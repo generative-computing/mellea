@@ -149,6 +149,29 @@ def _get_click_app():
     return typer.main.get_command(cli)
 
 
+def _extract_verbatim_blocks(help_text: str) -> list[str]:
+    """Extract Click ``\\b`` verbatim blocks from help text.
+
+    Click uses the backspace character (``\\x08``, written as ``\\b`` in Python
+    source string literals) as a marker to prevent paragraph rewrapping in
+    ``--help`` output.  The generator must extract these blocks independently
+    because the section parser buries them inside whatever named section
+    (e.g. ``Raises``) happens to precede them, and that section is never
+    rendered.
+
+    Returns a list of stripped block strings (first line is typically the
+    block title, e.g. ``"Modes:"``, followed by indented content lines).
+    """
+    # In memory the docstring contains actual \x08 chars; split on them.
+    parts = re.split(r"\x08\s*\n", help_text)
+    blocks: list[str] = []
+    for part in parts[1:]:  # parts[0] is content before the first \b
+        block = part.rstrip()
+        if block.strip():
+            blocks.append(block)
+    return blocks
+
+
 def _format_default(value: Any) -> str:
     """Format a parameter default for display."""
     if value is None:
@@ -300,6 +323,23 @@ def _render_command(
             help_text = _rst_to_md(getattr(p, "help", "") or "—")
             lines.append(f"| {flags} | {ptype} | {default} | {help_text} |")
         lines.append("")
+
+    # \b verbatim blocks — Click-style preformatted sections (e.g. "Modes:",
+    # "Best practices:") that appear in --help but are buried inside the
+    # Raises/Args sections of the parsed docstring and would otherwise be lost.
+    if cmd.help:
+        vb_blocks = _extract_verbatim_blocks(cmd.help)
+        for block in vb_blocks:
+            first_line, _, rest = block.partition("\n")
+            title = first_line.strip()
+            if title:
+                lines.append(f"**{title}**")
+                lines.append("")
+            if rest.strip():
+                lines.append("```")
+                lines.append(rest.rstrip())
+                lines.append("```")
+                lines.append("")
 
     # Output
     output = _rst_to_md(sections.get("Output", ""))

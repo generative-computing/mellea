@@ -191,3 +191,41 @@ def test_no_mdx_or_framework_specific_syntax(generated_md):
     assert "<Callout" not in generated_md
     assert "<Tab" not in generated_md
     assert "import " not in generated_md.split("---")[-1]  # After frontmatter
+
+
+def test_verbatim_blocks_rendered(generated_md):
+    """Click \\b verbatim blocks must appear in the generated docs.
+
+    ``m fix async`` and ``m fix genslots`` contain \\b-delimited sections
+    (Modes, Best practices, Detection notes, Rewrites) that are visible in
+    ``--help`` output.  These were previously silently dropped because they
+    appear after ``Raises:`` in the docstring, which the generator never
+    renders.  They should now appear as preformatted blocks.
+    """
+    assert "**Modes:**" in generated_md, "fix async Modes block missing"
+    assert "add-await-result" in generated_md, "fix async mode value missing"
+    assert "**Best practices:**" in generated_md, "Best practices block missing"
+    assert "**Detection notes:**" in generated_md, "Detection notes block missing"
+    assert "**Rewrites:**" in generated_md, "fix genslots Rewrites block missing"
+    assert "GenerativeStub" in generated_md, "fix genslots rewrite target missing"
+
+
+def test_extract_verbatim_blocks_basic():
+    """_extract_verbatim_blocks should split on \\x08 and return each block."""
+    from generate_cli_reference import _extract_verbatim_blocks
+
+    text = "Summary.\n\nRaises:\n    SomeError: ...\n\x08\nModes:\n  foo  bar\n\x08\nBest practices:\n  - do X\n"
+    blocks = _extract_verbatim_blocks(text)
+    assert len(blocks) == 2
+    assert blocks[0].startswith("Modes:")
+    assert "foo  bar" in blocks[0]
+    assert blocks[1].startswith("Best practices:")
+    assert "do X" in blocks[1]
+
+
+def test_extract_verbatim_blocks_empty():
+    """No \\b chars means no verbatim blocks."""
+    from generate_cli_reference import _extract_verbatim_blocks
+
+    assert _extract_verbatim_blocks("plain text with no backspace") == []
+    assert _extract_verbatim_blocks("") == []
