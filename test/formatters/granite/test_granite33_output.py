@@ -31,6 +31,7 @@ from mellea.formatters.granite.granite3.types import (
     Granite3Controls,
     Granite3Kwargs,
 )
+from test.predicates import require_nltk_data
 
 # ---------------------------------------------------------------------------
 # _parse_citations_text
@@ -256,6 +257,7 @@ class TestGranite33OutputProcessorTransform:
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].name == "search"
 
+    @require_nltk_data()
     def test_raw_content_set_when_different(self):
         proc = Granite33OutputProcessor()
         model_output = (

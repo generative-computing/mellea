@@ -29,6 +29,7 @@ from mellea.formatters.granite.granite3.types import (
     Granite3Controls,
     Granite3Kwargs,
 )
+from test.predicates import require_nltk_data
 
 # ---------------------------------------------------------------------------
 # _parse_citations_text
@@ -285,6 +286,7 @@ class TestGranite32OutputProcessorTransform:
         assert result.tool_calls == []
         assert isinstance(result.content, str)
 
+    @require_nltk_data()
     def test_citations_and_hallucinations_pipeline(self):
         proc = Granite32OutputProcessor()
         model_output = (
