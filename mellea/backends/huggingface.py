@@ -336,6 +336,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._generation_lock = threading.Lock()
         """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
 
+    def _get_hf_model_id(self) -> str:
+        """Return the HuggingFace model name as a string.
+
+        Returns the ``hf_model_name`` attribute when a ``ModelIdentifier`` is
+        provided, otherwise casts ``model_id`` to ``str``.
+        """
+        if hasattr(self.model_id, "hf_model_name"):
+            return str(self.model_id.hf_model_name)  # type: ignore
+        return str(self.model_id)
+
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
         with torch.no_grad():
@@ -613,6 +623,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             seed=seed,
         )
 
+        # Set model/provider early so they are available in the error path
+        output.model = self._get_hf_model_id()
+        output.provider = "huggingface"
+
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing this ._generate function.
@@ -861,6 +875,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 seed=seed,
             )
 
+            # Set model/provider early so they are available in the error path
+            output.model = self._get_hf_model_id()
+            output.provider = "huggingface"
+
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
                 # We can also support synchronous calls by adding a flag and changing this ._generate function.
@@ -1005,6 +1023,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=tools,
                 seed=seed,
             )
+
+            # Set model/provider early so they are available in the error path
+            output.model = self._get_hf_model_id()
+            output.provider = "huggingface"
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1159,10 +1181,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             }
 
         # Populate model and provider metadata
-        if hasattr(self.model_id, "hf_model_name"):
-            mot.model = str(self.model_id.hf_model_name)  # type: ignore
-        else:
-            mot.model = str(self.model_id)
+        mot.model = self._get_hf_model_id()
         mot.provider = "huggingface"
 
         # Record tracing if span exists

@@ -510,6 +510,16 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 set_span_error(span, chunks[-1])
                 end_backend_span(span)
                 del self._meta["_telemetry_span"]
+
+            # Fire generation_error hook (FIRE_AND_FORGET — does not block the raise)
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
+
+                err_payload = GenerationErrorPayload(
+                    exception=chunks[-1], model_output=self
+                )
+                await invoke_hook(HookType.GENERATION_ERROR, err_payload)
+
             raise chunks[-1]
 
         for chunk in chunks:

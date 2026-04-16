@@ -88,6 +88,7 @@ def _setup_metrics_provider(metrics_module, metric_reader):
     metrics_module._output_token_counter = None
     metrics_module._duration_histogram = None
     metrics_module._ttfb_histogram = None
+    metrics_module._error_counter = None
     return provider
 
 
@@ -427,3 +428,55 @@ async def test_huggingface_token_metrics_integration(
 
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.openai
+@pytest.mark.ollama
+async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
+    """Test that error metrics are recorded when a backend call fails.
+
+    Uses OpenAI backend pointed at Ollama with a non-existent model so the
+    error fires during generation (through base.py:astream), which is where
+    GENERATION_ERROR is triggered.  Also verifies that model/provider are
+    correctly populated in the error counter attributes (proving the early
+    output.model/provider set in generate_from_context works).
+    """
+    from mellea.backends.openai import OpenAIBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
+
+    backend = OpenAIBackend(
+        model_id="nonexistent-model-xyz",
+        base_url="http://localhost:11434/v1",
+        api_key="dummy",
+    )
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say hello"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""), ctx, model_options={}
+    )
+
+    # avalue() drives astream(), where the backend call fails, GENERATION_ERROR
+    # fires, and the exception is re-raised. pytest.raises catches that re-raise.
+    with pytest.raises(Exception):
+        await mot.avalue()
+
+    # Yield to event loop so FIRE_AND_FORGET plugin task completes
+    await asyncio.sleep(0.05)
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    error_count = get_metric_value(
+        metrics_data,
+        "mellea.llm.errors",
+        {
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "nonexistent-model-xyz",
+        },
+    )
+
+    assert error_count is not None, "Error counter should have been recorded"
+    assert error_count == 1, f"Expected 1 error, got {error_count}"
