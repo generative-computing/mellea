@@ -33,6 +33,21 @@ class ResponseFormat(BaseModel):
     type: Literal["text", "json_object"]
 
 
+class StreamOptions(BaseModel):
+    """OpenAI-compatible streaming options.
+
+    Controls behavior of streaming responses. Only applies when stream=True.
+    """
+
+    include_usage: bool = False
+    """Whether to include usage statistics in the final streaming chunk.
+
+    When True, the final chunk will include token usage information.
+    When False (default), usage is excluded from streaming responses.
+    For non-streaming requests, usage is always included regardless of this setting.
+    """
+
+
 class LogitBias(BaseModel):
     RootModel: dict[str, float]
 
@@ -59,13 +74,7 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None
     seed: int | None = None
     response_format: ResponseFormat | None = None
-
-    # OpenAI-compatible streaming options. Only applies when stream=True.
-    # Supports `include_usage` (bool) to control whether usage statistics are
-    # included in the final streaming chunk. Defaults to False (exclude usage)
-    # when not specified. For non-streaming requests (stream=False), usage is
-    # always included regardless of this parameter.
-    stream_options: dict[str, Any] | None = None
+    stream_options: StreamOptions | None = None
 
     # For future/undocumented fields
     extra: dict[str, Any] = Field(default_factory=dict)

@@ -1,7 +1,6 @@
 """Streaming utilities for OpenAI-compatible server responses."""
 
 from collections.abc import AsyncGenerator
-from typing import Any
 
 from mellea.core.base import ModelOutputThunk
 from mellea.helpers.openai_compatible_helpers import build_completion_usage
@@ -12,6 +11,7 @@ from .models import (
     ChatCompletionChunkDelta,
     OpenAIError,
     OpenAIErrorResponse,
+    StreamOptions,
 )
 
 
@@ -20,7 +20,7 @@ async def stream_chat_completion_chunks(
     completion_id: str,
     model: str,
     created: int,
-    stream_options: dict[str, Any] | None = None,
+    stream_options: StreamOptions | None = None,
     system_fingerprint: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate OpenAI-compatible SSE chat completion chunks from a model output.
@@ -30,10 +30,9 @@ async def stream_chat_completion_chunks(
         completion_id: Unique identifier for this completion.
         model: Model name to include in chunks.
         created: Unix timestamp of when the completion was created.
-        stream_options: OpenAI-compatible streaming options. Currently supports
-            ``include_usage`` (bool) to control whether usage stats are included
-            in the final chunk. Usage is only included when explicitly requested
-            via ``stream_options={"include_usage": True}``.
+        stream_options: OpenAI-compatible streaming options. Controls whether
+            usage statistics are included in the final chunk via the
+            ``include_usage`` field.
         system_fingerprint: Backend configuration fingerprint to include in chunks.
             Defaults to ``None``.
 
@@ -100,9 +99,7 @@ async def stream_chat_completion_chunks(
 
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
-        include_usage = stream_options is not None and stream_options.get(
-            "include_usage", False
-        )
+        include_usage = stream_options is not None and stream_options.include_usage
 
         usage = build_completion_usage(output) if include_usage else None
 

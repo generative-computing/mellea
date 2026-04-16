@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from cli.serve.app import make_chat_endpoint
-from cli.serve.models import ChatCompletionRequest, ChatMessage
+from cli.serve.models import ChatCompletionRequest, ChatMessage, StreamOptions
 from cli.serve.streaming import stream_chat_completion_chunks
 from mellea.core.base import ModelOutputThunk
 from mellea.helpers.openai_compatible_helpers import build_completion_usage
@@ -110,7 +110,7 @@ class TestStreamingHelpers:
             completion_id="chatcmpl-test123",
             model="test-model",
             created=123,
-            stream_options={"include_usage": True},
+            stream_options=StreamOptions(include_usage=True),
         ):
             events.append(event)
 
@@ -465,7 +465,7 @@ class TestStreamingEndpoint:
             model="test-model",
             messages=[ChatMessage(role="user", content="Hello")],
             stream=True,
-            stream_options={"include_usage": True},
+            stream_options=StreamOptions(include_usage=True),
         )
 
         mock_output = ModelOutputThunk(None)
@@ -518,7 +518,7 @@ class TestStreamingEndpoint:
             model="test-model",
             messages=[ChatMessage(role="user", content="Hello")],
             stream=True,
-            stream_options={"include_usage": False},
+            stream_options=StreamOptions(include_usage=False),
         )
 
         mock_output = ModelOutputThunk(None)
@@ -679,7 +679,7 @@ class TestStreamingEndpoint:
             model="test-model",
             messages=[ChatMessage(role="user", content="Hello")],
             stream=False,
-            stream_options={"include_usage": False},  # Should be ignored
+            stream_options=StreamOptions(include_usage=False),  # Should be ignored
         )
 
         mock_output = ModelOutputThunk("Complete response")
