@@ -25,12 +25,13 @@ from ...core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
+    MelleaLogger,
     Requirement,
     S,
     SamplingResult,
     SamplingStrategy,
     ValidationResult,
+    log_context,
 )
 from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
@@ -143,236 +144,243 @@ class BaseSamplingStrategy(SamplingStrategy):
         """
         validation_ctx = validation_ctx if validation_ctx is not None else context
 
-        flog = FancyLogger.get_logger()
+        flog = MelleaLogger.get_logger()
 
-        sampled_results: list[ComputedModelOutputThunk] = []
-        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        sampled_actions: list[Component] = []
-        sample_contexts: list[Context] = []
+        with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
+            sampled_results: list[ComputedModelOutputThunk] = []
+            sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+            sampled_actions: list[Component] = []
+            sample_contexts: list[Context] = []
 
-        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
-        # flag to determine whether we should show the pbar.
-        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
-
-        reqs = []
-        # global requirements supersede local requirements (global requirements can be defined by user)
-        # Todo: re-evaluate if this makes sense
-        if self.requirements is not None:
-            reqs += self.requirements
-        elif requirements is not None:
-            reqs += requirements
-        reqs = list(set(reqs))
-
-        loop_count = 0
-
-        # --- sampling_loop_start hook ---
-        effective_loop_budget = self.loop_budget
-        if has_plugins(HookType.SAMPLING_LOOP_START):
-            from ...plugins.hooks.sampling import SamplingLoopStartPayload
-
-            start_payload = SamplingLoopStartPayload(
-                strategy_name=type(self).__name__,
-                action=action,
-                context=context,
-                requirements=reqs,
-                loop_budget=self.loop_budget,
+            # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+            # flag to determine whether we should show the pbar.
+            show_progress = (
+                show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
             )
-            _, start_payload = await invoke_hook(
-                HookType.SAMPLING_LOOP_START, start_payload, backend=backend
-            )
-            effective_loop_budget = start_payload.loop_budget
 
-        loop_budget_range_iterator = (
-            tqdm.tqdm(range(effective_loop_budget))  # type: ignore
-            if show_progress
-            else range(effective_loop_budget)  # type: ignore
-        )
+            reqs = []
+            # global requirements supersede local requirements (global requirements can be defined by user)
+            # Todo: re-evaluate if this makes sense
+            if self.requirements is not None:
+                reqs += self.requirements
+            elif requirements is not None:
+                reqs += requirements
+            reqs = list(set(reqs))
 
-        next_action = deepcopy(action)
-        next_context = context
-        for _ in loop_budget_range_iterator:  # type: ignore
-            loop_count += 1
-            if not show_progress:
-                flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+            loop_count = 0
 
-            # run a generation pass
-            result, result_ctx = await backend.generate_from_context(
-                next_action,
-                ctx=next_context,
-                format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
-            await result.avalue()
-            result = ComputedModelOutputThunk(result)
+            # --- sampling_loop_start hook ---
+            effective_loop_budget = self.loop_budget
+            if has_plugins(HookType.SAMPLING_LOOP_START):
+                from ...plugins.hooks.sampling import SamplingLoopStartPayload
 
-            # Sampling strategies may use different components from the original
-            # action. This might cause discrepancies in the expected parsed_repr
-            # type / value. Explicitly overwrite that here.
-            # TODO: See if there's a more elegant way for this so that each sampling
-            # strategy doesn't have to re-implement it.
-            result.parsed_repr = action.parse(result)
-
-            # validation pass
-            val_scores_co = mfuncs.avalidate(
-                reqs=reqs,
-                context=result_ctx,
-                backend=backend,
-                output=result,
-                format=None,
-                model_options=model_options,
-                # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
-            )
-            val_scores = await val_scores_co
-
-            # match up reqs with scores
-            constraint_scores = list(zip(reqs, val_scores))
-
-            # collect all data
-            sampled_results.append(result)
-            sampled_scores.append(constraint_scores)
-            sampled_actions.append(next_action)
-            sample_contexts.append(result_ctx)
-
-            all_validations_passed = all(bool(s[1]) for s in constraint_scores)
-
-            # --- sampling_iteration hook ---
-            if has_plugins(HookType.SAMPLING_ITERATION):
-                from ...plugins.hooks.sampling import SamplingIterationPayload
-
-                iter_payload = SamplingIterationPayload(
-                    iteration=loop_count,
-                    action=next_action,
-                    result=result,
-                    validation_results=constraint_scores,
-                    all_validations_passed=all_validations_passed,
-                    valid_count=sum(1 for s in constraint_scores if bool(s[1])),
-                    total_count=len(constraint_scores),
+                start_payload = SamplingLoopStartPayload(
+                    strategy_name=type(self).__name__,
+                    action=action,
+                    context=context,
+                    requirements=reqs,
+                    loop_budget=self.loop_budget,
                 )
-                await invoke_hook(
-                    HookType.SAMPLING_ITERATION, iter_payload, backend=backend
+                _, start_payload = await invoke_hook(
+                    HookType.SAMPLING_LOOP_START, start_payload, backend=backend
                 )
+                effective_loop_budget = start_payload.loop_budget
 
-            # if all vals are true -- break and return success
-            if all_validations_passed:
-                flog.info("SUCCESS")
-                assert (
-                    result._generate_log is not None
-                )  # Cannot be None after generation.
-                result._generate_log.is_final_result = True
+            loop_budget_range_iterator = (
+                tqdm.tqdm(range(effective_loop_budget))  # type: ignore
+                if show_progress
+                else range(effective_loop_budget)  # type: ignore
+            )
 
-                # --- sampling_loop_end hook (success) ---
-                if has_plugins(HookType.SAMPLING_LOOP_END):
-                    from ...plugins.hooks.sampling import SamplingLoopEndPayload
+            next_action = deepcopy(action)
+            next_context = context
+            for _ in loop_budget_range_iterator:  # type: ignore
+                loop_count += 1
+                if not show_progress:
+                    flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
-                    end_payload = SamplingLoopEndPayload(
-                        success=True,
-                        iterations_used=loop_count,
-                        final_result=result,
-                        final_action=next_action,
-                        final_context=result_ctx,
-                        all_results=sampled_results,
-                        all_validations=sampled_scores,
+                # run a generation pass
+                result, result_ctx = await backend.generate_from_context(
+                    next_action,
+                    ctx=next_context,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
+                await result.avalue()
+                result = ComputedModelOutputThunk(result)
+
+                # Sampling strategies may use different components from the original
+                # action. This might cause discrepancies in the expected parsed_repr
+                # type / value. Explicitly overwrite that here.
+                # TODO: See if there's a more elegant way for this so that each sampling
+                # strategy doesn't have to re-implement it.
+                result.parsed_repr = action.parse(result)
+
+                # validation pass
+                val_scores_co = mfuncs.avalidate(
+                    reqs=reqs,
+                    context=result_ctx,
+                    backend=backend,
+                    output=result,
+                    format=None,
+                    model_options=model_options,
+                    # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
+                )
+                val_scores = await val_scores_co
+
+                # match up reqs with scores
+                constraint_scores = list(zip(reqs, val_scores))
+
+                # collect all data
+                sampled_results.append(result)
+                sampled_scores.append(constraint_scores)
+                sampled_actions.append(next_action)
+                sample_contexts.append(result_ctx)
+
+                all_validations_passed = all(bool(s[1]) for s in constraint_scores)
+
+                # --- sampling_iteration hook ---
+                if has_plugins(HookType.SAMPLING_ITERATION):
+                    from ...plugins.hooks.sampling import SamplingIterationPayload
+
+                    iter_payload = SamplingIterationPayload(
+                        iteration=loop_count,
+                        action=next_action,
+                        result=result,
+                        validation_results=constraint_scores,
+                        all_validations_passed=all_validations_passed,
+                        valid_count=sum(1 for s in constraint_scores if bool(s[1])),
+                        total_count=len(constraint_scores),
                     )
                     await invoke_hook(
-                        HookType.SAMPLING_LOOP_END, end_payload, backend=backend
+                        HookType.SAMPLING_ITERATION, iter_payload, backend=backend
                     )
 
-                # SUCCESS !!!!
-                return SamplingResult(
-                    result_index=len(sampled_results) - 1,
-                    success=True,
-                    sample_generations=sampled_results,
-                    sample_validations=sampled_scores,
-                    sample_contexts=sample_contexts,
-                    sample_actions=sampled_actions,
+                # if all vals are true -- break and return success
+                if all_validations_passed:
+                    flog.info("SUCCESS")
+                    assert (
+                        result._generate_log is not None
+                    )  # Cannot be None after generation.
+                    result._generate_log.is_final_result = True
+
+                    # --- sampling_loop_end hook (success) ---
+                    if has_plugins(HookType.SAMPLING_LOOP_END):
+                        from ...plugins.hooks.sampling import SamplingLoopEndPayload
+
+                        end_payload = SamplingLoopEndPayload(
+                            success=True,
+                            iterations_used=loop_count,
+                            final_result=result,
+                            final_action=next_action,
+                            final_context=result_ctx,
+                            all_results=sampled_results,
+                            all_validations=sampled_scores,
+                        )
+                        await invoke_hook(
+                            HookType.SAMPLING_LOOP_END, end_payload, backend=backend
+                        )
+
+                    # SUCCESS !!!!
+                    return SamplingResult(
+                        result_index=len(sampled_results) - 1,
+                        success=True,
+                        sample_generations=sampled_results,
+                        sample_validations=sampled_scores,
+                        sample_contexts=sample_contexts,
+                        sample_actions=sampled_actions,
+                    )
+
+                else:
+                    # log partial success and continue
+                    failed = [s for s in constraint_scores if not bool(s[1])]
+                    count_failed = len(failed)
+                    failed_reqs = [
+                        r[0].description
+                        if r[0].description is not None
+                        else "[no description]"
+                        for r in failed
+                    ]
+                    stringify_failed = "\n\t - " + "\n\t - ".join(failed_reqs)
+                    flog.info(
+                        f"FAILED. Valid: {len(constraint_scores) - count_failed}/{len(constraint_scores)}. Failed: {stringify_failed}"
+                    )
+
+                # If we did not pass all constraints, update the instruction and try again.
+                next_action, next_context = self.repair(
+                    next_context,
+                    result_ctx,
+                    sampled_actions,
+                    sampled_results,
+                    sampled_scores,
                 )
 
-            else:
-                # log partial success and continue
-                failed = [s for s in constraint_scores if not bool(s[1])]
-                count_failed = len(failed)
-                failed_reqs = [
-                    r[0].description
-                    if r[0].description is not None
-                    else "[no description]"
-                    for r in failed
-                ]
-                stringify_failed = "\n\t - " + "\n\t - ".join(failed_reqs)
-                flog.info(
-                    f"FAILED. Valid: {len(constraint_scores) - count_failed}/{len(constraint_scores)}. Failed: {stringify_failed}"
-                )
+                # --- sampling_repair hook ---
+                if has_plugins(HookType.SAMPLING_REPAIR):
+                    from ...plugins.hooks.sampling import SamplingRepairPayload
 
-            # If we did not pass all constraints, update the instruction and try again.
-            next_action, next_context = self.repair(
-                next_context,
-                result_ctx,
-                sampled_actions,
-                sampled_results,
-                sampled_scores,
+                    repair_payload = SamplingRepairPayload(
+                        repair_type=getattr(
+                            self, "_get_repair_type", lambda: "unknown"
+                        )(),
+                        failed_action=sampled_actions[-1],
+                        failed_result=sampled_results[-1],
+                        failed_validations=sampled_scores[-1],
+                        repair_action=next_action,
+                        repair_context=next_context,
+                        repair_iteration=loop_count,
+                    )
+                    await invoke_hook(
+                        HookType.SAMPLING_REPAIR, repair_payload, backend=backend
+                    )
+
+            flog.info(
+                f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
             )
 
-            # --- sampling_repair hook ---
-            if has_plugins(HookType.SAMPLING_REPAIR):
-                from ...plugins.hooks.sampling import SamplingRepairPayload
+            # if no valid result could be determined, find a last resort.
+            best_failed_index = self.select_from_failure(
+                sampled_actions, sampled_results, sampled_scores
+            )
+            assert best_failed_index < len(sampled_results), (
+                "The select_from_failure method did not return a valid result. It has to selected from failed_results."
+            )
 
-                repair_payload = SamplingRepairPayload(
-                    repair_type=getattr(self, "_get_repair_type", lambda: "unknown")(),
-                    failed_action=sampled_actions[-1],
-                    failed_result=sampled_results[-1],
-                    failed_validations=sampled_scores[-1],
-                    repair_action=next_action,
-                    repair_context=next_context,
-                    repair_iteration=loop_count,
+            assert (
+                sampled_results[best_failed_index]._generate_log is not None
+            )  # Cannot be None after generation.
+            sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
+
+            # --- sampling_loop_end hook (failure) ---
+            if has_plugins(HookType.SAMPLING_LOOP_END):
+                from ...plugins.hooks.sampling import SamplingLoopEndPayload
+
+                _final_ctx = (
+                    sample_contexts[best_failed_index] if sample_contexts else context
+                )
+                end_payload = SamplingLoopEndPayload(
+                    success=False,
+                    iterations_used=loop_count,
+                    final_result=sampled_results[best_failed_index],
+                    final_action=sampled_actions[best_failed_index],
+                    final_context=_final_ctx,
+                    failure_reason=f"Budget exhausted after {loop_count} iterations",
+                    all_results=sampled_results,
+                    all_validations=sampled_scores,
                 )
                 await invoke_hook(
-                    HookType.SAMPLING_REPAIR, repair_payload, backend=backend
+                    HookType.SAMPLING_LOOP_END, end_payload, backend=backend
                 )
 
-        flog.info(
-            f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
-        )
-
-        # if no valid result could be determined, find a last resort.
-        best_failed_index = self.select_from_failure(
-            sampled_actions, sampled_results, sampled_scores
-        )
-        assert best_failed_index < len(sampled_results), (
-            "The select_from_failure method did not return a valid result. It has to selected from failed_results."
-        )
-
-        assert (
-            sampled_results[best_failed_index]._generate_log is not None
-        )  # Cannot be None after generation.
-        sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
-
-        # --- sampling_loop_end hook (failure) ---
-        if has_plugins(HookType.SAMPLING_LOOP_END):
-            from ...plugins.hooks.sampling import SamplingLoopEndPayload
-
-            _final_ctx = (
-                sample_contexts[best_failed_index] if sample_contexts else context
-            )
-            end_payload = SamplingLoopEndPayload(
+            return SamplingResult(
+                result_index=best_failed_index,
                 success=False,
-                iterations_used=loop_count,
-                final_result=sampled_results[best_failed_index],
-                final_action=sampled_actions[best_failed_index],
-                final_context=_final_ctx,
-                failure_reason=f"Budget exhausted after {loop_count} iterations",
-                all_results=sampled_results,
-                all_validations=sampled_scores,
+                sample_generations=sampled_results,
+                sample_validations=sampled_scores,
+                sample_actions=sampled_actions,
+                sample_contexts=sample_contexts,
             )
-            await invoke_hook(HookType.SAMPLING_LOOP_END, end_payload, backend=backend)
-
-        return SamplingResult(
-            result_index=best_failed_index,
-            success=False,
-            sample_generations=sampled_results,
-            sample_validations=sampled_scores,
-            sample_actions=sampled_actions,
-            sample_contexts=sample_contexts,
-        )
 
 
 class RejectionSamplingStrategy(BaseSamplingStrategy):

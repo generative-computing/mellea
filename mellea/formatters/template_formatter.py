@@ -19,7 +19,7 @@ import jinja2
 
 from ..backends.cache import SimpleLRUCache
 from ..backends.model_ids import ModelIdentifier
-from ..core import CBlock, Component, FancyLogger, TemplateRepresentation
+from ..core import CBlock, Component, MelleaLogger, TemplateRepresentation
 from .chat_formatter import ChatFormatter
 
 
@@ -104,7 +104,7 @@ class TemplateFormatter(ChatFormatter):
                         stringified_template_args[key] = self._stringify(val)
 
                     if representation.obj is None:
-                        FancyLogger.get_logger().warning(
+                        MelleaLogger.get_logger().warning(
                             f"template formatter encountered a TemplateRepresentation with no obj when stringifying {c.__class__}; setting obj to {c}"
                         )
                         representation.obj = c
@@ -127,7 +127,7 @@ class TemplateFormatter(ChatFormatter):
                 return stringified_list
 
             case _:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"formatter encountered an unexpected type in _stringify; using str() on {c.__class__}"
                 )
                 return str(c)
@@ -161,7 +161,7 @@ class TemplateFormatter(ChatFormatter):
             return jinja2.Environment().from_string(repr.template)  # type: ignore
 
         if repr.template_order is None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"using template formatter for {repr.obj.__class__.__name__} but no template order was provided, defaulting to class name"
             )
             repr.template_order = ["*"]

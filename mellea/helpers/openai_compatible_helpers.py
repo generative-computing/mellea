@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..backends.tools import validate_tool_arguments
-from ..core import FancyLogger, ModelToolCall
+from ..core import MelleaLogger, ModelToolCall
 from ..core.base import AbstractMelleaTool
 from ..stdlib.components import Document, Message
 
@@ -33,7 +33,7 @@ def extract_model_tool_requests(
 
             func = tools.get(tool_name)
             if func is None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"model attempted to call a non-existing function: {tool_name}"
                 )
                 continue  # skip this function if we can't find it.

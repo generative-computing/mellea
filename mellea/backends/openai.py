@@ -22,9 +22,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
 )
@@ -175,7 +175,7 @@ class OpenAIBackend(FormatterBackend):
             )
 
         if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "OPENAI_BASE_URL or base_url is not set.\n"
                 "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
             )
@@ -481,7 +481,7 @@ class OpenAIBackend(FormatterBackend):
                     },
                 }
             else:
-                FancyLogger().get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
                 )
                 extra_params["response_format"] = {
@@ -497,7 +497,7 @@ class OpenAIBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
@@ -507,7 +507,7 @@ class OpenAIBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
@@ -800,7 +800,7 @@ class OpenAIBackend(FormatterBackend):
 
         extra_body = {}
         if format is not None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The official OpenAI completion api does not accept response format / structured decoding; "
                 "it will be passed as an extra arg."
             )
@@ -812,7 +812,7 @@ class OpenAIBackend(FormatterBackend):
             else:
                 extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
             )
 
@@ -836,7 +836,7 @@ class OpenAIBackend(FormatterBackend):
                 )  # type: ignore
             except openai.BadRequestError as e:
                 if openai_ollama_batching_error in e.message:
-                    FancyLogger.get_logger().error(
+                    MelleaLogger.get_logger().error(
                         "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
                         "your requests will fail since ollama doesn't support batching requests."
                     )

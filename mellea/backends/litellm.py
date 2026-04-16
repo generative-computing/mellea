@@ -24,9 +24,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -267,12 +267,12 @@ class LiteLLMBackend(FormatterBackend):
                     unknown_keys.append(key)
 
         if len(unknown_keys) > 0:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
             )
 
         if len(unsupported_openai_params) > 0:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"litellm may drop the following openai keys that it doesn't seem to recognize as being supported by the current model/provider: {', '.join(unsupported_openai_params)}"
                 "\nThere are sometimes false positives here."
             )
@@ -345,7 +345,7 @@ class LiteLLMBackend(FormatterBackend):
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
 
         if self._has_potential_event_loop_errors():
-            FancyLogger().get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
             )
 
@@ -580,7 +580,7 @@ class LiteLLMBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
@@ -590,7 +590,7 @@ class LiteLLMBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
     @overload
@@ -646,7 +646,7 @@ class LiteLLMBackend(FormatterBackend):
             await self.do_generate_walks(list(actions))
             extra_body = {}
             if format is not None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "The official OpenAI completion api does not accept response format / structured decoding; "
                     "it will be passed as an extra arg."
                 )
@@ -654,7 +654,7 @@ class LiteLLMBackend(FormatterBackend):
                 # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
                 extra_body["guided_json"] = format.model_json_schema()  # type: ignore
             if tool_calls:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "The completion endpoint does not support tool calling."
                 )
 
@@ -663,7 +663,7 @@ class LiteLLMBackend(FormatterBackend):
             model_specific_options = self._make_backend_specific_and_remove(model_opts)
 
             if self._has_potential_event_loop_errors():
-                FancyLogger().get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
                 )
 
@@ -680,7 +680,7 @@ class LiteLLMBackend(FormatterBackend):
         date = datetime.datetime.now()
         responses = completion_response.choices
         if len(responses) != len(prompts):
-            FancyLogger().get_logger().error(
+            MelleaLogger.get_logger().error(
                 "litellm appears to have sent your batch request as a single message; this typically happens with providers like ollama that don't support batching"
             )
 
@@ -732,7 +732,7 @@ class LiteLLMBackend(FormatterBackend):
 
                 func = tools.get(tool_name)
                 if func is None:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"model attempted to call a non-existing function: {tool_name}"
                     )
                     continue  # skip this function if we can't find it.

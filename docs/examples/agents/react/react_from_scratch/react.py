@@ -12,10 +12,10 @@ from jinja2 import Template
 
 import mellea
 import mellea.stdlib.components.chat
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 from mellea.stdlib.context import ChatContext
 
-FancyLogger.get_logger().setLevel("ERROR")
+MelleaLogger.get_logger().setLevel("ERROR")
 
 react_system_template: Template = Template(
     """Answer the user's question as best you can.

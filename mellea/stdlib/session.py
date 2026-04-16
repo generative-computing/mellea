@@ -25,9 +25,9 @@ from ..core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
     GenerateLog,
     ImageBlock,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
     S,
@@ -35,6 +35,7 @@ from ..core import (
     SamplingStrategy,
     ValidationResult,
 )
+from ..core.utils import _log_context
 from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
@@ -191,7 +192,7 @@ def start_session(
         session.cleanup()
         ```
     """
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
 
     # Get model_id string for logging and tracing
     if isinstance(model_id, ModelIdentifier):
@@ -307,8 +308,9 @@ class MelleaSession:
         self.id = str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
-        self._session_logger = FancyLogger.get_logger()
+        self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
+        self._log_context_token = None
         self._session_span = None
 
     def __enter__(self):
@@ -320,11 +322,22 @@ class MelleaSession:
             context_type=self.ctx.__class__.__name__,
         ).__enter__()
         self._context_token = _context_session.set(self)
+        self._log_context_token = _log_context.set(
+            {
+                **_log_context.get(),
+                "session_id": self.id,
+                "backend": self.backend.__class__.__name__,
+                "model_id": str(getattr(self.backend, "model_id", "unknown")),
+            }
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and cleanup session."""
         self.cleanup()
+        if self._log_context_token is not None:
+            _log_context.reset(self._log_context_token)
+            self._log_context_token = None
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None

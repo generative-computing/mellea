@@ -27,14 +27,14 @@ def _reset_logging_modules():
 
     import mellea.core.utils
     import mellea.telemetry.logging
-    from mellea.core.utils import FancyLogger
+    from mellea.core.utils import MelleaLogger
 
     # Clear any existing handlers from previous tests
     fancy_logger = logging.getLogger("fancy_logger")
     fancy_logger.handlers.clear()
 
-    # Reset FancyLogger singleton
-    FancyLogger.logger = None
+    # Reset MelleaLogger singleton
+    MelleaLogger.logger = None
 
     # Force reload of logging module and core.utils to pick up env vars
     importlib.reload(mellea.telemetry.logging)
@@ -160,28 +160,28 @@ def test_get_otlp_log_handler_can_be_added_to_logger(enable_otlp_logging):
     logger.removeHandler(handler)
 
 
-# FancyLogger Integration Tests
+# MelleaLogger Integration Tests
 
 
 def test_fancy_logger_includes_otlp_handler_when_enabled(enable_otlp_logging):
-    """Test that FancyLogger includes OTLP handler when enabled."""
-    from mellea.core.utils import FancyLogger
+    """Test that MelleaLogger includes OTLP handler when enabled."""
+    from mellea.core.utils import MelleaLogger
 
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
 
     # Check that logger has handlers
     assert len(logger.handlers) > 0
 
     # Check if any handler is a LoggingHandler (OTLP)
     has_otlp_handler = any(isinstance(h, LoggingHandler) for h in logger.handlers)  # type: ignore
-    assert has_otlp_handler, "FancyLogger should have OTLP handler when enabled"
+    assert has_otlp_handler, "MelleaLogger should have OTLP handler when enabled"
 
 
 def test_fancy_logger_works_without_otlp(clean_logging_env):
-    """Test that FancyLogger works normally when OTLP is disabled."""
-    from mellea.core.utils import FancyLogger
+    """Test that MelleaLogger works normally when OTLP is disabled."""
+    from mellea.core.utils import MelleaLogger
 
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
 
     # Should still have REST and console handlers
     assert len(logger.handlers) >= 2
@@ -189,7 +189,7 @@ def test_fancy_logger_works_without_otlp(clean_logging_env):
     # Should not have OTLP handler
     has_otlp_handler = any(isinstance(h, LoggingHandler) for h in logger.handlers)  # type: ignore
     assert not has_otlp_handler, (
-        "FancyLogger should not have OTLP handler when disabled"
+        "MelleaLogger should not have OTLP handler when disabled"
     )
 
     # Verify logger can log messages (backward compatibility)

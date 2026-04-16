@@ -17,7 +17,7 @@ from ...core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
     SamplingStrategy,
@@ -616,7 +616,7 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
 
             # No retries if precondition validation fails.
             if not all(bool(val_result) for val_result in val_results):
-                FancyLogger.get_logger().error(
+                MelleaLogger.get_logger().error(
                     "generative stub arguments did not satisfy precondition requirements"
                 )
                 raise PreconditionException(
@@ -625,7 +625,7 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 )
 
         elif len(stub_copy.precondition_requirements) > 0:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "calling a generative stub with precondition requirements but no args to validate the preconditions against; ignoring precondition validation"
             )
 
@@ -755,7 +755,7 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
 
                 # No retries if precondition validation fails.
                 if not all(bool(val_result) for val_result in val_results):
-                    FancyLogger.get_logger().error(
+                    MelleaLogger.get_logger().error(
                         "generative stub arguments did not satisfy precondition requirements"
                     )
                     raise PreconditionException(
@@ -764,7 +764,7 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                     )
 
             elif len(stub_copy.precondition_requirements) > 0:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "calling a generative stub with precondition requirements but no args to validate the preconditions against; ignoring precondition validation"
                 )
 
