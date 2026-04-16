@@ -27,6 +27,7 @@ from ...core import (
     SamplingStrategy,
     TemplateRepresentation,
     ValidationResult,
+    log_context,
 )
 from ...stdlib import functional as mfuncs
 from ..components import Message
@@ -606,46 +607,143 @@ class SOFAISamplingStrategy(SamplingStrategy):
         )
 
         flog = MelleaLogger.get_logger()
-        reqs: list[Requirement] = list(requirements) if requirements else []
 
-        # State tracking for all attempts
-        sampled_results: list[ComputedModelOutputThunk] = []
-        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        sampled_actions: list[Component] = []
-        sample_contexts: list[Context] = []
+        with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
+            reqs: list[Requirement] = list(requirements) if requirements else []
 
-        # ---------------------------------------------------------------------
-        # PHASE 1: S1 Solver Loop
-        # ---------------------------------------------------------------------
-        flog.info(
-            f"SOFAI: Starting S1 Solver ({getattr(self.s1_solver_backend, 'model_id', 'unknown')}) "
-            f"loop (budget={self.loop_budget})"
-        )
+            # State tracking for all attempts
+            sampled_results: list[ComputedModelOutputThunk] = []
+            sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+            sampled_actions: list[Component] = []
+            sample_contexts: list[Context] = []
 
-        previous_failed_set: set[tuple[str | None, str | None, float | None]] = set()
-        loop_count = 0
-        next_action = deepcopy(action)
-        next_context: Context = context
+            # ---------------------------------------------------------------------
+            # PHASE 1: S1 Solver Loop
+            # ---------------------------------------------------------------------
+            flog.info(
+                f"SOFAI: Starting S1 Solver ({getattr(self.s1_solver_backend, 'model_id', 'unknown')}) "
+                f"loop (budget={self.loop_budget})"
+            )
 
-        show_progress = flog.getEffectiveLevel() <= MelleaLogger.INFO
-        loop_iterator = (
-            tqdm.tqdm(range(self.loop_budget), desc="S1 Solver")
-            if show_progress
-            else range(self.loop_budget)
-        )
+            previous_failed_set: set[tuple[str | None, str | None, float | None]] = (
+                set()
+            )
+            loop_count = 0
+            next_action = deepcopy(action)
+            next_context: Context = context
 
-        # Exit conditions: success returns immediately; no-improvement breaks
-        # early to S2 escalation; loop budget exhaustion flows to S2 escalation.
-        for _ in loop_iterator:
-            loop_count += 1
-            if not show_progress:
-                flog.info(f"SOFAI S1: Running loop {loop_count} of {self.loop_budget}")
+            show_progress = flog.getEffectiveLevel() <= MelleaLogger.INFO
+            loop_iterator = (
+                tqdm.tqdm(range(self.loop_budget), desc="S1 Solver")
+                if show_progress
+                else range(self.loop_budget)
+            )
 
-            # Generate and validate
+            # Exit conditions: success returns immediately; no-improvement breaks
+            # early to S2 escalation; loop budget exhaustion flows to S2 escalation.
+            for _ in loop_iterator:
+                loop_count += 1
+                if not show_progress:
+                    flog.info(
+                        f"SOFAI S1: Running loop {loop_count} of {self.loop_budget}"
+                    )
+
+                # Generate and validate
+                (
+                    result,
+                    result_ctx,
+                    constraint_scores,
+                ) = await self._generate_and_validate(
+                    solver_backend=self.s1_solver_backend,
+                    action=next_action,
+                    ctx=next_context,
+                    reqs=reqs,
+                    session_backend=backend,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
+
+                # Store attempt
+                sampled_results.append(result)
+                sampled_scores.append(constraint_scores)
+                sampled_actions.append(next_action)
+                sample_contexts.append(result_ctx)
+
+                # Check for success
+                if all(bool(score[1]) for score in constraint_scores):
+                    flog.info(f"SOFAI S1: SUCCESS on attempt {loop_count}")
+                    assert result._generate_log is not None
+                    result._generate_log.is_final_result = True
+
+                    # Exit with success
+                    return SamplingResult(
+                        result_index=len(sampled_results) - 1,
+                        success=True,
+                        sample_generations=sampled_results,
+                        sample_validations=sampled_scores,
+                        sample_contexts=sample_contexts,
+                        sample_actions=sampled_actions,
+                    )
+
+                # Log partial progress
+                count_valid = sum(1 for s in constraint_scores if bool(s[1]))
+                flog.info(
+                    f"SOFAI S1: FAILED attempt {loop_count}. "
+                    f"Valid: {count_valid}/{len(constraint_scores)}"
+                )
+
+                # Check for no improvement (early exit to S2)
+                current_failed_set = {
+                    (req.description, val.reason, val.score)
+                    for req, val in constraint_scores
+                    if not val.as_bool()
+                }
+                if loop_count > 1 and current_failed_set == previous_failed_set:
+                    flog.warning(
+                        f"SOFAI S1: No improvement detected between attempt "
+                        f"{loop_count - 1} and {loop_count}. Escalating to S2 Solver."
+                    )
+                    # Exit with no improvement
+                    break
+                previous_failed_set = current_failed_set
+
+                # Prepare repair for next iteration
+                if loop_count < self.loop_budget:
+                    next_action, next_context = self.repair(
+                        next_context,
+                        result_ctx,
+                        sampled_actions,
+                        sampled_results,
+                        sampled_scores,
+                    )
+            # Exit due to loop budget exhaustion or no improvement
+
+            # ---------------------------------------------------------------------
+            # PHASE 2: S2 Solver Escalation
+            # ---------------------------------------------------------------------
+            flog.info(
+                f"SOFAI: S1 Solver completed {loop_count} attempts. "
+                f"Escalating to S2 Solver ({getattr(self.s2_solver_backend, 'model_id', 'unknown')})."
+            )
+
+            # Prepare S2 context based on mode
+            s2_action, s2_context = self._prepare_s2_context(
+                s2_mode=self.s2_solver_mode,
+                original_action=action,
+                original_context=context,
+                last_result_ctx=result_ctx,
+                last_action=next_action,
+                sampled_results=sampled_results,
+                sampled_scores=sampled_scores,
+                loop_count=loop_count,
+            )
+
+            # Generate and validate with S2
             result, result_ctx, constraint_scores = await self._generate_and_validate(
-                solver_backend=self.s1_solver_backend,
-                action=next_action,
-                ctx=next_context,
+                solver_backend=self.s2_solver_backend,
+                action=s2_action,
+                ctx=s2_context,
                 reqs=reqs,
                 session_backend=backend,
                 format=format,
@@ -653,19 +751,18 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 tool_calls=tool_calls,
             )
 
-            # Store attempt
+            # Store S2 attempt
             sampled_results.append(result)
             sampled_scores.append(constraint_scores)
-            sampled_actions.append(next_action)
+            sampled_actions.append(s2_action)
             sample_contexts.append(result_ctx)
 
-            # Check for success
-            if all(bool(score[1]) for score in constraint_scores):
-                flog.info(f"SOFAI S1: SUCCESS on attempt {loop_count}")
-                assert result._generate_log is not None
-                result._generate_log.is_final_result = True
+            # Check S2 success
+            assert result._generate_log is not None
+            result._generate_log.is_final_result = True
 
-                # Exit with success
+            if all(bool(score[1]) for score in constraint_scores):
+                flog.info("SOFAI S2: SUCCESS")
                 return SamplingResult(
                     result_index=len(sampled_results) - 1,
                     success=True,
@@ -674,103 +771,17 @@ class SOFAISamplingStrategy(SamplingStrategy):
                     sample_contexts=sample_contexts,
                     sample_actions=sampled_actions,
                 )
-
-            # Log partial progress
-            count_valid = sum(1 for s in constraint_scores if bool(s[1]))
-            flog.info(
-                f"SOFAI S1: FAILED attempt {loop_count}. "
-                f"Valid: {count_valid}/{len(constraint_scores)}"
-            )
-
-            # Check for no improvement (early exit to S2)
-            current_failed_set = {
-                (req.description, val.reason, val.score)
-                for req, val in constraint_scores
-                if not val.as_bool()
-            }
-            if loop_count > 1 and current_failed_set == previous_failed_set:
+            else:
+                count_valid = sum(1 for s in constraint_scores if bool(s[1]))
                 flog.warning(
-                    f"SOFAI S1: No improvement detected between attempt "
-                    f"{loop_count - 1} and {loop_count}. Escalating to S2 Solver."
+                    f"SOFAI S2: FAILED. Valid: {count_valid}/{len(constraint_scores)}. "
+                    f"Returning S2 Solver's attempt as final result."
                 )
-                # Exit with no improvement
-                break
-            previous_failed_set = current_failed_set
-
-            # Prepare repair for next iteration
-            if loop_count < self.loop_budget:
-                next_action, next_context = self.repair(
-                    next_context,
-                    result_ctx,
-                    sampled_actions,
-                    sampled_results,
-                    sampled_scores,
+                return SamplingResult(
+                    result_index=len(sampled_results) - 1,
+                    success=False,
+                    sample_generations=sampled_results,
+                    sample_validations=sampled_scores,
+                    sample_contexts=sample_contexts,
+                    sample_actions=sampled_actions,
                 )
-        # Exit due to loop budget exhaustion or no improvement
-
-        # ---------------------------------------------------------------------
-        # PHASE 2: S2 Solver Escalation
-        # ---------------------------------------------------------------------
-        flog.info(
-            f"SOFAI: S1 Solver completed {loop_count} attempts. "
-            f"Escalating to S2 Solver ({getattr(self.s2_solver_backend, 'model_id', 'unknown')})."
-        )
-
-        # Prepare S2 context based on mode
-        s2_action, s2_context = self._prepare_s2_context(
-            s2_mode=self.s2_solver_mode,
-            original_action=action,
-            original_context=context,
-            last_result_ctx=result_ctx,
-            last_action=next_action,
-            sampled_results=sampled_results,
-            sampled_scores=sampled_scores,
-            loop_count=loop_count,
-        )
-
-        # Generate and validate with S2
-        result, result_ctx, constraint_scores = await self._generate_and_validate(
-            solver_backend=self.s2_solver_backend,
-            action=s2_action,
-            ctx=s2_context,
-            reqs=reqs,
-            session_backend=backend,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
-
-        # Store S2 attempt
-        sampled_results.append(result)
-        sampled_scores.append(constraint_scores)
-        sampled_actions.append(s2_action)
-        sample_contexts.append(result_ctx)
-
-        # Check S2 success
-        assert result._generate_log is not None
-        result._generate_log.is_final_result = True
-
-        if all(bool(score[1]) for score in constraint_scores):
-            flog.info("SOFAI S2: SUCCESS")
-            return SamplingResult(
-                result_index=len(sampled_results) - 1,
-                success=True,
-                sample_generations=sampled_results,
-                sample_validations=sampled_scores,
-                sample_contexts=sample_contexts,
-                sample_actions=sampled_actions,
-            )
-        else:
-            count_valid = sum(1 for s in constraint_scores if bool(s[1]))
-            flog.warning(
-                f"SOFAI S2: FAILED. Valid: {count_valid}/{len(constraint_scores)}. "
-                f"Returning S2 Solver's attempt as final result."
-            )
-            return SamplingResult(
-                result_index=len(sampled_results) - 1,
-                success=False,
-                sample_generations=sampled_results,
-                sample_validations=sampled_scores,
-                sample_contexts=sample_contexts,
-                sample_actions=sampled_actions,
-            )

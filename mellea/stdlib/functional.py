@@ -575,7 +575,7 @@ async def aact(
         tool_calls=tool_calls,
     ) as span:
         if not silence_context_type_warning and not isinstance(context, SimpleContext):
-            MelleaLogger().get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
                 "\nSee the async section of the docs: https://docs.mellea.ai/how-to/use-async-and-streaming"
             )

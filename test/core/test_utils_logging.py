@@ -137,21 +137,18 @@ class TestJsonFormatterContextInjection:
     def test_context_is_thread_local(self) -> None:
         """Fields set in one thread must not bleed into another."""
         results: dict[str, Any] = {}
+        barrier = threading.Barrier(2)
 
         def worker_a() -> None:
             set_log_context(trace_id="thread-a")
-            import time
-
-            time.sleep(0.05)
+            barrier.wait()  # both threads read context at the same time
             fmt = JsonFormatter()
             results["a"] = json.loads(fmt.format(_make_record()))
             clear_log_context()
 
         def worker_b() -> None:
             # does NOT call set_log_context
-            import time
-
-            time.sleep(0.02)
+            barrier.wait()  # both threads read context at the same time
             fmt = JsonFormatter()
             results["b"] = json.loads(fmt.format(_make_record()))
 

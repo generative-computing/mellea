@@ -339,7 +339,7 @@ class LiteLLMBackend(FormatterBackend):
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
 
         if self._has_potential_event_loop_errors():
-            MelleaLogger().get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
             )
 
@@ -653,7 +653,7 @@ class LiteLLMBackend(FormatterBackend):
             model_specific_options = self._make_backend_specific_and_remove(model_opts)
 
             if self._has_potential_event_loop_errors():
-                MelleaLogger().get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
                 )
 
@@ -670,7 +670,7 @@ class LiteLLMBackend(FormatterBackend):
         date = datetime.datetime.now()
         responses = completion_response.choices
         if len(responses) != len(prompts):
-            MelleaLogger().get_logger().error(
+            MelleaLogger.get_logger().error(
                 "litellm appears to have sent your batch request as a single message; this typically happens with providers like ollama that don't support batching"
             )
 

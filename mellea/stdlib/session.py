@@ -34,9 +34,8 @@ from ..core import (
     SamplingResult,
     SamplingStrategy,
     ValidationResult,
-    clear_log_context,
-    set_log_context,
 )
+from ..core.utils import _log_context
 from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
@@ -311,6 +310,7 @@ class MelleaSession:
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
+        self._log_context_token = None
         self._session_span = None
 
     def __enter__(self):
@@ -322,17 +322,22 @@ class MelleaSession:
             context_type=self.ctx.__class__.__name__,
         ).__enter__()
         self._context_token = _context_session.set(self)
-        set_log_context(
-            session_id=self.id,
-            backend=self.backend.__class__.__name__,
-            model_id=str(getattr(self.backend, "model_id", "unknown")),
+        self._log_context_token = _log_context.set(
+            {
+                **_log_context.get(),
+                "session_id": self.id,
+                "backend": self.backend.__class__.__name__,
+                "model_id": str(getattr(self.backend, "model_id", "unknown")),
+            }
         )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and cleanup session."""
         self.cleanup()
-        clear_log_context()
+        if self._log_context_token is not None:
+            _log_context.reset(self._log_context_token)
+            self._log_context_token = None
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None

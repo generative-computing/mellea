@@ -4,8 +4,8 @@ Key properties verified:
 - MelleaLogger.get_logger() is callable and usable from inside a hook handler.
 - Log records emitted from inside a hook are captured.
 - log_context fields set inside a hook appear on records from that hook.
-- log_context fields set in the test body do NOT bleed into hook execution
-  (hooks run in a different thread, so ContextVar state is not inherited).
+- log_context fields set in the caller ARE visible inside AUDIT hook execution
+  (AUDIT hooks are awaited in the same asyncio task, so ContextVar state is inherited).
 """
 
 # pytest: integration

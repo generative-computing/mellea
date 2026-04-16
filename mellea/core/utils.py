@@ -140,7 +140,7 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
 
 
 class ContextFilter(logging.Filter):
-    """Logging filter that injects thread-local context fields into every record.
+    """Logging filter that injects async-safe ContextVar fields into every record.
 
     Fields registered via :func:`set_log_context` are copied onto the
     ``logging.LogRecord`` before formatters see it, enabling trace/request IDs
@@ -148,7 +148,7 @@ class ContextFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Attach thread-local context fields to *record* and allow it through.
+        """Attach async-safe ContextVar fields to *record* and allow it through.
 
         Args:
             record (logging.LogRecord): The log record being processed.
@@ -193,7 +193,7 @@ class RESTHandler(logging.Handler):
         Args:
             record (logging.LogRecord): The log record to forward.
         """
-        if os.environ.get("MELLEA_FLOG"):
+        if _check_flog_env():
             formatter = self.formatter
             if isinstance(formatter, JsonFormatter):
                 log_dict = formatter.format_as_dict(record)
@@ -343,7 +343,7 @@ class JsonFormatter(logging.Formatter):
         """Formats a log record as a JSON string.
 
         Core fields are filtered by *include_fields* / *exclude_fields*.
-        Static *extra_fields* and any thread-local context fields (set via
+        Static *extra_fields* and any per-task ContextVar fields (set via
         :func:`set_log_context`) are merged in after the core fields.
 
         Args:
@@ -499,3 +499,20 @@ class MelleaLogger:
 
                     MelleaLogger.logger = logger
         return MelleaLogger.logger
+
+
+def _check_flog_env() -> bool:
+    """Check MELLEA_FLOG, with a DeprecationWarning fallback for the old FLOG name."""
+    if os.environ.get("MELLEA_FLOG"):
+        return True
+    if os.environ.get("FLOG"):
+        import warnings
+
+        warnings.warn(
+            "The FLOG environment variable is deprecated and will be removed in a future release. "
+            "Use MELLEA_FLOG instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return True
+    return False

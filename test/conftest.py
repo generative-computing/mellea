@@ -302,7 +302,6 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
         backend: The backend instance to clean up.
         backend_name: Name for logging.
     """
-    import gc
 
     logger = MelleaLogger.get_logger()
     logger.info(f"Cleaning up {backend_name} backend GPU memory...")
