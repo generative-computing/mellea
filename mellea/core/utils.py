@@ -443,7 +443,8 @@ class CustomFormatter(logging.Formatter):
         result = formatter.format(record)
         trace_id = getattr(record, "trace_id", None)
         if trace_id is not None:
-            result += f" [trace_id={trace_id} span_id={record.span_id}]"  # type: ignore[attr-defined]
+            span_id = getattr(record, "span_id", None)
+            result += f" [trace_id={trace_id} span_id={span_id}]"
         return result
 
 

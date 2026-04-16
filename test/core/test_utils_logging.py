@@ -3,6 +3,7 @@
 # pytest: unit
 
 import asyncio
+import io
 import json
 import logging
 import threading
@@ -705,3 +706,50 @@ class TestFilterFormatterIntegration:
 
         assert "trace_id=00000000000000000000000000000001" in result
         assert "span_id=0000000000000002" in result
+
+    def test_logger_singleton_with_otel_filter_and_json_formatter(self):
+        """MelleaLogger.get_logger() with OtelTraceFilter produces trace context in JSON output."""
+        with _otel_span(0x00000000000000000000000000000003, 0x0000000000000004):
+            logger = MelleaLogger.get_logger()
+            # Capture output with JsonFormatter
+            stream = io.StringIO()
+            handler = logging.StreamHandler(stream)
+            handler.setFormatter(JsonFormatter())
+            logger.addHandler(handler)
+
+            try:
+                # Log a message - filters are applied automatically by the logger
+                logger.info("logger integration test")
+
+                # Parse the JSON output
+                output = stream.getvalue().strip()
+                result = json.loads(output)
+
+                assert result["trace_id"] == "00000000000000000000000000000003"
+                assert result["span_id"] == "0000000000000004"
+                assert result["message"] == "logger integration test"
+            finally:
+                logger.removeHandler(handler)
+
+    def test_logger_singleton_with_otel_filter_and_custom_formatter(self):
+        """MelleaLogger.get_logger() with OtelTraceFilter produces trace context in custom format output."""
+        with _otel_span(0x00000000000000000000000000000005, 0x0000000000000006):
+            logger = MelleaLogger.get_logger()
+            # Capture output with CustomFormatter
+            stream = io.StringIO()
+            handler = logging.StreamHandler(stream)
+            handler.setFormatter(CustomFormatter(datefmt="%H:%M:%S"))
+            logger.addHandler(handler)
+
+            try:
+                # Log a message - filters are applied automatically by the logger
+                logger.info("logger integration test")
+
+                # Check the formatted output
+                output = stream.getvalue().strip()
+
+                assert "trace_id=00000000000000000000000000000005" in output
+                assert "span_id=0000000000000006" in output
+                assert "logger integration test" in output
+            finally:
+                logger.removeHandler(handler)
