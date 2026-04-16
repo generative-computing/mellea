@@ -11,7 +11,7 @@ schemes not well-represented in general training data. Mellea lets you train a
 [aLoRA](https://github.com/IBM/activated-lora) adapter on your own labeled dataset
 and use it as a requirement validator in any Mellea program.
 
-**Prerequisites:** `pip install mellea`, `m` CLI available. Training requires a GPU or
+**Prerequisites:** `pip install "mellea[cli]"`. Training requires a GPU or
 Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requires a
 Hugging Face account.
 

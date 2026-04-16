@@ -8,11 +8,17 @@ import sys
 import time
 import uuid
 
-import typer
-import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+try:
+    import typer
+    import uvicorn
+    from fastapi import FastAPI, Request
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+except ImportError as e:
+    raise ImportError(
+        "The 'm serve' command requires extra dependencies. "
+        'Please install them with: pip install "mellea[server]"'
+    ) from e
 
 from mellea.backends.model_options import ModelOption
 
@@ -213,35 +219,12 @@ def make_chat_endpoint(module):
     return endpoint
 
 
-def serve(
-    script_path: str = typer.Argument(
-        default="docs/examples/m_serve/example.py",
-        help="Path to the Python script to import and serve",
-    ),
-    host: str = typer.Option("0.0.0.0", help="Host to bind to"),
-    port: int = typer.Option(8080, help="Port to bind to"),
+def run_server(
+    script_path: str = "docs/examples/m_serve/example.py",
+    host: str = "0.0.0.0",
+    port: int = 8080,
 ):
-    """Serve a Mellea program as an OpenAI-compatible HTTP endpoint.
-
-    Loads a Python script containing a Mellea generative function and exposes it
-    via a FastAPI server implementing the OpenAI chat completions API. The server
-    accepts ``POST /v1/chat/completions`` requests.
-
-    Prerequisites:
-        Mellea installed (``uv add mellea``). The target script must define at
-        least one generative function.
-
-    Output:
-        Starts a long-running HTTP server on the specified host and port.
-        The ``/v1/chat/completions`` endpoint accepts OpenAI-format chat
-        completion requests and returns ``ChatCompletion`` JSON responses.
-
-    Examples:
-        m serve my_app.py --port 9000
-
-    See Also:
-        guide: integrations/m-serve
-    """
+    """Serve a FastAPI endpoint for a given script."""
     module = load_module_from_path(script_path)
     route_path = "/v1/chat/completions"
 

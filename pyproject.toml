@@ -23,8 +23,6 @@ dependencies = [
     "jinja2",
     "ollama>=0.5.1",
     "requests>=2.32.3",
-    "typer",
-    "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
     "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
@@ -80,6 +78,7 @@ telemetry = [
 docling = [
     "docling>=2.45.0",
     "opencv-python-headless",  # workaround: docling-ibm-models uses cv2 but omits it from its declared dependencies; headless variant required on Apple Silicon
+    "omegaconf>=2.1", # workaround: docling's omegaconf and rapidocr dependencies have incompatible version
 ]
 
 granite_retriever = [
@@ -88,10 +87,15 @@ granite_retriever = [
     "elasticsearch>=8.0.0,<9.0.0",
 ]
 
+cli = [
+    "typer",
+]
+
 # Infrastructure
 server = [
     "uvicorn",
     "fastapi",
+    "mellea[cli]",
 ]
 
 sandbox = [
@@ -105,7 +109,7 @@ hooks = [
     "grpcio>=1.78.0",
 ]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks]"]
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks,cli]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups
@@ -158,6 +162,7 @@ dev = [
     {include-group = "release"},
     "griffe>=2.0.0",
     "mdxify>=0.2.37",
+    "mellea[server]",
     "poethepoet>=0.42.1",
 ]
 
@@ -418,3 +423,6 @@ branch = "main"
 parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test,release"
 parser_angular_minor_types = "release"
 parser_angular_patch_types = "fix,perf,feat"
+
+[tool.uv.sources]
+mellea = { workspace = true }

@@ -5,7 +5,7 @@ description: "Use m decompose to break a complex prompt into typed, validated ge
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install mellea`, Ollama running locally (or an
+**Prerequisites:** `pip install "mellea[cli]"`, Ollama running locally (or an
 OpenAI-compatible endpoint).
 
 When a single prompt grows too long or asks the LLM to do too many things at
