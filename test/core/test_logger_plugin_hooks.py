@@ -184,16 +184,28 @@ class TestMelleaLoggerInHooks:
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
-        hook_saw_context: list[bool] = []
+        hook_records: list[logging.LogRecord] = []
 
         set_log_context(outer_field="visible-in-hook")
 
         @hook("sampling_loop_start", mode=PluginMode.AUDIT)
         async def visibility_hook(payload: Any, ctx: Any) -> None:
-            from mellea.core.utils import _log_context
+            from mellea.core.utils import ContextFilter
 
-            fields = _log_context.get()
-            hook_saw_context.append("outer_field" in fields)
+            logger = MelleaLogger.get_logger()
+            # Create a log record to test context visibility
+            record = logger.makeRecord(
+                name="fancy_logger",
+                level=logging.INFO,
+                fn="test",
+                lno=0,
+                msg="testing context visibility",
+                args=(),
+                exc_info=None,
+            )
+            # Apply the context filter to populate context fields
+            ContextFilter().filter(record)
+            hook_records.append(record)
 
         register(visibility_hook)
 
@@ -208,8 +220,8 @@ class TestMelleaLoggerInHooks:
             show_progress=False,
         )
 
-        assert hook_saw_context, "Hook did not fire"
-        assert hook_saw_context[0], (
+        assert hook_records, "Hook did not fire"
+        assert getattr(hook_records[0], "outer_field", None) == "visible-in-hook", (
             "log_context fields should be visible inside AUDIT hooks (same asyncio task)"
         )
 
