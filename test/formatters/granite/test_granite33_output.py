@@ -292,6 +292,60 @@ class TestAddCitationResponseSpans:
         end = citation["response_end"]
         assert response_without[begin:end] == citation["response_text"]
 
+    def test_duplicate_sentences_each_get_own_span(self):
+        """Regression (#851): duplicate sentence text must map to distinct occurrences.
+
+        Without this fix, str.find() always returns the first occurrence, so both
+        citations end up with the same span pointing at the first sentence.
+        """
+        sent = "The sky is blue."
+        cite1 = f'{CITE_START}{{"document_id": "1"}}{CITE_END}'
+        cite2 = f'{CITE_START}{{"document_id": "2"}}{CITE_END}'
+        # Two identical sentences, each followed by a separate citation tag.
+        response_with = f"{sent} {cite1} {sent} {cite2}"
+        # Clean response has both sentences, separated by a space.
+        response_without = f"{sent} {sent}"
+
+        result = _add_citation_response_spans(
+            [self._make_citation(), self._make_citation()],
+            response_with,
+            response_without,
+        )
+
+        assert len(result) == 2
+        spans = [(c["response_begin"], c["response_end"]) for c in result]
+        # Both spans must be valid slices of the clean response.
+        for begin, end in spans:
+            assert response_without[begin:end] == sent
+        # The two spans must be different (pointing at the two different occurrences).
+        assert spans[0] != spans[1]
+        # They must not overlap.
+        spans_sorted = sorted(spans)
+        assert spans_sorted[0][1] <= spans_sorted[1][0]
+
+    def test_multiple_citations_on_same_sentence_share_span(self):
+        """Two citations on a single occurrence of a sentence must share the same span."""
+        sent = "The sky is blue."
+        cite1 = f'{CITE_START}{{"document_id": "1"}}{CITE_END}'
+        cite2 = f'{CITE_START}{{"document_id": "2"}}{CITE_END}'
+        # Single sentence with two citation tags; clean response has one occurrence.
+        response_with = f"{sent} {cite1} {cite2}"
+        response_without = sent
+
+        result = _add_citation_response_spans(
+            [self._make_citation(), self._make_citation()],
+            response_with,
+            response_without,
+        )
+
+        assert len(result) == 2
+        # Both citations reference the one occurrence — spans must be identical.
+        assert result[0]["response_begin"] == result[1]["response_begin"]
+        assert result[0]["response_end"] == result[1]["response_end"]
+        begin = result[0]["response_begin"]
+        end = result[0]["response_end"]
+        assert response_without[begin:end] == sent
+
 
 # ---------------------------------------------------------------------------
 # Granite33OutputProcessor.transform

@@ -211,16 +211,28 @@ def _add_citation_response_spans(
                 )
                 continue
 
-    # For each citation bring the response sentence to which it refers and its
-    # begin/end spans
+    # For each citation, find its span in the clean response.
+    # Citations are indexed in left-to-right response order (citation_idx above),
+    # so search_offset can advance monotonically (fixes issue #851 — str.find()
+    # without an offset always returned the first occurrence for duplicate sentences).
+    # If find() misses after search_offset the sentence appears only once in the
+    # response; fall back to the start so multi-citation sentences share their span.
+    search_offset = 0
     for i, citation in enumerate(augmented_citation_info):
         response_text = response_sents_by_citation_id.get(str(i), "")
-        index = response_text_without_citations.find(response_text)
+
+        index = response_text_without_citations.find(response_text, search_offset)
         if index < 0:
-            logger.warning(
-                "Error in extracting the response sentence of a citation: Unexpected error."
-            )
-            continue
+            # Single occurrence: fall back so every citation on this sentence
+            # gets the same span; do not advance search_offset.
+            index = response_text_without_citations.find(response_text)
+            if index < 0:
+                logger.warning(
+                    "Error in extracting the response sentence of a citation: Unexpected error."
+                )
+                continue
+        else:
+            search_offset = index + len(response_text)
 
         citation["response_text"] = response_text
         citation["response_begin"] = index
