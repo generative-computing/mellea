@@ -133,6 +133,38 @@ class TestStreamingHelpers:
         assert parsed[-1]["usage"]["total_tokens"] == 8
 
     @pytest.mark.asyncio
+    async def test_stream_chat_completion_chunks_preserves_empty_precomputed_chunk(
+        self,
+    ):
+        """Test helper emits an explicit empty content chunk for precomputed output."""
+        output = ModelOutputThunk("")
+        output.usage = {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1}
+
+        events = []
+        async for event in stream_chat_completion_chunks(
+            output=output,
+            completion_id="chatcmpl-test123",
+            model="test-model",
+            created=123,
+            stream_options=StreamOptions(include_usage=True),
+        ):
+            events.append(event)
+
+        assert events[-1] == "data: [DONE]\n\n"
+
+        parsed = [
+            json.loads(event[6:].strip())
+            for event in events
+            if event.startswith("data: ") and event != "data: [DONE]\n\n"
+        ]
+
+        assert len(parsed) == 3
+        assert parsed[0]["choices"][0]["delta"]["role"] == "assistant"
+        assert parsed[1]["choices"][0]["delta"]["content"] == ""
+        assert parsed[2]["choices"][0]["finish_reason"] == "stop"
+        assert parsed[2]["usage"]["total_tokens"] == 1
+
+    @pytest.mark.asyncio
     async def test_stream_chat_completion_chunks_emits_error_event(self):
         """Test helper emits an error payload and [DONE] when streaming fails."""
         output = ModelOutputThunk(None)

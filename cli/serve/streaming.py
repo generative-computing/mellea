@@ -60,7 +60,7 @@ async def stream_chat_completion_chunks(
 
         # Handle pre-computed output: emit value as a single content chunk
         if output.is_computed():
-            if output.value:
+            if output.value is not None:
                 chunk = ChatCompletionChunk(
                     id=completion_id,
                     model=model,
