@@ -149,6 +149,79 @@ def _get_click_app():
     return typer.main.get_command(cli)
 
 
+def _parse_two_column_block(content: str) -> list[tuple[str, str]] | None:
+    """Parse a Click-style two-column aligned block into (name, description) pairs.
+
+    Click authors sometimes format ``\\b`` blocks as a fixed-width two-column
+    table (name left-aligned, description right-aligned with consistent padding)
+    for legible ``--help`` output.  This function detects that format and returns
+    ``(name, description)`` pairs so the generator can emit a proper markdown
+    table instead of a raw code fence.
+
+    Returns ``None`` if the content does not match the two-column pattern.
+
+    Example input::
+
+        add-await-result  Adds await_result=True to each call.
+                          Continuation of the description.
+        add-stream-loop   Inserts a while loop after each call.
+    """
+    pairs: list[tuple[str, str]] = []
+    current_name: str | None = None
+    current_desc_parts: list[str] = []
+    desc_col: int | None = None
+
+    for raw in content.splitlines():
+        if not raw.strip():
+            continue
+        # Detect a new entry: leading whitespace, a name (no spaces), then 2+
+        # spaces, then description text — all starting before the desc column.
+        m = re.match(r"^(\s+)(\S+)(\s{2,})(\S.*)", raw)
+        if m and (desc_col is None or m.start(4) == desc_col):
+            if current_name is not None:
+                pairs.append((current_name, " ".join(current_desc_parts)))
+            desc_col = m.start(4)
+            current_name = m.group(2)
+            current_desc_parts = [m.group(4)]
+            continue
+        # Continuation line: non-space content starts at or near desc_col
+        if desc_col is not None and current_name is not None:
+            leading = len(raw) - len(raw.lstrip())
+            if leading >= desc_col - 1:
+                current_desc_parts.append(raw.strip())
+                continue
+        # Does not fit either pattern — not a two-column block
+        return None
+
+    if current_name is not None:
+        pairs.append((current_name, " ".join(current_desc_parts)))
+
+    return pairs if pairs else None
+
+
+def _extract_verbatim_blocks(help_text: str) -> list[str]:
+    """Extract Click ``\\b`` verbatim blocks from help text.
+
+    Click uses the backspace character (``\\x08``, written as ``\\b`` in Python
+    source string literals) as a marker to prevent paragraph rewrapping in
+    ``--help`` output.  The generator must extract these blocks independently
+    because the section parser buries them inside whatever named section
+    (e.g. ``Raises``) happens to precede them, and that section is never
+    rendered.
+
+    Returns a list of stripped block strings (first line is typically the
+    block title, e.g. ``"Modes:"``, followed by indented content lines).
+    """
+    # In memory the docstring contains actual \x08 chars; split on them.
+    parts = re.split(r"\x08\s*\n", help_text)
+    blocks: list[str] = []
+    for part in parts[1:]:  # parts[0] is content before the first \b
+        block = part.rstrip()
+        if block.strip():
+            blocks.append(block)
+    return blocks
+
+
 def _format_default(value: Any) -> str:
     """Format a parameter default for display."""
     if value is None:
@@ -300,6 +373,57 @@ def _render_command(
             help_text = _rst_to_md(getattr(p, "help", "") or "—")
             lines.append(f"| {flags} | {ptype} | {default} | {help_text} |")
         lines.append("")
+
+    # \b verbatim blocks — Click-style preformatted sections (e.g. "Modes:",
+    # "Best practices:") that appear in --help but are buried inside the
+    # Raises/Args sections of the parsed docstring and would otherwise be lost.
+    if cmd.help:
+        vb_blocks = _extract_verbatim_blocks(cmd.help)
+        for block in vb_blocks:
+            first_line, _, rest = block.partition("\n")
+            title = first_line.strip()
+            if title:
+                lines.append(f"**{title}**")
+                lines.append("")
+            if rest.strip():
+                # Bullet lists render as markdown; columnar/aligned content
+                # (e.g. mode tables) keeps a code fence for monospace alignment.
+                first_content = next(
+                    (line.strip() for line in rest.splitlines() if line.strip()), ""
+                )
+                if first_content.startswith("- "):
+                    # Bullet list — join wrapped continuation lines into bullets
+                    bullets: list[str] = []
+                    current: str | None = None
+                    for raw in rest.splitlines():
+                        s = raw.strip()
+                        if not s:
+                            if current is not None:
+                                bullets.append(current)
+                                current = None
+                        elif s.startswith("- "):
+                            if current is not None:
+                                bullets.append(current)
+                            current = s
+                        else:
+                            current = (current + " " + s) if current is not None else s
+                    if current is not None:
+                        bullets.append(current)
+                    for b in bullets:
+                        lines.append(b)
+                else:
+                    # Try two-column aligned format → markdown table
+                    pairs = _parse_two_column_block(rest)
+                    if pairs:
+                        # Render as bold-name bullets — consistent font with
+                        # other bullet blocks, no invented column headers.
+                        for name, desc in pairs:
+                            lines.append(f"- **`{name}`** — {desc}")
+                    else:
+                        lines.append("```")
+                        lines.append(rest.rstrip())
+                        lines.append("```")
+                lines.append("")
 
     # Output
     output = _rst_to_md(sections.get("Output", ""))
