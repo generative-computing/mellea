@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator
 
 from mellea.core.base import ModelOutputThunk
-from mellea.core.utils import FancyLogger
+from mellea.core.utils import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import build_completion_usage
 
 from .models import (
@@ -123,7 +123,7 @@ async def stream_chat_completion_chunks(
         yield "data: [DONE]\n\n"
 
     except Exception as e:
-        FancyLogger.get_logger().exception("Streaming error")
+        MelleaLogger.get_logger().exception("Streaming error")
         error_response = OpenAIErrorResponse(
             error=OpenAIError(message=f"Streaming error: {e!s}", type="server_error")
         )
