@@ -86,7 +86,7 @@ With structured JSON output enabled, the same `SUCCESS` record looks like:
 
 The `session_id`, `backend`, `model_id`, `strategy`, and `loop_budget` fields
 are injected automatically when the call runs inside a `with session:` block.
-They appear on every log record within that scope — not just `SUCCESS`.
+They appear on every log record within that scope.
 
 ### Adding custom context fields
 
