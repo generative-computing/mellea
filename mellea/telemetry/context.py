@@ -58,22 +58,38 @@ _CONTEXT_VARS: dict[str, contextvars.ContextVar[Any]] = {
 
 
 def get_session_id() -> str | None:
-    """Return the session_id for the current async context, or ``None``."""
+    """Return the session_id for the current async context, or ``None``.
+
+    Returns:
+        The active session ID string, or ``None`` if not set.
+    """
     return _session_id.get()
 
 
 def get_request_id() -> str | None:
-    """Return the request_id for the current async context, or ``None``."""
+    """Return the request_id for the current async context, or ``None``.
+
+    Returns:
+        The active request ID string, or ``None`` if not set.
+    """
     return _request_id.get()
 
 
 def get_model_id() -> str | None:
-    """Return the model_id for the current async context, or ``None``."""
+    """Return the model_id for the current async context, or ``None``.
+
+    Returns:
+        The active model ID string, or ``None`` if not set.
+    """
     return _model_id.get()
 
 
 def get_sampling_iteration() -> int | None:
-    """Return the sampling_iteration for the current async context, or ``None``."""
+    """Return the sampling_iteration for the current async context, or ``None``.
+
+    Returns:
+        The current sampling iteration integer, or ``None`` if not set.
+    """
     return _sampling_iteration.get()
 
 
