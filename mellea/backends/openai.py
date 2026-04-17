@@ -86,8 +86,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             constraint checking; primarily for benchmarking and debugging.
         embedded_adapters (bool): If ``True``, automatically download and register
             embedded intrinsic adapters from the model specified by *model_id*.
-            The model ID is used as a HuggingFace Hub repo ID (or local directory
-            path) to load ``adapter_index.json`` and the corresponding I/O configs.
+            The model ID is used as a HuggingFace Hub repo ID to load 
+            ``adapter_index.json`` and the corresponding I/O configs.
         api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
@@ -218,7 +218,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         _ = self._async_client
 
         if embedded_adapters:
-            self.register_granite_switch_model(self._model_id)
+            self.register_embedded_adapter_model(self._model_id)
 
     # ------------------------------------------------------------------
     # AdapterMixin implementation
@@ -269,14 +269,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # Convenience registration helpers
     # ------------------------------------------------------------------
 
-    def register_granite_switch_model(
+    def register_embedded_adapter_model(
         self, source: str, *, revision: str = "main", cache_dir: str | None = None
     ) -> list[str]:
-        """Register all embedded adapters from a Granite Switch model.
+        """Register all embedded adapters from an Embedded Adapter model.
 
         Args:
-            source (str): Either a local directory path containing
-                ``adapter_index.json``, or a HuggingFace Hub repo ID.
+            source (str): a HuggingFace Hub repo ID.
             revision (str): Git revision when loading from HuggingFace Hub.
             cache_dir (str | None): Cache directory for HF downloads.
 
@@ -285,12 +284,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """
         import os
 
-        if os.path.isdir(source):
-            adapters = EmbeddedIntrinsicAdapter.from_model_directory(source)
-        else:
-            adapters = EmbeddedIntrinsicAdapter.from_hub(
-                source, revision=revision, cache_dir=cache_dir
-            )
+        adapters = EmbeddedIntrinsicAdapter.from_hub(
+            source, revision=revision, cache_dir=cache_dir
+        )
 
         for adapter in adapters:
             self.add_adapter(adapter)
