@@ -327,16 +327,13 @@ class EmbeddedIntrinsicAdapter(Adapter):
         technology (str): ``"lora"`` or ``"alora"``.
     """
 
-    def __init__(
-        self,
-        intrinsic_name: str,
-        config: dict,
-        technology: str = "lora",
-    ):
+    def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
         """Initialize an embedded intrinsic adapter with its I/O config."""
-        adapter_type = (
-            AdapterType.ALORA if technology == "alora" else AdapterType.LORA
-        )
+        if technology not in ("lora", "alora"):
+            raise ValueError(
+                f"technology must be 'lora' or 'alora', got '{technology}'"
+            )
+        adapter_type = AdapterType.ALORA if technology == "alora" else AdapterType.LORA
         super().__init__(intrinsic_name, adapter_type)
         self.intrinsic_name = intrinsic_name
         self.config = config
@@ -367,9 +364,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
         model_path = pathlib.Path(model_path)
         index_path = model_path / "adapter_index.json"
         if not index_path.exists():
-            raise FileNotFoundError(
-                f"No adapter_index.json found at {index_path}"
-            )
+            raise FileNotFoundError(f"No adapter_index.json found at {index_path}")
 
         with open(index_path, encoding="utf-8") as f:
             index = _json.load(f)
@@ -402,9 +397,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
     @staticmethod
     def from_hub(
-        repo_id: str,
-        revision: str = "main",
-        cache_dir: str | None = None,
+        repo_id: str, revision: str = "main", cache_dir: str | None = None
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load all embedded adapters from a Granite Switch model on HuggingFace Hub.
 
@@ -420,7 +413,13 @@ class EmbeddedIntrinsicAdapter(Adapter):
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
         """
-        import huggingface_hub
+        try:
+            import huggingface_hub
+        except ImportError as e:
+            raise ImportError(
+                "huggingface_hub is required to load adapters from the Hub. "
+                "Please install it: pip install huggingface_hub"
+            ) from e
 
         local_root = huggingface_hub.snapshot_download(
             repo_id=repo_id,
