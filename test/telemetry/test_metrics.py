@@ -65,6 +65,20 @@ def enable_metrics(monkeypatch):
     importlib.reload(mellea.telemetry.metrics)
 
 
+@pytest.fixture
+def shutdown_meter_provider():
+    """Shut down the MeterProvider after tests that reload with real exporters enabled.
+
+    Prevents PeriodicExportingMetricReader background threads from firing after
+    pytest closes stdout (60 s default interval).
+    """
+    yield
+    import mellea.telemetry.metrics as _m
+
+    if _m._meter_provider is not None:
+        _m._meter_provider.shutdown()
+
+
 # Configuration Tests
 
 
@@ -364,7 +378,7 @@ def test_default_service_name(enable_metrics):
 # Console Exporter Tests
 
 
-def test_console_exporter_enabled(monkeypatch):
+def test_console_exporter_enabled(monkeypatch, shutdown_meter_provider):
     """Test that console exporter can be enabled."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
@@ -390,7 +404,7 @@ def test_console_exporter_disabled_by_default(enable_metrics):
 # OTLP Exporter Tests
 
 
-def test_otlp_explicit_enablement(monkeypatch):
+def test_otlp_explicit_enablement(monkeypatch, shutdown_meter_provider):
     """Test that OTLP exporter requires explicit enablement via MELLEA_METRICS_OTLP."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
@@ -521,7 +535,7 @@ def test_prometheus_exporter_import_error_warning(monkeypatch):
         sys.modules.update(original_modules)
 
 
-def test_prometheus_and_otlp_exporters_together(monkeypatch):
+def test_prometheus_and_otlp_exporters_together(monkeypatch, shutdown_meter_provider):
     """Test that Prometheus and OTLP exporters can run simultaneously."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
@@ -547,7 +561,9 @@ def test_prometheus_exporter_disabled_by_default(enable_metrics):
     assert _METRICS_PROMETHEUS is False
 
 
-def test_prometheus_exporter_with_console_exporter(monkeypatch):
+def test_prometheus_exporter_with_console_exporter(
+    monkeypatch, shutdown_meter_provider
+):
     """Test that Prometheus works alongside console exporter."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
