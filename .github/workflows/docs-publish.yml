@@ -377,7 +377,7 @@ jobs:
             docs: publish from ${{ github.sha }}
 
             Branch:  ${{ github.ref_name }}
-            Trigger: ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }}
+            Trigger: ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) }}
             Run:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Write deploy summary
@@ -408,4 +408,4 @@ jobs:
           STEPS_TARGET_OUTPUTS_BRANCH: ${{ steps.target.outputs.branch }}
           JOB_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
-          PR_SUFFIX: ${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }}
+          PR_SUFFIX: "${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) }}"
