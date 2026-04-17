@@ -47,7 +47,9 @@ from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -357,8 +359,6 @@ class OpenAIBackend(FormatterBackend):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes ``action`` and the new output.
         """
-        from ..telemetry.backend_instrumentation import start_generate_span
-
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
@@ -372,13 +372,15 @@ class OpenAIBackend(FormatterBackend):
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
 
-        result = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            result = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
         # Store span in ModelOutputThunk for later use in post_processing
         mot, new_ctx = result
         if span is not None:

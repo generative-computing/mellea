@@ -30,7 +30,9 @@ from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
@@ -286,21 +288,22 @@ class OllamaModelBackend(FormatterBackend):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes ``action`` and the new output.
         """
-        from ..telemetry.backend_instrumentation import start_generate_span
-
         # Start span without auto-closing (will be closed in post_processing)
         span = start_generate_span(self, action, ctx, format, tool_calls)
 
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
-        mot = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            mot = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
         # Store span for telemetry recording and closing in post_processing
         if span is not None:

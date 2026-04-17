@@ -36,6 +36,8 @@ try:
 except ImportError:
     _OTEL_AVAILABLE = False
 
+from ..telemetry.context import _CONTEXT_VARS as _telemetry_vars, MelleaContextFilter
+
 # ---------------------------------------------------------------------------
 # Per-task/coroutine context fields (safe for asyncio — each Task gets its own copy)
 # ---------------------------------------------------------------------------
@@ -376,12 +378,21 @@ class JsonFormatter(logging.Formatter):
         # Static extra fields (constructor-level)
         log_record.update(self._extra)
 
-        # Dynamic context fields — prefer record attributes (set by
-        # ContextFilter) but fall back to ContextVar storage so the
-        # formatter works standalone without a filter attached.
+        # Dynamic context fields — prefer record attributes (set by ContextFilter /
+        # MelleaContextFilter) but fall back to ContextVar storage so the formatter
+        # works standalone without filters attached.
         context_fields: dict[str, Any] = _log_context.get()
         for key, value in context_fields.items():
             log_record[key] = getattr(record, key, value)
+
+        # Telemetry context fields (session_id, request_id, model_id, sampling_iteration).
+        # MelleaContextFilter stamps these onto the record before formatters run; read
+        # them back off the record here so they appear in JSON output.  Fall back to the
+        # ContextVar directly so the formatter still works without the filter attached.
+        for key, var in _telemetry_vars.items():
+            value = getattr(record, key, var.get())
+            if value is not None:
+                log_record.setdefault(key, value)
 
         return log_record
 
@@ -520,6 +531,9 @@ class MelleaLogger:
                     # Attach both filters so they reach all handlers
                     logger.addFilter(ContextFilter())
                     logger.addFilter(OtelTraceFilter())
+
+                    # Inject telemetry context fields (session_id, request_id, etc.)
+                    logger.addFilter(MelleaContextFilter())
 
                     # Only set default level if user hasn't already configured it
                     if logger.level == logging.NOTSET:

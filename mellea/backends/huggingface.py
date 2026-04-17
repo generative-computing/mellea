@@ -55,6 +55,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .adapters import (
     AdapterMixin,
     AdapterType,
@@ -389,71 +390,80 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
-        await self.do_generate_walk(action)
 
-        # Upsert model options.
-        model_opts = self._simplify_and_merge(model_options)
+        with with_context(
+            request_id=generate_request_id(),
+            model_id=str(getattr(self, "model_id", "unknown")),
+        ):
+            await self.do_generate_walk(action)
 
-        # Requirements can be automatically rerouted to a requirement adapter.
-        if isinstance(action, Requirement):
-            # See docs/dev/requirement_aLoRA_rerouting.md
-            reroute_to_alora = self.default_to_constraint_checking_alora
-            adapter_name = "requirement_check"
+            # Upsert model options.
+            model_opts = self._simplify_and_merge(model_options)
 
-            if isinstance(action, ALoraRequirement):
-                reroute_to_alora = True
-                adapter_name = action.intrinsic_name
-                alora_action = action
-            else:
-                assert action.description is not None, (
-                    "must have a description when generating from a requirement"
-                )
-                alora_action = ALoraRequirement(action.description, adapter_name)
+            # Requirements can be automatically rerouted to a requirement adapter.
+            if isinstance(action, Requirement):
+                # See docs/dev/requirement_aLoRA_rerouting.md
+                reroute_to_alora = self.default_to_constraint_checking_alora
+                adapter_name = "requirement_check"
 
-            # Check if a requirement_check (or AloraRequirement specified) adapter
-            # exists.
-            alora_req_adapter = get_adapter_for_intrinsic(
-                adapter_name, [AdapterType.ALORA], self._added_adapters
-            )
-            if alora_req_adapter is None:
-                # Log a warning if using an AloraRequirement but no adapter fit.
-                if reroute_to_alora and isinstance(action, ALoraRequirement):
-                    MelleaLogger.get_logger().warning(
-                        f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                if isinstance(action, ALoraRequirement):
+                    reroute_to_alora = True
+                    adapter_name = action.intrinsic_name
+                    alora_action = action
+                else:
+                    assert action.description is not None, (
+                        "must have a description when generating from a requirement"
                     )
-                reroute_to_alora = False
+                    alora_action = ALoraRequirement(action.description, adapter_name)
 
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
+                # Check if a requirement_check (or AloraRequirement specified) adapter
+                # exists.
+                alora_req_adapter = get_adapter_for_intrinsic(
+                    adapter_name, [AdapterType.ALORA], self._added_adapters
+                )
+                if alora_req_adapter is None:
+                    # Log a warning if using an AloraRequirement but no adapter fit.
+                    if reroute_to_alora and isinstance(action, ALoraRequirement):
+                        MelleaLogger.get_logger().warning(
+                            f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                        )
+                    reroute_to_alora = False
 
-            if reroute_to_alora:
-                # Keep the alora requirement handling separate for now.
+                if issubclass(type(action), LLMaJRequirement):
+                    reroute_to_alora = False
+
+                if reroute_to_alora:
+                    # Keep the alora requirement handling separate for now.
+                    mot = await self._generate_from_intrinsic(
+                        alora_action, ctx, model_options=model_opts
+                    )
+                    # Store span for telemetry
+                    if span is not None:
+                        mot._meta["_telemetry_span"] = span
+                    return mot, ctx.add(alora_action).add(mot)
+
+            elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
-                    alora_action, ctx, model_options=model_opts
+                    action, ctx, model_options=model_opts
                 )
                 # Store span for telemetry
                 if span is not None:
                     mot._meta["_telemetry_span"] = span
-                return mot, ctx.add(alora_action).add(mot)
+                return mot, ctx.add(action).add(mot)
 
-        elif isinstance(action, Intrinsic):
-            mot = await self._generate_from_intrinsic(
-                action, ctx, model_options=model_opts
+            mot = await self._generate_from_context_standard(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_opts,
+                tool_calls=tool_calls,
             )
-            # Store span for telemetry
+
+            # Store span in metadata for post_processing to record telemetry
             if span is not None:
                 mot._meta["_telemetry_span"] = span
+
             return mot, ctx.add(action).add(mot)
-
-        mot = await self._generate_from_context_standard(
-            action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
-        )
-
-        # Store span in metadata for post_processing to record telemetry
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
-
-        return mot, ctx.add(action).add(mot)
 
     def _generate_with_adapter_lock(
         self, adapter_name: str, generate_func: Callable, *args, **kwargs
