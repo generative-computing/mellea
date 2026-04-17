@@ -289,6 +289,7 @@ def make_chat_endpoint(module):
                         created=created_timestamp,
                         stream_options=request.stream_options,
                         system_fingerprint=system_fingerprint,
+                        format_model=format_model,
                     ),
                     media_type="text/event-stream",
                 )

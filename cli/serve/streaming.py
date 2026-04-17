@@ -1,6 +1,9 @@
 """Streaming utilities for OpenAI-compatible server responses."""
 
+import json
 from collections.abc import AsyncGenerator
+
+from pydantic import BaseModel, ValidationError
 
 from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
@@ -23,6 +26,7 @@ async def stream_chat_completion_chunks(
     created: int,
     stream_options: StreamOptions | None = None,
     system_fingerprint: str | None = None,
+    format_model: type[BaseModel] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate OpenAI-compatible SSE chat completion chunks from a model output.
 
@@ -36,6 +40,9 @@ async def stream_chat_completion_chunks(
             ``include_usage`` field.
         system_fingerprint: Backend configuration fingerprint to include in chunks.
             Defaults to ``None``.
+        format_model: Optional Pydantic model for validating structured output.
+            When provided, the complete streamed output will be validated against
+            this schema before the final chunk is sent.
 
     Yields:
         Server-sent event payload strings representing OpenAI-compatible chat
@@ -97,6 +104,45 @@ async def stream_chat_completion_chunks(
                         system_fingerprint=system_fingerprint,
                     )
                     yield f"data: {chunk.model_dump_json()}\n\n"
+
+        # Validate format if format_model is provided
+        if format_model is not None:
+            if output.value is None:
+                error_response = OpenAIErrorResponse(
+                    error=OpenAIError(
+                        message="Output value is None, cannot validate format",
+                        type="invalid_response_error",
+                    )
+                )
+                yield f"data: {error_response.model_dump_json()}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            try:
+                # Parse the complete output as JSON
+                output_json = json.loads(output.value)
+                # Validate against the Pydantic model
+                format_model.model_validate(output_json)
+            except json.JSONDecodeError as e:
+                error_response = OpenAIErrorResponse(
+                    error=OpenAIError(
+                        message=f"Output is not valid JSON: {e!s}",
+                        type="invalid_response_error",
+                    )
+                )
+                yield f"data: {error_response.model_dump_json()}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            except ValidationError as e:
+                error_response = OpenAIErrorResponse(
+                    error=OpenAIError(
+                        message=f"Output does not match required schema: {e!s}",
+                        type="invalid_response_error",
+                    )
+                )
+                yield f"data: {error_response.model_dump_json()}\n\n"
+                yield "data: [DONE]\n\n"
+                return
 
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
