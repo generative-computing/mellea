@@ -29,6 +29,13 @@ from typing import Any
 
 import requests
 
+try:
+    from opentelemetry import trace as otel_trace
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Per-task/coroutine context fields (safe for asyncio — each Task gets its own copy)
 # ---------------------------------------------------------------------------
@@ -60,9 +67,11 @@ RESERVED_LOG_RECORD_ATTRS: frozenset[str] = frozenset(
         "process",
         "processName",
         "relativeCreated",
+        "span_id",
         "stack_info",
         "thread",
         "threadName",
+        "trace_id",
     )
 )
 
@@ -111,7 +120,7 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
 
     Example::
 
-        with log_context(trace_id="abc-123", request_id="req-1"):
+        with log_context(request_id="req-1", user_id="u-42"):
             logger.info("Handling request")   # both IDs appear here
         logger.info("After request")          # IDs are gone
 
@@ -159,6 +168,35 @@ class ContextFilter(logging.Filter):
         fields: dict[str, Any] = _log_context.get()
         for key, value in fields.items():
             setattr(record, key, value)
+        return True
+
+
+class OtelTraceFilter(logging.Filter):
+    """Logging filter that injects the current OpenTelemetry trace context into log records.
+
+    Adds ``trace_id`` and ``span_id`` attributes (hex strings) to every
+    ``LogRecord`` when an active span exists.  When OpenTelemetry is not
+    installed the filter is a true no-op: it adds no attributes and takes no
+    branches, so there is zero overhead on the hot logging path.  Formatters
+    use ``hasattr`` / ``getattr`` to handle the absent attributes gracefully.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Adds trace_id and span_id to the log record from the current OTel span.
+
+        No-op when OpenTelemetry is not installed or when there is no active span.
+
+        Args:
+            record (logging.LogRecord): The log record to enrich.
+
+        Returns:
+            bool: Always ``True`` — the record is never suppressed.
+        """
+        if _OTEL_AVAILABLE:
+            ctx = otel_trace.get_current_span().get_span_context()
+            if ctx.is_valid:
+                record.trace_id = format(ctx.trace_id, "032x")
+                record.span_id = format(ctx.span_id, "016x")
         return True
 
 
@@ -217,6 +255,7 @@ class JsonFormatter(logging.Formatter):
     Produces a consistent JSON schema with a fixed set of core fields.
     Additional fields can be injected at construction time (``extra_fields``) or
     dynamically per-thread via :func:`set_log_context` / :class:`ContextFilter`.
+    Includes trace_id and span_id when OpenTelemetry tracing is active.
 
     Args:
         timestamp_format: ``strftime`` format for the ``timestamp`` field.
@@ -277,6 +316,7 @@ class JsonFormatter(logging.Formatter):
 
         Equivalent to :meth:`_build_log_dict` but part of the public interface so
         handlers and other callers do not need to reach into private methods.
+        Includes trace_id and span_id when OpenTelemetry tracing is active.
 
         Args:
             record: The log record to convert.
@@ -314,7 +354,6 @@ class JsonFormatter(logging.Formatter):
             "process_id": record.process,
             "thread_id": record.thread,
         }
-
         # Apply include/exclude filtering
         if self._include is not None:
             log_record: dict[str, Any] = {
@@ -322,6 +361,13 @@ class JsonFormatter(logging.Formatter):
             }
         else:
             log_record = {k: v for k, v in all_core.items() if k not in self._exclude}
+
+        # Add trace context if available
+        if hasattr(record, "trace_id"):
+            log_record["trace_id"] = record.trace_id  # type: ignore[attr-defined]
+            span_id = getattr(record, "span_id", None)
+            if span_id is not None:
+                log_record["span_id"] = span_id
 
         # Exception info
         if record.exc_info:
@@ -387,6 +433,9 @@ class CustomFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Formats a log record using a colour-coded ANSI format string based on the record's log level.
 
+        Appends ``[trace_id=… span_id=…]`` when ``OtelTraceFilter`` has
+        populated those fields on the record and a trace is active.
+
         Args:
             record (logging.LogRecord): The log record to format.
 
@@ -395,7 +444,12 @@ class CustomFormatter(logging.Formatter):
         """
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
-        return formatter.format(record)
+        result = formatter.format(record)
+        trace_id = getattr(record, "trace_id", None)
+        if trace_id is not None:
+            span_id = getattr(record, "span_id", None)
+            result += f" [trace_id={trace_id} span_id={span_id}]"
+        return result
 
 
 class MelleaLogger:
@@ -463,8 +517,9 @@ class MelleaLogger:
                 if MelleaLogger.logger is None:
                     logger = logging.getLogger("fancy_logger")
 
-                    # Attach the context filter so ContextFilter fields reach all handlers
+                    # Attach both filters so they reach all handlers
                     logger.addFilter(ContextFilter())
+                    logger.addFilter(OtelTraceFilter())
 
                     # Only set default level if user hasn't already configured it
                     if logger.level == logging.NOTSET:
