@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import uuid
+from typing import Any
 
 try:
     import typer
@@ -14,6 +15,7 @@ try:
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse, StreamingResponse
+    from pydantic import BaseModel, create_model
 except ImportError as e:
     raise ImportError(
         "The 'm serve' command requires extra dependencies. "
@@ -90,6 +92,58 @@ def create_openai_error_response(
     )
 
 
+def _json_schema_to_pydantic(
+    schema: dict[str, Any], model_name: str = "DynamicModel"
+) -> type[BaseModel]:
+    """Convert a JSON Schema to a Pydantic model dynamically.
+
+    Args:
+        schema: JSON Schema definition (must have 'properties' and 'type': 'object').
+        model_name: Name for the generated Pydantic model.
+
+    Returns:
+        A dynamically created Pydantic model class.
+
+    Raises:
+        ValueError: If the schema is invalid or unsupported.
+    """
+    if not isinstance(schema, dict):
+        raise ValueError("Schema must be a dictionary")
+
+    if schema.get("type") != "object":
+        raise ValueError("Only object-type schemas are supported")
+
+    properties = schema.get("properties", {})
+    required = schema.get("required", [])
+
+    if not properties:
+        raise ValueError("Schema must have 'properties' field")
+
+    # Map JSON Schema types to Python types
+    type_mapping = {
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+        "array": list,
+        "object": dict,
+    }
+
+    # Build field definitions for create_model
+    field_definitions: dict[str, Any] = {}
+    for field_name, field_schema in properties.items():
+        field_type = field_schema.get("type", "string")
+        python_type = type_mapping.get(field_type, str)
+
+        # Handle optional fields
+        if field_name in required:
+            field_definitions[field_name] = (python_type, ...)
+        else:
+            field_definitions[field_name] = (python_type | None, None)
+
+    return create_model(model_name, **field_definitions)
+
+
 def _build_model_options(request: ChatCompletionRequest) -> dict:
     """Build model_options dict from OpenAI-compatible request parameters."""
     excluded_fields = {
@@ -108,7 +162,7 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "presence_penalty",  # Presence penalty - not yet implemented
         "frequency_penalty",  # Frequency penalty - not yet implemented
         "logit_bias",  # Logit bias - not yet implemented
-        "response_format",  # Response format (json_object) - not yet implemented
+        "response_format",  # Response format - handled separately
         "functions",  # Legacy function calling - not yet implemented
         "function_call",  # Legacy function calling - not yet implemented
         "tools",  # Tool calling - not yet implemented
@@ -154,22 +208,71 @@ def make_chat_endpoint(module):
 
             model_options = _build_model_options(request)
 
+            # Handle response_format
+            format_model: type[BaseModel] | None = None
+            if request.response_format is not None:
+                if request.response_format.type == "json_schema":
+                    if request.response_format.json_schema is None:
+                        return create_openai_error_response(
+                            status_code=400,
+                            message="json_schema field is required when response_format.type is 'json_schema'",
+                            error_type="invalid_request_error",
+                            param="response_format.json_schema",
+                        )
+                    try:
+                        format_model = _json_schema_to_pydantic(
+                            request.response_format.json_schema.schema_,
+                            request.response_format.json_schema.name,
+                        )
+                    except ValueError as e:
+                        return create_openai_error_response(
+                            status_code=400,
+                            message=f"Invalid JSON schema: {e!s}",
+                            error_type="invalid_request_error",
+                            param="response_format.json_schema.schema",
+                        )
+                elif request.response_format.type == "json_object":
+                    # For json_object, we don't enforce a specific schema
+                    # The backend will handle JSON mode if supported
+                    pass
+
+            # Check if serve function accepts format parameter
+            serve_sig = inspect.signature(module.serve)
+            accepts_format = "format" in serve_sig.parameters
+
             # Detect if serve is async or sync and handle accordingly
             if inspect.iscoroutinefunction(module.serve):
                 # It's async, await it directly
-                output = await module.serve(
-                    input=request.messages,
-                    requirements=request.requirements,
-                    model_options=model_options,
-                )
+                if accepts_format:
+                    output = await module.serve(
+                        input=request.messages,
+                        requirements=request.requirements,
+                        model_options=model_options,
+                        format=format_model,
+                    )
+                else:
+                    output = await module.serve(
+                        input=request.messages,
+                        requirements=request.requirements,
+                        model_options=model_options,
+                    )
             else:
                 # It's sync, run in thread pool to avoid blocking event loop
-                output = await asyncio.to_thread(
-                    module.serve,
-                    input=request.messages,
-                    requirements=request.requirements,
-                    model_options=model_options,
-                )
+                if accepts_format:
+                    output = await asyncio.to_thread(
+                        module.serve,
+                        input=request.messages,
+                        requirements=request.requirements,
+                        model_options=model_options,
+                        format=format_model,
+                    )
+                else:
+                    output = await asyncio.to_thread(
+                        module.serve,
+                        input=request.messages,
+                        requirements=request.requirements,
+                        model_options=model_options,
+                    )
 
             # system_fingerprint represents backend config hash, not model name
             # The model name is already in response.model (line 73)
