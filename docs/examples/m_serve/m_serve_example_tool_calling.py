@@ -11,6 +11,7 @@ from typing import Any
 
 import mellea
 from cli.serve.models import ChatMessage
+from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.core.base import AbstractMelleaTool
 from mellea.stdlib.context import ChatContext
@@ -140,9 +141,9 @@ def serve(
 
     # Extract tools from model_options if provided
     tools = None
-    if model_options and "@@@tools@@@" in model_options:
+    if model_options and ModelOption.TOOLS in model_options:
         # Convert OpenAI tool format to Mellea tool format
-        openai_tools = model_options["@@@tools@@@"]
+        openai_tools = model_options[ModelOption.TOOLS]
         tools = {}
         for tool_def in openai_tools:
             tool_name = tool_def["function"]["name"]
@@ -152,7 +153,7 @@ def serve(
     # Build model options with tools
     final_model_options = model_options or {}
     if tools:
-        final_model_options["@@@tools@@@"] = tools
+        final_model_options[ModelOption.TOOLS] = tools
 
     # Use instruct to generate response with potential tool calls
     result = session.instruct(
@@ -170,7 +171,7 @@ if __name__ == "__main__":
 
     # Simulate tool definitions being passed
     test_model_options = {
-        "@@@tools@@@": [weather_tool.as_json_tool, stock_price_tool.as_json_tool]
+        ModelOption.TOOLS: [weather_tool.as_json_tool, stock_price_tool.as_json_tool]
     }
 
     response = serve(input=test_messages, model_options=test_model_options)
