@@ -12,6 +12,17 @@ env:
   OLLAMA_HOST: "127.0.0.1:5000"
 
 jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Lint GitHub Actions workflows
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 180
