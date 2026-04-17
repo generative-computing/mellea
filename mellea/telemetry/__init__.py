@@ -30,6 +30,7 @@ Configuration:
         - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Metrics-specific OTLP endpoint (optional)
         - OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
         - OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
+        - MELLEA_PRICING_FILE: Path to a JSON file with custom model pricing overrides (optional)
 
     Logging:
         - MELLEA_LOGS_OTLP: Enable OTLP log export (default: false)
@@ -78,6 +79,8 @@ from .metrics import (
     create_histogram,
     create_up_down_counter,
     is_metrics_enabled,
+    record_cost,
+    record_error,
     record_request_duration,
     record_token_usage_metrics,
     record_ttfb,
@@ -110,6 +113,8 @@ __all__ = [
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",
+    "record_cost",
+    "record_error",
     "record_request_duration",
     "record_token_usage_metrics",
     "record_ttfb",

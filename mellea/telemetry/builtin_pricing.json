@@ -1,0 +1,17 @@
+{
+  "claude-opus-4-7":             {"input_per_1k": 0.005,    "output_per_1k": 0.025},
+  "claude-opus-4-6":             {"input_per_1k": 0.005,    "output_per_1k": 0.025},
+  "claude-opus-4-5":             {"input_per_1k": 0.005,    "output_per_1k": 0.025},
+  "claude-opus-4-5-20251101":    {"input_per_1k": 0.005,    "output_per_1k": 0.025},
+  "claude-opus-4-1":             {"input_per_1k": 0.015,    "output_per_1k": 0.075},
+  "claude-opus-4-1-20250805":    {"input_per_1k": 0.015,    "output_per_1k": 0.075},
+  "claude-sonnet-4-6":           {"input_per_1k": 0.003,    "output_per_1k": 0.015},
+  "claude-sonnet-4-5":           {"input_per_1k": 0.003,    "output_per_1k": 0.015},
+  "claude-sonnet-4-5-20250929":  {"input_per_1k": 0.003,    "output_per_1k": 0.015},
+  "claude-haiku-4-5":            {"input_per_1k": 0.001,    "output_per_1k": 0.005},
+  "claude-haiku-4-5-20251001":   {"input_per_1k": 0.001,    "output_per_1k": 0.005},
+  "gpt-5.4":                     {"input_per_1k": 0.0025,   "output_per_1k": 0.015},
+  "gpt-5.4-mini":                {"input_per_1k": 0.00075,  "output_per_1k": 0.0045},
+  "gpt-5.4-nano":                {"input_per_1k": 0.0002,   "output_per_1k": 0.00125},
+  "gpt-5.4-pro":                 {"input_per_1k": 0.030,    "output_per_1k": 0.180}
+}
