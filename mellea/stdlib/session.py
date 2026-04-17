@@ -325,6 +325,12 @@ class MelleaSession:
             context_type=self.ctx.__class__.__name__,
         ).__enter__()
         self._context_token = _context_session.set(self)
+        # TODO: Migrate telemetry fields from _log_context to with_context() system.
+        # Currently session_id and model_id are duplicated in both systems. The
+        # 'backend' field only exists in _log_context and would need to be added to
+        # the new telemetry context system (mellea/telemetry/context.py) before this
+        # _log_context.set() call can be removed. Once 'backend' is added to
+        # _CONTEXT_VARS, remove this block and set all three fields via with_context().
         self._log_context_token = _log_context.set(
             {
                 **_log_context.get(),
