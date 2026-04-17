@@ -61,6 +61,17 @@ Example:
         logger.addHandler(handler)
 """
 
+from .context import (
+    MelleaContextFilter,
+    async_with_context,
+    generate_request_id,
+    get_current_context,
+    get_model_id,
+    get_request_id,
+    get_sampling_iteration,
+    get_session_id,
+    with_context,
+)
 from .logging import get_otlp_log_handler
 from .metrics import (
     create_counter,
@@ -83,11 +94,19 @@ from .tracing import (
 )
 
 __all__ = [
+    "MelleaContextFilter",
+    "async_with_context",
     "create_counter",
     "create_histogram",
     "create_up_down_counter",
     "end_backend_span",
+    "generate_request_id",
+    "get_current_context",
+    "get_model_id",
     "get_otlp_log_handler",
+    "get_request_id",
+    "get_sampling_iteration",
+    "get_session_id",
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",
@@ -99,4 +118,5 @@ __all__ = [
     "start_backend_span",
     "trace_application",
     "trace_backend",
+    "with_context",
 ]

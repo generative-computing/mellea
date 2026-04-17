@@ -36,6 +36,7 @@ from ...core import (
 from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
 from ...stdlib import functional as mfuncs
+from ...telemetry.context import _sampling_iteration as _sampling_iteration_var
 from ..components import Instruction, Message
 from ..context import ChatContext
 
@@ -194,10 +195,16 @@ class BaseSamplingStrategy(SamplingStrategy):
 
             next_action = deepcopy(action)
             next_context = context
+            _iter_token = None
             for _ in loop_budget_range_iterator:  # type: ignore
                 loop_count += 1
                 if not show_progress:
                     flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+
+                # Update sampling_iteration context for this iteration
+                if _iter_token is not None:
+                    _sampling_iteration_var.reset(_iter_token)
+                _iter_token = _sampling_iteration_var.set(loop_count)
 
                 # run a generation pass
                 result, result_ctx = await backend.generate_from_context(
@@ -283,6 +290,8 @@ class BaseSamplingStrategy(SamplingStrategy):
                         )
 
                     # SUCCESS !!!!
+                    if _iter_token is not None:
+                        _sampling_iteration_var.reset(_iter_token)
                     return SamplingResult(
                         result_index=len(sampled_results) - 1,
                         success=True,
@@ -334,6 +343,10 @@ class BaseSamplingStrategy(SamplingStrategy):
                     await invoke_hook(
                         HookType.SAMPLING_REPAIR, repair_payload, backend=backend
                     )
+
+            if _iter_token is not None:
+                _sampling_iteration_var.reset(_iter_token)
+                _iter_token = None
 
             flog.info(
                 f"Invoking select_from_failure after {len(sampled_results)} failed attempts."

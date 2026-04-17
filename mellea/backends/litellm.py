@@ -45,6 +45,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -166,13 +167,16 @@ class LiteLLMBackend(FormatterBackend):
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
-        mot = await self._generate_from_chat_context_standard(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            mot = await self._generate_from_chat_context_standard(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
         # Store span for telemetry recording in post_processing
         if span is not None:
