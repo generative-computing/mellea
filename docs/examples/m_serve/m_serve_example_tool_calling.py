@@ -2,21 +2,45 @@
 
 """Example demonstrating tool calling with m serve.
 
-This example shows how to use the OpenAI-compatible tool calling API
-with m serve. The server will accept tool definitions and return tool
-calls in the response when the model decides to use them.
+This file supports two distinct usage patterns:
+
+1. Running it directly with ``uv run python ...`` performs a local smoke test
+   using native Mellea tool calling.
+2. Serving it with ``m serve`` exposes an OpenAI-compatible endpoint that
+   accepts OpenAI-style tool definitions in the request.
+
+The direct ``__main__`` smoke test is intentionally separate from the
+OpenAI-compatible server flow because local ``session.instruct(...)`` calls
+should use ``MelleaTool`` objects directly.
 """
 
+import os
 from typing import Any
 
 import mellea
 from cli.serve.models import ChatMessage
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.tools import MelleaTool
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.core.base import AbstractMelleaTool
+from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements.tool_reqs import uses_tool
+from mellea.stdlib.session import MelleaSession
 
-session = mellea.start_session(ctx=ChatContext())
+_ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
+if not _ollama_host.startswith(("http://", "https://")):
+    _ollama_host = f"http://{_ollama_host}"
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore[arg-type]
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name),  # type: ignore[arg-type]
+    base_url=f"{_ollama_host}/v1",
+    api_key="ollama",
+)
+session = MelleaSession(backend, ctx=ChatContext())
 
 
 class GetWeatherTool(AbstractMelleaTool):
@@ -24,7 +48,7 @@ class GetWeatherTool(AbstractMelleaTool):
 
     name = "get_weather"
 
-    def run(self, location: str, units: str = "celsius") -> str:
+    def run(self, location: str, units: str | None = "celsius") -> str:
         """Get the current weather for a location.
 
         Args:
@@ -34,8 +58,10 @@ class GetWeatherTool(AbstractMelleaTool):
         Returns:
             Weather information as a string
         """
+        # Models sometimes emit optional arguments explicitly as null/None.
+        resolved_units = units or "celsius"
         # In a real implementation, this would call a weather API
-        return f"The weather in {location} is sunny and 22°{units[0].upper()}"
+        return f"The weather in {location} is sunny and 22°{resolved_units[0].upper()}"
 
     @property
     def as_json_tool(self) -> dict[str, Any]:
@@ -110,12 +136,56 @@ class GetStockPriceTool(AbstractMelleaTool):
         }
 
 
-# Create tool instances
-weather_tool = GetWeatherTool()
-stock_price_tool = GetStockPriceTool()
+# Create tool instances for server-side lookup
+weather_tool_impl = GetWeatherTool()
+stock_price_tool_impl = GetStockPriceTool()
 
-# Map tool names to instances for easy lookup
-TOOLS = {weather_tool.name: weather_tool, stock_price_tool.name: stock_price_tool}
+# Native MelleaTool wrappers are only needed for the direct ``__main__`` path.
+# The backend helper used by local ``session.instruct(..., ModelOption.TOOLS=[...])``
+# expects ``MelleaTool`` instances in a list, while the server path below uses the
+# class-based implementations via the ``TOOLS`` lookup.
+weather_tool = MelleaTool(
+    name=weather_tool_impl.name,
+    tool_call=weather_tool_impl.run,
+    as_json_tool=weather_tool_impl.as_json_tool,
+)
+stock_price_tool = MelleaTool(
+    name=stock_price_tool_impl.name,
+    tool_call=stock_price_tool_impl.run,
+    as_json_tool=stock_price_tool_impl.as_json_tool,
+)
+
+# Map tool names to server-side tool implementations for easy lookup
+TOOLS = {
+    weather_tool_impl.name: weather_tool_impl,
+    stock_price_tool_impl.name: stock_price_tool_impl,
+}
+
+
+def _extract_mellea_tools_from_model_options(
+    model_options: dict | None,
+) -> dict[str, AbstractMelleaTool]:
+    """Normalize example tool inputs to native tool instances.
+
+    This example supports only two shapes:
+    - OpenAI-style JSON tool definitions from the server path
+    - native tool objects from the direct ``__main__`` path
+    """
+    if model_options is None or ModelOption.TOOLS not in model_options:
+        return {}
+
+    provided_tools = model_options[ModelOption.TOOLS]
+    tools: dict[str, AbstractMelleaTool] = {}
+
+    for tool_def in provided_tools:
+        if isinstance(tool_def, AbstractMelleaTool):
+            tools[tool_def.name] = tool_def
+        else:
+            tool_name = tool_def["function"]["name"]
+            if tool_name in TOOLS:
+                tools[tool_name] = TOOLS[tool_name]
+
+    return tools
 
 
 def serve(
@@ -127,7 +197,9 @@ def serve(
 
     This function demonstrates how to use tools with m serve. The tools
     are passed via model_options using ModelOption.TOOLS, and tool_choice
-    can be specified using ModelOption.TOOL_CHOICE.
+    can be specified using ModelOption.TOOL_CHOICE. Mellea forwards that
+    setting to compatible backends, but the downstream provider/model may
+    still ignore it or treat it as a weak preference.
 
     Args:
         input: List of chat messages
@@ -141,43 +213,61 @@ def serve(
     message = input[-1].content
 
     # Extract tools from model_options if provided
-    tools = None
-    if model_options and ModelOption.TOOLS in model_options:
-        # Convert OpenAI tool format to Mellea tool format
-        openai_tools = model_options[ModelOption.TOOLS]
-        tools = {}
-        for tool_def in openai_tools:
-            tool_name = tool_def["function"]["name"]
-            if tool_name in TOOLS:
-                tools[tool_name] = TOOLS[tool_name]
+    tools = _extract_mellea_tools_from_model_options(model_options)
 
-    # Build model options with tools
-    final_model_options = model_options or {}
+    # Build model options with tools.
+    # If the caller explicitly selected a single function via tool_choice,
+    # narrow the advertised tool set to that one tool so the backend/model
+    # is not asked to choose among unrelated tools.
+    final_model_options = dict(model_options or {})
+    selected_tool_name: str | None = None
     if tools:
-        final_model_options[ModelOption.TOOLS] = tools
+        selected_tools = tools
+        if model_options is not None and ModelOption.TOOL_CHOICE in model_options:
+            tool_choice = model_options[ModelOption.TOOL_CHOICE]
+            if isinstance(tool_choice, dict):
+                selected_tool_name = tool_choice.get("function", {}).get("name")
+                if selected_tool_name in tools:
+                    selected_tools = {selected_tool_name: tools[selected_tool_name]}
+        final_model_options[ModelOption.TOOLS] = selected_tools
 
-    # Use instruct to generate response with potential tool calls
+    # Keep the serve path deterministic for the client example by retrying only
+    # at the request level. Enforcing uses_tool(...) inside session.instruct()
+    # caused noisy server-side failures when the model ignored the tool request
+    # on a particular sample.
     result = session.instruct(
         description=message,  # type: ignore
         requirements=[Requirement(req) for req in requirements],  # type: ignore
         model_options=final_model_options,
+        tool_calls=True,
+        strategy=None,
     )
 
     return result
 
 
 if __name__ == "__main__":
-    # Example usage (for testing purposes)
-    test_messages = [ChatMessage(role="user", content="What's the weather in Paris?")]
-
-    # Simulate tool definitions being passed with tool_choice
-    test_model_options = {
-        ModelOption.TOOLS: [weather_tool.as_json_tool, stock_price_tool.as_json_tool],
-        ModelOption.TOOL_CHOICE: "auto",  # Can be "none", "auto", or specific tool
-    }
-
-    response = serve(input=test_messages, model_options=test_model_options)
+    response = session.instruct(
+        "What's the weather in Boston?",
+        model_options={
+            ModelOption.TOOLS: [weather_tool],
+            # This direct path now uses the OpenAI backend against Ollama's
+            # OpenAI-compatible endpoint, so TOOL_CHOICE is forwarded by
+            # Mellea. Ollama and/or the selected model may still ignore it
+            # or not enforce it strictly in practice.
+            ModelOption.TOOL_CHOICE: "auto",
+            ModelOption.MAX_NEW_TOKENS: 1000,
+        },
+        strategy=None,
+        tool_calls=True,
+    )
 
     print(f"Response: {response.value}")
-    if response.tool_calls:
-        print(f"Tool calls requested: {list(response.tool_calls.keys())}")
+    print(
+        "Tool calls requested:",
+        None if response.tool_calls is None else list(response.tool_calls.keys()),
+    )
+
+    if response.tool_calls and weather_tool.name in response.tool_calls:
+        tool_result = response.tool_calls[weather_tool.name].call_func()
+        print(f"Tool result: {tool_result}")
