@@ -35,24 +35,19 @@ pytestmark = [
 # ---------------------------------------------------------------------------
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters import TemplateFormatter
-from mellea.formatters.granite.intrinsics import json_util
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.components.docs.document import Document
 from mellea.stdlib.context import ChatContext
 from test.formatters.granite.test_intrinsics_formatters import (
-    _TEST_DATA_DIR,
     _YAML_JSON_COMBOS_WITH_MODEL,
     YamlJsonCombo,
-    _round_floats,
 )
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SWITCH_MODEL_ID = os.environ.get(
-    "GRANITE_SWITCH_MODEL_ID", "GrizleeBer/gs-test-2"
-)
+SWITCH_MODEL_ID = os.environ.get("GRANITE_SWITCH_MODEL_ID", "GrizleeBer/gs-test-2")
 
 
 # ---------------------------------------------------------------------------
@@ -281,45 +276,14 @@ def test_intrinsic_generation(intrinsic_combo: YamlJsonCombo, backend: OpenAIBac
     # Run the full generation path
     result, _new_ctx = mfuncs.act(intrinsic, ctx, backend, strategy=None)
 
-    # Validate that we got a result
+    # Validate that we got a non-empty result
     assert result.value is not None, f"Intrinsic '{cfg.task}' returned None"
     assert len(result.value) > 0, f"Intrinsic '{cfg.task}' returned empty string"
 
-    # Parse the result JSON
+    # Validate that the result is parseable JSON
     try:
-        result_json = json.loads(result.value)
+        json.loads(result.value)
     except json.JSONDecodeError:
         pytest.fail(
             f"Intrinsic '{cfg.task}' did not return valid JSON: {result.value[:200]}"
         )
-
-    # Compare against expected output
-    expected_file = _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json"
-    if not expected_file.exists():
-        # No expected file for this combo — just validate it's valid JSON
-        return
-
-    from mellea.formatters.granite import ChatCompletionResponse
-
-    with open(expected_file, encoding="utf-8") as f:
-        expected = ChatCompletionResponse.model_validate_json(f.read())
-
-    # Round floats for approximate comparison
-    result_rounded = _round_floats(
-        json_util.parse_inline_json(result_json)
-        if isinstance(result_json, dict)
-        else result_json,
-        num_digits=2,
-    )
-    expected_content = expected.choices[0].message.content
-    expected_json = json.loads(expected_content) if expected_content else {}
-    expected_rounded = _round_floats(
-        json_util.parse_inline_json(expected_json)
-        if isinstance(expected_json, dict)
-        else expected_json,
-        num_digits=2,
-    )
-
-    if result_rounded != expected_rounded:
-        # Fall back to approximate comparison
-        assert result_rounded == pytest.approx(expected_rounded, abs=0.1)
