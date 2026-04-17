@@ -125,6 +125,11 @@ OpenTelemetry. No code changes are required:
   `mellea.llm.ttfb` (streaming requests only).
 - **Error counter** — `mellea.llm.errors` on each failed backend call,
   classified by semantic error type.
+- **Sampling counters** — `mellea.sampling.attempts`, `mellea.sampling.successes`,
+  and `mellea.sampling.failures` per strategy.
+- **Requirement counters** — `mellea.requirement.checks` and
+  `mellea.requirement.failures` per requirement type.
+- **Tool counter** — `mellea.tool.calls` by tool name and status.
 
 The metrics API also exposes `create_counter`, `create_histogram`, and
 `create_up_down_counter` for instrumenting your own application code.

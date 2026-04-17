@@ -54,6 +54,9 @@ Built-in metrics (auto-recorded via plugins when metrics are enabled):
 - Token counters: mellea.llm.tokens.input, mellea.llm.tokens.output (unit: tokens)
 - Latency histograms: mellea.llm.request.duration (unit: s), mellea.llm.ttfb (unit: s, streaming only)
 - Error counter: mellea.llm.errors (unit: {error}), categorized by semantic error type
+- Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: {attempt}/{sample}/{failure})
+- Requirement counters: mellea.requirement.checks (unit: {check}), mellea.requirement.failures (unit: {failure})
+- Tool counter: mellea.tool.calls (unit: {call}), tagged by tool name and status
 
 Programmatic usage:
     from mellea.telemetry.metrics import create_counter, create_histogram
@@ -719,6 +722,175 @@ def record_error(
     )
 
 
+_sampling_attempts_counter: Any = None
+_sampling_successes_counter: Any = None
+_sampling_failures_counter: Any = None
+
+
+def _get_sampling_attempts_counter() -> Any:
+    """Get or create the sampling attempts counter (internal use only)."""
+    global _sampling_attempts_counter
+
+    if _sampling_attempts_counter is None:
+        _sampling_attempts_counter = create_counter(
+            "mellea.sampling.attempts",
+            description="Total number of sampling attempts per strategy",
+            unit="{attempt}",
+        )
+    return _sampling_attempts_counter
+
+
+def _get_sampling_successes_counter() -> Any:
+    """Get or create the sampling successes counter (internal use only)."""
+    global _sampling_successes_counter
+
+    if _sampling_successes_counter is None:
+        _sampling_successes_counter = create_counter(
+            "mellea.sampling.successes",
+            description="Total number of successful sampling loops per strategy",
+            unit="{sample}",
+        )
+    return _sampling_successes_counter
+
+
+def _get_sampling_failures_counter() -> Any:
+    """Get or create the sampling failures counter (internal use only)."""
+    global _sampling_failures_counter
+
+    if _sampling_failures_counter is None:
+        _sampling_failures_counter = create_counter(
+            "mellea.sampling.failures",
+            description="Total number of failed sampling loops (budget exhausted) per strategy",
+            unit="{failure}",
+        )
+    return _sampling_failures_counter
+
+
+def record_sampling_attempt(strategy: str) -> None:
+    """Record one sampling attempt for the given strategy.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        strategy: Sampling strategy class name (e.g. ``"RejectionSamplingStrategy"``).
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    _get_sampling_attempts_counter().add(1, {"strategy": strategy})
+
+
+def record_sampling_outcome(strategy: str, success: bool) -> None:
+    """Record the final outcome (success or failure) of a sampling loop.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        strategy: Sampling strategy class name (e.g. ``"RejectionSamplingStrategy"``).
+        success: ``True`` if at least one attempt passed all requirements.
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    if success:
+        _get_sampling_successes_counter().add(1, {"strategy": strategy})
+    else:
+        _get_sampling_failures_counter().add(1, {"strategy": strategy})
+
+
+_requirement_checks_counter: Any = None
+_requirement_failures_counter: Any = None
+
+
+def _get_requirement_checks_counter() -> Any:
+    """Get or create the requirement checks counter (internal use only)."""
+    global _requirement_checks_counter
+
+    if _requirement_checks_counter is None:
+        _requirement_checks_counter = create_counter(
+            "mellea.requirement.checks",
+            description="Total number of requirement validation checks",
+            unit="{check}",
+        )
+    return _requirement_checks_counter
+
+
+def _get_requirement_failures_counter() -> Any:
+    """Get or create the requirement failures counter (internal use only)."""
+    global _requirement_failures_counter
+
+    if _requirement_failures_counter is None:
+        _requirement_failures_counter = create_counter(
+            "mellea.requirement.failures",
+            description="Total number of requirement validation failures",
+            unit="{failure}",
+        )
+    return _requirement_failures_counter
+
+
+def record_requirement_check(requirement: str) -> None:
+    """Record one requirement validation check.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        requirement: Requirement class name (e.g. ``"LLMaJRequirement"``).
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    _get_requirement_checks_counter().add(1, {"requirement": requirement})
+
+
+def record_requirement_failure(requirement: str, reason: str) -> None:
+    """Record one requirement validation failure.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        requirement: Requirement class name (e.g. ``"LLMaJRequirement"``).
+        reason: Human-readable failure reason from ``ValidationResult.reason``.
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    _get_requirement_failures_counter().add(
+        1, {"requirement": requirement, "reason": reason}
+    )
+
+
+_tool_calls_counter: Any = None
+
+
+def _get_tool_calls_counter() -> Any:
+    """Get or create the tool calls counter (internal use only)."""
+    global _tool_calls_counter
+
+    if _tool_calls_counter is None:
+        _tool_calls_counter = create_counter(
+            "mellea.tool.calls",
+            description="Total number of tool invocations by name and status",
+            unit="{call}",
+        )
+    return _tool_calls_counter
+
+
+def record_tool_call(tool: str, status: str) -> None:
+    """Record one tool invocation.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        tool: Name of the tool that was invoked.
+        status: ``"success"`` if the tool executed without error, ``"failure"`` otherwise.
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    counter = _get_tool_calls_counter()
+    counter.add(1, {"tool": tool, "status": status})
+
+
 __all__ = [
     "classify_error",
     "create_counter",
@@ -727,6 +899,11 @@ __all__ = [
     "is_metrics_enabled",
     "record_error",
     "record_request_duration",
+    "record_requirement_check",
+    "record_requirement_failure",
+    "record_sampling_attempt",
+    "record_sampling_outcome",
     "record_token_usage_metrics",
+    "record_tool_call",
     "record_ttfb",
 ]

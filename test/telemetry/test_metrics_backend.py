@@ -89,6 +89,12 @@ def _setup_metrics_provider(metrics_module, metric_reader):
     metrics_module._duration_histogram = None
     metrics_module._ttfb_histogram = None
     metrics_module._error_counter = None
+    metrics_module._sampling_attempts_counter = None
+    metrics_module._sampling_successes_counter = None
+    metrics_module._sampling_failures_counter = None
+    metrics_module._requirement_checks_counter = None
+    metrics_module._requirement_failures_counter = None
+    metrics_module._tool_calls_counter = None
     return provider
 
 
@@ -480,3 +486,46 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
 
     assert error_count is not None, "Error counter should have been recorded"
     assert error_count == 1, f"Expected 1 error, got {error_count}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.ollama
+async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader):
+    """Test that sampling metrics are recorded through a full RejectionSamplingStrategy loop."""
+    from mellea.backends.ollama import OllamaModelBackend
+    from mellea.stdlib.components import Instruction
+    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.sampling import RejectionSamplingStrategy
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
+
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    strategy = RejectionSamplingStrategy(loop_budget=1)
+    ctx = SimpleContext()
+
+    result = await strategy.sample(
+        action=Instruction("Say hello"), context=ctx, backend=backend, requirements=None
+    )
+
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    attempts = get_metric_value(
+        metrics_data,
+        "mellea.sampling.attempts",
+        {"strategy": "RejectionSamplingStrategy"},
+    )
+    assert attempts is not None, "Sampling attempts should be recorded"
+    assert attempts >= 1, f"Expected at least 1 attempt, got {attempts}"
+
+    # With no requirements and loop_budget=1 the loop always succeeds
+    successes = get_metric_value(
+        metrics_data,
+        "mellea.sampling.successes",
+        {"strategy": "RejectionSamplingStrategy"},
+    )
+    assert result.success
+    assert successes == 1, f"Expected 1 success, got {successes}"
