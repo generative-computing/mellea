@@ -17,7 +17,6 @@ should use ``MelleaTool`` objects directly.
 import os
 from typing import Any
 
-import mellea
 from cli.serve.models import ChatMessage
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
@@ -27,7 +26,6 @@ from mellea.core import ModelOutputThunk, Requirement
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.tool_reqs import uses_tool
 from mellea.stdlib.session import MelleaSession
 
 _ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
