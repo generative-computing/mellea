@@ -501,9 +501,9 @@ class TestHTTPValidation:
 
         # Tools should be passed with ModelOption.TOOLS key
         assert ModelOption.TOOLS in model_options
-        # tool_choice should be passed through as-is
-        assert "tool_choice" in model_options
-        assert model_options["tool_choice"] == "auto"
+        # tool_choice should be passed through using ModelOption.TOOL_CHOICE
+        assert ModelOption.TOOL_CHOICE in model_options
+        assert model_options[ModelOption.TOOL_CHOICE] == "auto"
         # Legacy function calling parameters should still be excluded
         assert "functions" not in model_options
         assert "function_call" not in model_options

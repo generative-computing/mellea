@@ -126,12 +126,13 @@ def serve(
     """Serve function that handles tool calling.
 
     This function demonstrates how to use tools with m serve. The tools
-    are passed via model_options and the model can request to call them.
+    are passed via model_options using ModelOption.TOOLS, and tool_choice
+    can be specified using ModelOption.TOOL_CHOICE.
 
     Args:
         input: List of chat messages
         requirements: Optional list of requirement strings
-        model_options: Model options including tools and tool_choice
+        model_options: Model options including ModelOption.TOOLS and ModelOption.TOOL_CHOICE
 
     Returns:
         ModelOutputThunk with potential tool calls
@@ -169,9 +170,10 @@ if __name__ == "__main__":
     # Example usage (for testing purposes)
     test_messages = [ChatMessage(role="user", content="What's the weather in Paris?")]
 
-    # Simulate tool definitions being passed
+    # Simulate tool definitions being passed with tool_choice
     test_model_options = {
-        ModelOption.TOOLS: [weather_tool.as_json_tool, stock_price_tool.as_json_tool]
+        ModelOption.TOOLS: [weather_tool.as_json_tool, stock_price_tool.as_json_tool],
+        ModelOption.TOOL_CHOICE: "auto",  # Can be "none", "auto", or specific tool
     }
 
     response = serve(input=test_messages, model_options=test_model_options)
