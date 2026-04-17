@@ -67,9 +67,11 @@ RESERVED_LOG_RECORD_ATTRS: frozenset[str] = frozenset(
         "process",
         "processName",
         "relativeCreated",
+        "span_id",
         "stack_info",
         "thread",
         "threadName",
+        "trace_id",
     )
 )
 
@@ -118,7 +120,7 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
 
     Example::
 
-        with log_context(trace_id="abc-123", request_id="req-1"):
+        with log_context(request_id="req-1", user_id="u-42"):
             logger.info("Handling request")   # both IDs appear here
         logger.info("After request")          # IDs are gone
 
@@ -363,7 +365,9 @@ class JsonFormatter(logging.Formatter):
         # Add trace context if available
         if hasattr(record, "trace_id"):
             log_record["trace_id"] = record.trace_id  # type: ignore[attr-defined]
-            log_record["span_id"] = record.span_id  # type: ignore[attr-defined]
+            span_id = getattr(record, "span_id", None)
+            if span_id is not None:
+                log_record["span_id"] = span_id
 
         # Exception info
         if record.exc_info:

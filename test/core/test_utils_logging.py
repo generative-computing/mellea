@@ -181,6 +181,18 @@ class TestJsonFormatterCoreSchema:
         assert result["trace_id"] == "abcd1234abcd1234abcd1234abcd1234"
         assert result["span_id"] == "1234567890abcdef"
 
+    def test_trace_id_without_span_id_does_not_raise(self):
+        """trace_id present but span_id absent must not raise AttributeError."""
+        fmt = JsonFormatter()
+        record = _make_record()
+        record.trace_id = "abcd1234abcd1234abcd1234abcd1234"
+        # span_id intentionally absent
+
+        result = json.loads(fmt.format(record))
+
+        assert result["trace_id"] == "abcd1234abcd1234abcd1234abcd1234"
+        assert "span_id" not in result
+
 
 class TestJsonFormatterFieldConfig:
     def test_include_fields_limits_output(self) -> None:
@@ -229,19 +241,19 @@ class TestJsonFormatterContextInjection:
         assert parsed.get("request_id") == "abc-123"
 
     def test_multiple_context_fields(self) -> None:
-        set_log_context(trace_id="t1", request_id="r1", user="alice")
+        set_log_context(custom_trace="t1", request_id="r1", user="alice")
         fmt = JsonFormatter()
         parsed = json.loads(fmt.format(_make_record()))
-        assert parsed["trace_id"] == "t1"
+        assert parsed["custom_trace"] == "t1"
         assert parsed["request_id"] == "r1"
         assert parsed["user"] == "alice"
 
     def test_clear_context_removes_fields(self) -> None:
-        set_log_context(trace_id="gone")
+        set_log_context(custom_trace="gone")
         clear_log_context()
         fmt = JsonFormatter()
         parsed = json.loads(fmt.format(_make_record()))
-        assert "trace_id" not in parsed
+        assert "custom_trace" not in parsed
 
     def test_context_is_thread_local(self) -> None:
         """Fields set in one thread must not bleed into another."""
@@ -249,7 +261,7 @@ class TestJsonFormatterContextInjection:
         barrier = threading.Barrier(2)
 
         def worker_a() -> None:
-            set_log_context(trace_id="thread-a")
+            set_log_context(custom_trace="thread-a")
             barrier.wait()  # both threads read context at the same time
             fmt = JsonFormatter()
             results["a"] = json.loads(fmt.format(_make_record()))
@@ -268,8 +280,8 @@ class TestJsonFormatterContextInjection:
         ta.join()
         tb.join()
 
-        assert results["a"].get("trace_id") == "thread-a"
-        assert "trace_id" not in results["b"]
+        assert results["a"].get("custom_trace") == "thread-a"
+        assert "custom_trace" not in results["b"]
 
 
 class TestContextFilter:
@@ -284,11 +296,11 @@ class TestContextFilter:
         assert f.filter(_make_record()) is True
 
     def test_filter_attaches_context_fields_to_record(self) -> None:
-        set_log_context(span_id="span-999")
+        set_log_context(custom_span="span-999")
         f = ContextFilter()
         record = _make_record()
         f.filter(record)
-        assert getattr(record, "span_id", None) == "span-999"
+        assert getattr(record, "custom_span", None) == "span-999"
 
     def test_filter_noop_when_no_context(self) -> None:
         f = ContextFilter()
@@ -413,24 +425,24 @@ class TestLogContext:
 
     def test_fields_present_inside_block(self) -> None:
         fmt = JsonFormatter()
-        with log_context(trace_id="ctx-1"):
+        with log_context(custom_trace="ctx-1"):
             parsed = json.loads(fmt.format(_make_record()))
-            assert parsed["trace_id"] == "ctx-1"
+            assert parsed["custom_trace"] == "ctx-1"
 
     def test_fields_removed_after_block(self) -> None:
         fmt = JsonFormatter()
-        with log_context(trace_id="ctx-2"):
+        with log_context(custom_trace="ctx-2"):
             pass
         parsed = json.loads(fmt.format(_make_record()))
-        assert "trace_id" not in parsed
+        assert "custom_trace" not in parsed
 
     def test_cleanup_on_exception(self) -> None:
         fmt = JsonFormatter()
         with pytest.raises(RuntimeError):
-            with log_context(trace_id="ctx-err"):
+            with log_context(custom_trace="ctx-err"):
                 raise RuntimeError("boom")
         parsed = json.loads(fmt.format(_make_record()))
-        assert "trace_id" not in parsed
+        assert "custom_trace" not in parsed
 
     def test_nested_contexts_preserve_outer(self) -> None:
         fmt = JsonFormatter()
@@ -449,14 +461,14 @@ class TestLogContext:
 
     def test_nested_same_key_restores_outer(self) -> None:
         fmt = JsonFormatter()
-        with log_context(trace_id="outer"):
-            with log_context(trace_id="inner"):
+        with log_context(custom_trace="outer"):
+            with log_context(custom_trace="inner"):
                 parsed = json.loads(fmt.format(_make_record()))
-                assert parsed["trace_id"] == "inner"
+                assert parsed["custom_trace"] == "inner"
             parsed = json.loads(fmt.format(_make_record()))
-            assert parsed["trace_id"] == "outer"
+            assert parsed["custom_trace"] == "outer"
         parsed = json.loads(fmt.format(_make_record()))
-        assert "trace_id" not in parsed
+        assert "custom_trace" not in parsed
 
     def test_rejects_reserved_attribute(self) -> None:
         with pytest.raises(ValueError, match="reserved"):
@@ -479,13 +491,13 @@ class TestLogContextAsyncIsolation:
         results: dict[str, Any] = {}
 
         async def task_a() -> None:
-            with log_context(trace_id="task-a"):
+            with log_context(custom_trace="task-a"):
                 # Yield so task_b can run and attempt to overwrite the context
                 await asyncio.sleep(0)
                 results["a"] = json.loads(fmt.format(_make_record()))
 
         async def task_b() -> None:
-            with log_context(trace_id="task-b"):
+            with log_context(custom_trace="task-b"):
                 await asyncio.sleep(0)
                 results["b"] = json.loads(fmt.format(_make_record()))
 
@@ -496,15 +508,15 @@ class TestLogContextAsyncIsolation:
 
         asyncio.run(run())
 
-        assert results["a"].get("trace_id") == "task-a"
-        assert results["b"].get("trace_id") == "task-b"
+        assert results["a"].get("custom_trace") == "task-a"
+        assert results["b"].get("custom_trace") == "task-b"
 
     def test_task_context_does_not_leak_after_completion(self) -> None:
         """A task's context fields must not persist into the caller after the task ends."""
         fmt = JsonFormatter()
 
         async def child() -> None:
-            set_log_context(trace_id="child-task")
+            set_log_context(custom_trace="child-task")
 
         async def run() -> dict[str, object]:
             await asyncio.create_task(child())
@@ -512,7 +524,7 @@ class TestLogContextAsyncIsolation:
             return json.loads(fmt.format(_make_record()))
 
         parsed = asyncio.run(run())
-        assert "trace_id" not in parsed
+        assert "custom_trace" not in parsed
 
 
 class TestReservedAttributeValidation:
@@ -535,6 +547,14 @@ class TestReservedAttributeValidation:
         fmt = JsonFormatter()
         parsed = json.loads(fmt.format(_make_record()))
         assert parsed["custom_field"] == "fine"
+
+    def test_set_log_context_rejects_trace_id(self) -> None:
+        with pytest.raises(ValueError, match="reserved"):
+            set_log_context(trace_id="x")
+
+    def test_set_log_context_rejects_span_id(self) -> None:
+        with pytest.raises(ValueError, match="reserved"):
+            set_log_context(span_id="x")
 
     def test_reserved_set_is_non_empty(self) -> None:
         assert len(RESERVED_LOG_RECORD_ATTRS) > 10
@@ -683,6 +703,16 @@ class TestCustomFormatter:
 
 
 class TestFilterFormatterIntegration:
+    def setup_method(self) -> None:
+        MelleaLogger.logger = None
+        logging.getLogger("fancy_logger").handlers.clear()
+        logging.getLogger("fancy_logger").filters.clear()
+
+    def teardown_method(self) -> None:
+        MelleaLogger.logger = None
+        logging.getLogger("fancy_logger").handlers.clear()
+        logging.getLogger("fancy_logger").filters.clear()
+
     def test_json_formatter_picks_up_filter_output(self):
         """OtelTraceFilter + JsonFormatter round-trip injects trace context."""
         with _otel_span(0x00000000000000000000000000000001, 0x0000000000000002):
