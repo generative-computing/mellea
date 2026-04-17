@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from mellea.helpers.openai_compatible_helpers import CompletionUsage
+
 
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant", "tool", "function"]
@@ -31,6 +33,21 @@ class ResponseFormat(BaseModel):
     type: Literal["text", "json_object"]
 
 
+class StreamOptions(BaseModel):
+    """OpenAI-compatible streaming options.
+
+    Controls behavior of streaming responses. Only applies when stream=True.
+    """
+
+    include_usage: bool = False
+    """Whether to include usage statistics in the final streaming chunk.
+
+    When True, the final chunk will include token usage information.
+    When False (default), usage is excluded from streaming responses.
+    For non-streaming requests, usage is always included regardless of this setting.
+    """
+
+
 class LogitBias(BaseModel):
     RootModel: dict[str, float]
 
@@ -57,6 +74,7 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None
     seed: int | None = None
     response_format: ResponseFormat | None = None
+    stream_options: StreamOptions | None = None
 
     # For future/undocumented fields
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -88,17 +106,6 @@ class Choice(BaseModel):
     """The reason the model stopped generating tokens."""
 
 
-class CompletionUsage(BaseModel):
-    completion_tokens: int
-    """Number of tokens in the generated completion."""
-
-    prompt_tokens: int
-    """Number of tokens in the prompt."""
-
-    total_tokens: int
-    """Total number of tokens used in the request (prompt + completion)."""
-
-
 class ChatCompletion(BaseModel):
     id: str
     """A unique identifier for the chat completion."""
@@ -123,6 +130,60 @@ class ChatCompletion(BaseModel):
 
     usage: CompletionUsage | None = None
     """Usage statistics for the completion request."""
+
+
+class ChatCompletionChunkDelta(BaseModel):
+    """Delta content in a streaming chunk."""
+
+    content: str | None = None
+    """The content fragment in this chunk."""
+
+    role: Literal["assistant"] | None = None
+    """The role (only present in first chunk)."""
+
+    refusal: str | None = None
+    """The refusal message fragment, if any."""
+
+
+class ChatCompletionChunkChoice(BaseModel):
+    """A choice in a streaming chunk."""
+
+    index: int
+    """The index of the choice in the list of choices."""
+
+    delta: ChatCompletionChunkDelta
+    """The delta content for this chunk."""
+
+    finish_reason: (
+        Literal["stop", "length", "content_filter", "tool_calls", "function_call"]
+        | None
+    ) = None
+    """The reason the model stopped generating tokens (only in final chunk)."""
+
+
+class ChatCompletionChunk(BaseModel):
+    """A chunk in a streaming chat completion response."""
+
+    id: str
+    """A unique identifier for the chat completion."""
+
+    choices: list[ChatCompletionChunkChoice]
+    """A list of chat completion choices."""
+
+    created: int
+    """The Unix timestamp (in seconds) of when the chat completion was created."""
+
+    model: str
+    """The model used for the chat completion."""
+
+    object: Literal["chat.completion.chunk"]
+    """The object type, which is always `chat.completion.chunk`."""
+
+    system_fingerprint: str | None = None
+    """This fingerprint represents the backend configuration that the model runs with."""
+
+    usage: CompletionUsage | None = None
+    """Usage statistics for the final streaming chunk when available from the backend."""
 
 
 class OpenAIError(BaseModel):

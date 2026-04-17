@@ -1,7 +1,5 @@
 """Unit tests for _build_model_options function."""
 
-import pytest
-
 from cli.serve.app import _build_model_options
 from cli.serve.models import ChatCompletionRequest, ChatMessage
 from mellea.backends.model_options import ModelOption
@@ -71,6 +69,7 @@ class TestBuildModelOptions:
         assert "n" not in options
         assert "user" not in options
         assert "stream" not in options
+        assert ModelOption.STREAM not in options
         # Check that temperature is present
         assert ModelOption.TEMPERATURE in options
 
@@ -93,6 +92,7 @@ class TestBuildModelOptions:
         )
         options = _build_model_options(request)
         # ChatCompletionRequest has default temperature=1.0
+        # stream is excluded from model_options (handled separately in endpoint logic)
         assert options == {ModelOption.TEMPERATURE: 1.0}
 
     def test_requirements_excluded(self):

@@ -1,13 +1,27 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
 import json
-from collections.abc import Callable
 from typing import Any
+
+from pydantic import BaseModel
 
 from ..backends.tools import validate_tool_arguments
 from ..core import MelleaLogger, ModelToolCall
 from ..core.base import AbstractMelleaTool
 from ..stdlib.components import Document, Message
+
+
+class CompletionUsage(BaseModel):
+    """Token usage statistics for a completion request."""
+
+    completion_tokens: int
+    """Number of tokens in the generated completion."""
+
+    prompt_tokens: int
+    """Number of tokens in the prompt."""
+
+    total_tokens: int
+    """Total number of tokens used in the request (prompt + completion)."""
 
 
 def extract_model_tool_requests(
@@ -205,3 +219,27 @@ def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
             json_doc["doc_id"] = doc.doc_id
         json_docs.append(json_doc)
     return json_docs
+
+
+def build_completion_usage(output: Any) -> CompletionUsage | None:
+    """Build a normalized usage object from a model output, if available.
+
+    Args:
+        output: Model output object that may expose a ``usage`` mapping with
+            token counts.
+
+    Returns:
+        A ``CompletionUsage`` object when usage metadata is present on the
+        output, otherwise ``None``.
+    """
+    if not hasattr(output, "usage") or output.usage is None:
+        return None
+
+    prompt_tokens = output.usage.get("prompt_tokens", 0)
+    completion_tokens = output.usage.get("completion_tokens", 0)
+    total_tokens = output.usage.get("total_tokens", prompt_tokens + completion_tokens)
+    return CompletionUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
