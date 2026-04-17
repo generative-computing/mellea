@@ -29,8 +29,26 @@ class ToolFunction(BaseModel):
     function: FunctionDefinition
 
 
+class JsonSchemaFormat(BaseModel):
+    """JSON Schema definition for structured output."""
+
+    name: str
+    """Name of the schema."""
+
+    schema_: dict[str, Any] = Field(alias="schema")
+    """JSON Schema definition."""
+
+    strict: bool | None = None
+    """Whether to enforce strict schema validation."""
+
+    model_config = {"populate_by_name": True}
+
+
 class ResponseFormat(BaseModel):
-    type: Literal["text", "json_object"]
+    type: Literal["text", "json_object", "json_schema"]
+
+    json_schema: JsonSchemaFormat | None = None
+    """JSON Schema definition when type is 'json_schema'."""
 
 
 class StreamOptions(BaseModel):

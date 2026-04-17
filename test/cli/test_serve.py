@@ -625,3 +625,279 @@ class TestHTTPValidation:
         final_chunk = chunks[3]
         assert final_chunk["choices"][0]["delta"].get("content") is None
         assert final_chunk["choices"][0]["finish_reason"] == "tool_calls"
+
+
+class TestResponseFormat:
+    """Tests for response_format parameter handling."""
+
+    @pytest.mark.asyncio
+    async def test_json_schema_format_passed_to_serve(self):
+        """Test that json_schema response_format is converted to Pydantic model and passed to serve."""
+        from pydantic import BaseModel
+
+        from cli.serve.models import JsonSchemaFormat, ResponseFormat
+
+        # Create a mock module with serve that accepts format parameter
+        mock_module = Mock()
+        mock_module.__name__ = "test_module"
+
+        # Track calls manually
+        captured_format = None
+
+        def mock_serve(input, requirements=None, model_options=None, format=None):
+            nonlocal captured_format
+            captured_format = format
+            return ModelOutputThunk('{"name": "Alice", "age": 30}')
+
+        # Assign the real function so signature inspection works
+        mock_module.serve = mock_serve
+
+        # Create a request with json_schema response_format
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate a person")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=JsonSchemaFormat(
+                    name="Person",
+                    schema={
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "age": {"type": "integer"},
+                        },
+                        "required": ["name", "age"],
+                    },
+                ),
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Verify format was passed
+        assert captured_format is not None
+        assert issubclass(captured_format, BaseModel)
+        assert "name" in captured_format.model_fields
+        assert "age" in captured_format.model_fields
+
+        # Verify response is successful
+        assert isinstance(response, ChatCompletion)
+        assert response.choices[0].message.content == '{"name": "Alice", "age": 30}'
+
+    @pytest.mark.asyncio
+    async def test_json_object_format_no_schema(self, mock_module):
+        """Test that json_object response_format doesn't pass a format model."""
+        from cli.serve.models import ResponseFormat
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate JSON")],
+            response_format=ResponseFormat(type="json_object"),
+        )
+
+        mock_output = ModelOutputThunk('{"result": "success"}')
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Verify serve was called
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+
+        # For json_object, format should be None (no specific schema)
+        if "format" in call_args.kwargs:
+            assert call_args.kwargs["format"] is None
+
+        # Verify response is successful
+        assert isinstance(response, ChatCompletion)
+
+    @pytest.mark.asyncio
+    async def test_text_format_no_schema(self, mock_module):
+        """Test that text response_format doesn't pass a format model."""
+        from cli.serve.models import ResponseFormat
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            response_format=ResponseFormat(type="text"),
+        )
+
+        mock_output = ModelOutputThunk("Hello there!")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Verify serve was called
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+
+        # For text, format should be None
+        if "format" in call_args.kwargs:
+            assert call_args.kwargs["format"] is None
+
+        # Verify response is successful
+        assert isinstance(response, ChatCompletion)
+
+    @pytest.mark.asyncio
+    async def test_json_schema_missing_schema_field(self, mock_module):
+        """Test that json_schema without schema field returns error."""
+        import json
+
+        from fastapi.responses import JSONResponse
+
+        from cli.serve.models import ResponseFormat
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=None,  # Missing schema
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should return error
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+        body_bytes = response.body
+        if isinstance(body_bytes, memoryview):
+            body_bytes = bytes(body_bytes)
+        error_data = json.loads(body_bytes.decode("utf-8"))
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert "json_schema" in error_data["error"]["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_json_schema_invalid_schema(self, mock_module):
+        """Test that invalid JSON schema returns error."""
+        import json
+
+        from fastapi.responses import JSONResponse
+
+        from cli.serve.models import JsonSchemaFormat, ResponseFormat
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=JsonSchemaFormat(
+                    name="Invalid",
+                    schema={
+                        "type": "array",  # Not supported (only object)
+                        "items": {"type": "string"},
+                    },
+                ),
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should return error
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+        body_bytes = response.body
+        if isinstance(body_bytes, memoryview):
+            body_bytes = bytes(body_bytes)
+        error_data = json.loads(body_bytes.decode("utf-8"))
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert "schema" in error_data["error"]["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_serve_without_format_parameter(self, mock_module):
+        """Test that serve functions without format parameter still work."""
+        from cli.serve.models import JsonSchemaFormat, ResponseFormat
+
+        # Create a serve function that doesn't accept format
+        def serve_no_format(input, requirements=None, model_options=None):
+            return ModelOutputThunk("Response without format")
+
+        mock_module.serve = serve_no_format
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=JsonSchemaFormat(
+                    name="Test",
+                    schema={
+                        "type": "object",
+                        "properties": {"result": {"type": "string"}},
+                        "required": ["result"],
+                    },
+                ),
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed even though serve doesn't accept format
+        assert isinstance(response, ChatCompletion)
+        assert response.choices[0].message.content == "Response without format"
+
+    @pytest.mark.asyncio
+    async def test_json_schema_with_optional_fields(self):
+        """Test that JSON schema with optional fields is handled correctly."""
+        from pydantic import BaseModel
+
+        from cli.serve.models import JsonSchemaFormat, ResponseFormat
+
+        # Create a mock module with serve that accepts format parameter
+        mock_module = Mock()
+        mock_module.__name__ = "test_module"
+
+        # Track calls manually
+        captured_format = None
+
+        def mock_serve(input, requirements=None, model_options=None, format=None):
+            nonlocal captured_format
+            captured_format = format
+            return ModelOutputThunk('{"name": "Widget", "price": 9.99}')
+
+        # Assign the real function so signature inspection works
+        mock_module.serve = mock_serve
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=JsonSchemaFormat(
+                    name="Product",
+                    schema={
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "price": {"type": "number"},
+                            "description": {"type": "string"},
+                        },
+                        "required": ["name", "price"],  # description is optional
+                    },
+                ),
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Verify format model was created correctly
+        assert captured_format is not None
+        assert issubclass(captured_format, BaseModel)
+        assert "name" in captured_format.model_fields
+        assert "price" in captured_format.model_fields
+        assert "description" in captured_format.model_fields
+
+        # Verify response is successful
+        assert isinstance(response, ChatCompletion)
