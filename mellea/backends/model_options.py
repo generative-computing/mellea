@@ -22,6 +22,7 @@ class ModelOption:
 
     Attributes:
         TOOLS (str): Sentinel key for a list or dict of tools to expose for tool calling.
+        TOOL_CHOICE (str): Key for tool choice strategy (passed through to the backend).
         MAX_NEW_TOKENS (str): Sentinel key for the maximum number of new tokens to generate.
         SYSTEM_PROMPT (str): Sentinel key for the system prompt string.
         TEMPERATURE (str): Key for the sampling temperature (passed through to the backend).
@@ -33,6 +34,9 @@ class ModelOption:
 
     TOOLS = "@@@tools@@@"
     """Must be a list[Callable] or a dict[str, Callable] where str is the name of the function."""
+
+    TOOL_CHOICE = "tool_choice"
+    """Controls which tool the model should use. Can be "none", "auto", or a specific tool name."""
 
     MAX_NEW_TOKENS = "@@@max_new_tokens@@@"
     SYSTEM_PROMPT = "@@@system_prompt@@@"

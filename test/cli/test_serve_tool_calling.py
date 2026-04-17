@@ -15,6 +15,7 @@ from cli.serve.models import (
     FunctionParameters,
     ToolFunction,
 )
+from mellea.backends import ModelOption
 from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
 
 
@@ -223,9 +224,9 @@ class TestToolCalling:
         assert call_args is not None
         model_options = call_args.kwargs["model_options"]
 
-        # tool_choice should be passed through as-is
-        assert "tool_choice" in model_options
-        assert model_options["tool_choice"] == "auto"
+        # tool_choice should be passed through using ModelOption.TOOL_CHOICE
+        assert ModelOption.TOOL_CHOICE in model_options
+        assert model_options[ModelOption.TOOL_CHOICE] == "auto"
 
     @pytest.mark.asyncio
     async def test_tool_calls_with_complex_arguments(

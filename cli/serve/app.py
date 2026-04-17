@@ -115,7 +115,6 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "response_format",  # Response format (json_object) - not yet implemented
         "functions",  # Legacy function calling - not yet implemented
         "function_call",  # Legacy function calling - not yet implemented
-        # Tool choice is passed through as-is (not a ModelOption sentinel)
     }
     openai_to_model_option = {
         "temperature": ModelOption.TEMPERATURE,
@@ -123,6 +122,7 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "seed": ModelOption.SEED,
         "stream": ModelOption.STREAM,
         "tools": ModelOption.TOOLS,
+        "tool_choice": ModelOption.TOOL_CHOICE,
     }
 
     # Get all non-None fields
