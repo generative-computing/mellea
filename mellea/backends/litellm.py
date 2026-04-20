@@ -60,10 +60,6 @@ format: None = (
     None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 )
 
-# LiteLLM's INFO logs are very noisy (logs every completion call). Suppress them.
-logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
-
 
 class LiteLLMBackend(FormatterBackend):
     """A generic LiteLLM compatible backend.
