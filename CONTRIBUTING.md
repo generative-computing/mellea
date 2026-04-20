@@ -283,6 +283,19 @@ Closes #123
 git commit -s -m "feat: your commit message"
 ```
 
+### AI Coding Assistants
+
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting.
+
+AI coding assistants following project guidelines add an `Assisted-by:` trailer to commit messages by default, identifying which tool was used:
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
+Add one line per tool used, using its common name (GitHub Copilot, Cursor, etc.).
+
 ### Pre-commit Hooks
 
 Pre-commit hooks run automatically before each commit and check:
@@ -372,8 +385,6 @@ models must be pulled locally before running the tests that need them.
 - `granite4:latest` — melp examples
 - `llama3.2` — repair-with-guardian example
 - `llama3.2:3b` — tutorial / mify examples (via `META_LLAMA_3_2_3B`)
-- `phi:2.7b` — SOFAI graph-colouring example
-- `pielee/qwen3-4b-thinking-2507_q8:latest` — SOFAI S2 solver
 - `qwen2.5vl:7b` — vision (OpenAI-via-Ollama) example
 
 **Additional test models (`test/`):**
@@ -390,7 +401,7 @@ Pull everything:
 ```bash
 for m in granite4:micro granite4:micro-h deepseek-r1:8b \
   granite3-guardian:2b granite3.2-vision granite3.3:8b granite4:latest \
-  llama3.2 llama3.2:3b phi:2.7b pielee/qwen3-4b-thinking-2507_q8:latest \
+  llama3.2 llama3.2:3b \
   qwen2.5vl:7b granite4:small-h llama3.2:1b llama3:8b llava mistral:7b \
   smollm2:1.7b; do ollama pull "$m"; done
 ```
@@ -441,8 +452,8 @@ CICD=1 uv run pytest
 
 ```python
 # Enable debug logging
-from mellea.core import FancyLogger
-FancyLogger.get_logger().setLevel("DEBUG")
+from mellea.core import MelleaLogger
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 # See exact prompt sent to LLM
 print(m.last_prompt())

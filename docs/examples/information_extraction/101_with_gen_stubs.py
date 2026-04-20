@@ -1,6 +1,6 @@
 # pytest: ollama, e2e
 
-"""Simple Example of information extraction with Mellea using generative slots."""
+"""Simple Example of information extraction with Mellea using generative stubs."""
 
 from mellea import generative, start_session
 from mellea.backends import model_ids

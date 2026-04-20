@@ -46,3 +46,20 @@ class GenerationPostCallPayload(MelleaBasePayload):
     prompt: str | list[dict[str, Any]] = ""
     model_output: Any = None
     latency_ms: float = 0.0
+
+
+class GenerationErrorPayload(MelleaBasePayload):
+    """Payload for ``generation_error`` — fires when the LLM backend raises an exception.
+
+    This hook fires inside ``ModelOutputThunk.astream`` just before the exception
+    is re-raised, giving plugins a chance to observe (but not suppress) the error.
+
+    Attributes:
+        exception: The exception raised by the backend.
+        model_output: The ``ModelOutputThunk`` at the time of the error. ``model``
+            and ``provider`` are set when the backend set them early (before the
+            async task); otherwise they are ``None``.
+    """
+
+    exception: BaseException
+    model_output: Any = None

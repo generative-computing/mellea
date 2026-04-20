@@ -11,10 +11,16 @@ from collections.abc import Iterable
 from functools import reduce
 from typing import Any
 
-import torch
-from transformers import PreTrainedModel
-from transformers.cache_utils import DynamicCache
-from transformers.tokenization_utils_base import BatchEncoding
+try:
+    import torch
+    from transformers import PreTrainedModel
+    from transformers.cache_utils import DynamicCache
+    from transformers.tokenization_utils_base import BatchEncoding
+except ImportError as e:
+    raise ImportError(
+        "The HuggingFace backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 TokenizedCacheIterleaving = Iterable[BatchEncoding | DynamicCache]
 LegacyCache = Any

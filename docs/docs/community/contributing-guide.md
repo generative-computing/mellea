@@ -171,6 +171,15 @@ git commit -s -m "feat: your commit message"
 
 **Branch naming:** `feat/topic`, `fix/issue-id`, `docs/topic`
 
+### AI coding assistants
+
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting. AI coding assistants that follow project guidelines automatically add an `Assisted-by:` trailer to commit messages — one line per tool, using its common name (GitHub Copilot, Cursor, etc.):
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
 ### Pre-commit hooks
 
 Pre-commit hooks run automatically before each commit and check:
@@ -315,10 +324,10 @@ CICD=1 uv run pytest
 ### Debugging tips
 
 ```python
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 
 # Enable debug logging
-FancyLogger.get_logger().setLevel("DEBUG")
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 # Inspect the exact prompt sent to the LLM
 print(m.last_prompt())

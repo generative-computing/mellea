@@ -17,7 +17,7 @@ By the end you will have covered:
 
 > **`@generative` in depth:** This tutorial uses `@generative` in the final pipeline
 > step. For a dedicated walkthrough of typed returns, `Literal`, and Pydantic models,
-> see [Tutorial 03: Using Generative Slots](../tutorials/03-using-generative-slots).
+> see [Tutorial 03: Using Generative Stubs](../tutorials/03-using-generative-stubs).
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro` downloaded.
@@ -299,7 +299,7 @@ call is self-contained.
 | Requirements | Enforces plain-English constraints via IVR |
 | `simple_validate` | Adds deterministic checks (word count, format) |
 | `RejectionSamplingStrategy` | Controls retry budget and exposes `SamplingResult` |
-| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](../tutorials/03-using-generative-slots)) |
+| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](../tutorials/03-using-generative-stubs)) |
 | Composition | Independent typed functions wired into a pipeline |
 
 ---

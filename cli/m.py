@@ -6,13 +6,19 @@ Wires together all CLI sub-applications into a single Typer root command: ``m se
 evaluation). Run ``m --help`` to see all available sub-commands.
 """
 
-import typer
+try:
+    import typer
+except ImportError as e:
+    raise ImportError(
+        "The 'm' CLI requires extra dependencies. "
+        'Please install them with: pip install "mellea[cli]"'
+    ) from e
 
 from cli.alora.commands import alora_app
 from cli.decompose import app as decompose_app
 from cli.eval.commands import eval_app
 from cli.fix import fix_app
-from cli.serve.app import serve
+from cli.serve.commands import serve
 
 cli = typer.Typer(name="m", no_args_is_help=True)
 
@@ -23,16 +29,23 @@ def callback() -> None:
     """Mellea command-line tool for LLM-powered workflows.
 
     Provides sub-commands for serving models (``m serve``), training and uploading
-    adapters (``m alora``), decomposing tasks into subtasks (``m decompose``), and
-    running test-based evaluation pipelines (``m eval``).
+    adapters (``m alora``), decomposing tasks into subtasks (``m decompose``),
+    running test-based evaluation pipelines (``m eval``), and applying automated
+    code migrations (``m fix``).
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``).
+
+    See Also:
+        guide: getting-started/quickstart
     """
 
 
 # Typer assumes that all commands are in the same file/module.
 # Use this workaround to separate out functionality. Can still be called
-# as if added with @cli.command() (ie `m serve` here).
+# as if added with @cli.command() (ie `m serve` here). If we don't use this
+# approach, we would have to use `m server <subcommand>` instead.
 cli.command(name="serve")(serve)
-
 
 # Add new subcommand groups by importing and adding with `cli.add_typer()`
 # as documented: https://typer.tiangolo.com/tutorial/subcommands/add-typer/#put-them-together.

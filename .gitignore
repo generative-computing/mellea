@@ -381,6 +381,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.*-venv
 env/
 venv/
 ENV/
@@ -454,7 +455,8 @@ pyrightconfig.json
 .claude/*
 !.claude/settings.json
 
-# Generated API documentation (built by tooling/docs-autogen/)
+# Generated documentation (built by tooling/docs-autogen/)
 docs/docs/api/
 docs/docs/api-reference.mdx
+docs/docs/reference/cli.md
 .venv-docs-autogen/

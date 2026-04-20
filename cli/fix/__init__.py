@@ -14,6 +14,7 @@ class _FixMode(StrEnum):
     ADD_STREAM_LOOP = "add-stream-loop"
 
 
-from cli.fix.commands import fix_async  # noqa: E402
+from cli.fix.commands import fix_async, fix_genslots  # noqa: E402
 
 fix_app.command("async")(fix_async)
+fix_app.command("genslots")(fix_genslots)

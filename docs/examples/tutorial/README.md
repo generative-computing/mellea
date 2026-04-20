@@ -13,7 +13,7 @@ Email generation example - the classic "Hello World" of Mellea.
 ### instruct_validate_repair.py
 Walkthrough of the instruct-validate-repair paradigm.
 
-### compositionality_with_generative_slots.py
+### compositionality_with_generative_stubs.py
 Tutorial on composing generative functions.
 
 ### context_example.py
@@ -58,7 +58,7 @@ Recommended order for learning Mellea:
 
 1. **simple_email.py** - Start here for basic concepts
 2. **instruct_validate_repair.py** - Core paradigm
-3. **compositionality_with_generative_slots.py** - Building blocks
+3. **compositionality_with_generative_stubs.py** - Building blocks
 4. **context_example.py** - Context management
 5. **model_options_example.py** - Configuration
 6. **sentiment_classifier.py** - Complete application
@@ -73,7 +73,7 @@ Recommended order for learning Mellea:
 - **Requirements**: Constraining outputs with validation
 - **Validation**: Checking outputs against requirements
 - **Repair**: Automatically fixing invalid outputs
-- **Generative Slots**: Type-safe LLM functions
+- **Generative Stubs**: Type-safe LLM functions
 - **Contexts**: Managing conversation and generation history
 - **Model Options**: Configuring model behavior
 - **MObjects**: Working with structured data types

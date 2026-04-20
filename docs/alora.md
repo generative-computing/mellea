@@ -9,7 +9,7 @@ Mellea provides a command-line interface for training and uploading [LoRA](https
 From the root of the repository:
 
 ```bash
-pip install mellea
+pip install "mellea[cli]"
 huggingface-cli login  # Optional: only needed for uploads
 ```
 

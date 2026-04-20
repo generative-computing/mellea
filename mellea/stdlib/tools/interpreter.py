@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ...core import FancyLogger
+from ...core import MelleaLogger
 
-logger = FancyLogger.get_logger()
+logger = MelleaLogger.get_logger()
 
 
 @dataclass

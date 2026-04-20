@@ -7,7 +7,7 @@ This directory contains comprehensive examples demonstrating Mellea's features a
 **New to Mellea?** Start here:
 1. [tutorial/simple_email.py](tutorial/) - Your first Mellea program
 2. [instruct_validate_repair/](instruct_validate_repair/) - Core paradigm
-3. [generative_slots/](generative_slots/) - Type-safe LLM functions
+3. [generative_stubs/](generative_stubs/) - Type-safe LLM functions
 4. [notebooks/](notebooks/) - Interactive tutorials
 
 ## 📚 Example Categories
@@ -21,7 +21,7 @@ Learn Mellea's core instruct-validate-repair paradigm for reliable LLM outputs.
 - Automatic repair on validation failure
 - Custom validation functions
 
-**[generative_slots/](generative_slots/)**
+**[generative_stubs/](generative_stubs/)**
 Type-safe, composable LLM functions using the `@generative` decorator.
 - Sentiment classification
 - Text summarization
@@ -185,7 +185,7 @@ Utility functions used across examples.
 
 ### Text Generation
 - [instruct_validate_repair/](instruct_validate_repair/) - Email generation
-- [generative_slots/](generative_slots/) - Summarization
+- [generative_stubs/](generative_stubs/) - Summarization
 - [tutorial/sentiment_classifier.py](tutorial/) - Classification
 
 ### Data Processing

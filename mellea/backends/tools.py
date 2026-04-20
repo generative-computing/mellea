@@ -16,7 +16,7 @@ from typing import Any, Literal, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mellea.core.utils import FancyLogger
+from mellea.core.utils import MelleaLogger
 
 from ..core import CBlock, Component, TemplateRepresentation
 from ..core.base import AbstractMelleaTool
@@ -97,7 +97,7 @@ class MelleaTool(AbstractMelleaTool):
                     """Langchain tools expect their first argument to be 'tool_input'."""
                     if args:
                         # This shouldn't happen. Our ModelToolCall.call_func actually passes in everything as kwargs.
-                        FancyLogger.get_logger().warning(
+                        MelleaLogger.get_logger().warning(
                             f"ignoring unexpected args while calling langchain tool ({tool_name}): ({args})"
                         )
 
@@ -158,7 +158,7 @@ class MelleaTool(AbstractMelleaTool):
                 """Wrapper for smolagents tool forward method."""
                 if args:
                     # This shouldn't happen. Our ModelToolCall.call_func passes everything as kwargs.
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"ignoring unexpected args while calling smolagents tool ({tool_name}): ({args})"
                     )
                 return tool.forward(**kwargs)
@@ -480,7 +480,7 @@ def validate_tool_arguments(
     """
     from pydantic import ValidationError, create_model
 
-    from ..core import FancyLogger
+    from ..core import MelleaLogger
 
     # Extract JSON schema from tool
     tool_schema = tool.as_json_tool.get("function", {})
@@ -581,7 +581,7 @@ def validate_tool_arguments(
                 )
 
         if coerced_fields and coerce_types:
-            FancyLogger.get_logger().debug(
+            MelleaLogger.get_logger().debug(
                 f"Tool '{tool_name}' arguments coerced: {', '.join(coerced_fields)}"
             )
 
@@ -601,11 +601,11 @@ def validate_tool_arguments(
 
         if strict:
             # Re-raise with enhanced message
-            FancyLogger.get_logger().error(error_msg)
+            MelleaLogger.get_logger().error(error_msg)
             raise
         else:
             # Log warning and return original args
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 error_msg + "\nReturning original arguments without validation."
             )
             return dict(args)
@@ -615,10 +615,10 @@ def validate_tool_arguments(
         error_msg = f"Unexpected error validating tool '{tool_name}' arguments: {e}"
 
         if strict:
-            FancyLogger.get_logger().error(error_msg)
+            MelleaLogger.get_logger().error(error_msg)
             raise
         else:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 error_msg + "\nReturning original arguments without validation."
             )
             return dict(args)

@@ -4,6 +4,8 @@ This module contains plugins that hook into the generation pipeline to
 automatically record metrics when enabled. Currently includes:
 
 - TokenMetricsPlugin: Records token usage statistics from ModelOutputThunk.usage
+- LatencyMetricsPlugin: Records request duration and TTFB latency histograms
+- ErrorMetricsPlugin: Records LLM error counts categorized by semantic error type
 """
 
 from __future__ import annotations
@@ -15,7 +17,10 @@ from mellea.plugins.decorators import hook
 from mellea.plugins.types import PluginMode
 
 if TYPE_CHECKING:
-    from mellea.plugins.hooks.generation import GenerationPostCallPayload
+    from mellea.plugins.hooks.generation import (
+        GenerationErrorPayload,
+        GenerationPostCallPayload,
+    )
 
 
 class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
@@ -27,14 +32,6 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
 
     The plugin reads the standardized usage field (OpenAI-compatible format)
     and records metrics following OpenTelemetry Gen-AI semantic conventions.
-
-    Example:
-        >>> from mellea.telemetry.metrics_plugins import TokenMetricsPlugin
-        >>> from mellea.telemetry.metrics import enable_metrics
-        >>>
-        >>> enable_metrics()
-        >>> with TokenMetricsPlugin():
-        ...     result = session.instruct("Hello, world!")
     """
 
     @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
@@ -60,3 +57,75 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
             model=mot.model or "unknown",
             provider=mot.provider or "unknown",
         )
+
+
+class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=51):
+    """Records request duration and TTFB latency metrics from generation outputs.
+
+    This plugin hooks into the generation_post_call event to automatically
+    record latency metrics. It records total request duration for every request
+    and time-to-first-token (TTFB) for streaming requests.
+    """
+
+    @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_latency_metrics(
+        self, payload: GenerationPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record latency metrics after generation completes.
+
+        Args:
+            payload: Contains latency_ms and model_output
+            context: Plugin context (unused)
+        """
+        from mellea.telemetry.metrics import record_request_duration, record_ttfb
+
+        mot = payload.model_output
+        model = mot.model or "unknown"
+        provider = mot.provider or "unknown"
+
+        # Record total request duration (convert ms → seconds)
+        record_request_duration(
+            duration_s=payload.latency_ms / 1000.0,
+            model=model,
+            provider=provider,
+            streaming=mot.streaming,
+        )
+
+        # Record TTFB only for streaming requests with a measured value
+        if mot.streaming and mot.ttfb_ms is not None:
+            record_ttfb(ttfb_s=mot.ttfb_ms / 1000.0, model=model, provider=provider)
+
+
+class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
+    """Records LLM error counts from generation errors.
+
+    This plugin hooks into the generation_error event to classify exceptions
+    by semantic error type and increment the ``mellea.llm.errors`` counter.
+    """
+
+    @hook("generation_error", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_error_metrics(
+        self, payload: GenerationErrorPayload, context: dict[str, Any]
+    ) -> None:
+        """Record error metrics when a generation error occurs.
+
+        Args:
+            payload: Contains the exception and the ModelOutputThunk at the time of the error.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import classify_error, record_error
+
+        mot = payload.model_output
+        error_type = classify_error(payload.exception)
+        record_error(
+            error_type=error_type,
+            model=mot.model if mot is not None and mot.model is not None else "unknown",
+            provider=mot.provider
+            if mot is not None and mot.provider is not None
+            else "unknown",
+            exception_class=type(payload.exception).__name__,
+        )
+
+
+# All metrics plugins to auto-register when metrics are enabled
+_METRICS_PLUGIN_CLASSES = (TokenMetricsPlugin, LatencyMetricsPlugin, ErrorMetricsPlugin)

@@ -50,6 +50,11 @@ Example - Multiple exporters:
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
     export MELLEA_METRICS_PROMETHEUS=true
 
+Built-in metrics (auto-recorded via plugins when metrics are enabled):
+- Token counters: mellea.llm.tokens.input, mellea.llm.tokens.output (unit: tokens)
+- Latency histograms: mellea.llm.request.duration (unit: s), mellea.llm.ttfb (unit: s, streaming only)
+- Error counter: mellea.llm.errors (unit: {error}), categorized by semantic error type
+
 Programmatic usage:
     from mellea.telemetry.metrics import create_counter, create_histogram
 
@@ -63,11 +68,12 @@ Programmatic usage:
     latency_histogram = create_histogram(
         "mellea.request.duration",
         description="Request latency distribution",
-        unit="ms"
+        unit="s"
     )
-    latency_histogram.record(150.5, {"backend": "ollama"})
+    latency_histogram.record(1.5, {"backend": "ollama"})
 """
 
+import asyncio
 import os
 import warnings
 from importlib.metadata import version
@@ -84,6 +90,7 @@ try:
         ConsoleMetricExporter,
         PeriodicExportingMetricReader,
     )
+    from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
     from opentelemetry.sdk.resources import Resource
 
     _OTEL_AVAILABLE = True
@@ -232,7 +239,23 @@ def _setup_meter_provider() -> Any:
             stacklevel=2,
         )
 
-    provider = MeterProvider(resource=resource, metric_readers=readers)  # type: ignore
+    # Configure explicit bucket boundaries for LLM latency histograms
+    views = [
+        View(  # type: ignore
+            instrument_name="mellea.llm.request.duration",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120]
+            ),
+        ),
+        View(  # type: ignore
+            instrument_name="mellea.llm.ttfb",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10]
+            ),
+        ),
+    ]
+
+    provider = MeterProvider(resource=resource, metric_readers=readers, views=views)  # type: ignore
     metrics.set_meter_provider(provider)  # type: ignore
     return provider
 
@@ -446,34 +469,264 @@ def record_token_usage_metrics(
         output_counter.add(output_tokens, attributes)
 
 
-# Auto-register TokenMetricsPlugin when metrics are enabled
+# Latency histograms following Gen-AI semantic conventions
+# These are lazily initialized on first use and kept internal
+_duration_histogram: Any = None
+_ttfb_histogram: Any = None
+
+
+def _get_latency_histograms() -> tuple[Any, Any]:
+    """Get or create latency histograms (internal use only).
+
+    Returns:
+        Tuple of (duration_histogram, ttfb_histogram)
+    """
+    global _duration_histogram, _ttfb_histogram
+
+    if _duration_histogram is None:
+        _duration_histogram = create_histogram(
+            "mellea.llm.request.duration",
+            description="Total LLM request duration",
+            unit="s",
+        )
+
+    if _ttfb_histogram is None:
+        _ttfb_histogram = create_histogram(
+            "mellea.llm.ttfb",
+            description="Time to first token for streaming LLM requests",
+            unit="s",
+        )
+
+    return _duration_histogram, _ttfb_histogram
+
+
+def record_request_duration(
+    duration_s: float, model: str, provider: str, streaming: bool = False
+) -> None:
+    """Record total LLM request duration.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        duration_s: Request duration in seconds
+        model: Model identifier (e.g., "gpt-4", "llama2:7b")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        streaming: Whether the request used streaming mode
+
+    Example:
+        record_request_duration(
+            duration_s=1.25,
+            model="llama2:7b",
+            provider="ollama",
+            streaming=True,
+        )
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    duration_hist, _ = _get_latency_histograms()
+    attributes = {
+        "gen_ai.request.model": model,
+        "gen_ai.provider.name": provider,
+        "streaming": streaming,
+    }
+    duration_hist.record(duration_s, attributes)
+
+
+def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
+    """Record time-to-first-token for streaming LLM requests.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+    Should only be called for streaming requests.
+
+    Args:
+        ttfb_s: Time to first token in seconds
+        model: Model identifier (e.g., "gpt-4", "llama2:7b")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
+
+    Example:
+        record_ttfb(
+            ttfb_s=0.18,
+            model="llama2:7b",
+            provider="ollama",
+        )
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    _, ttfb_hist = _get_latency_histograms()
+    attributes = {"gen_ai.request.model": model, "gen_ai.provider.name": provider}
+    ttfb_hist.record(ttfb_s, attributes)
+
+
+# Auto-register metrics plugins when metrics are enabled
 if _OTEL_AVAILABLE and _METRICS_ENABLED:
     try:
         from mellea.plugins.registry import register
-        from mellea.telemetry.metrics_plugins import TokenMetricsPlugin
+        from mellea.telemetry.metrics_plugins import _METRICS_PLUGIN_CLASSES
 
-        # Idempotent registration (supports module reloads in tests)
-        try:
-            register(TokenMetricsPlugin())
-        except ValueError as e:
-            # Already registered (expected during module reloads in tests)
-            warnings.warn(
-                f"TokenMetricsPlugin already registered: {e}", UserWarning, stacklevel=2
-            )
+        for _plugin_cls in _METRICS_PLUGIN_CLASSES:
+            try:
+                register(_plugin_cls())
+            except ValueError as e:
+                # Already registered (expected during module reloads in tests)
+                warnings.warn(
+                    f"{_plugin_cls.__name__} already registered: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
     except ImportError:
         warnings.warn(
             "Metrics are enabled but the plugin framework is not installed. "
-            "Token usage metrics will not be recorded automatically. "
+            "Token usage and latency metrics will not be recorded automatically. "
             "Install with: pip install mellea[telemetry]",
             UserWarning,
             stacklevel=2,
         )
 
 
+# ---------------------------------------------------------------------------
+# Error counters
+# ---------------------------------------------------------------------------
+
+# Semantic error type constants (mellea-specific categories)
+ERROR_TYPE_RATE_LIMIT = "rate_limit"
+ERROR_TYPE_TIMEOUT = "timeout"
+ERROR_TYPE_CONTENT_POLICY = "content_policy"
+ERROR_TYPE_AUTH = "auth"
+ERROR_TYPE_INVALID_REQUEST = "invalid_request"
+ERROR_TYPE_TRANSPORT_ERROR = "transport_error"
+ERROR_TYPE_SERVER_ERROR = "server_error"
+ERROR_TYPE_UNKNOWN = "unknown"
+
+
+def classify_error(exc: BaseException) -> str:
+    """Map an exception to a semantic error type string.
+
+    Checks OpenAI SDK exception types first (when openai is installed), then
+    falls back to stdlib exceptions and name-based heuristics.
+
+    Args:
+        exc: The exception to classify.
+
+    Returns:
+        One of the ``ERROR_TYPE_*`` constants.
+    """
+    # OpenAI SDK exceptions (optional dependency)
+    try:
+        import openai
+
+        if isinstance(exc, openai.RateLimitError):
+            return ERROR_TYPE_RATE_LIMIT
+        if isinstance(exc, openai.APITimeoutError):
+            return ERROR_TYPE_TIMEOUT
+        if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+            return ERROR_TYPE_AUTH
+        if isinstance(exc, openai.BadRequestError):
+            # Content policy violations surface as BadRequestError with a specific code
+            if getattr(exc, "code", None) == "content_policy_violation":
+                return ERROR_TYPE_CONTENT_POLICY
+            return ERROR_TYPE_INVALID_REQUEST
+        if isinstance(exc, openai.APIConnectionError):
+            return ERROR_TYPE_TRANSPORT_ERROR
+        if isinstance(exc, openai.InternalServerError):
+            return ERROR_TYPE_SERVER_ERROR
+    except ImportError:
+        pass
+
+    # Stdlib exceptions
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return ERROR_TYPE_TIMEOUT
+    if isinstance(exc, ConnectionError):
+        return ERROR_TYPE_TRANSPORT_ERROR
+
+    # Name-based heuristics for provider-specific exceptions without explicit imports
+    name_lower = type(exc).__name__.lower()
+    if "ratelimit" in name_lower or "rate_limit" in name_lower:
+        return ERROR_TYPE_RATE_LIMIT
+    if "timeout" in name_lower:
+        return ERROR_TYPE_TIMEOUT
+    if "auth" in name_lower or "unauthorized" in name_lower:
+        return ERROR_TYPE_AUTH
+    if "content" in name_lower and "policy" in name_lower:
+        return ERROR_TYPE_CONTENT_POLICY
+    if (
+        "connection" in name_lower
+        or "network" in name_lower
+        or "transport" in name_lower
+    ):
+        return ERROR_TYPE_TRANSPORT_ERROR
+    if "server" in name_lower:
+        return ERROR_TYPE_SERVER_ERROR
+
+    return ERROR_TYPE_UNKNOWN
+
+
+_error_counter: Any = None
+
+
+def _get_error_counter() -> Any:
+    """Get or create the LLM error counter (internal use only).
+
+    Returns:
+        Counter instrument for LLM errors.
+    """
+    global _error_counter
+
+    if _error_counter is None:
+        _error_counter = create_counter(
+            "mellea.llm.errors",
+            description="Total number of LLM errors categorized by semantic type",
+            unit="{error}",
+        )
+
+    return _error_counter
+
+
+def record_error(
+    error_type: str, model: str, provider: str, exception_class: str
+) -> None:
+    """Record an LLM error metric.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        error_type: Semantic error category (use ``ERROR_TYPE_*`` constants).
+        model: Model identifier (e.g. "gpt-4", "llama2:7b").
+        provider: Provider name (e.g. "openai", "ollama").
+        exception_class: Python exception class name (e.g. "RateLimitError").
+
+    Example:
+        record_error(
+            error_type=ERROR_TYPE_RATE_LIMIT,
+            model="gpt-4",
+            provider="openai",
+            exception_class="RateLimitError",
+        )
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    counter = _get_error_counter()
+    counter.add(
+        1,
+        {
+            "error_type": error_type,
+            "gen_ai.request.model": model,
+            "gen_ai.provider.name": provider,
+            "error.type": exception_class,
+        },
+    )
+
+
 __all__ = [
+    "classify_error",
     "create_counter",
     "create_histogram",
     "create_up_down_counter",
     "is_metrics_enabled",
+    "record_error",
+    "record_request_duration",
     "record_token_usage_metrics",
+    "record_ttfb",
 ]

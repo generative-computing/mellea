@@ -41,19 +41,22 @@ def clean_metrics_env(monkeypatch):
     importlib.reload(mellea.telemetry.metrics)
 
 
-def test_record_token_metrics_basic(clean_metrics_env):
-    """Test that token metrics are recorded with correct values and attributes."""
-    from mellea.telemetry import metrics as metrics_module
-
-    # Create InMemoryMetricReader to capture metrics
+def _setup_in_memory_provider(metrics_module):
+    """Wire an InMemoryMetricReader into the metrics module globals."""
     reader = InMemoryMetricReader()
-
-    # Create MeterProvider with our reader
     provider = MeterProvider(metric_readers=[reader])
     metrics_module._meter_provider = provider
     metrics_module._meter = provider.get_meter("mellea")
     metrics_module._input_token_counter = None
     metrics_module._output_token_counter = None
+    return reader, provider
+
+
+def test_record_token_metrics_basic(clean_metrics_env):
+    """Test that token metrics are recorded with correct values and attributes."""
+    from mellea.telemetry import metrics as metrics_module
+
+    reader, provider = _setup_in_memory_provider(metrics_module)
 
     from mellea.telemetry.metrics import record_token_usage_metrics
 
@@ -104,12 +107,7 @@ def test_record_token_metrics_accumulation(clean_metrics_env):
     """Test that multiple token recordings accumulate correctly."""
     from mellea.telemetry import metrics as metrics_module
 
-    reader = InMemoryMetricReader()
-    provider = MeterProvider(metric_readers=[reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    reader, provider = _setup_in_memory_provider(metrics_module)
 
     from mellea.telemetry.metrics import record_token_usage_metrics
 
@@ -142,12 +140,7 @@ def test_record_token_metrics_none_handling(clean_metrics_env):
     """Test that None token values are handled gracefully."""
     from mellea.telemetry import metrics as metrics_module
 
-    reader = InMemoryMetricReader()
-    provider = MeterProvider(metric_readers=[reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    reader, provider = _setup_in_memory_provider(metrics_module)
 
     from mellea.telemetry.metrics import record_token_usage_metrics
 
@@ -175,12 +168,7 @@ def test_record_token_metrics_multiple_backends(clean_metrics_env):
     """Test token metrics from different backends are tracked separately."""
     from mellea.telemetry import metrics as metrics_module
 
-    reader = InMemoryMetricReader()
-    provider = MeterProvider(metric_readers=[reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    reader, provider = _setup_in_memory_provider(metrics_module)
 
     from mellea.telemetry.metrics import record_token_usage_metrics
 

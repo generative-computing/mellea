@@ -20,3 +20,6 @@ Use this template when adding or modifying components in `mellea/stdlib/tools/`.
 - [ ] Tests added to `tests/stdlib/tools/`
 - [ ] New code has 100% coverage
 - [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)
+
+### Attribution
+- [ ] AI coding assistants used

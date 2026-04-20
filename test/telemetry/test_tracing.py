@@ -43,7 +43,21 @@ def enable_backend_tracing(monkeypatch):
     importlib.reload(mellea.telemetry.tracing)
 
 
-def test_telemetry_disabled_by_default():
+@pytest.fixture
+def disable_tracing(monkeypatch):
+    """Disable all tracing for tests."""
+    monkeypatch.delenv("MELLEA_TRACE_APPLICATION", raising=False)
+    monkeypatch.delenv("MELLEA_TRACE_BACKEND", raising=False)
+    import importlib
+
+    import mellea.telemetry.tracing
+
+    importlib.reload(mellea.telemetry.tracing)
+    yield
+    importlib.reload(mellea.telemetry.tracing)
+
+
+def test_telemetry_disabled_by_default(disable_tracing):
     """Test that telemetry is disabled by default."""
     from mellea.telemetry import (
         is_application_tracing_enabled,

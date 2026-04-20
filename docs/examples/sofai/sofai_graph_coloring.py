@@ -7,8 +7,8 @@ sampling strategy using a graph coloring constraint satisfaction problem.
 
 In this example, we use the SOFAI sampling strategy. Because we wrote this
 example to run on consumer grade hardware, each model is still relatively small:
-1. S1 Solver (phi:2.7b) - Fast model with iterative feedback loop
-2. S2 Solver (qwen3-4b-thinking) - Slow model, called once on escalation
+1. S1 Solver (granite4:micro) - Fast model with iterative feedback loop
+2. S2 Solver (granite4:latest) - Slow model, called once on escalation
 3. Custom validator - Provides detailed feedback for constraint violations
 
 Note: This example uses a custom validator (check_graph_coloring). To use the
@@ -23,21 +23,27 @@ import logging
 
 import mellea
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import ValidationResult, req
 from mellea.stdlib.sampling import SOFAISamplingStrategy
 
-# Define the graph coloring problem
-graph = {"A": ["B"], "B": ["A", "C"], "C": ["B"]}
-colors = ["Red", "Blue"]
+# Define the graph coloring problem — an odd 5-cycle (needs 3 colors;
+# small models often fail on the first attempt, exercising the SOFAI loop).
+graph = {
+    "A": ["B", "E"],
+    "B": ["A", "C"],
+    "C": ["B", "D"],
+    "D": ["C", "E"],
+    "E": ["D", "A"],
+}
+colors = ["Red", "Blue", "Green"]
 
 graph_description = (
-    f"Color the nodes of the graph (A, B, C) using at most {len(colors)} colors "
+    f"Color the nodes of the graph (A, B, C, D, E) using at most {len(colors)} colors "
     f"({', '.join(colors)}). Adjacent nodes must have different colors. "
-    f"The adjacencies are: A is adjacent to B and C; B is adjacent to A and C; "
-    f"C is adjacent to A and B."
+    f"The adjacencies are: A-B, B-C, C-D, D-E, E-A."
 )
 
 output_format_instruction = (
@@ -136,10 +142,8 @@ requirements = [
 def main():
     """Run the graph coloring example with SOFAI strategy."""
     # Initialize backends
-    s1_solver_backend = OllamaModelBackend(model_id="phi:2.7b")
-    s2_solver_backend = OllamaModelBackend(
-        model_id="pielee/qwen3-4b-thinking-2507_q8:latest"
-    )
+    s1_solver_backend = OllamaModelBackend(model_id="granite4:micro")
+    s2_solver_backend = OllamaModelBackend(model_id="granite4:latest")
 
     # Optional: Initialize judge backend for LLM-as-Judge validation
     # Uncomment to use a third model for validation instead of custom validator
@@ -191,9 +195,9 @@ def main():
 
         # Determine which solver was used
         if i < solver_1_attempts:
-            solver_name = "S1 Solver (phi:2.7b)"
+            solver_name = "S1 Solver (granite4:micro)"
         else:
-            solver_name = "S2 Solver (qwen3-4b-thinking)"
+            solver_name = "S2 Solver (granite4:latest)"
 
         print(f"Solver: {solver_name}")
 
@@ -226,5 +230,5 @@ def main():
 
 if __name__ == "__main__":
     # Set logging level
-    FancyLogger.get_logger().setLevel(logging.INFO)
+    MelleaLogger.get_logger().setLevel(logging.INFO)
     main()

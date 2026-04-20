@@ -187,6 +187,10 @@ async def test_async_parallel_requests(session) -> None:
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+    assert mot1.streaming is True
+    assert mot1.ttfb_ms is not None
+    assert mot1.ttfb_ms > 0
+
 
 async def test_async_avalue(session) -> None:
     mot1, _ = await session.backend.generate_from_context(
@@ -203,6 +207,8 @@ async def test_async_avalue(session) -> None:
     assert mot1.usage["total_tokens"] > 0
     assert isinstance(mot1.model, str)
     assert mot1.provider == "ollama"
+    assert mot1.streaming is False
+    assert mot1.ttfb_ms is None
 
 
 def test_multiple_asyncio_runs(session) -> None:

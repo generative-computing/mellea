@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..core import FancyLogger
+from ..core import MelleaLogger
 
 
 class ModelOption:
@@ -91,6 +91,10 @@ class ModelOption:
             # This will usually be a @@@<>@@@ ModelOption.<> key.
             new_key = from_to.get(old_key, None)
             if new_key:
+                # Skip if old_key and new_key are the same (no-op replacement)
+                if old_key == new_key:
+                    continue
+
                 if new_options.get(new_key, None) is not None:
                     # The key already has a value associated with it in the dict. Leave it be.
                     conflict_log.append(
@@ -107,7 +111,7 @@ class ModelOption:
                 "Encountered conflict(s) when replacing keys. Could not replace keys for:\n"
                 + "\n".join(conflict_log)
             )
-            FancyLogger.get_logger().warning(f"{text_line}")
+            MelleaLogger.get_logger().warning(f"{text_line}")
         return new_options
 
     @staticmethod

@@ -33,7 +33,7 @@
             "pages": [
               "tutorials/01-your-first-generative-program",
               "tutorials/02-streaming-and-async",
-              "tutorials/03-using-generative-slots",
+              "tutorials/03-using-generative-stubs",
               "tutorials/04-making-agents-reliable",
               "tutorials/05-mifying-legacy-code"
             ]
@@ -136,7 +136,8 @@
           {
             "group": "Reference",
             "pages": [
-              "guide/glossary"
+              "guide/glossary",
+              "reference/cli"
             ]
           },
           {
@@ -426,6 +427,14 @@
     },
     {
       "source": "/overview/mellea-welcome",
+      "destination": "/"
+    },
+    {
+      "source": "/overview/quick-start",
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/overview/project-mellea",
       "destination": "/concepts/generative-programming"
     },
     {
@@ -503,6 +512,110 @@
     {
       "source": "/integrations/langchain-and-smolagents",
       "destination": "/integrations/langchain"
+    },
+    {
+      "source": "/how-to/safety-guardrails",
+      "destination": "/advanced/security-and-taint-tracking"
+    },
+    {
+      "source": "/dev/constrained-decoding",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/generate-ctx-signature",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/intrinsics-and-adapters",
+      "destination": "/advanced/intrinsics"
+    },
+    {
+      "source": "/dev/mellea-library",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/dev/mify",
+      "destination": "/concepts/mobjects-and-mify"
+    },
+    {
+      "source": "/dev/requirement-alora-rerouting",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/dev/spans",
+      "destination": "/evaluation-and-observability/tracing"
+    },
+    {
+      "source": "/dev/tool-calling",
+      "destination": "/guide/tools-and-agents"
+    },
+    {
+      "source": "/api/cli/m",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/intrinsic_uploader",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/readme_generator",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/train",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/upload",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/decompose",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/pipeline",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/utils",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/eval",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/runner",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/app",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/models",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/async_fixer",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/genstub_fixer",
+      "destination": "/reference/cli"
     }
   ]
 }

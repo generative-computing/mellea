@@ -31,7 +31,25 @@ def alora_train(
     max_length: int = typer.Option(1024, help="Max sequence length"),
     grad_accum: int = typer.Option(4, help="Gradient accumulation steps"),
 ):
-    """Train an aLoRA or LoRA model on your dataset.
+    """Train an aLoRA or LoRA adapter on a labelled dataset.
+
+    Fine-tunes a base causal language model using a JSONL dataset of item/label
+    pairs. Supports both aLoRA (asymmetric LoRA) and standard LoRA adapters.
+
+    Prerequisites:
+        Mellea installed with adapter extras (``uv add mellea[adapters]``).
+        A CUDA, MPS, or CPU device available for training.
+
+    Output:
+        Saves adapter weights to the path specified by ``--outfile``. The output
+        directory contains an ``adapter_config.json`` and the trained weight
+        files, ready for upload or local inference.
+
+    Examples:
+        m alora train data.jsonl --basemodel ibm-granite/granite-3.3-2b-instruct --outfile ./adapter
+
+    See Also:
+        guide: advanced/lora-and-alora-adapters
 
     Args:
         datafile: JSONL file with item/label pairs for training.
@@ -79,7 +97,23 @@ def alora_upload(
         "processing if the model is invoked as an intrinsic.",
     ),
 ):
-    """Upload trained adapter to remote model registry.
+    """Upload a trained adapter to a remote model registry.
+
+    Pushes adapter weights to Hugging Face Hub, optionally packaging the adapter
+    as an intrinsic with an ``io.yaml`` configuration file.
+
+    Prerequisites:
+        Hugging Face CLI authenticated (``huggingface-cli login``).
+
+    Output:
+        Creates or updates a Hugging Face Hub repository at the name specified
+        by ``--name`` and uploads the adapter weight files.
+
+    Examples:
+        m alora upload ./adapter --name acme/my-alora
+
+    See Also:
+        guide: advanced/lora-and-alora-adapters
 
     Args:
         weight_path: Path to saved adapter weights directory.
@@ -139,6 +173,24 @@ def alora_add_readme(
     ),
 ):
     """Generate and upload an INTRINSIC_README.md for a trained adapter.
+
+    Uses an LLM to auto-generate documentation for a trained adapter based on
+    the training data and model configuration, then uploads it to the Hugging
+    Face Hub repository.
+
+    Prerequisites:
+        Hugging Face CLI authenticated (``huggingface-cli login``).
+        An LLM backend available for README generation.
+
+    Output:
+        Generates a README.md file, displays it for confirmation, and uploads
+        it to the Hugging Face Hub repository specified by ``--name``.
+
+    Examples:
+        m alora add-readme data.jsonl --basemodel ibm-granite/granite-3.3-2b-instruct --name acme/my-alora
+
+    See Also:
+        guide: advanced/lora-and-alora-adapters
 
     Args:
         datafile: JSONL file with item/label pairs used to train the adapter.

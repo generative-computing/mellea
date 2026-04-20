@@ -14,22 +14,23 @@ Both work simultaneously when enabled.
 
 ## Console logging
 
-Mellea uses `FancyLogger`, a color-coded singleton logger built on Python's
+Mellea uses `MelleaLogger`, a color-coded singleton logger built on Python's
 `logging` module. All internal Mellea modules obtain their logger via
-`FancyLogger.get_logger()`.
+`MelleaLogger.get_logger()`.
 
 ### Configuration
 
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
-| `DEBUG` | Set to any value to enable `DEBUG`-level output | unset (`INFO` level) |
-| `FLOG` | Set to any value to forward logs to a local REST endpoint at `http://localhost:8000/api/receive` | unset |
+| `MELLEA_LOG_LEVEL` | Log level name (e.g. `DEBUG`, `INFO`, `WARNING`) | `INFO` |
+| `MELLEA_LOG_JSON` | Set to any truthy value (`1`, `true`, `yes`) to emit structured JSON instead of colour-coded output | unset |
+| `MELLEA_FLOG` | Set to any value to forward logs to a local REST endpoint at `http://localhost:8000/api/receive` | unset |
 
-By default, `FancyLogger` logs at `INFO` level with color-coded output to
-stdout. Set the `DEBUG` environment variable to lower the level to `DEBUG`:
+By default, `MelleaLogger` logs at `INFO` level with color-coded output to
+stdout. Set `MELLEA_LOG_LEVEL` to change the level:
 
 ```bash
-export DEBUG=1
+export MELLEA_LOG_LEVEL=DEBUG
 python your_script.py
 ```
 
@@ -48,6 +49,55 @@ Each message is formatted as:
 ```text
 === HH:MM:SS-LEVEL ======
 message
+```
+
+## Sample output
+
+### Console format (default)
+
+Running `m.instruct(...)` inside a session produces lines like:
+
+```text
+=== 11:11:25-INFO ======
+SUCCESS
+```
+
+### JSON format (`MELLEA_LOG_JSON=1`)
+
+With structured JSON output enabled, the same `SUCCESS` record looks like:
+
+```json
+{
+  "timestamp": "2026-04-08T11:11:25",
+  "level": "INFO",
+  "message": "SUCCESS",
+  "module": "base",
+  "function": "sample",
+  "line_number": 258,
+  "process_id": 73738,
+  "thread_id": 6179762176,
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "backend": "OllamaModelBackend",
+  "model_id": "granite4:micro",
+  "strategy": "RejectionSamplingStrategy",
+  "loop_budget": 3
+}
+```
+
+The `session_id`, `backend`, `model_id`, `strategy`, and `loop_budget` fields
+are injected automatically when the call runs inside a `with session:` block.
+They appear on every log record within that scope.
+
+### Adding custom context fields
+
+Use `log_context` to attach your own fields for the duration of a block:
+
+```python
+from mellea.core import log_context
+
+with log_context(request_id="req-abc", user_id="usr-42"):
+    result = m.instruct("Summarise this document")
+    # Every log record emitted here will include request_id and user_id
 ```
 
 ## OTLP log export
@@ -74,11 +124,11 @@ export OTEL_SERVICE_NAME=my-mellea-app
 
 ### How it works
 
-When `MELLEA_LOGS_OTLP=true`, `FancyLogger` adds an OpenTelemetry
+When `MELLEA_LOGS_OTLP=true`, `MelleaLogger` adds an OpenTelemetry
 `LoggingHandler` alongside its existing handlers:
 
 - **Console handler** — continues to work normally (color-coded output)
-- **REST handler** — continues to work normally (when `FLOG` is set)
+- **REST handler** — continues to work normally (when `MELLEA_FLOG` is set)
 - **OTLP handler** — exports logs to the configured OTLP collector
 
 Logs are exported using OpenTelemetry's Logs API with batched processing
@@ -182,5 +232,5 @@ Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
   telemetry features and configuration.
 - [Tracing](../evaluation-and-observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../evaluation-and-observability/metrics) — token usage metrics,
-  exporters, and custom instruments.
+- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+  and custom instruments.

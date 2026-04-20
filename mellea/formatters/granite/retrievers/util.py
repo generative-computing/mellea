@@ -10,8 +10,14 @@ import urllib.request
 import zipfile
 
 # Third Party
-import pyarrow as pa  # type: ignore[import-not-found]
-import pyarrow.json as pj  # type: ignore[import-not-found]
+try:
+    import pyarrow as pa  # type: ignore[import-not-found]
+    import pyarrow.json as pj  # type: ignore[import-not-found]
+except ImportError as e:
+    raise ImportError(
+        "The granite retrievers module requires extra dependencies. "
+        'Please install them with: pip install "mellea[granite_retriever]"'
+    ) from e
 
 
 def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:

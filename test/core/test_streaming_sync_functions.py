@@ -1,10 +1,10 @@
 """Tests for streaming support using async functions with await_result parameter."""
 
-# pytest: ollama, llm
-
 import asyncio
 
 import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
 from mellea.stdlib.session import start_session

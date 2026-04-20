@@ -22,9 +22,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
 )
@@ -47,7 +47,9 @@ from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -175,7 +177,7 @@ class OpenAIBackend(FormatterBackend):
             )
 
         if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "OPENAI_BASE_URL or base_url is not set.\n"
                 "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
             )
@@ -357,8 +359,6 @@ class OpenAIBackend(FormatterBackend):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes ``action`` and the new output.
         """
-        from ..telemetry.backend_instrumentation import start_generate_span
-
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
@@ -372,13 +372,15 @@ class OpenAIBackend(FormatterBackend):
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
 
-        result = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            result = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
         # Store span in ModelOutputThunk for later use in post_processing
         mot, new_ctx = result
         if span is not None:
@@ -463,7 +465,7 @@ class OpenAIBackend(FormatterBackend):
             if self._server_type == _ServerType.OPENAI:
                 # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
                 # However, not all schemas generates by Mellea include additionalProperties.
-                # GenerativeSlot, in particular, does not add this property.
+                # GenerativeStub, in particular, does not add this property.
                 # The easiest way to address this disparity between OpenAI and other inference providers is to
                 # monkey-patch the response format exactly when we are actually using the OpenAI server.
                 #
@@ -481,7 +483,7 @@ class OpenAIBackend(FormatterBackend):
                     },
                 }
             else:
-                FancyLogger().get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
                 )
                 extra_params["response_format"] = {
@@ -497,7 +499,7 @@ class OpenAIBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
@@ -507,7 +509,7 @@ class OpenAIBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
@@ -558,6 +560,10 @@ class OpenAIBackend(FormatterBackend):
             seed=model_opts.get(ModelOption.SEED, None),
             _format=_format,
         )
+
+        # Set model/provider early so they are available in the error path
+        output.model = self._model_id
+        output.provider = "openai"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -796,7 +802,7 @@ class OpenAIBackend(FormatterBackend):
 
         extra_body = {}
         if format is not None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The official OpenAI completion api does not accept response format / structured decoding; "
                 "it will be passed as an extra arg."
             )
@@ -808,7 +814,7 @@ class OpenAIBackend(FormatterBackend):
             else:
                 extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
             )
 
@@ -832,7 +838,7 @@ class OpenAIBackend(FormatterBackend):
                 )  # type: ignore
             except openai.BadRequestError as e:
                 if openai_ollama_batching_error in e.message:
-                    FancyLogger.get_logger().error(
+                    MelleaLogger.get_logger().error(
                         "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
                         "your requests will fail since ollama doesn't support batching requests."
                     )

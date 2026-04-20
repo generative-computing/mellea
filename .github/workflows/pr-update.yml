@@ -1,7 +1,15 @@
+# This workflow uses pull_request_target, which grants write access to
+# the repo even for PRs from forks. This is safe ONLY because the checkout
+# fetches the base branch (main), not the PR head. Do NOT add:
+#   - actions/checkout with ref: ${{ github.event.pull_request.head.sha }}
+#   - run: steps that execute scripts from the PR branch
+#   - any step that sources or evals PR-controlled content
+# Doing so would let a malicious fork run arbitrary code with write permissions.
+
 name: PR Bot
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, edited]
 
 jobs:
@@ -13,7 +21,9 @@ jobs:
       contents: read
     steps:
       - name: Checkout code # Checks out the base branch, not PR branch.
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Detect PR type from checkboxes
         id: detect-type
@@ -48,6 +58,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TYPE: ${{ steps.detect-type.outputs.pr_type }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           TEMPLATE_FILE=".github/PULL_REQUEST_TEMPLATE/${PR_TYPE}.md"
 
@@ -58,7 +69,7 @@ jobs:
             NEW_BODY="${MARKER}
             ${TEMPLATE_CONTENT}"
 
-            gh pr edit ${{ github.event.pull_request.number }} --body "$NEW_BODY"
+            gh pr edit "$PR_NUMBER" --body "$NEW_BODY"
             echo "Updated PR body with ${PR_TYPE} checklist"
           else
             echo "::error::Template file not found: $TEMPLATE_FILE"

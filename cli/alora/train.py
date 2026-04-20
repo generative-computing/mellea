@@ -12,19 +12,25 @@ import os
 import sys
 import warnings
 
-import torch
-import typer
-from datasets import Dataset
-from peft import LoraConfig, get_peft_model
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    TrainerCallback,
-    TrainerControl,
-    TrainerState,
-    TrainingArguments,
-)
-from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+try:
+    import torch
+    import typer
+    from datasets import Dataset
+    from peft import LoraConfig, get_peft_model
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        TrainerCallback,
+        TrainerControl,
+        TrainerState,
+        TrainingArguments,
+    )
+    from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+except ImportError as e:
+    raise ImportError(
+        "The 'm alora' command requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 # Handle MPS with old PyTorch versions on macOS only
 # Accelerate's GradScaler requires PyTorch >= 2.8.0 for MPS

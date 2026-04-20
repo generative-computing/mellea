@@ -17,9 +17,9 @@ from ..core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
     GenerateLog,
     ImageBlock,
+    MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
     Requirement,
@@ -441,7 +441,7 @@ def transform(
         if chosen_tool is None:
             chosen_tool = tools[0]
 
-        FancyLogger.get_logger().warning(
+        MelleaLogger.get_logger().warning(
             f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"
             # type: ignore
         )
@@ -449,12 +449,12 @@ def transform(
     if chosen_tool:
         # Tell the user the function they should've called if no generated values were added.
         if len(chosen_tool._tool.args.keys()) == 0:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"the transform of {obj} with transformation description '{transformation}' resulted in a tool call with no generated arguments; consider calling the function `{chosen_tool._tool.name}` directly"
             )
 
         new_ctx.add(chosen_tool)
-        FancyLogger.get_logger().info(
+        MelleaLogger.get_logger().info(
             "added a tool message from transform to the context"
         )
         return chosen_tool._tool_output, new_ctx
@@ -575,7 +575,7 @@ async def aact(
         tool_calls=tool_calls,
     ) as span:
         if not silence_context_type_warning and not isinstance(context, SimpleContext):
-            FancyLogger().get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
                 "\nSee the async section of the docs: https://docs.mellea.ai/how-to/use-async-and-streaming"
             )
@@ -618,7 +618,7 @@ async def aact(
             if strategy is None:
                 # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
                 if requirements is not None and len(requirements) > 0:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
                     )
 
@@ -1201,7 +1201,7 @@ async def atransform(
         if chosen_tool is None:
             chosen_tool = tools[0]
 
-        FancyLogger.get_logger().warning(
+        MelleaLogger.get_logger().warning(
             f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"
             # type: ignore
         )
@@ -1209,12 +1209,12 @@ async def atransform(
     if chosen_tool:
         # Tell the user the function they should've called if no generated values were added.
         if len(chosen_tool._tool.args.keys()) == 0:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"the transform of {obj} with transformation description '{transformation}' resulted in a tool call with no generated arguments; consider calling the function `{chosen_tool._tool.name}` directly"
             )
 
         new_ctx.add(chosen_tool)
-        FancyLogger.get_logger().info(
+        MelleaLogger.get_logger().info(
             "added a tool message from transform to the context"
         )
         return chosen_tool._tool_output, new_ctx

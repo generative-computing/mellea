@@ -8,7 +8,7 @@ This example shows the most direct path from raw text to typed, structured
 output in Mellea: a `@generative` function whose return annotation tells the
 runtime exactly what shape the result must have.
 
-**Source file:** `docs/examples/information_extraction/101_with_gen_slots.py`
+**Source file:** `docs/examples/information_extraction/101_with_gen_stubs.py`
 
 ## Concepts covered
 
@@ -46,7 +46,7 @@ def extract_all_person_names(doc: str) -> list[str]:
 ```
 
 The `@generative` decorator converts a bare function stub into a generative
-slot. Three things drive the extraction:
+stub. Three things drive the extraction:
 
 - **Parameter names** (`doc`) become the named inputs the model receives.
 - **Return annotation** (`list[str]`) tells the runtime to parse and validate
@@ -79,7 +79,7 @@ extracted, type-validated data — not a raw string or a thunk.
 ```python
 # pytest: ollama, llm
 
-"""Simple Example of information extraction with Mellea using generative slots."""
+"""Simple Example of information extraction with Mellea using generative stubs."""
 
 from mellea import generative, start_session
 from mellea.backends import model_ids

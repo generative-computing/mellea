@@ -306,6 +306,19 @@ class ModelOutputThunk(CBlock, Generic[S]):
         Populated by backends. None if unavailable.
         """
 
+        self.ttfb_ms: float | None = None
+        """Time to first token in milliseconds (streaming only).
+
+        Set when the first chunk is received from the backend.
+        None for non-streaming requests or when not measured.
+        """
+
+        self.streaming: bool = False
+        """Whether this generation used streaming mode.
+
+        Set from model options at the start of astream().
+        """
+
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
         self._action: Component | CBlock | None = None
@@ -328,7 +341,20 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
         self._start: datetime.datetime | None = None
+        self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
+
+    def _record_ttfb(self) -> None:
+        """Record time-to-first-byte if streaming and not yet recorded."""
+        if (
+            self.streaming
+            and not self._first_chunk_received
+            and self._start is not None
+        ):
+            self.ttfb_ms = (
+                datetime.datetime.now() - self._start
+            ).total_seconds() * 1000
+            self._first_chunk_received = True
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
@@ -345,6 +371,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.usage = other.usage
         self.model = other.model
         self.provider = other.provider
+        self.ttfb_ms = other.ttfb_ms
+        self.streaming = other.streaming
         self._generate_log = other._generate_log
 
     def is_computed(self) -> bool:
@@ -397,20 +425,24 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
     # If we require a function that returns only the new chunks of data, we can implement that similarly.
     async def astream(self) -> str:
-        """Returns the ModelOutputThunk's partial value including the next chunk(s). Can be used for both async streaming and async non-streaming.
+        """Returns only the NEW text fragment (delta) received since the last call.
 
-        Returns the complete value of the ModelOutputThunk if streaming is done.
+        This method is designed for streaming consumption where you want incremental
+        updates. Each call returns only the newly received content, not the accumulated
+        text. When streaming is complete, subsequent calls will raise RuntimeError.
 
         **Note**: Be careful with calling this function. Only call it from one location at a time. This means you shouldn't pass a ModelOutputThunk to
         multiple coroutines/tasks and call astream from those coroutines/tasks simultaneously. We have considered solutions to this but are waiting until
         we see this error happen in a real use case.
 
         Returns:
-            str: The accumulated output text up to and including the newly received chunk(s).
+            str: Only the new text fragment received since the last call (delta), not the
+                accumulated text. Returns empty string if no new content is available yet.
 
         Raises:
             Exception: Propagates any errors from the underlying inference engine api request.
-            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
+            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible,
+                or if called after the thunk is already computed.
         """
         if self._computed:
             raise RuntimeError(
@@ -418,6 +450,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             )
 
         do_set_computed = False
+        # Use string directly to avoid importing ModelOption from backends into core (circular import).
+        # ModelOption.STREAM is defined in mellea/backends/model_options.py.
+        self.streaming = bool((self._model_options or {}).get("@@@stream@@@", False))
 
         if not self._generate_type == GenerateType.ASYNC:
             raise RuntimeError(
@@ -434,6 +469,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             try:
                 item = self._async_queue.get_nowait()
                 chunks.append(item)
+                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -449,6 +485,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             item = await self._async_queue.get()
             chunks.append(item)
+            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -477,6 +514,16 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 set_span_error(span, chunks[-1])
                 end_backend_span(span)
                 del self._meta["_telemetry_span"]
+
+            # Fire generation_error hook (FIRE_AND_FORGET — does not block the raise)
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
+
+                err_payload = GenerationErrorPayload(
+                    exception=chunks[-1], model_output=self
+                )
+                await invoke_hook(HookType.GENERATION_ERROR, err_payload)
+
             raise chunks[-1]
 
         for chunk in chunks:
@@ -561,6 +608,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied.usage = self.usage
         copied.model = self.model
         copied.provider = self.provider
+        copied.ttfb_ms = self.ttfb_ms
+        copied.streaming = self.streaming
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -593,6 +642,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied.usage = deepcopy(self.usage) if self.usage else None
         deepcopied.model = self.model
         deepcopied.provider = self.provider
+        deepcopied.ttfb_ms = self.ttfb_ms
+        deepcopied.streaming = self.streaming
         return deepcopied
 
 

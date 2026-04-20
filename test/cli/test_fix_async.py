@@ -7,7 +7,13 @@ import textwrap
 from pathlib import Path
 
 from cli.fix import _FixMode
-from cli.fix.fixer import FixLocation, FixResult, find_fixable_calls, fix_file, fix_path
+from cli.fix.async_fixer import (
+    FixLocation,
+    FixResult,
+    find_fixable_calls,
+    fix_file,
+    fix_path,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

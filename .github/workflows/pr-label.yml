@@ -1,7 +1,15 @@
+# This workflow uses pull_request_target, which grants write access to
+# the repo even for PRs from forks. This is safe ONLY because it never checks
+# out or executes code from the PR branch. Do NOT add:
+#   - actions/checkout (of the PR head ref)
+#   - run: steps that reference PR-controlled files
+#   - any step that executes code from the pull request
+# Doing so would let a malicious fork run arbitrary code with write permissions.
+
 name: "Label PR by conventional commit prefix"
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, edited, synchronize]
   merge_group:
 
@@ -14,7 +22,7 @@ jobs:
     steps:
       - name: Apply label based on PR title prefix
         if: github.event_name == 'pull_request_target'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const title = context.payload.pull_request.title;

@@ -5,7 +5,7 @@ from mellea.backends import ModelOption
 from mellea.core import CBlock
 from mellea.stdlib.context import ChatContext
 
-# Generative slots can be used with sessions that have context.
+# Generative stubs can be used with sessions that have context.
 # By utilizing context, you can change the results of several
 # functions at the same time. This lets you write a function
 # once but use it in different ways.

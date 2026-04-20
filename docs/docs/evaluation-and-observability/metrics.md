@@ -1,6 +1,6 @@
 ---
 title: "Metrics"
-description: "Collect token usage metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
+description: "Automatically collect LLM metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
 # diataxis: how-to
 ---
 
@@ -8,8 +8,7 @@ description: "Collect token usage metrics and instrument your own code with Open
 introduces the environment variables and telemetry architecture. This page
 covers metrics collection in detail.
 
-Mellea automatically tracks token consumption across all backends using
-OpenTelemetry metrics counters. Token metrics follow the
+Mellea automatically records LLM metrics across all backends using OpenTelemetry. Metrics follow the
 [Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 for standardized observability. The metrics API also lets you create your own
 counters, histograms, and up-down counters for application-level instrumentation.
@@ -29,17 +28,16 @@ You also need at least one exporter configured — see
 ## Token usage metrics
 
 Mellea records token consumption automatically after each LLM call completes.
-No code changes are required. The `TokenMetricsPlugin` auto-registers when
-`MELLEA_METRICS_ENABLED=true` and records metrics via the plugin hook system.
+No code changes are required.
 
-### Built-in metrics
+### Token instruments
 
 | Metric Name | Type | Unit | Description |
 | ----------- | ---- | ---- | ----------- |
 | `mellea.llm.tokens.input` | Counter | `tokens` | Total input/prompt tokens processed |
 | `mellea.llm.tokens.output` | Counter | `tokens` | Total output/completion tokens generated |
 
-### Metric attributes
+### Token attributes
 
 All token metrics include these attributes following Gen-AI semantic conventions:
 
@@ -61,7 +59,7 @@ All token metrics include these attributes following Gen-AI semantic conventions
 > **Note:** Token usage metrics are only tracked for `generate_from_context`
 > requests. `generate_from_raw` calls do not record token metrics.
 
-### When metrics are recorded
+### Token recording timing
 
 Token metrics are recorded **after the full response is received**, not
 incrementally during streaming:
@@ -81,6 +79,99 @@ await mot.astream()
 # Metrics recorded here (after stream completion)
 await mot.avalue()
 ```
+
+## Latency histograms
+
+Mellea tracks request duration and time-to-first-token (TTFB) automatically
+after each LLM call. No code changes are required.
+
+### Latency instruments
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.request.duration` | Histogram | `s` | Total request duration, from call to full response |
+| `mellea.llm.ttfb` | Histogram | `s` | Time to first token (streaming requests only) |
+
+### Latency attributes
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `streaming` | Whether streaming mode was used (duration only) | `True`, `False` |
+
+### Histogram buckets
+
+Custom bucket boundaries are configured for LLM-sized latencies:
+
+- **`mellea.llm.request.duration`**: `0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120` seconds
+- **`mellea.llm.ttfb`**: `0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10` seconds
+
+### Latency recording timing
+
+- **`mellea.llm.request.duration`**: Recorded for every `generate_from_context` call,
+  both streaming and non-streaming.
+- **`mellea.llm.ttfb`**: Recorded only for streaming requests, measuring elapsed time
+  from the `generate_from_context` call until the first chunk arrives.
+
+Access latency data directly from a `ModelOutputThunk`:
+
+```python
+from mellea import start_session
+from mellea.backends import ModelOption
+
+with start_session() as m:
+    result = m.instruct(
+        "Explain quantum entanglement briefly",
+        model_options={ModelOption.STREAM: True},
+    )
+    if result.streaming and result.ttfb_ms is not None:
+        print(f"Time to first token: {result.ttfb_ms:.1f} ms")
+```
+
+## Error metrics
+
+Mellea records LLM errors automatically after each failed backend call. No
+code changes are required. Errors are classified into semantic categories for
+consistent filtering across providers.
+
+### Error counter
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.errors` | Counter | `{error}` | Total LLM errors categorized by type |
+
+### Error attributes
+
+All error metrics include these attributes:
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `error_type` | Semantic error category (mellea-specific) | `rate_limit`, `timeout`, `auth`, `content_policy`, `invalid_request`, `transport_error`, `server_error`, `unknown` |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `error.type` | Python exception class name (standard OTel) | `RateLimitError`, `TimeoutError`, `AuthenticationError` |
+
+### Error type categories
+
+The `error_type` attribute maps exceptions to human-friendly semantic labels:
+
+| Category | Description | Matched exceptions |
+| -------- | ----------- | ------------------ |
+| `rate_limit` | Request throttled by provider | `openai.RateLimitError`, class names containing `ratelimit` |
+| `timeout` | Request or connection timed out | `TimeoutError`, `openai.APITimeoutError`, class names containing `timeout` |
+| `auth` | Authentication or authorization failure | `openai.AuthenticationError`, `openai.PermissionDeniedError`, class names containing `auth` |
+| `content_policy` | Request rejected by content moderation | `openai.BadRequestError` with `code="content_policy_violation"`, class names containing `content_policy` |
+| `invalid_request` | Malformed or unsupported request | `openai.BadRequestError` (non-content-policy) |
+| `transport_error` | Network or connection failure | `ConnectionError`, `openai.APIConnectionError`, class names containing `connection`/`transport` |
+| `server_error` | Provider-side internal error | `openai.InternalServerError`, class names containing `server` |
+| `unknown` | Unrecognized exception type | Any exception not matched above |
+
+### When errors are recorded
+
+Error metrics are recorded when a backend raises an exception during generation,
+after the request has been dispatched to the provider. Construction-time errors
+(e.g. missing API key) are not captured by the error counter.
 
 ## Metrics export configuration
 
@@ -283,13 +374,14 @@ Check if metrics are enabled:
 from mellea.telemetry import is_metrics_enabled
 
 if is_metrics_enabled():
-    print("Token metrics are being collected")
+    print("Metrics are being collected")
 ```
 
-Access token usage data from a `ModelOutputThunk`:
+Access token usage and latency data from a `ModelOutputThunk`:
 
 ```python
 from mellea import start_session
+from mellea.backends import ModelOption
 
 with start_session() as m:
     result = m.instruct("Write a haiku about programming")
@@ -298,18 +390,28 @@ with start_session() as m:
         print(f"Prompt tokens: {result.usage['prompt_tokens']}")
         print(f"Completion tokens: {result.usage['completion_tokens']}")
         print(f"Total tokens: {result.usage['total_tokens']}")
+
+    # Streaming mode also exposes time-to-first-token
+    streamed = m.instruct(
+        "Describe the solar system",
+        model_options={ModelOption.STREAM: True},
+    )
+    print(f"Streaming: {streamed.streaming}")
+    if streamed.ttfb_ms is not None:
+        print(f"Time to first token: {streamed.ttfb_ms:.1f} ms")
 ```
 
 The `usage` field is a dictionary with three keys: `prompt_tokens`,
 `completion_tokens`, and `total_tokens`. All backends populate this field
-consistently.
+consistently. `streaming` and `ttfb_ms` are set automatically based on whether
+streaming mode was used.
 
 ## Performance
 
 - **Zero overhead when disabled**: When `MELLEA_METRICS_ENABLED=false` (default),
-  the `TokenMetricsPlugin` is not registered and all instrument calls are no-ops.
-- **Minimal overhead when enabled**: Counter increments are extremely fast
-  (~nanoseconds per operation).
+  no auto-registered metrics plugins are active and all instrument calls are no-ops.
+- **Minimal overhead when enabled**: Counter increments and histogram recordings
+  are extremely fast (~nanoseconds per operation).
 - **Async export**: Metrics are batched and exported asynchronously (default:
   every 60 seconds).
 - **Non-blocking**: Metric recording never blocks LLM calls.

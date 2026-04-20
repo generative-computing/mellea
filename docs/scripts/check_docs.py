@@ -383,7 +383,7 @@ MELLEA_NAMES = {
     "start_session",
     "act",
     "aact",
-    "GenSlot",
+    "GenStub",
     "Requirement",
     "PydanticRequirement",
     "RegexRequirement",

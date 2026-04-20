@@ -6,7 +6,7 @@ import sys
 import pytest
 import requests
 
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 
 # Try to import optional dependencies for system detection
 try:
@@ -261,6 +261,33 @@ def pytest_configure(config):
 
 
 # ============================================================================
+# Device Cache Flush Helper
+# ============================================================================
+
+
+def flush_device_caches() -> None:
+    """Force garbage collection and flush GPU device caches (CUDA and MPS).
+
+    Safe to call unconditionally — skips gracefully when torch is absent
+    or no accelerator is available.
+    """
+    gc.collect()
+    gc.collect()
+
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        if torch.backends.mps.is_available():
+            torch.mps.synchronize()
+            torch.mps.empty_cache()
+    except ImportError:
+        pass
+
+
+# ============================================================================
 # vLLM Backend Cleanup Helper
 # ============================================================================
 
@@ -275,22 +302,35 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
         backend: The backend instance to clean up.
         backend_name: Name for logging.
     """
-    import gc
 
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
     logger.info(f"Cleaning up {backend_name} backend GPU memory...")
 
     try:
         import torch
 
+        # Snapshot memory before cleanup for reporting
+        free_before = 0
+        allocated_before = 0
         if torch.cuda.is_available():
-            free_before, total = torch.cuda.mem_get_info()
+            free_before, total_mem = torch.cuda.mem_get_info()
+            reserved = torch.cuda.memory_reserved()
+            allocated = torch.cuda.memory_allocated()
             logger.info(
-                f"  GPU before cleanup: {free_before / 1024**3:.1f}GB free "
-                f"/ {total / 1024**3:.1f}GB total"
+                f"  CUDA before cleanup: {free_before / 1024**3:.1f}GB free "
+                f"/ {total_mem / 1024**3:.1f}GB total "
+                f"(allocated {allocated / 1024**2:.0f}MB, "
+                f"reserved {reserved / 1024**2:.0f}MB, "
+                f"fragmentation {(reserved - allocated) / 1024**2:.0f}MB)"
             )
-        else:
-            free_before = 0
+        elif torch.backends.mps.is_available():
+            allocated_before = torch.mps.current_allocated_memory()
+            max_mem = torch.mps.recommended_max_memory()
+            logger.info(
+                f"  MPS before cleanup: "
+                f"allocated {allocated_before / 1024**2:.0f}MB "
+                f"/ {max_mem / 1024**3:.1f}GB max"
+            )
 
         # 1. Clear the LRU cache (holds DynamicCache KV tensors on GPU)
         if hasattr(backend, "_cache") and hasattr(backend._cache, "cache"):
@@ -357,21 +397,27 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
             del backend._tokenizer
 
         # 7. Force garbage collection and flush device caches
-        gc.collect()
-        gc.collect()
+        flush_device_caches()
 
+        # Report memory after cleanup
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-
-            free_after, total = torch.cuda.mem_get_info()
+            free_after, total_mem = torch.cuda.mem_get_info()
+            reserved = torch.cuda.memory_reserved()
+            allocated = torch.cuda.memory_allocated()
             logger.info(
-                f"  GPU after cleanup: {free_after / 1024**3:.1f}GB free "
-                f"/ {total / 1024**3:.1f}GB total "
-                f"(reclaimed {(free_after - free_before) / 1024**3:.1f}GB)"
+                f"  CUDA after cleanup: {free_after / 1024**3:.1f}GB free "
+                f"/ {total_mem / 1024**3:.1f}GB total "
+                f"(allocated {allocated / 1024**2:.0f}MB, "
+                f"reserved {reserved / 1024**2:.0f}MB, "
+                f"reclaimed {(free_after - free_before) / 1024**3:.1f}GB)"
             )
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
+        elif torch.backends.mps.is_available():
+            allocated_after = torch.mps.current_allocated_memory()
+            logger.info(
+                f"  MPS after cleanup: "
+                f"allocated {allocated_after / 1024**2:.0f}MB "
+                f"(reclaimed {(allocated_before - allocated_after) / 1024**2:.0f}MB)"
+            )
 
     except ImportError:
         pass
@@ -410,7 +456,7 @@ def pytest_collection_modifyitems(config, items):
 
     # Reorder tests by backend if requested
     if config.getoption("--group-by-backend", default=False):
-        logger = FancyLogger.get_logger()
+        logger = MelleaLogger.get_logger()
         logger.info("Grouping tests by backend (--group-by-backend enabled)")
 
         # Group items by backend
@@ -472,27 +518,17 @@ def pytest_runtest_setup(item):
         prev_group = getattr(pytest_runtest_setup, "_last_backend_group", None)
 
         if prev_group is not None and current_group != prev_group:
-            logger = FancyLogger.get_logger()
+            logger = MelleaLogger.get_logger()
             logger.info(
                 f"Backend transition: {prev_group} → {current_group}. "
                 "Running GPU cleanup."
             )
 
-            # General GPU flush for any transition
-            try:
-                import torch
-
-                if torch.cuda.is_available():
-                    gc.collect()
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-            except ImportError:
-                pass
+            flush_device_caches()
 
         # Warm up Ollama models when entering Ollama group
         if current_group == "ollama" and prev_group != "ollama":
-            logger = FancyLogger.get_logger()
+            logger = MelleaLogger.get_logger()
             host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
             port = os.environ.get("OLLAMA_PORT", "11434")
             logger.info(
@@ -516,7 +552,7 @@ def pytest_runtest_setup(item):
 
         # Evict Ollama models when leaving Ollama group
         if prev_group == "ollama" and current_group != "ollama":
-            logger = FancyLogger.get_logger()
+            logger = MelleaLogger.get_logger()
             host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
             port = os.environ.get("OLLAMA_PORT", "11434")
             logger.info("Evicting ollama models from VRAM after ollama group...")
@@ -549,21 +585,71 @@ def pytest_runtest_setup(item):
     # to prevent fixture setup errors
 
 
+def pytest_runtest_teardown(item, nextitem):
+    """Evict Ollama models when crossing a module boundary.
+
+    Prevents models from accumulating across test files while avoiding
+    redundant unload/reload within a single module (where tests typically
+    share a model). Also evicts after the very last test.
+    """
+    if not item.get_closest_marker("ollama"):
+        return
+
+    if nextitem is None or nextitem.path != item.path:
+        evict_ollama_models()
+
+
 def memory_cleaner():
     """Lightweight memory cleanup — safety net for per-test GPU leaks."""
     yield
+    flush_device_caches()
 
-    gc.collect()
-    gc.collect()
+
+def evict_ollama_models() -> None:
+    """Evict all currently loaded Ollama models to free memory.
+
+    Queries /api/ps to discover loaded models, then sends keep_alive=0
+    to each via /api/generate. Prevents heavyweight models from starving
+    subsequent tests of memory (see #798).
+
+    Best-effort: errors are logged but never raised.
+    """
+    logger = MelleaLogger.get_logger()
+
+    # Parse OLLAMA_HOST which may be "host", "host:port", or absent.
+    host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
+    if ":" in host:
+        host, port = host.rsplit(":", 1)
+    else:
+        port = os.environ.get("OLLAMA_PORT", "11434")
+
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+
+    base_url = f"http://{host}:{port}"
 
     try:
-        import torch
+        resp = requests.get(f"{base_url}/api/ps", timeout=5)
+        resp.raise_for_status()
+        loaded = resp.json().get("models", [])
+    except Exception as e:
+        logger.warning("ollama-evict: could not query loaded models: %s", e)
+        return
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-    except ImportError:
-        pass
+    if not loaded:
+        return
+
+    for entry in loaded:
+        model_name = entry.get("name") or entry.get("model", "unknown")
+        try:
+            requests.post(
+                f"{base_url}/api/generate",
+                json={"model": model_name, "keep_alive": 0},
+                timeout=10,
+            )
+            logger.info("ollama-evict: evicted %s", model_name)
+        except Exception as e:
+            logger.warning("ollama-evict: failed to evict %s: %s", model_name, e)
 
 
 @pytest.fixture(autouse=True, scope="session")

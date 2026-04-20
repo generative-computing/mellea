@@ -9,25 +9,32 @@ on:
             required: false
             default: false
 
+permissions: {}
+
 env:
   UV_FROZEN: "1"
   CICD: 1
-    
+
 jobs:
   code-checks:
+    permissions:
+      contents: read
     uses: ./.github/workflows/quality.yml
     # with:
     #   push_coverage: false
   pre-release-check:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       TARGET_TAG_V: ${{ steps.version_check.outputs.TRGT_VERSION }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0  # for fetching tags, required for semantic-release
+          persist-credentials: false
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           enable-cache: true
       - name: Install dependencies
@@ -41,6 +48,8 @@ jobs:
       - name: Check notes of potential release
         run: uv run --no-sync semantic-release changelog --unreleased
   release:
+    permissions:
+      contents: write
     needs: [code-checks, pre-release-check]
     # Run this job only if the `TARGET_TAG_V` is set AND (the previous jobs
     # were successful OR we are forcing the release).
@@ -51,17 +60,18 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: release
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         id: app-token
         with:
           app-id: ${{ vars.CI_APP_ID }}
           private-key: ${{ secrets.CI_PRIVATE_KEY }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0  # for fetching tags, required for semantic-release
+          persist-credentials: false
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           enable-cache: true
       - name: Install dependencies

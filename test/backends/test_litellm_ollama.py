@@ -129,7 +129,7 @@ def test_litellm_ollama_instruct_options(session):
 
 
 @pytest.mark.qualitative
-def test_gen_slot(session):
+def test_gen_stub(session):
     @generative
     def is_happy(text: str) -> bool:
         """Determine if text is of happy mood."""
@@ -194,6 +194,10 @@ async def test_async_parallel_requests(session):
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+    assert mot1.streaming is True
+    assert mot1.ttfb_ms is not None
+    assert mot1.ttfb_ms > 0
+
 
 async def test_async_avalue(session):
     mot1, _ = await session.backend.generate_from_context(
@@ -210,6 +214,8 @@ async def test_async_avalue(session):
     assert mot1.usage["total_tokens"] > 0
     assert isinstance(mot1.model, str)
     assert mot1.provider == "litellm"
+    assert mot1.streaming is False
+    assert mot1.ttfb_ms is None
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
+#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
+#   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-3.3-8b-instruct \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #
@@ -219,7 +221,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
             log "Reusing existing vLLM venv at $VLLM_VENV (KEEP_VLLM_VENV=1)"
         else
             log "Creating isolated vLLM venv at $VLLM_VENV ..."
-            uv venv "$VLLM_VENV" --python 3.11
+            uv venv "$VLLM_VENV" --python 3.11 --clear
             log "Installing vllm into $VLLM_VENV ..."
             uv pip install --python "$VLLM_VENV/bin/python" vllm \
                 > "$LOGDIR/vllm_install.log" 2>&1 \
@@ -266,6 +268,21 @@ else
     log "vLLM disabled (WITH_VLLM=0). Pass WITH_VLLM=1 to enable, or run on a CUDA host for auto-detection."
 fi
 
+# WITH_EXAMPLES=1 runs pytest on the whole repo (includes docs/examples/)
+if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
+    PYTEST_DIR="."
+else
+    PYTEST_DIR="test/"
+    log "Examples disabled (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to include docs/examples/."
+fi
+
+# WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
+IGNORE_TOOLING=""
+if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
+    IGNORE_TOOLING="--ignore=test/tooling"
+    log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
+fi
+
 # --- Run tests ---
 log "Starting pytest..."
 log "Log directory: $LOGDIR"
@@ -279,7 +296,7 @@ if [[ -n "${UV_PYTHON:-}" ]]; then
 fi
 
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
-    pytest test/ ${@---group-by-backend} \
+    pytest "$PYTEST_DIR" $IGNORE_TOOLING ${@---group-by-backend} \
     2>&1 | tee "$LOGDIR/pytest_full.log"
 
 EXIT_CODE=${PIPESTATUS[0]}

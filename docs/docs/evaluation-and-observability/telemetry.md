@@ -116,11 +116,15 @@ exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.
 
 ## Metrics
 
-Mellea automatically tracks token consumption across all backends using
-OpenTelemetry counters (`mellea.llm.tokens.input` and
-`mellea.llm.tokens.output`). No code changes are required — the
-`TokenMetricsPlugin` records metrics via the plugin hook system after each
-LLM call completes.
+Mellea automatically records the following metrics across all backends using
+OpenTelemetry. No code changes are required:
+
+- **Token counters** — `mellea.llm.tokens.input` and `mellea.llm.tokens.output`
+  after each LLM call.
+- **Latency histograms** — `mellea.llm.request.duration` (every request) and
+  `mellea.llm.ttfb` (streaming requests only).
+- **Error counter** — `mellea.llm.errors` on each failed backend call,
+  classified by semantic error type.
 
 The metrics API also exposes `create_counter`, `create_histogram`, and
 `create_up_down_counter` for instrumenting your own application code.
@@ -131,12 +135,13 @@ Mellea supports three exporters that can run simultaneously:
 - **OTLP** — export to production observability platforms
 - **Prometheus** — register with `prometheus_client` for scraping
 
-See [Metrics](../evaluation-and-observability/metrics) for token usage details,
-backend support matrix, exporter setup, custom instruments, and troubleshooting.
+See [Metrics](../evaluation-and-observability/metrics) for the full list of
+metrics, backend support matrix, exporter setup, custom instruments, and
+troubleshooting.
 
 ## Logging
 
-Mellea uses a color-coded console logger (`FancyLogger`) by default. When the
+Mellea uses a color-coded console logger (`MelleaLogger`) by default. When the
 `[telemetry]` extra is installed and `MELLEA_LOGS_OTLP=true` is set, Mellea
 also exports logs to an OTLP collector alongside existing console output.
 
@@ -152,8 +157,8 @@ configuration, OTLP log export setup, and programmatic access via
 
 - [Tracing](../evaluation-and-observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../evaluation-and-observability/metrics) — token usage metrics,
-  exporters, and custom instruments.
+- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+  and custom instruments.
 - [Logging](../evaluation-and-observability/logging) — console logging and OTLP
   log export.
 - [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —

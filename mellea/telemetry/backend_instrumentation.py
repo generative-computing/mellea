@@ -131,22 +131,27 @@ def start_generate_span(
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)
 
-    return start_backend_span(
-        "chat",  # Gen-AI convention: use 'chat' for chat completions
-        **{
-            # Gen-AI semantic convention attributes
-            "gen_ai.system": system_name,
-            "gen_ai.request.model": model_id,
-            "gen_ai.operation.name": "chat",
-            # Mellea-specific attributes
-            "mellea.backend": backend.__class__.__name__,
-            "mellea.action_type": action.__class__.__name__,
-            "mellea.context_size": get_context_size(ctx),
-            "mellea.has_format": format is not None,
-            "mellea.format_type": format.__name__ if format else None,
-            "mellea.tool_calls_enabled": tool_calls,
-        },
-    )
+    from .context import get_current_context
+
+    telemetry_ctx = get_current_context()
+    span_attrs: dict = {
+        # Gen-AI semantic convention attributes
+        "gen_ai.system": system_name,
+        "gen_ai.request.model": model_id,
+        "gen_ai.operation.name": "chat",
+        # Mellea-specific attributes
+        "mellea.backend": backend.__class__.__name__,
+        "mellea.action_type": action.__class__.__name__,
+        "mellea.context_size": get_context_size(ctx),
+        "mellea.has_format": format is not None,
+        "mellea.format_type": format.__name__ if format else None,
+        "mellea.tool_calls_enabled": tool_calls,
+    }
+    # Propagate telemetry context to span
+    for key, value in telemetry_ctx.items():
+        span_attrs[f"mellea.{key}"] = value
+
+    return start_backend_span("chat", **span_attrs)
 
 
 def instrument_generate_from_raw(

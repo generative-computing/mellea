@@ -3,6 +3,9 @@
 from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.testclient import TestClient
 
 from cli.serve.app import make_chat_endpoint
 from cli.serve.models import (
@@ -122,6 +125,8 @@ class TestChatEndpoint:
     @pytest.mark.asyncio
     async def test_model_options_passed_correctly(self, mock_module, sample_request):
         """Test that model options are passed to serve function correctly."""
+        from mellea.backends.model_options import ModelOption
+
         mock_output = ModelOutputThunk("Test response")
         mock_module.serve.return_value = mock_output
 
@@ -134,11 +139,12 @@ class TestChatEndpoint:
         assert "model_options" in call_args.kwargs
         model_options = call_args.kwargs["model_options"]
 
-        # Should include temperature and max_tokens but not messages/requirements
-        assert "temperature" in model_options
-        assert model_options["temperature"] == 0.7
-        assert "max_tokens" in model_options
-        assert model_options["max_tokens"] == 100
+        # Should include ModelOption keys for temperature and max_tokens
+        # Note: TEMPERATURE is just "temperature" (not a sentinel), so it stays as-is
+        assert ModelOption.TEMPERATURE in model_options
+        assert model_options[ModelOption.TEMPERATURE] == 0.7
+        assert ModelOption.MAX_NEW_TOKENS in model_options
+        assert model_options[ModelOption.MAX_NEW_TOKENS] == 100
         assert "messages" not in model_options
         assert "requirements" not in model_options
 
@@ -223,3 +229,309 @@ class TestChatEndpoint:
         assert response.system_fingerprint is None  # Not tracking backend config
         assert response.object == "chat.completion"
         assert response.id.startswith("chatcmpl-")
+
+    @pytest.mark.asyncio
+    async def test_n_greater_than_1_rejected(self, mock_module):
+        """Test that requests with n > 1 are rejected with appropriate error."""
+        import json
+
+        from fastapi.responses import JSONResponse
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            n=2,  # Request multiple completions
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should return a JSONResponse error, not a ChatCompletion
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+        # Decode the response body
+        body_bytes = response.body
+        if isinstance(body_bytes, memoryview):
+            body_bytes = bytes(body_bytes)
+        error_data = json.loads(body_bytes.decode("utf-8"))
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert error_data["error"]["param"] == "n"
+        assert "not supported" in error_data["error"]["message"].lower()
+
+        # Verify serve was never called
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_n_equals_1_accepted(self, mock_module):
+        """Test that requests with n=1 are accepted."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            n=1,  # Explicitly set to 1
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+        assert response.choices[0].message.content == "Test response"
+
+        # Verify serve was called
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_n_less_than_1_rejected_by_pydantic(self, mock_module):
+        """Test that requests with n < 1 are rejected by Pydantic validation.
+
+        FastAPI automatically validates request models before they reach the endpoint,
+        so n=0 or negative values will be caught by the framework, not our code.
+        This test documents that behavior.
+        """
+        from pydantic import ValidationError
+
+        # Pydantic validation happens before the endpoint is called
+        with pytest.raises(ValidationError) as exc_info:
+            ChatCompletionRequest(
+                model="test-model",
+                messages=[ChatMessage(role="user", content="Hello")],
+                n=0,  # Invalid: less than 1
+            )
+
+        # Verify the error is about the 'n' field
+        errors = exc_info.value.errors()
+        assert len(errors) == 1
+        assert errors[0]["loc"] == ("n",)
+        assert errors[0]["type"] == "greater_than_equal"
+
+
+class TestHTTPValidation:
+    """Tests for HTTP-level validation via FastAPI TestClient."""
+
+    def test_n_zero_rejected_at_http_level(self, mock_module):
+        """Test that n=0 is rejected with OpenAI-compatible error format.
+
+        Pydantic validation errors are caught by our custom exception handler
+        and converted to OpenAI-compatible 400 errors (not FastAPI's default 422).
+        """
+        # Setup a test app with the exception handler
+        from cli.serve.app import validation_exception_handler
+
+        app = FastAPI()
+        app.add_exception_handler(RequestValidationError, validation_exception_handler)
+        app.add_api_route(
+            "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
+        )
+        client = TestClient(app)
+
+        # Send request with n=0
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "n": 0,
+            },
+        )
+
+        # Our exception handler converts to OpenAI-compatible 400 error
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert error_data["error"]["param"] == "n"
+        # Pydantic's error message is used as-is
+        assert "greater than or equal to 1" in error_data["error"]["message"].lower()
+
+        # Verify serve was never called
+        mock_module.serve.assert_not_called()
+
+    def test_n_two_rejected_at_endpoint_level(self, mock_module):
+        """Test that n=2 is rejected by our endpoint logic (not Pydantic).
+
+        While n=2 passes Pydantic validation (ge=1), our endpoint explicitly
+        rejects it because we don't support multiple completions.
+        """
+        # Setup a test app
+        app = FastAPI()
+        app.add_api_route(
+            "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
+        )
+        client = TestClient(app)
+
+        # Send request with n=2
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "n": 2,
+            },
+        )
+
+        # Our endpoint returns 400 for unsupported n > 1
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert error_data["error"]["param"] == "n"
+        assert "not supported" in error_data["error"]["message"].lower()
+
+        # Verify serve was never called
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_n_none_accepted(self, mock_module):
+        """Test that requests with n=None (default) are accepted."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            # n not specified, defaults to 1
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+        assert response.choices[0].message.content == "Test response"
+
+        # Verify serve was called
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unsupported_params_excluded_from_model_options(self, mock_module):
+        """Test that unsupported OpenAI parameters are excluded from model_options."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            temperature=0.7,
+            max_tokens=100,
+            # Unsupported parameters that should be excluded
+            stream=False,
+            stop=["END"],
+            top_p=0.9,
+            presence_penalty=0.5,
+            frequency_penalty=0.3,
+            logit_bias={"123": 1.0},
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+
+        # Verify serve was called with correct model_options
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+
+        # Supported parameters should be present
+        from mellea.backends.model_options import ModelOption
+
+        assert ModelOption.TEMPERATURE in model_options
+        assert model_options[ModelOption.TEMPERATURE] == 0.7
+        assert ModelOption.MAX_NEW_TOKENS in model_options
+        assert model_options[ModelOption.MAX_NEW_TOKENS] == 100
+
+        # Unsupported parameters should NOT be in model_options
+        assert "stream" not in model_options
+        assert "stop" not in model_options
+        assert "top_p" not in model_options
+        assert "presence_penalty" not in model_options
+        assert "frequency_penalty" not in model_options
+        assert "logit_bias" not in model_options
+
+    @pytest.mark.asyncio
+    async def test_tool_params_excluded_from_model_options(self, mock_module):
+        """Test that tool-related parameters are excluded from model_options."""
+        from cli.serve.models import (
+            FunctionDefinition,
+            FunctionParameters,
+            ToolFunction,
+        )
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            # Tool-related parameters that should be excluded
+            tools=[
+                ToolFunction(
+                    type="function",
+                    function=FunctionDefinition(
+                        name="test_func",
+                        description="A test function",
+                        parameters=FunctionParameters(RootModel={"type": "object"}),
+                    ),
+                )
+            ],
+            tool_choice="auto",
+            functions=[
+                FunctionDefinition(
+                    name="legacy_func",
+                    description="A legacy function",
+                    parameters=FunctionParameters(RootModel={"type": "object"}),
+                )
+            ],
+            function_call="auto",
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+
+        # Verify serve was called
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+
+        # Tool-related parameters should NOT be in model_options
+        assert "tools" not in model_options
+        assert "tool_choice" not in model_options
+        assert "functions" not in model_options
+        assert "function_call" not in model_options
+
+    @pytest.mark.asyncio
+    async def test_response_format_excluded_from_model_options(self, mock_module):
+        """Test that response_format parameter is excluded from model_options."""
+        from cli.serve.models import ResponseFormat
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            response_format=ResponseFormat(type="json_object"),
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+
+        # Verify serve was called
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+
+        # response_format should NOT be in model_options
+        assert "response_format" not in model_options

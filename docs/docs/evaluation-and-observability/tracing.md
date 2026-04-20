@@ -242,8 +242,8 @@ import mellea  # noqa: E402
 
 - [Telemetry](../evaluation-and-observability/telemetry) — overview of all
   telemetry features and configuration.
-- [Metrics](../evaluation-and-observability/metrics) — token usage metrics,
-  exporters, and custom instruments.
+- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+  and custom instruments.
 - [Logging](../evaluation-and-observability/logging) — console logging and OTLP
   log export.
 - [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —

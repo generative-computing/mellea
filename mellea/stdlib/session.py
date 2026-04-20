@@ -10,6 +10,7 @@ session.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import inspect
 from copy import copy
@@ -25,9 +26,9 @@ from ..core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
     GenerateLog,
     ImageBlock,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
     S,
@@ -35,11 +36,13 @@ from ..core import (
     SamplingStrategy,
     ValidationResult,
 )
+from ..core.utils import _log_context
 from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
+from ..telemetry.context import with_context
 from .components import Message
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
@@ -191,7 +194,7 @@ def start_session(
         session.cleanup()
         ```
     """
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
 
     # Get model_id string for logging and tracing
     if isinstance(model_id, ModelIdentifier):
@@ -307,9 +310,11 @@ class MelleaSession:
         self.id = str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
-        self._session_logger = FancyLogger.get_logger()
+        self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
+        self._log_context_token = None
         self._session_span = None
+        self._exit_stack: contextlib.ExitStack | None = None
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -320,14 +325,38 @@ class MelleaSession:
             context_type=self.ctx.__class__.__name__,
         ).__enter__()
         self._context_token = _context_session.set(self)
+        # TODO: Migrate telemetry fields from _log_context to with_context() system.
+        # Currently session_id and model_id are duplicated in both systems. The
+        # 'backend' field only exists in _log_context and would need to be added to
+        # the new telemetry context system (mellea/telemetry/context.py) before this
+        # _log_context.set() call can be removed. Once 'backend' is added to
+        # _CONTEXT_VARS, remove this block and set all three fields via with_context().
+        self._log_context_token = _log_context.set(
+            {
+                **_log_context.get(),
+                "session_id": self.id,
+                "backend": self.backend.__class__.__name__,
+                "model_id": str(getattr(self.backend, "model_id", "unknown")),
+            }
+        )
+        # Set session_id for the full session lifetime. model_id is intentionally
+        # omitted here — backends own it and set it per-call via with_context().
+        self._exit_stack = contextlib.ExitStack()
+        self._exit_stack.enter_context(with_context(session_id=self.id))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and cleanup session."""
         self.cleanup()
+        if self._log_context_token is not None:
+            _log_context.reset(self._log_context_token)
+            self._log_context_token = None
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None
+        if self._exit_stack is not None:
+            self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
+            self._exit_stack = None
         if self._session_span is not None:
             self._session_span.__exit__(exc_type, exc_val, exc_tb)
             self._session_span = None
