@@ -1050,7 +1050,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs used for decoding; required to slice off
                 the prompt portion from the generated sequences.
         """
-        input_ids_tensor: torch.Tensor = input_ids["input_ids"]
+        input_ids_tensor = (
+            input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
+        )
 
         if mot._underlying_value is None:
             mot._underlying_value = ""
