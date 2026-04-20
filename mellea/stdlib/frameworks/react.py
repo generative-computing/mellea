@@ -7,6 +7,8 @@ any list of ``AbstractMelleaTool`` instances and a ``ChatContext`` for multi-tur
 history tracking. Raises ``RuntimeError`` if the loop ends without a final answer.
 """
 
+from collections.abc import Awaitable, Callable
+
 import pydantic
 
 # from PIL import Image as PILImage
@@ -46,6 +48,19 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
+    answer_check: Callable[
+        [
+            str,
+            ComputedModelOutputThunk[str],
+            ChatContext,
+            Backend,
+            dict | None,
+            int,
+            int,
+        ],
+        Awaitable[bool],
+    ]
+    | None = None,
 ) -> tuple[ComputedModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
@@ -57,6 +72,11 @@ async def react(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tools: the list of tools to use
         loop_budget: the number of steps allowed; use -1 for unlimited
+        answer_check: optional callable to determine if the agent has completed its task.
+            Called every iteration when no tool calls are made and step.value exists (if provided).
+            Receives (goal, step, context, backend, model_options, turn_num, loop_budget).
+            Returns bool indicating if the task is complete.
+            If None, no answer check is performed (loop continues until finalizer or budget exhausted).
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -117,31 +137,19 @@ async def react(
                 if tool_res.name == MELLEA_FINALIZER_TOOL:
                     is_final = True
 
-        # Check for special case where model already has the answer, but it won't call the finalize tool.
-        # Instead of letting this run out of iterations and fail, let's ask.
-        # Only do this before we fail on iteration limit as a last resort because it's hard to justify doing it earlier for now.
-        elif -1 < loop_budget <= turn_num and step.value:
-            # If the turn number has reached the end of loop budget (and budget is not unlimited),
-            # then it's time to check if the model is just loopy and already has the answer.
-            print("### Done Check")
-            print("STEP_TOOL_CALLS:", step.tool_calls)
-            print("STEP:", step)
-            print("CONTEXT:", context)
-            content = mfuncs.chat(
-                content=f"Do you know the answer to the user's original query ({goal})? If so, respond with True. If you need to take more actions, then respond False.",
-                context=context,
-                backend=backend,
-                format=TrueOrFalse,
-            )[0].content
-            have_answer = TrueOrFalse.model_validate_json(content).answer
+        # Check if the agent has completed its task (runs every iteration if answer_check is provided and there's a value)
+        # The answer_check function can decide when to actually check based on turn_num and loop_budget
+        elif not is_final and answer_check and step.value:
+            have_answer = await answer_check(
+                goal, step, context, backend, model_options, turn_num, loop_budget
+            )
 
-            print("### Done Check ANSWER: ", have_answer)
             if have_answer:
                 # Create a synthetic finalizer tool response to be consistent with normal loop
                 finalizer_response = ToolMessage(
                     role="tool",
-                    content=step.value,
-                    tool_output=step.value,
+                    content=step.value or "",
+                    tool_output=step.value or "",
                     name=MELLEA_FINALIZER_TOOL,
                     args={},
                     tool=None,  # type: ignore
