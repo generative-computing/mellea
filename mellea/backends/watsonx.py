@@ -10,9 +10,15 @@ from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import fields
 from typing import Any, overload
 
-from ibm_watsonx_ai import APIClient, Credentials
-from ibm_watsonx_ai.foundation_models import ModelInference
-from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
+try:
+    from ibm_watsonx_ai import APIClient, Credentials
+    from ibm_watsonx_ai.foundation_models import ModelInference
+    from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
+except ImportError as e:
+    raise ImportError(
+        "The Watsonx backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[watsonx]"'
+    ) from e
 
 from ..backends import ModelIdentifier, model_ids
 from ..core import (
@@ -21,9 +27,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -42,6 +48,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -298,13 +305,16 @@ class WatsonxAIBackend(FormatterBackend):
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
-        mot = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            mot = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
         # Store span in metadata for post_processing to record telemetry
         if span is not None:
@@ -387,7 +397,7 @@ class WatsonxAIBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = {}
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"tool calling is superseded by format; will not call tools for request: {action}"
                 )
             else:
@@ -397,7 +407,7 @@ class WatsonxAIBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         formatted_tools = convert_tools_to_json(tools)
 
@@ -445,6 +455,10 @@ class WatsonxAIBackend(FormatterBackend):
             seed=model_opts.get(ModelOption.SEED, None),
             _format=_format,
         )
+
+        # Set model/provider early so they are available in the error path
+        output.model = str(self._get_watsonx_model_id())
+        output.provider = "watsonx"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -581,11 +595,7 @@ class WatsonxAIBackend(FormatterBackend):
             mot.usage = usage
 
         # Populate model and provider metadata
-        mot.model = (
-            self.model_id.watsonx_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else str(self.model_id)
-        )
+        mot.model = str(self._get_watsonx_model_id())
         mot.provider = "watsonx"
 
         # Record tracing if span exists
@@ -676,7 +686,7 @@ class WatsonxAIBackend(FormatterBackend):
             await self.do_generate_walks(list(actions))
 
             if format is not None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "WatsonxAI completion api does not accept response format, ignoring it for this request."
                 )
 
@@ -743,7 +753,7 @@ class WatsonxAIBackend(FormatterBackend):
 
             func = tools.get(tool_name)
             if func is None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"model attempted to call a non-existing function: {tool_name}"
                 )
                 continue  # skip this function if we can't find it.

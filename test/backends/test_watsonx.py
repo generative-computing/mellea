@@ -1,4 +1,3 @@
-# test/rits_backend_tests/test_watsonx_integration.py
 import asyncio
 import os
 

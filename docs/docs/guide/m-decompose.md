@@ -11,7 +11,7 @@ description: "Break complex tasks into ordered, executable subtasks with the m d
 3. Generate a prompt template for each subtask
 4. Output a ready-to-run Python script that executes each subtask in order
 
-**Prerequisites:** Mellea installed (`uv add mellea`), Ollama running locally (or an OpenAI-compatible endpoint).
+**Prerequisites:** Mellea installed (`uv add "mellea[cli]"`), Ollama running locally (or an OpenAI-compatible endpoint).
 
 ## Basic usage
 
@@ -123,4 +123,4 @@ For tasks that fit comfortably in a single prompt, use `m.instruct()` directly.
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) | [Refactor Prompts with CLI](../how-to/refactor-prompts-with-cli)
+**See also:** [Tools and Agents](../guide/tools-and-agents) | [Refactor Prompts with CLI](../how-to/refactor-prompts-with-cli) | [CLI Reference](../reference/cli)

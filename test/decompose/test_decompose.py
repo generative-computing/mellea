@@ -10,9 +10,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from cli.decompose.decompose import DecompVersion, run
+from cli.decompose.decompose import DecompVersion, reorder_subtasks, run
 from cli.decompose.logging import LogMode
-from cli.decompose.pipeline import DecompBackend, DecompPipelineResult
+from cli.decompose.pipeline import ConstraintResult, DecompBackend, DecompPipelineResult
 
 
 class DummyTemplate:
@@ -32,18 +32,39 @@ class DummyEnvironment:
         return DummyTemplate()
 
 
-def make_decomp_result() -> DecompPipelineResult:
-    """Create a minimal valid decomposition result for CLI tests."""
+def make_decomp_result(with_code_validation: bool = False) -> DecompPipelineResult:
+    """Create a valid decomposition result for CLI tests."""
+    identified_constraints: list[ConstraintResult] = []
+    subtask_constraints: list[ConstraintResult] = []
+
+    if with_code_validation:
+        identified_constraints = [
+            {
+                "constraint": "Return valid JSON.",
+                "val_strategy": "code",
+                "val_fn": "def validate_input(text: str) -> bool:\n    return text.startswith('{')",
+                "val_fn_name": "val_fn_1",
+            }
+        ]
+        subtask_constraints = [
+            {
+                "constraint": "Return valid JSON.",
+                "val_strategy": "code",
+                "val_fn": "def validate_input(text: str) -> bool:\n    return text.startswith('{')",
+                "val_fn_name": "val_fn_1",
+            }
+        ]
+
     return {
         "original_task_prompt": "Test task prompt",
         "subtask_list": ["Task A"],
-        "identified_constraints": [],
+        "identified_constraints": identified_constraints,
         "subtasks": [
             {
-                "subtask": "Task A",
+                "subtask": "1. Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
+                "general_instructions": "Keep the answer concise.",
+                "constraints": subtask_constraints,
                 "prompt_template": "Do A",
                 "input_vars_required": [],
                 "depends_on": [],
@@ -192,18 +213,17 @@ class TestRunSuccess:
         """``latest`` resolves to the last declared enum version."""
         input_file = write_input_file(tmp_path, "Test")
         requested_templates: list[str] = []
+        environment = Mock()
 
-        class TrackingEnvironment:
-            """Tracking Jinja environment for template resolution assertions."""
+        def get_template(template_name: str) -> DummyTemplate:
+            requested_templates.append(template_name)
+            return DummyTemplate()
 
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                pass
+        environment.get_template.side_effect = get_template
 
-            def get_template(self, template_name: str) -> DummyTemplate:
-                requested_templates.append(template_name)
-                return DummyTemplate()
-
-        monkeypatch.setattr("cli.decompose.decompose.Environment", TrackingEnvironment)
+        monkeypatch.setattr(
+            "cli.decompose.decompose.Environment", lambda *args, **kwargs: environment
+        )
         monkeypatch.setattr(
             "cli.decompose.decompose.FileSystemLoader", lambda *args, **kwargs: None
         )
@@ -219,7 +239,7 @@ class TestRunSuccess:
             version=DecompVersion.latest,
         )
 
-        assert requested_templates == ["m_decomp_result_v2.py.jinja2"]
+        assert requested_templates == ["m_decomp_result_v3.py.jinja2"]
 
     def test_successful_run_writes_outputs(
         self,
@@ -246,6 +266,34 @@ class TestRunSuccess:
         assert (out_path / "ok_case.py").exists()
         assert (out_path / "validations").exists()
         assert (out_path / "validations" / "__init__.py").exists()
+
+    def test_latest_template_writes_validation_modules_for_code_constraints(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Latest template includes code-validation imports and writes modules."""
+        input_file = write_input_file(tmp_path, "Generate JSON.")
+
+        monkeypatch.setattr(
+            "cli.decompose.decompose.pipeline.decompose",
+            lambda **kwargs: make_decomp_result(with_code_validation=True),
+        )
+
+        run(out_dir=tmp_path, out_name="validated_case", input_file=input_file)
+
+        validation_path = tmp_path / "validated_case" / "validations" / "val_fn_1.py"
+        program_path = tmp_path / "validated_case" / "validated_case.py"
+
+        assert validation_path.exists()
+        assert "def validate_input" in validation_path.read_text(encoding="utf-8")
+
+        program = program_path.read_text(encoding="utf-8")
+        assert "from mellea.stdlib.requirements import req" in program
+        assert "from validations.val_fn_1 import validate_input as val_fn_1" in program
+        assert "Keep the answer concise." in program
 
     def test_multi_line_input_file_creates_numbered_jobs(
         self,

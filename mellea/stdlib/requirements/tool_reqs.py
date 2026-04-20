@@ -60,11 +60,11 @@ def tool_arg_validator(
 ) -> Requirement:
     """A requirement that passes only if `validation_fn` returns a True value for the *value* of the `arg_name` argument to `tool_name`.
 
-    If `tool_name` is not specified, then this requirement is enforced for *every* tool that
+    If `tool_name` is not specified, then this requirement is enforced for *every* tool that was called.
 
     Args:
         description: The Requirement description.
-        tool_name: The (optional) tool name for .
+        tool_name: The (optional) tool name to validate. When None, all tools are checked.
         arg_name: The argument to check.
         validation_fn: A validation function for validating the value of the `arg_name` argument.
         check_only: propagates the `check_only` flag to the requirement.
@@ -76,7 +76,7 @@ def tool_arg_validator(
     Returns:
         A ``Requirement`` that validates the specified tool argument.
     """
-    if tool_name:
+    if tool_name is not None:
         tool_name = _name2str(tool_name)
 
     def _validate(ctx: Context) -> ValidationResult:
@@ -84,12 +84,13 @@ def tool_arg_validator(
         assert output is not None
 
         if output.tool_calls is None:
+            tool_label = tool_name if tool_name is not None else "a tool"
             return ValidationResult(
                 result=False,
-                reason=f"Expected {tool_name} to be called but no tools were called.",
+                reason=f"Expected {tool_label} to be called but no tools were called.",
             )
 
-        if tool_name:
+        if tool_name is not None:
             if tool_name not in output.tool_calls:
                 return ValidationResult(
                     result=False, reason=f"Tool {tool_name} was not called."
@@ -106,7 +107,7 @@ def tool_arg_validator(
             else:
                 return ValidationResult(
                     result=False,
-                    reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
+                    reason=f"Validation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                 )
         else:
             for tool in output.tool_calls.keys():
@@ -116,7 +117,7 @@ def tool_arg_validator(
                     if not validate_result:
                         return ValidationResult(
                             result=False,
-                            reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
+                            reason=f"Validation did not pass for {tool}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                         )
             return ValidationResult(result=True)
 

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..core import FancyLogger
+from ..core import MelleaLogger
 
 
 class ModelOption:
@@ -111,7 +111,7 @@ class ModelOption:
                 "Encountered conflict(s) when replacing keys. Could not replace keys for:\n"
                 + "\n".join(conflict_log)
             )
-            FancyLogger.get_logger().warning(f"{text_line}")
+            MelleaLogger.get_logger().warning(f"{text_line}")
         return new_options
 
     @staticmethod

@@ -9,9 +9,9 @@ from mellea.stdlib.tools.interpreter import (
     UnsafeEnvironment,
 )
 
-from ...core import Context, FancyLogger, Requirement, ValidationResult
+from ...core import Context, MelleaLogger, Requirement, ValidationResult
 
-logger = FancyLogger.get_logger()
+logger = MelleaLogger.get_logger()
 
 
 # region code extraction

@@ -5,7 +5,7 @@ description: "Use m decompose to break a complex prompt into typed, validated ge
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install mellea`, Ollama running locally (or an
+**Prerequisites:** `pip install "mellea[cli]"`, Ollama running locally (or an
 OpenAI-compatible endpoint).
 
 When a single prompt grows too long or asks the LLM to do too many things at
@@ -339,3 +339,5 @@ and `"llm"` for quality checks that require LLM-as-a-judge evaluation.
   typed returns, and context steering to the generated pipeline
 - [Enforce Structured Output](../how-to/enforce-structured-output) — constrain
   subtask outputs to Pydantic models or `Literal` values
+- [CLI Reference](../reference/cli) — complete flag and option reference for
+  all `m` subcommands

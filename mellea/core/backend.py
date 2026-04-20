@@ -21,7 +21,7 @@ import typing_extensions
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from .base import C, CBlock, Component, Context, ModelOutputThunk
-from .utils import FancyLogger
+from .utils import MelleaLogger
 
 # Necessary to define a type variable that has a default value.
 # This is because VSCode's pyright static type checker instantiates
@@ -180,7 +180,7 @@ class Backend(abc.ABC):
         coroutines = [x.avalue() for x in _to_compute]
         # The following log message might get noisy. Feel free to remove if so.
         if len(_to_compute) > 0:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
             )
         await asyncio.gather(*coroutines)
@@ -202,7 +202,7 @@ class Backend(abc.ABC):
         coroutines = [x.avalue() for x in _to_compute]
         # The following log message might get noisy. Feel free to remove if so.
         if len(_to_compute) > 0:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
             )
         await asyncio.gather(*coroutines)

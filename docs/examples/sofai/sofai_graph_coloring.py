@@ -23,7 +23,7 @@ import logging
 
 import mellea
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import ValidationResult, req
@@ -230,5 +230,5 @@ def main():
 
 if __name__ == "__main__":
     # Set logging level
-    FancyLogger.get_logger().setLevel(logging.INFO)
+    MelleaLogger.get_logger().setLevel(logging.INFO)
     main()

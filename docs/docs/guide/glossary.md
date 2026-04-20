@@ -399,22 +399,6 @@ See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 
 ---
 
-## m decompose
-
-`m decompose` is a CLI tool that takes a complex task description and uses an LLM
-to break it into ordered subtasks, extract constraints, and generate a ready-to-run
-Python script.
-
-```bash
-m decompose run --prompt-file task.txt --out-dir ./output/
-```
-
-The output includes a JSON breakdown of subtasks and a `result.py` you can run
-immediately. Also available programmatically via
-`cli.decompose.pipeline.decompose()`.
-
----
-
 ## MelleaSession
 
 The primary entry point for Mellea. A `MelleaSession` wraps a backend and provides

@@ -298,12 +298,9 @@ wheels = [
 
 [[package]]
 name = "antlr4-python3-runtime"
-version = "4.13.2"
+version = "4.9.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/33/5f/2cdf6f7aca3b20d3f316e9f505292e1f256a32089bd702034c29ebde6242/antlr4_python3_runtime-4.13.2.tar.gz", hash = "sha256:909b647e1d2fc2b70180ac586df3933e38919c85f98ccc656a96cd3f25ef3916", size = 117467, upload-time = "2024-08-03T19:00:12.757Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/03/a851e84fcbb85214dc637b6378121ef9a0dd61b4c65264675d8a5c9b1ae7/antlr4_python3_runtime-4.13.2-py3-none-any.whl", hash = "sha256:fe3835eb8d33daece0e799090eda89719dbccee7aa39ef94eed3818cafa5a7e8", size = 144462, upload-time = "2024-08-03T19:00:11.134Z" },
-]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/38/7859ff46355f76f8d19459005ca000b6e7012f2f1ca597746cbcd1fbfe5e/antlr4-python3-runtime-4.9.3.tar.gz", hash = "sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b", size = 117034, upload-time = "2021-11-06T17:52:23.524Z" }
 
 [[package]]
 name = "anyio"
@@ -3356,10 +3353,10 @@ name = "mellea"
 version = "0.4.2"
 source = { editable = "." }
 dependencies = [
-    { name = "click" },
     { name = "jinja2" },
     { name = "math-verify" },
     { name = "mistletoe" },
+    { name = "nltk" },
     { name = "ollama" },
     { name = "openai", version = "2.24.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "openai", version = "2.32.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
@@ -3370,7 +3367,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rouge-score" },
-    { name = "typer" },
 ]
 
 [package.optional-dependencies]
@@ -3390,6 +3386,7 @@ all = [
     { name = "litellm", version = "1.83.10", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "llguidance" },
     { name = "llm-sandbox", extra = ["docker"] },
+    { name = "omegaconf" },
     { name = "opencv-python-headless" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-distro" },
@@ -3402,6 +3399,7 @@ all = [
     { name = "smolagents" },
     { name = "transformers" },
     { name = "trl" },
+    { name = "typer" },
     { name = "uvicorn" },
     { name = "xgrammar" },
 ]
@@ -3419,8 +3417,12 @@ backends = [
     { name = "trl" },
     { name = "xgrammar" },
 ]
+cli = [
+    { name = "typer" },
+]
 docling = [
     { name = "docling" },
+    { name = "omegaconf" },
     { name = "opencv-python-headless" },
 ]
 granite-retriever = [
@@ -3452,6 +3454,7 @@ sandbox = [
 ]
 server = [
     { name = "fastapi" },
+    { name = "typer" },
     { name = "uvicorn" },
 ]
 telemetry = [
@@ -3483,6 +3486,7 @@ dev = [
     { name = "jsonschema", version = "4.26.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
     { name = "langchain-community" },
     { name = "mdxify" },
+    { name = "mellea", extra = ["server"] },
     { name = "mypy" },
     { name = "nbmake" },
     { name = "pdm" },
@@ -3550,7 +3554,6 @@ typecheck = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "boto3", marker = "extra == 'litellm'" },
-    { name = "click", specifier = "<8.2.0" },
     { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'hooks'", specifier = ">=0.1.0.dev10" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
@@ -3565,11 +3568,14 @@ requires-dist = [
     { name = "llguidance", marker = "extra == 'hf'" },
     { name = "llm-sandbox", extras = ["docker"], marker = "extra == 'sandbox'", specifier = ">=0.3.23" },
     { name = "math-verify" },
-    { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "granite-retriever", "hooks"], marker = "extra == 'all'" },
-    { name = "mellea", extras = ["hooks"], marker = "extra == 'telemetry'" },
-    { name = "mellea", extras = ["watsonx", "hf", "litellm"], marker = "extra == 'backends'" },
+    { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "granite-retriever", "hooks", "cli"], marker = "extra == 'all'", editable = "." },
+    { name = "mellea", extras = ["cli"], marker = "extra == 'server'", editable = "." },
+    { name = "mellea", extras = ["hooks"], marker = "extra == 'telemetry'", editable = "." },
+    { name = "mellea", extras = ["watsonx", "hf", "litellm"], marker = "extra == 'backends'", editable = "." },
     { name = "mistletoe", specifier = ">=1.4.0" },
+    { name = "nltk", specifier = ">=3.9" },
     { name = "ollama", specifier = ">=0.5.1" },
+    { name = "omegaconf", marker = "extra == 'docling'", specifier = ">=2.1" },
     { name = "openai" },
     { name = "opencv-python-headless", marker = "extra == 'docling'" },
     { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.20.0" },
@@ -3589,11 +3595,11 @@ requires-dist = [
     { name = "smolagents", marker = "extra == 'tools'", specifier = ">=1.0.0" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2,<5" },
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
-    { name = "typer" },
+    { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'server'" },
     { name = "xgrammar", marker = "extra == 'hf'" },
 ]
-provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "server", "sandbox", "backends", "hooks", "all"]
+provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "backends", "hooks", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pdm", specifier = ">=2.24.0" }]
@@ -3604,6 +3610,7 @@ dev = [
     { name = "jsonschema" },
     { name = "langchain-community", specifier = ">=0.3.0" },
     { name = "mdxify", specifier = ">=0.2.37" },
+    { name = "mellea", extras = ["server"], editable = "." },
     { name = "mypy", specifier = ">=1.17.0" },
     { name = "nbmake", specifier = ">=1.5.5" },
     { name = "pdm", specifier = ">=2.24.0" },
@@ -4400,15 +4407,15 @@ wheels = [
 
 [[package]]
 name = "omegaconf"
-version = "2.0.6"
+version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "antlr4-python3-runtime" },
     { name = "pyyaml" },
-    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/d4/ef79d003e6c471ba95fdcddd58f67532d9c39b5fcf420aea199f3cc164e1/omegaconf-2.0.6.tar.gz", hash = "sha256:92ca535a788d21651bf4c2eaf5c1ca4c7a8003b2dab4a87cbb09109784268806", size = 83046, upload-time = "2021-01-19T22:10:54.523Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/48/6388f1bb9da707110532cb70ec4d2822858ddfb44f1cdf1233c20a80ea4b/omegaconf-2.3.0.tar.gz", hash = "sha256:d5d4b6d29955cc50ad50c46dc269bcd92c6e00f5f90d23ab5fee7bfca4ba4cc7", size = 3298120, upload-time = "2022-12-08T20:59:22.753Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/eb/9d63ce09dd8aa85767c65668d5414958ea29648a0eec80a4a7d311ec2684/omegaconf-2.0.6-py3-none-any.whl", hash = "sha256:9e349fd76819b95b47aa628edea1ff83fed5b25108608abdd6c7fdca188e302a", size = 36834, upload-time = "2021-01-19T22:10:53.31Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/94/1843518e420fa3ed6919835845df698c7e27e183cb997394e4a670973a65/omegaconf-2.3.0-py3-none-any.whl", hash = "sha256:7b4df175cdb08ba400f45cae3bdcae7ba8365db4d165fc65fd04b050ab63b46b", size = 79500, upload-time = "2022-12-08T20:59:19.686Z" },
 ]
 
 [[package]]

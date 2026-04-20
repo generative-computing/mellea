@@ -1,4 +1,3 @@
-# test/rits_backend_tests/test_openai_integration.py
 import os
 import signal
 import subprocess

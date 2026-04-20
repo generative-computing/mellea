@@ -37,12 +37,18 @@ pytestmark = [
 @pytest.fixture(scope="module", autouse=True)
 def setup_telemetry():
     """Set up telemetry for all tests in this module."""
+    import importlib
+
+    import mellea.telemetry.tracing
+
     mp = pytest.MonkeyPatch()
     mp.setenv("MELLEA_TRACE_BACKEND", "true")
+    importlib.reload(mellea.telemetry.tracing)
 
     yield
 
-    mp.undo()
+    mp.setenv("MELLEA_TRACE_BACKEND", "false")
+    importlib.reload(mellea.telemetry.tracing)
 
 
 @pytest.fixture
@@ -67,10 +73,8 @@ def span_exporter():
 
 
 @pytest.mark.asyncio
-async def test_span_duration_captures_async_operation(span_exporter, gh_run):
+async def test_span_duration_captures_async_operation(span_exporter):
     """Test that span duration includes the full async operation time."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
@@ -113,17 +117,19 @@ async def test_span_duration_captures_async_operation(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_context_propagation_parent_child(span_exporter, gh_run):
+async def test_context_propagation_parent_child(span_exporter):
     """Test that parent-child span relationships are maintained."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
-    # Create a parent span
-    tracer = trace.get_tracer(__name__)
+    # Create a parent span using the module's own tracer provider
+    # (not the global one, which may be pinned to a different provider
+    # due to OTel's set-once semantics for set_tracer_provider)
+    from mellea.telemetry import tracing
+
+    tracer = tracing._tracer_provider.get_tracer(__name__)
     with tracer.start_as_current_span("parent_operation"):
         mot, _ = await backend.generate_from_context(
             Message(role="assistant", content=""), ctx
@@ -158,10 +164,8 @@ async def test_context_propagation_parent_child(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
+async def test_token_usage_recorded_after_completion(span_exporter):
     """Test that token usage metrics are recorded after async completion."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
@@ -209,10 +213,8 @@ async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_span_not_closed_prematurely(span_exporter, gh_run):
+async def test_span_not_closed_prematurely(span_exporter):
     """Test that spans are not closed before async operations complete."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
@@ -245,10 +247,8 @@ async def test_span_not_closed_prematurely(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_multiple_generations_separate_spans(span_exporter, gh_run):
+async def test_multiple_generations_separate_spans(span_exporter):
     """Test that multiple generations create separate spans."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
@@ -279,10 +279,8 @@ async def test_multiple_generations_separate_spans(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_streaming_span_duration(span_exporter, gh_run):
+async def test_streaming_span_duration(span_exporter):
     """Test that streaming operations have accurate span durations."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
 
     from mellea.backends.model_options import ModelOption
 

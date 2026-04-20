@@ -45,6 +45,14 @@ def clean_metrics_env(monkeypatch):
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    # Clear other env vars to prevent user-set values from leaking into reload
+    monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
+    monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
     import importlib
 
@@ -453,6 +461,9 @@ def test_otlp_enabled_without_endpoint_warning(monkeypatch):
     """Test that enabling OTLP without endpoint produces helpful warning."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+    # Ensure no endpoint env vars are set (user env could have these)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
     import importlib
 
@@ -600,6 +611,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
 def test_record_metrics_noop_when_disabled(clean_metrics_env):
     """Test that all record functions are no-ops when metrics disabled."""
     from mellea.telemetry.metrics import (
+        record_error,
         record_request_duration,
         record_token_usage_metrics,
     )
@@ -608,10 +620,17 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
     record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+    record_error(
+        error_type="timeout",
+        model="llama2:7b",
+        provider="ollama",
+        exception_class="TimeoutError",
+    )
 
     # No instruments should have been initialized
     from mellea.telemetry.metrics import (
         _duration_histogram,
+        _error_counter,
         _input_token_counter,
         _output_token_counter,
         _ttfb_histogram,
@@ -621,6 +640,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
     assert _output_token_counter is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _error_counter is None
 
 
 def test_record_functions_exported_in_public_api():

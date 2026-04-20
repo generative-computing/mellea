@@ -30,7 +30,22 @@ from .base import (
 from .formatter import Formatter
 from .requirement import Requirement, ValidationResult, default_output_to_bool
 from .sampling import SamplingResult, SamplingStrategy
-from .utils import FancyLogger
+from .utils import MelleaLogger, clear_log_context, log_context, set_log_context
+
+
+def __getattr__(name: str) -> object:
+    if name == "FancyLogger":
+        import warnings
+
+        warnings.warn(
+            "FancyLogger has been renamed to MelleaLogger and will be removed in a future release. "
+            "Update your imports to use mellea.core.MelleaLogger.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return MelleaLogger
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Backend",
@@ -42,11 +57,11 @@ __all__ = [
     "ComputedModelOutputThunk",
     "Context",
     "ContextTurn",
-    "FancyLogger",
     "Formatter",
     "GenerateLog",
     "GenerateType",
     "ImageBlock",
+    "MelleaLogger",
     "ModelOutputThunk",
     "ModelToolCall",
     "Requirement",
@@ -56,6 +71,9 @@ __all__ = [
     "TemplateRepresentation",
     "ValidationResult",
     "blockify",
+    "clear_log_context",
     "default_output_to_bool",
     "generate_walk",
+    "log_context",
+    "set_log_context",
 ]

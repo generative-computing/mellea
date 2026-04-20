@@ -26,3 +26,6 @@ Use this template when adding or modifying sampling strategies in `mellea/stdlib
 - [ ] Tests added to `tests/sampling/`
 - [ ] New code has 100% coverage
 - [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)
+
+### Attribution
+- [ ] AI coding assistants used

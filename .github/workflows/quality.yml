@@ -12,6 +12,17 @@ env:
   OLLAMA_HOST: "127.0.0.1:5000"
 
 jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Lint GitHub Actions workflows
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -19,17 +30,19 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Free disk space
         uses: ./.github/actions/free-disk-space
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       - name: pre-commit cache key
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> "$GITHUB_ENV"
-      - uses: actions/cache@v5
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml', 'uv.lock') }}
@@ -41,6 +54,8 @@ jobs:
       - name: Send failure message pre-commit
         if: failure() # This step will only run if a previous step failed
         run: echo "The quality verification failed. Please run precommit "
+      - name: Download NLTK data
+        run: uv run python -m nltk.downloader punkt_tab
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
       - name: Start serving ollama
@@ -61,9 +76,9 @@ jobs:
           python3 - <<'PYEOF'
           import os, xml.etree.ElementTree as ET
 
-          python_version = "${{ matrix.python-version }}"
-          precommit_outcome = "${{ steps.precommit.outcome }}"
-          test_outcome = "${{ steps.tests.outcome }}"
+          python_version = os.environ.get("PYTHON_VERSION", "")
+          precommit_outcome = os.environ.get("STEPS_PRECOMMIT_OUTCOME", "")
+          test_outcome = os.environ.get("STEPS_TESTS_OUTCOME", "")
 
           def icon(outcome):
               return "✅" if outcome == "success" else ("❌" if outcome == "failure" else "⏭️")
@@ -106,3 +121,7 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(lines))
           PYEOF
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          STEPS_PRECOMMIT_OUTCOME: ${{ steps.precommit.outcome }}
+          STEPS_TESTS_OUTCOME: ${{ steps.tests.outcome }}

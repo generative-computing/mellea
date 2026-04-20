@@ -54,6 +54,11 @@ def main():
     parser.add_argument(
         "--skip-decoration", action="store_true", help="Skip MDX decoration"
     )
+    parser.add_argument(
+        "--skip-cli-reference",
+        action="store_true",
+        help="Skip CLI reference page generation",
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
@@ -129,6 +134,26 @@ def main():
         if result.returncode != 0:
             print(
                 f"[build.py] ERROR: generate-ast.py (nav-only) failed with code {result.returncode}",
+                file=sys.stderr,
+            )
+            sys.exit(result.returncode)
+
+    # Step 4: Generate CLI reference page
+    if not args.skip_cli_reference:
+        cmd = [
+            sys.executable,
+            str(script_dir / "generate_cli_reference.py"),
+            "--docs-root",
+            str(output_dir.parent),
+            "--source-dir",
+            str(repo_root),
+            "--strict",
+        ]
+        print(f"[build.py] Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, check=False)
+        if result.returncode != 0:
+            print(
+                f"[build.py] ERROR: generate_cli_reference.py failed with code {result.returncode}",
                 file=sys.stderr,
             )
             sys.exit(result.returncode)

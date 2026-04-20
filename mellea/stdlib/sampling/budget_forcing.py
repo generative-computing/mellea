@@ -11,11 +11,12 @@ from ...core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
+    MelleaLogger,
     Requirement,
     S,
     SamplingResult,
     ValidationResult,
+    log_context,
 )
 from ...stdlib import functional as mfuncs
 from .base import RejectionSamplingStrategy
@@ -125,148 +126,151 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         """
         validation_ctx = validation_ctx if validation_ctx is not None else context
 
-        flog = FancyLogger.get_logger()
+        flog = MelleaLogger.get_logger()
 
-        sampled_results: list[ComputedModelOutputThunk] = []
-        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        sampled_actions: list[Component] = []
-        sample_contexts: list[Context] = []
+        with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
+            sampled_results: list[ComputedModelOutputThunk] = []
+            sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+            sampled_actions: list[Component] = []
+            sample_contexts: list[Context] = []
 
-        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
-        # flag to determine whether we should show the pbar.
-        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
-
-        reqs = []
-        # global requirements supersede local requirements (global requirements can be defined by user)
-        # Todo: re-evaluate if this makes sense
-        if self.requirements is not None:
-            reqs += self.requirements
-        elif requirements is not None:
-            reqs += requirements
-        reqs = list(set(reqs))
-
-        loop_count = 0
-        loop_budget_range_iterator = (
-            tqdm.tqdm(range(self.loop_budget))  # type: ignore
-            if show_progress
-            else range(self.loop_budget)  # type: ignore
-        )
-
-        next_action = deepcopy(action)
-        next_context = context
-        for _ in loop_budget_range_iterator:  # type: ignore
-            loop_count += 1
-            if not show_progress:
-                flog.info(f"Running loop {loop_count} of {self.loop_budget}")
-
-            # TODO
-            # tool_calls is not supported for budget forcing
-            assert tool_calls is False, (
-                "tool_calls is not supported with budget forcing"
+            # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+            # flag to determine whether we should show the pbar.
+            show_progress = (
+                show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
             )
-            # TODO
-            assert isinstance(backend, OllamaModelBackend), (
-                "Only ollama backend supported with budget forcing"
+
+            reqs = []
+            # global requirements supersede local requirements (global requirements can be defined by user)
+            # Todo: re-evaluate if this makes sense
+            if self.requirements is not None:
+                reqs += self.requirements
+            elif requirements is not None:
+                reqs += requirements
+            reqs = list(set(reqs))
+
+            loop_count = 0
+            loop_budget_range_iterator = (
+                tqdm.tqdm(range(self.loop_budget))  # type: ignore
+                if show_progress
+                else range(self.loop_budget)  # type: ignore
             )
-            # run a generation pass with budget forcing
-            result = await think_budget_forcing(
-                backend,
-                next_action,
-                ctx=context,
-                format=format,
-                tool_calls=tool_calls,
-                think_max_tokens=self.think_max_tokens,
-                answer_max_tokens=self.answer_max_tokens,
-                start_think_token=self.start_think_token,
-                end_think_token=self.end_think_token,
-                think_more_suffix=self.think_more_suffix,
-                answer_suffix=self.answer_suffix,
-                model_options=model_options,
-            )
-            result_ctx = next_context
-            await result.avalue()
-            result = ComputedModelOutputThunk(result)
 
-            # Sampling strategies may use different components from the original
-            # action. This might cause discrepancies in the expected parsed_repr
-            # type / value. Explicitly overwrite that here.
-            result.parsed_repr = action.parse(result)
+            next_action = deepcopy(action)
+            next_context = context
+            for _ in loop_budget_range_iterator:  # type: ignore
+                loop_count += 1
+                if not show_progress:
+                    flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
-            # validation pass
-            val_scores_co = mfuncs.avalidate(
-                reqs=reqs,
-                context=result_ctx,
-                backend=backend,
-                output=result,
-                format=format,
-                model_options=model_options,
-                # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
-            )
-            val_scores = await val_scores_co
+                # TODO
+                # tool_calls is not supported for budget forcing
+                assert tool_calls is False, (
+                    "tool_calls is not supported with budget forcing"
+                )
+                # TODO
+                assert isinstance(backend, OllamaModelBackend), (
+                    "Only ollama backend supported with budget forcing"
+                )
+                # run a generation pass with budget forcing
+                result = await think_budget_forcing(
+                    backend,
+                    next_action,
+                    ctx=context,
+                    format=format,
+                    tool_calls=tool_calls,
+                    think_max_tokens=self.think_max_tokens,
+                    answer_max_tokens=self.answer_max_tokens,
+                    start_think_token=self.start_think_token,
+                    end_think_token=self.end_think_token,
+                    think_more_suffix=self.think_more_suffix,
+                    answer_suffix=self.answer_suffix,
+                    model_options=model_options,
+                )
+                result_ctx = next_context
+                await result.avalue()
+                result = ComputedModelOutputThunk(result)
 
-            # match up reqs with scores
-            constraint_scores = list(zip(reqs, val_scores))
+                # Sampling strategies may use different components from the original
+                # action. This might cause discrepancies in the expected parsed_repr
+                # type / value. Explicitly overwrite that here.
+                result.parsed_repr = action.parse(result)
 
-            # collect all data
-            sampled_results.append(result)
-            sampled_scores.append(constraint_scores)
-            sampled_actions.append(next_action)
-            sample_contexts.append(result_ctx)
+                # validation pass
+                val_scores_co = mfuncs.avalidate(
+                    reqs=reqs,
+                    context=result_ctx,
+                    backend=backend,
+                    output=result,
+                    format=format,
+                    model_options=model_options,
+                    # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
+                )
+                val_scores = await val_scores_co
 
-            # if all vals are true -- break and return success
-            if all(bool(s[1]) for s in constraint_scores):
-                flog.info("SUCCESS")
-                assert (
-                    result._generate_log is not None
-                )  # Cannot be None after generation.
-                result._generate_log.is_final_result = True
+                # match up reqs with scores
+                constraint_scores = list(zip(reqs, val_scores))
 
-                # SUCCESS !!!!
-                return SamplingResult(
-                    result_index=len(sampled_results) - 1,
-                    success=True,
-                    sample_generations=sampled_results,
-                    sample_validations=sampled_scores,
-                    sample_contexts=sample_contexts,
-                    sample_actions=sampled_actions,
+                # collect all data
+                sampled_results.append(result)
+                sampled_scores.append(constraint_scores)
+                sampled_actions.append(next_action)
+                sample_contexts.append(result_ctx)
+
+                # if all vals are true -- break and return success
+                if all(bool(s[1]) for s in constraint_scores):
+                    flog.info("SUCCESS")
+                    assert (
+                        result._generate_log is not None
+                    )  # Cannot be None after generation.
+                    result._generate_log.is_final_result = True
+
+                    # SUCCESS !!!!
+                    return SamplingResult(
+                        result_index=len(sampled_results) - 1,
+                        success=True,
+                        sample_generations=sampled_results,
+                        sample_validations=sampled_scores,
+                        sample_contexts=sample_contexts,
+                        sample_actions=sampled_actions,
+                    )
+
+                else:
+                    # log partial success and continue
+                    count_valid = len([s for s in constraint_scores if bool(s[1])])
+                    flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+
+                # If we did not pass all constraints, update the instruction and try again.
+                next_action, next_context = self.repair(
+                    next_context,
+                    result_ctx,
+                    sampled_actions,
+                    sampled_results,
+                    sampled_scores,
                 )
 
-            else:
-                # log partial success and continue
-                count_valid = len([s for s in constraint_scores if bool(s[1])])
-                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
-
-            # If we did not pass all constraints, update the instruction and try again.
-            next_action, next_context = self.repair(
-                next_context,
-                result_ctx,
-                sampled_actions,
-                sampled_results,
-                sampled_scores,
+            flog.info(
+                f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
             )
 
-        flog.info(
-            f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
-        )
+            # if no valid result could be determined, find a last resort.
+            best_failed_index = self.select_from_failure(
+                sampled_actions, sampled_results, sampled_scores
+            )
+            assert best_failed_index < len(sampled_results), (
+                "The select_from_failure method did not return a valid result. It has to selected from failed_results."
+            )
 
-        # if no valid result could be determined, find a last resort.
-        best_failed_index = self.select_from_failure(
-            sampled_actions, sampled_results, sampled_scores
-        )
-        assert best_failed_index < len(sampled_results), (
-            "The select_from_failure method did not return a valid result. It has to selected from failed_results."
-        )
+            assert (
+                sampled_results[best_failed_index]._generate_log is not None
+            )  # Cannot be None after generation.
+            sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
 
-        assert (
-            sampled_results[best_failed_index]._generate_log is not None
-        )  # Cannot be None after generation.
-        sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
-
-        return SamplingResult(
-            result_index=best_failed_index,
-            success=False,
-            sample_generations=sampled_results,
-            sample_validations=sampled_scores,
-            sample_actions=sampled_actions,
-            sample_contexts=sample_contexts,
-        )
+            return SamplingResult(
+                result_index=best_failed_index,
+                success=False,
+                sample_generations=sampled_results,
+                sample_validations=sampled_scores,
+                sample_actions=sampled_actions,
+                sample_contexts=sample_contexts,
+            )

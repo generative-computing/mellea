@@ -69,10 +69,10 @@ For multiple queries:
 
 ## Key CLI options
 
-- `--backend`: `ollama` | `openai` | `rits`
+- `--backend`: `ollama` | `openai`
 - `--model-id`: inference model id/name
-- `--backend-endpoint`: required for `openai` and `rits`
-- `--backend-api-key`: required for `openai` and `rits`
+- `--backend-endpoint`: required for `openai`
+- `--backend-api-key`: required for `openai`
 - `--backend-req-timeout`: request timeout (seconds), default `300`
 - `--input-var`: optional input variable names (repeatable, must be valid Python identifiers)
 - `--version`: template version (`latest`, `v1`, `v2`)
