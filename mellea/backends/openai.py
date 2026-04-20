@@ -561,7 +561,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         if len(model_options.items()) > 0:
             FancyLogger.get_logger().info(
-                "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
+                "passing in model options when generating with an intrinsic; only temperature and seed are kept from model options"
             )
 
         # --- adapter lookup ------------------------------------------------
@@ -608,18 +608,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         docs = messages_to_docs(messages)
 
+        # Seed and temperature are used in the api call. The rewriter doesn't pass them
+        # along so we set them explicitly below.
         seed = model_options.get(ModelOption.SEED, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
 
         # Convert our conversation into a proper chat completions dict.
         request_json: dict = {
             "messages": conversation,
             "extra_body": {"documents": docs},
         }
-
-        # Convert other parameters from Mellea proprietary format to standard format.
-        for model_option in model_options:
-            if model_option == ModelOption.TEMPERATURE:
-                request_json["temperature"] = model_options[model_option]
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
@@ -643,6 +641,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         if seed is not None:
             api_params["seed"] = seed
+
+        if temperature is not None:
+            api_params["temperature"] = temperature
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default

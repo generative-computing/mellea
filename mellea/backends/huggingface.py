@@ -473,7 +473,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         if len(model_options.items()) > 0:
             FancyLogger.get_logger().info(
-                "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
+                "passing in model options when generating with an intrinsic; only temperature and seed are kept from model options"
             )
 
         linearized_ctx = ctx.view_for_generation()
