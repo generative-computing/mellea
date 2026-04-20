@@ -342,8 +342,9 @@ class EmbeddedIntrinsicAdapter(Adapter):
     @staticmethod
     def from_model_directory(
         model_path: str | pathlib.Path,
+        intrinsic_name: str | None = None,
     ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load all embedded adapters from a Granite Switch model directory.
+        """Load embedded adapters from a Granite Switch model directory.
 
         Reads ``adapter_index.json`` and the corresponding ``io_configs/*/io.yaml``
         files from the model directory.
@@ -351,6 +352,8 @@ class EmbeddedIntrinsicAdapter(Adapter):
         Args:
             model_path (str | pathlib.Path): Path to a Granite Switch model
                 directory that contains ``adapter_index.json`` and ``io_configs/``.
+            intrinsic_name (str | None): If provided, only load the adapter
+                matching this intrinsic name. ``None`` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
@@ -371,6 +374,8 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
         adapters: list[EmbeddedIntrinsicAdapter] = []
         for entry in index.get("adapters", []):
+            if intrinsic_name is not None and entry.get("intrinsic_name") != intrinsic_name:
+                continue
             io_config_rel = entry.get("io_config")
             if io_config_rel is None:
                 continue
@@ -397,9 +402,12 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
     @staticmethod
     def from_hub(
-        repo_id: str, revision: str = "main", cache_dir: str | None = None
+        repo_id: str,
+        revision: str = "main",
+        cache_dir: str | None = None,
+        intrinsic_name: str | None = None,
     ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load all embedded adapters from a Granite Switch model on HuggingFace Hub.
+        """Load embedded adapters from a Granite Switch model on HuggingFace Hub.
 
         Downloads ``adapter_index.json`` and the ``io_configs/`` directory, then
         delegates to :meth:`from_model_directory`.
@@ -409,6 +417,8 @@ class EmbeddedIntrinsicAdapter(Adapter):
                 (e.g. ``"ibm-granite/granite-switch-micro"``).
             revision (str): Git revision to download from.
             cache_dir (str | None): Local cache directory; ``None`` for the default.
+            intrinsic_name (str | None): If provided, only load the adapter
+                matching this intrinsic name. ``None`` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
@@ -427,7 +437,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
             cache_dir=cache_dir,
             revision=revision,
         )
-        return EmbeddedIntrinsicAdapter.from_model_directory(local_root)
+        return EmbeddedIntrinsicAdapter.from_model_directory(local_root, intrinsic_name=intrinsic_name)
 
 
 class CustomIntrinsicAdapter(IntrinsicAdapter):

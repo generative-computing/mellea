@@ -3,7 +3,7 @@
 import json
 
 from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
+from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter, EmbeddedIntrinsicAdapter
 from ....stdlib import functional as mfuncs
 from ...context import ChatContext
 from .intrinsic import Intrinsic
@@ -26,10 +26,26 @@ def call_intrinsic(
     base_model_name = backend.base_model_name
     if base_model_name is None:
         raise ValueError("Backend has no model ID")
-    adapter = IntrinsicAdapter(
-        intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
+
+    # Check if the backend already has the adapter.
+    has_adapter = any(
+        qualified_name.startswith(f"{intrinsic_name}_") for qualified_name in backend.list_adapters()
     )
-    if adapter.qualified_name not in backend.list_adapters():
+
+    # TODO: We should improve this logic. For now, we know that there are two cases of
+    # adapter loading: 1. regular adapters, and 2. embedded adapters.
+    if not has_adapter:
+        # EmbeddedAdapters get grabbed directly from the hf repo.
+        if getattr(backend, "embedded_adapters", False):
+            repo_id = getattr(backend, "_model_id", backend.base_model_name)
+            adapter = EmbeddedIntrinsicAdapter.from_hub(
+                repo_id, intrinsic_name=intrinsic_name
+            )
+        else:
+            # Regular IntrinsicAdapters utilize a catalog to download during their instantiation.
+            adapter = IntrinsicAdapter(
+                intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
+            )
         backend.add_adapter(adapter)
 
     # Create the AST node for the action we wish to perform.

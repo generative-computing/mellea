@@ -209,6 +209,19 @@ class TestFromModelDirectory:
         adapters = EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
         assert adapters == []
 
+    def test_filter_single_intrinsic(self, model_dir):
+        adapters = EmbeddedIntrinsicAdapter.from_model_directory(
+            model_dir, intrinsic_name="answerability"
+        )
+        assert len(adapters) == 1
+        assert adapters[0].intrinsic_name == "answerability"
+
+    def test_filter_nonexistent_intrinsic(self, model_dir):
+        adapters = EmbeddedIntrinsicAdapter.from_model_directory(
+            model_dir, intrinsic_name="nonexistent"
+        )
+        assert adapters == []
+
 
 # ---- EmbeddedIntrinsicAdapter.from_hub ----
 
@@ -230,6 +243,22 @@ class TestFromHub:
             revision="test-rev",
         )
         assert len(adapters) == 2
+
+    def test_filter_single_intrinsic(self, model_dir):
+        with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)) as mock_dl:
+            adapters = EmbeddedIntrinsicAdapter.from_hub(
+                "ibm-granite/granite-switch-micro",
+                intrinsic_name="citations",
+            )
+
+        mock_dl.assert_called_once_with(
+            repo_id="ibm-granite/granite-switch-micro",
+            allow_patterns=["adapter_index.json", "io_configs/**"],
+            cache_dir=None,
+            revision="main",
+        )
+        assert len(adapters) == 1
+        assert adapters[0].intrinsic_name == "citations"
 
     def test_missing_huggingface_hub_raises(self):
         with patch.dict("sys.modules", {"huggingface_hub": None}):
@@ -296,8 +325,9 @@ class TestOpenAIBackendRegistration:
     def test_base_model_name(self, backend):
         assert backend.base_model_name == "granite-switch"
 
-    def test_register_granite_switch_model(self, backend, model_dir):
-        names = backend.register_granite_switch_model(str(model_dir))
+    def test_register_embedded_adapter_model(self, backend, model_dir):
+        with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)):
+            names = backend.register_embedded_adapter_model("ibm-granite/granite-switch-micro")
 
         assert set(names) == {"answerability", "citations"}
         assert len(backend._added_adapters) == 2
@@ -321,11 +351,12 @@ class TestOpenAIBackendRegistration:
         from mellea.backends.openai import OpenAIBackend
 
         os.environ.setdefault("OPENAI_API_KEY", "test-key")
-        backend = OpenAIBackend(
-            model_id=str(model_dir),
-            base_url="http://localhost:8000/v1",
-            embedded_adapters=True,
-        )
+        with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)):
+            backend = OpenAIBackend(
+                model_id="ibm-granite/granite-switch-micro",
+                base_url="http://localhost:8000/v1",
+                embedded_adapters=True,
+            )
         assert len(backend._added_adapters) == 2
         assert set(backend.list_adapters()) == {"answerability_alora", "citations_lora"}
 
