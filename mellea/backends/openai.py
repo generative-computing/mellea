@@ -217,7 +217,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
 
-        self._embedded_adapters = embedded_adapters
+        # TODO: We should change this logic once we have a better protocol for "auto-loading"
+        # adapters during call_intrinsic, or once we support other types of adapters for
+        # OpenAIBackends.
+        # OpenAI Backends only support embedded_adapters.
+        self._uses_embedded_adapters = True
         if embedded_adapters:
             self.register_embedded_adapter_model(self._model_id)
 

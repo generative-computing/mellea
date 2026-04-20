@@ -360,7 +360,8 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
         Raises:
             FileNotFoundError: If ``adapter_index.json`` is missing.
-            ValueError: If an ``io.yaml`` file listed in the index cannot be found.
+            ValueError: If an ``io.yaml`` file listed in the index cannot be found
+                or if no adapters are found.
         """
         import json as _json
 
@@ -398,6 +399,14 @@ class EmbeddedIntrinsicAdapter(Adapter):
                 )
             )
 
+        if not adapters:
+            if intrinsic_name is not None:
+                raise ValueError(
+                    f"No adapter found for intrinsic '{intrinsic_name}' "
+                    f"in {model_path}"
+                )
+            raise ValueError(f"No adapters found in {model_path}")
+
         return adapters
 
     @staticmethod
@@ -422,6 +431,11 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+
+        Raises:
+            ImportError: If ``huggingface_hub`` is not installed.
+            ValueError: If no adapters are found (delegated from
+                :meth:`from_model_directory`).
         """
         try:
             import huggingface_hub
@@ -437,7 +451,15 @@ class EmbeddedIntrinsicAdapter(Adapter):
             cache_dir=cache_dir,
             revision=revision,
         )
-        return EmbeddedIntrinsicAdapter.from_model_directory(local_root, intrinsic_name=intrinsic_name)
+        try:
+            return EmbeddedIntrinsicAdapter.from_model_directory(local_root, intrinsic_name=intrinsic_name)
+        except ValueError:
+            if intrinsic_name is not None:
+                raise ValueError(
+                    f"No adapter found for intrinsic '{intrinsic_name}' "
+                    f"in {repo_id}"
+                ) from None
+            raise ValueError(f"No adapters found in {repo_id}") from None
 
 
 class CustomIntrinsicAdapter(IntrinsicAdapter):

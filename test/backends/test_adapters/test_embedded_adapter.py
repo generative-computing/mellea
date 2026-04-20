@@ -200,14 +200,14 @@ class TestFromModelDirectory:
 
     def test_empty_adapters_list(self, tmp_path):
         (tmp_path / "adapter_index.json").write_text(json.dumps({"adapters": []}))
-        adapters = EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
-        assert adapters == []
+        with pytest.raises(ValueError, match="No adapters found"):
+            EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
 
     def test_no_adapters_key(self, tmp_path):
-        """Index with no 'adapters' key returns empty list."""
+        """Index with no 'adapters' key raises ValueError."""
         (tmp_path / "adapter_index.json").write_text(json.dumps({}))
-        adapters = EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
-        assert adapters == []
+        with pytest.raises(ValueError, match="No adapters found"):
+            EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
 
     def test_filter_single_intrinsic(self, model_dir):
         adapters = EmbeddedIntrinsicAdapter.from_model_directory(
@@ -217,10 +217,10 @@ class TestFromModelDirectory:
         assert adapters[0].intrinsic_name == "answerability"
 
     def test_filter_nonexistent_intrinsic(self, model_dir):
-        adapters = EmbeddedIntrinsicAdapter.from_model_directory(
-            model_dir, intrinsic_name="nonexistent"
-        )
-        assert adapters == []
+        with pytest.raises(ValueError, match="No adapter found for intrinsic 'nonexistent'"):
+            EmbeddedIntrinsicAdapter.from_model_directory(
+                model_dir, intrinsic_name="nonexistent"
+            )
 
 
 # ---- EmbeddedIntrinsicAdapter.from_hub ----
