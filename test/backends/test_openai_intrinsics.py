@@ -7,6 +7,7 @@ through the full generation path.
 
 import json
 import os
+import pathlib
 import signal
 import subprocess
 import time
@@ -38,6 +39,7 @@ from mellea.formatters import TemplateFormatter
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.components.docs.document import Document
+from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 from test.formatters.granite.test_intrinsics_formatters import (
     _YAML_JSON_COMBOS_WITH_MODEL,
@@ -287,3 +289,69 @@ def test_intrinsic_generation(intrinsic_combo: YamlJsonCombo, backend: OpenAIBac
         pytest.fail(
             f"Intrinsic '{cfg.task}' did not return valid JSON: {result.value[:200]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# call_intrinsic tests — exercise the high-level convenience wrappers
+# ---------------------------------------------------------------------------
+_RAG_TEST_DATA = (
+    pathlib.Path(__file__).parent.parent
+    / "stdlib"
+    / "components"
+    / "intrinsic"
+    / "testdata"
+    / "input_json"
+)
+
+
+@pytest.fixture(scope="module")
+def call_intrinsic_backend(vllm_switch_process):
+    """OpenAI backend with embedded_adapters=False so call_intrinsic loads them dynamically."""
+    base_url = (
+        os.environ.get("VLLM_SWITCH_TEST_BASE_URL", "http://127.0.0.1:8000") + "/v1"
+    )
+    return OpenAIBackend(
+        model_id=SWITCH_MODEL_ID,
+        formatter=TemplateFormatter(model_id=SWITCH_MODEL_ID),
+        base_url=base_url,
+        api_key="EMPTY",
+        embedded_adapters=False,
+    )
+
+
+def _read_rag_input(file_name: str) -> tuple[ChatContext, str, list[Document]]:
+    """Load RAG test data and convert to Mellea types."""
+    with open(_RAG_TEST_DATA / file_name, encoding="utf-8") as f:
+        data = json.load(f)
+
+    context = ChatContext()
+    for m in data["messages"][:-1]:
+        context = context.add(Message(m["role"], m["content"]))
+
+    last_turn = data["messages"][-1]["content"]
+
+    documents = [
+        Document(text=d["text"], doc_id=d.get("doc_id"))
+        for d in data.get("extra_body", {}).get("documents", [])
+    ]
+    return context, last_turn, documents
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_answerability(call_intrinsic_backend):
+    """call_intrinsic path: check_answerability returns a score between 0 and 1."""
+    context, question, documents = _read_rag_input("answerability.json")
+    result = rag.check_answerability(question, documents, context, call_intrinsic_backend)
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_context_relevance(call_intrinsic_backend):
+    """call_intrinsic path: check_context_relevance returns a score between 0 and 1."""
+    context, question, documents = _read_rag_input("context_relevance.json")
+    result = rag.check_context_relevance(
+        question, documents[0], context, call_intrinsic_backend
+    )
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
