@@ -29,6 +29,7 @@ dependencies = [
     "nltk>=3.9", # Needed for sentence tokenization in granite citation parsing.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "PyYAML", # Needed for backends/adapters and granite formatters.
+    "huggingface-hub>=0.33.4", # Needed for Granite Switch embedded adapter downloads (OpenAI backend).
     "packaging", # Needed for server type helpers.
 ]
 

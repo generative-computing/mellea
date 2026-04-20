@@ -13,6 +13,7 @@ import pathlib
 import re
 from typing import TypeVar
 
+import huggingface_hub
 import yaml
 
 from ...core import Backend
@@ -440,14 +441,6 @@ class EmbeddedIntrinsicAdapter(Adapter):
             ValueError: If no adapters are found (delegated from
                 :meth:`from_model_directory`).
         """
-        try:
-            import huggingface_hub
-        except ImportError as e:
-            raise ImportError(
-                "huggingface_hub is required to load adapters from the Hub. "
-                "Please install it: pip install huggingface_hub"
-            ) from e
-
         local_root = huggingface_hub.snapshot_download(
             repo_id=repo_id,
             allow_patterns=["adapter_index.json", "io_configs/**"],
