@@ -43,6 +43,8 @@ OLLAMA_MODELS=(
     "granite4:micro"
     "granite4:micro-h"
     "granite3.2-vision"
+    "llama3.2"
+    "qwen2.5vl:7b"
 )
 
 # --- vLLM configuration ---
@@ -279,7 +281,7 @@ fi
 # WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
 IGNORE_TOOLING=""
 if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
-    IGNORE_TOOLING="--ignore=test/tooling"
+    IGNORE_TOOLING="--ignore=tooling"
     log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
 fi
 
@@ -294,6 +296,11 @@ UV_PYTHON_ARG=""
 if [[ -n "${UV_PYTHON:-}" ]]; then
     UV_PYTHON_ARG="--python $UV_PYTHON"
 fi
+
+# Download NLTK data required by granite formatter tests
+log "Downloading NLTK punkt_tab data..."
+uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+    python -c "import nltk; nltk.download('punkt_tab', quiet=True)" || true
 
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
     pytest "$PYTEST_DIR" $IGNORE_TOOLING ${@---group-by-backend} \
