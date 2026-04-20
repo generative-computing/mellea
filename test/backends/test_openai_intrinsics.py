@@ -186,7 +186,7 @@ def backend(vllm_switch_process):
         formatter=TemplateFormatter(model_id=SWITCH_MODEL_ID),
         base_url=base_url,
         api_key="EMPTY",
-        embedded_adapters=True,
+        load_embedded_adapters=True,
     )
 
 
@@ -315,7 +315,7 @@ def call_intrinsic_backend(vllm_switch_process):
         formatter=TemplateFormatter(model_id=SWITCH_MODEL_ID),
         base_url=base_url,
         api_key="EMPTY",
-        embedded_adapters=False,
+        load_embedded_adapters=False,
     )
 
 

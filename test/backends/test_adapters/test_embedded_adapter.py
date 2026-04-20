@@ -355,7 +355,7 @@ class TestOpenAIBackendRegistration:
             backend = OpenAIBackend(
                 model_id="ibm-granite/granite-switch-micro",
                 base_url="http://localhost:8000/v1",
-                embedded_adapters=True,
+                load_embedded_adapters=True,
             )
         assert len(backend._added_adapters) == 2
         assert set(backend.list_adapters()) == {"answerability_alora", "citations_lora"}
