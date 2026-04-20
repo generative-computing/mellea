@@ -41,6 +41,65 @@ class TestComputeSimilarity:
         strategy = SIMBAUQSamplingStrategy(similarity_metric="jaccard")
         assert strategy._compute_similarity("", "") == pytest.approx(1.0)
 
+    def test_difflib_identical(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="difflib")
+        assert strategy._compute_similarity(
+            "hello world", "hello world"
+        ) == pytest.approx(1.0)
+
+    def test_difflib_different(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="difflib")
+        score = strategy._compute_similarity("the cat sat on the mat", "dogs run fast")
+        assert 0.0 <= score < 0.5
+
+    def test_difflib_partial(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="difflib")
+        score = strategy._compute_similarity("hello world foo", "hello world bar")
+        assert 0.5 < score < 1.0
+
+    def test_difflib_empty(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="difflib")
+        assert strategy._compute_similarity("", "") == pytest.approx(1.0)
+
+    def test_levenshtein_identical(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="levenshtein")
+        assert strategy._compute_similarity(
+            "hello world", "hello world"
+        ) == pytest.approx(1.0)
+
+    def test_levenshtein_different(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="levenshtein")
+        score = strategy._compute_similarity("abc", "xyz")
+        assert score == pytest.approx(0.0)
+
+    def test_levenshtein_partial(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="levenshtein")
+        score = strategy._compute_similarity("kitten", "sitting")
+        assert 0.0 < score < 1.0
+
+    def test_levenshtein_empty(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="levenshtein")
+        assert strategy._compute_similarity("", "") == pytest.approx(1.0)
+
+    def test_levenshtein_single_edit(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="levenshtein")
+        score = strategy._compute_similarity("abcd", "abce")
+        assert score == pytest.approx(0.75)
+
+
+class TestLevenshteinDistance:
+    def test_empty_strings(self):
+        assert SIMBAUQSamplingStrategy._levenshtein_distance("", "") == 0
+
+    def test_one_empty(self):
+        assert SIMBAUQSamplingStrategy._levenshtein_distance("a", "") == 1
+
+    def test_classic_example(self):
+        assert SIMBAUQSamplingStrategy._levenshtein_distance("kitten", "sitting") == 3
+
+    def test_identical(self):
+        assert SIMBAUQSamplingStrategy._levenshtein_distance("abc", "abc") == 0
+
 
 class TestAggregate:
     def setup_method(self):

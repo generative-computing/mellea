@@ -19,6 +19,7 @@ Reference:
 
 import asyncio
 from copy import deepcopy
+from difflib import SequenceMatcher
 from typing import Literal, Protocol, runtime_checkable
 
 import numpy as np
@@ -61,10 +62,13 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
     Args:
         temperatures (list[float]): Temperature values to sample at.
         n_per_temp (int): Number of samples to generate per temperature value.
-        similarity_metric (Literal['rouge', 'jaccard', 'sbert']): Pairwise
-            similarity metric. ``'rouge'`` uses RougeL F-measure; ``'jaccard'``
-            uses word-level Jaccard index; ``'sbert'`` uses cosine similarity of
-            Sentence-BERT embeddings (requires ``sentence-transformers``).
+        similarity_metric (Literal['rouge', 'jaccard', 'sbert', 'difflib',
+            'levenshtein']): Pairwise similarity metric. ``'rouge'`` uses
+            RougeL F-measure; ``'jaccard'`` uses word-level Jaccard index;
+            ``'sbert'`` uses cosine similarity of Sentence-BERT embeddings
+            (requires ``sentence-transformers``); ``'difflib'`` uses
+            ``difflib.SequenceMatcher`` ratio; ``'levenshtein'`` uses
+            normalized Levenshtein edit distance.
         confidence_method (Literal['aggregation', 'classifier']): How to
             compute confidence from the similarity matrix. ``'aggregation'``
             uses a data-free aggregation function; ``'classifier'`` uses a
@@ -100,7 +104,9 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         *,
         temperatures: list[float] | None = None,
         n_per_temp: int = 4,
-        similarity_metric: Literal["rouge", "jaccard", "sbert"] = "rouge",
+        similarity_metric: Literal[
+            "rouge", "jaccard", "sbert", "difflib", "levenshtein"
+        ] = "rouge",
         confidence_method: Literal["aggregation", "classifier"] = "aggregation",
         aggregation: Literal[
             "mean", "geometric_mean", "harmonic_mean", "median", "max", "min"
@@ -327,6 +333,23 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
                     seen.add(id(req))
         return combined
 
+    @staticmethod
+    def _levenshtein_distance(s1: str, s2: str) -> int:
+        """Compute the Levenshtein edit distance between two strings."""
+        m, n = len(s1), len(s2)
+        dp = list(range(n + 1))
+        for i in range(1, m + 1):
+            prev = dp[0]
+            dp[0] = i
+            for j in range(1, n + 1):
+                temp = dp[j]
+                if s1[i - 1] == s2[j - 1]:
+                    dp[j] = prev
+                else:
+                    dp[j] = 1 + min(prev, dp[j], dp[j - 1])
+                prev = temp
+        return dp[n]
+
     def _compute_similarity(self, text1: str, text2: str) -> float:
         """Compute pairwise similarity between two text strings.
 
@@ -355,6 +378,14 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
             embs = self._sbert_model_obj.encode([text1, text2])
             return float(cosine_similarity([embs[0]], [embs[1]])[0, 0])
+
+        if self.similarity_metric == "difflib":
+            return SequenceMatcher(None, text1, text2).ratio()
+
+        if self.similarity_metric == "levenshtein":
+            dist = self._levenshtein_distance(text1, text2)
+            max_len = max(len(text1), len(text2))
+            return 1.0 - dist / max_len if max_len > 0 else 1.0
 
         # Jaccard: word-level set overlap.
         words1 = set(text1.lower().split())

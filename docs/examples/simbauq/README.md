@@ -102,7 +102,7 @@ strategy = SIMBAUQSamplingStrategy(
 |-----------|------|---------|-------------|
 | `temperatures` | `list[float]` | `[0.3, 0.5, 0.7, 1.0]` | Temperature values to sample at |
 | `n_per_temp` | `int` | `4` | Number of samples per temperature |
-| `similarity_metric` | `"rouge"`, `"jaccard"`, `"sbert"` | `"rouge"` | Pairwise similarity metric |
+| `similarity_metric` | `"rouge"`, `"jaccard"`, `"sbert"`, `"difflib"`, `"levenshtein"` | `"rouge"` | Pairwise similarity metric |
 | `confidence_method` | `"aggregation"`, `"classifier"` | `"aggregation"` | Confidence estimation method |
 | `aggregation` | `"mean"`, `"geometric_mean"`, `"harmonic_mean"`, `"median"`, `"max"`, `"min"` | `"mean"` | Aggregation function (for `aggregation` method) |
 | `classifier` | sklearn classifier | `None` | Pre-trained classifier with `predict_proba` |
@@ -121,6 +121,10 @@ strategy = SIMBAUQSamplingStrategy(
   external dependencies, works well for short structured answers.
 - **sbert**: Cosine similarity of Sentence-BERT embeddings. Best semantic
   similarity but requires `sentence-transformers`.
+- **difflib**: `difflib.SequenceMatcher` ratio. Character-level similarity
+  from the Python standard library; no extra dependencies.
+- **levenshtein**: Normalized Levenshtein edit distance (`1 - dist / max_len`).
+  Exact character-level metric; no extra dependencies.
 
 ## Inspecting Results
 
@@ -138,7 +142,7 @@ meta["all_confidences"]   # list[float]: confidence for every sample
 meta["similarity_matrix"] # list[list[float]]: N x N pairwise similarity matrix
 meta["temperatures_used"] # list[float]: temperature used for each sample
 meta["confidence_method"] # "aggregation" or "classifier"
-meta["similarity_metric"] # "rouge", "jaccard", or "sbert"
+meta["similarity_metric"] # "rouge", "jaccard", "sbert", "difflib", or "levenshtein"
 meta["aggregation"]       # aggregation function name
 
 # All generated samples
