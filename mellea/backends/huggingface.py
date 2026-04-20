@@ -514,10 +514,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       through their rewriters.
 
         conversation: list[dict] = []
-        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
-        if system_prompt != "":
-            conversation.append({"role": "system", "content": system_prompt})
-
         conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
         docs = messages_to_docs(ctx_as_message_list)
@@ -526,9 +522,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if seed is not None:
             set_seed(seed)
 
-        if model_options.get(ModelOption.STREAM, None) is not None:
-            # Intrinsics don't support streaming because of their post-processing step.
-            raise Exception("Intrinsics do not support streaming.")
+        # Intrinsics don't support streaming because of their post-processing step.
+        if model_options.get(ModelOption.STREAM, False):
+            raise NotImplementedError("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -540,9 +536,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # TODO: Code below this point is mostly specific to RagIntrinsics
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, IntrinsicAdapter), (
-            "currently Mellea only supports IntrinsicAdapters and Intrinsics"
-        )
+        if not isinstance(adapter, IntrinsicAdapter):
+            raise TypeError(
+                f"LocalHFBackend only supports IntrinsicAdapters, got: {type(adapter).__name__}"
+            )
 
         intrinsic_config = adapter.config
         assert intrinsic_config is not None

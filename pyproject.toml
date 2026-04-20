@@ -29,7 +29,6 @@ dependencies = [
     "nltk>=3.9", # Needed for sentence tokenization in granite citation parsing.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "PyYAML", # Needed for backends/adapters and granite formatters.
-    "huggingface-hub>=0.33.4", # Needed for Granite Switch embedded adapter downloads (OpenAI backend).
     "packaging", # Needed for server type helpers.
 ]
 
@@ -103,6 +102,10 @@ sandbox = [
     "llm-sandbox[docker]>=0.3.23",
 ]
 
+switch = [
+    "huggingface-hub>=0.33.4",
+]
+
 backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
@@ -110,7 +113,7 @@ hooks = [
     "grpcio>=1.78.0",
 ]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks,cli]"]
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups

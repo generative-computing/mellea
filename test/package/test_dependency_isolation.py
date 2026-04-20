@@ -65,6 +65,7 @@ IMPORTS: dict[str, list[str]] = {
     "cli": ["from cli.m import cli"],
     "server": ["from cli.serve.app import run_server"],
     "sandbox": ["import llm_sandbox"],
+    "switch": ["import huggingface_hub"],
     "hooks": [
         "import cpex"  # We directly import a non-Mellea class/package here since the hooks classes are defined regardless of if cpex is installed.
     ],
@@ -105,6 +106,7 @@ TESTED_EXTRAS = {
     "granite_retriever",
     "server",
     "sandbox",
+    "switch",
     "hooks",
     "cli",
     "backends",
@@ -381,6 +383,11 @@ def test_server() -> None:
 def test_sandbox() -> None:
     """mellea[sandbox]: llm_sandbox is available."""
     _run_check(extra="sandbox", should_succeed=[*IMPORTS["core"], *IMPORTS["sandbox"]])
+
+
+def test_switch() -> None:
+    """mellea[switch]: huggingface_hub is available for embedded adapter downloads."""
+    _run_check(extra="switch", should_succeed=[*IMPORTS["core"], *IMPORTS["switch"]])
 
 
 def test_cli() -> None:

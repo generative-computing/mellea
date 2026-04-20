@@ -18,6 +18,21 @@ from mellea.stdlib.context import ChatContext
 
 # Create the backend.
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+# --- Alternative: OpenAI backend with Granite Switch (requires vLLM server) ---
+# Requires the adapter for this intrinsic to be embedded in the Granite Switch
+# model. See docs/examples/granite-switch/ for a full runnable example.
+# from mellea.backends.openai import OpenAIBackend
+# from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+# from mellea.formatters import TemplateFormatter
+#
+# backend = OpenAIBackend(
+#     model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+#     formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+#     base_url="http://localhost:8000/v1",  # vLLM server URL
+#     api_key="EMPTY",
+#     load_embedded_adapters=True,
+# )
+# --- End alternative ---
 
 policy_text = "hiring managers should steer away from any questions that directly seek information about protected classes—such as “how old are you,” “where are you from,” “what year did you graduate” or “what are your plans for having kids.”"
 

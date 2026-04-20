@@ -559,7 +559,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             raise NotImplementedError("Intrinsics require a chat context.")
 
         # Intrinsics don't support streaming because of their post-processing step.
-        if model_options.get(ModelOption.STREAM, None) is not None:
+        if model_options.get(ModelOption.STREAM, False):
             raise NotImplementedError("Intrinsics do not support streaming.")
 
         if len(model_options.items()) > 0:
@@ -579,9 +579,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # TODO: OpenAIBackend only supports EmbeddedAdapters.
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, EmbeddedIntrinsicAdapter), (
-            "currently Mellea's OpenAIBackend only supports EmbeddedIntrinsicAdapter and Intrinsics"
-        )
+        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
+            raise TypeError(
+                f"OpenAIBackend only supports EmbeddedIntrinsicAdapter, got: {type(adapter).__name__}"
+            )
 
         intrinsic_config = adapter.config
         assert intrinsic_config is not None
@@ -604,9 +605,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
         conversation: list[dict] = []
-        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
-        if system_prompt != "":
-            conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([message_to_openai_message(m) for m in messages])
 
         docs = messages_to_docs(messages)

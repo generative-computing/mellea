@@ -13,7 +13,6 @@ import pathlib
 import re
 from typing import TypeVar
 
-import huggingface_hub
 import yaml
 
 from ...core import Backend
@@ -441,6 +440,14 @@ class EmbeddedIntrinsicAdapter(Adapter):
             ValueError: If no adapters are found (delegated from
                 :meth:`from_model_directory`).
         """
+        try:
+            import huggingface_hub
+        except ImportError as e:
+            raise ImportError(
+                "huggingface_hub is required to download embedded adapter configs from "
+                'HuggingFace Hub. Please install it with: pip install "mellea[switch]"'
+            ) from e
+
         local_root = huggingface_hub.snapshot_download(
             repo_id=repo_id,
             allow_patterns=["adapter_index.json", "io_configs/**"],
@@ -451,12 +458,12 @@ class EmbeddedIntrinsicAdapter(Adapter):
             return EmbeddedIntrinsicAdapter.from_model_directory(
                 local_root, intrinsic_name=intrinsic_name
             )
-        except ValueError:
+        except ValueError as e:
             if intrinsic_name is not None:
                 raise ValueError(
                     f"No adapter found for intrinsic '{intrinsic_name}' in {repo_id}"
-                ) from None
-            raise ValueError(f"No adapters found in {repo_id}") from None
+                ) from e
+            raise ValueError(f"No adapters found in {repo_id}") from e
 
 
 class CustomIntrinsicAdapter(IntrinsicAdapter):

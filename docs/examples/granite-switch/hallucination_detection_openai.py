@@ -26,14 +26,14 @@ except requests.ConnectionError:
     print(f"Skipped: vLLM server not reachable at {VLLM_BASE_URL}", file=sys.stderr)
     raise SystemExit(1)
 
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_8B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-SWITCH_MODEL_ID = IBM_GRANITE_SWITCH_4_1_8B.hf_model_name
+SWITCH_MODEL_ID = IBM_GRANITE_SWITCH_4_1_3B.hf_model_name
 assert SWITCH_MODEL_ID is not None
 
 backend = OpenAIBackend(
