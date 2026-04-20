@@ -81,6 +81,10 @@ See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for
 adapters — lightweight domain-specific requirement validators that run on local GPU
 hardware. See the aLoRA guide for training and usage.
 
+> **Tip:** For intrinsics without local GPU requirements, Granite Switch models
+> serve pre-embedded adapters via vLLM and the OpenAI backend. See
+> [Intrinsics](../advanced/intrinsics) for details.
+
 ## Vision support
 
 Vision support for `LocalHFBackend` is model-dependent and experimental. Pass a PIL

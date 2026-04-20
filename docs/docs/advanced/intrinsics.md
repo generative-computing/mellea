@@ -4,17 +4,23 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install "mellea[hf]"`, a GPU or Apple Silicon Mac recommended for
-acceptable inference speed. All intrinsics require a `LocalHFBackend` with a
-[Granite](https://huggingface.co/ibm-granite) model.
+**Prerequisites:** `pip install "mellea[hf]"` for LocalHFBackend (GPU or Apple
+Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
+[Granite Switch](../guide/glossary#granite-switch) model served via vLLM.
 
 Intrinsics are adapter-accelerated operations for RAG quality checks. They use
 LoRA/aLoRA adapters loaded directly into the HuggingFace backend — faster and more
 reliable than prompting a general-purpose model for these specialized micro-tasks.
 
-> **Backend note:** Intrinsics require `LocalHFBackend` with an IBM Granite model
-> (e.g., `ibm-granite/granite-4.0-micro`). They do not work with Ollama, OpenAI, or
-> other remote backends.
+> **Backend note:** Intrinsics work with two backends:
+>
+> - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
+>   All intrinsics are available. Requires a GPU or Apple Silicon Mac.
+> - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
+>   `load_embedded_adapters=True`. Only intrinsics embedded in the model are
+>   available — check the model's `adapter_index.json` for the list.
+>
+> Intrinsics do not work with Ollama or other remote backends.
 
 Set up the backend once and reuse it across intrinsic calls:
 
@@ -22,6 +28,22 @@ Set up the backend once and reuse it across intrinsic calls:
 from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+```
+
+Or, with a Granite Switch model via the OpenAI backend:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_8B
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_8B.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_8B.hf_model_name),
+    base_url="http://localhost:8000/v1",  # vLLM server
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
 ```
 
 ## Answerability
@@ -208,4 +230,6 @@ print(out)  # {"requirement_likelihood": 1.0}
 ```
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
+For OpenAI backends with Granite Switch, adapters are loaded from the model's
+HuggingFace repository configuration instead of the intrinsic catalog.
 Output format is task-specific — `requirement_check` returns a likelihood score.

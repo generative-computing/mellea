@@ -29,6 +29,9 @@ pytestmark = [
         int(os.environ.get("CICD", 0)) == 1,
         reason="Skipping OpenAI intrinsics tests in CI",
     ),
+    pytest.mark.skip(
+        reason="Requires additional VLLM setup that isn't yet streamlined. Re-enable once nightlies can run this."
+    ),
 ]
 
 # ---------------------------------------------------------------------------
