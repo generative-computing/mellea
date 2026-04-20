@@ -133,7 +133,7 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
 
     This plugin hooks into the generation_post_call event to automatically
     record cost metrics when token usage and model pricing data are available.
-    Cost is skipped silently for models not in the pricing registry.
+    Cost is skipped and a warning is logged for models not in the pricing registry.
     """
 
     @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)

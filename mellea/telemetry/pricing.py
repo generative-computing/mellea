@@ -18,7 +18,7 @@ Environment variables:
 Custom pricing file format::
 
     {
-      "my-model": {"input_per_1k": 0.001, "output_per_1k": 0.002}
+      "my-model": {"input_per_1m": 1.0, "output_per_1m": 2.0}
     }
 """
 
@@ -68,6 +68,7 @@ class PricingRegistry:
         custom_path = pricing_file or os.getenv("MELLEA_PRICING_FILE")
         custom = _load_pricing_json(custom_path) if custom_path else {}
         self._pricing: dict[str, dict[str, float]] = {**builtin, **custom}
+        self._warned_models: set[str] = set()
 
     def compute_cost(
         self, model: str, input_tokens: int | None, output_tokens: int | None
@@ -84,18 +85,31 @@ class PricingRegistry:
         """
         entry = self._pricing.get(model)
         if entry is None:
-            logger.warning(
-                "No pricing data for model %r — cost metric will not be recorded. "
-                "Set MELLEA_PRICING_FILE to add custom pricing.",
-                model,
-            )
+            if model not in self._warned_models:
+                self._warned_models.add(model)
+                logger.warning(
+                    "No pricing data for model %r — cost metric will not be recorded. "
+                    "Set MELLEA_PRICING_FILE to add custom pricing.",
+                    model,
+                )
             return None
-        input_cost = ((input_tokens or 0) / 1000.0) * entry["input_per_1k"]
-        output_cost = ((output_tokens or 0) / 1000.0) * entry["output_per_1k"]
+        input_cost = ((input_tokens or 0) / 1_000_000.0) * entry.get(
+            "input_per_1m", 0.0
+        )
+        output_cost = ((output_tokens or 0) / 1_000_000.0) * entry.get(
+            "output_per_1m", 0.0
+        )
         return input_cost + output_cost
 
 
-_registry = PricingRegistry()
+_registry: PricingRegistry | None = None
+
+
+def _get_registry() -> PricingRegistry:
+    global _registry
+    if _registry is None:
+        _registry = PricingRegistry()
+    return _registry
 
 
 def compute_cost(
@@ -111,4 +125,4 @@ def compute_cost(
     Returns:
         Estimated cost in USD, or ``None`` if no pricing data exists for the model.
     """
-    return _registry.compute_cost(model, input_tokens, output_tokens)
+    return _get_registry().compute_cost(model, input_tokens, output_tokens)

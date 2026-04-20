@@ -205,12 +205,12 @@ Override built-in prices or add pricing for any model using a JSON file:
 export MELLEA_PRICING_FILE=/path/to/my-pricing.json
 ```
 
-The file format maps model IDs to per-1,000-token rates:
+The file format maps model IDs to per-million-token rates:
 
 ```json
 {
-  "my-custom-model": {"input_per_1k": 0.001, "output_per_1k": 0.002},
-  "gpt-5.4": {"input_per_1k": 0.003, "output_per_1k": 0.015}
+  "my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0},
+  "gpt-5.4": {"input_per_1m": 2.5, "output_per_1m": 15.0}
 }
 ```
 

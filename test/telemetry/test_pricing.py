@@ -36,7 +36,7 @@ def test_compute_cost_known_model(fresh_registry):
     """Known model returns a non-None float cost."""
     cost = fresh_registry.compute_cost("gpt-5.4", input_tokens=1000, output_tokens=500)
     assert cost is not None
-    # gpt-5.4: 1000 * 0.0025/1k + 500 * 0.015/1k = 0.0025 + 0.0075 = 0.010
+    # gpt-5.4: 1000 * 2.5/1m + 500 * 15.0/1m = 0.0025 + 0.0075 = 0.010
     assert abs(cost - 0.010) < 1e-9
 
 
@@ -67,7 +67,7 @@ def test_compute_cost_zero_tokens(fresh_registry):
 
 def test_custom_pricing_override(custom_pricing):
     """MELLEA_PRICING_FILE overrides built-in prices."""
-    custom_pricing({"my-custom-model": {"input_per_1k": 0.001, "output_per_1k": 0.002}})
+    custom_pricing({"my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0}})
 
     from mellea.telemetry.pricing import compute_cost
 
@@ -78,7 +78,7 @@ def test_custom_pricing_override(custom_pricing):
 
 def test_custom_pricing_overrides_builtin(custom_pricing):
     """Custom file can override built-in prices for existing models."""
-    custom_pricing({"gpt-5.4": {"input_per_1k": 0.999, "output_per_1k": 0.999}})
+    custom_pricing({"gpt-5.4": {"input_per_1m": 999.0, "output_per_1m": 999.0}})
 
     from mellea.telemetry.pricing import compute_cost
 
