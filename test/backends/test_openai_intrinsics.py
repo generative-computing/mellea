@@ -34,6 +34,7 @@ pytestmark = [
 # ---------------------------------------------------------------------------
 # Imports (after markers so collection-time skips fire first)
 # ---------------------------------------------------------------------------
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_8B
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib import functional as mfuncs
@@ -49,7 +50,9 @@ from test.formatters.granite.test_intrinsics_formatters import (
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SWITCH_MODEL_ID = os.environ.get("GRANITE_SWITCH_MODEL_ID", "GrizleeBer/gs-test-2")
+SWITCH_MODEL_ID = os.environ.get(
+    "GRANITE_SWITCH_MODEL_ID", IBM_GRANITE_SWITCH_4_1_8B.hf_model_name
+)
 
 
 # ---------------------------------------------------------------------------

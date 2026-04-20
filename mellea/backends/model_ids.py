@@ -119,6 +119,12 @@ IBM_GRANITE_4_TINY_PREVIEW_BASE_7B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-tiny-base-preview"
 )
 
+# Pre-Built Granite Switch Models
+IBM_GRANITE_SWITCH_4_1_8B = ModelIdentifier(
+    hf_model_name="GrizleeBer/gs-test-2"  # Placeholder.
+)
+"""Granite Switch."""  # Document what adapters are included by default here.
+
 #####################
 #### Meta models ####
 #####################
