@@ -39,7 +39,7 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
-OLLAMA_MODELS=(
+OLLAMA_MODEL_LIST=(
     "granite4:micro"
     "granite4:micro-h"
     "granite3.2-vision"
@@ -143,8 +143,8 @@ else
     # --- Start ollama server ---
     log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
-    export OLLAMA_MODELS_DIR="${OLLAMA_DIR}/models"
-    mkdir -p "$OLLAMA_MODELS_DIR"
+    export OLLAMA_MODELS="${OLLAMA_DIR}/models"
+    mkdir -p "$OLLAMA_MODELS"
 
     # Ensure ollama can find system CUDA libraries
     if [[ -d "/usr/local/cuda" ]]; then
@@ -176,7 +176,7 @@ fi
 
 # --- Pull required models ---
 export OLLAMA_HOST="127.0.0.1:${OLLAMA_PORT}"
-for model in "${OLLAMA_MODELS[@]}"; do
+for model in "${OLLAMA_MODEL_LIST[@]}"; do
     if "$OLLAMA_BIN" list 2>/dev/null | grep -q "^${model}"; then
         log "Model $model already pulled"
     else
@@ -194,7 +194,7 @@ if [[ "${SKIP_WARMUP:-0}" == "1" || "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
     log "Skipping model warmup"
 else
     log "Warming up models..."
-    for model in "${OLLAMA_MODELS[@]}"; do
+    for model in "${OLLAMA_MODEL_LIST[@]}"; do
         log "  Warming $model ..."
         curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
             -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
