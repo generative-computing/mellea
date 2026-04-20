@@ -43,10 +43,13 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
+SWITCH_MODEL_ID = IBM_GRANITE_SWITCH_4_1_8B.hf_model_name
+assert SWITCH_MODEL_ID is not None
+
 # Create the backend WITHOUT auto-loading adapters.
 backend = OpenAIBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_8B.hf_model_name,
-    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_8B.hf_model_name),
+    model_id=SWITCH_MODEL_ID,
+    formatter=TemplateFormatter(model_id=SWITCH_MODEL_ID),
     base_url="http://localhost:8000/v1",
     api_key="EMPTY",
     load_embedded_adapters=False,
@@ -54,7 +57,7 @@ backend = OpenAIBackend(
 
 # --- Option A: Load a single adapter from HuggingFace Hub ---
 adapters = EmbeddedIntrinsicAdapter.from_hub(
-    IBM_GRANITE_SWITCH_4_1_8B.hf_model_name, intrinsic_name="answerability"
+    SWITCH_MODEL_ID, intrinsic_name="answerability"
 )
 for adapter in adapters:
     backend.add_adapter(adapter)
