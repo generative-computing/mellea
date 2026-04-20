@@ -86,7 +86,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             constraint checking; primarily for benchmarking and debugging.
         load_embedded_adapters (bool): If ``True``, automatically download and register
             embedded intrinsic adapters from the model specified by *model_id*.
-            The model ID is used as a HuggingFace Hub repo ID to load 
+            The model ID is used as a HuggingFace Hub repo ID to load
             ``adapter_index.json`` and the corresponding I/O configs.
         api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
         kwargs: Additional keyword arguments forwarded to the OpenAI client.

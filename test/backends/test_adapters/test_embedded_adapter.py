@@ -11,7 +11,6 @@ import yaml
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.adapters.catalog import AdapterType
 
-
 _TEST_DIR = pathlib.Path(__file__).parent
 _INTRINSICS_DATA = _TEST_DIR / "intrinsics-data"
 
@@ -96,9 +95,7 @@ class TestEmbeddedIntrinsicAdapterInit:
 
     def test_lora_technology(self):
         adapter = EmbeddedIntrinsicAdapter(
-            intrinsic_name="citations",
-            config=_CITATIONS_CONFIG,
-            technology="lora",
+            intrinsic_name="citations", config=_CITATIONS_CONFIG, technology="lora"
         )
         assert adapter.adapter_type == AdapterType.LORA
         assert adapter.qualified_name == "citations_lora"
@@ -147,14 +144,12 @@ class TestFromModelDirectory:
         assert len(adapters) == 2
 
     def test_missing_adapter_index(self, tmp_path):
-        with pytest.raises(FileNotFoundError, match="adapter_index.json"):
+        with pytest.raises(FileNotFoundError, match=r"adapter_index\.json"):
             EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
 
     def test_missing_io_yaml(self, tmp_path):
-        (tmp_path / "adapter_index.json").write_text(
-            json.dumps(_SAMPLE_ADAPTER_INDEX)
-        )
-        with pytest.raises(ValueError, match="io.yaml.*not found"):
+        (tmp_path / "adapter_index.json").write_text(json.dumps(_SAMPLE_ADAPTER_INDEX))
+        with pytest.raises(ValueError, match=r"io\.yaml.*not found"):
             EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
 
     def test_skips_entry_without_io_config(self, tmp_path):
@@ -217,7 +212,9 @@ class TestFromModelDirectory:
         assert adapters[0].intrinsic_name == "answerability"
 
     def test_filter_nonexistent_intrinsic(self, model_dir):
-        with pytest.raises(ValueError, match="No adapter found for intrinsic 'nonexistent'"):
+        with pytest.raises(
+            ValueError, match="No adapter found for intrinsic 'nonexistent'"
+        ):
             EmbeddedIntrinsicAdapter.from_model_directory(
                 model_dir, intrinsic_name="nonexistent"
             )
@@ -229,7 +226,9 @@ class TestFromModelDirectory:
 class TestFromHub:
     def test_downloads_and_delegates(self, model_dir):
         """from_hub calls snapshot_download then delegates to from_model_directory."""
-        with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)) as mock_dl:
+        with patch(
+            "huggingface_hub.snapshot_download", return_value=str(model_dir)
+        ) as mock_dl:
             adapters = EmbeddedIntrinsicAdapter.from_hub(
                 "ibm-granite/granite-switch-micro",
                 revision="test-rev",
@@ -245,10 +244,11 @@ class TestFromHub:
         assert len(adapters) == 2
 
     def test_filter_single_intrinsic(self, model_dir):
-        with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)) as mock_dl:
+        with patch(
+            "huggingface_hub.snapshot_download", return_value=str(model_dir)
+        ) as mock_dl:
             adapters = EmbeddedIntrinsicAdapter.from_hub(
-                "ibm-granite/granite-switch-micro",
-                intrinsic_name="citations",
+                "ibm-granite/granite-switch-micro", intrinsic_name="citations"
             )
 
         mock_dl.assert_called_once_with(
@@ -276,8 +276,7 @@ class TestOpenAIBackendRegistration:
         from mellea.backends.openai import OpenAIBackend
 
         return OpenAIBackend(
-            model_id="granite-switch",
-            base_url="http://localhost:8000/v1",
+            model_id="granite-switch", base_url="http://localhost:8000/v1"
         )
 
     def test_add_adapter(self, backend):
@@ -327,7 +326,9 @@ class TestOpenAIBackendRegistration:
 
     def test_register_embedded_adapter_model(self, backend, model_dir):
         with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)):
-            names = backend.register_embedded_adapter_model("ibm-granite/granite-switch-micro")
+            names = backend.register_embedded_adapter_model(
+                "ibm-granite/granite-switch-micro"
+            )
 
         assert set(names) == {"answerability", "citations"}
         assert len(backend._added_adapters) == 2

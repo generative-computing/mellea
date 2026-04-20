@@ -273,6 +273,7 @@ def test_intrinsic_generation(intrinsic_combo: YamlJsonCombo, backend: OpenAIBac
 
     # Build context and intrinsic action
     ctx = _build_chat_context(input_json)
+    assert cfg.task is not None
     intrinsic = Intrinsic(cfg.task, intrinsic_kwargs=intrinsic_kwargs)
 
     # Run the full generation path
@@ -341,7 +342,9 @@ def _read_rag_input(file_name: str) -> tuple[ChatContext, str, list[Document]]:
 def test_call_intrinsic_answerability(call_intrinsic_backend):
     """call_intrinsic path: check_answerability returns a score between 0 and 1."""
     context, question, documents = _read_rag_input("answerability.json")
-    result = rag.check_answerability(question, documents, context, call_intrinsic_backend)
+    result = rag.check_answerability(
+        question, documents, context, call_intrinsic_backend
+    )
     assert isinstance(result, float)
     assert 0.0 <= result <= 1.0
 

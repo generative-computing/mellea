@@ -3,7 +3,12 @@
 import json
 
 from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter, EmbeddedIntrinsicAdapter
+from ....backends.adapters import (
+    AdapterMixin,
+    AdapterType,
+    EmbeddedIntrinsicAdapter,
+    IntrinsicAdapter,
+)
 from ....stdlib import functional as mfuncs
 from ...context import ChatContext
 from .intrinsic import Intrinsic
@@ -29,7 +34,8 @@ def call_intrinsic(
 
     # Check if the backend already has the adapter.
     has_adapter = any(
-        qualified_name.startswith(f"{intrinsic_name}_") for qualified_name in backend.list_adapters()
+        qualified_name.startswith(f"{intrinsic_name}_")
+        for qualified_name in backend.list_adapters()
     )
 
     # TODO: We should improve this logic. For now, we know that there are two cases of
@@ -38,15 +44,20 @@ def call_intrinsic(
         # EmbeddedAdapters get grabbed directly from the hf repo.
         if getattr(backend, "_uses_embedded_adapters", False):
             repo_id = getattr(backend, "_model_id", backend.base_model_name)
-            adapter = EmbeddedIntrinsicAdapter.from_hub(
+            adapters = EmbeddedIntrinsicAdapter.from_hub(
                 repo_id, intrinsic_name=intrinsic_name
             )
+            # Only one adapter should be returned, but we add any returned here in case.
+            for adapter in adapters:
+                backend.add_adapter(adapter)
         else:
             # Regular IntrinsicAdapters utilize a catalog to download during their instantiation.
-            adapter = IntrinsicAdapter(
-                intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
+            intrinsic_adapter = IntrinsicAdapter(
+                intrinsic_name,
+                adapter_type=AdapterType.LORA,
+                base_model_name=base_model_name,
             )
-        backend.add_adapter(adapter)
+            backend.add_adapter(intrinsic_adapter)
 
     # Create the AST node for the action we wish to perform.
     intrinsic = Intrinsic(intrinsic_name, intrinsic_kwargs=kwargs)

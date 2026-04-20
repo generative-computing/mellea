@@ -341,8 +341,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
     @staticmethod
     def from_model_directory(
-        model_path: str | pathlib.Path,
-        intrinsic_name: str | None = None,
+        model_path: str | pathlib.Path, intrinsic_name: str | None = None
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model directory.
 
@@ -375,7 +374,10 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
         adapters: list[EmbeddedIntrinsicAdapter] = []
         for entry in index.get("adapters", []):
-            if intrinsic_name is not None and entry.get("intrinsic_name") != intrinsic_name:
+            if (
+                intrinsic_name is not None
+                and entry.get("intrinsic_name") != intrinsic_name
+            ):
                 continue
             io_config_rel = entry.get("io_config")
             if io_config_rel is None:
@@ -402,8 +404,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
         if not adapters:
             if intrinsic_name is not None:
                 raise ValueError(
-                    f"No adapter found for intrinsic '{intrinsic_name}' "
-                    f"in {model_path}"
+                    f"No adapter found for intrinsic '{intrinsic_name}' in {model_path}"
                 )
             raise ValueError(f"No adapters found in {model_path}")
 
@@ -434,6 +435,8 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
         Raises:
             ImportError: If ``huggingface_hub`` is not installed.
+            FileNotFoundError: If ``adapter_index.json`` is missing (delegated
+                from :meth:`from_model_directory`).
             ValueError: If no adapters are found (delegated from
                 :meth:`from_model_directory`).
         """
@@ -452,12 +455,13 @@ class EmbeddedIntrinsicAdapter(Adapter):
             revision=revision,
         )
         try:
-            return EmbeddedIntrinsicAdapter.from_model_directory(local_root, intrinsic_name=intrinsic_name)
+            return EmbeddedIntrinsicAdapter.from_model_directory(
+                local_root, intrinsic_name=intrinsic_name
+            )
         except ValueError:
             if intrinsic_name is not None:
                 raise ValueError(
-                    f"No adapter found for intrinsic '{intrinsic_name}' "
-                    f"in {repo_id}"
+                    f"No adapter found for intrinsic '{intrinsic_name}' in {repo_id}"
                 ) from None
             raise ValueError(f"No adapters found in {repo_id}") from None
 
