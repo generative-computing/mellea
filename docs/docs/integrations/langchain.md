@@ -6,9 +6,9 @@ description: "Use LangChain tools inside Mellea and seed a Mellea session with L
 
 Mellea integrates with LangChain in two ways:
 
-1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../guide/glossary#tool)
-   objects and pass them to any [`MelleaSession`](../guide/glossary#melleasession) call.
-2. **Message history** — seed a Mellea [`ChatContext`](../guide/glossary#context) with
+1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../reference/glossary#tool)
+   objects and pass them to any [`MelleaSession`](../reference/glossary#melleasession) call.
+2. **Message history** — seed a Mellea [`ChatContext`](../reference/glossary#context) with
    conversation history from a LangChain session.
 
 ## Using LangChain tools
@@ -17,7 +17,7 @@ Mellea integrates with LangChain in two ways:
 for community tools).
 
 `MelleaTool.from_langchain()` wraps any LangChain `BaseTool` so it can be passed to
-`instruct()` or `chat()` via [`ModelOption.TOOLS`](../guide/glossary#modeloption):
+`instruct()` or `chat()` via [`ModelOption.TOOLS`](../reference/glossary#modeloption):
 
 ```python
 from mellea import start_session

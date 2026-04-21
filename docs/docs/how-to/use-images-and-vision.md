@@ -80,7 +80,7 @@ the PIL image is not directly available.
 
 ## Multi-turn vision with ChatContext
 
-Images passed to `instruct()` or `chat()` are stored in the [`ChatContext`](../guide/glossary#context)
+Images passed to `instruct()` or `chat()` are stored in the [`ChatContext`](../reference/glossary#context)
 turn history. Subsequent calls in the same session can reference the image without
 passing it again:
 

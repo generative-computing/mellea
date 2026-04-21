@@ -18,9 +18,9 @@ When an event fires during Mellea's execution (e.g., "about to call the LLM" or 
 Plugins are organized into six hook categories:
 
 - **Session Lifecycle** — session init, reset, and cleanup (`session_pre_init`, `session_post_init`, `session_reset`, `session_cleanup`)
-- **[Component](../guide/glossary#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
+- **[Component](../reference/glossary#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
 - **Generation Pipeline** — before and after LLM calls (`generation_pre_call`, `generation_post_call`, `generation_error`)
-- **Validation** — before and after [requirement](../guide/glossary#requirement) checks (`validation_pre_check`, `validation_post_check`)
+- **Validation** — before and after [requirement](../reference/glossary#requirement) checks (`validation_pre_check`, `validation_post_check`)
 - **Sampling Pipeline** — sampling loop events (`sampling_loop_start`, `sampling_iteration`, `sampling_repair`, `sampling_loop_end`)
 - **Tool Execution** — before and after tool invocations (`tool_pre_invoke`, `tool_post_invoke`)
 
@@ -246,7 +246,7 @@ unregister(log_generation)
 
 ### Session scope
 
-Pass plugins to [`start_session()`](../guide/glossary#melleasession), fires only within that session.
+Pass plugins to [`start_session()`](../reference/glossary#melleasession), fires only within that session.
 
 ```python
 from mellea import start_session
@@ -1003,4 +1003,4 @@ from mellea.plugins import (
 
 ---
 
-**See also:** [Glossary](../guide/glossary), [Tools and Agents](../how-to/tools-and-agents), [Security and Taint Tracking](../advanced/security-and-taint-tracking), [OpenTelemetry Tracing](../evaluation-and-observability/opentelemetry-tracing)
+**See also:** [Glossary](../reference/glossary), [Tools and Agents](../how-to/tools-and-agents), [Security and Taint Tracking](../advanced/security-and-taint-tracking), [OpenTelemetry Tracing](../evaluation-and-observability/opentelemetry-tracing)

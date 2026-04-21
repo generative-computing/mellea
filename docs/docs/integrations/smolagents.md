@@ -5,7 +5,7 @@ description: "Use HuggingFace smolagents tools inside a Mellea session."
 ---
 
 `MelleaTool.from_smolagents()` wraps any [smolagents](https://huggingface.co/docs/smolagents)
-`Tool` instance so it can be passed to any [`MelleaSession`](../guide/glossary#melleasession)
+`Tool` instance so it can be passed to any [`MelleaSession`](../reference/glossary#melleasession)
 call. The HuggingFace ecosystem provides many pre-built tools — `PythonInterpreterTool`,
 `DuckDuckGoSearchTool`, `WikipediaSearchTool`, and others.
 

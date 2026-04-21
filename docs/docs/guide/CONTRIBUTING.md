@@ -186,7 +186,7 @@ Verify before merge: relative links resolve, absolute URLs return HTTP 200.
 
 `glossary.md` defines all Mellea-specific terms. Use canonical terms from the glossary; never invent synonyms. Add new terms to `glossary.md` as you write each page.
 
-**Linking rule:** Cross-link to the glossary on **first use only** of a term on each page — not every occurrence. Use anchor links, e.g. `[`MelleaSession`](../guide/glossary#melleasession)`.
+**Linking rule:** Cross-link to the glossary on **first use only** of a term on each page — not every occurrence. Use anchor links, e.g. `[`MelleaSession`](../reference/glossary#melleasession)`.
 
 Terms that **must** be linked on first use wherever they appear in guide pages (getting-started, tutorials, concepts, how-to, integrations, advanced):
 
