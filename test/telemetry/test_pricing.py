@@ -165,3 +165,34 @@ def test_invalid_entry_negative_value(custom_pricing, caplog):
 
     assert cost is None
     assert any("invalid" in record.message for record in caplog.records)
+
+
+@pytest.mark.parametrize("bad_val", [float("nan"), float("inf")])
+def test_invalid_entry_non_finite_value(custom_pricing, caplog, bad_val):
+    """nan and inf pricing values are skipped with a warning."""
+    import logging
+
+    custom_pricing({"bad-model": {"input_per_1m": bad_val, "output_per_1m": 1.0}})
+
+    from mellea.telemetry.pricing import compute_cost
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        cost = compute_cost("bad-model", 1000, 1000)
+
+    assert cost is None
+    assert any("invalid" in record.message for record in caplog.records)
+
+
+def test_invalid_entry_no_recognised_keys(custom_pricing, caplog):
+    """Entry with no recognised pricing keys is skipped with a warning."""
+    import logging
+
+    custom_pricing({"bad-model": {"input_per_1k": 3.0, "output_per_1k": 15.0}})
+
+    from mellea.telemetry.pricing import compute_cost
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        cost = compute_cost("bad-model", 1000, 1000)
+
+    assert cost is None
+    assert any("recognised keys" in record.message for record in caplog.records)

@@ -24,6 +24,7 @@ Custom pricing file format::
 
 import json
 import logging
+import math
 import os
 from importlib.resources import files
 from pathlib import Path
@@ -45,17 +46,27 @@ def _load_pricing_json(path: str | Path) -> dict[str, Any]:
         return {}
 
 
+_PRICING_KEYS = {"input_per_1m", "output_per_1m"}
+
+
 def _validate_pricing_entry(model: str, entry: Any) -> bool:
     """Return True if entry is a valid pricing dict; log and return False otherwise."""
     if not isinstance(entry, dict):
         logger.warning("Pricing entry for %r is not a dict — skipping.", model)
         return False
     for key, val in entry.items():
-        if not isinstance(val, (int, float)) or val < 0:
+        if not isinstance(val, (int, float)) or val < 0 or not math.isfinite(val):
             logger.warning(
                 "Pricing entry for %r has invalid %r: %r — skipping.", model, key, val
             )
             return False
+    if not _PRICING_KEYS & entry.keys():
+        logger.warning(
+            "Pricing entry for %r has no recognised keys (%s) — skipping.",
+            model,
+            ", ".join(sorted(_PRICING_KEYS)),
+        )
+        return False
     return True
 
 
