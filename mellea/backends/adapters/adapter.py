@@ -374,10 +374,10 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
         adapters: list[EmbeddedIntrinsicAdapter] = []
         for entry in index.get("adapters", []):
-            if (
-                intrinsic_name is not None
-                and entry.get("intrinsic_name") != intrinsic_name
-            ):
+            entry_name = entry.get("adapter_name")
+            if entry_name is None:
+                continue
+            if intrinsic_name is not None and entry_name != intrinsic_name:
                 continue
             io_config_rel = entry.get("io_config")
             if io_config_rel is None:
@@ -386,7 +386,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
             io_config_path = model_path / io_config_rel
             if not io_config_path.exists():
                 raise ValueError(
-                    f"io.yaml for intrinsic '{entry['intrinsic_name']}' "
+                    f"io.yaml for intrinsic '{entry_name}' "
                     f"not found at {io_config_path}"
                 )
 
@@ -395,7 +395,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
             adapters.append(
                 EmbeddedIntrinsicAdapter(
-                    intrinsic_name=entry["intrinsic_name"],
+                    intrinsic_name=entry_name,
                     config=config_dict,
                     technology=entry.get("technology", "lora"),
                 )

@@ -34,7 +34,7 @@ _SAMPLE_ADAPTER_INDEX = {
     "adapters": [
         {
             "adapter_index": 1,
-            "intrinsic_name": "answerability",
+            "adapter_name": "answerability",
             "technology": "alora",
             "io_config": "io_configs/answerability/io.yaml",
             "control_token": {
@@ -46,7 +46,7 @@ _SAMPLE_ADAPTER_INDEX = {
         },
         {
             "adapter_index": 2,
-            "intrinsic_name": "citations",
+            "adapter_name": "citations",
             "technology": "lora",
             "io_config": "io_configs/citations/io.yaml",
             "control_token": {
@@ -156,9 +156,9 @@ class TestFromModelDirectory:
         """Entries with io_config=None are silently skipped."""
         index = {
             "adapters": [
-                {"intrinsic_name": "no_config", "technology": "lora"},
+                {"adapter_name": "no_config", "technology": "lora"},
                 {
-                    "intrinsic_name": "has_config",
+                    "adapter_name": "has_config",
                     "technology": "lora",
                     "io_config": "io_configs/has_config/io.yaml",
                 },
@@ -178,7 +178,7 @@ class TestFromModelDirectory:
         index = {
             "adapters": [
                 {
-                    "intrinsic_name": "test",
+                    "adapter_name": "test",
                     "io_config": "io_configs/test/io.yaml",
                     # no "technology" key
                 }
@@ -218,6 +218,26 @@ class TestFromModelDirectory:
             EmbeddedIntrinsicAdapter.from_model_directory(
                 model_dir, intrinsic_name="nonexistent"
             )
+
+    def test_adapter_name_key(self, tmp_path):
+        """Index with 'adapter_name' key is read correctly."""
+        index = {
+            "adapters": [
+                {
+                    "adapter_name": "answerability",
+                    "technology": "alora",
+                    "io_config": "io_configs/answerability/io.yaml",
+                }
+            ]
+        }
+        (tmp_path / "adapter_index.json").write_text(json.dumps(index))
+        cfg_dir = tmp_path / "io_configs" / "answerability"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "io.yaml").write_text(yaml.dump(_ANSWERABILITY_CONFIG))
+
+        adapters = EmbeddedIntrinsicAdapter.from_model_directory(tmp_path)
+        assert len(adapters) == 1
+        assert adapters[0].intrinsic_name == "answerability"
 
 
 # ---- EmbeddedIntrinsicAdapter.from_hub ----

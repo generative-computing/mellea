@@ -177,7 +177,7 @@ async def test_chat_template_kwargs_set():
     extra_body = call_kwargs.kwargs.get("extra_body", {})
 
     assert "chat_template_kwargs" in extra_body
-    assert extra_body["chat_template_kwargs"]["intrinsic_name"] == "answerability"
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
 
 
 async def test_result_processor_applied():

@@ -634,7 +634,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Embedded adapters activate via control tokens in the chat template.
         if isinstance(adapter, EmbeddedIntrinsicAdapter):
             chat_template_kwargs = extra_body.pop("chat_template_kwargs", {}) or {}
-            chat_template_kwargs["intrinsic_name"] = action.intrinsic_name
+            chat_template_kwargs["adapter_name"] = action.intrinsic_name
             extra_body["chat_template_kwargs"] = chat_template_kwargs
             # The rewriter config may set `model` to the adapter name, but
             # for embedded adapters the actual model is self._model_id.
