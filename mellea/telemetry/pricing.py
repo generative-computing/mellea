@@ -45,6 +45,20 @@ def _load_pricing_json(path: str | Path) -> dict[str, Any]:
         return {}
 
 
+def _validate_pricing_entry(model: str, entry: Any) -> bool:
+    """Return True if entry is a valid pricing dict; log and return False otherwise."""
+    if not isinstance(entry, dict):
+        logger.warning("Pricing entry for %r is not a dict — skipping.", model)
+        return False
+    for key, val in entry.items():
+        if not isinstance(val, (int, float)) or val < 0:
+            logger.warning(
+                "Pricing entry for %r has invalid %r: %r — skipping.", model, key, val
+            )
+            return False
+    return True
+
+
 class PricingRegistry:
     """Registry of LLM model pricing for per-request cost estimation.
 
@@ -67,7 +81,11 @@ class PricingRegistry:
         builtin = json.loads(builtin_text)
         custom_path = pricing_file or os.getenv("MELLEA_PRICING_FILE")
         custom = _load_pricing_json(custom_path) if custom_path else {}
-        self._pricing: dict[str, dict[str, float]] = {**builtin, **custom}
+        self._pricing: dict[str, dict[str, float]] = {
+            model: entry
+            for model, entry in {**builtin, **custom}.items()
+            if _validate_pricing_entry(model, entry)
+        }
         self._warned_models: set[str] = set()
 
     def compute_cost(

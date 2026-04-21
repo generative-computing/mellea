@@ -120,3 +120,48 @@ def test_custom_pricing_invalid_json(tmp_path, monkeypatch, caplog):
     assert any("Invalid JSON" in record.message for record in caplog.records)
     # Built-in pricing still works
     assert registry.compute_cost("claude-sonnet-4-6", 1000, 0) is not None
+
+
+def test_invalid_entry_not_a_dict(custom_pricing, caplog):
+    """Non-dict pricing entry is skipped with a warning."""
+    import logging
+
+    custom_pricing({"bad-model": "not-a-dict"})
+
+    from mellea.telemetry.pricing import compute_cost
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        cost = compute_cost("bad-model", 1000, 1000)
+
+    assert cost is None
+    assert any("not a dict" in record.message for record in caplog.records)
+
+
+def test_invalid_entry_non_numeric_value(custom_pricing, caplog):
+    """Non-numeric pricing value is skipped with a warning."""
+    import logging
+
+    custom_pricing({"bad-model": {"input_per_1m": "cheap", "output_per_1m": 1.0}})
+
+    from mellea.telemetry.pricing import compute_cost
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        cost = compute_cost("bad-model", 1000, 1000)
+
+    assert cost is None
+    assert any("invalid" in record.message for record in caplog.records)
+
+
+def test_invalid_entry_negative_value(custom_pricing, caplog):
+    """Negative pricing value is skipped with a warning."""
+    import logging
+
+    custom_pricing({"bad-model": {"input_per_1m": -1.0, "output_per_1m": 1.0}})
+
+    from mellea.telemetry.pricing import compute_cost
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        cost = compute_cost("bad-model", 1000, 1000)
+
+    assert cost is None
+    assert any("invalid" in record.message for record in caplog.records)
