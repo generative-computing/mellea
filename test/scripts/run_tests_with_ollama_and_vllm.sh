@@ -39,10 +39,12 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
-OLLAMA_MODELS=(
+OLLAMA_MODEL_LIST=(
     "granite4:micro"
     "granite4:micro-h"
     "granite3.2-vision"
+    "llama3.2"
+    "qwen2.5vl:7b"
 )
 
 # --- vLLM configuration ---
@@ -141,8 +143,8 @@ else
     # --- Start ollama server ---
     log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
-    export OLLAMA_MODELS_DIR="${OLLAMA_DIR}/models"
-    mkdir -p "$OLLAMA_MODELS_DIR"
+    export OLLAMA_MODELS="${OLLAMA_DIR}/models"
+    mkdir -p "$OLLAMA_MODELS"
 
     # Ensure ollama can find system CUDA libraries
     if [[ -d "/usr/local/cuda" ]]; then
@@ -174,7 +176,7 @@ fi
 
 # --- Pull required models ---
 export OLLAMA_HOST="127.0.0.1:${OLLAMA_PORT}"
-for model in "${OLLAMA_MODELS[@]}"; do
+for model in "${OLLAMA_MODEL_LIST[@]}"; do
     if "$OLLAMA_BIN" list 2>/dev/null | grep -q "^${model}"; then
         log "Model $model already pulled"
     else
@@ -192,7 +194,7 @@ if [[ "${SKIP_WARMUP:-0}" == "1" || "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
     log "Skipping model warmup"
 else
     log "Warming up models..."
-    for model in "${OLLAMA_MODELS[@]}"; do
+    for model in "${OLLAMA_MODEL_LIST[@]}"; do
         log "  Warming $model ..."
         curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
             -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
@@ -279,7 +281,7 @@ fi
 # WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
 IGNORE_TOOLING=""
 if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
-    IGNORE_TOOLING="--ignore=test/tooling"
+    IGNORE_TOOLING="--ignore=tooling"
     log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
 fi
 
@@ -294,6 +296,11 @@ UV_PYTHON_ARG=""
 if [[ -n "${UV_PYTHON:-}" ]]; then
     UV_PYTHON_ARG="--python $UV_PYTHON"
 fi
+
+# Download NLTK data required by granite formatter tests
+log "Downloading NLTK punkt_tab data..."
+uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+    python -c "import nltk; nltk.download('punkt_tab', quiet=True)" || true
 
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
     pytest "$PYTEST_DIR" $IGNORE_TOOLING ${@---group-by-backend} \

@@ -1,11 +1,16 @@
 """Unit tests for eval runner pure-logic helpers — no backend, no model required.
 
-Covers InputEvalResult, TestEvalResult, parse_judge_output.
+Covers InputEvalResult, TestEvalResult, parse_judge_output, _extract_first_json.
 """
 
 import pytest
 
-from cli.eval.runner import InputEvalResult, TestEvalResult, parse_judge_output
+from cli.eval.runner import (
+    InputEvalResult,
+    TestEvalResult,
+    _extract_first_json,
+    parse_judge_output,
+)
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
 # --- InputEvalResult ---
@@ -140,6 +145,57 @@ def test_parse_zero_score():
     score, reason = parse_judge_output(output)
     assert score == 0
     assert reason == "Failed"
+
+
+def test_parse_nested_json_preserves_justification():
+    output = '{"score": 1, "justification": "Correct", "reasoning": {"detail": "step-by-step"}}'
+    score, reason = parse_judge_output(output)
+    assert score == 1
+    assert reason == "Correct"
+
+
+def test_parse_json_score_no_justification_key():
+    output = '{"score": 1}'
+    score, reason = parse_judge_output(output)
+    assert score == 1
+    assert reason == output
+
+
+def test_parse_json_justification_null():
+    output = '{"score": 0, "justification": null}'
+    score, reason = parse_judge_output(output)
+    assert score == 0
+    assert reason == output
+
+
+def test_parse_second_json_when_first_lacks_score():
+    output = '{"context": "intro"} {"score": 1, "justification": "Looks good"}'
+    score, reason = parse_judge_output(output)
+    assert score == 1
+    assert reason == "Looks good"
+
+
+# --- _extract_first_json ---
+
+
+def test_extract_first_json_finds_score_object():
+    assert _extract_first_json('{"score": 1, "justification": "ok"}') == {
+        "score": 1,
+        "justification": "ok",
+    }
+
+
+def test_extract_first_json_skips_object_without_score():
+    text = '{"foo": "bar"} {"score": 0}'
+    assert _extract_first_json(text) == {"score": 0}
+
+
+def test_extract_first_json_no_json_returns_none():
+    assert _extract_first_json("plain text, no JSON here") is None
+
+
+def test_extract_first_json_no_score_key_returns_none():
+    assert _extract_first_json('{"justification": "no score anywhere"}') is None
 
 
 if __name__ == "__main__":

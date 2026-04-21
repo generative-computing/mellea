@@ -6,6 +6,7 @@ automatically record metrics when enabled. Currently includes:
 - TokenMetricsPlugin: Records token usage statistics from ModelOutputThunk.usage
 - LatencyMetricsPlugin: Records request duration and TTFB latency histograms
 - ErrorMetricsPlugin: Records LLM error counts categorized by semantic error type
+- CostMetricsPlugin: Records estimated request cost in USD from pricing registry
 - SamplingMetricsPlugin: Records sampling attempt/success/failure counts per strategy
 - RequirementMetricsPlugin: Records requirement validation check and failure counts
 - ToolMetricsPlugin: Records tool invocation counts by name and status
@@ -136,6 +137,42 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
         )
 
 
+class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
+    """Records estimated request cost metrics from generation outputs.
+
+    This plugin hooks into the generation_post_call event to automatically
+    record cost metrics when token usage and model pricing data are available.
+    Cost is skipped and a warning is logged for models not in the pricing registry.
+    """
+
+    @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_cost_metrics(
+        self, payload: GenerationPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record cost metrics after generation completes.
+
+        Args:
+            payload: Contains the model_output (ModelOutputThunk) with usage data.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_cost
+        from mellea.telemetry.pricing import compute_cost
+
+        mot = payload.model_output
+        if mot.usage is None:
+            return
+
+        model = mot.model or "unknown"
+        provider = mot.provider or "unknown"
+        cost = compute_cost(
+            model=model,
+            input_tokens=mot.usage.get("prompt_tokens"),
+            output_tokens=mot.usage.get("completion_tokens"),
+        )
+        if cost is not None:
+            record_cost(cost=cost, model=model, provider=provider)
+
+
 class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
     """Records sampling loop attempt and outcome metrics.
 
@@ -238,6 +275,7 @@ _METRICS_PLUGIN_CLASSES = (
     TokenMetricsPlugin,
     LatencyMetricsPlugin,
     ErrorMetricsPlugin,
+    CostMetricsPlugin,
     SamplingMetricsPlugin,
     RequirementMetricsPlugin,
     ToolMetricsPlugin,

@@ -366,6 +366,20 @@ def execute_test_eval(
     return test_result
 
 
+def _extract_first_json(text: str) -> dict | None:
+    """Return the first JSON object containing a ``"score"`` key, or ``None``."""
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch == "{":
+            try:
+                obj, _ = decoder.raw_decode(text, i)
+                if "score" in obj:
+                    return obj
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
 def parse_judge_output(judge_output: str) -> tuple[int | None, str]:
     """Parse score and justification from a judge model's output string.
 
@@ -377,16 +391,13 @@ def parse_judge_output(judge_output: str) -> tuple[int | None, str]:
         ``None`` if parsing failed) and ``justification`` is an explanatory
         string.
     """
-    try:
-        json_match = re.search(r'\{[^}]*"score"[^}]*\}', judge_output, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            data = json.loads(json_str)
-            score = data.get("score")
-            justification = data.get("justification")
-            return score, justification
-    except (json.JSONDecodeError, AttributeError):
-        pass
+    data = _extract_first_json(judge_output)
+    if data is not None:
+        score = data.get("score")
+        justification = data.get("justification")
+        return score, (
+            justification if isinstance(justification, str) else judge_output
+        )
 
     # if the above fails, search the text for the score
     score_match = re.search(r'score["\s:]+(\d+)', judge_output, re.IGNORECASE)

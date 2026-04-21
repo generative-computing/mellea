@@ -145,4 +145,4 @@ so vision-capable models (e.g., `amazon.nova-pro-v1:0`) support image input via
 
 ---
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration)

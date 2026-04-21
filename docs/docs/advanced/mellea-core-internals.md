@@ -277,5 +277,5 @@ for a worked example.
 
 **See also:**
 [Generative Programming](../concepts/generative-programming) |
-[Working with Data](../guide/working-with-data) |
+[Working with Data](../how-to/working-with-data) |
 [Async and Streaming](../how-to/use-async-and-streaming)

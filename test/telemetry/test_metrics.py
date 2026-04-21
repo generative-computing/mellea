@@ -587,6 +587,7 @@ def test_prometheus_exporter_with_console_exporter(
 def test_metric_instruments_lazy_initialization(enable_metrics):
     """Test that all metric instruments are lazily initialized."""
     from mellea.telemetry.metrics import (
+        _cost_counter,
         _duration_histogram,
         _input_token_counter,
         _output_token_counter,
@@ -604,6 +605,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     assert _output_token_counter is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _cost_counter is None
     assert _sampling_attempts_counter is None
     assert _sampling_successes_counter is None
     assert _sampling_failures_counter is None
@@ -612,6 +614,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     assert _tool_calls_counter is None
 
     from mellea.telemetry.metrics import (
+        record_cost,
         record_request_duration,
         record_requirement_check,
         record_requirement_failure,
@@ -625,6 +628,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
     record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+    record_cost(cost=0.001, model="llama2:7b", provider="ollama")
     record_sampling_attempt("RejectionSamplingStrategy")
     record_sampling_outcome("RejectionSamplingStrategy", success=True)
     record_sampling_outcome("RejectionSamplingStrategy", success=False)
@@ -633,6 +637,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     record_tool_call("search", "success")
 
     from mellea.telemetry.metrics import (
+        _cost_counter,
         _duration_histogram,
         _input_token_counter,
         _output_token_counter,
@@ -651,6 +656,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     assert (
         _ttfb_histogram is not None
     )  # initialized together via _get_latency_histograms
+    assert _cost_counter is not None
     assert _sampling_attempts_counter is not None
     assert _sampling_successes_counter is not None
     assert _sampling_failures_counter is not None
@@ -662,6 +668,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
 def test_record_metrics_noop_when_disabled(clean_metrics_env):
     """Test that all record functions are no-ops when metrics disabled."""
     from mellea.telemetry.metrics import (
+        record_cost,
         record_error,
         record_request_duration,
         record_requirement_check,
@@ -682,6 +689,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         provider="ollama",
         exception_class="TimeoutError",
     )
+    record_cost(cost=0.001, model="llama2:7b", provider="ollama")
     record_sampling_attempt("RejectionSamplingStrategy")
     record_sampling_outcome("RejectionSamplingStrategy", success=True)
     record_requirement_check("LLMaJRequirement")
@@ -690,6 +698,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
 
     # No instruments should have been initialized
     from mellea.telemetry.metrics import (
+        _cost_counter,
         _duration_histogram,
         _error_counter,
         _input_token_counter,
@@ -708,6 +717,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
     assert _duration_histogram is None
     assert _ttfb_histogram is None
     assert _error_counter is None
+    assert _cost_counter is None
     assert _sampling_attempts_counter is None
     assert _sampling_successes_counter is None
     assert _sampling_failures_counter is None
@@ -719,6 +729,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
 def test_record_functions_exported_in_public_api():
     """Test that all record functions are exported in the public API."""
     from mellea.telemetry import (
+        record_cost,
         record_request_duration,
         record_requirement_check,
         record_requirement_failure,
@@ -732,6 +743,7 @@ def test_record_functions_exported_in_public_api():
     assert callable(record_token_usage_metrics)
     assert callable(record_request_duration)
     assert callable(record_ttfb)
+    assert callable(record_cost)
     assert callable(record_sampling_attempt)
     assert callable(record_sampling_outcome)
     assert callable(record_requirement_check)

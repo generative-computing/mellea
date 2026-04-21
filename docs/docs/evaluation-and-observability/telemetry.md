@@ -45,6 +45,7 @@ All telemetry is configured via environment variables:
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Metrics-specific OTLP endpoint (overrides general) | none |
 | `MELLEA_METRICS_PROMETHEUS` | Enable Prometheus metric reader | `false` |
 | `OTEL_METRIC_EXPORT_INTERVAL` | Export interval in milliseconds | `60000` |
+| `MELLEA_PRICING_FILE` | Path to a JSON file with custom model pricing overrides | none |
 
 ### Logging variables
 
@@ -125,6 +126,8 @@ OpenTelemetry. No code changes are required:
   `mellea.llm.ttfb` (streaming requests only).
 - **Error counter** — `mellea.llm.errors` on each failed backend call,
   classified by semantic error type.
+- **Cost counter** — `mellea.llm.cost.usd` estimated request cost in USD,
+  when pricing data is available for the model.
 - **Sampling counters** — `mellea.sampling.attempts`, `mellea.sampling.successes`,
   and `mellea.sampling.failures` per strategy.
 - **Requirement counters** — `mellea.requirement.checks` and

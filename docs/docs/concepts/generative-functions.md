@@ -9,7 +9,7 @@ In a generative program, a function can have the same interface but delegate its
 to an LLM. Mellea calls these [**generative functions**](../guide/glossary#generative-function) and provides the [`@generative`](../guide/glossary#generative) decorator
 to define them.
 
-> **Looking to use this in code?** See [Generative Functions](../guide/generative-functions) for practical examples and API details.
+> **Looking to use this in code?** See [Generative Functions](../how-to/generative-functions) for practical examples and API details.
 
 ## The @generative decorator
 
@@ -167,4 +167,4 @@ Use `@generative` when you want a named, typed, reusable LLM-backed operation. U
 
 **See also:** [Instruct, Validate, Repair](./instruct-validate-repair) |
 [The Requirements System](./requirements-system) |
-[Tools and Agents](../guide/tools-and-agents)
+[Tools and Agents](../how-to/tools-and-agents)

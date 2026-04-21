@@ -28,6 +28,9 @@ OTLP Exporter (production observability):
 Prometheus Exporter:
 - MELLEA_METRICS_PROMETHEUS: Enable Prometheus metric reader (default: false)
 
+Pricing (for cost counter):
+- MELLEA_PRICING_FILE: Path to a JSON file with custom model pricing overrides (optional)
+
 Multiple exporters can be enabled simultaneously.
 
 Example - Console debugging:
@@ -54,6 +57,7 @@ Built-in metrics (auto-recorded via plugins when metrics are enabled):
 - Token counters: mellea.llm.tokens.input, mellea.llm.tokens.output (unit: tokens)
 - Latency histograms: mellea.llm.request.duration (unit: s), mellea.llm.ttfb (unit: s, streaming only)
 - Error counter: mellea.llm.errors (unit: {error}), categorized by semantic error type
+- Cost counter: mellea.llm.cost.usd (unit: USD), estimated cost when pricing data is available
 - Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: {attempt}/{sample}/{failure})
 - Requirement counters: mellea.requirement.checks (unit: {check}), mellea.requirement.failures (unit: {failure})
 - Tool counter: mellea.tool.calls (unit: {call}), tagged by tool name and status
@@ -722,6 +726,57 @@ def record_error(
     )
 
 
+# ---------------------------------------------------------------------------
+# Cost counter
+# ---------------------------------------------------------------------------
+
+_cost_counter: Any = None
+
+
+def _get_cost_counter() -> Any:
+    """Get or create the LLM cost counter (internal use only).
+
+    Returns:
+        Counter instrument for LLM request cost.
+    """
+    global _cost_counter
+
+    if _cost_counter is None:
+        _cost_counter = create_counter(
+            "mellea.llm.cost.usd",
+            description="Estimated LLM request cost in USD",
+            unit="USD",
+        )
+
+    return _cost_counter
+
+
+def record_cost(cost: float, model: str, provider: str) -> None:
+    """Record estimated LLM request cost in USD.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+    Only call this when pricing data is available (i.e., ``compute_cost`` returned
+    a non-None value).
+
+    Args:
+        cost: Estimated request cost in US dollars.
+        model: Model identifier (e.g. ``"gpt-4o"``, ``"claude-sonnet-4-6"``).
+        provider: Provider name (e.g. ``"openai"``, ``"ollama"``).
+
+    Example:
+        record_cost(
+            cost=0.0042,
+            model="gpt-4o",
+            provider="openai",
+        )
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    counter = _get_cost_counter()
+    counter.add(cost, {"gen_ai.request.model": model, "gen_ai.provider.name": provider})
+
+
 _sampling_attempts_counter: Any = None
 _sampling_successes_counter: Any = None
 _sampling_failures_counter: Any = None
@@ -897,6 +952,7 @@ __all__ = [
     "create_histogram",
     "create_up_down_counter",
     "is_metrics_enabled",
+    "record_cost",
     "record_error",
     "record_request_duration",
     "record_requirement_check",

@@ -23,6 +23,7 @@ from mellea.telemetry.metrics import (
     ERROR_TYPE_UNKNOWN,
 )
 from mellea.telemetry.metrics_plugins import (
+    CostMetricsPlugin,
     ErrorMetricsPlugin,
     LatencyMetricsPlugin,
     RequirementMetricsPlugin,
@@ -275,6 +276,100 @@ async def test_error_plugin_handles_none_model_output(error_plugin):
             model="unknown",
             provider="unknown",
             exception_class="RuntimeError",
+        )
+
+
+# CostMetricsPlugin tests
+
+
+@pytest.fixture
+def cost_plugin():
+    return CostMetricsPlugin()
+
+
+def _make_cost_payload(usage=None, model="test-model", provider="test-provider"):
+    """Create a GenerationPostCallPayload for cost tests."""
+    mot = ModelOutputThunk(value="hello")
+    mot.usage = usage
+    mot.model = model
+    mot.provider = provider
+    return GenerationPostCallPayload(model_output=mot)
+
+
+@pytest.mark.asyncio
+async def test_cost_plugin_records_cost_for_known_model(cost_plugin):
+    """Plugin calls record_cost when compute_cost returns a value."""
+    payload = _make_cost_payload(
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    )
+
+    with (
+        patch(
+            "mellea.telemetry.pricing.compute_cost", return_value=0.0042
+        ) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="test-model", input_tokens=100, output_tokens=50
+        )
+        mock_record.assert_called_once_with(
+            cost=0.0042, model="test-model", provider="test-provider"
+        )
+
+
+@pytest.mark.asyncio
+async def test_cost_plugin_skips_unknown_model(cost_plugin):
+    """Plugin does not call record_cost when compute_cost returns None."""
+    payload = _make_cost_payload(
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=None),
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_cost_metrics(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cost_plugin_skips_none_usage(cost_plugin):
+    """Plugin does not call record_cost when mot.usage is None."""
+    payload = _make_cost_payload(usage=None)
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost") as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_cost_metrics(payload, {})
+
+        mock_cost.assert_not_called()
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cost_plugin_unknown_model_provider_fallback(cost_plugin):
+    """model/provider fall back to 'unknown' when None on the MOT."""
+    payload = _make_cost_payload(
+        usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        model=None,
+        provider=None,
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=0.001) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="unknown", input_tokens=10, output_tokens=5
+        )
+        mock_record.assert_called_once_with(
+            cost=0.001, model="unknown", provider="unknown"
         )
 
 
