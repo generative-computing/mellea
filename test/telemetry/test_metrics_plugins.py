@@ -297,7 +297,8 @@ class _FailResult:
 
 
 class _FakeReq:
-    pass
+    def validation_fn(self, _ctx):
+        return None
 
 
 @pytest.fixture
@@ -431,10 +432,10 @@ async def test_requirement_plugin_mixed_pass_fail(requirement_plugin):
 
 
 @pytest.mark.asyncio
-async def test_requirement_plugin_failure_with_no_reason_falls_back_to_unknown(
+async def test_requirement_plugin_failure_with_no_reason_uses_default(
     requirement_plugin,
 ):
-    """A None reason falls back to 'unknown'."""
+    """A None reason falls back to the default reason."""
     req = _FakeReq()
     payload = ValidationPostCheckPayload(
         requirements=[req],
@@ -450,7 +451,7 @@ async def test_requirement_plugin_failure_with_no_reason_falls_back_to_unknown(
     ):
         await requirement_plugin.record_requirement_metrics(payload, {})
 
-        mock_fail.assert_called_once_with("_FakeReq", "unknown")
+        mock_fail.assert_called_once_with("_FakeReq", "LLM judgment")
 
 
 # ToolMetricsPlugin tests

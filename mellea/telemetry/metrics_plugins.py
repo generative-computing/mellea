@@ -198,7 +198,11 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
             req_name = type(req).__name__
             record_requirement_check(req_name)
             if not bool(result):
-                reason = getattr(result, "reason", None) or "unknown"
+                reason = (
+                    getattr(result, "reason", None)
+                    if req.validation_fn is not None
+                    else None
+                ) or "LLM judgment"
                 record_requirement_failure(req_name, reason)
 
 
