@@ -128,6 +128,9 @@ def test_litellm_ollama_instruct_options(session):
     assert "homer_simpson" in res._generate_log.model_options
 
 
+@pytest.mark.xfail(
+    strict=False, reason="Mood classification is model-dependent and non-deterministic"
+)
 @pytest.mark.qualitative
 def test_gen_stub(session):
     @generative

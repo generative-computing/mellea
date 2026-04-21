@@ -101,6 +101,9 @@ def test_format(session) -> None:
     # assert email.to.email_address.endswith("example.com")
 
 
+@pytest.mark.xfail(
+    strict=False, reason="Ollama intermittently returns empty responses for raw prompts"
+)
 @pytest.mark.qualitative
 @pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
