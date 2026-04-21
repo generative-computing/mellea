@@ -262,11 +262,13 @@ def pytest_configure(config):
 
     # Propagate --skip-resource-checks as env var so predicates.py can read it
     # at module-import time (before test collection begins).
-    try:
-        if config.getoption("--skip-resource-checks", default=False):
-            os.environ["_MELLEA_SKIP_RESOURCE_CHECKS"] = "1"
-    except (ValueError, AttributeError):
-        pass
+    if config.getoption("skip_resource_checks", default=False):
+        os.environ["_MELLEA_SKIP_RESOURCE_CHECKS"] = "1"
+
+
+def pytest_unconfigure(_config):
+    """Clean up env var so repeated programmatic pytest invocations are unaffected."""
+    os.environ.pop("_MELLEA_SKIP_RESOURCE_CHECKS", None)
 
 
 # ============================================================================
