@@ -35,6 +35,7 @@ class ModelIdentifier:
     mlx_name: str | None = None
     openai_name: str | None = None
     bedrock_name: str | None = None
+    bedrock_litellm_name: str | None = None
 
     hf_tokenizer_name: str | None = None  # if None, is the same as hf_model_name
 
@@ -183,6 +184,10 @@ MISTRALAI_MISTRAL_LARGE_123B = ModelIdentifier(
     watsonx_name="mistralai/mistral-large",
 )
 
+MISTRALAI_DEVSTRAL_2_123B = ModelIdentifier(
+    bedrock_name="mistral.devstral-2-123b",
+    bedrock_litellm_name="bedrock/converse/mistral.devstral-2-123b",
+)
 
 #####################
 #### Qwen models ####
@@ -216,11 +221,13 @@ OPENAI_GPT_OSS_20B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-20b",  # OpenAI GPT-OSS 20B
     ollama_name="gpt-oss:20b",  # Ollama
     bedrock_name="openai.gpt-oss-20b",
+    bedrock_litellm_name="bedrock/converse/openai.gpt-oss-120b-1:0",
 )
 OPENAI_GPT_OSS_120B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-120b",  # OpenAI GPT-OSS 120B
     ollama_name="gpt-oss:120b",  # Ollama
     bedrock_name="openai.gpt-oss-120b",
+    bedrock_litellm_name="bedrock/converse/openai.gpt-oss-120b-1:0",
 )
 
 ###########################
