@@ -101,15 +101,10 @@
             "group": "Evaluation and Observability",
             "pages": [
               "evaluation-and-observability/evaluate-with-llm-as-a-judge",
-              {
-                "group": "Telemetry",
-                "pages": [
-                  "evaluation-and-observability/telemetry",
-                  "evaluation-and-observability/tracing",
-                  "evaluation-and-observability/metrics",
-                  "evaluation-and-observability/logging"
-                ]
-              }
+              "evaluation-and-observability/telemetry",
+              "evaluation-and-observability/tracing",
+              "evaluation-and-observability/metrics",
+              "evaluation-and-observability/logging"
             ]
           },
           {
