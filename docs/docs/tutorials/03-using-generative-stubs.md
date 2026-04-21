@@ -258,4 +258,4 @@ context-steerable generative functions:
 
 ---
 
-**See also:** [Generative Functions](../guide/generative-functions) | [The Requirements System](../concepts/requirements-system) | [Write Custom Verifiers](../how-to/write-custom-verifiers)
+**See also:** [Generative Functions](../how-to/generative-functions) | [The Requirements System](../concepts/requirements-system) | [Write Custom Verifiers](../how-to/write-custom-verifiers)

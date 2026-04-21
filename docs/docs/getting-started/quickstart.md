@@ -94,7 +94,7 @@ chat.
 
 **Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../guide/glossary#litellm--litellmbackend),
 HuggingFace, and WatsonX are also supported. See
-[Backends and Configuration](../guide/backends-and-configuration).
+[Backends and Configuration](../how-to/backends-and-configuration).
 
 ## Troubleshooting
 

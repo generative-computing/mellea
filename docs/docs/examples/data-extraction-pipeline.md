@@ -35,7 +35,7 @@ m = start_session()
 
 `start_session()` with no arguments creates a session backed by the default
 local model. The `model_ids` import is available if you want to switch to a
-specific model later (see [Backends and configuration](../guide/backends-and-configuration)).
+specific model later (see [Backends and configuration](../how-to/backends-and-configuration)).
 
 ### Declaring the extraction function
 

@@ -250,4 +250,4 @@ tools during `transform()` calls automatically.
 
 ---
 
-**See also:** [act() and aact()](../guide/act-and-aact) | [MObjects and mify](../concepts/mobjects-and-mify)
+**See also:** [act() and aact()](../how-to/act-and-aact) | [MObjects and mify](../concepts/mobjects-and-mify)

@@ -489,4 +489,4 @@ agentic system:
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) | [Security and Taint Tracking](../advanced/security-and-taint-tracking) | [Tools and Agents](../guide/tools-and-agents)
+**See also:** [The Requirements System](../concepts/requirements-system) | [Security and Taint Tracking](../advanced/security-and-taint-tracking) | [Tools and Agents](../how-to/tools-and-agents)
