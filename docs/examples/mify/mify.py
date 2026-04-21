@@ -23,7 +23,7 @@ assert isinstance(c, MifiedProtocol)
 # You can also mify objects ad hoc.
 class MyStoreClass:
     def __init__(self, purchases: list[str]) -> None:
-        self.purchases: list[str]
+        self.purchases: list[str] = purchases
 
 
 store = MyStoreClass(["Beans", "Soil", "Watering Can"])
@@ -32,8 +32,11 @@ assert isinstance(store, MifiedProtocol)
 
 # Now, you can use these objects in MelleaSessions.
 store.format_for_llm()
+print("Starting a Mellea session and acting on the store object...")
 m = start_session()
-m.act(store)
+act_result = m.act(store)
+print("Model processed the store object.")
+print(f"Result: {act_result}\n")
 
 
 # However, unless your object/class has a __str__ function,
@@ -46,9 +49,12 @@ class MyChain:
         self.location = location
 
 
+print("Customizing how objects are represented to the model...")
 # M operations will now utilize that string representation of the
 # object when interacting with it.
-m.query(MyChain("Northeast"), "Where is my chain located?")
+print("Asking: Where is my chain located?")
+query_result = m.query(MyChain("Northeast"), "Where is my chain located?")
+print(f"Answer: {query_result}\n")
 
 
 # For more complicated representations, you can utilize mify
@@ -81,9 +87,12 @@ class MyOtherCompanyDatabase:
 | Midwest    | $420    |"""
 
 
-m.query(
+print("Controlling exactly what data is exposed to the model...")
+print("Asking: What were sales for the Northeast branch?")
+other_result = m.query(
     MyOtherCompanyDatabase(), "What were sales for the Northeast branch this month?"
 )
+print(f"Answer: {other_result}\n")
 
 
 # By default, mifying and object will also provide any functions
@@ -103,6 +112,13 @@ class MyDocumentLoader:
         return doc
 
 
+print("Using class methods as callable tools...")
 # m.transform will be able to call the from_markdown function to return
 # the poem as a MyDocumentLoader object.
-m.transform(MyDocumentLoader(), "Write a poem.")
+
+print("Prompt: Write a poem.")
+transform_result = m.transform(
+    MyDocumentLoader(), "Write a poem based on this code object."
+)
+if hasattr(transform_result, "content"):
+    print(f"Result: {transform_result.content}\n")
