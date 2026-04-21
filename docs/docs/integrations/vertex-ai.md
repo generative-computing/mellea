@@ -244,4 +244,4 @@ pip install google-cloud-aiplatform
 ---
 
 **See also:** [OpenAI and OpenAI-Compatible APIs](../integrations/openai) |
-[Backends and Configuration](../guide/backends-and-configuration)
+[Backends and Configuration](../how-to/backends-and-configuration)

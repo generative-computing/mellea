@@ -105,11 +105,11 @@ OpenAI chat format — LlamaIndex, Haystack, Semantic Kernel — works with the 
 | -------- | --- |
 | Your tool exists as a LangChain `BaseTool` | `MelleaTool.from_langchain(tool)` |
 | Your tool exists as a smolagents `Tool` | [`MelleaTool.from_smolagents(tool)`](./smolagents) |
-| You have a plain Python function to expose | [`@tool` decorator](../guide/tools-and-agents) |
+| You have a plain Python function to expose | [`@tool` decorator](../how-to/tools-and-agents) |
 | You have LangChain message history to continue | `convert_to_openai_messages` → `ChatContext` |
 | You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve) |
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) |
+**See also:** [Tools and Agents](../how-to/tools-and-agents) |
 [Context and Sessions](../concepts/context-and-sessions)

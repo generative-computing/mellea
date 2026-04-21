@@ -112,5 +112,5 @@ print(response.choices[0].message.content)
 ---
 
 **See also:** [Context and Sessions](../concepts/context-and-sessions) |
-[Backends and Configuration](../guide/backends-and-configuration) |
+[Backends and Configuration](../how-to/backends-and-configuration) |
 [CLI Reference](../reference/cli)

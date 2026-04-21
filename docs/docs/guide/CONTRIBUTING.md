@@ -74,7 +74,7 @@ before the first H2, so readers can orient themselves quickly:
 - On the **explanation** page:
 
   ```markdown
-  > **Looking to use this in code?** See [Generative Functions](../guide/generative-functions) for practical examples and API details.
+  > **Looking to use this in code?** See [Generative Functions](../how-to/generative-functions) for practical examples and API details.
   ```
 
 - On the **how-to** page:

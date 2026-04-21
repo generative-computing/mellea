@@ -166,4 +166,4 @@ For parallel generation, use `SimpleContext`.
 
 ---
 
-**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async) | [act() and aact()](../guide/act-and-aact)
+**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async) | [act() and aact()](../how-to/act-and-aact)

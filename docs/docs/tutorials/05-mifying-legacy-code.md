@@ -194,5 +194,5 @@ modifying their class definitions:
 | `mify(obj)` | You don't own the class |
 
 **See also:** [MObjects and mify](../concepts/mobjects-and-mify) |
-[Working with Data](../guide/working-with-data) |
+[Working with Data](../how-to/working-with-data) |
 [Tutorial 03: Using Generative Stubs](./03-using-generative-stubs)

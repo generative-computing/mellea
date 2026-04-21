@@ -121,5 +121,5 @@ To remove images from context on the next turn, pass `images=[]` explicitly.
 
 ---
 
-**See also:** [Working with Data](../guide/working-with-data) |
+**See also:** [Working with Data](../how-to/working-with-data) |
 [The Instruction Model](../concepts/instruct-validate-repair)
