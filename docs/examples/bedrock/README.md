@@ -18,7 +18,7 @@ export AWS_BEARER_TOKEN_BEDROCK=<your API key goes here>
 uv pip install mellea[litellm]
 ```
 
-3. You can now use Bedrock. We've included some built-in model ids for convienance:
+3. You can now use Bedrock. We've included some built-in model ids for convenience:
 
 
 ```python

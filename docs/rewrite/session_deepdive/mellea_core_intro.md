@@ -110,7 +110,7 @@ Notice that we now have an `async` function and we're using `await`. The functio
 
 ## Step 5: Lazy Computation and Thunks
 
-Now we're getting into Mellea's more sophisticated features. The async `mfuncs` versions are themselves also just convienance wrappers around a two-step process where we first dispatch an LLM call and then wait for its response. Let's call `backend.generate_from_context()` directly instead of using the functional API:
+Now we're getting into Mellea's more sophisticated features. The async `mfuncs` versions are themselves also just convenience wrappers around a two-step process where we first dispatch an LLM call and then wait for its response. Let's call `backend.generate_from_context()` directly instead of using the functional API:
 
 ```python
 import mellea.stdlib.functional as mfuncs
