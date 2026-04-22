@@ -247,6 +247,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                         from ...plugins.hooks.sampling import SamplingIterationPayload
 
                         iter_payload = SamplingIterationPayload(
+                            strategy_name=type(self).__name__,
                             iteration=loop_count,
                             action=next_action,
                             result=result,
@@ -272,6 +273,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                             from ...plugins.hooks.sampling import SamplingLoopEndPayload
 
                             end_payload = SamplingLoopEndPayload(
+                                strategy_name=type(self).__name__,
                                 success=True,
                                 iterations_used=loop_count,
                                 final_result=result,
@@ -362,6 +364,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     sample_contexts[best_failed_index] if sample_contexts else context
                 )
                 end_payload = SamplingLoopEndPayload(
+                    strategy_name=type(self).__name__,
                     success=False,
                     iterations_used=loop_count,
                     final_result=sampled_results[best_failed_index],
