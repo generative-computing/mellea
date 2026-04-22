@@ -266,7 +266,7 @@ def pytest_configure(config):
         os.environ["_MELLEA_SKIP_RESOURCE_CHECKS"] = "1"
 
 
-def pytest_unconfigure(_config):
+def pytest_unconfigure():
     """Clean up env var so repeated programmatic pytest invocations are unaffected."""
     os.environ.pop("_MELLEA_SKIP_RESOURCE_CHECKS", None)
 
