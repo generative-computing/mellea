@@ -43,7 +43,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`ainstruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). `await`-ing it starts generation
+`ainstruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). `await`-ing it starts generation
 immediately; `str(result)` resolves the value when it is ready. Every other
 method follows the same pattern: `achat()`, `aact()`, `aquery()`,
 `atransform()`, `avalidate()`.
@@ -202,8 +202,8 @@ asyncio.run(analyze_feedback(
 
 ## Step 5: Context and concurrency
 
-By default [`start_session()`](../guide/glossary#melleasession) uses [`SimpleContext`](../guide/glossary#context), which is safe for concurrent
-async calls. If you switch to [`ChatContext`](../guide/glossary#context), Mellea logs a warning because
+By default [`start_session()`](../reference/glossary#melleasession) uses [`SimpleContext`](../reference/glossary#context), which is safe for concurrent
+async calls. If you switch to [`ChatContext`](../reference/glossary#context), Mellea logs a warning because
 concurrent writes can corrupt the context state:
 
 ```text

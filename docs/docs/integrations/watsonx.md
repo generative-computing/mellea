@@ -30,7 +30,7 @@ Obtain these from the IBM Cloud console:
 
 ## Connecting
 
-The quickest path is [`start_session()`](../guide/glossary#melleasession) with `backend_name="watsonx"`:
+The quickest path is [`start_session()`](../reference/glossary#melleasession) with `backend_name="watsonx"`:
 
 ```python
 from mellea import start_session
@@ -44,7 +44,7 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-Or construct the [`Backend`](../guide/glossary#backend) directly for full control:
+Or construct the [`Backend`](../reference/glossary#backend) directly for full control:
 
 ```python
 from mellea import MelleaSession

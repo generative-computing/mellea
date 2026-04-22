@@ -9,12 +9,12 @@ description: "Use the LLM itself to evaluate output quality — inline as a requ
 
 LLM-as-a-judge (LLMaJ) uses a second model call to evaluate whether a generated
 output meets a criterion expressed in natural language. In Mellea this is the
-default validation strategy for [`req()`](../guide/glossary#requirement) — you describe what good output looks
+default validation strategy for [`req()`](../reference/glossary#requirement) — you describe what good output looks
 like, and Mellea asks the model whether the output satisfies that description.
 
 ## How it works
 
-When a [`Requirement`](../guide/glossary#requirement) has no `validation_fn`, Mellea runs a separate LLM call
+When a [`Requirement`](../reference/glossary#requirement) has no `validation_fn`, Mellea runs a separate LLM call
 after generation. The requirement's `description` and the model output are
 formatted into a judge prompt, and the model returns a verdict. Mellea converts
 the verdict to `True` / `False` by looking for `"yes"` (case-insensitive) in the
@@ -63,11 +63,11 @@ for r, vr in zip([completeness, conciseness], validation_results):
         print(f"  Reason: {vr.reason}")
 ```
 
-`m.validate()` returns a list of [`ValidationResult`](../guide/glossary#validationresult) objects, one per requirement.
+`m.validate()` returns a list of [`ValidationResult`](../reference/glossary#validationresult) objects, one per requirement.
 
 ## Capture judge reasoning with generate_logs
 
-To inspect the full judge prompt and verdict, pass a [`GenerateLog`](../guide/glossary#generatelog) list:
+To inspect the full judge prompt and verdict, pass a [`GenerateLog`](../reference/glossary#generatelog) list:
 
 ```python
 from mellea import start_session
@@ -98,8 +98,8 @@ string, which is useful for debugging requirements that are failing unexpectedly
 ## Avoid the purple elephant effect with check()
 
 Including a requirement description in the generation prompt can cause the model
-to fixate on the thing you want to avoid — the [purple elephant effect](../guide/glossary#purple-elephant-effect). Use
-[`check()`](../guide/glossary#requirement) to validate without including the description in the generation prompt:
+to fixate on the thing you want to avoid — the [purple elephant effect](../reference/glossary#purple-elephant-effect). Use
+[`check()`](../reference/glossary#requirement) to validate without including the description in the generation prompt:
 
 ```python
 from mellea import start_session
@@ -197,7 +197,7 @@ print(f"Passed: {output.success}")
 print(f"Attempts: {len(output.sample_generations)}")
 ```
 
-[`SamplingResult`](../guide/glossary#samplingresult)`.success` is `True` if at least one attempt satisfied all
+[`SamplingResult`](../reference/glossary#samplingresult)`.success` is `True` if at least one attempt satisfied all
 requirements. `sample_generations` lists every attempt made.
 
 **See also:** [The Requirements System](../concepts/requirements-system) |

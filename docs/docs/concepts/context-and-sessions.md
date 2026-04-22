@@ -4,8 +4,8 @@ description: "How Component, Backend, Context, and Session fit together in Melle
 # diataxis: explanation
 ---
 
-Every call to an LLM in Mellea passes through four layers: [**Component**](../guide/glossary#component), [**Backend**](../guide/glossary#backend),
-[**Context**](../guide/glossary#context), and **Session**. Understanding how these fit together explains both why
+Every call to an LLM in Mellea passes through four layers: [**Component**](../reference/glossary#component), [**Backend**](../reference/glossary#backend),
+[**Context**](../reference/glossary#context), and **Session**. Understanding how these fit together explains both why
 Mellea is structured the way it is and how to extend it effectively.
 
 > **Looking to use this in code?** See [Context and Sessions](../how-to/use-context-and-sessions) for practical examples and session extension patterns.
@@ -30,7 +30,7 @@ raw text or a parsed representation of a model output.
 ### Backends
 
 A `Backend` takes a `Component`, formats it into a prompt, sends it to an LLM, and
-returns the model output as a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). The `Thunk` is a lazy wrapper: it
+returns the model output as a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). The `Thunk` is a lazy wrapper: it
 holds the raw model output and parses it on access (via `.value` or `str()`).
 
 The backend is responsible for:
@@ -52,7 +52,7 @@ The context serves two purposes:
 
 1. **Prompt construction** — the backend calls `ctx.view_for_generation()` to get
    the components that should appear in the prompt. For `ChatContext`, this includes
-   all prior turns. For [`SimpleContext`](../guide/glossary#simplecontext), it includes only the current instruction.
+   all prior turns. For [`SimpleContext`](../reference/glossary#simplecontext), it includes only the current instruction.
 
 2. **Validation** — during the IVR loop, requirement validators receive the
    `Context` object. They can call `ctx.last_output()` to inspect the most recent
@@ -60,7 +60,7 @@ The context serves two purposes:
 
 ### Sessions
 
-[`MelleaSession`](../guide/glossary#melleasession) is the developer-facing layer. It wraps a backend and a context,
+[`MelleaSession`](../reference/glossary#melleasession) is the developer-facing layer. It wraps a backend and a context,
 exposes the `instruct()`, `chat()`, `validate()`, and other methods you use in your
 code, and handles the bookkeeping that ties components, context updates, and backend
 calls together.
@@ -201,7 +201,7 @@ print(last.value)
 turn = m.ctx.last_turn()
 ```
 
-`last_turn()` returns a [`ContextTurn`](../guide/glossary#contextturn) with `.input` and `.output` fields. It is
+`last_turn()` returns a [`ContextTurn`](../reference/glossary#contextturn) with `.input` and `.output` fields. It is
 useful for observability or when you need to log exactly what the model received and
 produced.
 
