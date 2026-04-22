@@ -235,10 +235,9 @@ def make_chat_endpoint(module):
                             error_type="invalid_request_error",
                             param="response_format.json_schema.schema",
                         )
-                elif request.response_format.type == "json_object":
-                    # For json_object, we don't enforce a specific schema
-                    # The backend will handle JSON mode if supported
-                    pass
+                # For "json_object" and "text", format_model remains None
+                # Note: "json_object" mode is not yet implemented - the backend
+                # receives no signal to produce JSON output (same as "text" mode)
 
             # Check if serve function accepts format parameter
             serve_sig = inspect.signature(module.serve)
