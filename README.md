@@ -30,7 +30,11 @@ For source installation directly from this repo, see [CONTRIBUTING.md](CONTRIBUT
 ## Example
 
 The `@generative` decorator turns a typed Python function into a structured LLM call.
-Docstrings become prompts, type hints become schemas — no templates, no parsers:
+Docstrings become prompts, type hints become schemas — no templates, no parsers.
+
+`start_session()` is the convenience entry point: it returns a configured
+`MelleaSession` with default backend and context settings, which you can customize
+later when needed:
 
 ```python
 from pydantic import BaseModel

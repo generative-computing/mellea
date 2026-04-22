@@ -68,6 +68,82 @@ calls together.
 `start_session()` returns a `MelleaSession` with defaults: Ollama backend, Granite 4
 Micro model, and `SimpleContext`.
 
+## Session creation
+
+There are two ways to create a session in Mellea:
+
+1. `start_session(...)` — a convenience factory that creates and configures a
+   `MelleaSession` for you
+2. `MelleaSession(backend, ctx)` — explicit construction when you want to provide
+   the backend and context objects yourself
+
+For most application code, prefer `start_session()`. It is shorter, clearer, and
+uses sensible defaults. Reach for direct `MelleaSession(...)` construction when
+you need full control over backend instantiation or want to inject a preconfigured
+backend object.
+
+| Pattern | What you provide | Defaults included | Best for |
+| --- | --- | --- | --- |
+| `start_session()` | Backend name, model ID, optional context, model options, backend kwargs | Yes — backend class resolution, default model, and `SimpleContext` | Quick prototyping, tutorials, most production app code |
+| `MelleaSession(backend, ctx)` | A fully constructed backend object and a context object | No | Advanced usage, custom backend setup, dependency injection, testing |
+
+### `start_session()`: recommended default
+
+Use `start_session()` when you want the standard Mellea entry point:
+
+```python
+from mellea import start_session
+
+m = start_session()
+result = m.instruct("Summarise this paragraph in one sentence.")
+```
+
+This is the right choice when:
+
+- You want the shortest path from example code to a working session
+- The built-in backend selection by name is sufficient
+- You want to configure the model with `model_id`, `model_options`, or backend kwargs
+  without manually instantiating backend objects
+
+You can still customize the session while keeping the convenience factory:
+
+```python
+from mellea import start_session
+from mellea.stdlib.context import ChatContext
+
+m = start_session(
+    backend_name="ollama",
+    ctx=ChatContext(),
+    model_options={"temperature": 0.2},
+)
+```
+
+### `MelleaSession(backend, ctx)`: explicit construction
+
+Use direct construction when you already have a backend instance or need explicit
+control over how it is created:
+
+```python
+from mellea import MelleaSession
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.stdlib.context import SimpleContext
+
+backend = OllamaModelBackend(
+    "granite4:micro",
+    model_options={"temperature": 0.2},
+)
+m = MelleaSession(backend, SimpleContext())
+```
+
+This is the right choice when:
+
+- You are wiring Mellea into a larger application with dependency injection
+- You need backend setup that happens before session creation
+- You want tests to construct or swap backend instances explicitly
+
+The two patterns are not different session types: `start_session()` is the
+higher-level convenience API, and it returns a regular `MelleaSession`.
+
 ## `SimpleContext` vs `ChatContext`
 
 The two built-in context types implement very different history policies.
