@@ -41,14 +41,15 @@ async def main():
     print(out)
 
     # Version that looks up info and formats the final response as an Email object.
-    # out, _ = await react(
-    #     goal="Write an email about the Mellea python library to Jake with the subject 'cool library'.",
-    #     context=ChatContext(),
-    #     backend=m.backend,
-    #     tools=[search_tool],
-    #     format=Email
-    # )
-    # print(out)
+    out, _ = await react(
+        goal="Write an email about the Mellea python library to Jake with the subject 'cool library'.",
+        context=ChatContext(),
+        backend=m.backend,
+        tools=[search_tool],
+        format=Email,
+        loop_budget=20,
+    )
+    print(out)
 
 
 asyncio.run(main())
