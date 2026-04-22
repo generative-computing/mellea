@@ -7,16 +7,10 @@ response_format: |
     "enum": ["answerable", "unanswerable"]
   }
 transformations:
-  # Convert categorical answer to continuous value by decoding logprobs
-  - type: likelihood
-    categories_to_values:
-      "answerable": 1.0
-      "unanswerable": 0.0
-    input_path: []
   # Convert scalar value to a record for consistency with other intrinsics
   - type: nest
     input_path: []
-    field_name: "answerability_likelihood"
+    field_name: "answerability"
 instruction: ~
 parameters:
   # "unanswerable" can be 6 tokens at high temperatures
