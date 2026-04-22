@@ -29,7 +29,6 @@ from mellea.formatters.granite import (
 )
 from mellea.formatters.granite.base import util as base_util
 from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
-from test.predicates import require_gpu
 
 
 def _read_file(name):
@@ -434,6 +433,9 @@ def test_canned_input(yaml_json_combo_no_alora):
     assert after_json == expected_json
 
 
+# PLEASE DO NOT REMOVE THIS DECORATOR.
+# This decorator activates the network blocking features of the pytest-recording plugin.
+@pytest.mark.block_network
 def test_openai_compat(yaml_json_combo_no_alora):
     """
     Verify that the dataclasses for intrinsics chat completions can be directly passed
@@ -573,12 +575,12 @@ def _round_floats(json_data, num_digits: int = 2):
     return result
 
 
+# THIS TEST DOES NOT REQUIRE A GPU.
+# Please do not mark it with @require_gpu.
+# THIS TEST USES gh_run TO SKIP EXPENSIVE WORK WHEN RUNNING ON CI.
+# Please do not mark this test with @pytest.mark.skipif(os.environ.get("CICD"))
 @pytest.mark.huggingface
 @pytest.mark.e2e
-@require_gpu(min_vram_gb=12)
-@pytest.mark.skipif(
-    int(os.environ.get("CICD", 0)) == 1, reason="Skipping HuggingFace tests in CI"
-)
 def test_run_transformers(yaml_json_combo_with_model, gh_run):
     """
     Run the target model end-to-end on transformers.
@@ -610,23 +612,20 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
         pytest.xfail("Downloads fail on CI server because repo is private")
 
     # Load IO config YAML for this model
-    io_yaml_path = lora_dir / "io.yaml"
-    if not os.path.exists(io_yaml_path):
-        # Use local files until proper configs are up on Hugging Face
-        io_yaml_path = cfg.yaml_file
+    io_yaml_path = cfg.yaml_file if cfg.yaml_file else lora_dir / "io.yaml"
     rewriter = IntrinsicsRewriter(config_file=io_yaml_path)
     result_processor = IntrinsicsResultProcessor(config_file=io_yaml_path)
 
     # Prepare inputs for inference
     transformed_input = rewriter.transform(model_input, **transform_kwargs)
 
-    if gh_run:
+    if gh_run == 1:
         pytest.xfail(
             "Skipping end-to-end model evaluation for this test case because it takes "
             "more than 5 seconds. "
-            "Mellea's CI fails the entire run without an error message if all 500+ "
+            "Mellea's CI fails the entire run without an error message if all 1900+ "
             "tests combined take more than 15 minutes to complete. "
-            "That works out to 1.8 seconds per test. "
+            "That works out to 0.5 seconds per test. "
             "Any test that takes more than 5 seconds needs to disable or shortcut "
             "itself during CI, or all of Mellea's development infrastructure will "
             "grind to a halt."
@@ -634,6 +633,9 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
     # Run the model using Hugging Face APIs
     model, tokenizer = base_util.load_transformers_lora(lora_dir)
+    if torch.cuda.is_available():  # Use GPU if available
+        model.cuda()
+
     generate_input, other_input = (
         base_util.chat_completion_request_to_transformers_inputs(
             transformed_input.model_dump(), tokenizer, model
