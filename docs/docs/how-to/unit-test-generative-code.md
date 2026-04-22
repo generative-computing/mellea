@@ -328,7 +328,7 @@ judge_session = start_session()
 for eval_case in test_evals:
     for idx, input_text in enumerate(eval_case.inputs):
         # Generate the prediction from the system under test.
-        prediction = "Thank you, can't wait to hear back :)"  # replace with your actual model call, this one would fail for both examples as it is not professional or formal
+        prediction = "Thank you, can't wait to hear back :)"  # replace with your actual model calls - this prediction would fail for both examples as it is not professional or formal
 
         targets = eval_case.targets[idx] if eval_case.targets else []
         eval_case.set_judge_context(input_text, prediction, targets)
