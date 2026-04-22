@@ -195,8 +195,8 @@ debugging or for choosing the best available output when the budget runs out.
 
 ## Step 4: Adding Guardian harm detection
 
-[`GuardianCheck`](../guide/glossary#guardiancheck) wraps a `MelleaSession` call and evaluates the output against a
-set of [`GuardianRisk`](../guide/glossary#guardianrisk) category. Run it after your agent responds to flag outputs before
+[`GuardianCheck`](../reference/glossary#guardiancheck) wraps a `MelleaSession` call and evaluates the output against a
+set of [`GuardianRisk`](../reference/glossary#guardianrisk) category. Run it after your agent responds to flag outputs before
 they reach downstream code.
 
 ```python
@@ -489,4 +489,4 @@ agentic system:
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) | [Security and Taint Tracking](../advanced/security-and-taint-tracking) | [Tools and Agents](../guide/tools-and-agents)
+**See also:** [The Requirements System](../concepts/requirements-system) | [Security and Taint Tracking](../advanced/security-and-taint-tracking) | [Tools and Agents](../how-to/tools-and-agents)

@@ -234,7 +234,7 @@ m = MelleaSession(
 > **Note (review needed):** Direct Anthropic API compatibility via this path has not
 > been verified against the current Mellea version. If you are using Anthropic,
 > LiteLLM provides a verified integration — see
-> [Backends and Configuration](../guide/backends-and-configuration).
+> [Backends and Configuration](../how-to/backends-and-configuration).
 
 ## Intrinsics with Granite Switch
 
@@ -323,6 +323,6 @@ local servers, list available models from the server's API or UI.
 
 ---
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration) |
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
 [Enforce Structured Output](../how-to/enforce-structured-output) |
-[Intrinsics](../advanced/intrinsics)
+[Official Granite Switch Documentation](GRANITE_SWITCH_DOCS)

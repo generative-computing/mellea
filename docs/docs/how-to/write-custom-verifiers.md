@@ -10,7 +10,7 @@ description: "Write validation functions that inspect LLM output and return pass
 [Quick Start](../getting-started/quickstart) complete, `pip install mellea`.
 
 Custom verifiers are Python functions that inspect LLM output and return a
-[`ValidationResult`](../guide/glossary#validationresult). Mellea calls them as part of the IVR loop: when a verifier
+[`ValidationResult`](../reference/glossary#validationresult). Mellea calls them as part of the IVR loop: when a verifier
 returns `False`, Mellea sends the `reason` back to the model and retries.
 
 ## The `simple_validate` shortcut

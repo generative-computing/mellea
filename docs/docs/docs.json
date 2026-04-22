@@ -54,12 +54,12 @@
           {
             "group": "How-To",
             "pages": [
-              "guide/generative-functions",
-              "guide/tools-and-agents",
-              "guide/working-with-data",
-              "guide/backends-and-configuration",
-              "guide/act-and-aact",
-              "guide/m-decompose",
+              "how-to/generative-functions",
+              "how-to/tools-and-agents",
+              "how-to/working-with-data",
+              "how-to/backends-and-configuration",
+              "how-to/act-and-aact",
+              "how-to/m-decompose",
               "how-to/use-async-and-streaming",
               "how-to/use-context-and-sessions",
               "how-to/enforce-structured-output",
@@ -136,7 +136,7 @@
           {
             "group": "Reference",
             "pages": [
-              "guide/glossary",
+              "reference/glossary",
               "reference/cli"
             ]
           },
@@ -422,6 +422,10 @@
   },
   "redirects": [
     {
+      "source": "/guide/glossary",
+      "destination": "/reference/glossary"
+    },
+    {
       "source": "/overview/overview",
       "destination": "/getting-started/quickstart"
     },
@@ -443,7 +447,7 @@
     },
     {
       "source": "/overview/architecture",
-      "destination": "/guide/backends-and-configuration"
+      "destination": "/how-to/backends-and-configuration"
     },
     {
       "source": "/core-concept/instruct-validate-repair",
@@ -455,7 +459,7 @@
     },
     {
       "source": "/core-concept/generative-slots",
-      "destination": "/guide/generative-functions"
+      "destination": "/how-to/generative-functions"
     },
     {
       "source": "/core-concept/mobjects",
@@ -463,7 +467,7 @@
     },
     {
       "source": "/core-concept/agents",
-      "destination": "/guide/tools-and-agents"
+      "destination": "/how-to/tools-and-agents"
     },
     {
       "source": "/core-concept/context-management",
@@ -491,7 +495,7 @@
     },
     {
       "source": "/core-concept/adapters",
-      "destination": "/guide/tools-and-agents"
+      "destination": "/how-to/tools-and-agents"
     },
     {
       "source": "/core-concept/contribution-guide",
@@ -547,7 +551,7 @@
     },
     {
       "source": "/dev/tool-calling",
-      "destination": "/guide/tools-and-agents"
+      "destination": "/how-to/tools-and-agents"
     },
     {
       "source": "/api/cli/m",
@@ -616,6 +620,30 @@
     {
       "source": "/api/cli/fix/genstub_fixer",
       "destination": "/reference/cli"
+    },
+    {
+      "source": "/guide/generative-functions",
+      "destination": "/how-to/generative-functions"
+    },
+    {
+      "source": "/guide/tools-and-agents",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/guide/working-with-data",
+      "destination": "/how-to/working-with-data"
+    },
+    {
+      "source": "/guide/backends-and-configuration",
+      "destination": "/how-to/backends-and-configuration"
+    },
+    {
+      "source": "/guide/act-and-aact",
+      "destination": "/how-to/act-and-aact"
+    },
+    {
+      "source": "/guide/m-decompose",
+      "destination": "/how-to/m-decompose"
     }
   ]
 }

@@ -5,8 +5,8 @@ description: "Run Mellea with IBM WatsonX AI using the WatsonxAIBackend."
 ---
 
 > **Deprecated:** The native WatsonX backend is deprecated since v0.4. Use the
-> [LiteLLM](../guide/backends-and-configuration#litellm-backend) or
-> [OpenAI](../guide/backends-and-configuration#openai-backend) backend with a
+> [LiteLLM](../how-to/backends-and-configuration#litellm-backend) or
+> [OpenAI](../how-to/backends-and-configuration#openai-backend) backend with a
 > WatsonX-compatible endpoint instead.
 
 The WatsonX backend connects to IBM's managed AI platform. It requires an API key,
@@ -30,7 +30,7 @@ Obtain these from the IBM Cloud console:
 
 ## Connecting
 
-The quickest path is [`start_session()`](../guide/glossary#melleasession) with `backend_name="watsonx"`:
+The quickest path is [`start_session()`](../reference/glossary#melleasession) with `backend_name="watsonx"`:
 
 ```python
 from mellea import start_session
@@ -44,7 +44,7 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-Or construct the [`Backend`](../guide/glossary#backend) directly for full control:
+Or construct the [`Backend`](../reference/glossary#backend) directly for full control:
 
 ```python
 from mellea import MelleaSession
@@ -111,4 +111,4 @@ pip install 'mellea[watsonx]'
 
 ---
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration)

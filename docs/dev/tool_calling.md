@@ -67,7 +67,7 @@ modification.
    `def tool_call_result(...)` on that protocol must be called by the user
    after a tool is executed. When that method is called, the context is
    updated appropriately. We can also provide a `def call_tool(tool)` method
-   for convienance, which does both the tool call and the context management
+   for convenience, which does both the tool call and the context management
        for the user.
 3. Otherwise, nothing happens. The user is responsible for updating their
    context as needed.

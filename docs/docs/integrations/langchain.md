@@ -6,9 +6,9 @@ description: "Use LangChain tools inside Mellea and seed a Mellea session with L
 
 Mellea integrates with LangChain in two ways:
 
-1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../guide/glossary#tool)
-   objects and pass them to any [`MelleaSession`](../guide/glossary#melleasession) call.
-2. **Message history** — seed a Mellea [`ChatContext`](../guide/glossary#context) with
+1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../reference/glossary#tool)
+   objects and pass them to any [`MelleaSession`](../reference/glossary#melleasession) call.
+2. **Message history** — seed a Mellea [`ChatContext`](../reference/glossary#context) with
    conversation history from a LangChain session.
 
 ## Using LangChain tools
@@ -17,7 +17,7 @@ Mellea integrates with LangChain in two ways:
 for community tools).
 
 `MelleaTool.from_langchain()` wraps any LangChain `BaseTool` so it can be passed to
-`instruct()` or `chat()` via [`ModelOption.TOOLS`](../guide/glossary#modeloption):
+`instruct()` or `chat()` via [`ModelOption.TOOLS`](../reference/glossary#modeloption):
 
 ```python
 from mellea import start_session
@@ -105,11 +105,11 @@ OpenAI chat format — LlamaIndex, Haystack, Semantic Kernel — works with the 
 | -------- | --- |
 | Your tool exists as a LangChain `BaseTool` | `MelleaTool.from_langchain(tool)` |
 | Your tool exists as a smolagents `Tool` | [`MelleaTool.from_smolagents(tool)`](./smolagents) |
-| You have a plain Python function to expose | [`@tool` decorator](../guide/tools-and-agents) |
+| You have a plain Python function to expose | [`@tool` decorator](../how-to/tools-and-agents) |
 | You have LangChain message history to continue | `convert_to_openai_messages` → `ChatContext` |
 | You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve) |
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) |
+**See also:** [Tools and Agents](../how-to/tools-and-agents) |
 [Context and Sessions](../concepts/context-and-sessions)

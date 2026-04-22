@@ -94,6 +94,9 @@ def require_gpu(*, min_vram_gb: int | None = None):
     Args:
         min_vram_gb: Minimum VRAM in GB.  When ``None``, any GPU suffices.
     """
+    if os.environ.get("_MELLEA_SKIP_RESOURCE_CHECKS"):
+        return pytest.mark.skipif(False, reason="")
+
     if not _gpu_available():
         return pytest.mark.skipif(True, reason="No GPU available (CUDA/MPS)")
 
@@ -124,6 +127,9 @@ def _system_ram_gb() -> float:
 
 def require_ram(min_gb: int):
     """Skip unless the system has at least *min_gb* GB of RAM."""
+    if os.environ.get("_MELLEA_SKIP_RESOURCE_CHECKS"):
+        return pytest.mark.skipif(False, reason="")
+
     ram = _system_ram_gb()
     if ram > 0 and ram < min_gb:
         return pytest.mark.skipif(

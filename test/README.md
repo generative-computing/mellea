@@ -136,6 +136,10 @@ pytestmark = [pytest.mark.e2e, pytest.mark.huggingface, require_gpu(), require_r
 | `require_ram(min_gb=N)` | N GB+ system RAM |
 | `require_api_key("ENV_VAR")` | Specific API credentials |
 
+Pass `--skip-resource-checks` to bypass `require_gpu` and `require_ram` gates — useful for running test logic on under-spec hardware or reproducing failures from higher-spec machines. API credential and Ollama checks are unaffected. On machines with no GPU at all, gated tests will run and may fail naturally.
+
+The env var `_MELLEA_SKIP_RESOURCE_CHECKS=1` has the same effect and can be used in CI environments without modifying the pytest invocation.
+
 > **Deprecated:** The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`,
 > and `requires_gpu_isolation` are deprecated. Existing tests using them still work
 > (conftest auto-skip handles them) but new tests must use predicates. Migrate legacy

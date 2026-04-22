@@ -30,14 +30,14 @@ def check_answerability(
             for answerability checks.
 
     Returns:
-        Answerability score as a floating-point value from 0 to 1.
+        A string value of either "answerable" or "unanswerable"
     """
     result_json = call_intrinsic(
         "answerability",
         context.add(Message("user", question, documents=list(documents))),
         backend,
     )
-    return result_json["answerability_likelihood"]
+    return result_json["answerability"]
 
 
 def rewrite_question(
@@ -146,7 +146,10 @@ def check_context_relevance(
             intrinsic.
 
     Returns:
-        Context relevance score as a floating-point value from 0 to 1.
+        Context relevance judgement as one of the following strings:
+        - "relevant"
+        - "irrelevant"
+        - "partially relevant"
     """
     result_json = call_intrinsic(
         "context_relevance",
@@ -180,7 +183,7 @@ def flag_hallucinated_content(
 
     Returns:
         List of records with the following fields: ``response_begin``,
-        ``response_end``, ``response_text``, ``faithfulness_likelihood``,
+        ``response_end``, ``response_text``, ``faithfulness``,
         ``explanation``.
     """
     result_json = call_intrinsic(

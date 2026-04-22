@@ -260,5 +260,5 @@ Both patterns support the full IVR loop, requirements, sampling strategies, and
 
 ---
 
-**See also:** [Generative Functions](../guide/generative-functions) |
+**See also:** [Generative Functions](../how-to/generative-functions) |
 [The Requirements System](../concepts/requirements-system)
