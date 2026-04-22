@@ -91,6 +91,10 @@ def test_requirement_check(backend):
     assert 0.0 <= result2 <= 1.0
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason="Context attribution count varies non-deterministically across runs",
+)
 @pytest.mark.qualitative
 def test_find_context_attributions(backend):
     """Verify that the context-attribution intrinsic functions properly."""

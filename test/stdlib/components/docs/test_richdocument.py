@@ -20,7 +20,9 @@ pytestmark = pytest.mark.integration
 def rd() -> RichDocument:
     # Use a specific document so we can test some of the functionality
     # related to extracting and transforming text.
-    return RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
+    return RichDocument.from_document_file(
+        "https://arxiv.org/pdf/1906.04043", do_ocr=False
+    )
 
 
 def test_richdocument_basics(rd: RichDocument):

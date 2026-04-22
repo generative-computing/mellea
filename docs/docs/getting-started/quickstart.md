@@ -22,7 +22,7 @@ print(str(email))
 ```
 
 Three lines: create a session, instruct, print. The `instruct()` call returns a
-[`ModelOutputThunk`](../guide/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
+[`ModelOutputThunk`](../reference/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
 
 > **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
 
@@ -81,20 +81,20 @@ over loop budget, custom validators, and the full `instruct()` API.
 
 ## Core concepts
 
-**Sessions** — [`MelleaSession`](../guide/glossary#melleasession) is the main entry point. `start_session()` creates one
-with defaults: Ollama backend, Granite 4 Micro, [`SimpleContext`](../guide/glossary#context) (single-turn).
+**Sessions** — [`MelleaSession`](../reference/glossary#melleasession) is the main entry point. `start_session()` creates one
+with defaults: Ollama backend, Granite 4 Micro, [`SimpleContext`](../reference/glossary#context) (single-turn).
 
 **Instructions** — `instruct()` builds a structured `Instruction` component, not a
 raw chat message. It supports a description, requirements, user variables, grounding
 context, and few-shot examples.
 
-**Contexts** — `SimpleContext` holds a single turn. [`ChatContext`](../guide/glossary#context) accumulates turns for
+**Contexts** — `SimpleContext` holds a single turn. [`ChatContext`](../reference/glossary#context) accumulates turns for
 multi-turn conversations. Pass `ctx=ChatContext()` to `start_session()` for stateful
 chat.
 
-**Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../guide/glossary#litellm--litellmbackend),
+**Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../reference/glossary#litellm--litellmbackend),
 HuggingFace, and WatsonX are also supported. See
-[Backends and Configuration](../guide/backends-and-configuration).
+[Backends and Configuration](../how-to/backends-and-configuration).
 
 ## Troubleshooting
 

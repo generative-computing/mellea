@@ -30,7 +30,5 @@
         ]
       }
     }
-  },
-  "logprobs": true,
-  "top_logprobs": 10
+  }
 }

@@ -91,11 +91,11 @@ def test_answerability(backend):
 
     # First call triggers adapter loading
     result = rag.check_answerability(next_user_turn, documents, context, backend)
-    assert pytest.approx(result, rel=0.01) == 1.0
+    assert result == "answerable"
 
     # Second call hits a different code path from the first one
     result = rag.check_answerability(next_user_turn, documents, context, backend)
-    assert pytest.approx(result, rel=0.01) == 1.0
+    assert result == "answerable"
 
 
 @pytest.mark.qualitative
@@ -141,11 +141,11 @@ def test_context_relevance(backend):
 
     # First call triggers adapter loading
     result = rag.check_context_relevance(question, document, context, backend)
-    assert pytest.approx(result, abs=1e-2) == 0.0
+    assert result == "irrelevant"
 
     # Second call hits a different code path from the first one
     result = rag.check_context_relevance(question, document, context, backend)
-    assert pytest.approx(result, abs=1e-2) == 0.0
+    assert result == "irrelevant"
 
 
 @pytest.mark.qualitative
@@ -158,12 +158,12 @@ def test_hallucination_detection(backend):
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     # pytest.approx() chokes on lists of records, so we do this complicated dance.
     for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=5e-2) == e
+        assert r == e
 
     # Second call hits a different code path from the first one
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=5e-2) == e
+        assert r == e
 
 
 @pytest.mark.qualitative

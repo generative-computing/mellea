@@ -173,6 +173,93 @@ Error metrics are recorded when a backend raises an exception during generation,
 after the request has been dispatched to the provider. Construction-time errors
 (e.g. missing API key) are not captured by the error counter.
 
+## Cost metrics
+
+Mellea estimates request cost automatically after each LLM call when pricing data
+is available. No code changes are required.
+
+### Cost instrument
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.cost.usd` | Counter | `USD` | Estimated request cost in US dollars |
+
+### Cost attributes
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-5.4`, `claude-sonnet-4-6` |
+
+### Pricing data
+
+Mellea ships with built-in pricing for current OpenAI and Anthropic models. Prices
+are approximate and may become stale as providers update their rates. For models
+without built-in pricing, cost is not recorded and a warning is logged instead.
+
+### Custom pricing
+
+Override built-in prices or add pricing for any model using a JSON file:
+
+```bash
+export MELLEA_PRICING_FILE=/path/to/my-pricing.json
+```
+
+The file format maps model IDs to per-million-token rates:
+
+```json
+{
+  "my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0},
+  "gpt-5.4": {"input_per_1m": 2.5, "output_per_1m": 15.0}
+}
+```
+
+Custom entries override built-in prices. Errors loading the file are logged as
+warnings and built-in prices are used as a fallback.
+
+## Operational metrics
+
+Mellea records metrics for its internal sampling, validation, and tool execution
+loops. These counters give visibility into retry behavior, validation failure
+rates, and tool call health — independent of the underlying LLM provider.
+
+### Sampling counters
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.sampling.attempts` | Counter | `{attempt}` | Sampling attempts per loop iteration |
+| `mellea.sampling.successes` | Counter | `{sample}` | Sampling loops that produced a passing sample |
+| `mellea.sampling.failures` | Counter | `{failure}` | Sampling loops that exhausted the loop budget without success |
+
+All sampling metrics include:
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `strategy` | Sampling strategy class name | `RejectionSamplingStrategy`, `MultiTurnStrategy`, `RepairTemplateStrategy` |
+
+### Requirement counters
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.requirement.checks` | Counter | `{check}` | Requirement validation checks performed |
+| `mellea.requirement.failures` | Counter | `{failure}` | Requirement validation checks that failed |
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` |
+| `reason` | Human-readable failure reason (`mellea.requirement.failures` only) | `"Output did not satisfy constraint"`, `"unknown"` |
+
+### Tool counter
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.tool.calls` | Counter | `{call}` | Tool invocations by name and status |
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `tool` | Name of the invoked tool | `"search"`, `"calculator"` |
+| `status` | Execution outcome | `success`, `failure` |
+
 ## Metrics export configuration
 
 Mellea supports multiple metrics exporters that can be used independently or

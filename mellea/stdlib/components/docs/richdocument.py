@@ -120,18 +120,22 @@ class RichDocument(Component[str]):
         return cls(doc_doc)
 
     @classmethod
-    def from_document_file(cls, source: str | Path | DocumentStream) -> RichDocument:
+    def from_document_file(
+        cls, source: str | Path | DocumentStream, do_ocr: bool = True
+    ) -> RichDocument:
         """Convert a document file to a ``RichDocument`` using Docling.
 
         Args:
             source (str | Path | DocumentStream): Path or stream for the
                 source document (e.g. a PDF or Markdown file).
+            do_ocr (bool): Whether to run OCR on the document. Disable for
+                text-based PDFs to avoid downloading OCR model weights.
 
         Returns:
             RichDocument: A new ``RichDocument`` wrapping the converted document.
         """
         pipeline_options = PdfPipelineOptions(
-            images_scale=2.0, generate_picture_images=True
+            images_scale=2.0, generate_picture_images=True, do_ocr=do_ocr
         )
 
         converter = DocumentConverter(
