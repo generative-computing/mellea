@@ -634,8 +634,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Set model/provider early so they are available in the error path
-        output.model = self._get_hf_model_id()
-        output.provider = "huggingface"
+        output.generation.model = self._get_hf_model_id()
+        output.generation.provider = "huggingface"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -886,8 +886,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             # Set model/provider early so they are available in the error path
-            output.model = self._get_hf_model_id()
-            output.provider = "huggingface"
+            output.generation.model = self._get_hf_model_id()
+            output.generation.provider = "huggingface"
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1035,8 +1035,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             # Set model/provider early so they are available in the error path
-            output.model = self._get_hf_model_id()
-            output.provider = "huggingface"
+            output.generation.model = self._get_hf_model_id()
+            output.generation.provider = "huggingface"
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1184,15 +1184,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 pass
 
         if n_prompt is not None and n_completion is not None:
-            mot.usage = {
+            mot.generation.usage = {
                 "prompt_tokens": n_prompt,
                 "completion_tokens": n_completion,
                 "total_tokens": n_prompt + n_completion,
             }
 
         # Populate model and provider metadata
-        mot.model = self._get_hf_model_id()
-        mot.provider = "huggingface"
+        mot.generation.model = self._get_hf_model_id()
+        mot.generation.provider = "huggingface"
 
         # Record tracing if span exists
         if span is not None:
@@ -1204,8 +1204,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
-                if mot.usage:
-                    record_token_usage(span, mot.usage)
+                if mot.generation.usage:
+                    record_token_usage(span, mot.generation.usage)
 
             # Close the span now that async operation is complete
             end_backend_span(span)

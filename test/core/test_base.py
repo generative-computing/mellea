@@ -1,4 +1,5 @@
 import base64
+import copy
 import io
 from typing import Any
 
@@ -149,12 +150,42 @@ def test_mot_copy_from_copies_tool_calls():
     assert a.tool_calls == {"fn": None}
 
 
-def test_mot_copy_from_copies_usage():
+def _make_mot_with_generation() -> ModelOutputThunk:
+    mot = ModelOutputThunk(value="x")
+    mot.generation.usage = {"prompt_tokens": 10}
+    mot.generation.model = "test-model"
+    mot.generation.provider = "test-provider"
+    mot.generation.streaming = True
+    mot.generation.ttfb_ms = 42.0
+    return mot
+
+
+def test_mot_copy_from_copies_generation():
     a = ModelOutputThunk(value=None)
-    b = ModelOutputThunk(value="x")
-    b.usage = {"prompt_tokens": 10}
+    b = _make_mot_with_generation()
     a._copy_from(b)
-    assert a.usage == {"prompt_tokens": 10}
+    assert a.generation.usage == {"prompt_tokens": 10}
+    assert a.generation.model == "test-model"
+    assert a.generation.provider == "test-provider"
+    assert a.generation.streaming is True
+    assert a.generation.ttfb_ms == 42.0
+
+
+def test_mot_shallow_copy_shares_generation():
+    original = _make_mot_with_generation()
+    copied = copy.copy(original)
+    assert copied.generation is original.generation
+
+
+def test_mot_deep_copy_clones_generation():
+    original = _make_mot_with_generation()
+    deepcopied = copy.deepcopy(original)
+    assert deepcopied.generation is not original.generation
+    assert deepcopied.generation.usage == {"prompt_tokens": 10}
+    assert deepcopied.generation.model == "test-model"
+    assert deepcopied.generation.provider == "test-provider"
+    assert deepcopied.generation.streaming is True
+    assert deepcopied.generation.ttfb_ms == 42.0
 
 
 if __name__ == "__main__":

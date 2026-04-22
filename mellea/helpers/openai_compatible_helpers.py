@@ -225,19 +225,21 @@ def build_completion_usage(output: Any) -> CompletionUsage | None:
     """Build a normalized usage object from a model output, if available.
 
     Args:
-        output: Model output object that may expose a ``usage`` mapping with
+        output: Model output object whose ``generation.usage`` mapping contains
             token counts.
 
     Returns:
         A ``CompletionUsage`` object when usage metadata is present on the
         output, otherwise ``None``.
     """
-    if not hasattr(output, "usage") or output.usage is None:
+    if output.generation.usage is None:
         return None
 
-    prompt_tokens = output.usage.get("prompt_tokens", 0)
-    completion_tokens = output.usage.get("completion_tokens", 0)
-    total_tokens = output.usage.get("total_tokens", prompt_tokens + completion_tokens)
+    prompt_tokens = output.generation.usage.get("prompt_tokens", 0)
+    completion_tokens = output.generation.usage.get("completion_tokens", 0)
+    total_tokens = output.generation.usage.get(
+        "total_tokens", prompt_tokens + completion_tokens
+    )
     return CompletionUsage(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

@@ -383,8 +383,8 @@ class LiteLLMBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.model = str(self.model_id)
-        output.provider = "litellm"
+        output.generation.model = str(self.model_id)
+        output.generation.provider = "litellm"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -551,11 +551,11 @@ class LiteLLMBackend(FormatterBackend):
 
         # Populate standardized usage field (LiteLLM uses OpenAI format)
         if usage:
-            mot.usage = usage
+            mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.model = str(self.model_id)
-        mot.provider = "litellm"
+        mot.generation.model = str(self.model_id)
+        mot.generation.provider = "litellm"
 
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")
