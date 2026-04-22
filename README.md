@@ -30,11 +30,7 @@ For source installation directly from this repo, see [CONTRIBUTING.md](CONTRIBUT
 ## Example
 
 The `@generative` decorator turns a typed Python function into a structured LLM call.
-Docstrings become prompts, type hints become schemas — no templates, no parsers.
-
-`start_session()` is the convenience entry point: it returns a configured
-`MelleaSession` with default backend and context settings, which you can customize
-later when needed:
+Docstrings become prompts, type hints become schemas — no templates, no parsers:
 
 ```python
 from pydantic import BaseModel
@@ -53,6 +49,9 @@ user = extract_user(m, text="User log 42: Alice is 31 years old.")
 print(user.name)  # Alice
 print(user.age)   # 31 — always an int, guaranteed by the schema
 ```
+
+`start_session()` is the convenience entry point: it returns a `MelleaSession`
+with sensible defaults you can override as needed.
 
 ## What Mellea Does
 

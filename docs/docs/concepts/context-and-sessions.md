@@ -73,7 +73,7 @@ Micro model, and `SimpleContext`.
 There are two ways to create a session in Mellea:
 
 1. `start_session(...)` — a convenience factory that creates and configures a
-   `MelleaSession` for you
+   `MelleaSession`
 2. `MelleaSession(backend, ctx)` — explicit construction when you want to provide
    the backend and context objects yourself
 
@@ -98,7 +98,7 @@ m = start_session()
 result = m.instruct("Summarise this paragraph in one sentence.")
 ```
 
-This is the right choice when:
+Use it when:
 
 - You want the shortest path from example code to a working session
 - The built-in backend selection by name is sufficient
@@ -135,7 +135,7 @@ backend = OllamaModelBackend(
 m = MelleaSession(backend, SimpleContext())
 ```
 
-This is the right choice when:
+Use it when:
 
 - You are wiring Mellea into a larger application with dependency injection
 - You need backend setup that happens before session creation
