@@ -1,20 +1,46 @@
 """Logging utilities for the mellea core library.
 
-Provides ``MelleaLogger``, a singleton logger with colour-coded console output and
-an optional REST handler (``RESTHandler``) that forwards log records to a local
-``/api/receive`` endpoint when the ``MELLEA_FLOG`` environment variable is set. All
-internal mellea modules obtain their logger via ``MelleaLogger.get_logger()``.
+Provides ``MelleaLogger``, a singleton logger with colour-coded console output,
+an optional rotating file handler, and optional OTLP / webhook forwarding.
+All internal mellea modules obtain their logger via ``MelleaLogger.get_logger()``.
+
+Handler setup is performed by :func:`configure_logging`, which is called
+automatically on the first :meth:`MelleaLogger.get_logger` invocation.
 
 Environment variables
 ---------------------
+``MELLEA_LOG_ENABLED``
+    Master switch for all logging handlers.  Set to ``false`` / ``0`` / ``no`` to
+    suppress all handlers (useful in test environments).  Defaults to ``true``.
 ``MELLEA_LOG_LEVEL``
     Minimum log level name (e.g. ``DEBUG``, ``INFO``, ``WARNING``).  Defaults to
     ``INFO``.
 ``MELLEA_LOG_JSON``
-    Set to any truthy value (``1``, ``true``, ``yes``) to emit structured JSON on
-    the console instead of the colour-coded human-readable format.
+    Set to any truthy value (``1``, ``true``, ``yes``) to emit structured JSON
+    instead of colour-coded human-readable text.  Applies to both the console and
+    file handlers.
+``MELLEA_LOG_CONSOLE``
+    Set to ``false`` / ``0`` / ``no`` to disable the console (stdout) handler.
+    Defaults to ``true``.
+``MELLEA_LOG_FILE``
+    Absolute or relative path for rotating file output (e.g.
+    ``/var/log/mellea.log``).  When unset no file handler is attached.
+``MELLEA_LOG_FILE_MAX_BYTES``
+    Maximum size in bytes before the log file is rotated.  Defaults to
+    ``10485760`` (10 MB).
+``MELLEA_LOG_FILE_BACKUP_COUNT``
+    Number of rotated backup files to keep.  Defaults to ``5``.
+``MELLEA_LOG_OTLP``
+    Set to ``true`` / ``1`` / ``yes`` to export logs via OpenTelemetry Logs
+    Protocol.  Requires ``opentelemetry-sdk`` and an OTLP endpoint configured
+    via ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
+``MELLEA_LOG_WEBHOOK``
+    HTTP(S) URL to forward log records to via HTTP POST.  When set a
+    :class:`RESTHandler` is attached.  Supersedes the deprecated ``MELLEA_FLOG``
+    and ``FLOG`` variables.
 ``MELLEA_FLOG``
-    When set, log records are forwarded to a local REST endpoint.
+    Deprecated alias for ``MELLEA_LOG_WEBHOOK``.  Activates a ``RESTHandler``
+    pointed at ``http://localhost:8000/api/receive``.
 """
 
 import contextlib
@@ -24,7 +50,9 @@ import logging
 import os
 import sys
 import threading
+import warnings
 from collections.abc import Generator
+from logging.handlers import RotatingFileHandler as _RotatingFileHandler
 from typing import Any
 
 import requests
@@ -36,6 +64,7 @@ try:
 except ImportError:
     _OTEL_AVAILABLE = False
 
+from ..telemetry import get_otlp_log_handler
 from ..telemetry.context import _CONTEXT_VARS as _telemetry_vars, MelleaContextFilter
 
 # ---------------------------------------------------------------------------
@@ -203,11 +232,13 @@ class OtelTraceFilter(logging.Filter):
 
 
 class RESTHandler(logging.Handler):
-    """Logging handler that forwards records to a local REST endpoint.
+    """Logging handler that forwards records to an HTTP endpoint unconditionally.
 
-    Sends log records as JSON to ``/api/receive`` when the ``MELLEA_FLOG`` environment
-    variable is set. Failures are silently suppressed to avoid disrupting the
-    application.
+    Attach this handler only when a webhook URL is configured; it sends every
+    record it receives.  Use :func:`configure_logging` or
+    :meth:`MelleaLogger.get_logger` to obtain a pre-configured instance.
+
+    Failures are silently suppressed to avoid disrupting the application.
 
     Args:
         api_url (str): The URL of the REST endpoint that receives log records.
@@ -226,29 +257,29 @@ class RESTHandler(logging.Handler):
         self.headers = headers or {"Content-Type": "application/json"}
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Forwards a log record to the REST endpoint when the ``MELLEA_FLOG`` environment variable is set.
+        """Forward *record* to the configured REST endpoint.
 
-        Silently suppresses any network or HTTP errors to avoid disrupting the application.
+        Silently suppresses any network or HTTP errors to avoid disrupting
+        the application.
 
         Args:
             record (logging.LogRecord): The log record to forward.
         """
-        if _check_flog_env():
-            formatter = self.formatter
-            if isinstance(formatter, JsonFormatter):
-                log_dict = formatter.format_as_dict(record)
-            else:
-                log_dict = {"message": self.format(record)}
-            try:
-                response = requests.request(
-                    self.method,
-                    self.api_url,
-                    headers=self.headers,
-                    data=json.dumps([log_dict]),
-                )
-                response.raise_for_status()
-            except requests.exceptions.RequestException as _:
-                pass
+        formatter = self.formatter
+        if isinstance(formatter, JsonFormatter):
+            log_dict = formatter.format_as_dict(record)
+        else:
+            log_dict = {"message": self.format(record)}
+        try:
+            response = requests.request(
+                self.method,
+                self.api_url,
+                headers=self.headers,
+                data=json.dumps([log_dict]),
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException:
+            pass
 
 
 class JsonFormatter(logging.Formatter):
@@ -463,13 +494,137 @@ class CustomFormatter(logging.Formatter):
         return result
 
 
+def _parse_bool_env(value: str, default: bool = True) -> bool:
+    """Parse an environment variable string as a boolean.
+
+    Args:
+        value: Raw environment variable string (may be empty).
+        default: Value to return when *value* is empty or unrecognised.
+
+    Returns:
+        bool: Parsed boolean value.
+    """
+    v = value.strip().lower()
+    if v in ("1", "true", "yes"):
+        return True
+    if v in ("0", "false", "no"):
+        return False
+    return default
+
+
+def _resolve_webhook_url() -> str | None:
+    """Return the configured webhook URL, with deprecated-variable fallbacks.
+
+    Checks in priority order:
+
+    1. ``MELLEA_LOG_WEBHOOK`` — the canonical variable.
+    2. ``MELLEA_FLOG`` — deprecated; emits :class:`DeprecationWarning` and
+       returns ``http://localhost:8000/api/receive``.
+    3. ``FLOG`` — deprecated; emits :class:`DeprecationWarning` and returns
+       ``http://localhost:8000/api/receive``.
+
+    Returns:
+        str | None: The URL to POST log records to, or ``None`` if no webhook
+        is configured.
+    """
+    url = os.environ.get("MELLEA_LOG_WEBHOOK", "").strip()
+    if url:
+        return url
+
+    if os.environ.get("MELLEA_FLOG"):
+        warnings.warn(
+            "MELLEA_FLOG is deprecated and will be removed in a future release. "
+            "Use MELLEA_LOG_WEBHOOK instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return "http://localhost:8000/api/receive"
+
+    if os.environ.get("FLOG"):
+        warnings.warn(
+            "FLOG is deprecated and will be removed in a future release. "
+            "Use MELLEA_LOG_WEBHOOK instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return "http://localhost:8000/api/receive"
+
+    return None
+
+
+def configure_logging(logger: logging.Logger) -> None:
+    """Attach log handlers to *logger* based on current environment variables.
+
+    It always appends new handlers (the caller is responsible for clearing
+    existing ones before re-configuring).  It is called automatically by
+    :meth:`MelleaLogger.get_logger` and is also available for programmatic use.
+
+    When ``MELLEA_LOG_ENABLED`` is falsy no handlers are attached; the logger
+    still exists and accepts records, but they are silently discarded.
+
+    Args:
+        logger: The :class:`logging.Logger` to configure.
+    """
+    if not _parse_bool_env(os.environ.get("MELLEA_LOG_ENABLED", ""), default=True):
+        return
+
+    use_json = _parse_bool_env(os.environ.get("MELLEA_LOG_JSON", ""), default=False)
+
+    # --- Webhook / REST handler ---
+    webhook_url = _resolve_webhook_url()
+    if webhook_url:
+        rest_handler = RESTHandler(webhook_url)
+        rest_handler.setFormatter(JsonFormatter())
+        logger.addHandler(rest_handler)
+
+    # --- Console / stream handler ---
+    if _parse_bool_env(os.environ.get("MELLEA_LOG_CONSOLE", ""), default=True):
+        stream_handler = logging.StreamHandler(stream=sys.stdout)
+        if use_json:
+            stream_handler.setFormatter(JsonFormatter())
+        else:
+            stream_handler.setFormatter(CustomFormatter(datefmt="%H:%M:%S,%03d"))
+        logger.addHandler(stream_handler)
+
+    # --- Optional rotating file handler ---
+    log_file = os.environ.get("MELLEA_LOG_FILE", "").strip()
+    if log_file:
+        try:
+            max_bytes = int(os.environ.get("MELLEA_LOG_FILE_MAX_BYTES", "10485760"))
+            backup_count = int(os.environ.get("MELLEA_LOG_FILE_BACKUP_COUNT", "5"))
+            file_handler = _RotatingFileHandler(
+                log_file, maxBytes=max_bytes, backupCount=backup_count
+            )
+            if use_json:
+                file_handler.setFormatter(JsonFormatter())
+            else:
+                file_handler.setFormatter(
+                    logging.Formatter(
+                        "%(asctime)s - %(levelname)s - %(message)s",
+                        datefmt="%Y-%m-%dT%H:%M:%S",
+                    )
+                )
+            logger.addHandler(file_handler)
+        except (ValueError, OSError) as exc:
+            warnings.warn(
+                f"Failed to configure file logging handler for {log_file!r}: {exc}. "
+                "File logging will be skipped.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    # --- Optional OTLP handler ---
+    otlp_handler = get_otlp_log_handler()
+    if otlp_handler:
+        logger.addHandler(otlp_handler)
+
+
 class MelleaLogger:
-    """Singleton logger with colour-coded console output and optional REST forwarding.
+    """Singleton logger with colour-coded console output and configurable handlers.
 
     Obtain the shared logger instance via ``MelleaLogger.get_logger()``. Log level
-    defaults to ``INFO`` but can be overridden via ``MELLEA_LOG_LEVEL``. When the
-    ``MELLEA_FLOG`` environment variable is set, records are also forwarded to a
-    local ``/api/receive`` REST endpoint via ``RESTHandler``.
+    defaults to ``INFO`` but can be overridden via ``MELLEA_LOG_LEVEL``. Handler
+    setup is delegated to :func:`configure_logging`.
 
     Attributes:
         logger (logging.Logger | None): The shared ``logging.Logger`` instance; ``None`` until first call to ``get_logger()``.
@@ -512,76 +667,38 @@ class MelleaLogger:
 
     @staticmethod
     def get_logger() -> logging.Logger:
-        """Returns a MelleaLogger.logger and sets level based upon env vars.
+        """Return the shared :class:`logging.Logger`, creating it on first call.
 
         The logger is created once (singleton).  Subsequent calls return the
         cached instance.  Initialisation is protected by a module-level lock so
         concurrent callers at startup cannot create duplicate handlers.
 
+        When ``MELLEA_LOG_ENABLED`` is falsy :func:`configure_logging` attaches
+        no handlers — the logger still exists, but records are silently
+        discarded (useful for tests or environments that must produce no output).
+
         Returns:
-            Configured logger with REST, stream, and optional OTLP handlers.
+            Configured logger instance.
         """
         if MelleaLogger.logger is None:
             with _logger_lock:
                 # Second check inside the lock: another thread may have finished
                 # initialisation while we were waiting.
                 if MelleaLogger.logger is None:
-                    logger = logging.getLogger("fancy_logger")
+                    logger = logging.getLogger("mellea")
 
-                    # Attach both filters so they reach all handlers
+                    # Filters belong to the logger so every handler receives
+                    # trace and Mellea context regardless of which handler
+                    # processes the record.
                     logger.addFilter(ContextFilter())
                     logger.addFilter(OtelTraceFilter())
-
-                    # Inject telemetry context fields (session_id, request_id, etc.)
                     logger.addFilter(MelleaContextFilter())
 
                     # Only set default level if user hasn't already configured it
                     if logger.level == logging.NOTSET:
                         logger.setLevel(MelleaLogger._resolve_log_level())
 
-                    # --- REST handler ---
-                    api_url = "http://localhost:8000/api/receive"
-                    rest_handler = RESTHandler(api_url)
-                    rest_handler.setFormatter(JsonFormatter())
-                    logger.addHandler(rest_handler)
-
-                    # --- Console / stream handler ---
-                    stream_handler = logging.StreamHandler(stream=sys.stdout)
-                    use_json_console = os.environ.get(
-                        "MELLEA_LOG_JSON", ""
-                    ).strip().lower() in ("1", "true", "yes")
-                    if use_json_console:
-                        stream_handler.setFormatter(JsonFormatter())
-                    else:
-                        stream_handler.setFormatter(
-                            CustomFormatter(datefmt="%H:%M:%S,%03d")
-                        )
-                    logger.addHandler(stream_handler)
-
-                    # --- Optional OTLP handler ---
-                    from ..telemetry import get_otlp_log_handler
-
-                    otlp_handler = get_otlp_log_handler()
-                    if otlp_handler:
-                        otlp_handler.setFormatter(JsonFormatter())
-                        logger.addHandler(otlp_handler)
+                    configure_logging(logger)
 
                     MelleaLogger.logger = logger
         return MelleaLogger.logger
-
-
-def _check_flog_env() -> bool:
-    """Check MELLEA_FLOG, with a DeprecationWarning fallback for the old FLOG name."""
-    if os.environ.get("MELLEA_FLOG"):
-        return True
-    if os.environ.get("FLOG"):
-        import warnings
-
-        warnings.warn(
-            "The FLOG environment variable is deprecated and will be removed in a future release. "
-            "Use MELLEA_FLOG instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return True
-    return False
