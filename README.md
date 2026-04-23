@@ -50,6 +50,9 @@ print(user.name)  # Alice
 print(user.age)   # 31 — always an int, guaranteed by the schema
 ```
 
+`start_session()` is the convenience entry point: it returns a `MelleaSession`
+with sensible defaults you can override as needed.
+
 ## What Mellea Does
 
 - **Structured output** — `@generative` turns typed functions into LLM calls; Pydantic schemas are enforced at generation time
