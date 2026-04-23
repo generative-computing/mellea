@@ -501,7 +501,12 @@ def validate_tool_arguments(
 
     # Helper function to build Pydantic model from nested JSON schema
     def _build_pydantic_type_from_schema(schema: dict[str, Any]) -> Any:
-        """Recursively build Pydantic type from JSON schema."""
+        """Recursively build Pydantic type from JSON schema.
+
+        Note: This assumes all $ref references have been resolved by
+        convert_function_to_ollama_tool before validation. If a schema
+        still contains $ref entries, this will return Any as a fallback.
+        """
         json_type = schema.get("type", "string")
 
         # Handle nested objects with properties
@@ -517,11 +522,11 @@ def validate_tool_arguments(
                 else:
                     nested_fields[nested_name] = (nested_type, None)
 
-            # Create a nested Pydantic model
+            # Create a nested Pydantic model with deterministic name
+            # Use sorted field names for consistent naming across runs
+            model_name = f"Nested_{'_'.join(sorted(nested_fields.keys()))}"
             return create_model(
-                f"Nested_{hash(str(schema))}",
-                __config__=ConfigDict(extra="allow"),
-                **nested_fields,
+                model_name, __config__=ConfigDict(extra="allow"), **nested_fields
             )
 
         # Handle arrays
@@ -938,6 +943,19 @@ def convert_function_to_ollama_tool(
             return defs.get(def_name, {})
         return {}
 
+    # Helper to check if anyOf represents a complex union (not just Optional[primitive])
+    def _is_complex_anyof(v: dict) -> bool:
+        """Check if anyOf contains complex types (refs or nested objects)."""
+        any_of_schemas = v.get("anyOf", [])
+        for sub_schema in any_of_schemas:
+            # Skip null types - they just indicate optionality
+            if sub_schema.get("type") == "null":
+                continue
+            # Check for references or nested properties
+            if "$ref" in sub_schema or "properties" in sub_schema:
+                return True
+        return False
+
     defs = schema.get("$defs", schema.get("definitions", {}))
 
     for k, v in schema.get("properties", {}).items():
@@ -955,11 +973,14 @@ def convert_function_to_ollama_tool(
             else:
                 # Fallback if we can't resolve
                 schema["properties"][k] = {
-                    "description": parsed_docstring[k],
+                    "description": parsed_docstring.get(k, ""),
                     "type": "object",
                 }
         # Check if this property is a nested object (has 'properties' or complex types)
-        elif "properties" in v or "allOf" in v or "anyOf" in v:
+        # Narrow anyOf check to only complex unions, not Optional[primitive]
+        elif (
+            "properties" in v or "allOf" in v or ("anyOf" in v and _is_complex_anyof(v))
+        ):
             # This is a complex/nested type - preserve the full schema
             # Only add description if we have one
             if parsed_docstring.get(k):
@@ -967,18 +988,19 @@ def convert_function_to_ollama_tool(
             schema["properties"][k] = v
         else:
             # Simple type - use the original flattening logic
-            types = (
-                {t.get("type", "string") for t in v.get("anyOf")}
-                if "anyOf" in v
-                else {v.get("type", "string")}
-            )
+            # This now handles Optional[primitive] types correctly
+            if "anyOf" in v:
+                types = {t.get("type", "string") for t in v.get("anyOf")}
+            else:
+                types = {v.get("type", "string")}
+
             if "null" in types:
                 if k in schema.get("required", []):
                     schema["required"].remove(k)
                 types.discard("null")
 
             schema["properties"][k] = {
-                "description": parsed_docstring[k],
+                "description": parsed_docstring.get(k, ""),
                 "type": ", ".join(types),
             }
 
