@@ -22,6 +22,20 @@ import mellea
 m = mellea.start_session()
 ```
 
+## Backend comparison
+
+The following table shows all available backends, their class names, import paths, required extras, and `start_session()` configuration:
+
+| Backend | Class | Import | Required extras | `start_session()` |
+| ------- | ----- | ------ | --------------- | ----------------- |
+| [Ollama](../integrations/ollama) | `OllamaModelBackend` | `mellea.backends.ollama` | base | `backend_name="ollama"` |
+| [OpenAI](../integrations/openai) | `OpenAIBackend` | `mellea.backends.openai` | base | `backend_name="openai"` |
+| [LiteLLM](../integrations/bedrock) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
+| [HuggingFace](../integrations/huggingface) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
+| [WatsonX](../integrations/watsonx) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
+
+> **Note:** Vertex AI uses the LiteLLM backend with appropriate model IDs. See the [Vertex AI integration](../integrations/vertex-ai) for details. For detailed setup instructions, click the backend name in the table above.
+
 ## Switching the model
 
 Pass any model string your backend supports:
