@@ -171,10 +171,11 @@ def test_mot_copy_from_copies_generation():
     assert a.generation.ttfb_ms == 42.0
 
 
-def test_mot_shallow_copy_shares_generation():
+def test_mot_shallow_copy_generation_mutation_does_not_bleed():
     original = _make_mot_with_generation()
     copied = copy.copy(original)
-    assert copied.generation is original.generation
+    copied.generation.model = "mutated"
+    assert original.generation.model == "test-model"
 
 
 def test_mot_deep_copy_clones_generation():
