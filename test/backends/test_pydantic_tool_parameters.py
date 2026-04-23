@@ -478,6 +478,7 @@ class TestOptionalParameterRegression:
         reason="Nested model resolution not yet implemented. "
         "This test documents the expected behavior once recursive $ref resolution is added. "
         "Currently fails because Address remains as a dangling $ref inside Person's schema. "
+        "NESTED_MODEL_RESOLUTION_ISSUE.md in "
         "https://github.com/generative-computing/mellea/issues/404 for implementation details."
     )
     def test_nested_models_fully_inlined(self):
