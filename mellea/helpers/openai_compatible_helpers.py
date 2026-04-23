@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from ..backends.tools import validate_tool_arguments
 from ..core import MelleaLogger, ModelToolCall
-from ..core.base import AbstractMelleaTool
+from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..stdlib.components import Document, Message
 
 
@@ -221,7 +221,7 @@ def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
     return json_docs
 
 
-def build_completion_usage(output: Any) -> CompletionUsage | None:
+def build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None:
     """Build a normalized usage object from a model output, if available.
 
     Args:

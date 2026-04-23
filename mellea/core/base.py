@@ -611,7 +611,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._context = self._context
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
-        copied.generation = self.generation
+        copied.generation = copy(self.generation)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
