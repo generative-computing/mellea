@@ -1,7 +1,7 @@
 ---
 title: "Logging"
 description: "Configure Mellea's console logging and export logs to OTLP collectors."
-# diataxis: reference
+# diataxis: how-to
 ---
 
 **Prerequisites:** [Telemetry](../observability/telemetry)
