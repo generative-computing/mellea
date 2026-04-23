@@ -17,6 +17,8 @@ Decorate any function with `@mcp.tool()`. The docstring becomes the tool descrip
 visible to the AI client.
 
 ```python
+# Requires: mcp[cli], mellea[ollama]
+# Returns: str
 from mcp.server.fastmcp import FastMCP
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
@@ -62,6 +64,8 @@ wraps the result.
 A single `FastMCP` server can expose multiple tools, resources, and prompts:
 
 ```python
+# Requires: mcp[cli], mellea[ollama]
+# Returns: str
 from mcp.server.fastmcp import FastMCP
 from mellea import MelleaSession, generative, start_session
 from mellea.backends.ollama import OllamaModelBackend

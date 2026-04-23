@@ -26,6 +26,8 @@ optional validation function. During the [instruct–validate–repair (IVR)](..
 4. The loop retries up to `loop_budget` times (default: 2).
 
 ```python
+# Requires: mellea
+# Returns: Requirement
 from mellea.core import Requirement
 
 # Simplest form: natural-language string.
@@ -37,6 +39,8 @@ Passing plain strings directly to `instruct()` is equivalent — they are
 converted to `Requirement` objects internally:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -51,6 +55,8 @@ email = m.instruct(
 `req()` and `check()` are concise constructors from `mellea.stdlib.requirements`:
 
 ```python
+# Requires: mellea
+# Returns: Requirement
 from mellea.stdlib.requirements import check, req
 
 # req() creates a standard Requirement (description included in the prompt)
@@ -75,6 +81,8 @@ For deterministic checks, attach a `validation_fn`. Mellea skips LLM-as-a-judge 
 runs your function directly:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.core import Requirement
 from mellea.stdlib.requirements import simple_validate
@@ -100,6 +108,8 @@ most recent model output as a string and returns either:
   repair request
 
 ```python
+# Requires: mellea
+# Returns: ValidationResult
 from mellea.stdlib.requirements import simple_validate
 
 # Boolean return
@@ -117,6 +127,8 @@ within_limit = simple_validate(
 a full validation function directly, you construct `ValidationResult` yourself:
 
 ```python
+# Requires: mellea
+# Returns: ValidationResult
 from mellea.core import Context, ValidationResult
 
 
