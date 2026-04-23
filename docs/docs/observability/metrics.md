@@ -4,7 +4,7 @@ description: "Automatically collect LLM metrics and instrument your own code wit
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Telemetry](../evaluation-and-observability/telemetry)
+**Prerequisites:** [Telemetry](../observability/telemetry)
 introduces the environment variables and telemetry architecture. This page
 covers metrics collection in detail.
 
@@ -524,9 +524,9 @@ Enable at least one exporter:
 
 **See also:**
 
-- [Telemetry](../evaluation-and-observability/telemetry) — overview of all
+- [Telemetry](../observability/telemetry) — overview of all
   telemetry features and configuration.
-- [Tracing](../evaluation-and-observability/tracing) — distributed traces
+- [Tracing](../observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Logging](../evaluation-and-observability/logging) — console logging and OTLP
+- [Logging](../observability/logging) — console logging and OTLP
   log export.

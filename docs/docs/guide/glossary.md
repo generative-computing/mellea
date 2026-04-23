@@ -208,7 +208,7 @@ for log in logs:
 Key fields: `prompt`, `result` (`ModelOutputThunk | None`), `backend`,
 `model_options`, `is_final_result`.
 
-See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge)
+See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
 
 ---
 
@@ -339,7 +339,7 @@ looking for `"yes"` (case-insensitive) in the reply.
 Use `simple_validate` instead when the criterion is deterministic (word count,
 regex, type check) — no second LLM call is needed.
 
-See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge)
+See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
 
 ---
 
@@ -543,7 +543,7 @@ requirements=[
 ]
 ```
 
-See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge)
+See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
 
 ---
 
