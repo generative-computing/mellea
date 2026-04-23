@@ -21,19 +21,21 @@ _MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
 @pytest.fixture(scope="function")
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
-    if gh_run == 1:
-        # LiteLLM prepends 127.0.0.1 with a `/` which causes issues.
-        url = os.environ.get("OLLAMA_HOST", None)
-        if url is None:
-            url = "http://localhost:11434"
+    host_env = os.environ.get("OLLAMA_HOST")
+    if host_env:
+        if ":" in host_env:
+            url = f"http://{host_env}"
         else:
-            url = url.replace("127.0.0.1", "http://localhost")
-
-        return LiteLLMBackend(
-            model_id=_MODEL_ID, base_url=url, model_options={"api_base": url}
-        )
+            port = os.environ.get("OLLAMA_PORT", "11434")
+            url = f"http://{host_env}:{port}"
+        # LiteLLM prepends 127.0.0.1 with a `/` which causes issues.
+        url = url.replace("http://127.0.0.1", "http://localhost")
     else:
-        return LiteLLMBackend(model_id=_MODEL_ID)
+        url = "http://localhost:11434"
+
+    return LiteLLMBackend(
+        model_id=_MODEL_ID, base_url=url, model_options={"api_base": url}
+    )
 
 
 @pytest.fixture(scope="function")
