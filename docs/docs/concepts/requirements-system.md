@@ -16,8 +16,8 @@ see [The Instruction Model](./instruct-validate-repair).
 
 ## What a requirement is
 
-A [`Requirement`](../guide/glossary#requirement) is a [`Component`](../guide/glossary#component) that wraps a natural-language description and an
-optional validation function. During the [instruct–validate–repair (IVR)](../guide/glossary#ivr-instruct-validate-repair) loop:
+A [`Requirement`](../reference/glossary#requirement) is a [`Component`](../reference/glossary#component) that wraps a natural-language description and an
+optional validation function. During the [instruct–validate–repair (IVR)](../reference/glossary#ivr-instruct-validate-repair) loop:
 
 1. Mellea renders the requirement descriptions into the prompt alongside the instruction.
 2. After the model generates output, each requirement is validated against that output.
@@ -152,9 +152,9 @@ model make a targeted repair rather than regenerating blindly.
 
 ## Preconditions in generative functions
 
-The [`@generative`](../guide/glossary#generative) decorator supports `precondition_requirements` alongside the
+The [`@generative`](../reference/glossary#generative) decorator supports `precondition_requirements` alongside the
 standard `requirements`. Preconditions are validated against the *inputs* to the
-function before generation starts. If they fail, Mellea raises [`PreconditionException`](../guide/glossary#preconditionexception)
+function before generation starts. If they fail, Mellea raises [`PreconditionException`](../reference/glossary#preconditionexception)
 immediately — no generation attempt is made and no IVR loop runs.
 
 ```python
@@ -204,8 +204,8 @@ requirement that failed, giving you a complete picture of what went wrong.
 
 ## Inspecting validation results
 
-When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult)
-instead of a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). This exposes per-attempt validation results:
+When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult)
+instead of a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). This exposes per-attempt validation results:
 
 ```python
 from mellea import start_session

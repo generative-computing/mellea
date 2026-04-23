@@ -79,9 +79,9 @@ class RichDocumentSections(RichDocument):
 
     @classmethod
     def from_document_file(
-        cls, source: str | Path | DocumentStream
+        cls, source: str | Path | DocumentStream, do_ocr: bool = True
     ) -> "RichDocumentSections":
-        rd = RichDocument.from_document_file(source)
+        rd = RichDocument.from_document_file(source, do_ocr=do_ocr)
         return RichDocumentSections(rd.docling())
 
 

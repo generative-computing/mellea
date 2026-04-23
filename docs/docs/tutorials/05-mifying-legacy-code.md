@@ -7,7 +7,7 @@ description: "Add LLM query and transform capabilities to existing Python classe
 > **Concept overview:** [MObjects and mify](../concepts/mobjects-and-mify) explains the design and trade-offs.
 
 This tutorial shows how to make existing Python objects queryable and transformable
-by the LLM using [`@mify`](../guide/glossary#mify--mify) — without changing their Python interface or behaviour.
+by the LLM using [`@mify`](../reference/glossary#mify--mify) — without changing their Python interface or behaviour.
 
 By the end you will have covered:
 
@@ -61,7 +61,7 @@ print(str(result))
 ```
 
 By default, `@mify` exposes all instance attributes as fields and adds the
-[`MObject`](../guide/glossary#mobject) protocol to every instance. The LLM sees a text representation
+[`MObject`](../reference/glossary#mobject) protocol to every instance. The LLM sees a text representation
 of the object built from those fields.
 
 > **Full example:** [`docs/examples/mify/mify.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/mify.py)

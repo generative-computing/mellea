@@ -6,7 +6,7 @@ description: "Build a retrieval-augmented generation pipeline that uses FAISS fo
 
 This example builds a complete RAG pipeline in three stages: embed and index a
 document corpus, retrieve candidates by semantic similarity, then use a
-[`@generative`](../guide/glossary#generative) boolean function to discard irrelevant candidates before passing
+[`@generative`](../reference/glossary#generative) boolean function to discard irrelevant candidates before passing
 the survivors to a grounded `m.instruct()` call.
 
 **Source file:** `docs/examples/rag/simple_rag_with_filter.py`
@@ -15,7 +15,7 @@ the survivors to a grounded `m.instruct()` call.
 
 - Building a FAISS flat inner-product index from sentence-transformer embeddings
 - Using `@generative` returning `bool` as a per-document relevance gate
-- Passing filtered documents as [`grounding_context`](../guide/glossary#grounding_context) to `m.instruct()`
+- Passing filtered documents as [`grounding_context`](../reference/glossary#grounding_context) to `m.instruct()`
 - Running the example with `uv run` via an inline PEP 723 dependency block
 
 ## Prerequisites
@@ -207,7 +207,7 @@ entries. The template variable `{{query}}` is supplied separately via
 prompt correctly and trace each component independently.
 
 **`answer.value`** retrieves the raw string from the
-[`ModelOutputThunk`](../guide/glossary#modeloutputthunk) returned by
+[`ModelOutputThunk`](../reference/glossary#modeloutputthunk) returned by
 `m.instruct()`.
 
 ### Full file

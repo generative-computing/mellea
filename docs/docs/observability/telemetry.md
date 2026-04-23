@@ -127,6 +127,11 @@ OpenTelemetry. No code changes are required:
   classified by semantic error type.
 - **Cost counter** — `mellea.llm.cost.usd` estimated request cost in USD,
   when pricing data is available for the model.
+- **Sampling counters** — `mellea.sampling.attempts`, `mellea.sampling.successes`,
+  and `mellea.sampling.failures` per strategy.
+- **Requirement counters** — `mellea.requirement.checks` and
+  `mellea.requirement.failures` per requirement type.
+- **Tool counter** — `mellea.tool.calls` by tool name and status.
 
 The metrics API also exposes `create_counter`, `create_histogram`, and
 `create_up_down_counter` for instrumenting your own application code.

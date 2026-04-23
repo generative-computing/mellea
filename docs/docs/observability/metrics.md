@@ -217,6 +217,49 @@ The file format maps model IDs to per-million-token rates:
 Custom entries override built-in prices. Errors loading the file are logged as
 warnings and built-in prices are used as a fallback.
 
+## Operational metrics
+
+Mellea records metrics for its internal sampling, validation, and tool execution
+loops. These counters give visibility into retry behavior, validation failure
+rates, and tool call health — independent of the underlying LLM provider.
+
+### Sampling counters
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.sampling.attempts` | Counter | `{attempt}` | Sampling attempts per loop iteration |
+| `mellea.sampling.successes` | Counter | `{sample}` | Sampling loops that produced a passing sample |
+| `mellea.sampling.failures` | Counter | `{failure}` | Sampling loops that exhausted the loop budget without success |
+
+All sampling metrics include:
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `strategy` | Sampling strategy class name | `RejectionSamplingStrategy`, `MultiTurnStrategy`, `RepairTemplateStrategy` |
+
+### Requirement counters
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.requirement.checks` | Counter | `{check}` | Requirement validation checks performed |
+| `mellea.requirement.failures` | Counter | `{failure}` | Requirement validation checks that failed |
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` |
+| `reason` | Human-readable failure reason (`mellea.requirement.failures` only) | `"Output did not satisfy constraint"`, `"unknown"` |
+
+### Tool counter
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.tool.calls` | Counter | `{call}` | Tool invocations by name and status |
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `tool` | Name of the invoked tool | `"search"`, `"calculator"` |
+| `status` | Execution outcome | `success`, `failure` |
+
 ## Metrics export configuration
 
 Mellea supports multiple metrics exporters that can be used independently or

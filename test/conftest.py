@@ -209,6 +209,12 @@ def pytest_addoption(parser):
         default=False,
         help="Group tests by backend and run them together (reduces GPU memory fragmentation)",
     )
+    add_option_safe(
+        "--skip-resource-checks",
+        action="store_true",
+        default=False,
+        help="Skip hardware capability gates (VRAM/RAM). API credential and Ollama checks are unaffected.",
+    )
 
 
 BACKEND_MARKERS: dict[str, str] = {
@@ -253,6 +259,16 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "llm: Tests that make LLM calls (deprecated — use e2e instead)"
     )
+
+    # Propagate --skip-resource-checks as env var so predicates.py can read it
+    # at module-import time (before test collection begins).
+    if config.getoption("skip_resource_checks", default=False):
+        os.environ["_MELLEA_SKIP_RESOURCE_CHECKS"] = "1"
+
+
+def pytest_unconfigure():
+    """Clean up env var so repeated programmatic pytest invocations are unaffected."""
+    os.environ.pop("_MELLEA_SKIP_RESOURCE_CHECKS", None)
 
 
 # ============================================================================

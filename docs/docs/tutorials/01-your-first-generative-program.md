@@ -42,7 +42,7 @@ print(str(summary))
 #   "The customer found onboarding confusing and slow, but appreciated the helpful support."
 ```
 
-`instruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). Calling `str()` on it (or accessing
+`instruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). Calling `str()` on it (or accessing
 `.value`) gives you the string. This is already a generative program: it calls an
 LLM and returns structured text.
 
@@ -164,7 +164,7 @@ to code reliably.
 ## Step 5: Rejection sampling and inspecting results
 
 By default, `instruct()` retries up to twice if any requirement fails. Use
-[`RejectionSamplingStrategy`](../guide/glossary#sampling-strategy) to control the budget and inspect results:
+[`RejectionSamplingStrategy`](../reference/glossary#sampling-strategy) to control the budget and inspect results:
 
 ```python
 import mellea
@@ -202,7 +202,7 @@ m = mellea.start_session()
 print(summarize_feedback(m, "The onboarding was confusing and took far too long."))
 ```
 
-With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult) with
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult) with
 `.success`, `.result`, and `.sample_generations`. This gives you programmatic
 control over what to do when the model can not satisfy your requirements.
 

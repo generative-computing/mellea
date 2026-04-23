@@ -131,7 +131,7 @@
           {
             "group": "Reference",
             "pages": [
-              "guide/glossary",
+              "reference/glossary",
               "reference/cli"
             ]
           },
@@ -416,6 +416,10 @@
     "thumbsRating": true
   },
   "redirects": [
+    {
+      "source": "/guide/glossary",
+      "destination": "/reference/glossary"
+    },
     {
       "source": "/overview/overview",
       "destination": "/getting-started/quickstart"
