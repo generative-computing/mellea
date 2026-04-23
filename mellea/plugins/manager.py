@@ -26,9 +26,22 @@ logger = logging.getLogger(__name__)
 _plugin_manager: Any | None = None
 _plugins_enabled: bool = False
 _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
+_pending_background_results: list[Any] = []
 
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
 DEFAULT_HOOK_POLICY: Literal["allow"] | Literal["deny"] = "deny"
+
+
+async def drain_background_tasks() -> None:
+    """Await all accumulated FIRE_AND_FORGET tasks and clear the pending list.
+
+    Call this in tests after any operation that may have triggered FAF plugins,
+    to ensure side effects (metrics recording, etc.) complete before assertions.
+    """
+    global _pending_background_results
+    pending, _pending_background_results = _pending_background_results, []
+    for result in pending:
+        await result.wait_for_background_tasks()
 
 
 def has_plugins(hook_type: HookType | None = None) -> bool:
@@ -228,6 +241,9 @@ async def invoke_hook(
         global_context=global_ctx,
         violations_as_exceptions=False,
     )
+
+    if result and result.background_tasks:
+        _pending_background_results.append(result)
 
     if result and not result.continue_processing and result.violation:
         v = result.violation
