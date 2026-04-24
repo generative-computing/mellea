@@ -11,7 +11,7 @@ from mellea.backends.model_ids import (
     IBM_GRANITE_4_HYBRID_MICRO,
     IBM_GRANITE_4_HYBRID_SMALL,
 )
-from mellea.plugins.manager import drain_background_tasks
+from mellea.plugins.manager import discard_background_tasks, drain_background_tasks
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 from test.predicates import require_api_key, require_gpu
@@ -41,6 +41,7 @@ def metric_reader():
 @pytest.fixture
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
+    discard_background_tasks()
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     # Force reload of metrics module to pick up env vars
     import importlib
@@ -52,6 +53,7 @@ def enable_metrics(monkeypatch):
     # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
     importlib.reload(mellea.telemetry.metrics)
+    discard_background_tasks()
 
 
 @pytest.fixture(scope="module")

@@ -44,6 +44,15 @@ async def drain_background_tasks() -> None:
         await result.wait_for_background_tasks()
 
 
+def discard_background_tasks() -> None:
+    """Discard all accumulated FIRE_AND_FORGET tasks without awaiting them.
+
+    Call this in test fixtures to clear stale results from a previous event
+    loop before running the next test.
+    """
+    _pending_background_results.clear()
+
+
 def has_plugins(hook_type: HookType | None = None) -> bool:
     """Fast check: are plugins configured and available for the given hook type.
 
@@ -156,6 +165,7 @@ async def shutdown_plugins() -> None:
     _plugin_manager = None
     _plugins_enabled = False
     _session_tags.clear()
+    _pending_background_results.clear()
 
 
 def track_session_plugin(session_id: str, plugin_name: str) -> None:
