@@ -284,7 +284,7 @@ class Requirement(Component[str]):
             )
 
     async def stream_validate(
-        self, chunk: str, backend: Backend, ctx: Context
+        self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
         """Hook for per-chunk streaming validation.
 

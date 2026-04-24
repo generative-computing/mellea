@@ -32,7 +32,7 @@ def test_stream_validate_is_coroutine():
 async def test_subclass_can_return_pass():
     class PassRequirement(Requirement):
         async def stream_validate(
-            self, chunk: str, backend: Backend, ctx: Context
+            self, chunk: str, *, backend: Backend, ctx: Context
         ) -> PartialValidationResult:
             return PartialValidationResult("pass")
 
@@ -45,7 +45,7 @@ async def test_subclass_can_return_pass():
 async def test_subclass_can_return_fail():
     class FailRequirement(Requirement):
         async def stream_validate(
-            self, chunk: str, backend: Backend, ctx: Context
+            self, chunk: str, *, backend: Backend, ctx: Context
         ) -> PartialValidationResult:
             if "bad" in chunk:
                 return PartialValidationResult("fail", reason="bad word detected")
