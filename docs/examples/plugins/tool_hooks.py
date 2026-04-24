@@ -150,11 +150,6 @@ ALLOWED_TOOLS: frozenset[str] = frozenset({"get_weather", "calculator"})
 @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
 async def enforce_tool_allowlist(payload, _):
     """Block any tool not on the explicit allow list."""
-    # Internal tools (like ReAct's final_answer) are always permitted.
-    if payload.model_tool_call.func.is_internal:
-        log.info("[allowlist] permitted internal tool=%r", payload.model_tool_call.name)
-        return None
-
     tool_name = payload.model_tool_call.name
     if tool_name not in ALLOWED_TOOLS:
         log.warning(

@@ -954,16 +954,12 @@ class AbstractMelleaTool(abc.ABC):
 
     Attributes:
         name (str): The unique name used to identify the tool in JSON descriptions and tool-call dispatch.
-        is_internal (bool): Whether the tool is internal to Mellea and should be bypassed by certain security policies.
         as_json_tool (dict[str, Any]): A JSON-serialisable description of the tool, compatible with
             the function-calling schemas expected by supported inference backends.
     """
 
     name: str
     """Name of the tool."""
-
-    is_internal: bool = False
-    """Whether the tool is internal to Mellea."""
 
     @abc.abstractmethod
     def run(self, *args: Any, **kwargs: Any) -> Any:
