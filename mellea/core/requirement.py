@@ -102,7 +102,7 @@ class PartialValidationResult:
         context: Context | None = None,
     ):
         """Initialize PartialValidationResult with a tri-state success value."""
-        self._success = success
+        self._success: Literal["pass", "fail", "unknown"] = success
         self._reason = reason
         self._score = score
         self._thunk = thunk
