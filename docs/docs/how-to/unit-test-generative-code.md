@@ -285,7 +285,16 @@ def test_with_simple_validate_requirement(session):
 `mellea.stdlib.components.unit_test_eval` provides `TestBasedEval`, a
 `Component` that formats an LLM-as-a-judge evaluation task for generative unit testing. You load test cases
 from a JSON file and pass them to a judge session. This is useful for offline
-evaluation pipelines, not for individual pytest assertions. Given a task, you provide test cases that consist of evaluation instructions and a set of examples, along with associated metadata. Each example, in conversational format, consists of an input and (optional) target / reference response(s), which can be used to guide evaluation along with the evaluation instructions. They can either be instantiated inline or in JSON format, with a separate JSON file per task. There are no limitations on the number of test examples per task, and each input can have multiple reference responses. The evaluation instructions apply to all the test cases in your task.
+evaluation pipelines, 
+not for individual pytest assertions. 
+
+Given a task, you provide test cases that consist of evaluation instructions 
+and a set of examples, along with associated metadata. Each example, in conversational format, consists of an input 
+and (optional) target / reference response(s), which can be used to guide evaluation along with the evaluation instructions. 
+They can either be instantiated inline or in JSON format, with a separate JSON file per task. 
+
+There are no limitations on the number of test examples per task, and each input can have multiple reference responses. 
+The evaluation instructions apply to all the test cases in your task.
 
 ### JSON file format
 
@@ -327,8 +336,8 @@ judge_session = start_session()
 
 for eval_case in test_evals:
     for idx, input_text in enumerate(eval_case.inputs):
-        # Generate the prediction from the system under test.
-        prediction = "Thank you, can't wait to hear back :)"  # replace with your actual model calls - this prediction would fail for both examples as it is not professional or formal
+        # Generate the prediction from the system under test. Replace with your actual model calls - this prediction would fail for both examples as it is not professional or formal
+        prediction = "Thank you, can't wait to hear back :)" 
 
         targets = eval_case.targets[idx] if eval_case.targets else []
         eval_case.set_judge_context(input_text, prediction, targets)
