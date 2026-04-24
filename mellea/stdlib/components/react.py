@@ -71,7 +71,7 @@ class ReactInitiator(Component[str]):
             )
 
         finalizer_tool = MelleaTool.from_callable(
-            _mellea_finalize_tool, MELLEA_FINALIZER_TOOL
+            _mellea_finalize_tool, MELLEA_FINALIZER_TOOL, is_internal=True
         )
         tools[MELLEA_FINALIZER_TOOL] = finalizer_tool
 

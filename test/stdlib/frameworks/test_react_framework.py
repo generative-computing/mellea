@@ -98,7 +98,9 @@ def _make_tool(name: str, return_value: str = "tool_result") -> MelleaTool:
 
 def _final_answer_call(answer: str = "42") -> _ScriptedTurn:
     """Script a turn where the model calls final_answer with real arg flow."""
-    tool = MelleaTool.from_callable(_mellea_finalize_tool, MELLEA_FINALIZER_TOOL)
+    tool = MelleaTool.from_callable(
+        _mellea_finalize_tool, MELLEA_FINALIZER_TOOL, is_internal=True
+    )
     tc = ModelToolCall(name=MELLEA_FINALIZER_TOOL, func=tool, args={"answer": answer})
     return _ScriptedTurn(value="", tool_calls={MELLEA_FINALIZER_TOOL: tc})
 
@@ -205,7 +207,9 @@ async def test_react_format_triggers_second_generation():
 async def test_react_final_answer_with_extra_tool_rejected():
     """final_answer alongside another tool in the same turn triggers assertion."""
     search = _make_tool("search", "found it")
-    finalizer = MelleaTool.from_callable(_mellea_finalize_tool, MELLEA_FINALIZER_TOOL)
+    finalizer = MelleaTool.from_callable(
+        _mellea_finalize_tool, MELLEA_FINALIZER_TOOL, is_internal=True
+    )
     both = {
         "search": ModelToolCall(name="search", func=search, args={}),
         MELLEA_FINALIZER_TOOL: ModelToolCall(

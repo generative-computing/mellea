@@ -264,6 +264,29 @@ class TestComponentHookCallSites:
         await aact(action, ctx, backend, strategy=None)
         assert observed[0].component_type == "Instruction"
 
+    async def test_component_pre_execute_has_context_view(self) -> None:
+        """COMPONENT_PRE_EXECUTE payload.context_view is populated."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.functional import aact
+        from mellea.stdlib.context import ChatContext
+
+        observed: list[Any] = []
+
+        @hook("component_pre_execute")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = ChatContext().add(CBlock("previous turn"))
+        action = Instruction("Context check")
+
+        await aact(action, ctx, backend, strategy=None)
+        assert observed[0].context_view is not None
+        assert len(observed[0].context_view) == 1
+        assert observed[0].context_view[0].value == "previous turn"
+
     async def test_component_post_success_fires_in_aact(self) -> None:
         """COMPONENT_POST_SUCCESS fires in aact() after successful generation."""
         from mellea.stdlib.components import Instruction

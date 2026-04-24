@@ -34,6 +34,7 @@ class MelleaTool(AbstractMelleaTool):
         tool_call (Callable): The underlying Python callable to invoke when the tool is run.
         as_json_tool (dict[str, Any]): The OpenAI-compatible JSON schema dict describing
             the tool's parameters.
+        is_internal (bool): Whether the tool is internal to Mellea. Defaults to ``False``.
 
     """
 
@@ -41,14 +42,20 @@ class MelleaTool(AbstractMelleaTool):
     # Our ModelToolCall is the class that has a reference to the tool and actually calls with arguments
 
     name: str
+    is_internal: bool
     _as_json_tool: dict[str, Any]
     _call_tool: Callable[..., Any]
 
     def __init__(
-        self, name: str, tool_call: Callable, as_json_tool: dict[str, Any]
+        self,
+        name: str,
+        tool_call: Callable,
+        as_json_tool: dict[str, Any],
+        is_internal: bool = False,
     ) -> None:
         """Initialize the tool with a name, tool call and as_json_tool dict."""
         self.name = name
+        self.is_internal = is_internal
         self._as_json_tool = as_json_tool
         self._call_tool = tool_call
 
@@ -172,7 +179,9 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_callable(cls, func: Callable, name: str | None = None) -> "MelleaTool":
+    def from_callable(
+        cls, func: Callable, name: str | None = None, is_internal: bool = False
+    ) -> "MelleaTool":
         """Create a MelleaTool from a plain Python callable.
 
         Introspects the callable's signature and docstring to build an
@@ -181,6 +190,7 @@ class MelleaTool(AbstractMelleaTool):
         Args:
             func (Callable): The Python callable to wrap as a tool.
             name (str | None): Optional name override; defaults to ``func.__name__``.
+            is_internal (bool): Whether the tool is internal to Mellea. Defaults to ``False``.
 
         Returns:
             MelleaTool: A Mellea tool wrapping the callable.
@@ -191,7 +201,7 @@ class MelleaTool(AbstractMelleaTool):
             exclude_none=True
         )
         tool_call = func
-        return MelleaTool(tool_name, tool_call, as_json)
+        return MelleaTool(tool_name, tool_call, as_json, is_internal=is_internal)
 
 
 @overload
