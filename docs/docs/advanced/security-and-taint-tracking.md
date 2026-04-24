@@ -4,6 +4,13 @@ description: "Use GuardianCheck with IBM Granite Guardian to validate LLM output
 # diataxis: how-to
 ---
 
+> **Deprecated API.** The `GuardianCheck` class documented here is deprecated as
+> of Mellea v0.4 and will emit `DeprecationWarning` on use. For new code, use the
+> [Guardian Intrinsics](../how-to/safety-guardrails) — `guardian_check()`,
+> `policy_guardrails()`, `factuality_detection()`, and `factuality_correction()` —
+> which are faster, require no separate Guardian model pull, and produce consistent
+> structured output.
+
 **Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 complete, `pip install mellea`, Ollama running locally with a Granite Guardian model
 pulled.

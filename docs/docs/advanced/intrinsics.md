@@ -209,3 +209,12 @@ print(out)  # {"requirement_likelihood": 1.0}
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 Output format is task-specific — `requirement_check` returns a likelihood score.
+
+---
+
+## Guardian Intrinsics
+
+Safety and factuality checks use a separate set of Guardian-specific intrinsics:
+`guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
+`factuality_correction()`. These are documented in the
+[Safety Guardrails](../how-to/safety-guardrails) how-to guide.

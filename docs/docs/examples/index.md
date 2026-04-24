@@ -60,7 +60,8 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
-| `safety/` | `GuardianCheck` for harm, jailbreak, profanity, social bias, violence, and groundedness; shared backend pattern |
+| `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
+| `safety/` | *(Deprecated)* `GuardianCheck` examples — see `intrinsics/` for the current API |
 
 ### Integration and deployment
 

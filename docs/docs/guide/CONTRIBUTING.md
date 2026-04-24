@@ -208,7 +208,8 @@ Terms that **must** be linked on first use wherever they appear in guide pages (
 | `ReAct` | `#react` |
 | `RichDocument` | `#richdocument` |
 | `LiteLLM` / `LiteLLMBackend` | `#litellm--litellmbackend` |
-| `GuardianCheck` / `GuardianRisk` | `#guardiancheck` |
+| `guardian_check()` / `CRITERIA_BANK` | `#guardian_check` / `#criteria_bank` |
+| `GuardianCheck` / `GuardianRisk` *(deprecated)* | `#guardiancheck` / `#guardianrisk` |
 | `m decompose` | `#m-decompose` |
 
 Linking within the **glossary page itself** is not required (the glossary is the definition source).
