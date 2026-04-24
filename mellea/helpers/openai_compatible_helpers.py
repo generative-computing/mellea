@@ -1,7 +1,7 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
 import json
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
@@ -9,6 +9,21 @@ from ..backends.tools import validate_tool_arguments
 from ..core import MelleaLogger, ModelToolCall
 from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..stdlib.components import Document, Message
+
+
+class ToolCallFunction(TypedDict):
+    """Function details in a tool call."""
+
+    name: str
+    arguments: str
+
+
+class ToolCallDict(TypedDict):
+    """OpenAI-compatible tool call dictionary with ID and function."""
+
+    id: str
+    type: Literal["function"]
+    function: ToolCallFunction
 
 
 class CompletionUsage(BaseModel):
@@ -245,3 +260,42 @@ def build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None:
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
     )
+
+
+def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
+    """Build OpenAI-compatible tool calls from a model output, if available.
+
+    Args:
+        output: Model output thunk that may expose a ``tool_calls`` mapping.
+
+    Returns:
+        List of ``ToolCallDict`` objects when tool calls are present,
+        otherwise ``None``.
+    """
+    import json
+    import uuid
+
+    # Check for tool calls - ModelOutputThunk always has tool_calls attribute
+    if (
+        output.tool_calls is None
+        or not isinstance(output.tool_calls, dict)
+        or not output.tool_calls
+    ):
+        return None
+
+    tool_calls: list[ToolCallDict] = []
+    for model_tool_call in output.tool_calls.values():
+        # Generate a unique ID for this tool call
+        tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+
+        # Serialize the arguments to JSON string
+        args_json = json.dumps(model_tool_call.args)
+
+        tool_call: ToolCallDict = {
+            "id": tool_call_id,
+            "type": "function",
+            "function": {"name": model_tool_call.name, "arguments": args_json},
+        }
+        tool_calls.append(tool_call)
+
+    return tool_calls
