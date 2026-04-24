@@ -33,7 +33,7 @@ Environment variables
 ``MELLEA_LOG_OTLP``
     Set to ``true`` / ``1`` / ``yes`` to export logs via OpenTelemetry Logs
     Protocol.  Requires ``opentelemetry-sdk`` and an OTLP endpoint configured
-    via ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
+    via ``OTEL_EXPORTER_OTLP_LOG_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
 ``MELLEA_LOG_WEBHOOK``
     HTTP(S) URL to forward log records to via HTTP POST.  When set a
     :class:`RESTHandler` is attached.  Supersedes the deprecated ``MELLEA_FLOG``
@@ -556,11 +556,19 @@ def configure_logging(logger: logging.Logger) -> None:
     """Attach log handlers to *logger* based on current environment variables.
 
     It always appends new handlers (the caller is responsible for clearing
-    existing ones before re-configuring).  It is called automatically by
-    :meth:`MelleaLogger.get_logger` and is also available for programmatic use.
+    existing ones before re-configuring).  It is invoked automatically on the
+    first call to :meth:`MelleaLogger.get_logger`; subsequent calls return the
+    same singleton logger with its handlers already in place.  It is also
+    available for programmatic use when you need to attach handlers to a custom
+    logger.
 
     When ``MELLEA_LOG_ENABLED`` is falsy no handlers are attached; the logger
     still exists and accepts records, but they are silently discarded.
+
+    If ``MELLEA_LOG_FILE`` is set but the path cannot be opened (e.g. due to a
+    permissions error), a :class:`UserWarning` is emitted and file logging is
+    skipped.  The remaining handlers are still attached and the application
+    continues normally.
 
     Args:
         logger: The :class:`logging.Logger` to configure.
@@ -606,6 +614,9 @@ def configure_logging(logger: logging.Logger) -> None:
                 )
             logger.addHandler(file_handler)
         except (ValueError, OSError) as exc:
+            # Emit a warning rather than raising so a misconfigured log path
+            # never crashes the application.  The rest of the handlers still
+            # work; only file logging is lost.
             warnings.warn(
                 f"Failed to configure file logging handler for {log_file!r}: {exc}. "
                 "File logging will be skipped.",

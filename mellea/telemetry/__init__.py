@@ -34,7 +34,7 @@ Configuration:
 
     Logging:
         - MELLEA_LOG_OTLP: Enable OTLP log export (default: false)
-        - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: Logs-specific endpoint (optional)
+        - OTEL_EXPORTER_OTLP_LOG_ENDPOINT: Logs-specific endpoint (optional)
         - OTEL_EXPORTER_OTLP_ENDPOINT: General OTLP endpoint (fallback)
         - OTEL_SERVICE_NAME: Service name for logs (default: mellea)
 

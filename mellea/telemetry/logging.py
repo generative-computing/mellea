@@ -3,8 +3,8 @@
 Provides log export using OpenTelemetry Logs API with OTLP exporter support.
 
 Configuration via environment variables:
-- MELLEA_LOG_OTLP: Enable OTLP logs exporter (default: false)
-- OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: Logs-specific endpoint (optional, overrides general)
+- MELLEA_LOG_OTLP: Enable OTLP log exporter (default: false)
+- OTEL_EXPORTER_OTLP_LOG_ENDPOINT: Log-specific endpoint (optional, overrides general)
 - OTEL_EXPORTER_OTLP_ENDPOINT: General endpoint for all signals (fallback)
 - OTEL_SERVICE_NAME: Service name for logs (default: mellea)
 
@@ -53,13 +53,13 @@ def _setup_logger_provider() -> Any:
     if not _OTEL_AVAILABLE:
         return None
 
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") or os.getenv(
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT") or os.getenv(
         "OTEL_EXPORTER_OTLP_ENDPOINT"
     )
     if not endpoint:
         warnings.warn(
             "OTLP logs exporter is enabled (MELLEA_LOG_OTLP=true) but no endpoint is configured. "
-            "Set OTEL_EXPORTER_OTLP_LOGS_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT to export logs.",
+            "Set OTEL_EXPORTER_OTLP_LOG_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT to export logs.",
             UserWarning,
             stacklevel=3,
         )
