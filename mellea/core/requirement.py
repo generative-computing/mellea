@@ -283,6 +283,32 @@ class Requirement(Component[str]):
                 context=val_ctx,
             )
 
+    async def stream_validate(
+        self, chunk: str, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        """Hook for per-chunk streaming validation.
+
+        The default implementation returns ``PartialValidationResult("unknown")``
+        — meaning insufficient data to decide yet. Subclasses override this method
+        to inspect the accumulated chunk and return ``"pass"`` or ``"fail"`` early.
+
+        This method must not mutate ``self``. The orchestrator is responsible for
+        cloning the requirement before each attempt; any state needed across chunks
+        must be managed externally.
+
+        Args:
+            chunk: The accumulated model output so far (not just the latest token).
+            backend: The inference backend, available for backend-assisted checks.
+            ctx: The current generation context.
+
+        Returns:
+            PartialValidationResult: ``"unknown"`` by default. Subclasses may return
+            ``"pass"`` (constraint satisfied so far) or ``"fail"`` (constraint violated,
+            streaming should be aborted). In Phase 1, ``"pass"`` is informational and
+            does not short-circuit the final ``validate()`` call.
+        """
+        return PartialValidationResult("unknown")
+
     def parts(self) -> list[Component | CBlock]:
         """Returns all of the constituent parts of a Requirement.
 

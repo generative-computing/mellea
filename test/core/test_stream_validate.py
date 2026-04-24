@@ -1,0 +1,68 @@
+"""Unit tests for Requirement.stream_validate() hook."""
+
+import inspect
+
+import pytest
+
+from mellea.core import PartialValidationResult, Requirement
+
+
+@pytest.mark.asyncio
+async def test_default_returns_unknown():
+    req = Requirement(description="some requirement")
+    result = await req.stream_validate("some chunk", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert result.success == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_default_returns_partial_validation_result_instance():
+    req = Requirement()
+    result = await req.stream_validate("chunk", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert isinstance(result, PartialValidationResult)
+
+
+def test_stream_validate_is_coroutine():
+    req = Requirement()
+    assert inspect.iscoroutinefunction(req.stream_validate)
+
+
+@pytest.mark.asyncio
+async def test_subclass_can_return_pass():
+    class PassRequirement(Requirement):
+        async def stream_validate(self, chunk, backend, ctx) -> PartialValidationResult:
+            return PartialValidationResult("pass")
+
+    req = PassRequirement(description="always passes")
+    result = await req.stream_validate("any chunk", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert result.success == "pass"
+
+
+@pytest.mark.asyncio
+async def test_subclass_can_return_fail():
+    class FailRequirement(Requirement):
+        async def stream_validate(self, chunk, backend, ctx) -> PartialValidationResult:
+            if "bad" in chunk:
+                return PartialValidationResult("fail", reason="bad word detected")
+            return PartialValidationResult("unknown")
+
+    req = FailRequirement(description="no bad words")
+    result = await req.stream_validate("this is bad content", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert result.success == "fail"
+    assert result.reason == "bad word detected"
+
+    result_unknown = await req.stream_validate("good content", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert result_unknown.success == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_does_not_mutate_requirement():
+    req = Requirement(description="original description")
+    original_description = req.description
+    original_output = req._output
+    original_validation_fn = req.validation_fn
+
+    await req.stream_validate("some chunk", backend=None, ctx=None)  # type: ignore[arg-type]
+
+    assert req.description == original_description
+    assert req._output == original_output
+    assert req.validation_fn == original_validation_fn
