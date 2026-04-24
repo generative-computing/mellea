@@ -79,6 +79,10 @@ class ValidationResult:
         """Return a boolean value based on the result."""
         return self.as_bool()
 
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the validation result."""
+        return f"ValidationResult({self._result!r}, reason={self._reason!r}, score={self._score!r})"
+
 
 class PartialValidationResult:
     """Tri-state result from per-chunk streaming validation.

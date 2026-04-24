@@ -64,3 +64,15 @@ def test_repr_shows_state() -> None:
     assert "'fail'" in r
     assert "too short" in r
     assert "0.1" in r
+
+
+def test_thunk_field() -> None:
+    sentinel = object()
+    pvr = PartialValidationResult("pass", thunk=sentinel)  # type: ignore[arg-type]
+    assert pvr.thunk is sentinel
+
+
+def test_context_field() -> None:
+    sentinel = object()
+    pvr = PartialValidationResult("pass", context=sentinel)  # type: ignore[arg-type]
+    assert pvr.context is sentinel
