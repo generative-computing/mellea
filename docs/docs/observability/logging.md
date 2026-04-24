@@ -22,9 +22,21 @@ Mellea uses `MelleaLogger`, a color-coded singleton logger built on Python's
 
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
+| `MELLEA_LOG_ENABLED` | Master switch. Set to `false` / `0` / `no` to suppress all handlers (useful in test environments) | `true` |
 | `MELLEA_LOG_LEVEL` | Log level name (e.g. `DEBUG`, `INFO`, `WARNING`) | `INFO` |
 | `MELLEA_LOG_JSON` | Set to any truthy value (`1`, `true`, `yes`) to emit structured JSON instead of colour-coded output | unset |
-| `MELLEA_FLOG` | Set to any value to forward logs to a local REST endpoint at `http://localhost:8000/api/receive` | unset |
+| `MELLEA_LOG_CONSOLE` | Set to `false` / `0` / `no` to disable the console (stdout) handler | `true` |
+| `MELLEA_LOG_FILE` | Absolute or relative path for rotating file output (e.g. `/var/log/mellea.log`). When unset no file handler is attached | unset |
+| `MELLEA_LOG_FILE_MAX_BYTES` | Maximum size in bytes before the log file is rotated | `10485760` (10 MB) |
+| `MELLEA_LOG_FILE_BACKUP_COUNT` | Number of rotated backup files to keep | `5` |
+| `MELLEA_LOG_OTLP` | Set to `true` / `1` / `yes` to export logs via OTLP. Requires `opentelemetry-sdk` and a configured OTLP endpoint | `false` |
+| `MELLEA_LOG_WEBHOOK` | HTTP(S) URL to forward log records to via HTTP POST. Supersedes the deprecated `MELLEA_FLOG` and `FLOG` variables | unset |
+| `MELLEA_FLOG` | **Deprecated.** Activates a webhook handler pointed at `http://localhost:8000/api/receive`. Use `MELLEA_LOG_WEBHOOK` instead | unset |
+
+> **Note:** If `MELLEA_LOG_FILE` is set but the path cannot be opened (for
+> example due to a permissions error or an invalid path), Mellea emits a
+> `UserWarning` and continues without file logging. The application is never
+> crashed by a misconfigured log path.
 
 By default, `MelleaLogger` logs at `INFO` level with color-coded output to
 stdout. Set `MELLEA_LOG_LEVEL` to change the level:
@@ -112,11 +124,11 @@ logs from distributed services.
 ### Enable OTLP logging
 
 ```bash
-export MELLEA_LOGS_OTLP=true
+export MELLEA_LOG_OTLP=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
-# Optional: logs-specific endpoint (overrides general endpoint)
-export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318
+# Optional: log-specific endpoint (overrides general endpoint)
+export OTEL_EXPORTER_OTLP_LOG_ENDPOINT=http://localhost:4318
 
 # Optional: set service name
 export OTEL_SERVICE_NAME=my-mellea-app
@@ -124,11 +136,11 @@ export OTEL_SERVICE_NAME=my-mellea-app
 
 ### How it works
 
-When `MELLEA_LOGS_OTLP=true`, `MelleaLogger` adds an OpenTelemetry
+When `MELLEA_LOG_OTLP=true`, `MelleaLogger` adds an OpenTelemetry
 `LoggingHandler` alongside its existing handlers:
 
 - **Console handler** — continues to work normally (color-coded output)
-- **REST handler** — continues to work normally (when `MELLEA_FLOG` is set)
+- **REST handler** — continues to work normally (when `MELLEA_LOG_WEBHOOK` is set)
 - **OTLP handler** — exports logs to the configured OTLP collector
 
 Logs are exported using OpenTelemetry's Logs API with batched processing
@@ -204,9 +216,9 @@ OTLP logs work with any OTLP-compatible platform:
 
 **Logs not appearing in OTLP collector:**
 
-1. Verify `MELLEA_LOGS_OTLP=true` is set.
+1. Verify `MELLEA_LOG_OTLP=true` is set.
 2. Check that an OTLP endpoint is configured
-   (`OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`).
+   (`OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOG_ENDPOINT`).
 3. Verify the OTLP collector is running and configured to receive logs.
 4. Check collector logs for connection errors.
 
@@ -216,7 +228,7 @@ OTLP logs work with any OTLP-compatible platform:
 WARNING: OTLP logs exporter is enabled but no endpoint is configured
 ```
 
-Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
+Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOG_ENDPOINT`.
 
 **Connection refused:**
 

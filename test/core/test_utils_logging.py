@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import threading
+import warnings
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,8 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+from logging.handlers import RotatingFileHandler
+
 from mellea.core.utils import (
     RESERVED_LOG_RECORD_ATTRS,
     ContextFilter,
@@ -22,7 +25,10 @@ from mellea.core.utils import (
     JsonFormatter,
     MelleaLogger,
     OtelTraceFilter,
+    RESTHandler,
+    _parse_bool_env,
     clear_log_context,
+    configure_logging,
     log_context,
     set_log_context,
 )
@@ -313,8 +319,8 @@ class TestContextFilter:
 class TestMelleaLoggerLogLevel:
     def _reset(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").setLevel(logging.NOTSET)
 
     def teardown_method(self) -> None:
         self._reset()
@@ -342,7 +348,7 @@ class TestMelleaLoggerLogLevel:
 class TestMelleaLoggerJsonConsole:
     def _reset(self) -> None:
         MelleaLogger.logger = None
-        logger = logging.getLogger("fancy_logger")
+        logger = logging.getLogger("mellea")
         logger.handlers.clear()
         logger.setLevel(logging.NOTSET)
 
@@ -355,8 +361,6 @@ class TestMelleaLoggerJsonConsole:
     def _get_stream_handler(self) -> logging.StreamHandler:  # type: ignore[type-arg]
         logger = MelleaLogger.get_logger()
         handlers = [h for h in logger.handlers if isinstance(h, logging.StreamHandler)]
-        # RESTHandler is a subclass of Handler but not StreamHandler, so this
-        # correctly picks the console handler.
         return handlers[0]
 
     def test_default_uses_custom_formatter(
@@ -397,14 +401,14 @@ class TestMelleaLoggerJsonConsole:
 class TestMelleaLoggerFiltersWired:
     def setup_method(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").setLevel(logging.NOTSET)
         clear_log_context()
 
     def teardown_method(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").setLevel(logging.NOTSET)
         clear_log_context()
 
     def test_context_filter_present(self) -> None:
@@ -564,13 +568,13 @@ class TestReservedAttributeValidation:
 class TestGetLoggerThreadSafety:
     def setup_method(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").setLevel(logging.NOTSET)
 
     def teardown_method(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").setLevel(logging.NOTSET)
 
     def test_concurrent_get_logger_returns_same_instance(self) -> None:
         """Multiple threads calling get_logger() must all get the same object."""
@@ -705,13 +709,13 @@ class TestCustomFormatter:
 class TestFilterFormatterIntegration:
     def setup_method(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").filters.clear()
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").filters.clear()
 
     def teardown_method(self) -> None:
         MelleaLogger.logger = None
-        logging.getLogger("fancy_logger").handlers.clear()
-        logging.getLogger("fancy_logger").filters.clear()
+        logging.getLogger("mellea").handlers.clear()
+        logging.getLogger("mellea").filters.clear()
 
     def test_json_formatter_picks_up_filter_output(self):
         """OtelTraceFilter + JsonFormatter round-trip injects trace context."""
@@ -783,3 +787,500 @@ class TestFilterFormatterIntegration:
                 assert "logger integration test" in output
             finally:
                 logger.removeHandler(handler)
+
+
+# ---------------------------------------------------------------------------
+# MELLEA_LOG_ENABLED master switch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestMelleaLogEnabled:
+    def _reset(self) -> None:
+        MelleaLogger.logger = None
+        logger = logging.getLogger("mellea")
+        logger.handlers.clear()
+        logger.setLevel(logging.NOTSET)
+
+    def setup_method(self) -> None:
+        self._reset()
+
+    def teardown_method(self) -> None:
+        self._reset()
+
+    def test_default_adds_handlers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        logger = MelleaLogger.get_logger()
+        assert len(logger.handlers) > 0
+
+    def test_enabled_true_adds_handlers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOG_ENABLED", "true")
+        logger = MelleaLogger.get_logger()
+        assert len(logger.handlers) > 0
+
+    def test_enabled_false_adds_no_handlers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_ENABLED", "false")
+        logger = MelleaLogger.get_logger()
+        assert len(logger.handlers) == 0
+
+    def test_enabled_0_adds_no_handlers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOG_ENABLED", "0")
+        logger = MelleaLogger.get_logger()
+        assert len(logger.handlers) == 0
+
+    def test_enabled_no_adds_no_handlers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOG_ENABLED", "no")
+        logger = MelleaLogger.get_logger()
+        assert len(logger.handlers) == 0
+
+    def test_disabled_logger_still_has_filters(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_ENABLED", "false")
+        logger = MelleaLogger.get_logger()
+        assert any(isinstance(f, ContextFilter) for f in logger.filters)
+        assert any(isinstance(f, OtelTraceFilter) for f in logger.filters)
+
+
+# ---------------------------------------------------------------------------
+# MELLEA_LOG_CONSOLE console handler toggle
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestMelleaLogConsole:
+    def _reset(self) -> None:
+        MelleaLogger.logger = None
+        logger = logging.getLogger("mellea")
+        logger.handlers.clear()
+        logger.setLevel(logging.NOTSET)
+
+    def setup_method(self) -> None:
+        self._reset()
+
+    def teardown_method(self) -> None:
+        self._reset()
+
+    def _stream_handlers(self) -> list[logging.StreamHandler]:  # type: ignore[type-arg]
+        logger = MelleaLogger.get_logger()
+        return [h for h in logger.handlers if isinstance(h, logging.StreamHandler)]
+
+    def test_default_console_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MELLEA_LOG_CONSOLE", raising=False)
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        assert len(self._stream_handlers()) >= 1
+
+    def test_console_false_removes_stream_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "false")
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        assert len(self._stream_handlers()) == 0
+
+    def test_console_0_removes_stream_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "0")
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        assert len(self._stream_handlers()) == 0
+
+    def test_console_no_removes_stream_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "no")
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        assert len(self._stream_handlers()) == 0
+
+    def test_console_true_keeps_stream_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "true")
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        assert len(self._stream_handlers()) >= 1
+
+    def test_no_rest_handler_when_console_disabled_and_no_webhook(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "false")
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
+        monkeypatch.delenv("MELLEA_FLOG", raising=False)
+        monkeypatch.delenv("FLOG", raising=False)
+        logger = MelleaLogger.get_logger()
+        assert not any(isinstance(h, RESTHandler) for h in logger.handlers)
+
+
+# ---------------------------------------------------------------------------
+# _parse_bool_env helper
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestParseBoolEnv:
+    def test_true_values(self) -> None:
+        for v in ("1", "true", "yes", "TRUE", "YES", "True"):
+            assert _parse_bool_env(v) is True
+
+    def test_false_values(self) -> None:
+        for v in ("0", "false", "no", "FALSE", "NO", "False"):
+            assert _parse_bool_env(v) is False
+
+    def test_empty_uses_default_true(self) -> None:
+        assert _parse_bool_env("", default=True) is True
+
+    def test_empty_uses_default_false(self) -> None:
+        assert _parse_bool_env("", default=False) is False
+
+    def test_unrecognised_uses_default(self) -> None:
+        assert _parse_bool_env("maybe", default=True) is True
+        assert _parse_bool_env("maybe", default=False) is False
+
+    def test_whitespace_stripped(self) -> None:
+        assert _parse_bool_env("  true  ") is True
+        assert _parse_bool_env("  false  ") is False
+
+
+# ---------------------------------------------------------------------------
+# Webhook handler (MELLEA_LOG_WEBHOOK / deprecated MELLEA_FLOG / FLOG)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWebhookHandler:
+    def _reset(self) -> None:
+        MelleaLogger.logger = None
+        logger = logging.getLogger("mellea")
+        logger.handlers.clear()
+        logger.setLevel(logging.NOTSET)
+
+    def setup_method(self) -> None:
+        self._reset()
+
+    def teardown_method(self) -> None:
+        self._reset()
+
+    def _rest_handlers(self) -> list[RESTHandler]:
+        return [
+            h for h in MelleaLogger.get_logger().handlers if isinstance(h, RESTHandler)
+        ]
+
+    def test_no_webhook_env_means_no_rest_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
+        monkeypatch.delenv("MELLEA_FLOG", raising=False)
+        monkeypatch.delenv("FLOG", raising=False)
+        assert len(self._rest_handlers()) == 0
+
+    def test_mellea_log_webhook_attaches_rest_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_WEBHOOK", "http://example.com/logs")
+        monkeypatch.delenv("MELLEA_FLOG", raising=False)
+        monkeypatch.delenv("FLOG", raising=False)
+        handlers = self._rest_handlers()
+        assert len(handlers) == 1
+        assert handlers[0].api_url == "http://example.com/logs"
+
+    def test_mellea_flog_deprecated_still_works(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
+        monkeypatch.setenv("MELLEA_FLOG", "1")
+        monkeypatch.delenv("FLOG", raising=False)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            handlers = self._rest_handlers()
+
+        assert len(handlers) == 1
+        assert handlers[0].api_url == "http://localhost:8000/api/receive"
+        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+    def test_flog_deprecated_still_works(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
+        monkeypatch.delenv("MELLEA_FLOG", raising=False)
+        monkeypatch.setenv("FLOG", "1")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            handlers = self._rest_handlers()
+
+        assert len(handlers) == 1
+        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+    def test_webhook_takes_precedence_over_mellea_flog(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_WEBHOOK", "http://new.example.com/hook")
+        monkeypatch.setenv("MELLEA_FLOG", "1")
+        handlers = self._rest_handlers()
+        assert len(handlers) == 1
+        assert handlers[0].api_url == "http://new.example.com/hook"
+
+    def test_both_mellea_flog_and_flog_set_uses_mellea_flog(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """MELLEA_FLOG takes priority over FLOG; exactly one DeprecationWarning is issued."""
+        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
+        monkeypatch.setenv("MELLEA_FLOG", "1")
+        monkeypatch.setenv("FLOG", "1")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            handlers = self._rest_handlers()
+
+        assert len(handlers) == 1
+        assert handlers[0].api_url == "http://localhost:8000/api/receive"
+        deprecation_warnings = [
+            w for w in caught if issubclass(w.category, DeprecationWarning)
+        ]
+        assert len(deprecation_warnings) == 1
+        assert "MELLEA_FLOG" in str(deprecation_warnings[0].message)
+
+    def test_rest_handler_emit_sends_unconditionally(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """RESTHandler.emit() sends without checking any env var."""
+
+        class _FakeResponse:
+            def raise_for_status(self) -> None:
+                pass
+
+        with patch("mellea.core.utils.requests.request") as mock_req:
+            mock_req.return_value = _FakeResponse()
+            handler = RESTHandler("http://example.com/logs")
+            handler.setFormatter(JsonFormatter())
+            record = logging.LogRecord(
+                name="test",
+                level=logging.INFO,
+                pathname="",
+                lineno=0,
+                msg="ping",
+                args=(),
+                exc_info=None,
+            )
+            handler.emit(record)
+
+        assert mock_req.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# configure_logging() + RotatingFileHandler
+# ---------------------------------------------------------------------------
+
+
+def _close_and_clear(lg: logging.Logger) -> None:
+    """Close all handlers on *lg* then remove them, preventing fd leaks."""
+    for h in list(lg.handlers):
+        h.close()
+    lg.handlers.clear()
+
+
+@pytest.mark.unit
+class TestConfigureLogging:
+    def _reset(self) -> None:
+        MelleaLogger.logger = None
+        logger = logging.getLogger("mellea")
+        _close_and_clear(logger)
+        logger.setLevel(logging.NOTSET)
+
+    def setup_method(self) -> None:
+        self._reset()
+
+    def teardown_method(self) -> None:
+        self._reset()
+
+    def _make_bare_logger(self) -> logging.Logger:
+        """Return a fresh logger with no handlers; caller must call _close_and_clear()."""
+        lg = logging.getLogger(f"test_configure_{id(self)}")
+        _close_and_clear(lg)
+        return lg
+
+    # --- file handler presence ---
+
+    def test_no_file_handler_when_env_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MELLEA_LOG_FILE", raising=False)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        assert not any(isinstance(h, RotatingFileHandler) for h in lg.handlers)
+
+    def test_file_handler_added_when_env_set(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        assert any(isinstance(h, RotatingFileHandler) for h in lg.handlers)
+        _close_and_clear(lg)
+
+    def test_file_handler_is_rotating(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert isinstance(fh, RotatingFileHandler)
+        _close_and_clear(lg)
+
+    def test_file_handler_default_max_bytes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.delenv("MELLEA_LOG_FILE_MAX_BYTES", raising=False)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert fh.maxBytes == 10_485_760
+        _close_and_clear(lg)
+
+    def test_file_handler_default_backup_count(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.delenv("MELLEA_LOG_FILE_BACKUP_COUNT", raising=False)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert fh.backupCount == 5
+        _close_and_clear(lg)
+
+    def test_file_handler_custom_max_bytes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOG_FILE_MAX_BYTES", "1048576")
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert fh.maxBytes == 1_048_576
+        _close_and_clear(lg)
+
+    def test_file_handler_custom_backup_count(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOG_FILE_BACKUP_COUNT", "3")
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert fh.backupCount == 3
+        _close_and_clear(lg)
+
+    # --- per-handler format ---
+
+    def test_file_handler_uses_plain_formatter_by_default(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.delenv("MELLEA_LOG_JSON", raising=False)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert not isinstance(fh.formatter, JsonFormatter)
+        _close_and_clear(lg)
+
+    def test_file_handler_uses_json_formatter_when_env_set(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOG_JSON", "true")
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert isinstance(fh.formatter, JsonFormatter)
+        _close_and_clear(lg)
+
+    # --- error handling ---
+
+    def test_invalid_max_bytes_warns_and_skips_file_handler(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOG_FILE_MAX_BYTES", "not-a-number")
+        lg = self._make_bare_logger()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            configure_logging(lg)
+
+        assert not any(isinstance(h, RotatingFileHandler) for h in lg.handlers)
+        assert any(issubclass(w.category, UserWarning) for w in caught)
+
+    def test_invalid_backup_count_warns_and_skips_file_handler(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOG_FILE_BACKUP_COUNT", "not-a-number")
+        lg = self._make_bare_logger()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            configure_logging(lg)
+
+        assert not any(isinstance(h, RotatingFileHandler) for h in lg.handlers)
+        assert any(issubclass(w.category, UserWarning) for w in caught)
+
+    def test_unwritable_path_warns_and_skips_file_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOG_FILE", "/no/such/directory/mellea.log")
+        lg = self._make_bare_logger()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            configure_logging(lg)
+
+        assert not any(isinstance(h, RotatingFileHandler) for h in lg.handlers)
+        assert any(issubclass(w.category, UserWarning) for w in caught)
+
+    # --- multiple handlers simultaneously ---
+
+    def test_multiple_handlers_active_simultaneously(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOG_WEBHOOK", "http://example.com/logs")
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "true")
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        has_stream = any(isinstance(h, logging.StreamHandler) for h in lg.handlers)
+        has_file = any(isinstance(h, RotatingFileHandler) for h in lg.handlers)
+        has_rest = any(isinstance(h, RESTHandler) for h in lg.handlers)
+        assert has_stream and has_file and has_rest
+        _close_and_clear(lg)
+
+    def test_configure_logging_twice_doubles_handlers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Calling configure_logging twice always appends — documented non-idempotent behaviour."""
+        monkeypatch.delenv("MELLEA_LOG_FILE", raising=False)
+        monkeypatch.delenv("MELLEA_LOG_ENABLED", raising=False)
+        monkeypatch.setenv("MELLEA_LOG_CONSOLE", "true")
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        configure_logging(lg)
+        stream_handlers = [h for h in lg.handlers if type(h) is logging.StreamHandler]
+        assert len(stream_handlers) == 2
+
+    # --- configure_logging called from get_logger ---
+
+    def test_get_logger_delegates_to_configure_logging(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "via_get_logger.log")
+        monkeypatch.setenv("MELLEA_LOG_FILE", log_path)
+        logger = MelleaLogger.get_logger()
+        assert any(isinstance(h, RotatingFileHandler) for h in logger.handlers)

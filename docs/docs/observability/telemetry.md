@@ -51,7 +51,7 @@ All telemetry is configured via environment variables:
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
 | `MELLEA_LOGS_OTLP` | Enable OTLP logs exporter | `false` |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Logs-specific OTLP endpoint (overrides general) | none |
+| `OTEL_EXPORTER_OTLP_LOG_ENDPOINT` | Logs-specific OTLP endpoint (overrides general) | none |
 
 ## Quick start
 
