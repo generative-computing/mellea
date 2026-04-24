@@ -4,6 +4,8 @@ A ``Requirement`` pairs a human-readable description with a validation function 
 inspects a ``Context`` (and optionally a backend) to determine whether a model output
 meets a constraint. ``ValidationResult`` carries the pass/fail verdict along with an
 optional reason, score, and the ``ModelOutputThunk`` produced during validation.
+``PartialValidationResult`` provides a tri-state variant (``"pass"``, ``"fail"``,
+``"unknown"``) for per-chunk streaming validation.
 Helper factories such as ``default_output_to_bool`` make it easy to build requirements
 without boilerplate.
 """
@@ -81,6 +83,12 @@ class ValidationResult:
 class PartialValidationResult:
     """Tri-state result from per-chunk streaming validation.
 
+    Unlike :class:`ValidationResult`, which stores its verdict as a private
+    ``_result: bool``, this class exposes ``success`` as a public property.
+    The asymmetry is intentional: the tri-state value cannot be recovered from
+    a ``bool``, so a public property is the only way to distinguish ``"fail"``
+    from ``"unknown"`` after construction.
+
     Args:
         success: Validation state — ``"pass"`` (constraint satisfied so far),
             ``"fail"`` (constraint violated, stop streaming), or
@@ -102,6 +110,10 @@ class PartialValidationResult:
         context: Context | None = None,
     ):
         """Initialize PartialValidationResult with a tri-state success value."""
+        if success not in ("pass", "fail", "unknown"):
+            raise ValueError(
+                f"success must be 'pass', 'fail', or 'unknown', got {success!r}"
+            )
         self._success: Literal["pass", "fail", "unknown"] = success
         self._reason = reason
         self._score = score
@@ -136,6 +148,11 @@ class PartialValidationResult:
     def as_bool(self) -> bool:
         """Return True for ``"pass"``, False for ``"fail"`` or ``"unknown"``.
 
+        ``"unknown"`` maps to ``False`` intentionally. In streaming contexts,
+        check ``pvr.success == "unknown"`` before treating ``False`` as a definitive
+        failure — ``"unknown"`` means insufficient data so far, not a constraint
+        violation.
+
         Returns:
             bool: ``True`` if the partial result is ``"pass"``, ``False`` otherwise.
         """
@@ -144,6 +161,10 @@ class PartialValidationResult:
     def __bool__(self) -> bool:
         """Return a boolean value based on the success state."""
         return self.as_bool()
+
+    def __repr__(self) -> str:
+        """Return a developer-readable representation showing the tri-state value."""
+        return f"PartialValidationResult({self._success!r}, reason={self._reason!r}, score={self._score!r})"
 
 
 def default_output_to_bool(x: CBlock | str) -> bool:

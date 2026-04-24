@@ -1,5 +1,7 @@
 """Unit tests for PartialValidationResult tri-state semantics."""
 
+import pytest
+
 from mellea.core import PartialValidationResult
 
 
@@ -42,7 +44,23 @@ def test_score_field():
     assert pvr.score == 0.95
 
 
-def test_as_bool_matches_bool():
-    for state in ("pass", "fail", "unknown"):
-        pvr = PartialValidationResult(state)  # type: ignore[arg-type]
-        assert pvr.as_bool() == bool(pvr)
+@pytest.mark.parametrize(
+    ("state", "expected"), [("pass", True), ("fail", False), ("unknown", False)]
+)
+def test_as_bool_correctness(state: str, expected: bool) -> None:
+    pvr = PartialValidationResult(state)  # type: ignore[arg-type]
+    assert pvr.as_bool() is expected
+    assert bool(pvr) is expected
+
+
+def test_invalid_success_raises() -> None:
+    with pytest.raises(ValueError, match="success must be"):
+        PartialValidationResult("maybe")  # type: ignore[arg-type]
+
+
+def test_repr_shows_state() -> None:
+    pvr = PartialValidationResult("fail", reason="too short", score=0.1)
+    r = repr(pvr)
+    assert "'fail'" in r
+    assert "too short" in r
+    assert "0.1" in r
