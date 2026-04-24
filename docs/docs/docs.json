@@ -338,40 +338,11 @@
               {
                 "group": "telemetry",
                 "pages": [
+                  "api/mellea/telemetry/context",
                   "api/mellea/telemetry/logging",
                   "api/mellea/telemetry/metrics",
                   "api/mellea/telemetry/telemetry",
                   "api/mellea/telemetry/tracing"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "cli",
-            "pages": [
-              "api/cli/m",
-              {
-                "group": "alora",
-                "pages": [
-                  "api/cli/alora/commands",
-                  "api/cli/alora/intrinsic_uploader",
-                  "api/cli/alora/readme_generator",
-                  "api/cli/alora/train",
-                  "api/cli/alora/upload"
-                ]
-              },
-              {
-                "group": "decompose",
-                "pages": [
-                  "api/cli/decompose/decompose"
-                ]
-              },
-              {
-                "group": "eval",
-                "pages": [
-                  "api/cli/eval/commands",
-                  "api/cli/eval/eval",
-                  "api/cli/eval/runner"
                 ]
               }
             ]
