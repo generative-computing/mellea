@@ -3,6 +3,8 @@
 import re
 from abc import ABC, abstractmethod
 
+__all__ = ["ChunkingStrategy", "ParagraphChunker", "SentenceChunker", "WordChunker"]
+
 
 class ChunkingStrategy(ABC):
     """Abstract base class for text chunking strategies used in streaming validation.
@@ -11,6 +13,12 @@ class ChunkingStrategy(ABC):
     list of complete chunks ready for downstream validation. Any trailing fragment
     that has not yet reached a chunk boundary is withheld — it is not included in
     the returned list. Each call is stateless and idempotent given the same input.
+
+    End-of-stream contract: ``split()`` always withholds the trailing fragment.
+    When the stream terminates, callers are responsible for processing any remainder:
+    take the full accumulated text, identify everything after the last returned
+    chunk boundary, and handle it appropriately (e.g. pass to a final validator
+    or discard).
     """
 
     @abstractmethod
@@ -28,20 +36,31 @@ class ChunkingStrategy(ABC):
         ...
 
 
-# Sentence boundary: sentence-ending punctuation optionally followed by closing
-# quotes/parens, then either whitespace or end-of-string.
-_SENTENCE_BOUNDARY = re.compile(r'[.!?]["\')]?\s')
+# Sentence boundary: sentence-ending punctuation, optionally followed by a closing
+# quote or paren, then whitespace.
+# Character class covers: straight double/single quotes, right double/single curly
+# quotes (U+201D / U+2019), and closing paren.
+# The \u escapes are processed by the re engine (not Python's string parser), so
+# this works correctly in a raw string.
+_SENTENCE_BOUNDARY = re.compile(r'[.!?]["\'”’)]?\s')
+
+# Whitespace run separator used by WordChunker.
+_WHITESPACE = re.compile(r"\s+")
+
+# Paragraph boundary patterns used by ParagraphChunker.
+_PARA_BOUNDARY = re.compile(r"\n{2,}")
+_PARA_BOUNDARY_END = re.compile(r"\n{2,}$")
 
 
 class SentenceChunker(ChunkingStrategy):
     """Splits accumulated text on sentence boundaries.
 
     Sentence boundaries are detected by ``.``, ``!``, or ``?``, optionally
-    followed by a closing quote or parenthesis, then whitespace. The final
-    sentence is only returned once it is followed by whitespace or another
-    sentence — a trailing fragment with no following whitespace is withheld.
-    Abbreviations are a known edge case: they will be split on (simple regex,
-    not NLP).
+    followed by a closing quote (straight or curly) or parenthesis, then
+    whitespace. The final sentence is only returned once it is followed by
+    whitespace or another sentence — a trailing fragment with no following
+    whitespace is withheld. Abbreviations are a known edge case: they will
+    be split on (simple regex, not NLP).
     """
 
     def split(self, accumulated_text: str) -> list[str]:
@@ -68,8 +87,10 @@ class SentenceChunker(ChunkingStrategy):
             # but not the trailing whitespace character.
             end = match.start() + len(match.group().rstrip())
             chunks.append(remaining[:end])
-            # Advance past the whitespace separator
-            remaining = remaining[match.end() :]
+            # Advance past the entire whitespace separator; lstrip() handles
+            # multi-character gaps (double-space, tab, etc.) so they don't
+            # leak into the next chunk as leading whitespace.
+            remaining = remaining[match.end() :].lstrip()
 
         return chunks
 
@@ -96,7 +117,7 @@ class WordChunker(ChunkingStrategy):
 
         # Split on runs of whitespace; the last token is a trailing fragment
         # unless accumulated_text ends with whitespace.
-        parts = re.split(r"\s+", accumulated_text)
+        parts = _WHITESPACE.split(accumulated_text)
 
         # re.split on leading whitespace produces an empty first element; strip it.
         if parts and parts[0] == "":
@@ -120,6 +141,9 @@ class ParagraphChunker(ChunkingStrategy):
     Two or more consecutive newline characters are treated as a paragraph
     separator. The trailing paragraph fragment (text not yet followed by ``\n\n``)
     is withheld.
+
+    Note: only Unix-style ``\n\n`` separators are recognised. CRLF
+    (``\r\n\r\n``) paragraph separators are not supported.
     """
 
     def split(self, accumulated_text: str) -> list[str]:
@@ -136,10 +160,11 @@ class ParagraphChunker(ChunkingStrategy):
         if not accumulated_text:
             return []
 
-        parts = re.split(r"\n{2,}", accumulated_text)
+        parts = _PARA_BOUNDARY.split(accumulated_text)
 
         # If the text does not end with \n\n, the last part is a trailing fragment.
-        if not re.search(r"\n{2,}$", accumulated_text):
+        if not _PARA_BOUNDARY_END.search(accumulated_text):
             parts = parts[:-1]
 
+        # _PARA_BOUNDARY.split on leading \n\n produces an empty first element.
         return [p for p in parts if p]

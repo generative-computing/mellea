@@ -65,6 +65,32 @@ def test_sentence_chunker_unicode():
     assert result == ["Ça va bien.", "C'est délicieux."]
 
 
+def test_sentence_chunker_closing_paren():
+    c = SentenceChunker()
+    result = c.split("(See note.) Continue here. ")
+    assert result == ["(See note.)", "Continue here."]
+
+
+def test_sentence_chunker_double_space_separator():
+    # Regression: double-space between sentences must not leak into next chunk.
+    c = SentenceChunker()
+    result = c.split("First.  Second. ")
+    assert result == ["First.", "Second."]
+
+
+def test_sentence_chunker_tab_separator():
+    c = SentenceChunker()
+    result = c.split("First.\tSecond. ")
+    assert result == ["First.", "Second."]
+
+
+def test_sentence_chunker_abbreviation_known_bad():
+    # Known edge case: abbreviations cause a spurious split (simple regex, not NLP).
+    c = SentenceChunker()
+    result = c.split("Dr. Smith went home. He was tired. ")
+    assert result == ["Dr.", "Smith went home.", "He was tired."]
+
+
 def test_sentence_chunker_incremental_simulation():
     # Simulate accumulating text token by token.
     c = SentenceChunker()
@@ -130,6 +156,14 @@ def test_word_chunker_incremental_simulation():
     assert c.split("foobar ") == ["foobar"]
     assert c.split("foobar ba") == ["foobar"]
     assert c.split("foobar baz ") == ["foobar", "baz"]
+
+
+def test_word_chunker_leading_whitespace():
+    # re.split on " hello world" produces ['', 'hello', 'world'] — empty first
+    # element must be stripped.
+    c = WordChunker()
+    result = c.split(" hello world ")
+    assert result == ["hello", "world"]
 
 
 # ---------------------------------------------------------------------------
