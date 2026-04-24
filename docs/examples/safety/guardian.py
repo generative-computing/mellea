@@ -1,6 +1,14 @@
 # pytest: ollama, e2e
 
-"""Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B"""
+"""[DEPRECATED] Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B.
+
+.. deprecated:: 0.4
+    ``GuardianCheck`` is deprecated. Use the Guardian Intrinsics API instead:
+    ``docs/examples/intrinsics/guardian_core.py`` for ``guardian_check()``,
+    ``docs/examples/intrinsics/policy_guardrails.py`` for ``policy_guardrails()``,
+    ``docs/examples/intrinsics/factuality_detection.py`` for ``factuality_detection()``.
+    See https://mellea.dev/how-to/safety-guardrails for documentation.
+"""
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
