@@ -294,7 +294,7 @@ Each entry in the JSON array defines one test:
 ```json
 [
   {
-    "source": "profession-email-writing",
+    "source": "professional-email-writing",
     "name": "case_001",
     "instructions": "The email should follow the instructions in the input.",
     "id": "tc-001",
