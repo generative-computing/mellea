@@ -343,6 +343,7 @@
               {
                 "group": "telemetry",
                 "pages": [
+                  "api/mellea/telemetry/context",
                   "api/mellea/telemetry/logging",
                   "api/mellea/telemetry/metrics",
                   "api/mellea/telemetry/telemetry",
