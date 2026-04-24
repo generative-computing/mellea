@@ -260,34 +260,111 @@ See: [Build a RAG Pipeline](../how-to/build-a-rag-pipeline)
 
 ---
 
+## CRITERIA_BANK
+
+A dictionary mapping short string keys to full criteria descriptions used by
+[`guardian_check()`](#guardian_check). Pass a key directly as the `criteria`
+argument — the function looks up the full description automatically.
+
+Available keys: `"harm"`, `"social_bias"`, `"jailbreak"`, `"profanity"`,
+`"unethical_behavior"`, `"violence"`, `"groundedness"`, `"answer_relevance"`,
+`"context_relevance"`, `"function_call"`.
+
+```python
+from mellea.stdlib.components.intrinsic.guardian import CRITERIA_BANK
+
+print(list(CRITERIA_BANK.keys()))
+```
+
+See: [Safety Guardrails](../how-to/safety-guardrails)
+
+---
+
+## factuality_correction()
+
+A Guardian Intrinsic function that generates a corrected version of the assistant's
+last response grounded in the documents provided in context. Returns the corrected
+text as a `str`, or `"none"` if the original response was already factually correct.
+
+```python
+from mellea.stdlib.components.intrinsic.guardian import factuality_correction
+```
+
+See: [Safety Guardrails](../how-to/safety-guardrails#factuality-correction)
+
+---
+
+## factuality_detection()
+
+A Guardian Intrinsic function that evaluates whether the assistant's last response
+is factually consistent with the documents in context. Returns `"yes"` if the
+response contains factual errors, or `"no"` if it is consistent.
+
+```python
+from mellea.stdlib.components.intrinsic.guardian import factuality_detection
+```
+
+See: [Safety Guardrails](../how-to/safety-guardrails#factuality-detection)
+
+---
+
+## guardian_check()
+
+A Guardian Intrinsic function that evaluates the last message from a given role in
+a `ChatContext` against a safety or quality criterion. Returns a `float` score from
+`0.0` (no risk) to `1.0` (risk detected); values at or above `0.5` indicate risk.
+
+Accepts any key from [`CRITERIA_BANK`](#criteria_bank) or a custom free-text
+criteria string.
+
+```python
+from mellea.stdlib.components.intrinsic import guardian
+
+score = guardian.guardian_check(context, backend, criteria="harm")
+```
+
+See: [Safety Guardrails](../how-to/safety-guardrails)
+
+---
+
 ## GuardianCheck
 
-A safety requirement in Mellea that validates LLM outputs against defined safety
-rules before they are returned to the caller. Uses the Granite Guardian model as a
-verifier. Constructed with a `GuardianRisk` value and optional `backend` and
-`context_text` parameters.
+> **Deprecated as of v0.4.** Use [`guardian_check()`](#guardian_check),
+> [`policy_guardrails()`](#policy_guardrails), or
+> [`factuality_detection()`](#factuality_detection) from the Guardian Intrinsics
+> instead. See [Safety Guardrails](../how-to/safety-guardrails).
 
-See: [Making Agents Reliable](../tutorials/04-making-agents-reliable) |
-[Security and Taint Tracking](../advanced/security-and-taint-tracking)
+A `Requirement` subclass that validated LLM outputs using a separately loaded
+Granite Guardian model. Required an independent Ollama or HuggingFace backend
+for the Guardian model.
+
+See: [Security and Taint Tracking (deprecated)](../advanced/security-and-taint-tracking)
 
 ---
 
 ## GuardianRisk
 
-An enum that specifies which safety risk category `GuardianCheck` should detect.
-Each check runs as an independent inference call against the Guardian model.
+> **Deprecated as of v0.4.** Use [`CRITERIA_BANK`](#criteria_bank) string keys
+> with [`guardian_check()`](#guardian_check) instead.
 
-Available values: `HARM`, `GROUNDEDNESS`, `PROFANITY`, `ANSWER_RELEVANCE`,
-`JAILBREAK`, `FUNCTION_CALL`, `SOCIAL_BIAS`, `VIOLENCE`, `SEXUAL_CONTENT`,
-`UNETHICAL_BEHAVIOR`.
+An enum specifying which safety risk category the deprecated `GuardianCheck`
+class should detect. Replaced by the string keys in `CRITERIA_BANK`.
+
+See: [Security and Taint Tracking (deprecated)](../advanced/security-and-taint-tracking)
+
+---
+
+## policy_guardrails()
+
+A Guardian Intrinsic function that checks whether a scenario complies with a
+natural-language policy. Returns `"Yes"` (compliant), `"No"` (non-compliant), or
+`"Ambiguous"` (insufficient information to decide).
 
 ```python
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
-
-harm_check = GuardianCheck(GuardianRisk.HARM, backend_type="ollama")
+from mellea.stdlib.components.intrinsic.guardian import policy_guardrails
 ```
 
-See: [Making Agents Reliable](../tutorials/04-making-agents-reliable)
+See: [Safety Guardrails](../how-to/safety-guardrails#policy-compliance)
 
 ---
 

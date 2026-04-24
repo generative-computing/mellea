@@ -1,7 +1,15 @@
 # pytest: ollama, huggingface, e2e
 
-"""RepairTemplateStrategy Example with Actual Function Call Validation
+"""[DEPRECATED] RepairTemplateStrategy Example with Actual Function Call Validation.
+
 Demonstrates how RepairTemplateStrategy repairs responses using actual function calls.
+
+.. deprecated:: 0.4
+    ``GuardianCheck`` is deprecated. Use the Guardian Intrinsics API instead.
+    Note: this example demonstrates ``GuardianCheck`` as a ``Requirement`` in
+    ``RepairTemplateStrategy`` — a pattern that does not have a direct equivalent
+    with the intrinsic functions. See ``docs/examples/intrinsics/guardian_core.py``
+    for the current Guardian API.
 """
 
 from mellea import MelleaSession

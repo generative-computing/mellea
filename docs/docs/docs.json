@@ -68,6 +68,7 @@
               "how-to/configure-model-options",
               "how-to/use-images-and-vision",
               "how-to/build-a-rag-pipeline",
+              "how-to/safety-guardrails",
               "how-to/refactor-prompts-with-cli",
               "how-to/unit-test-generative-code",
               "how-to/handling-exceptions"
@@ -482,10 +483,6 @@
     {
       "source": "/integrations/langchain-and-smolagents",
       "destination": "/integrations/langchain"
-    },
-    {
-      "source": "/how-to/safety-guardrails",
-      "destination": "/advanced/security-and-taint-tracking"
     },
     {
       "source": "/dev/constrained-decoding",

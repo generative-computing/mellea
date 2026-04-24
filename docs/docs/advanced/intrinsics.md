@@ -250,3 +250,12 @@ The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task na
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
 HuggingFace repository configuration instead of the intrinsic catalog.
 Output format is task-specific — `requirement-check` returns a likelihood score.
+
+---
+
+## Guardian Intrinsics
+
+Safety and factuality checks use a separate set of Guardian-specific intrinsics:
+`guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
+`factuality_correction()`. These are documented in the
+[Safety Guardrails](../how-to/safety-guardrails) how-to guide.

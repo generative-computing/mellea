@@ -1,9 +1,15 @@
 # pytest: ollama, huggingface, e2e
 
-"""Example of using GuardianCheck with HuggingFace backend for direct model inference
+"""[DEPRECATED] Example of using GuardianCheck with HuggingFace backend for direct model inference.
 
 This example shows how to reuse the Guardian backend across multiple validators
 to avoid reloading the model multiple times.
+
+.. deprecated:: 0.4
+    ``GuardianCheck`` is deprecated. Use the Guardian Intrinsics API instead:
+    ``docs/examples/intrinsics/guardian_core.py`` covers all ``guardian_check()``
+    patterns including harm, groundedness, and function call validation.
+    See https://mellea.dev/how-to/safety-guardrails for documentation.
 """
 
 from mellea import MelleaSession
