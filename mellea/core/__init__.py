@@ -28,7 +28,12 @@ from .base import (
     blockify,
 )
 from .formatter import Formatter
-from .requirement import Requirement, ValidationResult, default_output_to_bool
+from .requirement import (
+    PartialValidationResult,
+    Requirement,
+    ValidationResult,
+    default_output_to_bool,
+)
 from .sampling import SamplingResult, SamplingStrategy
 from .utils import FancyLogger
 
@@ -49,6 +54,7 @@ __all__ = [
     "ImageBlock",
     "ModelOutputThunk",
     "ModelToolCall",
+    "PartialValidationResult",
     "Requirement",
     "S",
     "SamplingResult",

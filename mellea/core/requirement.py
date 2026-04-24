@@ -11,6 +11,7 @@ without boilerplate.
 import re
 from collections.abc import Callable
 from copy import copy
+from typing import Literal
 
 from .backend import Backend, BaseModelSubclass
 from .base import CBlock, Component, Context, ModelOutputThunk, TemplateRepresentation
@@ -74,6 +75,74 @@ class ValidationResult:
 
     def __bool__(self) -> bool:
         """Return a boolean value based on the result."""
+        return self.as_bool()
+
+
+class PartialValidationResult:
+    """Tri-state result from per-chunk streaming validation.
+
+    Args:
+        success: Validation state — ``"pass"`` (constraint satisfied so far),
+            ``"fail"`` (constraint violated, stop streaming), or
+            ``"unknown"`` (insufficient data yet, continue streaming).
+        reason: Optional human-readable explanation.
+        score: Optional numeric confidence score.
+        thunk: Optional ModelOutputThunk from the validation call.
+        context: Optional context associated with the validation call.
+
+    """
+
+    def __init__(
+        self,
+        success: Literal["pass", "fail", "unknown"],
+        *,
+        reason: str | None = None,
+        score: float | None = None,
+        thunk: ModelOutputThunk | None = None,
+        context: Context | None = None,
+    ):
+        """Initialize PartialValidationResult with a tri-state success value."""
+        self._success = success
+        self._reason = reason
+        self._score = score
+        self._thunk = thunk
+        self._context = context
+
+    @property
+    def success(self) -> Literal["pass", "fail", "unknown"]:
+        """The tri-state validation result."""
+        return self._success
+
+    @property
+    def reason(self) -> str | None:
+        """Reason for the validation result."""
+        return self._reason
+
+    @property
+    def score(self) -> float | None:
+        """An optional score for the validation result."""
+        return self._score
+
+    @property
+    def thunk(self) -> ModelOutputThunk | None:
+        """The ModelOutputThunk associated with the validation call, if any."""
+        return self._thunk
+
+    @property
+    def context(self) -> Context | None:
+        """The context associated with the validation call, if any."""
+        return self._context
+
+    def as_bool(self) -> bool:
+        """Return True for ``"pass"``, False for ``"fail"`` or ``"unknown"``.
+
+        Returns:
+            bool: ``True`` if the partial result is ``"pass"``, ``False`` otherwise.
+        """
+        return self._success == "pass"
+
+    def __bool__(self) -> bool:
+        """Return a boolean value based on the success state."""
         return self.as_bool()
 
 
