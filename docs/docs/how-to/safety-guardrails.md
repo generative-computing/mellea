@@ -148,6 +148,11 @@ print(f"PII score: {score:.4f}")
 # Example output: PII score: 0.9871
 ```
 
+> **Migrating from `GuardianRisk`?** Not all deprecated `GuardianRisk` enum
+> values have a corresponding `CRITERIA_BANK` key. For any risk category not
+> listed in the table above, pass a custom free-text description as the
+> `criteria` argument.
+
 ## Policy compliance
 
 `policy_guardrails()` checks whether a scenario complies with a natural-language
@@ -188,6 +193,10 @@ documents, a user question, and the assistant's answer.
 
 Returns `"yes"` if the response is factually incorrect (contains unsupported or
 contradicted claims), or `"no"` if it is factually correct:
+
+> **Note:** `"yes"` means factuality issues **were** detected — the response is
+> incorrect. `"no"` means the response is factually consistent with the context.
+> This is easy to misread; test against `== "yes"` to catch errors.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
