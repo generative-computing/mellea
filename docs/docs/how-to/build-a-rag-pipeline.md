@@ -222,7 +222,7 @@ from sentence_transformers import SentenceTransformer
 
 from mellea import generative, start_session
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import req, simple_validate
@@ -268,10 +268,11 @@ def rag(docs: list[str], query: str) -> str | None:
         requirements=[req("Answer only from the provided documents.")],
     )
 
+    docs_for_eval = [Document(text=doc, doc_id=str(i)) for i, doc in enumerate(relevant)]
     eval_ctx = (
         ChatContext()
-        .add(Message("user", f"Document: {chr(10).join(relevant)}"))
-        .add(Message("assistant", str(answer)))
+        .add(Message("user", query))
+        .add(Message("assistant", str(answer), documents=docs_for_eval))
     )
     score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="groundedness")
     if score >= 0.5:

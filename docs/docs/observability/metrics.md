@@ -266,8 +266,16 @@ All sampling metrics include:
 
 | Attribute | Description | Example Values |
 | --------- | ----------- | -------------- |
-| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` |
+| `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` *(deprecated v0.4)* |
 | `reason` | Human-readable failure reason (`mellea.requirement.failures` only) | `"Output did not satisfy constraint"`, `"unknown"` |
+
+> **Guardian Intrinsics and metrics:** `guardian_check()`, `policy_guardrails()`,
+> `factuality_detection()`, and `factuality_correction()` are not `Requirement`
+> subclasses and do not emit `mellea.requirement.checks` or
+> `mellea.requirement.failures` metrics. If you migrate from `GuardianCheck` to
+> Guardian Intrinsics, Guardian-related requirement counters will stop appearing
+> in your metrics. Wrap Guardian Intrinsic calls in a custom `Requirement` subclass
+> if you need to preserve this telemetry.
 
 ### Tool counter
 
