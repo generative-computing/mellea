@@ -25,6 +25,9 @@ Every test for a `@generative` function falls into one of three levels:
 | **Type check** | `isinstance(result, bool)` | Yes — constrained decoding always returns the declared type |
 | **Structural check** | `result in ["positive", "negative"]` or field names present | Yes — schema enforcement is deterministic |
 | **Qualitative check** | `assert result is True` | No — depends on the model and prompt |
+| **Semantic evaluation** |	Judge model scores output against reference responses |	No — run separately, not a pytest assertion |
+
+*For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component](#the-unit_test_eval-component) at the end of this page.*
 
 Type and structural checks run in CI. Qualitative checks carry
 `@pytest.mark.qualitative` and are skipped in CI when `CICD=1` is set.
@@ -311,7 +314,10 @@ Each entry in the JSON array defines one test:
       {
         "input_id": "ex-001",
         "input": [{"role": "user", "content": "Write a brief professional follow-up email after a job interview"}],
-        "targets": [{"role": "assistant", "content": "Thank you for taking the time to speak with me yesterday. I look forward to hearing about next steps at your convenience."}]
+        "targets": [
+            {"role": "assistant", "content": "Thank you for taking the time to speak with me yesterday. I look forward to hearing about next steps at your convenience."},
+            {"role": "assistant", "content": "I appreciate the opportunity to interview yesterday. Looking forward to hearing about next steps."}
+        ]
       },
       {
         "input_id": "ex-002",
@@ -332,12 +338,16 @@ from mellea.stdlib.components.unit_test_eval import TestBasedEval
 # Load one TestBasedEval per test definition in the file.
 test_evals = TestBasedEval.from_json_file("tests/eval_data/email_writer.json")
 
-judge_session = start_session()
+# default backend model which can be changed as needed (two different models can be used)
+judge_session = start_session(backend_name="ollama", model_id="granite4:3b")
+generation_session = start_session(backend_name="ollama", model_id="granite4:3b")
 
 for eval_case in test_evals:
     for idx, input_text in enumerate(eval_case.inputs):
-        # Generate the prediction from the system under test. Replace with your actual model calls - this prediction would fail for both examples as it is not professional or formal
-        prediction = "Thank you, can't wait to hear back :)" 
+        # Generate the prediction from the system under test.  
+        prediction = generation_session.act(
+            SimpleComponent(instruction=input_text)
+        )
 
         targets = eval_case.targets[idx] if eval_case.targets else []
         eval_case.set_judge_context(input_text, prediction, targets)
@@ -399,3 +409,5 @@ pytest -m qualitative
   `Requirement`, `simple_validate`, and `check` interact with the IVR loop
 - [Handling Exceptions](../how-to/handling-exceptions) —
   catch and diagnose errors that occur during generation
+- [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
+  the `Requirement`-based approach for inline judge evaluation
