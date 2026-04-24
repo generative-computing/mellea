@@ -3,7 +3,6 @@
 import asyncio
 import importlib.util
 import inspect
-import json
 import os
 import sys
 import time
@@ -23,7 +22,10 @@ except ImportError as e:
     ) from e
 
 from mellea.backends.model_options import ModelOption
-from mellea.helpers.openai_compatible_helpers import build_completion_usage
+from mellea.helpers.openai_compatible_helpers import (
+    build_completion_usage,
+    build_tool_calls,
+)
 
 from .models import (
     ChatCompletion,
@@ -176,34 +178,30 @@ def make_chat_endpoint(module):
                 )
 
             # Extract tool calls from the ModelOutputThunk if available
-            tool_calls = None
-            finish_reason: Literal[
-                "stop", "length", "content_filter", "tool_calls", "function_call"
-            ] = "stop"
-            if (
-                hasattr(output, "tool_calls")
-                and output.tool_calls is not None
-                and isinstance(output.tool_calls, dict)
-                and output.tool_calls  # Check dict is not empty
-            ):
-                tool_calls = []
-                for model_tool_call in output.tool_calls.values():
-                    # Generate a unique ID for this tool call
-                    tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
-
-                    # Serialize the arguments to JSON string
-                    args_json = json.dumps(model_tool_call.args)
-
-                    tool_calls.append(
-                        ChatCompletionMessageToolCall(
-                            id=tool_call_id,
-                            type="function",
-                            function=ToolCallFunction(
-                                name=model_tool_call.name, arguments=args_json
-                            ),
-                        )
+            tool_calls_list = build_tool_calls(output)
+            tool_calls = (
+                [
+                    ChatCompletionMessageToolCall(
+                        id=tc["id"],
+                        type=tc["type"],
+                        function=ToolCallFunction(
+                            name=tc["function"]["name"],
+                            arguments=tc["function"]["arguments"],
+                        ),
                     )
-                finish_reason = "tool_calls"
+                    for tc in tool_calls_list
+                ]
+                if tool_calls_list
+                else None
+            )
+
+            # Determine finish_reason based on tool calls
+            finish_reason: (
+                Literal[
+                    "stop", "length", "content_filter", "tool_calls", "function_call"
+                ]
+                | None
+            ) = "tool_calls" if tool_calls else "stop"
 
             # system_fingerprint represents backend config hash, not model name
             # The model name is already in response.model (line 73)

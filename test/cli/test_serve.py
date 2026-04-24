@@ -535,3 +535,90 @@ class TestHTTPValidation:
 
         # response_format should NOT be in model_options
         assert "response_format" not in model_options
+
+    @pytest.mark.asyncio
+    async def test_streaming_with_tool_calls(self, mock_module):
+        """Test that tool calls are properly emitted in streaming responses."""
+        import json
+        from unittest.mock import Mock
+
+        from fastapi.responses import StreamingResponse
+
+        from mellea.core.base import ModelToolCall
+
+        # Create a mock tool
+        mock_tool = Mock()
+        mock_tool.name = "get_weather"
+
+        # Create a mock output with tool calls
+        # Real backends may return content alongside tool calls (e.g., "I'll check that for you")
+        mock_output = ModelOutputThunk("I'll check the weather for you.")
+        mock_output.tool_calls = {
+            "get_weather": ModelToolCall(
+                name="get_weather",
+                func=mock_tool,
+                args={"location": "San Francisco", "units": "celsius"},
+            )
+        }
+        mock_module.serve.return_value = mock_output
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="What's the weather?")],
+            stream=True,
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Verify it's a streaming response
+        assert isinstance(response, StreamingResponse)
+
+        # Collect all chunks
+        chunks = []
+        async for chunk_data in response.body_iterator:
+            # Convert to string for parsing
+            if isinstance(chunk_data, (bytes, memoryview)):
+                chunk_str = (
+                    bytes(chunk_data).decode("utf-8")
+                    if isinstance(chunk_data, memoryview)
+                    else chunk_data.decode("utf-8")
+                )
+            else:
+                chunk_str = chunk_data
+
+            # Parse SSE format: "data: {json}\n\n"
+            if chunk_str.startswith("data: "):
+                json_str = chunk_str[6:].strip()
+                if json_str and json_str != "[DONE]":
+                    chunks.append(json.loads(json_str))
+
+        # Verify we have the expected chunk sequence
+        # Expected: initial (role), content, tool_calls, final = 4 chunks
+        assert len(chunks) == 4, f"Should have exactly 4 chunks, got {len(chunks)}"
+
+        # Chunk 0: Initial chunk with role
+        initial_chunk = chunks[0]
+        assert initial_chunk["choices"][0]["delta"].get("role") == "assistant"
+        assert initial_chunk["choices"][0]["finish_reason"] is None
+
+        # Chunk 1: Content chunk
+        content_chunk = chunks[1]
+        assert (
+            content_chunk["choices"][0]["delta"].get("content")
+            == "I'll check the weather for you."
+        )
+        assert content_chunk["choices"][0]["finish_reason"] is None
+
+        # Chunk 2: Tool call chunk
+        tool_call_chunk = chunks[2]
+        tool_calls = tool_call_chunk["choices"][0]["delta"]["tool_calls"]
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["function"]["name"] == "get_weather"
+        assert "location" in tool_calls[0]["function"]["arguments"]
+        assert tool_call_chunk["choices"][0]["finish_reason"] is None
+
+        # Chunk 3: Final chunk has finish_reason="tool_calls"
+        final_chunk = chunks[3]
+        assert final_chunk["choices"][0]["delta"].get("content") is None
+        assert final_chunk["choices"][0]["finish_reason"] == "tool_calls"
