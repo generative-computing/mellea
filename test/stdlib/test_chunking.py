@@ -1,7 +1,5 @@
 """Tests for ChunkingStrategy ABC and built-in chunker implementations."""
 
-import pytest
-
 from mellea.stdlib.chunking import ParagraphChunker, SentenceChunker, WordChunker
 
 # ---------------------------------------------------------------------------
