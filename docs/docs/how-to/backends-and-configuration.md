@@ -115,7 +115,7 @@ LiteLLM provides unified access to 100+ providers — Anthropic, AWS Bedrock, Az
 and more:
 
 ```python
-# Requires: mellea, litellm
+# Requires: mellea[litellm]
 # Returns: str
 import mellea
 
@@ -137,7 +137,7 @@ print(str(result))
 Run models locally using HuggingFace transformers:
 
 ```python
-# Requires: mellea, transformers
+# Requires: mellea[hf]
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.huggingface import LocalHFBackend

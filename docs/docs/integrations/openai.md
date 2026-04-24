@@ -22,7 +22,7 @@ export OPENAI_API_KEY=sk-...
 Then create a session:
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: ModelOutputThunk
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -40,7 +40,7 @@ print(str(reply))
 Pass the key directly if you prefer not to use an environment variable:
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -61,7 +61,7 @@ API key is needed for local servers — pass any non-empty string:
 ### LM Studio
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -77,7 +77,7 @@ m = MelleaSession(
 ### Ollama's OpenAI endpoint
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -96,7 +96,7 @@ m = MelleaSession(
 ### vLLM
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -120,7 +120,7 @@ export OPENAI_API_KEY=ollama
 ```
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -138,7 +138,7 @@ variables if both are set.
 or a Mellea `ImageBlock`:
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: ModelOutputThunk
 from PIL import Image
 from mellea import MelleaSession
@@ -168,7 +168,7 @@ print(str(response))
 You can also pass PIL `Image` objects directly without wrapping them:
 
 ```python
-# Requires: mellea[openai], pillow
+# Requires: mellea, pillow
 # Returns: ModelOutputThunk
 chat_response = m.chat(
     "How many people are in this image?",
@@ -184,7 +184,7 @@ chat_response = m.chat(
 Use the `format` parameter to constrain generation to a Pydantic schema:
 
 ```python
-# Requires: mellea[openai], pydantic
+# Requires: mellea, pydantic
 # Returns: str
 from pydantic import BaseModel
 from mellea import MelleaSession
@@ -210,7 +210,7 @@ print(parsed.title)
 Set generation parameters with `ModelOption`:
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends import ModelOption
@@ -238,7 +238,7 @@ Anthropic's API is not OpenAI-compatible natively, but if you access it through 
 proxy that exposes an OpenAI-compatible interface, you can use `OpenAIBackend`:
 
 ```python
-# Requires: mellea[openai]
+# Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
