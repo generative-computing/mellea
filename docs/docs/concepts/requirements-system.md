@@ -260,6 +260,8 @@ reserve LLM-based requirements for subjective criteria that cannot be coded dire
 > LoRA adapter for validation instead of LLM-as-a-judge. It falls back to LLM-as-a-judge
 > if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters).
 
+For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge).
+
 ## Composing requirements
 
 Requirements are composable: mix strings, `req()`, `check()`, and `Requirement`

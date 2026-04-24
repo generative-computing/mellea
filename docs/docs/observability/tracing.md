@@ -4,7 +4,7 @@ description: "Export distributed traces from Mellea using OpenTelemetry semantic
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Telemetry](../evaluation-and-observability/telemetry)
+**Prerequisites:** [Telemetry](../observability/telemetry)
 introduces the environment variables and trace scopes. This page focuses on
 exporting traces to external backends and interpreting the span data they contain.
 
@@ -240,11 +240,9 @@ import mellea  # noqa: E402
 
 **See also:**
 
-- [Telemetry](../evaluation-and-observability/telemetry) — overview of all
+- [Telemetry](../observability/telemetry) — overview of all
   telemetry features and configuration.
-- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+- [Metrics](../observability/metrics) — metrics, exporters,
   and custom instruments.
-- [Logging](../evaluation-and-observability/logging) — console logging and OTLP
+- [Logging](../observability/logging) — console logging and OTLP
   log export.
-- [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
-  automated quality evaluation correlated with trace data.
