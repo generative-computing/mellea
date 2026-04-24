@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
-from mellea.core.base import ModelOutputThunk
+from mellea.core.base import GenerationMetadata, ModelOutputThunk
 from mellea.plugins.hooks.generation import (
     GenerationErrorPayload,
     GenerationPostCallPayload,
@@ -41,9 +41,7 @@ def token_plugin():
 def _make_token_payload(usage=None, model="test-model", provider="test-provider"):
     """Create a GenerationPostCallPayload with a ModelOutputThunk."""
     mot = ModelOutputThunk(value="hello")
-    mot.usage = usage
-    mot.model = model
-    mot.provider = provider
+    mot.generation = GenerationMetadata(usage=usage, model=model, provider=provider)
     return GenerationPostCallPayload(model_output=mot)
 
 
@@ -118,10 +116,9 @@ def _make_latency_payload(
 ):
     """Create a GenerationPostCallPayload for latency tests."""
     mot = ModelOutputThunk(value="hello")
-    mot.model = model
-    mot.provider = provider
-    mot.ttfb_ms = ttfb_ms
-    mot.streaming = streaming
+    mot.generation = GenerationMetadata(
+        model=model, provider=provider, ttfb_ms=ttfb_ms, streaming=streaming
+    )
     return GenerationPostCallPayload(model_output=mot, latency_ms=latency_ms)
 
 
@@ -208,8 +205,7 @@ def error_plugin():
 def _make_error_payload(exc, model="test-model", provider="test-provider"):
     """Create a GenerationErrorPayload wrapping the given exception."""
     mot = ModelOutputThunk(value="")
-    mot.model = model
-    mot.provider = provider
+    mot.generation = GenerationMetadata(model=model, provider=provider)
     return GenerationErrorPayload(exception=exc, model_output=mot)
 
 
@@ -290,9 +286,7 @@ def cost_plugin():
 def _make_cost_payload(usage=None, model="test-model", provider="test-provider"):
     """Create a GenerationPostCallPayload for cost tests."""
     mot = ModelOutputThunk(value="hello")
-    mot.usage = usage
-    mot.model = model
-    mot.provider = provider
+    mot.generation = GenerationMetadata(usage=usage, model=model, provider=provider)
     return GenerationPostCallPayload(model_output=mot)
 
 
@@ -337,7 +331,7 @@ async def test_cost_plugin_skips_unknown_model(cost_plugin):
 
 @pytest.mark.asyncio
 async def test_cost_plugin_skips_none_usage(cost_plugin):
-    """Plugin does not call record_cost when mot.usage is None."""
+    """Plugin does not call record_cost when mot.generation.usage is None."""
     payload = _make_cost_payload(usage=None)
 
     with (

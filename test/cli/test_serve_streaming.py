@@ -51,7 +51,11 @@ class TestCompletionUsageHelpers:
     def test_build_completion_usage_with_full_usage(self):
         """Test usage normalization with complete usage data."""
         output = ModelOutputThunk("done")
-        output.usage = {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+        }
 
         usage = build_completion_usage(output)
 
@@ -63,7 +67,7 @@ class TestCompletionUsageHelpers:
     def test_build_completion_usage_with_partial_usage(self):
         """Test usage normalization fills missing values safely."""
         output = ModelOutputThunk("done")
-        output.usage = {"prompt_tokens": 5}
+        output.generation.usage = {"prompt_tokens": 5}
 
         usage = build_completion_usage(output)
 
@@ -102,7 +106,11 @@ class TestStreamingHelpers:
 
         output.astream = mock_astream
         output.is_computed = lambda: output._computed
-        output.usage = {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+        output.generation.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 3,
+            "total_tokens": 8,
+        }
 
         events = []
         async for event in stream_chat_completion_chunks(
@@ -138,7 +146,11 @@ class TestStreamingHelpers:
     ):
         """Test helper emits an explicit empty content chunk for precomputed output."""
         output = ModelOutputThunk("")
-        output.usage = {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1}
+        output.generation.usage = {
+            "prompt_tokens": 1,
+            "completion_tokens": 0,
+            "total_tokens": 1,
+        }
 
         events = []
         async for event in stream_chat_completion_chunks(
@@ -223,7 +235,7 @@ class TestStreamingEndpoint:
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 5,
             "completion_tokens": 3,
             "total_tokens": 8,
@@ -270,7 +282,7 @@ class TestStreamingEndpoint:
     def test_non_streaming_still_works(self, mock_module, non_streaming_request):
         """Test that non-streaming requests still work correctly."""
         mock_output = ModelOutputThunk("Complete response")
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 5,
             "completion_tokens": 2,
             "total_tokens": 7,
@@ -352,7 +364,7 @@ class TestStreamingEndpoint:
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
-        mock_output.usage = None
+        mock_output.generation.usage = None
 
         mock_module.serve.return_value = mock_output
 
@@ -510,7 +522,7 @@ class TestStreamingEndpoint:
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 5,
             "completion_tokens": 3,
             "total_tokens": 8,
@@ -563,7 +575,7 @@ class TestStreamingEndpoint:
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 5,
             "completion_tokens": 3,
             "total_tokens": 8,
@@ -615,7 +627,7 @@ class TestStreamingEndpoint:
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 5,
             "completion_tokens": 3,
             "total_tokens": 8,
@@ -715,7 +727,7 @@ class TestStreamingEndpoint:
         )
 
         mock_output = ModelOutputThunk("Complete response")
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 5,
             "completion_tokens": 3,
             "total_tokens": 8,
