@@ -40,7 +40,7 @@ class ChunkingStrategy(ABC):
 # quote or paren, then whitespace.
 # Character class covers: straight double/single quotes, right double/single curly
 # quotes (U+201D, U+2019), and closing paren.
-_SENTENCE_BOUNDARY = re.compile("[.!?][\"'" + chr(0x201D) + chr(0x2019) + ")]?\\s")
+_SENTENCE_BOUNDARY = re.compile("[.!?][\"'\u201d\u2019)]?\\s")
 
 # Whitespace run separator used by WordChunker.
 _WHITESPACE = re.compile(r"\s+")
@@ -58,7 +58,9 @@ class SentenceChunker(ChunkingStrategy):
     whitespace. The final sentence is only returned once it is followed by
     whitespace or another sentence — a trailing fragment with no following
     whitespace is withheld. Abbreviations are a known edge case: they will
-    be split on (simple regex, not NLP).
+    be split on (simple regex, not NLP). Inter-sentence whitespace (including
+    double-space or tab) is discarded and does not appear as leading whitespace
+    in subsequent chunks.
     """
 
     def split(self, accumulated_text: str) -> list[str]:

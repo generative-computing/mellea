@@ -1,6 +1,19 @@
 """Tests for ChunkingStrategy ABC and built-in chunker implementations."""
 
-from mellea.stdlib.chunking import ParagraphChunker, SentenceChunker, WordChunker
+import pytest
+
+from mellea.stdlib.chunking import (
+    ChunkingStrategy,
+    ParagraphChunker,
+    SentenceChunker,
+    WordChunker,
+)
+
+
+def test_chunking_strategy_is_abstract():
+    with pytest.raises(TypeError):
+        ChunkingStrategy()  # type: ignore[abstract]
+
 
 # ---------------------------------------------------------------------------
 # SentenceChunker
