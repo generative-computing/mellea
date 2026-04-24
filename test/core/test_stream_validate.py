@@ -5,6 +5,8 @@ import inspect
 import pytest
 
 from mellea.core import PartialValidationResult, Requirement
+from mellea.core.backend import Backend
+from mellea.core.base import Context
 
 
 @pytest.mark.asyncio
@@ -29,7 +31,9 @@ def test_stream_validate_is_coroutine():
 @pytest.mark.asyncio
 async def test_subclass_can_return_pass():
     class PassRequirement(Requirement):
-        async def stream_validate(self, chunk, backend, ctx) -> PartialValidationResult:
+        async def stream_validate(
+            self, chunk: str, backend: Backend, ctx: Context
+        ) -> PartialValidationResult:
             return PartialValidationResult("pass")
 
     req = PassRequirement(description="always passes")
@@ -40,7 +44,9 @@ async def test_subclass_can_return_pass():
 @pytest.mark.asyncio
 async def test_subclass_can_return_fail():
     class FailRequirement(Requirement):
-        async def stream_validate(self, chunk, backend, ctx) -> PartialValidationResult:
+        async def stream_validate(
+            self, chunk: str, backend: Backend, ctx: Context
+        ) -> PartialValidationResult:
             if "bad" in chunk:
                 return PartialValidationResult("fail", reason="bad word detected")
             return PartialValidationResult("unknown")
@@ -66,3 +72,13 @@ async def test_does_not_mutate_requirement():
     assert req.description == original_description
     assert req._output == original_output
     assert req.validation_fn == original_validation_fn
+
+
+@pytest.mark.asyncio
+async def test_stream_validate_idempotent():
+    req = Requirement(description="repeated calls")
+    result1 = await req.stream_validate("chunk one", backend=None, ctx=None)  # type: ignore[arg-type]
+    result2 = await req.stream_validate("chunk two", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert result1.success == "unknown"
+    assert result2.success == "unknown"
+    assert req._output is None

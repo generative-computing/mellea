@@ -304,8 +304,8 @@ class Requirement(Component[str]):
         Returns:
             PartialValidationResult: ``"unknown"`` by default. Subclasses may return
             ``"pass"`` (constraint satisfied so far) or ``"fail"`` (constraint violated,
-            streaming should be aborted). In Phase 1, ``"pass"`` is informational and
-            does not short-circuit the final ``validate()`` call.
+            streaming should be aborted). ``"pass"`` does not short-circuit the final
+            ``validate()`` call; the orchestrator decides whether to skip it.
         """
         return PartialValidationResult("unknown")
 
