@@ -343,6 +343,7 @@ markers = [
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
     "litellm: Tests requiring LiteLLM backend",
     "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
+    "vllm: Tests requiring vLLM backend (local, GPU required)",
 
     # Capability markers
     "qualitative: Non-deterministic quality tests",
