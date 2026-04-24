@@ -59,6 +59,14 @@ def test_sentence_chunker_closing_quote():
     assert result == ['He said "hello."', "She left."]
 
 
+def test_sentence_chunker_curly_quotes():
+    # Verifies U+201D (right double curly quote) and U+2019 (right single curly quote)
+    # are recognised as closing marks after sentence-ending punctuation.
+    c = SentenceChunker()
+    result = c.split("She said \u201cdone.\u201d Next sentence. ")
+    assert result == ["She said \u201cdone.\u201d", "Next sentence."]
+
+
 def test_sentence_chunker_unicode():
     c = SentenceChunker()
     result = c.split("Ça va bien. C'est délicieux. ")

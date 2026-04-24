@@ -39,10 +39,8 @@ class ChunkingStrategy(ABC):
 # Sentence boundary: sentence-ending punctuation, optionally followed by a closing
 # quote or paren, then whitespace.
 # Character class covers: straight double/single quotes, right double/single curly
-# quotes (U+201D / U+2019), and closing paren.
-# The \u escapes are processed by the re engine (not Python's string parser), so
-# this works correctly in a raw string.
-_SENTENCE_BOUNDARY = re.compile(r'[.!?]["\'”’)]?\s')
+# quotes (U+201D, U+2019), and closing paren.
+_SENTENCE_BOUNDARY = re.compile("[.!?][\"'" + chr(0x201D) + chr(0x2019) + ")]?\\s")
 
 # Whitespace run separator used by WordChunker.
 _WHITESPACE = re.compile(r"\s+")
