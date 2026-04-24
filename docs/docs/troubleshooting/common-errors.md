@@ -213,7 +213,8 @@ nest_asyncio.apply()
 ## Guardian / safety validation
 
 Guardian Intrinsics (`guardian_check()`, `policy_guardrails()`,
-`factuality_detection()`) require `LocalHFBackend` with an IBM Granite model.
+`factuality_detection()`, `factuality_correction()`) require `LocalHFBackend`
+with an IBM Granite model.
 See [Safety Guardrails](../how-to/safety-guardrails) for full usage.
 
 ### `guardian_check()` returns unexpected scores

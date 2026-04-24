@@ -1,6 +1,6 @@
 ---
 title: "Security and Taint Tracking"
-description: "Use GuardianCheck with IBM Granite Guardian to validate LLM outputs for safety risks."
+description: "[Deprecated] GuardianCheck API for LLM output safety validation. Use Guardian Intrinsics instead."
 # diataxis: how-to
 ---
 
@@ -8,7 +8,7 @@ description: "Use GuardianCheck with IBM Granite Guardian to validate LLM output
 > of Mellea v0.4 and will emit `DeprecationWarning` on use. For new code, use the
 > [Guardian Intrinsics](../how-to/safety-guardrails) — `guardian_check()`,
 > `policy_guardrails()`, `factuality_detection()`, and `factuality_correction()` —
-> which are faster, require no separate Guardian model pull, and produce consistent
+> which are faster, use a single Granite model instead of a separate Guardian model, and produce consistent
 > structured output.
 
 **Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)

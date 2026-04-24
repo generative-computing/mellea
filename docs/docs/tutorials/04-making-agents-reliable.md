@@ -383,9 +383,9 @@ else:
 # Grounded response (score: 0.0034): Mellea is an open-source Python framework ...
 ```
 
-> **Tip:** Pass the same text you supplied as `grounding_context` to
-> `"Document:"` in the evaluation context. This ensures the guardian evaluates
-> the response against exactly what the agent was given.
+> **Tip:** Include the same document text the tool retrieved in the evaluation
+> context. This ensures the guardian evaluates the response against exactly
+> what the agent was given.
 
 ---
 
@@ -443,7 +443,11 @@ output = asyncio.run(run_agent(
 
 # Evaluate the agent's final output against harm criteria.
 guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-eval_ctx = ChatContext().add(Message("assistant", output))
+eval_ctx = (
+    ChatContext()
+    .add(Message("user", "Find out what Mellea is, then calculate how many characters are in 'Mellea'."))
+    .add(Message("assistant", output))
+)
 harm_score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="harm")
 
 if harm_score < 0.5:
