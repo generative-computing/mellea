@@ -160,7 +160,7 @@ def guardian_check(
 
 
 def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
-    """Determine is the last response is factually incorrect.
+    """Determine if the last response is factually incorrect.
 
     Intrinsic function that evaluates the factuality of the
     assistant's response to a user's question. The context should end with
