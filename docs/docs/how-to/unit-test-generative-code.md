@@ -306,7 +306,7 @@ Each entry in the JSON array defines one test:
       },
       {
         "input_id": "ex-002",
-        "input": [{"role": "user": "content": "I just finished a client demo can you create a formal thank-you email"}],
+        "input": [{"role": "user", "content": "I just finished a client demo can you create a formal thank-you email"}],
         "targets": [{"role": "assistant", "content": "It was a pleasure sharing a product demo with you. Thank you for meeting with us."}]
       }
     ]
