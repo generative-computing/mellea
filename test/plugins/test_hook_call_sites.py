@@ -267,8 +267,8 @@ class TestComponentHookCallSites:
     async def test_component_pre_execute_has_context_view(self) -> None:
         """COMPONENT_PRE_EXECUTE payload.context_view is populated."""
         from mellea.stdlib.components import Instruction
-        from mellea.stdlib.functional import aact
         from mellea.stdlib.context import ChatContext
+        from mellea.stdlib.functional import aact
 
         observed: list[Any] = []
 
