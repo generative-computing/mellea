@@ -172,9 +172,7 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_callable(
-        cls, func: Callable, name: str | None = None
-    ) -> "MelleaTool":
+    def from_callable(cls, func: Callable, name: str | None = None) -> "MelleaTool":
         """Create a MelleaTool from a plain Python callable.
 
         Introspects the callable's signature and docstring to build an
