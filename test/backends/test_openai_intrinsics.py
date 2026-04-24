@@ -29,9 +29,6 @@ pytestmark = [
         int(os.environ.get("CICD", 0)) == 1,
         reason="Skipping OpenAI intrinsics tests in CI",
     ),
-    pytest.mark.skip(
-        reason="Requires additional VLLM setup that isn't yet streamlined. Re-enable once nightlies can run this."
-    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -61,128 +58,9 @@ SWITCH_MODEL_ID = os.environ.get(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture(scope="module")
-def vllm_switch_process():
-    """Module-scoped vLLM process serving a Granite Switch model.
-
-    If ``VLLM_SWITCH_TEST_BASE_URL`` is set the server is assumed to be running
-    externally and no subprocess is started.
-    """
-    if os.environ.get("VLLM_SWITCH_TEST_BASE_URL"):
-        # Verify the external server is serving the expected model.
-        base = os.environ["VLLM_SWITCH_TEST_BASE_URL"]
-        try:
-            resp = requests.get(f"{base}/v1/models", timeout=5)
-            resp.raise_for_status()
-            served = {m["id"] for m in resp.json().get("data", [])}
-            if SWITCH_MODEL_ID not in served:
-                pytest.skip(
-                    f"External vLLM server at {base} is not serving "
-                    f"'{SWITCH_MODEL_ID}' (serving: {served})",
-                    allow_module_level=True,
-                )
-        except requests.RequestException as exc:
-            pytest.skip(
-                f"Cannot reach external vLLM server at {base}: {exc}",
-                allow_module_level=True,
-            )
-        yield None
-        return
-
-    # Require CUDA — vLLM does not support MPS
-    try:
-        subprocess.run(["nvidia-smi", "-L"], check=True, capture_output=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pytest.skip(
-            "No CUDA GPU detected — skipping vLLM OpenAI intrinsics tests",
-            allow_module_level=True,
-        )
-
-    vllm_venv = os.environ.get("VLLM_VENV_PATH", ".vllm-venv")
-    vllm_python = os.path.join(vllm_venv, "bin", "python")
-    if not os.path.isfile(vllm_python):
-        subprocess.run(["uv", "venv", vllm_venv, "--python", "3.11"], check=True)
-        subprocess.run(
-            ["uv", "pip", "install", "--python", vllm_python, "vllm"], check=True
-        )
-
-    process = None
-    try:
-        process = subprocess.Popen(
-            [
-                vllm_python,
-                "-m",
-                "vllm.entrypoints.openai.api_server",
-                "--model",
-                SWITCH_MODEL_ID,
-                "--served-model-name",
-                SWITCH_MODEL_ID,
-                "--dtype",
-                "bfloat16",
-                "--enable-prefix-caching",
-                "--gpu-memory-utilization",
-                "0.4",
-                "--max-num-seqs",
-                "256",
-                "--max-model-len",
-                "4096",
-            ],
-            start_new_session=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        url = "http://127.0.0.1:8000/ping"
-        timeout = 600
-        start_time = time.time()
-
-        while True:
-            if process.poll() is not None:
-                output = process.stdout.read() if process.stdout else ""
-                raise RuntimeError(
-                    f"vLLM server exited before startup (code {process.returncode}).\n"
-                    f"--- vLLM output ---\n{output}\n--- end ---"
-                )
-            try:
-                response = requests.get(url, timeout=2)
-                if response.status_code == 200:
-                    break
-            except requests.RequestException:
-                pass
-            if time.time() - start_time > timeout:
-                raise TimeoutError(f"Timed out waiting for vLLM health check at {url}")
-
-        yield process
-
-    except Exception as e:
-        output = ""
-        if process is not None and process.stdout:
-            try:
-                output = process.stdout.read()
-            except Exception:
-                pass
-        skip_msg = (
-            f"vLLM process not available: {e}\n"
-            f"--- vLLM output ---\n{output}\n--- end ---"
-        )
-        print(skip_msg)
-        pytest.skip(skip_msg, allow_module_level=True)
-
-    finally:
-        if process is not None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-                process.wait(timeout=30)
-            except Exception:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except Exception:
-                    pass
-                process.wait()
-
 
 @pytest.fixture(scope="module")
-def backend(vllm_switch_process):
+def backend():
     """OpenAI backend with embedded adapters auto-loaded from the switch model."""
     base_url = (
         os.environ.get("VLLM_SWITCH_TEST_BASE_URL", "http://127.0.0.1:8000") + "/v1"
@@ -364,3 +242,6 @@ def test_call_intrinsic_context_relevance(call_intrinsic_backend):
     )
     assert isinstance(result, float)
     assert 0.0 <= result <= 1.0
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])
