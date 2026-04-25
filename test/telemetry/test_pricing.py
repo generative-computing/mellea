@@ -52,9 +52,21 @@ def test_compute_cost_unknown_model(fresh_registry, caplog):
 
 
 def test_compute_cost_none_tokens(fresh_registry):
-    """None tokens are treated as zero without raising."""
+    """None tokens are treated as zero without raising; None cache args produce same cost as omitting them."""
     cost = fresh_registry.compute_cost("gpt-5.4", input_tokens=None, output_tokens=None)
     assert cost == 0.0
+
+    base = fresh_registry.compute_cost(
+        "claude-sonnet-4-6", input_tokens=500, output_tokens=100
+    )
+    with_none = fresh_registry.compute_cost(
+        "claude-sonnet-4-6",
+        input_tokens=500,
+        output_tokens=100,
+        cached_tokens=None,
+        cache_creation_tokens=None,
+    )
+    assert base == with_none
 
 
 def test_compute_cost_zero_tokens(fresh_registry):
@@ -196,3 +208,50 @@ def test_invalid_entry_no_recognised_keys(custom_pricing, caplog):
 
     assert cost is None
     assert any("recognised keys" in record.message for record in caplog.records)
+
+
+def test_compute_cost_with_cached_tokens(fresh_registry):
+    """Cache read tokens are priced at cache_read_per_1m rate."""
+    # claude-sonnet-4-6: cache_read_per_1m = 0.30
+    # 1000 cached_tokens * 0.30 / 1e6 = 0.0003
+    cost = fresh_registry.compute_cost(
+        "claude-sonnet-4-6", input_tokens=0, output_tokens=0, cached_tokens=1000
+    )
+    assert cost is not None
+    assert abs(cost - 0.0003) < 1e-9
+
+
+def test_compute_cost_with_cache_creation_tokens(fresh_registry):
+    """Cache creation tokens are priced at cache_write_per_1m rate."""
+    # claude-sonnet-4-6: cache_write_per_1m = 3.75
+    # 1000 cache_creation_tokens * 3.75 / 1e6 = 0.00375
+    cost = fresh_registry.compute_cost(
+        "claude-sonnet-4-6", input_tokens=0, output_tokens=0, cache_creation_tokens=1000
+    )
+    assert cost is not None
+    assert abs(cost - 0.00375) < 1e-9
+
+
+def test_compute_cost_cache_tokens_model_without_cache_pricing(fresh_registry):
+    """Cache token args are silently ignored for models with no cache pricing fields."""
+    # gpt-5.4 has no cache_write_per_1m, only cache_read_per_1m
+    base_cost = fresh_registry.compute_cost(
+        "gpt-5.4", input_tokens=1000, output_tokens=0
+    )
+    cost_with_creation = fresh_registry.compute_cost(
+        "gpt-5.4", input_tokens=1000, output_tokens=0, cache_creation_tokens=500
+    )
+    assert base_cost is not None
+    assert cost_with_creation is not None
+    assert abs(base_cost - cost_with_creation) < 1e-9
+
+
+def test_compute_cost_openai_cache_read(fresh_registry):
+    """OpenAI cache_read_per_1m (50% of input) is applied correctly."""
+    # gpt-5.4: cache_read_per_1m = 1.25
+    # 1000 cached_tokens * 1.25 / 1e6 = 0.00125
+    cost = fresh_registry.compute_cost(
+        "gpt-5.4", input_tokens=0, output_tokens=0, cached_tokens=1000
+    )
+    assert cost is not None
+    assert abs(cost - 0.00125) < 1e-9

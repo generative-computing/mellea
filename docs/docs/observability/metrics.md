@@ -209,13 +209,18 @@ The file format maps model IDs to per-million-token rates:
 
 ```json
 {
-  "my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0},
-  "gpt-5.4": {"input_per_1m": 2.5, "output_per_1m": 15.0}
+  "my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0, "cache_write_per_1m": 1.25, "cache_read_per_1m": 0.10},
+  "gpt-5.4": {"input_per_1m": 2.5, "output_per_1m": 15.0, "cache_read_per_1m": 1.25}
 }
 ```
 
 Custom entries override built-in prices. Errors loading the file are logged as
 warnings and built-in prices are used as a fallback.
+
+> **Note:** Anthropic does not distinguish 5-minute from 1-hour cache writes in
+> `cache_creation_input_tokens`. Mellea uses the 5-minute rate for `cache_write_per_1m`
+> (1.25× base input). Override it in a custom pricing file if you primarily use 1-hour
+> writes (2× base input).
 
 ## Operational metrics
 

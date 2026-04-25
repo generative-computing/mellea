@@ -51,8 +51,18 @@ def _make_token_payload(usage=None, model="test-model", provider="test-provider"
     [
         ({"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}, 10, 5),
         ({"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}, 0, 0),
+        (
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "cache_creation_input_tokens": 50,
+            },
+            150,
+            20,
+        ),
     ],
-    ids=["normal-usage", "zero-tokens"],
+    ids=["normal-usage", "zero-tokens", "with-cache-creation"],
 )
 async def test_record_token_metrics_with_usage(
     token_plugin, usage, expected_input, expected_output
@@ -306,10 +316,42 @@ async def test_cost_plugin_records_cost_for_known_model(cost_plugin):
         await cost_plugin.record_cost_metrics(payload, {})
 
         mock_cost.assert_called_once_with(
-            model="test-model", input_tokens=100, output_tokens=50
+            model="test-model",
+            input_tokens=100,
+            output_tokens=50,
+            cached_tokens=0,
+            cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
             cost=0.0042, model="test-model", provider="test-provider"
+        )
+
+
+@pytest.mark.asyncio
+async def test_cost_plugin_cache_tokens_forwarded(cost_plugin):
+    """Cache token fields are extracted and forwarded to compute_cost correctly."""
+    payload = _make_cost_payload(
+        usage={
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 50},
+            "cache_creation_input_tokens": 10,
+        }
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=0.005) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost"),
+    ):
+        await cost_plugin.record_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="test-model",
+            input_tokens=50,  # prompt_tokens (100) - cached_tokens (50)
+            output_tokens=20,
+            cached_tokens=50,
+            cache_creation_tokens=10,
         )
 
 
@@ -360,7 +402,11 @@ async def test_cost_plugin_unknown_model_provider_fallback(cost_plugin):
         await cost_plugin.record_cost_metrics(payload, {})
 
         mock_cost.assert_called_once_with(
-            model="unknown", input_tokens=10, output_tokens=5
+            model="unknown",
+            input_tokens=10,
+            output_tokens=5,
+            cached_tokens=0,
+            cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
             cost=0.001, model="unknown", provider="unknown"
