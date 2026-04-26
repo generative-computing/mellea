@@ -30,7 +30,12 @@ from ..core import (
 )
 from ..helpers import _run_async_in_thread
 from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
-from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.manager import (
+    has_plugins,
+    invoke_hook,
+    is_internal_tool,
+    skip_hooks_for_internal_tools,
+)
 from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
 from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
@@ -1270,8 +1275,10 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         return outputs
 
     for name, tool in tool_calls.items():
+        _run_hooks = not (skip_hooks_for_internal_tools() and is_internal_tool(name))
+
         # --- tool_pre_invoke ---
-        if has_plugins(HookType.TOOL_PRE_INVOKE):
+        if _run_hooks and has_plugins(HookType.TOOL_PRE_INVOKE):
             pre_payload = ToolPreInvokePayload(model_tool_call=tool)
             _, pre_payload = await invoke_hook(
                 HookType.TOOL_PRE_INVOKE, pre_payload, backend=backend
@@ -1310,7 +1317,7 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         )
 
         # --- tool_post_invoke ---
-        if has_plugins(HookType.TOOL_POST_INVOKE):
+        if _run_hooks and has_plugins(HookType.TOOL_POST_INVOKE):
             post_payload = ToolPostInvokePayload(
                 model_tool_call=tool,
                 tool_output=output,
