@@ -60,7 +60,14 @@ def call_intrinsic(
             backend.add_adapter(intrinsic_adapter)
 
     # Create the AST node for the action we wish to perform.
-    intrinsic = Intrinsic(intrinsic_name, intrinsic_kwargs=kwargs)
+    intrinsic = Intrinsic(
+        intrinsic_name,
+        intrinsic_kwargs=kwargs,
+        adapter_types=(
+            AdapterType.ALORA,
+            AdapterType.LORA,
+        ),  # Forcibly allow either type of adapter. The intrinsic itself doesn't care as long as an adapter exists.
+    )
 
     # Execute the AST node.
     model_output_thunk, _ = mfuncs.act(
