@@ -351,8 +351,7 @@ def test_call_intrinsic_answerability(call_intrinsic_backend):
     result = rag.check_answerability(
         question, documents, context, call_intrinsic_backend
     )
-    assert isinstance(result, float)
-    assert 0.0 <= result <= 1.0
+    assert result in ["answerable", "unanswerable"]
 
 
 @pytest.mark.qualitative
@@ -362,5 +361,4 @@ def test_call_intrinsic_context_relevance(call_intrinsic_backend):
     result = rag.check_context_relevance(
         question, documents[0], context, call_intrinsic_backend
     )
-    assert isinstance(result, float)
-    assert 0.0 <= result <= 1.0
+    assert result in ["relevant", "irrelevant", "partially relevant"]
