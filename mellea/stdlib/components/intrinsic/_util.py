@@ -48,6 +48,57 @@ def _coerce_document(document: str | Document) -> Document:
     return document
 
 
+def _resolve_question(
+    question: str | None, context: ChatContext
+) -> tuple[str, ChatContext]:
+    """Return ``(question_text, context_to_use)``.
+
+    When *question* is not ``None``, returns it with *context* unchanged.
+    When ``None``, extracts the text from the last turn's ``model_input``
+    (which must be a ``Message``) and rewinds *context* to before that message.
+    """
+    if question is not None:
+        return question, context
+    from ..chat import Message
+
+    turn = context.last_turn()
+    if turn is None or turn.model_input is None:
+        raise ValueError(
+            "question is None and context has no last turn with model input"
+        )
+    if not isinstance(turn.model_input, Message):
+        raise ValueError(
+            f"question is None but last turn model_input is "
+            f"{type(turn.model_input).__name__}, not a Message"
+        )
+    rewound = context.previous_node
+    if rewound is None:
+        raise ValueError("Cannot rewind context past the root node")
+    return turn.model_input.content, rewound  # type: ignore[return-value]
+
+
+def _resolve_response(
+    response: str | None, context: ChatContext
+) -> tuple[str, ChatContext]:
+    """Return ``(response_text, context_to_use)``.
+
+    When *response* is not ``None``, returns it with *context* unchanged.
+    When ``None``, extracts from the last turn's ``output.value`` and rewinds
+    *context* to before that output.
+    """
+    if response is not None:
+        return response, context
+    turn = context.last_turn()
+    if turn is None or turn.output is None:
+        raise ValueError("response is None and context has no last turn with output")
+    if turn.output.value is None:
+        raise ValueError("response is None and last turn output has no value")
+    rewound = context.previous_node
+    if rewound is None:
+        raise ValueError("Cannot rewind context past the root node")
+    return turn.output.value, rewound  # type: ignore[return-value]
+
+
 def call_intrinsic(
     intrinsic_name: str,
     context: ChatContext,

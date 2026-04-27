@@ -11,6 +11,7 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
@@ -199,6 +200,94 @@ def test_query_clarification_negative(backend):
 
     # Second call hits a different code path from the first one
     result = rag.clarify_query(next_user_turn, documents, context, backend)
+    assert result == "CLEAR"
+
+
+# ---------------------------------------------------------------------------
+# Resolve-from-context variants: pass question/response=None, infer from ctx
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.qualitative
+def test_answerability_resolve(backend):
+    """Verify answerability when question is resolved from context."""
+    context, next_user_turn, documents = _read_input_json("answerability.json")
+    context = context.add(Message("user", next_user_turn))
+
+    result = rag.check_answerability(None, documents, context, backend)
+    assert result == "answerable"
+
+
+@pytest.mark.qualitative
+def test_query_rewrite_resolve(backend):
+    """Verify query rewrite when question is resolved from context."""
+    context, next_user_turn, _ = _read_input_json("query_rewrite.json")
+    context = context.add(Message("user", next_user_turn))
+    expected = (
+        "Is Rex more likely to get fleas because he spends a lot of time outdoors?"
+    )
+
+    result = rag.rewrite_question(None, context, backend)
+    assert result == expected
+
+
+@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
+@pytest.mark.qualitative
+def test_citations_resolve(backend):
+    """Verify citations when response is resolved from context."""
+    context, assistant_response, docs = _read_input_json("citations.json")
+    context = context.add(ModelOutputThunk(value=assistant_response))
+    expected = _read_output_json("citations.json")
+
+    result = rag.find_citations(None, docs, context, backend)
+    assert result == expected
+
+
+@pytest.mark.qualitative
+def test_context_relevance_resolve(backend):
+    """Verify context relevance when question is resolved from context."""
+    context, question, docs = _read_input_json("context_relevance.json")
+    context = context.add(Message("user", question))
+    document = docs[0]
+
+    result = rag.check_context_relevance(None, document, context, backend)
+    assert result == "irrelevant"
+
+
+@pytest.mark.qualitative
+def test_hallucination_detection_resolve(backend):
+    """Verify hallucination detection when response is resolved from context."""
+    context, assistant_response, docs = _read_input_json("hallucination_detection.json")
+    context = context.add(ModelOutputThunk(value=assistant_response))
+    expected = _read_output_json("hallucination_detection.json")
+
+    result = rag.flag_hallucinated_content(None, docs, context, backend)
+    for r, e in zip(result, expected, strict=True):  # type: ignore
+        assert r == e
+
+
+@pytest.mark.qualitative
+def test_query_clarification_positive_resolve(backend):
+    """Verify query clarification (positive) when question is resolved from context."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_positive.json"
+    )
+    context = context.add(Message("user", next_user_turn))
+
+    result = rag.clarify_query(None, documents, context, backend)
+    assert result != "CLEAR"
+    assert len(result) > 0
+
+
+@pytest.mark.qualitative
+def test_query_clarification_negative_resolve(backend):
+    """Verify query clarification (negative) when question is resolved from context."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_negative.json"
+    )
+    context = context.add(Message("user", next_user_turn))
+
+    result = rag.clarify_query(None, documents, context, backend)
     assert result == "CLEAR"
 
 

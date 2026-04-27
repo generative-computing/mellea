@@ -5,7 +5,7 @@ import collections.abc
 from ....backends.adapters import AdapterMixin
 from ...components import Document, Message
 from ...context import ChatContext
-from ._util import _coerce_documents, call_intrinsic
+from ._util import _coerce_documents, _resolve_response, call_intrinsic
 
 
 def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
@@ -59,7 +59,7 @@ def requirement_check(
 
 
 def find_context_attributions(
-    response: str,
+    response: str | None,
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
@@ -70,7 +70,8 @@ def find_context_attributions(
     documents that were most important to the LLM in generating each sentence in the
     assistant response.
 
-    :param response: Assistant response
+    :param response: Assistant response. When ``None``, the response is extracted
+        from the last assistant output in ``context``.
     :param documents: Documents that were used to generate ``response``. Each element
         may be a ``Document`` or a plain string. Strings are wrapped in ``Document``
         with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...); for explicit
@@ -92,6 +93,7 @@ def find_context_attributions(
         * ``attribution_text``
     Begin and end offsets are character offsets into their respective UTF-8 strings.
     """
+    response, context = _resolve_response(response, context)
     result_json = call_intrinsic(
         "context-attribution",
         context.add(

@@ -1,9 +1,18 @@
-"""Tests for _coerce_documents and _coerce_document helpers."""
+"""Tests for _coerce_documents, _coerce_document, _resolve_question, and _resolve_response."""
 
 import warnings
 
-from mellea.stdlib.components import Document
-from mellea.stdlib.components.intrinsic._util import _coerce_document, _coerce_documents
+import pytest
+
+from mellea.core import CBlock, ModelOutputThunk
+from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components.intrinsic._util import (
+    _coerce_document,
+    _coerce_documents,
+    _resolve_question,
+    _resolve_response,
+)
+from mellea.stdlib.context import ChatContext
 
 
 class TestCoerceDocuments:
@@ -70,3 +79,74 @@ class TestCoerceDocument:
     def test_passthrough(self):
         doc = Document("existing", doc_id="1")
         assert _coerce_document(doc) is doc
+
+
+class TestResolveQuestion:
+    def test_explicit_string(self):
+        ctx = ChatContext()
+        text, returned_ctx = _resolve_question("hello", ctx)
+        assert text == "hello"
+        assert returned_ctx is ctx
+
+    def test_from_context(self):
+        ctx = ChatContext().add(Message("user", "What is 2+2?"))
+        text, rewound = _resolve_question(None, ctx)
+        assert text == "What is 2+2?"
+        assert rewound.is_root_node  # type: ignore[union-attr]
+
+    def test_context_with_prior_messages(self):
+        ctx = (
+            ChatContext()
+            .add(Message("user", "first"))
+            .add(Message("assistant", "reply"))
+            .add(Message("user", "second"))
+        )
+        text, rewound = _resolve_question(None, ctx)
+        assert text == "second"
+        # Rewound context should end with the assistant reply
+        last = rewound.last_turn()  # type: ignore[union-attr]
+        assert last is not None
+        assert isinstance(last.model_input, Message)
+        assert last.model_input.content == "reply"
+
+    def test_empty_context_raises(self):
+        ctx = ChatContext()
+        with pytest.raises(ValueError, match="no last turn"):
+            _resolve_question(None, ctx)
+
+    def test_non_message_input_raises(self):
+        ctx = ChatContext().add(CBlock("raw block"))
+        with pytest.raises(ValueError, match="not a Message"):
+            _resolve_question(None, ctx)
+
+
+class TestResolveResponse:
+    def test_explicit_string(self):
+        ctx = ChatContext()
+        text, returned_ctx = _resolve_response("answer", ctx)
+        assert text == "answer"
+        assert returned_ctx is ctx
+
+    def test_from_context(self):
+        ctx = (
+            ChatContext()
+            .add(Message("user", "question"))
+            .add(ModelOutputThunk(value="The answer is 4."))
+        )
+        text, rewound = _resolve_response(None, ctx)
+        assert text == "The answer is 4."
+        # Rewound context should still have the user question
+        last = rewound.last_turn()  # type: ignore[union-attr]
+        assert last is not None
+        assert isinstance(last.model_input, Message)
+        assert last.model_input.content == "question"
+
+    def test_empty_context_raises(self):
+        ctx = ChatContext()
+        with pytest.raises(ValueError, match="no last turn"):
+            _resolve_response(None, ctx)
+
+    def test_none_value_raises(self):
+        ctx = ChatContext().add(ModelOutputThunk(value=None))
+        with pytest.raises(ValueError, match="no value"):
+            _resolve_response(None, ctx)
