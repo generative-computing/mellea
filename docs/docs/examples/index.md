@@ -60,7 +60,8 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
-| `safety/` | `GuardianCheck` for harm, jailbreak, profanity, social bias, violence, and groundedness; shared backend pattern |
+| `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
+| `safety/` | *(Deprecated)* `GuardianCheck` examples — see `intrinsics/` for the current API |
 
 ### Integration and deployment
 
@@ -77,7 +78,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `aLora/` | Training aLoRA adapters for fast constraint checking; performance optimisation |
-| `intrinsics/` | Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks |
+| `intrinsics/` | *(Non-Guardian)* Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks. For Guardian safety functions see [Safety and validation](#safety-and-validation) above |
 | `sofai/` | Two-tier sampling: fast-model iteration with escalation to a slow model; cost optimisation |
 
 ### Multimodal

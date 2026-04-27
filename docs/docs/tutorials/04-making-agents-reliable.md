@@ -13,12 +13,14 @@ By the end you will have covered:
 - Building a tool-using agent with `instruct()` and `ModelOption.TOOLS`
 - Enforcing structured output with requirements and a retry budget
 - Inspecting `SamplingResult` to understand failures
-- Detecting harmful outputs with `GuardianCheck`
+- Detecting harmful outputs with Guardian Intrinsics
 - Grounding safety checks against retrieved context
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async) and
 [Tutorial 03](./03-using-generative-stubs) complete,
 `pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+Steps 4–7 additionally require `pip install "mellea[hf]"` — the Guardian Intrinsics
+use a `LocalHFBackend` for evaluation (approximately 3 GB download on first run).
 
 ---
 
@@ -193,18 +195,25 @@ debugging or for choosing the best available output when the budget runs out.
 
 ---
 
-## Step 4: Adding Guardian harm detection
+## Step 4: Safety checks with Guardian Intrinsics
 
-[`GuardianCheck`](../reference/glossary#guardiancheck) wraps a `MelleaSession` call and evaluates the output against a
-set of [`GuardianRisk`](../reference/glossary#guardianrisk) category. Run it after your agent responds to flag outputs before
-they reach downstream code.
+Guardian Intrinsics use a HuggingFace backend loaded with Granite Guardian adapters
+to evaluate LLM outputs. Each call returns a float score: `0.0` means safe, `1.0`
+means risk detected. Use `0.5` as the threshold.
+
+Pass `ctx=ChatContext()` to `start_session()` so the session context is available for
+evaluation directly after generation:
 
 ```python
 import mellea
 from mellea.backends import ModelOption, tool
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import req, simple_validate
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 from mellea.stdlib.sampling import RejectionSamplingStrategy
+from typing import cast
 
 @tool
 def web_search(query: str) -> str:
@@ -227,7 +236,7 @@ def calculate(expression: str) -> str:
         return "Error: expression contains disallowed characters."
     return str(eval(expression))  # noqa: S307
 
-m = mellea.start_session()
+m = mellea.start_session(ctx=ChatContext())
 
 response = m.instruct(
     "What is Mellea, and how many characters are in the word 'Mellea'?",
@@ -247,53 +256,41 @@ response = m.instruct(
     strategy=RejectionSamplingStrategy(loop_budget=3),
 )
 
-output_text = str(response)
+# Evaluate the session context — it already contains the full conversation.
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+eval_ctx = cast(ChatContext, m.ctx)
 
-# Run Guardian checks on the agent output.
-harm_check = GuardianCheck(
-    GuardianRisk.HARM,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
-)
-jailbreak_check = GuardianCheck(
-    GuardianRisk.JAILBREAK,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
-)
+harm_score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="harm")
+jailbreak_score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="jailbreak")
 
-# session.validate() returns a list of ValidationResult objects.
-validation_results = m.validate([harm_check, jailbreak_check])
+print(f"Harm:      {harm_score:.4f}  ({'RISK' if harm_score >= 0.5 else 'SAFE'})")
+print(f"Jailbreak: {jailbreak_score:.4f}  ({'RISK' if jailbreak_score >= 0.5 else 'SAFE'})")
 
-safe = all(r._result for r in validation_results)
-if safe:
-    print("Output passed safety checks:", output_text)
-else:
-    for check_result in validation_results:
-        if not check_result._result:
-            print(f"Safety check failed — {check_result._reason}")
+if harm_score < 0.5 and jailbreak_score < 0.5:
+    print("Output passed safety checks:", str(response))
+# Example output:
+# Harm:      0.0018  (SAFE)
+# Jailbreak: 0.0011  (SAFE)
+# Output passed safety checks: Mellea is a Python framework for building ...
 ```
 
-> **Note:** `m.validate()` evaluates the checks against the most recent session
-> output. Run it immediately after the `instruct()` call before any other session
-> activity modifies the context.
-
-Each `GuardianCheck` runs as an independent inference call against your local
-Ollama instance. The results are `ValidationResult` objects with `._result`
-(bool) and `._reason` (str).
+`guardian_check()` evaluates the last message from `target_role` in the context.
+The default `target_role="assistant"` checks the most recent assistant response.
 
 ---
 
-## Step 5: Sharing a backend across Guardian checks
+## Step 5: Checking multiple risk criteria
 
-When you run multiple `GuardianCheck` instances, each one loads or contacts the
-model separately by default. Pass `backend=shared_backend` to reuse a single
-loaded backend and avoid the overhead of repeated initialisation:
+`CRITERIA_BANK` contains 10 pre-baked criteria keys. Reuse a single
+`guardian_backend` across all checks to avoid repeated model initialisation:
 
 ```python
 import mellea
-from mellea.backends import ModelOption, model_ids, tool
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.backends import ModelOption, tool
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
+from typing import cast
 
 @tool
 def web_search(query: str) -> str:
@@ -304,48 +301,43 @@ def web_search(query: str) -> str:
     """
     return f"Top result for '{query}': Mellea is a Python framework for generative programs."
 
-m = mellea.start_session()
+m = mellea.start_session(ctx=ChatContext())
+m.instruct("What is Mellea?", model_options={ModelOption.TOOLS: [web_search]})
 
-response = m.instruct(
-    "What is Mellea?",
-    model_options={ModelOption.TOOLS: [web_search]},
-)
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+eval_ctx = cast(ChatContext, m.ctx)
 
-# Create a single Guardian backend and reuse it across all checks.
-# Pull the model first: ollama pull granite3-guardian:2b
-guardian_backend = OllamaModelBackend(model_ids.IBM_GRANITE_GUARDIAN_3_0_2B.ollama_name)
-
-checks = [
-    GuardianCheck(GuardianRisk.HARM, backend=guardian_backend),
-    GuardianCheck(GuardianRisk.PROFANITY, backend=guardian_backend),
-    GuardianCheck(GuardianRisk.ANSWER_RELEVANCE, backend=guardian_backend),
-    GuardianCheck(GuardianRisk.JAILBREAK, backend=guardian_backend),
-]
-
-results = m.validate(checks)
-
-for risk, result in zip(checks, results):
-    status = "PASS" if result._result else "FAIL"
-    print(f"[{status}] {risk}: {result._reason or 'ok'}")
+for criteria in ["harm", "jailbreak", "profanity", "social_bias", "answer_relevance"]:
+    score = guardian.guardian_check(eval_ctx, guardian_backend, criteria=criteria)
+    status = "RISK" if score >= 0.5 else "SAFE"
+    print(f"[{status}] {criteria}: {score:.4f}")
+# Example output:
+# [SAFE] harm:             0.0021
+# [SAFE] jailbreak:        0.0013
+# [SAFE] profanity:        0.0009
+# [SAFE] social_bias:      0.0031
+# [SAFE] answer_relevance: 0.0044
 ```
 
-The full list of `GuardianRisk` values you can check:
-`HARM`, `GROUNDEDNESS`, `PROFANITY`, `ANSWER_RELEVANCE`, `JAILBREAK`,
-`FUNCTION_CALL`, `SOCIAL_BIAS`, `VIOLENCE`, `SEXUAL_CONTENT`,
-`UNETHICAL_BEHAVIOR`.
+> **Advanced:** Pass a free-text string as `criteria` for domain-specific checks
+> not covered by `CRITERIA_BANK` — for example, PII detection or domain-specific
+> compliance rules. See [Safety Guardrails](../how-to/safety-guardrails#custom-criteria).
 
 ---
 
 ## Step 6: Groundedness checks with retrieved context
 
-When your agent retrieves documents before answering, add a `GROUNDEDNESS` check
-to confirm the response is grounded in what was retrieved rather than
-hallucinated:
+When your agent retrieves documents before answering, use `guardian_check()` with
+`criteria="groundedness"` to detect hallucinations relative to what was retrieved.
+Include the source document in the evaluation context as a user message:
 
 ```python
 import mellea
 from mellea.backends import ModelOption, tool
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
 
 RETRIEVED_CONTEXT = (
     "Mellea is an open-source Python framework for building generative programs. "
@@ -368,38 +360,38 @@ m = mellea.start_session()
 response = m.instruct(
     "Using the retrieved documentation, describe what Mellea is.",
     model_options={ModelOption.TOOLS: [retrieve_docs]},
-    grounding_context={"docs": RETRIEVED_CONTEXT},
 )
 
 output_text = str(response)
 
-# Check the response is grounded in the retrieved context.
-groundedness_check = GuardianCheck(
-    GuardianRisk.GROUNDEDNESS,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
-    context_text=RETRIEVED_CONTEXT,
+# Build an evaluation context with the source document prepended.
+# guardian_check compares the assistant response against the provided document.
+eval_ctx = (
+    ChatContext()
+    .add(Message("user", f"Document: {RETRIEVED_CONTEXT}"))
+    .add(Message("assistant", output_text))
 )
 
-results = m.validate([groundedness_check])
-grounded = results[0]._result
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="groundedness")
 
-if grounded:
-    print("Grounded response:", output_text)
+if score < 0.5:
+    print(f"Grounded response (score: {score:.4f}):", output_text)
 else:
-    print("Response may contain hallucinated content.")
-    print("Reason:", results[0]._reason)
+    print(f"Groundedness risk detected (score: {score:.4f}) — response may be hallucinated.")
+# Example output:
+# Grounded response (score: 0.0034): Mellea is an open-source Python framework ...
 ```
 
-> **Tip:** Pass the same text you supplied as `grounding_context` to
-> `context_text` in `GuardianCheck`. This ensures the groundedness model
-> evaluates the response against exactly what the agent was given.
+> **Tip:** Include the same document text the tool retrieved in the evaluation
+> context. This ensures the guardian evaluates the response against exactly
+> what the agent was given.
 
 ---
 
-## Step 7: A ReACT agent with Guardian checks
+## Step 7: A ReACT agent with Guardian Intrinsics
 
-For goal-driven agentic loops, combine `react()` with Guardian validation. The
+For goal-driven agentic loops, combine `react()` with Guardian Intrinsics. The
 `react()` function is an async built-in that runs the Reason-Act loop until the
 goal is reached or the step budget is exhausted:
 
@@ -407,9 +399,11 @@ goal is reached or the step budget is exhausted:
 import asyncio
 import mellea
 from mellea.backends import tool
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.frameworks.react import react
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 @tool
 def web_search(query: str) -> str:
@@ -447,18 +441,19 @@ output = asyncio.run(run_agent(
     "Find out what Mellea is, then calculate how many characters are in 'Mellea'."
 ))
 
-# Validate the agent's final output.
-harm_check = GuardianCheck(
-    GuardianRisk.HARM,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
+# Evaluate the agent's final output against harm criteria.
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+eval_ctx = (
+    ChatContext()
+    .add(Message("user", "Find out what Mellea is, then calculate how many characters are in 'Mellea'."))
+    .add(Message("assistant", output))
 )
-results = m.validate([harm_check])
+harm_score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="harm")
 
-if results[0]._result:
-    print("Agent output (safe):", output)
+if harm_score < 0.5:
+    print(f"Agent output (safe, score: {harm_score:.4f}):", output)
 else:
-    print("Agent output flagged:", results[0]._reason)
+    print(f"Agent output flagged — harm score: {harm_score:.4f}")
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
@@ -482,11 +477,11 @@ agentic system:
 | `requirements` + `simple_validate` | Deterministic and LLM-judged output constraints |
 | `RejectionSamplingStrategy` | Explicit retry budget |
 | `return_sampling_results=True` | Inspect every attempt for debugging |
-| `GuardianCheck` | Post-generation safety risk detection |
-| Shared `backend` | Amortise model loading across multiple checks |
-| `GuardianRisk.GROUNDEDNESS` + `context_text` | Detect hallucination relative to retrieved context |
+| `guardian_check()` | Post-generation safety risk score (0.0–1.0) |
+| Reused `guardian_backend` | Single model load amortised across all criteria checks |
+| `criteria="groundedness"` + document context | Detect hallucination relative to retrieved context |
 | `react()` | Goal-driven multi-step agentic loop |
 
 ---
 
-**See also:** [The Requirements System](../concepts/requirements-system) | [Security and Taint Tracking](../advanced/security-and-taint-tracking) | [Tools and Agents](../how-to/tools-and-agents)
+**See also:** [The Requirements System](../concepts/requirements-system) | [Safety Guardrails](../how-to/safety-guardrails) | [Tools and Agents](../how-to/tools-and-agents)
