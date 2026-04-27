@@ -122,7 +122,7 @@ async def test_stateful_subclass_accumulates_state():
 
     result = await req.stream_validate(
         "intro text\n- one\n- two\n- three\n- four",
-        backend=None,
+        backend=None,  # type: ignore[arg-type]
         ctx=None,  # type: ignore[arg-type]
     )
     assert req._bullet_count == 4  # delta added 2 more
