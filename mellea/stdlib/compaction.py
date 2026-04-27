@@ -1,0 +1,325 @@
+"""Context compaction strategies for the ReACT framework.
+
+Provides modular, callable strategy objects to compact a ``ChatContext`` that
+has grown too large during a react loop.  Three strategies are available:
+
+- ``ClearAll`` — discard the entire conversation body, keeping only the prefix
+  (everything up to and including the ``ReactInitiator``).
+- ``KeepLastN`` — keep the prefix plus the *n* most recent body components.
+- ``LLMSummarize`` — ask the backend to summarize old body components into a
+  single ``Message``, then keep the last *n* body components verbatim.
+
+All strategies preserve the **prefix** (every component up to and including the
+first ``ReactInitiator``) so the model retains its goal and tool definitions.
+
+Example::
+
+    from mellea.stdlib.compaction import KeepLastN
+    from mellea.stdlib.frameworks.react import react
+
+    await react(
+        goal="...",
+        context=ChatContext(),
+        backend=m.backend,
+        tools=[search_tool],
+        compaction=KeepLastN(keep_n=5, threshold=20),
+    )
+"""
+
+from __future__ import annotations
+
+import abc
+
+from mellea.core.backend import Backend
+from mellea.core.base import CBlock, Component, ModelOutputThunk
+from mellea.core.utils import MelleaLogger
+from mellea.stdlib.components.chat import Message, ToolMessage
+from mellea.stdlib.components.react import ReactInitiator
+from mellea.stdlib.context import ChatContext
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def rebuild_chat_context(
+    components: list[Component | CBlock], *, window_size: int | None = None
+) -> ChatContext:
+    """Build a fresh ``ChatContext`` from an ordered list of components.
+
+    Args:
+        components: Components to add, in chronological order.
+        window_size: Optional sliding-window size for the new context.
+
+    Returns:
+        A new ``ChatContext`` containing all *components*.
+    """
+    ctx = ChatContext(window_size=window_size)
+    for c in components:
+        ctx = ctx.add(c)
+    return ctx
+
+
+def _find_prefix_end(components: list[Component | CBlock]) -> int:
+    """Return the index *after* the first ``ReactInitiator``.
+
+    Everything in ``components[:idx]`` is the prefix that must be preserved by
+    every compaction strategy.  Returns 0 when no ``ReactInitiator`` is found.
+    """
+    for i, c in enumerate(components):
+        if isinstance(c, ReactInitiator):
+            return i + 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Abstract base
+# ---------------------------------------------------------------------------
+
+
+class CompactionStrategy(abc.ABC):
+    """Abstract base class for context compaction strategies.
+
+    Each strategy carries a ``threshold`` — the component count above which
+    compaction should fire.  The :meth:`should_compact` helper checks this so
+    callers don't need to track the threshold separately.
+
+    Subclasses implement :meth:`compact` which receives the current
+    ``ChatContext`` and returns a compacted copy.  The method is ``async``
+    so that strategies requiring LLM calls (e.g. ``LLMSummarize``) work
+    transparently; synchronous strategies simply never ``await``.
+
+    Args:
+        threshold (int): Trigger compaction when the number of context
+            components exceeds this value.
+    """
+
+    def __init__(self, *, threshold: int = 0) -> None:
+        """Initialize with the component-count threshold."""
+        self.threshold = threshold
+
+    def should_compact(self, context: ChatContext) -> bool:
+        """Return ``True`` when *context* exceeds the configured threshold.
+
+        Args:
+            context: The context to check.
+
+        Returns:
+            ``True`` if the number of components exceeds ``self.threshold``
+            and ``self.threshold`` is greater than 0.
+        """
+        return self.threshold > 0 and len(context.as_list()) > self.threshold
+
+    async def maybe_compact(
+        self,
+        context: ChatContext,
+        *,
+        backend: Backend | None = None,
+        goal: str | None = None,
+    ) -> ChatContext:
+        """Compact *context* only if it exceeds the threshold, otherwise return it unchanged.
+
+        Args:
+            context: The context to check and potentially compact.
+            backend: The backend (forwarded to :meth:`compact`).
+            goal: The react goal string (forwarded to :meth:`compact`).
+
+        Returns:
+            A compacted ``ChatContext`` if the threshold was exceeded,
+            or the original *context* unchanged.
+        """
+        if self.should_compact(context):
+            return await self.compact(context, backend=backend, goal=goal)
+        return context
+
+    @abc.abstractmethod
+    async def compact(
+        self,
+        context: ChatContext,
+        *,
+        backend: Backend | None = None,
+        goal: str | None = None,
+    ) -> ChatContext:
+        """Return a compacted copy of *context*.
+
+        Args:
+            context: The context to compact.
+            backend: The backend (required by ``LLMSummarize``).
+            goal: The react goal string (required by ``LLMSummarize``).
+
+        Returns:
+            A new, compacted ``ChatContext``.
+        """
+
+
+# ---------------------------------------------------------------------------
+# Concrete strategies
+# ---------------------------------------------------------------------------
+
+
+class ClearAll(CompactionStrategy):
+    """Discard the entire conversation body, keeping only the prefix.
+
+    The prefix is everything up to and including the first ``ReactInitiator``.
+
+    Args:
+        threshold (int): Trigger compaction when context exceeds this many components.
+    """
+
+    async def compact(
+        self,
+        context: ChatContext,
+        *,
+        backend: Backend | None = None,
+        goal: str | None = None,
+    ) -> ChatContext:
+        """Return a context containing only the prefix."""
+        components = context.as_list()
+        prefix_end = _find_prefix_end(components)
+        compacted = components[:prefix_end]
+
+        MelleaLogger.get_logger().info(
+            f"ClearAll: compacted context from {len(components)} to "
+            f"{len(compacted)} components"
+        )
+        return rebuild_chat_context(compacted, window_size=context._window_size)
+
+
+class KeepLastN(CompactionStrategy):
+    """Keep the prefix plus the last *keep_n* body components.
+
+    Args:
+        keep_n (int): Number of recent body components to retain.
+        threshold (int): Trigger compaction when context exceeds this many components.
+    """
+
+    def __init__(self, *, keep_n: int = 5, threshold: int = 0) -> None:
+        """Initialize with the number of recent body components to keep."""
+        super().__init__(threshold=threshold)
+        self.keep_n = keep_n
+
+    async def compact(
+        self,
+        context: ChatContext,
+        *,
+        backend: Backend | None = None,
+        goal: str | None = None,
+    ) -> ChatContext:
+        """Return a context with the prefix and the last *keep_n* body components."""
+        components = context.as_list()
+        prefix_end = _find_prefix_end(components)
+        prefix = components[:prefix_end]
+        body = components[prefix_end:]
+
+        if len(body) <= self.keep_n:
+            return context  # nothing to compact
+
+        compacted = prefix + body[-self.keep_n :]
+
+        MelleaLogger.get_logger().info(
+            f"KeepLastN(keep_n={self.keep_n}): compacted context from "
+            f"{len(components)} to {len(compacted)} components"
+        )
+        return rebuild_chat_context(compacted, window_size=context._window_size)
+
+
+class LLMSummarize(CompactionStrategy):
+    """Summarize old body components with the LLM, keep last *keep_n* verbatim.
+
+    Requires ``backend`` and ``goal`` to be passed to :meth:`compact`.
+
+    Args:
+        keep_n (int): Number of recent body components to retain verbatim.
+        threshold (int): Trigger compaction when context exceeds this many components.
+    """
+
+    def __init__(self, *, keep_n: int = 5, threshold: int = 0) -> None:
+        """Initialize with the number of recent body components to keep."""
+        super().__init__(threshold=threshold)
+        self.keep_n = keep_n
+
+    async def compact(
+        self,
+        context: ChatContext,
+        *,
+        backend: Backend | None = None,
+        goal: str | None = None,
+    ) -> ChatContext:
+        """Return a context with the prefix, an LLM summary, and recent body components.
+
+        Raises:
+            ValueError: If *backend* or *goal* are not provided.
+        """
+        if backend is None or goal is None:
+            raise ValueError(
+                "LLMSummarize requires both 'backend' and 'goal' arguments"
+            )
+
+        from mellea.stdlib import functional as mfuncs
+        from mellea.stdlib.context import SimpleContext
+
+        components = context.as_list()
+        prefix_end = _find_prefix_end(components)
+        prefix = components[:prefix_end]
+        body = components[prefix_end:]
+
+        if len(body) <= self.keep_n:
+            return context  # nothing to compact
+
+        old = body[: -self.keep_n] if self.keep_n > 0 else body
+        recent = body[-self.keep_n :] if self.keep_n > 0 else []
+
+        # Build a textual representation of old components for summarization.
+        context_lines: list[str] = []
+        for c in old:
+            if isinstance(c, ToolMessage):
+                context_lines.append(f"tool ({c.name}): {c.content}")
+            elif isinstance(c, Message):
+                context_lines.append(f"{c.role}: {c.content}")
+            elif isinstance(c, ModelOutputThunk):
+                context_lines.append(f"assistant: {c.value}")
+            elif isinstance(c, CBlock):
+                context_lines.append(str(c))
+            else:
+                context_lines.append(str(getattr(c, "content", c)))
+
+        summary_prompt = (
+            "You are summarizing research progress to maintain context "
+            "within token limits.\n\n"
+            f"GOAL: {goal}\n\n"
+            "Provide a comprehensive summary of the research context below. "
+            "Your summary should:\n"
+            "- Preserve ALL specific facts, numbers, names, URLs, and search "
+            "queries found\n"
+            "- Note which tools were called and what results were obtained\n"
+            "- Highlight key findings and any dead ends encountered\n"
+            "- Be structured clearly so the research can continue seamlessly"
+            "\n\nContext to summarize:\n"
+            f"{chr(10).join(context_lines)}"
+        )
+
+        summary_action = Message(role="user", content=summary_prompt)
+        result, _ = await mfuncs.aact(
+            action=summary_action,
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[],
+            strategy=None,
+            await_result=True,
+        )
+
+        summary_text = result.value or ""
+        summary_message = Message(
+            role="user",
+            content=(
+                f"[CONTEXT SUMMARY]\n{summary_text}\n\nContinue working on: {goal}"
+            ),
+        )
+
+        compacted = [*prefix, summary_message, *recent]
+
+        MelleaLogger.get_logger().info(
+            f"LLMSummarize(keep_n={self.keep_n}): compacted context from "
+            f"{len(components)} to {len(compacted)} components"
+        )
+        return rebuild_chat_context(compacted, window_size=context._window_size)
