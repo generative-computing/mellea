@@ -674,6 +674,10 @@ async def enforce_tool_allowlist(payload, ctx):
         return block(f"Tool '{payload.model_tool_call.name}' not permitted", code="TOOL_NOT_ALLOWED")
 ```
 
+<Note>
+By default, `tool_pre_invoke` and `tool_post_invoke` hooks are **skipped for framework-internal tools** such as the ReAct loop's `final_answer` tool. This prevents allowlist plugins from accidentally blocking internal control flow. See [Internal tool exemption](#internal-tool-exemption) for details and how to opt out.
+</Note>
+
 #### `tool_post_invoke`
 
 **Fires:** After tool execution completes.
@@ -878,6 +882,49 @@ with start_session(plugins=[tool_security]) as m:
 
 See the [full tool hooks example](https://github.com/generative-computing/mellea/blob/main/docs/examples/plugins/tool_hooks.py).
 
+### Internal tool exemption
+
+Mellea's frameworks use internal tools that are invisible to application developers. For example, the [ReAct loop](../reference/glossary#react) uses a `final_answer` tool to signal that the agent has finished reasoning. These tools flow through the same invocation path as user-defined tools, which means a `tool_pre_invoke` allowlist plugin would block them — breaking the framework.
+
+To prevent this, **tool hooks are skipped for framework-internal tools by default**. Both `tool_pre_invoke` and `tool_post_invoke` are bypassed; the tool itself still executes normally.
+
+This means you can write a tool allowlist plugin that lists only your own tools, without worrying about framework internals:
+
+```python
+ALLOWED_TOOLS = frozenset({"get_weather", "calculator"})
+
+@hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
+async def enforce_tool_allowlist(payload, ctx):
+    if payload.model_tool_call.name not in ALLOWED_TOOLS:
+        return block(f"Tool '{payload.model_tool_call.name}' not permitted")
+    # final_answer will never reach this hook — it is automatically exempted
+```
+
+#### Checking whether a tool is internal
+
+Use `is_internal_tool()` to query the internal tools registry:
+
+```python
+from mellea.plugins import is_internal_tool
+
+is_internal_tool("final_answer")  # True
+is_internal_tool("get_weather")   # False
+```
+
+#### Opting out
+
+If your plugin genuinely needs to intercept internal tools (e.g., for deep audit logging of every tool invocation including framework tools), disable the exemption:
+
+```python
+from mellea.plugins import set_skip_hooks_for_internal_tools
+
+set_skip_hooks_for_internal_tools(False)  # all tools now fire hooks
+```
+
+<Warning>
+Disabling the exemption means your allowlist plugin must explicitly permit internal tools like `final_answer`, or the ReAct loop will fail with a `PluginViolationError`.
+</Warning>
+
 ---
 
 ## Patterns and best practices
@@ -971,18 +1018,21 @@ All public symbols are available from a single import:
 
 ```python
 from mellea.plugins import (
-    HookType,            # Enum of all hook types (e.g., GENERATION_PRE_CALL)
-    Plugin,              # Base class for class-based plugins
-    PluginMode,          # Execution mode enum (SEQUENTIAL, TRANSFORM, AUDIT, CONCURRENT, FIRE_AND_FORGET)
-    PluginResult,        # Return type for hooks that modify or block
-    PluginSet,           # Named group of hooks/plugins for composition
-    PluginViolationError,# Exception raised when a hook blocks execution
-    block,               # Helper to create a blocking PluginResult
-    hook,                # Decorator to register an async function as a hook handler
-    modify,              # Helper to create a modifying PluginResult
-    plugin_scope,        # Context manager for with-block scoped activation
-    register,            # Register hooks/plugins globally or per-session
-    unregister,          # Remove globally-registered hooks/plugins
+    HookType,                        # Enum of all hook types (e.g., GENERATION_PRE_CALL)
+    Plugin,                          # Base class for class-based plugins
+    PluginMode,                      # Execution mode enum (SEQUENTIAL, TRANSFORM, ...)
+    PluginResult,                    # Return type for hooks that modify or block
+    PluginSet,                       # Named group of hooks/plugins for composition
+    PluginViolationError,            # Exception raised when a hook blocks execution
+    block,                           # Helper to create a blocking PluginResult
+    hook,                            # Decorator to register an async function as a hook handler
+    is_internal_tool,                # Check if a tool name is framework-internal
+    modify,                          # Helper to create a modifying PluginResult
+    plugin_scope,                    # Context manager for with-block scoped activation
+    register,                        # Register hooks/plugins globally or per-session
+    set_skip_hooks_for_internal_tools, # Enable/disable tool hook exemption for internal tools
+    skip_hooks_for_internal_tools,   # Query current exemption state
+    unregister,                      # Remove globally-registered hooks/plugins
 )
 ```
 
@@ -996,6 +1046,9 @@ from mellea.plugins import (
 | `plugin_scope(*items)` | Context manager that registers on enter, deregisters on exit |
 | `block(reason, *, code, details)` | Create a blocking `PluginResult` |
 | `modify(payload, **field_updates)` | Create a modifying `PluginResult` via `model_copy` |
+| `is_internal_tool(tool_name)` | Returns `True` if the tool is framework-internal (e.g. `final_answer`) |
+| `skip_hooks_for_internal_tools()` | Returns `True` if tool hooks are currently skipped for internal tools |
+| `set_skip_hooks_for_internal_tools(enabled)` | Enable or disable tool hook exemption for internal tools |
 | `HookType` | Enum with all 18 hook types |
 | `PluginMode` | Enum: `SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET` |
 | `PluginResult` | Typed result with `continue_processing`, `modified_payload`, and `violation` |

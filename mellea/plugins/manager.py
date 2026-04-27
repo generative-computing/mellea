@@ -27,6 +27,11 @@ _plugin_manager: Any | None = None
 _plugins_enabled: bool = False
 _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
 
+# Framework-internal tool names that bypass plugin hooks by default.
+# See mellea.stdlib.components.react.MELLEA_FINALIZER_TOOL
+_INTERNAL_TOOL_NAMES: frozenset[str] = frozenset({"final_answer"})
+_skip_hooks_for_internal_tools: bool = True
+
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
 DEFAULT_HOOK_POLICY: Literal["allow"] | Literal["deny"] = "deny"
 
@@ -50,6 +55,41 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
     if hook_type is not None:
         return _plugin_manager.has_hooks_for(hook_type.value)
     return True
+
+
+def skip_hooks_for_internal_tools() -> bool:
+    """Return whether tool hooks are skipped for framework-internal tools.
+
+    Returns:
+        ``True`` if hooks are bypassed for internal tools like ``final_answer``.
+    """
+    return _skip_hooks_for_internal_tools
+
+
+def set_skip_hooks_for_internal_tools(enabled: bool) -> None:
+    """Control whether tool hooks are skipped for framework-internal tools.
+
+    When *enabled* (the default), ``tool_pre_invoke`` and ``tool_post_invoke``
+    hooks will not fire for tools in the internal registry (e.g. ``final_answer``).
+    Set to ``False`` if your plugin intentionally needs to intercept internal tools.
+
+    Args:
+        enabled: ``True`` to skip hooks for internal tools, ``False`` to invoke them.
+    """
+    global _skip_hooks_for_internal_tools
+    _skip_hooks_for_internal_tools = enabled
+
+
+def is_internal_tool(tool_name: str) -> bool:
+    """Return whether the given tool name is a framework-internal tool.
+
+    Args:
+        tool_name: Name of the tool to check.
+
+    Returns:
+        ``True`` if the tool is in the internal tools registry.
+    """
+    return tool_name in _INTERNAL_TOOL_NAMES
 
 
 def get_plugin_manager() -> Any | None:
@@ -136,13 +176,18 @@ async def initialize_plugins(
 
 async def shutdown_plugins() -> None:
     """Shut down the PluginManager and reset all state."""
-    global _plugin_manager, _plugins_enabled, _session_tags
+    global \
+        _plugin_manager, \
+        _plugins_enabled, \
+        _session_tags, \
+        _skip_hooks_for_internal_tools
 
     if _plugin_manager is not None:
         await _plugin_manager.shutdown()
     _plugin_manager = None
     _plugins_enabled = False
     _session_tags.clear()
+    _skip_hooks_for_internal_tools = True
 
 
 def track_session_plugin(session_id: str, plugin_name: str) -> None:
