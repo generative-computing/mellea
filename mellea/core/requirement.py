@@ -292,9 +292,15 @@ class Requirement(Component[str]):
         — meaning insufficient data to decide yet. Subclasses override this method
         to inspect the accumulated chunk and return ``"pass"`` or ``"fail"`` early.
 
-        This method must not mutate ``self``. The orchestrator is responsible for
-        cloning the requirement before each attempt; any state needed across chunks
-        must be managed externally.
+        Implementations may accumulate state on ``self`` across calls within a
+        single attempt. The orchestrator clones the requirement (``copy(req)``)
+        before each attempt, so state does not bleed across retries.
+
+        Shallow-copy caveat: mutable container fields (e.g. ``self._buffer = []``)
+        are shared by reference under ``copy()``. Reassign rather than mutate in
+        place (``self._buffer = self._buffer + [chunk]``, not
+        ``self._buffer.append(chunk)``), or override ``__copy__`` for proper
+        isolation.
 
         Args:
             chunk: The accumulated model output so far (not just the latest token).

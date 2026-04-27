@@ -1,6 +1,7 @@
 """Unit tests for Requirement.stream_validate() hook."""
 
 import inspect
+from copy import copy
 
 import pytest
 
@@ -82,3 +83,70 @@ async def test_stream_validate_idempotent():
     assert result1.success == "unknown"
     assert result2.success == "unknown"
     assert req._output is None
+
+
+@pytest.mark.asyncio
+async def test_stateful_subclass_accumulates_state():
+    """Stateful subclass correctly accumulates state across stream_validate calls."""
+
+    class BulletCounter(Requirement):
+        def __init__(self) -> None:
+            super().__init__(description="no more than 3 bullets")
+            self._bullet_count = 0
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Backend, ctx: Context
+        ) -> PartialValidationResult:
+            self._bullet_count = chunk.count("\n-")
+            if self._bullet_count > 3:
+                return PartialValidationResult(
+                    "fail", reason=f"{self._bullet_count} bullets exceeds limit"
+                )
+            return PartialValidationResult("unknown")
+
+    req = BulletCounter()
+    assert req._bullet_count == 0
+
+    await req.stream_validate("intro text", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert req._bullet_count == 0
+
+    await req.stream_validate("intro\n- one\n- two", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert req._bullet_count == 2
+
+    result = await req.stream_validate(
+        "intro\n- one\n- two\n- three\n- four",
+        backend=None,
+        ctx=None,  # type: ignore[arg-type]
+    )
+    assert req._bullet_count == 4
+    assert result.success == "fail"
+    assert result.reason is not None and "4" in result.reason
+
+
+@pytest.mark.asyncio
+async def test_stateful_subclass_clone_isolation():
+    """copy() of a stateful requirement gives an independent clone — orchestrator pattern."""
+
+    class CallCounter(Requirement):
+        def __init__(self) -> None:
+            super().__init__(description="call counter")
+            self._calls = 0
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Backend, ctx: Context
+        ) -> PartialValidationResult:
+            self._calls += 1
+            return PartialValidationResult("unknown")
+
+    req = CallCounter()
+    await req.stream_validate("a", backend=None, ctx=None)  # type: ignore[arg-type]
+    await req.stream_validate("b", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert req._calls == 2
+
+    # Simulate orchestrator cloning before a new attempt
+    cloned = copy(req)
+    assert cloned._calls == 2  # clone inherits state at clone time
+
+    await cloned.stream_validate("c", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert cloned._calls == 3  # clone advances independently
+    assert req._calls == 2  # original is unchanged
