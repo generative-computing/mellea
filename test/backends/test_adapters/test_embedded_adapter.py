@@ -286,6 +286,52 @@ class TestFromHub:
                 EmbeddedIntrinsicAdapter.from_hub("some/repo")
 
 
+# ---- EmbeddedIntrinsicAdapter.from_source ----
+
+
+class TestFromSource:
+    def test_local_directory(self, model_dir):
+        """Local path routes to from_model_directory."""
+        adapters = EmbeddedIntrinsicAdapter.from_source(str(model_dir))
+        assert len(adapters) == 2
+
+    def test_local_directory_with_filter(self, model_dir):
+        """Local path with intrinsic_name filter."""
+        adapters = EmbeddedIntrinsicAdapter.from_source(
+            str(model_dir), intrinsic_name="answerability"
+        )
+        assert len(adapters) == 1
+        assert adapters[0].intrinsic_name == "answerability"
+
+    def test_hub_repo_id(self, model_dir):
+        """Non-local string routes to from_hub."""
+        with patch(
+            "huggingface_hub.snapshot_download", return_value=str(model_dir)
+        ) as mock_dl:
+            adapters = EmbeddedIntrinsicAdapter.from_source(
+                "ibm-granite/granite-switch-micro"
+            )
+        mock_dl.assert_called_once()
+        assert len(adapters) == 2
+
+    def test_hub_passes_revision_and_cache(self, model_dir):
+        """revision and cache_dir are forwarded to from_hub."""
+        with patch(
+            "huggingface_hub.snapshot_download", return_value=str(model_dir)
+        ) as mock_dl:
+            EmbeddedIntrinsicAdapter.from_source(
+                "ibm-granite/granite-switch-micro",
+                revision="v2",
+                cache_dir="/tmp/cache",
+            )
+        mock_dl.assert_called_once_with(
+            repo_id="ibm-granite/granite-switch-micro",
+            allow_patterns=["adapter_index.json", "io_configs/**"],
+            cache_dir="/tmp/cache",
+            revision="v2",
+        )
+
+
 # ---- OpenAIBackend adapter integration ----
 
 
@@ -350,6 +396,12 @@ class TestOpenAIBackendRegistration:
                 "ibm-granite/granite-switch-micro"
             )
 
+        assert set(names) == {"answerability", "citations"}
+        assert len(backend._added_adapters) == 2
+
+    def test_register_from_local_directory(self, backend, model_dir):
+        """register_embedded_adapter_model works with a local directory path."""
+        names = backend.register_embedded_adapter_model(str(model_dir))
         assert set(names) == {"answerability", "citations"}
         assert len(backend._added_adapters) == 2
 

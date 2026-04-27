@@ -44,7 +44,7 @@ def call_intrinsic(
         # EmbeddedAdapters get grabbed directly from the hf repo.
         if getattr(backend, "_uses_embedded_adapters", False):
             repo_id = getattr(backend, "_model_id", backend.base_model_name)
-            adapters = EmbeddedIntrinsicAdapter.from_hub(
+            adapters = EmbeddedIntrinsicAdapter.from_source(
                 repo_id, intrinsic_name=intrinsic_name
             )
             # Only one adapter should be returned, but we add any returned here in case.

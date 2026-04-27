@@ -466,6 +466,41 @@ class EmbeddedIntrinsicAdapter(Adapter):
             raise ValueError(f"No adapters found in {repo_id}") from e
 
 
+    @staticmethod
+    def from_source(
+        source: str,
+        revision: str = "main",
+        cache_dir: str | None = None,
+        intrinsic_name: str | None = None,
+    ) -> list["EmbeddedIntrinsicAdapter"]:
+        """Load embedded adapters from a local directory or HuggingFace Hub.
+
+        Automatically detects whether ``source`` is a local filesystem path
+        or a HuggingFace Hub repo ID, and delegates accordingly.
+
+        Args:
+            source (str): Local path to a model directory, or a HuggingFace
+                Hub repo ID (e.g. ``"ibm-granite/granite-switch-micro"``).
+            revision (str): Git revision (only used for Hub downloads).
+            cache_dir (str | None): Cache directory (only used for Hub downloads).
+            intrinsic_name (str | None): If provided, only load the adapter
+                matching this intrinsic name. ``None`` loads all adapters.
+
+        Returns:
+            list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+        """
+        if pathlib.Path(source).is_dir():
+            return EmbeddedIntrinsicAdapter.from_model_directory(
+                source, intrinsic_name=intrinsic_name
+            )
+        return EmbeddedIntrinsicAdapter.from_hub(
+            source,
+            revision=revision,
+            cache_dir=cache_dir,
+            intrinsic_name=intrinsic_name,
+        )
+
+
 class CustomIntrinsicAdapter(IntrinsicAdapter):
     """Special class for users to subclass when creating custom intrinsic adapters.
 

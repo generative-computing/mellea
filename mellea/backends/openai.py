@@ -86,10 +86,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         model_options (dict | None): Default model options for generation requests.
         default_to_constraint_checking_alora (bool): If ``False``, deactivates aLoRA
             constraint checking; primarily for benchmarking and debugging.
-        load_embedded_adapters (bool): If ``True``, automatically download and register
+        load_embedded_adapters (bool): If ``True``, automatically registers
             embedded intrinsic adapters from the model specified by *model_id*.
-            The model ID is used as a HuggingFace Hub repo ID to load
-            ``adapter_index.json`` and the corresponding I/O configs.
+            The model ID is used as a local directory if it exists, otherwise 
+            as a HuggingFace Hub repo ID to load ``adapter_index.json`` and the corresponding I/O configs.
         api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
@@ -282,7 +282,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Register all embedded adapters from an Embedded Adapter model.
 
         Args:
-            source (str): a HuggingFace Hub repo ID.
+            source (str): A local model directory path or HuggingFace Hub repo ID.
             revision (str): Git revision when loading from HuggingFace Hub.
             cache_dir (str | None): Cache directory for HF downloads.
 
@@ -291,7 +291,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """
         import os
 
-        adapters = EmbeddedIntrinsicAdapter.from_hub(
+        adapters = EmbeddedIntrinsicAdapter.from_source(
             source, revision=revision, cache_dir=cache_dir
         )
 
