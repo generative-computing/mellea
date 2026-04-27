@@ -2,6 +2,7 @@ import gc
 import os
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 import pytest
 import requests
@@ -546,11 +547,18 @@ def pytest_runtest_setup(item):
         if current_group == "ollama" and prev_group != "ollama":
             logger = MelleaLogger.get_logger()
             host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
-            if ":" in host_str:
-                ollama_base = f"http://{host_str}"
+            parsed_host_str = urlsplit(host_str)
+            if parsed_host_str.port:
+                ollama_base = (
+                    f"http://{host_str}" if not parsed_host_str.scheme else host_str
+                )
             else:
                 port = os.environ.get("OLLAMA_PORT", "11434")
-                ollama_base = f"http://{host_str}:{port}"
+                ollama_base = (
+                    f"http://{host_str}:{port}"
+                    if not parsed_host_str.scheme
+                    else host_str
+                )
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
