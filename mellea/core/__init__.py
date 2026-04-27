@@ -4,7 +4,7 @@ This package defines the fundamental interfaces and data structures on which eve
 other layer of mellea is built: the ``Backend``, ``Formatter``, and
 ``SamplingStrategy`` protocols; the ``Component``, ``CBlock``, ``Context``, and
 ``ModelOutputThunk`` data types that flow through the inference pipeline; and
-``Requirement`` / ``ValidationResult`` for constrained generation. Start here when
+``Requirement`` / ``ValidationResult`` / ``PartialValidationResult`` for constrained generation. Start here when
 building a new backend, formatter, or sampling strategy, or when you need the type
 definitions shared across the library.
 """
@@ -29,7 +29,12 @@ from .base import (
     blockify,
 )
 from .formatter import Formatter
-from .requirement import Requirement, ValidationResult, default_output_to_bool
+from .requirement import (
+    PartialValidationResult,
+    Requirement,
+    ValidationResult,
+    default_output_to_bool,
+)
 from .sampling import SamplingResult, SamplingStrategy
 from .utils import MelleaLogger, clear_log_context, log_context, set_log_context
 
@@ -66,6 +71,7 @@ __all__ = [
     "MelleaLogger",
     "ModelOutputThunk",
     "ModelToolCall",
+    "PartialValidationResult",
     "Requirement",
     "S",
     "SamplingResult",
