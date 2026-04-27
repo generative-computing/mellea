@@ -364,6 +364,64 @@ class ModelOutputThunk(CBlock, Generic[S]):
             ).total_seconds() * 1000
             self._first_chunk_received = True
 
+    async def cancel_generation(self) -> None:
+        """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
+
+        Safe to call at any point during streaming. After this method returns,
+        ``is_computed()`` is ``True`` and ``value`` contains whatever text was
+        accumulated before cancellation.  Calling on an already-computed MOT
+        is a no-op.
+
+        Draining the internal queue after cancellation is necessary to release
+        any ``asyncio.Queue.put()`` call that the generation task was blocked on
+        (queue maxsize=20).
+        """
+        if self._computed:
+            return
+
+        def _drain() -> None:
+            while not self._async_queue.empty():
+                try:
+                    self._async_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+        if self._generate is not None and not self._generate.done():
+            self._generate.cancel()
+
+        if self._generate_extra is not None and not self._generate_extra.done():
+            self._generate_extra.cancel()
+
+        # Drain before awaiting — unblocks any put() the task is stuck on.
+        _drain()
+
+        if self._generate is not None:
+            try:
+                await self._generate
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        if self._generate_extra is not None:
+            try:
+                await self._generate_extra
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        # Drain again for any final item the task put before terminating.
+        _drain()
+
+        span = self._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span, set_span_error
+
+            set_span_error(span, RuntimeError("Generation cancelled"))
+            end_backend_span(span)
+            del self._meta["_telemetry_span"]
+
+        if self._underlying_value is None:
+            self._underlying_value = ""
+        self._computed = True
+
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
 
