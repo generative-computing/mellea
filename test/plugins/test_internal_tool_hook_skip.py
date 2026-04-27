@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("cpex.framework")
 
 from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
-from mellea.plugins import PluginResult, hook, register
+from mellea.plugins import hook, register
 from mellea.plugins.manager import (
     is_internal_tool,
     set_skip_hooks_for_internal_tools,
