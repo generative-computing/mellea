@@ -46,6 +46,7 @@ from ..telemetry.context import with_context
 from .components import Message
 from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
+from .start_backend import start_backend as start_backend  # re-export for backwards compat
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
@@ -185,48 +186,6 @@ def _resolve_backend_and_context(
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
 
     return resolved_ctx, backend, model_id_str
-
-
-def start_backend(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
-    ctx: Context | None = None,
-    *,
-    context_type: Literal["simple", "chat"] | None = None,
-    model_options: dict | None = None,
-    **backend_kwargs: Any,
-) -> tuple[Context, Backend]:
-    """Create a context and backend pair without a full session.
-
-    Accepts the same backend/model/context arguments as ``start_session`` but
-    returns the raw ``(Context, Backend)`` tuple for callers that manage their
-    own inference loop.
-
-    Args:
-        backend_name: The backend to use (``"ollama"``, ``"hf"``, ``"openai"``,
-            ``"watsonx"``, or ``"litellm"``).
-        model_id: Model identifier or name.
-        ctx: An explicit ``Context`` instance. Mutually exclusive with
-            ``context_type``.
-        context_type: Shorthand for creating a context — ``"simple"`` for
-            ``SimpleContext``, ``"chat"`` for ``ChatContext``. Mutually
-            exclusive with ``ctx``.
-        model_options: Additional model configuration options passed to the
-            backend.
-        **backend_kwargs: Additional keyword arguments passed to the backend
-            constructor.
-
-    Returns:
-        Tuple of ``(Context, Backend)``.
-
-    Raises:
-        ValueError: If both ``ctx`` and ``context_type`` are provided.
-        Exception: If ``backend_name`` is not recognised.
-    """
-    resolved_ctx, backend, _ = _resolve_backend_and_context(
-        backend_name, model_id, ctx, context_type, model_options, **backend_kwargs
-    )
-    return resolved_ctx, backend
 
 
 def start_session(
