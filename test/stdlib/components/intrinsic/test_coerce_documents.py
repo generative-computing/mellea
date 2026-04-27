@@ -5,7 +5,7 @@ import warnings
 import pytest
 
 from mellea.core import CBlock, ModelOutputThunk
-from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components import Document, Instruction, Message
 from mellea.stdlib.components.intrinsic._util import (
     _coerce_document,
     _coerce_documents,
@@ -114,10 +114,28 @@ class TestResolveQuestion:
         with pytest.raises(ValueError, match="no last turn"):
             _resolve_question(None, ctx)
 
-    def test_non_message_input_raises(self):
-        ctx = ChatContext().add(CBlock("raw block"))
-        with pytest.raises(ValueError, match="not a Message"):
+    def test_from_cblock(self):
+        ctx = ChatContext().add(CBlock("raw question"))
+        text, rewound = _resolve_question(None, ctx)
+        assert text == "raw question"
+        assert rewound.is_root_node  # type: ignore[union-attr]
+
+    def test_cblock_none_value_raises(self):
+        ctx = ChatContext().add(CBlock(None))
+        with pytest.raises(ValueError, match="no value"):
             _resolve_question(None, ctx)
+
+    def test_from_component(self):
+        ctx = ChatContext().add(Document("some document text"))
+        text, rewound = _resolve_question(None, ctx)
+        assert "some document text" in text
+        assert rewound.is_root_node  # type: ignore[union-attr]
+
+    def test_from_instruction_component(self):
+        ctx = ChatContext().add(Instruction("Summarize the article"))
+        text, rewound = _resolve_question(None, ctx)
+        assert "Summarize the article" in text
+        assert rewound.is_root_node  # type: ignore[union-attr]
 
 
 class TestResolveResponse:

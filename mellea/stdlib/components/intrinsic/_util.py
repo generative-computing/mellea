@@ -55,10 +55,14 @@ def _resolve_question(
 
     When *question* is not ``None``, returns it with *context* unchanged.
     When ``None``, extracts the text from the last turn's ``model_input``
-    (which must be a ``Message``) and rewinds *context* to before that message.
+    and rewinds *context* to before that element.
+
+    Supports ``Message`` (via ``.content``), ``CBlock`` (via ``.value``),
+    and generic ``Component`` types (via ``TemplateFormatter.print()``).
     """
     if question is not None:
         return question, context
+    from ....core import CBlock, Component
     from ..chat import Message
 
     turn = context.last_turn()
@@ -66,15 +70,30 @@ def _resolve_question(
         raise ValueError(
             "question is None and context has no last turn with model input"
         )
-    if not isinstance(turn.model_input, Message):
+
+    model_input = turn.model_input
+    if isinstance(model_input, Message):
+        text = model_input.content
+    elif isinstance(model_input, CBlock):
+        if model_input.value is None:
+            raise ValueError(
+                "question is None and last turn model_input CBlock has no value"
+            )
+        text = model_input.value
+    elif isinstance(model_input, Component):
+        from ....formatters import TemplateFormatter
+
+        text = TemplateFormatter(model_id="default").print(model_input)
+    else:
         raise ValueError(
             f"question is None but last turn model_input is "
-            f"{type(turn.model_input).__name__}, not a Message"
+            f"{type(model_input).__name__}, which is not a supported type"
         )
+
     rewound = context.previous_node
     if rewound is None:
         raise ValueError("Cannot rewind context past the root node")
-    return turn.model_input.content, rewound  # type: ignore[return-value]
+    return text, rewound  # type: ignore[return-value]
 
 
 def _resolve_response(
