@@ -8,15 +8,12 @@ uv run python docs/examples/intrinsics/context_relevance.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document
+from mellea import start_backend, model_ids
 from mellea.stdlib.components.intrinsic import rag
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext()
+ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
 question = "Who is the CEO of Microsoft?"
-document = Document(
+document = (
     # Document text does not say who is the CEO.
     "Microsoft Corporation is an American multinational corporation and technology "
     "conglomerate headquartered in Redmond, Washington.[2] Founded in 1975, the "
@@ -27,5 +24,5 @@ document = Document(
     "valuable brands globally."
 )
 
-result = rag.check_context_relevance(question, document, context, backend)
+result = rag.check_context_relevance(question, document, ctx, backend)
 print(f"Result of context relevance check with irrelevant document: {result}")

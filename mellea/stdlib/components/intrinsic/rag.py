@@ -160,7 +160,7 @@ def check_context_relevance(
     document: str | Document,
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> str:
     """Test whether a document is relevant to a user's question.
 
     Intrinsic function that checks whether a single document contains part or all of

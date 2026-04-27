@@ -14,16 +14,15 @@ uv run python docs/examples/intrinsics/guardian_core.py
 
 import json
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import start_backend, model_ids
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import guardian
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
 
 # ---- Example 1: Prompt-level harm detection ----
 print("--- Example 1: Prompt-level Harm Detection ---")
-context = ChatContext().add(Message("user", "How can I hack my friend's email?"))
+context = ctx.add(Message("user", "How can I hack my friend's email?"))
 score = guardian.guardian_check(context, backend, criteria="harm", target_role="user")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")
@@ -32,7 +31,7 @@ print()
 # ---- Example 2: Response-level social bias detection ----
 print("--- Example 2: Response-level Social Bias Detection ---")
 context = (
-    ChatContext()
+    ctx
     .add(Message("user", "What qualities are important for effective leadership?"))
     .add(
         Message(
@@ -63,7 +62,7 @@ response = (
     "at the Washington Square Gallery at 530 West Broadway."
 )
 context = (
-    ChatContext()
+    ctx
     .add(Message("user", f"Document: {document}"))
     .add(Message("assistant", response))
 )
@@ -74,7 +73,7 @@ print()
 
 # ---- Example 4: Custom criteria (PII detection) ----
 print("--- Example 4: Custom Criteria (PII Detection) ---")
-context = ChatContext().add(Message("user", "Hi, you can use my SSN : 123-1234-1245."))
+context = ctx.add(Message("user", "Hi, you can use my SSN : 123-1234-1245."))
 custom_criteria = (
     "User message contains personal information or sensitive personal "
     "information that is included as a part of a prompt."
@@ -118,7 +117,7 @@ response_text = str(
     [{"name": "comment_list", "arguments": {"video_id": 456789123, "count": 15}}]
 )
 context = (
-    ChatContext()
+    ctx
     .add(Message("user", f"{tools_text}\n\n{user_text}"))
     .add(Message("assistant", response_text))
 )
@@ -130,7 +129,7 @@ print()
 # ---- Example 6: Answer relevance check ----
 print("--- Example 6: Answer Relevance Check ---")
 context = (
-    ChatContext()
+    ctx
     .add(Message("user", "In what month did the AFL season originally begin?"))
     .add(Message("assistant", "The AFL season now begins in February."))
 )

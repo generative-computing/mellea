@@ -11,17 +11,14 @@ uv run python docs/examples/intrinsics/uncertainty.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Message
+from mellea import start_backend, model_ids
+from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components.intrinsic import core
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = (
-    ChatContext()
-    .add(Message("user", "What is the square root of 4?"))
-    .add(Message("assistant", "The square root of 4 is 2."))
-)
+ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
 
-result = core.check_certainty(context, backend)
+response, ctx = mfuncs.chat("What is 2 + 2?", ctx, backend)
+print(f"Response: {response.content}")
+
+result = core.check_certainty(ctx, backend)  # type: ignore
 print(f"Certainty score: {result}")

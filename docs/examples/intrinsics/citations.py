@@ -10,13 +10,12 @@ uv run python docs/examples/intrinsics/citations.py
 
 import json
 
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document, Message
+from mellea import start_backend, model_ids
+from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext().add(
+ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
+ctx = ctx.add(
     Message(
         "user",
         "How does Murdoch's expansion in Australia compare to his expansion "
@@ -29,9 +28,7 @@ assistant_response = (
     "purchasing The Dominion."
 )
 documents = [
-    Document(
-        doc_id="1",
-        text="Keith Rupert Murdoch was born on 11 March 1931 in Melbourne, Australia, "
+    (   "Keith Rupert Murdoch was born on 11 March 1931 in Melbourne, Australia, "
         "the son of Sir Keith Murdoch (1885-1952) and Dame Elisabeth Murdoch (nee "
         "Greene; 1909-2012). He is of English, Irish, and Scottish ancestry. Murdoch's "
         "parents were also born in Melbourne. Keith Murdoch was a war correspondent "
@@ -64,15 +61,13 @@ documents = [
         "the controlling share in a leading Australian independent label, Michael "
         "Gudinski's Mushroom Records; he merged that with Festival Records, and the "
         "result was Festival Mushroom Records (FMR). Both Festival and FMR were "
-        "managed by Murdoch's son James Murdoch for several years.",
+        "managed by Murdoch's son James Murdoch for several years."
     ),
-    Document(
-        doc_id="2",
-        text="This document has nothing to do with Rupert Murdoch. This document is "
-        "two sentences long.",
+    (
+        "This document has nothing to do with Rupert Murdoch. This document is "
+        "two sentences long."
     ),
 ]
 
-
-result = rag.find_citations(assistant_response, documents, context, backend)
+result = rag.find_citations(assistant_response, documents, ctx, backend)
 print(f"Result of citations intrinsic:\n{json.dumps(result, indent=2)}")

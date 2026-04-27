@@ -8,10 +8,9 @@ uv run python docs/examples/intrinsics/factuality_correction.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import start_backend, model_ids
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
-from mellea.stdlib.context import ChatContext
 
 user_text = "Why does February have 28 days?"
 response_text = "February has 28 days because it was named after the Roman god of war, Mars, and the Romans believed that the month should have an even number of days to symbolize balance and fairness in war."
@@ -82,13 +81,8 @@ document = Document(
 )
 
 # Create the backend.
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = (
-    ChatContext()
-    .add(document)
-    .add(Message("user", user_text))
-    .add(Message("assistant", response_text))
-)
+ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
+ctx = ctx.add(document).add(Message("user", user_text)).add(Message("assistant", response_text))
 
-result = guardian.factuality_correction(context, backend)
+result = guardian.factuality_correction(ctx, backend)
 print(f"Result of factuality correction: {result}")  # corrected response string
