@@ -465,7 +465,6 @@ class EmbeddedIntrinsicAdapter(Adapter):
                 ) from e
             raise ValueError(f"No adapters found in {repo_id}") from e
 
-
     @staticmethod
     def from_source(
         source: str,

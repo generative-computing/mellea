@@ -87,9 +87,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora (bool): If ``False``, deactivates aLoRA
             constraint checking; primarily for benchmarking and debugging.
         load_embedded_adapters (bool): If ``True``, automatically registers
-            embedded intrinsic adapters from the model specified by *model_id*.
-            The model ID is used as a local directory if it exists, otherwise 
-            as a HuggingFace Hub repo ID to load ``adapter_index.json`` and the corresponding I/O configs.
+            embedded intrinsic adapters from *adapter_source* (or *model_id* if
+            *adapter_source* is not set). Looks first for a local directory
+            and then for a HuggingFace hub repo.
+        adapter_source (str | None): Local directory path or HuggingFace hub
+            repo ID from which to load embedded adapter configs. When ``None``,
+            falls back to *model_id*. Use this when the vLLM served model name
+            differs from the adapter config location.
         api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
@@ -113,6 +117,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         *,
         default_to_constraint_checking_alora: bool = True,
         load_embedded_adapters: bool = False,
+        adapter_source: str | None = None,
         api_key: str | None = None,
         **kwargs,
     ):
@@ -176,6 +181,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 self._model_id = model_id.openai_name
 
+        self._adapter_source = adapter_source
+
         # Use provided parameters or fall back to environment variables
         self._api_key = api_key
         self._base_url = base_url
@@ -225,7 +232,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # OpenAI Backends only support embedded_adapters.
         self._uses_embedded_adapters = True
         if load_embedded_adapters:
-            self.register_embedded_adapter_model(self._model_id)
+            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
 
     # ------------------------------------------------------------------
     # AdapterMixin implementation

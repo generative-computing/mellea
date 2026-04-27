@@ -437,6 +437,34 @@ class TestOpenAIBackendRegistration:
         """Without the flag, no adapters are loaded."""
         assert len(backend._added_adapters) == 0
 
+    def test_adapter_source_used_for_loading(self, model_dir):
+        """adapter_source is used instead of model_id for adapter loading."""
+        from mellea.backends.openai import OpenAIBackend
+
+        os.environ.setdefault("OPENAI_API_KEY", "test-key")
+        backend = OpenAIBackend(
+            model_id="granite-switch",
+            base_url="http://localhost:8000/v1",
+            load_embedded_adapters=True,
+            adapter_source=str(model_dir),
+        )
+        # Adapters loaded from local dir, model_id untouched for API calls
+        assert len(backend._added_adapters) == 2
+        assert backend._model_id == "granite-switch"
+
+    def test_adapter_source_defaults_to_model_id(self, model_dir):
+        """Without adapter_source, model_id is used (existing behavior)."""
+        from mellea.backends.openai import OpenAIBackend
+
+        os.environ.setdefault("OPENAI_API_KEY", "test-key")
+        with patch("huggingface_hub.snapshot_download", return_value=str(model_dir)):
+            backend = OpenAIBackend(
+                model_id="ibm-granite/granite-switch-micro",
+                base_url="http://localhost:8000/v1",
+                load_embedded_adapters=True,
+            )
+        assert len(backend._added_adapters) == 2
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

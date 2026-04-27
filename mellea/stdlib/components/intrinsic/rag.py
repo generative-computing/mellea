@@ -40,9 +40,7 @@ def check_answerability(
     return result_json["answerability"]
 
 
-def rewrite_question(
-    question: str, context: ChatContext, backend: AdapterMixin
-) -> str:
+def rewrite_question(question: str, context: ChatContext, backend: AdapterMixin) -> str:
     """Rewrite a user's question for retrieval.
 
     Intrinsic function that rewrites the question in the next user turn into a
