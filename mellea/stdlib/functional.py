@@ -1275,7 +1275,7 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         return outputs
 
     for name, tool in tool_calls.items():
-        _run_hooks = not (skip_hooks_for_internal_tools() and is_internal_tool(name))
+        run_hooks = not (skip_hooks_for_internal_tools() and is_internal_tool(name))
 
         # --- tool_pre_invoke ---
         if _run_hooks and has_plugins(HookType.TOOL_PRE_INVOKE):
