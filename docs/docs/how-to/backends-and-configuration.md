@@ -17,16 +17,34 @@ configure the backend when you create a session.
 No API keys needed — just have Ollama running:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 import mellea
 
 m = mellea.start_session()
 ```
+
+## Backend comparison
+
+The following table shows all available backends, their class names, import paths, required extras, and `start_session()` configuration:
+
+| Backend | Class | Import | Required extras | `start_session()` |
+| ------- | ----- | ------ | --------------- | ----------------- |
+| [Ollama](../integrations/ollama) | `OllamaModelBackend` | `mellea.backends.ollama` | base | `backend_name="ollama"` |
+| [OpenAI](../integrations/openai) | `OpenAIBackend` | `mellea.backends.openai` | base | `backend_name="openai"` |
+| [LiteLLM](../integrations/bedrock) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
+| [HuggingFace](../integrations/huggingface) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
+| [WatsonX](../integrations/watsonx) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
+
+> **Note:** Vertex AI uses the LiteLLM backend with appropriate model IDs. See the [Vertex AI integration](../integrations/vertex-ai) for details. For detailed setup instructions, click the backend name in the table above.
 
 ## Switching the model
 
 Pass any model string your backend supports:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 import mellea
 
 m = mellea.start_session(model_id="llama3.2:3b")
@@ -35,6 +53,8 @@ m = mellea.start_session(model_id="llama3.2:3b")
 Use `model_ids` constants for known models:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import start_session
 from mellea.backends import model_ids
 
@@ -51,6 +71,8 @@ Use any OpenAI-compatible API — OpenAI itself, LM Studio, vLLM, or Ollama's
 OpenAI-compatible endpoint:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
@@ -63,6 +85,8 @@ m = MelleaSession(
 ```
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
@@ -91,6 +115,8 @@ LiteLLM provides unified access to 100+ providers — Anthropic, AWS Bedrock, Az
 and more:
 
 ```python
+# Requires: mellea[litellm]
+# Returns: str
 import mellea
 
 m = mellea.start_session(
@@ -111,6 +137,8 @@ print(str(result))
 Run models locally using HuggingFace transformers:
 
 ```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.huggingface import LocalHFBackend
 
@@ -131,6 +159,8 @@ Options set at session level apply to all calls; options passed to `instruct()` 
 `chat()` apply to that call only and take precedence:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import MelleaSession
 from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
@@ -175,6 +205,8 @@ translated correctly for all backends regardless of how each provider serializes
 system role:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.backends import ModelOption
 
@@ -189,6 +221,8 @@ print(str(reply))
 For full control, construct the backend and pass it to `MelleaSession` directly:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 import mellea
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.context import ChatContext
@@ -200,6 +234,8 @@ m = mellea.MelleaSession(backend=backend, ctx=ChatContext())
 `start_session()` accepts the same arguments as keyword parameters:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 import mellea
 from mellea.backends import ModelOption
 from mellea.stdlib.context import ChatContext

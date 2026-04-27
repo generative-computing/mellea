@@ -113,7 +113,7 @@ class TestMelleaLoggerInHooks:
 
         register(log_hook)
 
-        with caplog.at_level(logging.INFO, logger="fancy_logger"):
+        with caplog.at_level(logging.INFO, logger="mellea"):
             await RejectionSamplingStrategy(loop_budget=1).sample(
                 Instruction("test"),
                 context=SimpleContext(),
@@ -143,7 +143,7 @@ class TestMelleaLoggerInHooks:
                 logger = MelleaLogger.get_logger()
                 # Emit via a plain handler so we can capture the LogRecord
                 record = logger.makeRecord(
-                    name="fancy_logger",
+                    name="mellea",
                     level=logging.INFO,
                     fn="test",
                     lno=0,
@@ -195,7 +195,7 @@ class TestMelleaLoggerInHooks:
             logger = MelleaLogger.get_logger()
             # Create a log record to test context visibility
             record = logger.makeRecord(
-                name="fancy_logger",
+                name="mellea",
                 level=logging.INFO,
                 fn="test",
                 lno=0,
@@ -232,7 +232,7 @@ class TestMelleaLoggerInHooks:
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
-        with caplog.at_level(logging.INFO, logger="fancy_logger"):
+        with caplog.at_level(logging.INFO, logger="mellea"):
             await RejectionSamplingStrategy(loop_budget=2).sample(
                 Instruction("test"),
                 context=SimpleContext(),

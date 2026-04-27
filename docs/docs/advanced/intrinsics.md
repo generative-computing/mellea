@@ -19,6 +19,8 @@ reliable than prompting a general-purpose model for these specialized micro-task
 Set up the backend once and reuse it across intrinsic calls:
 
 ```python
+# Requires: mellea[hf]
+# Returns: LocalHFBackend
 from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
@@ -29,6 +31,8 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 Check whether a set of retrieved documents can answer a given question:
 
 ```python
+# Requires: mellea[hf]
+# Returns: bool
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -50,6 +54,8 @@ print(rag.check_answerability(question, docs_not_answerable, context, backend)) 
 Assess whether a document is relevant to a question:
 
 ```python
+# Requires: mellea[hf]
+# Returns: float
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document
 from mellea.stdlib.components.intrinsic import rag
@@ -72,6 +78,8 @@ print(result)  # False — the document does not mention the CEO
 Flag sentences in an assistant response that are not grounded in the source documents:
 
 ```python
+# Requires: mellea[hf]
+# Returns: list[str]
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -99,6 +107,8 @@ print(result)
 Rewrite a vague or incomplete answer to be more grounded in the source documents:
 
 ```python
+# Requires: mellea[hf]
+# Returns: str
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -122,6 +132,8 @@ print(result)
 Rewrite an ambiguous user query using conversation history to improve retrieval:
 
 ```python
+# Requires: mellea[hf]
+# Returns: str
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
@@ -147,6 +159,8 @@ print(result)
 Find supporting sentences in source documents for a given assistant response:
 
 ```python
+# Requires: mellea[hf]
+# Returns: dict
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -177,6 +191,8 @@ print(result)
 > `CustomIntrinsicAdapter` directly.
 
 ```python
+# Requires: mellea[hf]
+# Returns: dict
 import mellea.stdlib.functional as mfuncs
 from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend

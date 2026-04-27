@@ -35,6 +35,8 @@ Use a `backend` fixture to handle CI versus local configuration, and a
 function-scoped `session` fixture to give each test a clean slate:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 import os
 import pytest
 from mellea import MelleaSession
@@ -90,6 +92,8 @@ The return type of a `@generative` function is enforced by constrained decoding
 or output parsing. An `isinstance` check never depends on model behaviour:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from typing import Literal
 
 import pytest
@@ -114,6 +118,8 @@ For `Literal` return types, membership in the allowed values is enforced before
 your test sees the result. The assertion is still deterministic:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 def test_classify_sentiment_structure(session):
     result = classify_sentiment(session, text="I love this product!")
     assert result in ["positive", "negative"]
@@ -123,6 +129,8 @@ For Pydantic model return types, assert that the required fields are present and
 have the right types:
 
 ```python
+# Requires: mellea, pydantic, pytest
+# Returns: None
 from pydantic import BaseModel
 from mellea import generative
 
@@ -156,6 +164,8 @@ When you want to assert on the *content* of a response, add
 (`CICD=1`) and are intended to run locally or in a dedicated quality gate:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 import pytest
 from mellea import generative
 
@@ -189,6 +199,8 @@ def test_classify_sentiment_positive(session):
 Assert that the call returns a value and that the value has the right type:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
@@ -208,6 +220,8 @@ def test_instruct_returns_string(session):
 forwarded to the model. This is useful when testing custom model option handling:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.backends import ModelOption
 
 
@@ -236,6 +250,8 @@ inside the IVR loop, or directly in tests to verify that your validator logic
 behaves correctly:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.stdlib.requirements import Requirement, simple_validate
 
 
@@ -259,6 +275,8 @@ When you attach `simple_validate` to a `Requirement`, it checks the last model
 output as a string, regardless of how the output was parsed:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.stdlib.requirements import Requirement, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
@@ -312,6 +330,8 @@ Each entry in the JSON array defines one test:
 ### Loading and running evaluations
 
 ```python
+# Requires: mellea
+# Returns: None
 from mellea import MelleaSession, start_session
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
@@ -340,6 +360,8 @@ for eval_case in test_evals:
 A simple `conftest.py` that skips qualitative tests in CI:
 
 ```python
+# Requires: pytest
+# Returns: None
 # conftest.py
 import os
 import pytest

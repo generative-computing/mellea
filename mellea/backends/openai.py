@@ -562,8 +562,8 @@ class OpenAIBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.model = self._model_id
-        output.provider = "openai"
+        output.generation.model = self._model_id
+        output.generation.provider = "openai"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -724,11 +724,11 @@ class OpenAIBackend(FormatterBackend):
 
         # Populate standardized usage field (OpenAI format already matches)
         if usage:
-            mot.usage = usage
+            mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.model = self._model_id
-        mot.provider = "openai"
+        mot.generation.model = self._model_id
+        mot.generation.provider = "openai"
 
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")

@@ -1,6 +1,5 @@
 ---
 title: "Telemetry"
-sidebarTitle: "Overview"
 description: "Add OpenTelemetry tracing, metrics, and logging to Mellea programs."
 # diataxis: how-to
 ---
@@ -52,7 +51,7 @@ All telemetry is configured via environment variables:
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
 | `MELLEA_LOGS_OTLP` | Enable OTLP logs exporter | `false` |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Logs-specific OTLP endpoint (overrides general) | none |
+| `OTEL_EXPORTER_OTLP_LOG_ENDPOINT` | Logs-specific OTLP endpoint (overrides general) | none |
 
 ## Quick start
 
@@ -112,7 +111,7 @@ session_context          (mellea.application)
     └── chat             (mellea.backend) [gen_ai.system=openai]
 ```
 
-See [Tracing](../evaluation-and-observability/tracing) for span attributes,
+See [Tracing](../observability/tracing) for span attributes,
 exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.
 
 ## Metrics
@@ -143,7 +142,7 @@ Mellea supports three exporters that can run simultaneously:
 - **OTLP** — export to production observability platforms
 - **Prometheus** — register with `prometheus_client` for scraping
 
-See [Metrics](../evaluation-and-observability/metrics) for the full list of
+See [Metrics](../observability/metrics) for the full list of
 metrics, backend support matrix, exporter setup, custom instruments, and
 troubleshooting.
 
@@ -153,7 +152,7 @@ Mellea uses a color-coded console logger (`MelleaLogger`) by default. When the
 `[telemetry]` extra is installed and `MELLEA_LOGS_OTLP=true` is set, Mellea
 also exports logs to an OTLP collector alongside existing console output.
 
-See [Logging](../evaluation-and-observability/logging) for console logging
+See [Logging](../observability/logging) for console logging
 configuration, OTLP log export setup, and programmatic access via
 `get_otlp_log_handler()`.
 
@@ -163,11 +162,9 @@ configuration, OTLP log export setup, and programmatic access via
 
 **See also:**
 
-- [Tracing](../evaluation-and-observability/tracing) — distributed traces
+- [Tracing](../observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+- [Metrics](../observability/metrics) — metrics, exporters,
   and custom instruments.
-- [Logging](../evaluation-and-observability/logging) — console logging and OTLP
+- [Logging](../observability/logging) — console logging and OTLP
   log export.
-- [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
-  automated quality evaluation correlated with trace data.

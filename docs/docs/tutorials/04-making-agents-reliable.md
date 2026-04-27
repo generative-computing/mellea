@@ -28,6 +28,8 @@ Start with two tools — a search stub and a calculator — and wire them into a
 `instruct()` call:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.backends import ModelOption, tool
 
@@ -73,6 +75,8 @@ attached, the output format is up to the model.
 Require the agent to format its answer as a short structured response:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.backends import ModelOption, tool
 from mellea.stdlib.requirements import req, simple_validate
@@ -132,6 +136,8 @@ Use `RejectionSamplingStrategy` with `return_sampling_results=True` to observe
 what happens when requirements fail:
 
 ```python
+# Requires: mellea
+# Returns: None
 import mellea
 from mellea.backends import ModelOption, tool
 from mellea.stdlib.requirements import req, simple_validate
@@ -200,6 +206,8 @@ set of [`GuardianRisk`](../reference/glossary#guardianrisk) category. Run it aft
 they reach downstream code.
 
 ```python
+# Requires: mellea
+# Returns: None
 import mellea
 from mellea.backends import ModelOption, tool
 from mellea.stdlib.requirements import req, simple_validate
@@ -290,6 +298,8 @@ model separately by default. Pass `backend=shared_backend` to reuse a single
 loaded backend and avoid the overhead of repeated initialisation:
 
 ```python
+# Requires: mellea
+# Returns: None
 import mellea
 from mellea.backends import ModelOption, model_ids, tool
 from mellea.backends.ollama import OllamaModelBackend
@@ -343,6 +353,8 @@ to confirm the response is grounded in what was retrieved rather than
 hallucinated:
 
 ```python
+# Requires: mellea
+# Returns: None
 import mellea
 from mellea.backends import ModelOption, tool
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
@@ -404,6 +416,8 @@ For goal-driven agentic loops, combine `react()` with Guardian validation. The
 goal is reached or the step budget is exhausted:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 from mellea.backends import tool

@@ -38,6 +38,7 @@ background service.
 automatically pulls the model if it is not already downloaded:
 
 ```python
+# Returns: ModelOutputThunk
 import mellea
 
 m = mellea.start_session()
@@ -54,6 +55,7 @@ print(str(email))
 Pass any model name that Ollama supports:
 
 ```python
+# Returns: MelleaSession
 import mellea
 
 m = mellea.start_session(model_id="llama3.2:3b")
@@ -63,6 +65,7 @@ Use `model_ids` constants for well-known models — they carry the correct Ollam
 model name automatically:
 
 ```python
+# Returns: MelleaSession
 from mellea import start_session
 from mellea.backends import model_ids
 
@@ -97,6 +100,7 @@ Run `ollama list` to see which models are already downloaded locally.
 For full control, construct `OllamaModelBackend` directly:
 
 ```python
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import model_ids
@@ -120,6 +124,8 @@ export OLLAMA_HOST=http://my-gpu-server:11434
 ```
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 
@@ -138,6 +144,8 @@ m = MelleaSession(
 Pass generation parameters via `ModelOption`:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
@@ -162,6 +170,8 @@ Ollama hosts vision-capable models. Use `IBM_GRANITE_3_3_VISION_2B` or any Ollam
 vision model via the OpenAI-compatible endpoint:
 
 ```python
+# Requires: mellea, pillow
+# Returns: str
 from PIL import Image
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
@@ -193,6 +203,8 @@ with the `OpenAIBackend` to access any Ollama model with OpenAI-style tool calli
 or vision support:
 
 ```python
+# Requires: mellea[openai]
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 

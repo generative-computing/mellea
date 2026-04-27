@@ -22,6 +22,8 @@ fine-grained control, or building your own inference loops.
 These three snippets all produce the same result:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea import start_session
 from mellea.stdlib import functional as mfuncs
@@ -49,6 +51,8 @@ result, new_ctx = mfuncs.act(instruction, context=ctx, backend=backend)
 Pass any `Component` to `act()`. It returns a `ModelOutputThunk`:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.stdlib.components import Instruction
 
@@ -68,6 +72,8 @@ print(str(result))
 skip the IVR loop — this is what `chat()` does internally:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.stdlib.components import Message
 
@@ -82,6 +88,8 @@ print(str(result))
 Pass document content directly in a `Message`:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.stdlib.components import Message
 
@@ -106,6 +114,8 @@ For rich document processing (PDFs, tables), see
 The default is `RejectionSamplingStrategy(loop_budget=2)`:
 
 ```python
+# Requires: mellea
+# Returns: SamplingResult
 from mellea import start_session
 from mellea.core import Requirement
 from mellea.stdlib.components import Instruction
@@ -136,6 +146,8 @@ and validation.
 Pass a Pydantic `BaseModel` as the `format` parameter for constrained decoding:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: Planet
 from pydantic import BaseModel
 from mellea import start_session
 from mellea.stdlib.components import Instruction
@@ -159,6 +171,8 @@ print(result.value)  # A Planet instance
 > relying on a session to thread them.
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Instruction
@@ -185,6 +199,8 @@ simpler.
 `aact()` is the async counterpart. Same signature, same return types:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 from mellea import start_session
 from mellea.stdlib.components import Instruction
@@ -202,6 +218,8 @@ asyncio.run(main())
 The functional async version is `mfuncs.aact()`:
 
 ```python
+# Requires: mellea
+# Returns: tuple
 result, new_ctx = await mfuncs.aact(instruction, context=ctx, backend=backend)
 ```
 

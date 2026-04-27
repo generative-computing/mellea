@@ -42,6 +42,8 @@ Decorate the class with `@mify`. This adds the LLM-queryable protocol to every
 instance, without touching the class's Python interface:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.components.mify import mify
 
@@ -72,6 +74,8 @@ If the default field listing is too verbose or structured incorrectly, supply a
 `stringify_func` to produce exactly the text the LLM receives:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.components.mify import mify
 
@@ -99,6 +103,8 @@ print(str(result))
 To hide internal state from the LLM, use `fields_include` with a Jinja2 template:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.components.mify import mify
 
@@ -129,6 +135,8 @@ model.
 calling one of its methods. Expose the target method with `funcs_include`:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.components.mify import mify
 
@@ -163,6 +171,8 @@ You can also mify an existing object instance without decorating its class — u
 when you don't own the class definition:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.components.mify import mify
 

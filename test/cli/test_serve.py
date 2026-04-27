@@ -73,7 +73,7 @@ class TestChatEndpoint:
     async def test_usage_field_populated(self, mock_module, sample_request):
         """Test that usage field is populated when available."""
         mock_output = ModelOutputThunk("Test response")
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 10,
             "completion_tokens": 5,
             "total_tokens": 15,
@@ -110,8 +110,6 @@ class TestChatEndpoint:
         We don't currently track backend config fingerprints.
         """
         mock_output = ModelOutputThunk("Test response")
-        mock_output.model = "gpt-4-turbo"
-        mock_output.provider = "openai"
         mock_module.serve.return_value = mock_output
 
         endpoint = make_chat_endpoint(mock_module)
@@ -190,7 +188,7 @@ class TestChatEndpoint:
         """Test that usage handles missing fields gracefully."""
         mock_output = ModelOutputThunk("Test response")
         # Only provide some fields
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 10
             # Missing completion_tokens and total_tokens
         }
@@ -210,13 +208,11 @@ class TestChatEndpoint:
     async def test_all_fields_together(self, mock_module, sample_request):
         """Test that all new fields work together correctly."""
         mock_output = ModelOutputThunk("Complete response")
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 20,
             "completion_tokens": 10,
             "total_tokens": 30,
         }
-        mock_output.model = "gpt-4"
-        mock_output.provider = "openai"
         mock_module.serve.return_value = mock_output
 
         endpoint = make_chat_endpoint(mock_module)

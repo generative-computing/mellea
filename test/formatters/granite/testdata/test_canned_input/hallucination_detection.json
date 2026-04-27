@@ -40,7 +40,8 @@
                 "enum": [
                   "faithful",
                   "partial",
-                  "unfaithful"
+                  "unfaithful",
+                  "NA"
                 ]
               },
               "e": {

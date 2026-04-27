@@ -15,6 +15,8 @@ grounding context, few-shot examples, and images. The instruction is rendered th
 ## Basic `instruct()`
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -32,6 +34,8 @@ Embed dynamic values in your description using `{{double_braces}}`. The descript
 is a Jinja2 template; values are injected at generation time via `user_variables`:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
@@ -60,6 +64,8 @@ Requirements are declarative constraints. They serve two purposes:
 Pass plain strings for LLM-checked requirements:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -79,6 +85,8 @@ print(str(email))
 For deterministic checks, attach a `validation_fn` to a [`Requirement`](../reference/glossary#requirement):
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.core import Requirement
 from mellea.stdlib.requirements import simple_validate
@@ -104,6 +112,8 @@ with a failure reason) into a validation function.
 `req()` and `check()` are concise constructors for `Requirement`:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.stdlib.requirements import check, req, simple_validate
 
@@ -135,6 +145,8 @@ generates once, validates all requirements, and retries up to two times if any f
 Configure the loop explicitly with `strategy`:
 
 ```python
+# Requires: mellea
+# Returns: SamplingResult
 from mellea import start_session
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy

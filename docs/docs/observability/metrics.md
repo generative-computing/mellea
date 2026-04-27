@@ -4,7 +4,7 @@ description: "Automatically collect LLM metrics and instrument your own code wit
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Telemetry](../evaluation-and-observability/telemetry)
+**Prerequisites:** [Telemetry](../observability/telemetry)
 introduces the environment variables and telemetry architecture. This page
 covers metrics collection in detail.
 
@@ -125,8 +125,8 @@ with start_session() as m:
         "Explain quantum entanglement briefly",
         model_options={ModelOption.STREAM: True},
     )
-    if result.streaming and result.ttfb_ms is not None:
-        print(f"Time to first token: {result.ttfb_ms:.1f} ms")
+    if result.generation.streaming and result.generation.ttfb_ms is not None:
+        print(f"Time to first token: {result.generation.ttfb_ms:.1f} ms")
 ```
 
 ## Error metrics
@@ -473,25 +473,25 @@ from mellea.backends import ModelOption
 with start_session() as m:
     result = m.instruct("Write a haiku about programming")
 
-    if result.usage:
-        print(f"Prompt tokens: {result.usage['prompt_tokens']}")
-        print(f"Completion tokens: {result.usage['completion_tokens']}")
-        print(f"Total tokens: {result.usage['total_tokens']}")
+    if result.generation.usage:
+        print(f"Prompt tokens: {result.generation.usage['prompt_tokens']}")
+        print(f"Completion tokens: {result.generation.usage['completion_tokens']}")
+        print(f"Total tokens: {result.generation.usage['total_tokens']}")
 
     # Streaming mode also exposes time-to-first-token
     streamed = m.instruct(
         "Describe the solar system",
         model_options={ModelOption.STREAM: True},
     )
-    print(f"Streaming: {streamed.streaming}")
-    if streamed.ttfb_ms is not None:
-        print(f"Time to first token: {streamed.ttfb_ms:.1f} ms")
+    print(f"Streaming: {streamed.generation.streaming}")
+    if streamed.generation.ttfb_ms is not None:
+        print(f"Time to first token: {streamed.generation.ttfb_ms:.1f} ms")
 ```
 
-The `usage` field is a dictionary with three keys: `prompt_tokens`,
-`completion_tokens`, and `total_tokens`. All backends populate this field
-consistently. `streaming` and `ttfb_ms` are set automatically based on whether
-streaming mode was used.
+The `generation` attribute is a `GenerationMetadata` dataclass. Its `usage` field
+is a dictionary with three keys: `prompt_tokens`, `completion_tokens`, and
+`total_tokens`. All backends populate this consistently. `streaming` and `ttfb_ms`
+are set automatically based on whether streaming mode was used.
 
 ## Performance
 
@@ -567,9 +567,9 @@ Enable at least one exporter:
 
 **See also:**
 
-- [Telemetry](../evaluation-and-observability/telemetry) — overview of all
+- [Telemetry](../observability/telemetry) — overview of all
   telemetry features and configuration.
-- [Tracing](../evaluation-and-observability/tracing) — distributed traces
+- [Tracing](../observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Logging](../evaluation-and-observability/logging) — console logging and OTLP
+- [Logging](../observability/logging) — console logging and OTLP
   log export.

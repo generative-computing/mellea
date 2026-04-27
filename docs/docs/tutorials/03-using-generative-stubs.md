@@ -26,6 +26,8 @@ A `@generative` function uses its name, type annotation, and docstring as the
 prompt. Call it by passing a `MelleaSession` as the first argument:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea import generative
 
@@ -58,6 +60,8 @@ Generative functions support any JSON-serialisable return type — `str`, `int`,
 `bool`, `list`, `dict`, and Pydantic models:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: FeedbackAnalysis
 from typing import Literal
 
 import mellea
@@ -91,6 +95,8 @@ Because each `@generative` function is just a Python function, you compose them
 the same way as any other code:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea import generative
 
@@ -133,6 +139,8 @@ A key advantage of `@generative` functions over direct `instruct()` calls: you c
 change the behaviour of every function in a session by injecting context once.
 
 ```python
+# Requires: mellea
+# Returns: None
 from mellea import generative, start_session
 from mellea.stdlib.context import ChatContext
 from mellea.core import CBlock
@@ -189,6 +197,8 @@ For production pipelines, validate inputs before the LLM call and outputs
 afterwards using plain Python:
 
 ```python
+# Requires: mellea
+# Returns: None
 from typing import Literal
 from mellea import generative, start_session, MelleaSession
 
