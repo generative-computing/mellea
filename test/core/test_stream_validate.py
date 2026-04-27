@@ -87,17 +87,24 @@ async def test_stream_validate_idempotent():
 
 @pytest.mark.asyncio
 async def test_stateful_subclass_accumulates_state():
-    """Stateful subclass correctly accumulates state across stream_validate calls."""
+    """Stateful subclass correctly accumulates state across stream_validate calls.
+
+    Uses delta extraction (via _seen_len) to count only new bullet points per call —
+    a pattern that genuinely requires state from prior calls.
+    """
 
     class BulletCounter(Requirement):
         def __init__(self) -> None:
             super().__init__(description="no more than 3 bullets")
+            self._seen_len = 0
             self._bullet_count = 0
 
         async def stream_validate(
             self, chunk: str, *, backend: Backend, ctx: Context
         ) -> PartialValidationResult:
-            self._bullet_count = chunk.count("\n-")
+            delta = chunk[self._seen_len :]
+            self._seen_len = len(chunk)
+            self._bullet_count += delta.count("\n-")
             if self._bullet_count > 3:
                 return PartialValidationResult(
                     "fail", reason=f"{self._bullet_count} bullets exceeds limit"
@@ -110,15 +117,15 @@ async def test_stateful_subclass_accumulates_state():
     await req.stream_validate("intro text", backend=None, ctx=None)  # type: ignore[arg-type]
     assert req._bullet_count == 0
 
-    await req.stream_validate("intro\n- one\n- two", backend=None, ctx=None)  # type: ignore[arg-type]
-    assert req._bullet_count == 2
+    await req.stream_validate("intro text\n- one\n- two", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert req._bullet_count == 2  # delta added 2 new bullets
 
     result = await req.stream_validate(
-        "intro\n- one\n- two\n- three\n- four",
+        "intro text\n- one\n- two\n- three\n- four",
         backend=None,
         ctx=None,  # type: ignore[arg-type]
     )
-    assert req._bullet_count == 4
+    assert req._bullet_count == 4  # delta added 2 more
     assert result.success == "fail"
     assert result.reason is not None and "4" in result.reason
 
