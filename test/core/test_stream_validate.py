@@ -5,9 +5,7 @@ from copy import copy
 
 import pytest
 
-from mellea.core import PartialValidationResult, Requirement
-from mellea.core.backend import Backend
-from mellea.core.base import Context
+from mellea.core import Backend, Context, PartialValidationResult, Requirement
 
 
 @pytest.mark.asyncio
@@ -132,7 +130,12 @@ async def test_stateful_subclass_accumulates_state():
 
 @pytest.mark.asyncio
 async def test_stateful_subclass_clone_isolation():
-    """copy() of a stateful requirement gives an independent clone — orchestrator pattern."""
+    """Orchestrator clone pattern: copy() before each attempt gives a fresh independent clone.
+
+    The orchestrator holds the original requirement and never calls stream_validate on it
+    directly. Before each attempt it clones the original; each clone starts from the
+    original's (zero) state and advances independently.
+    """
 
     class CallCounter(Requirement):
         def __init__(self) -> None:
@@ -145,15 +148,19 @@ async def test_stateful_subclass_clone_isolation():
             self._calls += 1
             return PartialValidationResult("unknown")
 
-    req = CallCounter()
-    await req.stream_validate("a", backend=None, ctx=None)  # type: ignore[arg-type]
-    await req.stream_validate("b", backend=None, ctx=None)  # type: ignore[arg-type]
-    assert req._calls == 2
+    req = CallCounter()  # original — never used directly by the orchestrator
 
-    # Simulate orchestrator cloning before a new attempt
-    cloned = copy(req)
-    assert cloned._calls == 2  # clone inherits state at clone time
+    # Attempt 1
+    attempt1 = copy(req)
+    assert attempt1._calls == 0
+    await attempt1.stream_validate("a", backend=None, ctx=None)  # type: ignore[arg-type]
+    await attempt1.stream_validate("b", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert attempt1._calls == 2
 
-    await cloned.stream_validate("c", backend=None, ctx=None)  # type: ignore[arg-type]
-    assert cloned._calls == 3  # clone advances independently
-    assert req._calls == 2  # original is unchanged
+    # Attempt 2 (retry) — fresh clone from the same original
+    attempt2 = copy(req)
+    assert attempt2._calls == 0  # starts clean, not carrying attempt1's state
+    await attempt2.stream_validate("c", backend=None, ctx=None)  # type: ignore[arg-type]
+    assert attempt2._calls == 1
+
+    assert req._calls == 0  # original never mutated
