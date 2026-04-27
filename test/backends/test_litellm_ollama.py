@@ -20,7 +20,7 @@ _MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
 
 @pytest.fixture(scope="function")
 def backend(gh_run: int):
-    """Shared OpenAI backend configured for Ollama."""
+    """Shared litellm backend configured for Ollama."""
     host_env = os.environ.get("OLLAMA_HOST")
     if host_env:
         if ":" in host_env:
