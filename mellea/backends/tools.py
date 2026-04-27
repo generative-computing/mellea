@@ -7,6 +7,7 @@ tool lists to JSON, extracting tool call requests from raw LLM output strings, a
 validating/coercing tool arguments against the tool's JSON schema using Pydantic.
 """
 
+import copy
 import inspect
 import json
 import re
@@ -899,6 +900,30 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
     return parsed_docstring
 
 
+def _resolve_ref(ref_path: str, defs: dict) -> dict:
+    """Resolve a $ref path like '#/$defs/Email' to the actual schema."""
+    if ref_path.startswith("#/$defs/"):
+        def_name = ref_path.split("/")[-1]
+        return defs.get(def_name, {})
+    elif ref_path.startswith("#/definitions/"):
+        def_name = ref_path.split("/")[-1]
+        return defs.get(def_name, {})
+    return {}
+
+
+def _is_complex_anyof(v: dict) -> bool:
+    """Check if anyOf contains complex types (refs or nested objects)."""
+    any_of_schemas = v.get("anyOf", [])
+    for sub_schema in any_of_schemas:
+        # Skip null types - they just indicate optionality
+        if sub_schema.get("type") == "null":
+            continue
+        # Check for references or nested properties
+        if "$ref" in sub_schema or "properties" in sub_schema:
+            return True
+    return False
+
+
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
 def convert_function_to_ollama_tool(
     func: Callable, name: str | None = None
@@ -915,8 +940,6 @@ def convert_function_to_ollama_tool(
         An ``OllamaTool`` instance representing the function as an OpenAI-compatible
         tool schema.
     """
-    import copy
-
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
     schema = type(
@@ -932,37 +955,13 @@ def convert_function_to_ollama_tool(
         },
     ).model_json_schema()  # type: ignore
 
-    # Helper to resolve $ref references
-    def resolve_ref(ref_path: str, defs: dict) -> dict:
-        """Resolve a $ref path like '#/$defs/Email' to the actual schema."""
-        if ref_path.startswith("#/$defs/"):
-            def_name = ref_path.split("/")[-1]
-            return defs.get(def_name, {})
-        elif ref_path.startswith("#/definitions/"):
-            def_name = ref_path.split("/")[-1]
-            return defs.get(def_name, {})
-        return {}
-
-    # Helper to check if anyOf represents a complex union (not just Optional[primitive])
-    def _is_complex_anyof(v: dict) -> bool:
-        """Check if anyOf contains complex types (refs or nested objects)."""
-        any_of_schemas = v.get("anyOf", [])
-        for sub_schema in any_of_schemas:
-            # Skip null types - they just indicate optionality
-            if sub_schema.get("type") == "null":
-                continue
-            # Check for references or nested properties
-            if "$ref" in sub_schema or "properties" in sub_schema:
-                return True
-        return False
-
     defs = schema.get("$defs", schema.get("definitions", {}))
 
     for k, v in schema.get("properties", {}).items():
         # Check if this property has a $ref (reference to a definition)
         if "$ref" in v:
             # Resolve the reference and inline it
-            ref_schema = resolve_ref(v["$ref"], defs)
+            ref_schema = _resolve_ref(v["$ref"], defs)
             if ref_schema:
                 # Inline the referenced schema (deep copy to avoid mutations)
                 inlined = copy.deepcopy(ref_schema)
