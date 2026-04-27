@@ -5,7 +5,7 @@ import collections.abc
 from ....backends.adapters import AdapterMixin
 from ...components import Document, Message
 from ...context import ChatContext
-from ._util import call_intrinsic
+from ._util import _coerce_documents, call_intrinsic
 
 
 def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
@@ -60,7 +60,7 @@ def requirement_check(
 
 def find_context_attributions(
     response: str,
-    documents: collections.abc.Iterable[Document],
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> list[dict]:
@@ -71,7 +71,12 @@ def find_context_attributions(
     assistant response.
 
     :param response: Assistant response
-    :param documents: Documents that were used to generate ``response``
+    :param documents: Documents that were used to generate ``response``. Each element
+        may be a ``Document`` or a plain string. Strings are wrapped in ``Document``
+        with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...); for explicit
+        control, pass ``Document`` objects with ``doc_id`` set. ``Document`` objects
+        without ``doc_id`` trigger a warning because the intrinsic uses ``doc_id`` to
+        identify attribution sources.
     :param context: Context of the dialog between user and assistant, ending with a
         user query
     :param backend: Backend that supports intrinsic adapters
@@ -89,7 +94,13 @@ def find_context_attributions(
     """
     result_json = call_intrinsic(
         "context-attribution",
-        context.add(Message("assistant", response, documents=list(documents))),
+        context.add(
+            Message(
+                "assistant",
+                response,
+                documents=_coerce_documents(documents, auto_doc_id=True),
+            )
+        ),
         backend,
     )
     return result_json

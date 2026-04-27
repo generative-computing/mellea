@@ -1,12 +1,51 @@
 """Shared utilities for intrinsic convenience wrappers."""
 
+import collections.abc
 import json
+import warnings
 
 from ....backends import ModelOption
 from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
 from ....stdlib import functional as mfuncs
+from ...components import Document
 from ...context import ChatContext
 from .intrinsic import Intrinsic
+
+
+def _coerce_documents(
+    documents: collections.abc.Iterable[str | Document], *, auto_doc_id: bool = False
+) -> list[Document]:
+    """Convert an iterable of strings or Documents into a list of Documents.
+
+    Args:
+        documents: Strings, Document objects, or a mix.
+        auto_doc_id: When True, assign sequential string doc_id values
+            ("0", "1", ...) to Documents created from strings and warn about
+            existing Document objects that have no ``doc_id`` set.
+    """
+    result: list[Document] = []
+    for i, d in enumerate(documents):
+        if isinstance(d, str):
+            doc_id = str(i) if auto_doc_id else None
+            result.append(Document(text=d, doc_id=doc_id))
+        else:
+            if auto_doc_id and d.doc_id is None:
+                warnings.warn(
+                    f"Document at index {i} has no doc_id; results may omit "
+                    "document identification. Set doc_id on the Document or "
+                    "pass a plain string to auto-generate one.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            result.append(d)
+    return result
+
+
+def _coerce_document(document: str | Document) -> Document:
+    """Convert a single string or Document into a Document."""
+    if isinstance(document, str):
+        return Document(text=document)
+    return document
 
 
 def call_intrinsic(

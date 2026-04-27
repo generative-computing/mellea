@@ -6,12 +6,12 @@ from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from ._util import call_intrinsic
+from ._util import _coerce_document, _coerce_documents, call_intrinsic
 
 
 def check_answerability(
     question: str,
-    documents: collections.abc.Iterable[Document],
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> float:
@@ -24,7 +24,8 @@ def check_answerability(
         question: Question that the user has posed in response to the last turn in
             ``context``.
         documents: Document snippets retrieved that may or may not answer the
-            indicated question.
+            indicated question. Each element may be a ``Document`` or a plain
+            string (automatically wrapped in ``Document``).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters
             for answerability checks.
@@ -34,15 +35,13 @@ def check_answerability(
     """
     result_json = call_intrinsic(
         "answerability",
-        context.add(Message("user", question, documents=list(documents))),
+        context.add(Message("user", question, documents=_coerce_documents(documents))),
         backend,
     )
     return result_json["answerability"]
 
 
-def rewrite_question(
-    question: str, context: ChatContext, backend: AdapterMixin
-) -> float:
+def rewrite_question(question: str, context: ChatContext, backend: AdapterMixin) -> str:
     """Rewrite a user's question for retrieval.
 
     Intrinsic function that rewrites the question in the next user turn into a
@@ -65,7 +64,7 @@ def rewrite_question(
 
 def clarify_query(
     question: str,
-    documents: collections.abc.Iterable[Document],
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> str:
@@ -77,7 +76,9 @@ def clarify_query(
 
     Args:
         question: Question that the user has posed.
-        documents: Document snippets retrieved for the question.
+        documents: Document snippets retrieved for the question. Each element
+            may be a ``Document`` or a plain string (automatically wrapped in
+            ``Document``).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports the adapters that implement
             this intrinsic.
@@ -88,7 +89,7 @@ def clarify_query(
     """
     result_json = call_intrinsic(
         "query_clarification",
-        context.add(Message("user", question, documents=list(documents))),
+        context.add(Message("user", question, documents=_coerce_documents(documents))),
         backend,
     )
     return result_json["clarification"]
@@ -96,7 +97,7 @@ def clarify_query(
 
 def find_citations(
     response: str,
-    documents: collections.abc.Iterable[Document],
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> list[dict]:
@@ -107,9 +108,12 @@ def find_citations(
 
     Args:
         response: Potential assistant response.
-        documents: Documents that were used to generate ``response``. These documents
-            should set the ``doc_id`` field; otherwise the intrinsic will be unable to
-            specify which document was the source of a given citation.
+        documents: Documents that were used to generate ``response``. Each element
+            may be a ``Document`` or a plain string. Strings are wrapped in
+            ``Document`` with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...);
+            for explicit control, pass ``Document`` objects with ``doc_id`` set.
+            ``Document`` objects without ``doc_id`` trigger a warning because the
+            intrinsic uses ``doc_id`` to identify citation sources.
         context: Context of the dialog between user and assistant at the point where
             the user has just asked a question that will be answered with RAG documents.
         backend: Backend that supports one of the adapters that implements this
@@ -123,14 +127,20 @@ def find_citations(
     """
     result_json = call_intrinsic(
         "citations",
-        context.add(Message("assistant", response, documents=list(documents))),
+        context.add(
+            Message(
+                "assistant",
+                response,
+                documents=_coerce_documents(documents, auto_doc_id=True),
+            )
+        ),
         backend,
     )
     return result_json
 
 
 def check_context_relevance(
-    question: str, document: Document, context: ChatContext, backend: AdapterMixin
+    question: str, document: str | Document, context: ChatContext, backend: AdapterMixin
 ) -> float:
     """Test whether a document is relevant to a user's question.
 
@@ -140,7 +150,8 @@ def check_context_relevance(
 
     Args:
         question: Question that the user has posed.
-        document: A retrieved document snippet.
+        document: A retrieved document snippet. May be a ``Document`` or a plain
+            string (automatically wrapped in ``Document``).
         context: The chat up to the point where the user asked a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
@@ -151,6 +162,7 @@ def check_context_relevance(
         - "irrelevant"
         - "partially relevant"
     """
+    document = _coerce_document(document)
     result_json = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
@@ -163,7 +175,7 @@ def check_context_relevance(
 
 def flag_hallucinated_content(
     response: str,
-    documents: collections.abc.Iterable[Document],
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> float:
@@ -176,7 +188,9 @@ def flag_hallucinated_content(
     Args:
         response: The assistant's response to the user's question in the last turn
             of ``context``.
-        documents: Document snippets that were used to generate ``response``.
+        documents: Document snippets that were used to generate ``response``. Each
+            element may be a ``Document`` or a plain string (automatically wrapped
+            in ``Document``).
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
@@ -188,7 +202,9 @@ def flag_hallucinated_content(
     """
     result_json = call_intrinsic(
         "hallucination_detection",
-        context.add(Message("assistant", response, documents=list(documents))),
+        context.add(
+            Message("assistant", response, documents=_coerce_documents(documents))
+        ),
         backend,
     )
     return result_json
