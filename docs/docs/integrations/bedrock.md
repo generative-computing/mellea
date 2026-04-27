@@ -24,6 +24,8 @@ export AWS_BEARER_TOKEN_BEDROCK=your-bedrock-key
 ## Connecting with `create_bedrock_mantle_backend`
 
 ```python
+# Requires: mellea
+# Returns: ModelOutputThunk
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.bedrock import create_bedrock_mantle_backend
@@ -48,6 +50,8 @@ that the requested model is available in the target region before returning.
 The default region is `us-east-1`. Pass `region` to target a different region:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.bedrock import create_bedrock_mantle_backend
 
@@ -65,6 +69,8 @@ If the `ModelIdentifier` for a Bedrock model is not in `model_ids`, pass the Bed
 model ID string directly:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.bedrock import create_bedrock_mantle_backend
 
@@ -78,6 +84,7 @@ m = MelleaSession(
 Listing available models in your region:
 
 ```python
+# Returns: str
 from mellea.backends.bedrock import stringify_mantle_model_ids
 
 print(stringify_mantle_model_ids())
@@ -95,6 +102,8 @@ export AWS_BEARER_TOKEN_BEDROCK=your-bedrock-key
 ```
 
 ```python
+# Requires: mellea[litellm]
+# Returns: str
 import mellea
 
 m = mellea.start_session(

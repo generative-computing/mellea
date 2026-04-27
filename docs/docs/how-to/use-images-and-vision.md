@@ -22,6 +22,8 @@ Start a session with a vision-capable model, then pass a [Pillow](https://python
 `Image` object in the `images` list:
 
 ```python
+# Requires: mellea, pillow
+# Returns: str
 import pathlib
 from PIL import Image
 from mellea import start_session
@@ -44,6 +46,8 @@ For the OpenAI backend (and compatible endpoints), convert the PIL image to an
 `ImageBlock` first:
 
 ```python
+# Requires: mellea, pillow
+# Returns: str
 import pathlib
 from PIL import Image
 from mellea import MelleaSession
@@ -85,6 +89,8 @@ turn history. Subsequent calls in the same session can reference the image witho
 passing it again:
 
 ```python
+# Requires: mellea, pillow
+# Returns: None
 from PIL import Image
 from mellea import start_session
 from mellea.stdlib.context import ChatContext

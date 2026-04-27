@@ -20,6 +20,8 @@ for community tools).
 `instruct()` or `chat()` via [`ModelOption.TOOLS`](../reference/glossary#modeloption):
 
 ```python
+# Requires: langchain-community
+# Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
@@ -62,6 +64,8 @@ explicit `ChatContext` objects; the bridge is to convert LangChain messages to O
 format first, then build the context:
 
 ```python
+# Requires: langchain-core, mellea[ollama]
+# Returns: str
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages import convert_to_openai_messages
 

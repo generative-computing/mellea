@@ -22,6 +22,8 @@ same signature and return type:
 | `transform()` | `atransform()` |
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 
@@ -41,6 +43,8 @@ background but the value is not resolved until you call `avalue()`. This lets yo
 fire multiple generations and resolve them all at once:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 
@@ -73,6 +77,8 @@ asyncio.run(main())
 For a list of thunks, `wait_for_all_mots` is a convenience wrapper:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 from mellea.helpers.async_helpers import wait_for_all_mots
@@ -102,6 +108,8 @@ Enable streaming by passing `ModelOption.STREAM: True` in `model_options`. Consu
 incremental output chunks with `mot.astream()`:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 from mellea.backends import ModelOption
@@ -148,6 +156,8 @@ unexpected results due to stale contexts. Ensure you await between requests.
 If you need `ChatContext` with async, await each call before starting the next:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 from mellea.stdlib.context import ChatContext

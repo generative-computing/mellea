@@ -29,6 +29,8 @@ Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro`
 Start with the smallest possible program: a single call to `instruct()`.
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -57,6 +59,8 @@ Hardcoding the text in the instruction string makes the function impossible to r
 Use `user_variables` and `{{double_braces}}` template syntax:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 def summarize_feedback(m: mellea.MelleaSession, text: str) -> str:
@@ -87,6 +91,8 @@ Pass a list of plain-English requirements to constrain the output. Mellea checks
 each requirement after generation and retries if any fail:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 def summarize_feedback(m: mellea.MelleaSession, text: str) -> str:
@@ -121,6 +127,8 @@ For facts you can check in code — word counts, format, length — use
 `simple_validate`:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.requirements import req, simple_validate
 
@@ -167,6 +175,8 @@ By default, `instruct()` retries up to twice if any requirement fails. Use
 [`RejectionSamplingStrategy`](../reference/glossary#sampling-strategy) to control the budget and inspect results:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -213,6 +223,8 @@ control over what to do when the model can not satisfy your requirements.
 Assemble all the pieces into a complete pipeline:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: None
 from typing import Literal
 from pydantic import BaseModel
 

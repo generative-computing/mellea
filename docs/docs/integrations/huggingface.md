@@ -23,6 +23,8 @@ pip install 'mellea[hf]'
 ## Basic usage
 
 ```python
+# Requires: mellea[hf]
+# Returns: ModelOutputThunk
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.huggingface import LocalHFBackend
@@ -49,6 +51,8 @@ if available, then Apple Silicon MPS, then CPU. To override device selection, us
 `custom_config`:
 
 ```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
 from mellea.backends.huggingface import LocalHFBackend, TransformersTorchConfig
 
 m_backend = LocalHFBackend(
@@ -64,6 +68,8 @@ speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](.
 to control capacity, or disable caching entirely for debugging:
 
 ```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
 from mellea.backends.cache import SimpleLRUCache
 
 # Enable with explicit capacity

@@ -16,6 +16,8 @@ implementation, calls the backend, and parses the output into the declared retur
 ## Basic `@generative`
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 
@@ -41,6 +43,8 @@ The first argument is always the `MelleaSession`.
 Return complex structured objects using Pydantic models:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: ChainOfThought
 from pydantic import BaseModel
 from mellea import generative, start_session
 
@@ -74,6 +78,8 @@ and `requirements` (checked after). Both accept the same requirement types as
 `instruct()`:
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -98,6 +104,8 @@ If a precondition fails, `PreconditionException` is raised immediately — the m
 is never called:
 
 ```python
+# Requires: mellea
+# Returns: None
 from mellea import generative, start_session
 from mellea.core import Requirement
 from mellea.stdlib.components.genstub import PreconditionException
@@ -134,6 +142,8 @@ Chain multiple `@generative` functions to build typed pipelines. The output of o
 call becomes the input to the next:
 
 ```python
+# Requires: mellea
+# Returns: None
 from typing import Literal
 from mellea import generative, start_session
 
@@ -172,6 +182,8 @@ reasoning. Separating the reasoning step from the answer extraction step can
 significantly improve accuracy on tasks like GSM8K.
 
 ```python
+# Requires: mellea, pydantic
+# Returns: int
 from pydantic import BaseModel
 from mellea import generative, start_session
 
