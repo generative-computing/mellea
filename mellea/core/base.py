@@ -269,9 +269,9 @@ class GenerationMetadata:
     """Token usage following OpenAI API standard.
 
     Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
-    May include 'prompt_tokens_details' (nested dict; 'cached_tokens' = tokens served
-    from prompt cache) and 'completion_tokens_details'. Anthropic models also populate
-    'cache_creation_input_tokens' (tokens written to prompt cache).
+    May include optional breakdown fields like 'completion_tokens_details'
+    and 'prompt_tokens_details' (nested dicts with per-category token counts
+    for reasoning, audio, caching, etc.).
     """
 
     model: str | None = None
