@@ -207,7 +207,7 @@ def test_invalid_entry_no_recognised_keys(custom_pricing, caplog):
         cost = compute_cost("bad-model", 1000, 1000)
 
     assert cost is None
-    assert any("recognised keys" in record.message for record in caplog.records)
+    assert any("required keys" in record.message for record in caplog.records)
 
 
 def test_compute_cost_with_cached_tokens(fresh_registry):

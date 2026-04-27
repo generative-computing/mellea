@@ -14,7 +14,10 @@ Pricing data sources:
 
 Prices change over time. To override or supplement built-in prices, create a JSON
 file in the same format as ``builtin_pricing.json`` and point ``MELLEA_PRICING_FILE``
-to it. Custom entries take precedence over built-ins.
+to it. Custom entries take precedence over built-ins. Each custom entry replaces the
+entire built-in entry for that model — there is no field-level merging. To adjust only
+cache rates for a built-in model, copy its full entry from ``builtin_pricing.json`` and
+modify the relevant fields.
 
 Environment variables:
   - MELLEA_PRICING_FILE: Path to a JSON file with custom model pricing overrides.
@@ -74,7 +77,9 @@ def _validate_pricing_entry(model: str, entry: Any) -> bool:
             return False
     if not _PRICING_KEYS & entry.keys():
         logger.warning(
-            "Pricing entry for %r has no recognised keys (%s) — skipping.",
+            "Pricing entry for %r is missing required keys (%s) — skipping. "
+            "Custom entries must include at least one of these; they replace the full "
+            "built-in entry and do not merge with it.",
             model,
             ", ".join(sorted(_PRICING_KEYS)),
         )

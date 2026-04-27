@@ -51,18 +51,8 @@ def _make_token_payload(usage=None, model="test-model", provider="test-provider"
     [
         ({"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}, 10, 5),
         ({"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}, 0, 0),
-        (
-            {
-                "prompt_tokens": 100,
-                "completion_tokens": 20,
-                "total_tokens": 120,
-                "cache_creation_input_tokens": 50,
-            },
-            150,
-            20,
-        ),
     ],
-    ids=["normal-usage", "zero-tokens", "with-cache-creation"],
+    ids=["normal-usage", "zero-tokens"],
 )
 async def test_record_token_metrics_with_usage(
     token_plugin, usage, expected_input, expected_output
@@ -329,10 +319,14 @@ async def test_cost_plugin_records_cost_for_known_model(cost_plugin):
 
 @pytest.mark.asyncio
 async def test_cost_plugin_cache_tokens_forwarded(cost_plugin):
-    """Cache token fields are extracted and forwarded to compute_cost correctly."""
+    """Cache token fields are extracted and forwarded to compute_cost correctly.
+
+    Simulates LiteLLM-normalised Anthropic usage where prompt_tokens already
+    includes cache_creation and cache_read tokens (40 base + 50 read + 10 write = 100).
+    """
     payload = _make_cost_payload(
         usage={
-            "prompt_tokens": 100,
+            "prompt_tokens": 100,  # LiteLLM-normalised: 40 base + 50 cache_read + 10 cache_creation
             "completion_tokens": 20,
             "total_tokens": 120,
             "prompt_tokens_details": {"cached_tokens": 50},
@@ -348,7 +342,7 @@ async def test_cost_plugin_cache_tokens_forwarded(cost_plugin):
 
         mock_cost.assert_called_once_with(
             model="test-model",
-            input_tokens=50,  # prompt_tokens (100) - cached_tokens (50)
+            input_tokens=40,  # prompt_tokens (100) - cached_tokens (50) - cache_creation (10)
             output_tokens=20,
             cached_tokens=50,
             cache_creation_tokens=10,

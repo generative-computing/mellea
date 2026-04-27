@@ -61,10 +61,8 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
         if gen.usage is None:
             return
 
-        # cache_creation_input_tokens is additive (Anthropic-only, not in prompt_tokens)
-        cache_creation = gen.usage.get("cache_creation_input_tokens") or 0
         record_token_usage_metrics(
-            input_tokens=(gen.usage.get("prompt_tokens") or 0) + cache_creation,
+            input_tokens=gen.usage.get("prompt_tokens") or 0,
             output_tokens=gen.usage.get("completion_tokens"),
             model=gen.model or "unknown",
             provider=gen.provider or "unknown",
@@ -176,7 +174,7 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
         prompt_tokens = gen.usage.get("prompt_tokens") or 0
         cost = compute_cost(
             model=model,
-            input_tokens=prompt_tokens - cached_tokens,
+            input_tokens=prompt_tokens - cached_tokens - cache_creation,
             output_tokens=gen.usage.get("completion_tokens"),
             cached_tokens=cached_tokens,
             cache_creation_tokens=cache_creation,
