@@ -214,7 +214,7 @@ The file format maps model IDs to per-million-token rates:
 }
 ```
 
-Custom entries override built-in prices. Errors loading the file are logged as
+Custom entries replace the entire built-in entry for that model. Errors loading the file are logged as
 warnings and built-in prices are used as a fallback.
 
 > **Note:** Anthropic does not distinguish 5-minute from 1-hour cache writes in

@@ -61,8 +61,9 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
         if gen.usage is None:
             return
 
+        # Record metrics (no-op if metrics disabled)
         record_token_usage_metrics(
-            input_tokens=gen.usage.get("prompt_tokens") or 0,
+            input_tokens=gen.usage.get("prompt_tokens"),
             output_tokens=gen.usage.get("completion_tokens"),
             model=gen.model or "unknown",
             provider=gen.provider or "unknown",
