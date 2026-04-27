@@ -46,7 +46,9 @@ from ..telemetry.context import with_context
 from .components import Message
 from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
-from .start_backend import start_backend as start_backend  # re-export for backwards compat
+from .start_backend import (
+    start_backend as start_backend,
+)  # re-export for backwards compat
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(

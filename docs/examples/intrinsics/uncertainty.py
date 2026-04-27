@@ -11,13 +11,15 @@ uv run python docs/examples/intrinsics/uncertainty.py
 ```
 """
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components.intrinsic import core
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
 
-response, ctx = mfuncs.chat("What is 2 + 2?", ctx, backend)
+response, ctx = mfuncs.chat("What is 2 + 2?", ctx, backend)  # type: ignore
 print(f"Response: {response.content}")
 
 result = core.check_certainty(ctx, backend)  # type: ignore

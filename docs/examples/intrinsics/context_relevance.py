@@ -8,10 +8,12 @@ uv run python docs/examples/intrinsics/context_relevance.py
 ```
 """
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components.intrinsic import rag
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
 question = "Who is the CEO of Microsoft?"
 document = (
     # Document text does not say who is the CEO.

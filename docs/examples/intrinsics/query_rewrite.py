@@ -8,14 +8,15 @@ uv run python docs/examples/intrinsics/query_rewrite.py
 ```
 """
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
 ctx = (
-    ctx
-    .add(Message("assistant", "Welcome to pet questions!"))
+    ctx.add(Message("assistant", "Welcome to pet questions!"))
     .add(Message("user", "I have two pets, a dog named Rex and a cat named Lucy."))
     .add(
         Message(

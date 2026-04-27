@@ -10,11 +10,13 @@ uv run python docs/examples/intrinsics/citations.py
 
 import json
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
 ctx = ctx.add(
     Message(
         "user",
@@ -28,7 +30,8 @@ assistant_response = (
     "purchasing The Dominion."
 )
 documents = [
-    (   "Keith Rupert Murdoch was born on 11 March 1931 in Melbourne, Australia, "
+    (
+        "Keith Rupert Murdoch was born on 11 March 1931 in Melbourne, Australia, "
         "the son of Sir Keith Murdoch (1885-1952) and Dame Elisabeth Murdoch (nee "
         "Greene; 1909-2012). He is of English, Irish, and Scottish ancestry. Murdoch's "
         "parents were also born in Melbourne. Keith Murdoch was a war correspondent "

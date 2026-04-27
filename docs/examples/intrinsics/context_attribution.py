@@ -14,27 +14,33 @@ uv run python docs/examples/intrinsics/context_attribution.py
 
 import json
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import core
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
-ctx = ctx.add(
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+ctx = (
+    ctx.add(
         Message(
             "user",
             "Who were the members of The Metal Ono Band, which was formed by Yoko Ono "
             "in 1976 to explore her interest in heavy metal music?",
         )
-    ).add(
+    )
+    .add(
         Message(
             "assistant",
             "I'm sorry, but I don't have the data to answer that specific question. ",
         )
-    ).add(
+    )
+    .add(
         Message(
             "user", "What was the concept behind the formation of the Plastic Ono Band?"
         )
     )
+)
 
 assistant_response = (
     "The Plastic Ono Band was formed by John Lennon and Yoko Ono in 1969 as a "
@@ -43,7 +49,7 @@ assistant_response = (
     "their marriage in 1969."
 )
 documents = [
-    ( 
+    (
         "The Plastic Ono Band is a band formed by John Lennon and Yoko Ono in 1969 "
         "as a vehicle for their collaborative and solo projects. Lennon and Ono had "
         "begun a personal and artistic relationship in 1968, collaborating on several "
@@ -163,7 +169,7 @@ documents = [
         "re-establish a connection with the then 17-year-old, and confidently predicted, "
         '"Julian and I will have a relationship in the future." After his death it was '
         "revealed that he had left Julian very little in his will."
-    )
+    ),
 ]
 
 result = core.find_context_attributions(assistant_response, documents, ctx, backend)

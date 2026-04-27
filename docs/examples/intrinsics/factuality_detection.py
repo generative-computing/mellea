@@ -8,7 +8,7 @@ uv run python docs/examples/intrinsics/factuality_detection.py
 ```
 """
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 
@@ -24,8 +24,14 @@ document = Document(
 )
 
 # Create the backend.
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
-ctx = ctx.add(document).add(Message("user", user_text)).add(Message("assistant", response_text))
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+ctx = (
+    ctx.add(document)
+    .add(Message("user", user_text))
+    .add(Message("assistant", response_text))
+)
 
 result = guardian.factuality_detection(ctx, backend)
 print(f"Result of factuality detection: {result}")  # string "yes" or "no"

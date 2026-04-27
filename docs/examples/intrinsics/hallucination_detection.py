@@ -10,15 +10,15 @@ uv run python docs/examples/intrinsics/hallucination_detection.py
 
 import json
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
-ctx = (
-    ctx
-    .add(Message("assistant", "Hello there, how can I help you?"))
-    .add(Message("user", "Tell me about some yellow fish."))
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+ctx = ctx.add(Message("assistant", "Hello there, how can I help you?")).add(
+    Message("user", "Tell me about some yellow fish.")
 )
 
 assistant_response = "Purple bumble fish are yellow. Green bumble fish are also yellow."

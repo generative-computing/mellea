@@ -10,7 +10,7 @@ uv run python docs/examples/intrinsics/requirement_check.py
 ```
 """
 
-from mellea import start_backend, model_ids
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import core
 
@@ -39,12 +39,10 @@ We look forward to seeing everyone there and celebrating our hard work together.
 """
 requirement = "Use a professional tone."
 
-ctx, backend = start_backend("hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat")
-ctx = (
-    ctx
-    .add(Message("user", user_text))
-    .add(Message("assistant", response_text))
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
 )
+ctx = ctx.add(Message("user", user_text)).add(Message("assistant", response_text))
 
 result = core.requirement_check(ctx, backend, requirement)
 print(f"Requirements Satisfied: {result}")  # float between 0.0 and 1.0
