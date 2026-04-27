@@ -21,8 +21,6 @@ behavior summary
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 pytest.importorskip("cpex.framework")
@@ -344,11 +342,10 @@ class TestFireAndForgetMode:
 
         register(faf_observer)
 
-        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+        result, _ = await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        # The hook runs as a background asyncio task; yield to the event loop to
-        # allow it to complete before asserting.
-        await asyncio.sleep(0.05)
+        assert result is not None
+        await result.wait_for_background_tasks()
         assert invocations == ["fired"]
 
     @pytest.mark.asyncio
@@ -413,9 +410,10 @@ class TestFireAndForgetMode:
         register(faf_first)
         register(enforce_second)
 
-        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+        result, _ = await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        await asyncio.sleep(0.05)
+        assert result is not None
+        await result.wait_for_background_tasks()
         assert order == ["enforce", "faf"]
 
     @pytest.mark.asyncio
