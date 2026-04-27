@@ -2,6 +2,7 @@ import gc
 import os
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 import pytest
 import requests
@@ -545,15 +546,26 @@ def pytest_runtest_setup(item):
         # Warm up Ollama models when entering Ollama group
         if current_group == "ollama" and prev_group != "ollama":
             logger = MelleaLogger.get_logger()
-            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
-            port = os.environ.get("OLLAMA_PORT", "11434")
+            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
+            parsed_host_str = urlsplit(host_str)
+            if parsed_host_str.port:
+                ollama_base = (
+                    f"http://{host_str}" if not parsed_host_str.scheme else host_str
+                )
+            else:
+                port = os.environ.get("OLLAMA_PORT", "11434")
+                ollama_base = (
+                    f"http://{host_str}:{port}"
+                    if not parsed_host_str.scheme
+                    else host_str
+                )
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
             for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
                 try:
                     requests.post(
-                        f"http://{host_str}:{port}/api/generate",
+                        f"{ollama_base}/api/generate",
                         json={
                             "model": model,
                             "prompt": "hi",
@@ -569,13 +581,17 @@ def pytest_runtest_setup(item):
         # Evict Ollama models when leaving Ollama group
         if prev_group == "ollama" and current_group != "ollama":
             logger = MelleaLogger.get_logger()
-            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
-            port = os.environ.get("OLLAMA_PORT", "11434")
+            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
+            if ":" in host_str:
+                ollama_base = f"http://{host_str}"
+            else:
+                port = os.environ.get("OLLAMA_PORT", "11434")
+                ollama_base = f"http://{host_str}:{port}"
             logger.info("Evicting ollama models from VRAM after ollama group...")
             for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
                 try:
                     requests.post(
-                        f"http://{host_str}:{port}/api/generate",
+                        f"{ollama_base}/api/generate",
                         json={"model": model, "keep_alive": 0},
                         timeout=10,
                     )
