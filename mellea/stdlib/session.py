@@ -44,7 +44,7 @@ from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
 from ..telemetry.context import with_context
 from .components import Message
-from .context import SimpleContext
+from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
 
 # Global context variable for the context session
@@ -127,74 +127,37 @@ def backend_name_to_class(name: str) -> Any:
         return None
 
 
-def start_session(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
-    ctx: Context | None = None,
-    *,
-    model_options: dict | None = None,
-    plugins: list[Any] | None = None,
-    **backend_kwargs,
-) -> MelleaSession:
-    """Start a new Mellea session. Can be used as a context manager or called directly.
-
-    This function creates and configures a new Mellea session with the specified backend
-    and model. When used as a context manager (with `with` statement), it automatically
-    sets the session as the current active session for use with convenience functions
-    like `instruct()`, `chat()`, `query()`, and `transform()`. When called directly,
-    it returns a session object that can be used directly.
-
-    Args:
-        backend_name: The backend to use. Options are:
-            - "ollama": Use Ollama backend for local models
-            - "hf" or "huggingface": Use HuggingFace transformers backend
-            - "openai": Use OpenAI API backend
-            - "watsonx": Use IBM WatsonX backend
-            - "litellm": Use the LiteLLM backend
-        model_id: Model identifier or name. Can be a `ModelIdentifier` from
-            mellea.backends.model_ids or a string model name.
-        ctx: Context manager for conversation history. Defaults to SimpleContext().
-            Use ChatContext() for chat-style conversations.
-        model_options: Additional model configuration options that will be passed
-            to the backend (e.g., temperature, max_tokens, etc.).
-        plugins: Optional list of plugins scoped to this session. Accepts
-            ``@hook``-decorated functions, ``@plugin``-decorated class instances,
-            ``MelleaPlugin`` instances, or ``PluginSet`` instances.
-        **backend_kwargs: Additional keyword arguments passed to the backend constructor.
-
-    Returns:
-        MelleaSession: A session object that can be used as a context manager
-        or called directly with session methods.
+def _resolve_context(
+    ctx: Context | None, context_type: Literal["simple", "chat"] | None
+) -> Context:
+    """Resolve a ``Context`` from explicit instance and/or shorthand name.
 
     Raises:
-        Exception: If ``backend_name`` is not one of the recognised backend
-            identifiers.
-        ImportError: If the requested backend requires optional dependencies
-            that are not installed.
-
-    Examples:
-        ```python
-        # Basic usage with default settings
-        with start_session() as session:
-            response = session.instruct("Explain quantum computing")
-
-        # Using OpenAI with custom model options
-        with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
-            response = session.chat("Write a poem")
-
-        # Using HuggingFace with ChatContext for conversations
-        from mellea.stdlib.base import ChatContext
-        with start_session("hf", "microsoft/DialoGPT-medium", ctx=ChatContext()):
-            session.chat("Hello!")
-            session.chat("How are you?")  # Remembers previous message
-
-        # Direct usage.
-        session = start_session()
-        response = session.instruct("Explain quantum computing")
-        session.cleanup()
-        ```
+        ValueError: If both ``ctx`` and ``context_type`` are provided.
     """
-    logger = MelleaLogger.get_logger()
+    if ctx is not None and context_type is not None:
+        raise ValueError("Cannot specify both 'ctx' and 'context_type'.")
+    if context_type == "chat":
+        return ChatContext()
+    if context_type == "simple":
+        return SimpleContext()
+    if ctx is not None:
+        return ctx
+    return SimpleContext()
+
+
+def _resolve_backend_and_context(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"],
+    model_id: str | ModelIdentifier,
+    ctx: Context | None,
+    context_type: Literal["simple", "chat"] | None,
+    model_options: dict | None,
+    **backend_kwargs: Any,
+) -> tuple[Context, Backend, str]:
+    """Create a backend and resolve the context. Shared by ``start_session`` and ``start_backend``."""
+    # Validate/resolve context first so argument errors surface before the
+    # (potentially expensive) backend constructor runs.
+    resolved_ctx = _resolve_context(ctx, context_type)
 
     # Get model_id string for logging and tracing
     if isinstance(model_id, ModelIdentifier):
@@ -213,11 +176,141 @@ def start_session(
     else:
         model_id_str = str(model_id)
 
+    backend_class = backend_name_to_class(backend_name)
+    if backend_class is None:
+        raise Exception(
+            f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
+        )
+    assert backend_class is not None
+    backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+
+    return resolved_ctx, backend, model_id_str
+
+
+def start_backend(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
+    ctx: Context | None = None,
+    *,
+    context_type: Literal["simple", "chat"] | None = None,
+    model_options: dict | None = None,
+    **backend_kwargs: Any,
+) -> tuple[Context, Backend]:
+    """Create a context and backend pair without a full session.
+
+    Accepts the same backend/model/context arguments as ``start_session`` but
+    returns the raw ``(Context, Backend)`` tuple for callers that manage their
+    own inference loop.
+
+    Args:
+        backend_name: The backend to use (``"ollama"``, ``"hf"``, ``"openai"``,
+            ``"watsonx"``, or ``"litellm"``).
+        model_id: Model identifier or name.
+        ctx: An explicit ``Context`` instance. Mutually exclusive with
+            ``context_type``.
+        context_type: Shorthand for creating a context — ``"simple"`` for
+            ``SimpleContext``, ``"chat"`` for ``ChatContext``. Mutually
+            exclusive with ``ctx``.
+        model_options: Additional model configuration options passed to the
+            backend.
+        **backend_kwargs: Additional keyword arguments passed to the backend
+            constructor.
+
+    Returns:
+        Tuple of ``(Context, Backend)``.
+
+    Raises:
+        ValueError: If both ``ctx`` and ``context_type`` are provided.
+        Exception: If ``backend_name`` is not recognised.
+    """
+    resolved_ctx, backend, _ = _resolve_backend_and_context(
+        backend_name, model_id, ctx, context_type, model_options, **backend_kwargs
+    )
+    return resolved_ctx, backend
+
+
+def start_session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
+    ctx: Context | None = None,
+    *,
+    context_type: Literal["simple", "chat"] | None = None,
+    model_options: dict | None = None,
+    plugins: list[Any] | None = None,
+    **backend_kwargs: Any,
+) -> MelleaSession:
+    """Start a new Mellea session. Can be used as a context manager or called directly.
+
+    This function creates and configures a new Mellea session with the specified backend
+    and model. When used as a context manager (with `with` statement), it automatically
+    sets the session as the current active session for use with convenience functions
+    like `instruct()`, `chat()`, `query()`, and `transform()`. When called directly,
+    it returns a session object that can be used directly.
+
+    Args:
+        backend_name: The backend to use. Options are:
+            - "ollama": Use Ollama backend for local models
+            - "hf" or "huggingface": Use HuggingFace transformers backend
+            - "openai": Use OpenAI API backend
+            - "watsonx": Use IBM WatsonX backend
+            - "litellm": Use the LiteLLM backend
+        model_id: Model identifier or name. Can be a `ModelIdentifier` from
+            mellea.backends.model_ids or a string model name.
+        ctx: Context instance for conversation history. Defaults to
+            ``SimpleContext()``. Mutually exclusive with ``context_type``.
+        context_type: Shorthand for creating a context — ``"simple"`` for
+            ``SimpleContext``, ``"chat"`` for ``ChatContext``. Mutually
+            exclusive with ``ctx``.
+        model_options: Additional model configuration options that will be passed
+            to the backend (e.g., temperature, max_tokens, etc.).
+        plugins: Optional list of plugins scoped to this session. Accepts
+            ``@hook``-decorated functions, ``@plugin``-decorated class instances,
+            ``MelleaPlugin`` instances, or ``PluginSet`` instances.
+        **backend_kwargs: Additional keyword arguments passed to the backend constructor.
+
+    Returns:
+        MelleaSession: A session object that can be used as a context manager
+        or called directly with session methods.
+
+    Raises:
+        ValueError: If both ``ctx`` and ``context_type`` are provided.
+        Exception: If ``backend_name`` is not one of the recognised backend
+            identifiers.
+        ImportError: If the requested backend requires optional dependencies
+            that are not installed.
+
+    Examples:
+        ```python
+        # Basic usage with default settings
+        with start_session() as session:
+            response = session.instruct("Explain quantum computing")
+
+        # Using OpenAI with custom model options
+        with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
+            response = session.chat("Write a poem")
+
+        # Using context_type shorthand for chat conversations
+        with start_session("ollama", context_type="chat") as session:
+            session.chat("Hello!")
+            session.chat("How are you?")  # Remembers previous message
+
+        # Direct usage.
+        session = start_session()
+        response = session.instruct("Explain quantum computing")
+        session.cleanup()
+        ```
+    """
+    logger = MelleaLogger.get_logger()
+
+    resolved_ctx, backend, model_id_str = _resolve_backend_and_context(
+        backend_name, model_id, ctx, context_type, model_options, **backend_kwargs
+    )
+
     with trace_application(
         "start_session",
         backend=backend_name,
         model_id=model_id_str,
-        context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+        context_type=resolved_ctx.__class__.__name__,
     ):
         # --- session_pre_init hook ---
         if has_plugins(HookType.SESSION_PRE_INIT):
@@ -227,7 +320,7 @@ def start_session(
                 backend_name=backend_name,
                 model_id=model_id_str,
                 model_options=model_options,
-                context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+                context_type=resolved_ctx.__class__.__name__,
             )
             _, pre_payload = _run_async_in_thread(
                 invoke_hook(HookType.SESSION_PRE_INIT, pre_payload)
@@ -236,24 +329,13 @@ def start_session(
             model_id_str = pre_payload.model_id
             model_options = pre_payload.model_options
 
-        backend_class = backend_name_to_class(backend_name)
-        if backend_class is None:
-            raise Exception(
-                f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
-            )
-        assert backend_class is not None
-        backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
-
-        if ctx is None:
-            ctx = SimpleContext()
-
         logger.info(
             f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
-            f"context={ctx.__class__.__name__}"
+            f"context={resolved_ctx.__class__.__name__}"
             + (f", model_options={model_options}" if model_options else "")
         )
 
-        session = MelleaSession(backend, ctx)
+        session = MelleaSession(backend, resolved_ctx)
 
         # Register session-scoped plugins
         if plugins:
