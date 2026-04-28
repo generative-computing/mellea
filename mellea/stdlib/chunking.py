@@ -124,6 +124,15 @@ class SentenceChunker(ChunkingStrategy):
         ``lstrip`` is needed here.  The result is the fragment's content
         only, consistent with how :meth:`split` returns sentences without
         trailing whitespace.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            A single-element list containing the trailing sentence fragment
+            with leading and trailing whitespace stripped, or an empty list
+            when there is no fragment (all content ended in a sentence
+            boundary or the input is empty/whitespace-only).
         """
         if not accumulated_text:
             return []
@@ -177,7 +186,21 @@ class WordChunker(ChunkingStrategy):
         return parts
 
     def flush(self, accumulated_text: str) -> list[str]:
-        """Return the trailing word fragment (if any) as a final chunk."""
+        """Return the trailing word fragment (if any) as a final chunk.
+
+        The trailing fragment is the text after the last whitespace run when
+        the accumulated text does not end with whitespace.  When it does end
+        with whitespace, every word is already complete and no fragment is
+        released.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            A single-element list containing the trailing word fragment, or
+            an empty list when the input ends with whitespace (every word
+            already complete) or is empty.
+        """
         if not accumulated_text:
             return []
         if accumulated_text[-1].isspace():
@@ -232,6 +255,14 @@ class ParagraphChunker(ChunkingStrategy):
         a paragraph (e.g. a list item or a deliberate line break), and a
         consumer validating paragraph content should see the fragment as
         it was withheld.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            A single-element list containing the trailing paragraph fragment
+            byte-for-byte, or an empty list when the input ends with a
+            paragraph boundary (``\n\n`` or more) or is empty.
         """
         if not accumulated_text:
             return []
