@@ -263,6 +263,10 @@ async def stream_with_chunking(
         StreamChunkingResult: A result object providing :meth:`~StreamChunkingResult.astream`
             for incremental chunk consumption and
             :meth:`~StreamChunkingResult.acomplete` for blocking until done.
+
+    Raises:
+        ValueError: If *chunking* is a string that does not match any known
+            alias (``"sentence"``, ``"word"``, ``"paragraph"``).
     """
     if isinstance(chunking, str):
         cls = _CHUNKING_ALIASES.get(chunking)
