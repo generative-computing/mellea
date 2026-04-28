@@ -18,6 +18,8 @@ is replaced by the LLM at call time — the signature and docstring guide the mo
 the output.
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 
@@ -40,6 +42,8 @@ return anything else.
 Generative functions can also return Pydantic models for structured multi-field output:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: FeedbackSummary
 from typing import Literal
 from pydantic import BaseModel
 from mellea import generative, start_session
@@ -70,6 +74,8 @@ Consider two independent libraries: one that summarizes documents, and one that 
 decisions or risks from summaries.
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import generative
 
 # Summarizer library
@@ -105,6 +111,8 @@ To compose libraries safely without coupling them, use generative functions as c
 classifiers that gate whether a composition makes sense:
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative
 
@@ -122,6 +130,8 @@ def has_structured_conclusion(summary: str) -> Literal["yes", "no"]:
 These contracts let you write dynamic composition logic in ordinary Python:
 
 ```python
+# Requires: mellea
+# Returns: None
 from mellea import start_session
 
 m = start_session()

@@ -40,6 +40,10 @@ print(str(result))
 If the output fails the requirement, Mellea retries (up to the `loop_budget`
 limit) and feeds the failure reason back into the next attempt.
 
+> **Observability:** If tracing is enabled, judge calls appear as
+> child spans with `mellea.action_type = "Requirement"`, separate from the main
+> generation span. See [Tracing](../observability/tracing).
+
 ## Standalone validation with m.validate()
 
 Run requirements against an existing output without triggering a new generation:

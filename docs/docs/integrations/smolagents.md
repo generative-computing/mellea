@@ -14,6 +14,8 @@ call. The HuggingFace ecosystem provides many pre-built tools — `PythonInterpr
 ## Using smolagents tools
 
 ```python
+# Requires: mellea[smolagents], mellea[ollama]
+# Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool

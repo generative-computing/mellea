@@ -27,6 +27,8 @@ the same signature and return type. Replace `instruct()` with `ainstruct()` and
 wrap the call in `async def`:
 
 ```python
+# Requires: mellea
+# Returns: str
 import asyncio
 import mellea
 
@@ -57,6 +59,8 @@ Consume chunks with `mot.astream()` as they arrive — useful for displaying
 output progressively rather than waiting for the full response:
 
 ```python
+# Requires: mellea
+# Returns: str
 import asyncio
 import mellea
 from mellea.backends import ModelOption
@@ -103,6 +107,8 @@ all calls immediately and resolve them together.
 Use `wait_for_all_mots` to await a list of thunks concurrently:
 
 ```python
+# Requires: mellea
+# Returns: list[str]
 import asyncio
 import mellea
 from mellea.helpers.async_helpers import wait_for_all_mots
@@ -153,6 +159,8 @@ both take the raw feedback. Run them in parallel, then feed the resolved summary
 into `classify_sentiment`:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 from typing import Literal
 
@@ -219,6 +227,8 @@ If you need `ChatContext` (for multi-turn conversation), await each call before
 starting the next:
 
 ```python
+# Requires: mellea
+# Returns: None
 import asyncio
 import mellea
 from mellea.stdlib.context import ChatContext

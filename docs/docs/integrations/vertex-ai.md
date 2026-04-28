@@ -63,6 +63,8 @@ deployed. Common values are `us-central1`, `europe-west4`, and `asia-east1`.
 Use `LiteLLMBackend` with a `vertex_ai/` or `vertex_ai_beta/` model string:
 
 ```python
+# Requires: mellea[litellm], google-cloud-aiplatform
+# Returns: ModelOutputThunk
 import os
 
 from mellea import MelleaSession
@@ -117,6 +119,8 @@ Both `chat()` and `instruct()` work with `LiteLLMBackend` in the same way as
 other backends:
 
 ```python
+# Requires: mellea[litellm], google-cloud-aiplatform
+# Returns: ModelOutputThunk
 import os
 
 from mellea import MelleaSession
@@ -142,6 +146,8 @@ print(str(reply))
 Use the `format` parameter with a Pydantic model to get typed responses:
 
 ```python
+# Requires: mellea[litellm], google-cloud-aiplatform, pydantic
+# Returns: str
 import os
 
 from pydantic import BaseModel
@@ -178,6 +184,8 @@ print(parsed.points)
 Pass generation parameters with `ModelOption`:
 
 ```python
+# Requires: mellea[litellm], google-cloud-aiplatform
+# Returns: MelleaSession
 import os
 
 from mellea import MelleaSession

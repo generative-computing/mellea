@@ -64,6 +64,7 @@
               "how-to/use-context-and-sessions",
               "how-to/enforce-structured-output",
               "how-to/write-custom-verifiers",
+              "how-to/evaluate-with-llm-as-a-judge",
               "how-to/configure-model-options",
               "how-to/use-images-and-vision",
               "how-to/build-a-rag-pipeline",
@@ -98,18 +99,12 @@
             ]
           },
           {
-            "group": "Evaluation and Observability",
+            "group": "Observability",
             "pages": [
-              "evaluation-and-observability/evaluate-with-llm-as-a-judge",
-              {
-                "group": "Telemetry",
-                "pages": [
-                  "evaluation-and-observability/telemetry",
-                  "evaluation-and-observability/tracing",
-                  "evaluation-and-observability/metrics",
-                  "evaluation-and-observability/logging"
-                ]
-              }
+              "observability/telemetry",
+              "observability/tracing",
+              "observability/metrics",
+              "observability/logging"
             ]
           },
           {
@@ -343,40 +338,11 @@
               {
                 "group": "telemetry",
                 "pages": [
+                  "api/mellea/telemetry/context",
                   "api/mellea/telemetry/logging",
                   "api/mellea/telemetry/metrics",
                   "api/mellea/telemetry/telemetry",
                   "api/mellea/telemetry/tracing"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "cli",
-            "pages": [
-              "api/cli/m",
-              {
-                "group": "alora",
-                "pages": [
-                  "api/cli/alora/commands",
-                  "api/cli/alora/intrinsic_uploader",
-                  "api/cli/alora/readme_generator",
-                  "api/cli/alora/train",
-                  "api/cli/alora/upload"
-                ]
-              },
-              {
-                "group": "decompose",
-                "pages": [
-                  "api/cli/decompose/decompose"
-                ]
-              },
-              {
-                "group": "eval",
-                "pages": [
-                  "api/cli/eval/commands",
-                  "api/cli/eval/eval",
-                  "api/cli/eval/runner"
                 ]
               }
             ]
@@ -547,7 +513,7 @@
     },
     {
       "source": "/dev/spans",
-      "destination": "/evaluation-and-observability/tracing"
+      "destination": "/observability/tracing"
     },
     {
       "source": "/dev/tool-calling",
@@ -636,6 +602,26 @@
     {
       "source": "/guide/backends-and-configuration",
       "destination": "/how-to/backends-and-configuration"
+    },
+    {
+      "source": "/evaluation-and-observability/evaluate-with-llm-as-a-judge",
+      "destination": "/how-to/evaluate-with-llm-as-a-judge"
+    },
+    {
+      "source": "/evaluation-and-observability/telemetry",
+      "destination": "/observability/telemetry"
+    },
+    {
+      "source": "/evaluation-and-observability/tracing",
+      "destination": "/observability/tracing"
+    },
+    {
+      "source": "/evaluation-and-observability/metrics",
+      "destination": "/observability/metrics"
+    },
+    {
+      "source": "/evaluation-and-observability/logging",
+      "destination": "/observability/logging"
     },
     {
       "source": "/guide/act-and-aact",

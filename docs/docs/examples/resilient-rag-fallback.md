@@ -58,6 +58,8 @@ Final answer
 ### Inline script dependencies
 
 ```python
+# Requires: faiss-cpu, sentence-transformers, mellea
+# Returns: N/A
 # pytest: skip_always
 # /// script
 # requires-python = ">=3.12"
@@ -77,6 +79,8 @@ execution. No manual `pip install` is needed.
 ### Imports and document corpus
 
 ```python
+# Requires: faiss-cpu, sentence-transformers, mellea
+# Returns: list[str]
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 
@@ -110,6 +114,8 @@ are L2-normalised, as `sentence-transformers` produces by default.
 ### Index creation and querying
 
 ```python
+# Requires: faiss-cpu, sentence-transformers
+# Returns: IndexFlatIP
 def create_index(model, ds: list[str]) -> IndexFlatIP:
     print("running encoding... ")
     embeddings = model.encode(ds)
@@ -135,6 +141,8 @@ overwhelming the context window.
 ### The relevance filter
 
 ```python
+# Requires: mellea
+# Returns: bool
 @generative
 def is_answer_relevant_to_question(answer: str, question: str) -> bool:
     """For the given question, determine whether the answer is relevant or not."""
@@ -213,6 +221,8 @@ prompt correctly and trace each component independently.
 ### Full file
 
 ```python
+# Requires: faiss-cpu, sentence-transformers, mellea
+# Returns: N/A
 # pytest: skip_always
 # /// script
 # requires-python = ">=3.12"

@@ -33,6 +33,8 @@ Obtain these from the IBM Cloud console:
 The quickest path is [`start_session()`](../reference/glossary#melleasession) with `backend_name="watsonx"`:
 
 ```python
+# Requires: mellea[watsonx]
+# Returns: str
 from mellea import start_session
 
 m = start_session(
@@ -47,6 +49,8 @@ print(str(result))
 Or construct the [`Backend`](../reference/glossary#backend) directly for full control:
 
 ```python
+# Requires: mellea[watsonx]
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.watsonx import WatsonxAIBackend
@@ -60,6 +64,8 @@ Credentials are read from the environment variables by default. Pass them explic
 if needed:
 
 ```python
+# Requires: mellea[watsonx]
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.watsonx import WatsonxAIBackend
 

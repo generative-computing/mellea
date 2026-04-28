@@ -105,7 +105,7 @@ sandbox = [
 backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
-    "cpex>=0.1.0.dev10; python_version >= '3.11'",
+    "cpex>=0.1.0.dev12; python_version >= '3.11'",
     "grpcio>=1.78.0",
 ]
 
@@ -343,6 +343,7 @@ markers = [
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
     "litellm: Tests requiring LiteLLM backend",
     "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
+    "vllm: Tests requiring vLLM backend (local, GPU required)",
 
     # Capability markers
     "qualitative: Non-deterministic quality tests",

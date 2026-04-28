@@ -20,20 +20,22 @@ _MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
 
 @pytest.fixture(scope="function")
 def backend(gh_run: int):
-    """Shared OpenAI backend configured for Ollama."""
-    if gh_run == 1:
-        # LiteLLM prepends 127.0.0.1 with a `/` which causes issues.
-        url = os.environ.get("OLLAMA_HOST", None)
-        if url is None:
-            url = "http://localhost:11434"
+    """Shared litellm backend configured for Ollama."""
+    host_env = os.environ.get("OLLAMA_HOST")
+    if host_env:
+        if ":" in host_env:
+            url = f"http://{host_env}"
         else:
-            url = url.replace("127.0.0.1", "http://localhost")
-
-        return LiteLLMBackend(
-            model_id=_MODEL_ID, base_url=url, model_options={"api_base": url}
-        )
+            port = os.environ.get("OLLAMA_PORT", "11434")
+            url = f"http://{host_env}:{port}"
+        # LiteLLM prepends 127.0.0.1 with a `/` which causes issues.
+        url = url.replace("http://127.0.0.1", "http://localhost")
     else:
-        return LiteLLMBackend(model_id=_MODEL_ID)
+        url = "http://localhost:11434"
+
+    return LiteLLMBackend(
+        model_id=_MODEL_ID, base_url=url, model_options={"api_base": url}
+    )
 
 
 @pytest.fixture(scope="function")
@@ -197,9 +199,9 @@ async def test_async_parallel_requests(session):
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
-    assert mot1.streaming is True
-    assert mot1.ttfb_ms is not None
-    assert mot1.ttfb_ms > 0
+    assert mot1.generation.streaming is True
+    assert mot1.generation.ttfb_ms is not None
+    assert mot1.generation.ttfb_ms > 0
 
 
 async def test_async_avalue(session):
@@ -211,14 +213,14 @@ async def test_async_avalue(session):
     assert m1_final_val == mot1.value
 
     # Verify telemetry fields are populated
-    assert mot1.usage is not None
-    assert mot1.usage["prompt_tokens"] >= 0
-    assert mot1.usage["completion_tokens"] > 0
-    assert mot1.usage["total_tokens"] > 0
-    assert isinstance(mot1.model, str)
-    assert mot1.provider == "litellm"
-    assert mot1.streaming is False
-    assert mot1.ttfb_ms is None
+    assert mot1.generation.usage is not None
+    assert mot1.generation.usage["prompt_tokens"] >= 0
+    assert mot1.generation.usage["completion_tokens"] > 0
+    assert mot1.generation.usage["total_tokens"] > 0
+    assert isinstance(mot1.generation.model, str)
+    assert mot1.generation.provider == "litellm"
+    assert mot1.generation.streaming is False
+    assert mot1.generation.ttfb_ms is None
 
 
 if __name__ == "__main__":

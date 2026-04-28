@@ -17,6 +17,8 @@ The `@tool` decorator turns a regular Python function into a tool the LLM can ca
 Mellea uses the function's docstring and type hints to build the tool schema:
 
 ```python
+# Requires: mellea
+# Returns: dict
 from mellea.backends import tool
 
 @tool
@@ -33,6 +35,8 @@ def get_weather(location: str, days: int = 1) -> dict:
 Use `@tool(name="...")` to override the tool name as it appears to the model:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea.backends import tool
 
 @tool(name="calculator")
@@ -55,6 +59,8 @@ weather = get_weather.run("Boston", days=3)
 You can also construct a tool from any callable manually:
 
 ```python
+# Requires: mellea
+# Returns: MelleaTool
 from mellea.backends.tools import MelleaTool
 
 def double(x: int) -> int:
@@ -69,6 +75,8 @@ my_tool = MelleaTool.from_callable(double)
 Pass tools via `ModelOption.TOOLS`. The model can then choose to call them:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.backends import ModelOption, tool
 
@@ -97,6 +105,8 @@ Use the `uses_tool` requirement to enforce that the model actually calls a speci
 tool:
 
 ```python
+# Requires: mellea
+# Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
@@ -127,6 +137,8 @@ print(exec_result)
 generates for a tool call:
 
 ```python
+# Requires: mellea
+# Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
@@ -158,6 +170,8 @@ Import tools directly from LangChain or smolagents. Install the required
 packages first: `uv pip install langchain-community ddgs`.
 
 ```python
+# Requires: langchain-community
+# Returns: MelleaTool
 from langchain_community.tools import DuckDuckGoSearchResults
 from mellea.backends.tools import MelleaTool
 
@@ -172,6 +186,8 @@ search_tool = MelleaTool.from_langchain(DuckDuckGoSearchResults(output_format="l
 tools until the goal is met or a step budget is reached:
 
 ```python
+# Requires: mellea, langchain-community
+# Returns: str
 import asyncio
 from mellea import start_session
 from mellea.backends.tools import MelleaTool
@@ -198,6 +214,8 @@ asyncio.run(main())
 `react()` can return a structured Pydantic object by passing a `format` parameter:
 
 ```python
+# Requires: mellea, langchain-community, pydantic
+# Returns: Email
 import asyncio
 import pydantic
 from mellea import start_session
@@ -241,6 +259,8 @@ asyncio.run(main())
 Mellea includes a built-in Python code interpreter tool:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea.stdlib.tools import code_interpreter
 
 result = code_interpreter("print(1 + 1)")

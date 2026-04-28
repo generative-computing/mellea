@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
-from mellea.core.base import ModelOutputThunk
+from mellea.core.base import GenerationMetadata, ModelOutputThunk
 from mellea.plugins.hooks.generation import (
     GenerationErrorPayload,
     GenerationPostCallPayload,
@@ -41,9 +41,7 @@ def token_plugin():
 def _make_token_payload(usage=None, model="test-model", provider="test-provider"):
     """Create a GenerationPostCallPayload with a ModelOutputThunk."""
     mot = ModelOutputThunk(value="hello")
-    mot.usage = usage
-    mot.model = model
-    mot.provider = provider
+    mot.generation = GenerationMetadata(usage=usage, model=model, provider=provider)
     return GenerationPostCallPayload(model_output=mot)
 
 
@@ -118,10 +116,9 @@ def _make_latency_payload(
 ):
     """Create a GenerationPostCallPayload for latency tests."""
     mot = ModelOutputThunk(value="hello")
-    mot.model = model
-    mot.provider = provider
-    mot.ttfb_ms = ttfb_ms
-    mot.streaming = streaming
+    mot.generation = GenerationMetadata(
+        model=model, provider=provider, ttfb_ms=ttfb_ms, streaming=streaming
+    )
     return GenerationPostCallPayload(model_output=mot, latency_ms=latency_ms)
 
 
@@ -208,8 +205,7 @@ def error_plugin():
 def _make_error_payload(exc, model="test-model", provider="test-provider"):
     """Create a GenerationErrorPayload wrapping the given exception."""
     mot = ModelOutputThunk(value="")
-    mot.model = model
-    mot.provider = provider
+    mot.generation = GenerationMetadata(model=model, provider=provider)
     return GenerationErrorPayload(exception=exc, model_output=mot)
 
 
@@ -290,9 +286,7 @@ def cost_plugin():
 def _make_cost_payload(usage=None, model="test-model", provider="test-provider"):
     """Create a GenerationPostCallPayload for cost tests."""
     mot = ModelOutputThunk(value="hello")
-    mot.usage = usage
-    mot.model = model
-    mot.provider = provider
+    mot.generation = GenerationMetadata(usage=usage, model=model, provider=provider)
     return GenerationPostCallPayload(model_output=mot)
 
 
@@ -312,10 +306,46 @@ async def test_cost_plugin_records_cost_for_known_model(cost_plugin):
         await cost_plugin.record_cost_metrics(payload, {})
 
         mock_cost.assert_called_once_with(
-            model="test-model", input_tokens=100, output_tokens=50
+            model="test-model",
+            input_tokens=100,
+            output_tokens=50,
+            cached_tokens=0,
+            cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
             cost=0.0042, model="test-model", provider="test-provider"
+        )
+
+
+@pytest.mark.asyncio
+async def test_cost_plugin_cache_tokens_forwarded(cost_plugin):
+    """Cache token fields are extracted and forwarded to compute_cost correctly.
+
+    Simulates LiteLLM-normalised Anthropic usage where prompt_tokens already
+    includes cache_creation and cache_read tokens (40 base + 50 read + 10 write = 100).
+    """
+    payload = _make_cost_payload(
+        usage={
+            "prompt_tokens": 100,  # LiteLLM-normalised: 40 base + 50 cache_read + 10 cache_creation
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 50},
+            "cache_creation_input_tokens": 10,
+        }
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=0.005) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost"),
+    ):
+        await cost_plugin.record_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="test-model",
+            input_tokens=40,  # prompt_tokens (100) - cached_tokens (50) - cache_creation (10)
+            output_tokens=20,
+            cached_tokens=50,
+            cache_creation_tokens=10,
         )
 
 
@@ -337,7 +367,7 @@ async def test_cost_plugin_skips_unknown_model(cost_plugin):
 
 @pytest.mark.asyncio
 async def test_cost_plugin_skips_none_usage(cost_plugin):
-    """Plugin does not call record_cost when mot.usage is None."""
+    """Plugin does not call record_cost when mot.generation.usage is None."""
     payload = _make_cost_payload(usage=None)
 
     with (
@@ -366,7 +396,11 @@ async def test_cost_plugin_unknown_model_provider_fallback(cost_plugin):
         await cost_plugin.record_cost_metrics(payload, {})
 
         mock_cost.assert_called_once_with(
-            model="unknown", input_tokens=10, output_tokens=5
+            model="unknown",
+            input_tokens=10,
+            output_tokens=5,
+            cached_tokens=0,
+            cache_creation_tokens=0,
         )
         mock_record.assert_called_once_with(
             cost=0.001, model="unknown", provider="unknown"

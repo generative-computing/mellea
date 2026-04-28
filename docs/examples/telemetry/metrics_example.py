@@ -103,10 +103,12 @@ def main():
         print(f"Email: {str(email)[:100]}...")
 
         # Token usage is available on the result from instruct()
-        if email.usage:
-            print(f"  → Prompt tokens: {email.usage['prompt_tokens']}")
-            print(f"  → Completion tokens: {email.usage['completion_tokens']}")
-            print(f"  → Total tokens: {email.usage['total_tokens']}")
+        if email.generation.usage:
+            print(f"  → Prompt tokens: {email.generation.usage['prompt_tokens']}")
+            print(
+                f"  → Completion tokens: {email.generation.usage['completion_tokens']}"
+            )
+            print(f"  → Total tokens: {email.generation.usage['total_tokens']}")
 
         # Example 3: Multiple operations
         print("\n3. Multiple operations...")
@@ -126,8 +128,8 @@ def main():
             model_options={ModelOption.STREAM: True},
         )
         print(f"Response: {str(streamed)[:100]}...")
-        if streamed.streaming and streamed.ttfb_ms is not None:
-            print(f"  -> Time to first token: {streamed.ttfb_ms:.1f} ms")
+        if streamed.generation.streaming and streamed.generation.ttfb_ms is not None:
+            print(f"  -> Time to first token: {streamed.generation.ttfb_ms:.1f} ms")
 
     print("\n" + "=" * 60)
     print("Example complete! Metrics recorded.")

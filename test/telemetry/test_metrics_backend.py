@@ -3,7 +3,6 @@
 Tests that backends correctly record token metrics through the telemetry system.
 """
 
-import asyncio
 import os
 
 import pytest
@@ -11,6 +10,12 @@ import pytest
 from mellea.backends.model_ids import (
     IBM_GRANITE_4_HYBRID_MICRO,
     IBM_GRANITE_4_HYBRID_SMALL,
+)
+from mellea.plugins.manager import (
+    disable_background_collection,
+    discard_background_tasks,
+    drain_background_tasks,
+    enable_background_collection,
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
@@ -41,6 +46,8 @@ def metric_reader():
 @pytest.fixture
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
+    enable_background_collection()
+    discard_background_tasks()
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     # Force reload of metrics module to pick up env vars
     import importlib
@@ -52,6 +59,7 @@ def enable_metrics(monkeypatch):
     # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
     importlib.reload(mellea.telemetry.metrics)
+    disable_background_collection()
 
 
 @pytest.fixture(scope="module")
@@ -169,8 +177,7 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     await mot.avalue()
 
     # Force metrics export and collection
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -235,8 +242,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         await mot.astream()
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -290,8 +296,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     )
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -354,8 +359,7 @@ async def test_litellm_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -413,8 +417,7 @@ async def test_huggingface_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -470,8 +473,7 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
     with pytest.raises(Exception):
         await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin task completes
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -508,8 +510,7 @@ async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader
         action=Instruction("Say hello"), context=ctx, backend=backend, requirements=None
     )
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 

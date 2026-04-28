@@ -749,7 +749,7 @@ toml = [
 
 [[package]]
 name = "cpex"
-version = "0.1.0.dev11"
+version = "0.1.0.dev12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -757,15 +757,16 @@ dependencies = [
     { name = "jinja2" },
     { name = "mcp" },
     { name = "orjson" },
+    { name = "packaging" },
     { name = "prometheus-client" },
     { name = "prometheus-fastapi-instrumentator" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/84/4c/c462d23f98b7b388dd6642d71702f5f47d120c0df471a22add22ad99fe69/cpex-0.1.0.dev11.tar.gz", hash = "sha256:c7c30650fd49fdae7ec67f46c1d57486db090ae79ec39a6ed2f8ed990b78f6e5", size = 754645, upload-time = "2026-04-13T21:02:26.901Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0d/f6/d5a194b338b3d55b1b9b8619baafa504ae8146168cf4b91fcefa95811a16/cpex-0.1.0.dev12.tar.gz", hash = "sha256:9fb08e0fa27236747c26c841260951a83252029c0e55a7550c65a060473f200c", size = 3475629, upload-time = "2026-04-23T17:34:14.434Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/5e/d051f25b6bb2241f61f710ef0a127cbdd4b8ca2612d8b777d4164347e1f6/cpex-0.1.0.dev11-py3-none-any.whl", hash = "sha256:c34d23f16191744e98415cdf850d981e377399a2d802abda565c276f217ae380", size = 167516, upload-time = "2026-04-13T21:02:25.687Z" },
+    { url = "https://files.pythonhosted.org/packages/39/ed/f70537bd8adbf1f847a703e02c3abd2cdc53dfa87e44977aa25dd163774b/cpex-0.1.0.dev12-py3-none-any.whl", hash = "sha256:5c10688b6f7ca8c3673fce9dfd94d0b3a348e0e63566546ced5068574a38403e", size = 236654, upload-time = "2026-04-23T17:34:12.592Z" },
 ]
 
 [[package]]
@@ -3334,7 +3335,7 @@ typecheck = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "boto3", marker = "extra == 'litellm'" },
-    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'hooks'", specifier = ">=0.1.0.dev10" },
+    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'hooks'", specifier = ">=0.1.0.dev12" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },
