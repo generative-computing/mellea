@@ -290,7 +290,7 @@ class Requirement(Component[str]):
 
         The default implementation returns ``PartialValidationResult("unknown")``
         — meaning insufficient data to decide yet. Subclasses override this method
-        to inspect the accumulated chunk and return ``"pass"`` or ``"fail"`` early.
+        to inspect the current chunk and return ``"pass"`` or ``"fail"`` early.
 
         Implementations may accumulate state on ``self`` across calls within a
         single attempt. The orchestrator clones the requirement (``copy(req)``)
@@ -302,10 +302,23 @@ class Requirement(Component[str]):
         ``self._buffer.append(chunk)``), or override ``__copy__`` for proper
         isolation.
 
+        Implementations must not call ``mot.astream()`` or otherwise read the
+        underlying stream; the orchestrator is the single consumer of the MOT
+        stream (see ``ModelOutputThunk.astream``). Requirements that need access
+        to the text seen so far should accumulate it themselves from the
+        ``chunk`` values they receive.
+
         Args:
-            chunk: The accumulated model output so far (not just the latest token).
+            chunk: A single complete semantic chunk produced by the chunking
+                strategy (e.g. one sentence for ``SentenceChunker``). This is
+                the delta since the previous ``stream_validate`` call for this
+                attempt, not the accumulated output. Requirements that need
+                earlier context should retain it on ``self`` across calls.
             backend: The inference backend, available for backend-assisted checks.
-            ctx: The current generation context.
+            ctx: The current generation context. During streaming the MOT is
+                not yet computed, so ``ctx`` does not contain the generated
+                output; use ``chunk`` (and any state accumulated on ``self``)
+                instead.
 
         Returns:
             PartialValidationResult: ``"unknown"`` by default. Subclasses may return
