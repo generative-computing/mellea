@@ -18,7 +18,7 @@ fast and reliable.
 
 ## Three levels of assertion
 
-Every test for a `@generative` function falls into one of three levels:
+Every test for a `@generative` function falls into one of four levels:
 
 | Level | What you assert | Deterministic? |
 | ----- | --------------- | -------------- |
@@ -27,7 +27,7 @@ Every test for a `@generative` function falls into one of three levels:
 | **Qualitative check** | `assert result is True` | No — depends on the model and prompt |
 | **Semantic evaluation** |	Judge model scores output against reference responses |	No — run separately, not a pytest assertion |
 
-*For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component](#the-unit_test_eval-component) at the end of this page.*
+*For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component for Generative Unit Tests](#the-unit_test_eval-component-for-Generative-Unit-Tests) at the end of this page.*
 
 Type and structural checks run in CI. Qualitative checks carry
 `@pytest.mark.qualitative` and are skipped in CI when `CICD=1` is set.
@@ -332,27 +332,28 @@ Each entry in the JSON array defines one test:
 ### Loading and running evaluations
 
 ```python
-from mellea import MelleaSession, start_session
+from mellea import start_session
+from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
-# Load one TestBasedEval per test definition in the file.
 test_evals = TestBasedEval.from_json_file("tests/eval_data/email_writer.json")
 
-# default backend model which can be changed as needed (two different models can be used)
-judge_session = start_session(backend_name="ollama", model_id="granite4:3b")
-generation_session = start_session(backend_name="ollama", model_id="granite4:3b")
+judge_session = start_session(backend_name="ollama", model_id="granite4:micro")
+generation_session = start_session(backend_name="ollama", model_id="granite4:micro")
 
 for eval_case in test_evals:
     for idx, input_text in enumerate(eval_case.inputs):
-        # Generate the prediction from the system under test.  
         prediction = generation_session.act(
             SimpleComponent(instruction=input_text)
-        )
+        ).value
 
         targets = eval_case.targets[idx] if eval_case.targets else []
         eval_case.set_judge_context(input_text, prediction, targets)
 
-        verdict = judge_session.instruct(eval_case)
+        verdict = judge_session.act(eval_case)
+        # Note: verdict.value is the raw JSON string returned by the judge — {"score": 0|1, 
+        # "justification": "..."}. Score 0 means the guidelines were violated; score 1 means the 
+        # output is well aligned. Parse it to use the score programmatically:
         print(f"{eval_case.name}: {verdict.value}")
 ```
 
