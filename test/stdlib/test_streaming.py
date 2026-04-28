@@ -115,10 +115,15 @@ class AlwaysUnknownReq(Requirement):
 
 
 class FailAfterWordsReq(Requirement):
-    """Returns 'fail' once the accumulated text reaches *threshold* words."""
+    """Returns 'fail' once the cumulative word count reaches *threshold*.
+
+    Each call to ``stream_validate`` receives a single chunk (delta) from the
+    chunking strategy; the running total is maintained on the instance.
+    """
 
     def __init__(self, threshold: int) -> None:
         self._threshold = threshold
+        self._word_count = 0
 
     def format_for_llm(self) -> str:
         return f"fail after {self._threshold} words"
@@ -126,7 +131,8 @@ class FailAfterWordsReq(Requirement):
     async def stream_validate(
         self, chunk: str, *, backend: Any, ctx: Any
     ) -> PartialValidationResult:
-        if len(chunk.split()) >= self._threshold:
+        self._word_count += len(chunk.split())
+        if self._word_count >= self._threshold:
             return PartialValidationResult("fail", reason="too many words")
         return PartialValidationResult("unknown")
 
@@ -365,6 +371,76 @@ async def test_astream_yields_individual_chunks() -> None:
         assert chunk.endswith(".")
     # Chunks don't include inter-sentence spaces; joined with a space they appear in full_text
     assert " ".join(chunks) in result.full_text
+
+
+@pytest.mark.asyncio
+async def test_stream_validate_receives_individual_chunks() -> None:
+    """stream_validate is called once per chunk with the chunk itself, not accumulated text."""
+
+    class ChunkRecordingReq(Requirement):
+        def __init__(self) -> None:
+            self.seen_chunks: list[str] = []
+
+        def __copy__(self) -> "ChunkRecordingReq":
+            clone = ChunkRecordingReq()
+            clone.seen_chunks = []
+            return clone
+
+        def format_for_llm(self) -> str:
+            return "chunk recorder"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            self.seen_chunks.append(chunk)
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    response = "First sentence. Second sentence. Third sentence. "
+    backend = StreamingMockBackend(response, token_size=4)
+    req = ChunkRecordingReq()
+
+    # Capture the cloned requirement used by the orchestrator via a side channel.
+    captured: list[ChunkRecordingReq] = []
+    original_copy = ChunkRecordingReq.__copy__
+
+    def _capturing_copy(self: ChunkRecordingReq) -> ChunkRecordingReq:
+        clone = original_copy(self)
+        captured.append(clone)
+        return clone
+
+    ChunkRecordingReq.__copy__ = _capturing_copy  # type: ignore[method-assign]
+    try:
+        result = await stream_with_chunking(
+            _action(),
+            backend,
+            _ctx(),
+            quick_check_requirements=[req],
+            chunking="sentence",
+        )
+        await result.acomplete()
+    finally:
+        ChunkRecordingReq.__copy__ = original_copy  # type: ignore[method-assign]
+
+    assert len(captured) == 1
+    seen = captured[0].seen_chunks
+    # Three complete sentences → three separate stream_validate calls.
+    assert len(seen) == 3
+    # Each chunk is one sentence, not a prefix of accumulated text.
+    for chunk in seen:
+        assert chunk.endswith(".")
+    # Lengths must not be monotonically growing (which would indicate accumulated text).
+    # With per-chunk semantics, each chunk is roughly the same length as one sentence.
+    assert not all(len(seen[i]) < len(seen[i + 1]) for i in range(len(seen) - 1))
 
 
 @pytest.mark.asyncio

@@ -154,8 +154,9 @@ async def _orchestrate_streaming(
             accumulated += delta
             chunks = chunking.split(accumulated)
             new_chunks = chunks[prev_chunk_count:]
+            prev_chunk_count = len(chunks)
 
-            if new_chunks:
+            for c in new_chunks:
                 active = [
                     (i, req)
                     for i, req in enumerate(cloned_reqs)
@@ -165,9 +166,7 @@ async def _orchestrate_streaming(
                     pvrs: list[PartialValidationResult] = list(
                         await asyncio.gather(
                             *[
-                                req.stream_validate(
-                                    accumulated, backend=val_backend, ctx=ctx
-                                )
+                                req.stream_validate(c, backend=val_backend, ctx=ctx)
                                 for _, req in active
                             ]
                         )
@@ -181,13 +180,12 @@ async def _orchestrate_streaming(
                     early_exit = True
                     result.completed = False
                     await mot.cancel_generation()
-                    for c in new_chunks:
-                        await result._chunk_queue.put(c)
                     break
 
-                for c in new_chunks:
-                    await result._chunk_queue.put(c)
-                prev_chunk_count = len(chunks)
+                await result._chunk_queue.put(c)
+
+            if early_exit:
+                break
 
         result.full_text = accumulated
 
@@ -225,20 +223,29 @@ async def stream_with_chunking(
     :meth:`~mellea.core.requirement.Requirement.stream_validate` on each new
     chunk in parallel across all requirements.
 
-    If any requirement returns ``"fail"`` during streaming validation, the
-    generation is cancelled immediately (via
+    For each new complete chunk produced by the chunking strategy,
+    ``stream_validate`` is called once per active requirement (in parallel
+    via :func:`asyncio.gather`), receiving that single chunk.  Multiple
+    chunks produced from one ``astream()`` iteration are validated
+    sequentially in order, so early exit on a ``"fail"`` result prevents
+    later chunks in the same batch from being validated or emitted to the
+    consumer.
+
+    If any requirement returns ``"fail"``, the generation is cancelled
+    immediately (via
     :meth:`~mellea.core.base.ModelOutputThunk.cancel_generation`) and
-    :attr:`StreamChunkingResult.completed` is set to ``False``.
+    :attr:`StreamChunkingResult.completed` is set to ``False``.  The
+    failing chunk is not emitted to the consumer; use
+    :attr:`StreamChunkingResult.streaming_failures` to inspect what failed.
 
     After the stream ends (naturally or via early exit), ``validate()`` is
     called on all requirements that did not return ``"fail"``.  Requirements
     are cloned (``copy(req)``) before use so originals are never mutated.
 
-    ``stream_validate`` receives the *accumulated* model output so far, not
-    just the current chunk.  The chunking strategy determines *when* it is
-    called (at chunk boundaries).  Requirements that want delta-only
-    processing track ``self._seen_len`` and slice
-    ``accumulated[self._seen_len:]``.
+    Requirements that need context beyond the current chunk should
+    accumulate it themselves across ``stream_validate`` calls (e.g.
+    ``self._seen = self._seen + chunk``).  They must not read ``mot.astream()``
+    directly — this orchestrator is the single consumer of the MOT stream.
 
     Note:
         v1 retry is simple re-invocation of this function.  Plugin hooks
