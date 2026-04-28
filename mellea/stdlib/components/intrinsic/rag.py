@@ -40,7 +40,7 @@ def check_answerability(
     Returns:
         A string value of either "answerable" or "unanswerable"
     """
-    question, context = _resolve_question(question, context)
+    question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "answerability",
         context.add(Message("user", question, documents=_coerce_documents(documents))),
@@ -67,7 +67,7 @@ def rewrite_question(
     Returns:
         Rewritten version of ``question``.
     """
-    question, context = _resolve_question(question, context)
+    question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
     )
@@ -100,7 +100,7 @@ def clarify_query(
         Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed.
     """
-    question, context = _resolve_question(question, context)
+    question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_clarification",
         context.add(Message("user", question, documents=_coerce_documents(documents))),
@@ -182,7 +182,7 @@ def check_context_relevance(
         - "irrelevant"
         - "partially relevant"
     """
-    question, context = _resolve_question(question, context)
+    question, context = _resolve_question(question, context, backend)
     document = _coerce_document(document)
     result_json = call_intrinsic(
         "context_relevance",

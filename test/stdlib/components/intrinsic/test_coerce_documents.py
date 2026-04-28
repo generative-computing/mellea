@@ -137,6 +137,18 @@ class TestResolveQuestion:
         assert "Summarize the article" in text
         assert rewound.is_root_node  # type: ignore[union-attr]
 
+    def test_from_component_uses_backend_formatter(self):
+        from unittest.mock import MagicMock
+
+        ctx = ChatContext().add(Document("some document text"))
+        mock_backend = MagicMock()
+        mock_backend.formatter.print.return_value = "custom formatted"
+
+        text, rewound = _resolve_question(None, ctx, backend=mock_backend)
+        assert text == "custom formatted"
+        mock_backend.formatter.print.assert_called_once()
+        assert rewound.is_root_node  # type: ignore[union-attr]
+
 
 class TestResolveResponse:
     def test_explicit_string(self):

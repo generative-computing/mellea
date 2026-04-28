@@ -6,6 +6,7 @@ import warnings
 
 from ....backends import ModelOption
 from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
+from ....core import Backend
 from ....stdlib import functional as mfuncs
 from ...components import Document
 from ...context import ChatContext
@@ -49,7 +50,7 @@ def _coerce_document(document: str | Document) -> Document:
 
 
 def _resolve_question(
-    question: str | None, context: ChatContext
+    question: str | None, context: ChatContext, backend: Backend | None = None
 ) -> tuple[str, ChatContext]:
     """Return ``(question_text, context_to_use)``.
 
@@ -81,9 +82,13 @@ def _resolve_question(
             )
         text = model_input.value
     elif isinstance(model_input, Component):
-        from ....formatters import TemplateFormatter
+        formatter = getattr(backend, "formatter", None)
+        if formatter is not None:
+            text = formatter.print(model_input)
+        else:
+            from ....formatters import TemplateFormatter
 
-        text = TemplateFormatter(model_id="default").print(model_input)
+            text = TemplateFormatter(model_id="default").print(model_input)
     else:
         raise ValueError(
             f"question is None but last turn model_input is "
