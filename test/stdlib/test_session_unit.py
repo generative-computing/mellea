@@ -104,7 +104,7 @@ def test_resolve_context_both_raises():
 # --- start_backend ---
 
 
-@patch("mellea.stdlib.session.backend_name_to_class")
+@patch("mellea.stdlib.start_backend.backend_name_to_class")
 def test_start_backend_returns_context_and_backend(mock_bn2c: MagicMock):
     mock_backend_cls = MagicMock()
     mock_bn2c.return_value = mock_backend_cls
@@ -116,7 +116,7 @@ def test_start_backend_returns_context_and_backend(mock_bn2c: MagicMock):
     assert backend is mock_backend_cls.return_value
 
 
-@patch("mellea.stdlib.session.backend_name_to_class")
+@patch("mellea.stdlib.start_backend.backend_name_to_class")
 def test_start_backend_context_type_chat(mock_bn2c: MagicMock):
     mock_bn2c.return_value = MagicMock()
 
@@ -125,7 +125,7 @@ def test_start_backend_context_type_chat(mock_bn2c: MagicMock):
     assert isinstance(ctx, ChatContext)
 
 
-@patch("mellea.stdlib.session.backend_name_to_class")
+@patch("mellea.stdlib.start_backend.backend_name_to_class")
 def test_start_backend_explicit_ctx(mock_bn2c: MagicMock):
     mock_bn2c.return_value = MagicMock()
     explicit = ChatContext()

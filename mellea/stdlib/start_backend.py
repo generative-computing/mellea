@@ -20,6 +20,98 @@ if TYPE_CHECKING:
 CtxT = typing_extensions.TypeVar("CtxT", bound=Context, default=SimpleContext)
 
 
+def backend_name_to_class(name: str) -> Any:
+    """Resolves backend names to Backend classes.
+
+    Args:
+        name: Short backend name, e.g. ``"ollama"``, ``"hf"``, ``"openai"``,
+            ``"watsonx"``, or ``"litellm"``.
+
+    Returns:
+        The corresponding ``Backend`` class, or ``None`` if the name is unrecognised.
+
+    Raises:
+        ImportError: If the requested backend has optional dependencies that are
+            not installed (e.g. ``mellea[hf]``, ``mellea[watsonx]``, or
+            ``mellea[litellm]``).
+    """
+    if name == "ollama":
+        from ..backends.ollama import OllamaModelBackend
+
+        return OllamaModelBackend
+    elif name == "hf" or name == "huggingface":
+        try:
+            from mellea.backends.huggingface import LocalHFBackend
+
+            return LocalHFBackend
+        except ImportError as e:
+            raise ImportError(
+                "The 'hf' backend requires extra dependencies. "
+                "Please install them with: pip install 'mellea[hf]'"
+            ) from e
+    elif name == "openai":
+        from ..backends.openai import OpenAIBackend
+
+        return OpenAIBackend
+    elif name == "watsonx":
+        try:
+            from ..backends.watsonx import WatsonxAIBackend
+
+            return WatsonxAIBackend
+        except ImportError as e:
+            raise ImportError(
+                "The 'watsonx' backend requires extra dependencies. "
+                "Please install them with: pip install 'mellea[watsonx]'"
+            ) from e
+    elif name == "litellm":
+        try:
+            from ..backends.litellm import LiteLLMBackend
+
+            return LiteLLMBackend
+        except ImportError as e:
+            raise ImportError(
+                "The 'litellm' backend requires extra dependencies. "
+                "Please install them with: pip install 'mellea[litellm]'"
+            ) from e
+    else:
+        return None
+
+
+def _resolve_context(
+    ctx: Context | None, context_type: Literal["simple", "chat"] | None
+) -> Context:
+    """Resolve a ``Context`` from explicit instance and/or shorthand name.
+
+    Raises:
+        ValueError: If both ``ctx`` and ``context_type`` are provided.
+    """
+    if ctx is not None and context_type is not None:
+        raise ValueError("Cannot specify both 'ctx' and 'context_type'.")
+    if context_type == "chat":
+        return ChatContext()
+    if context_type == "simple":
+        return SimpleContext()
+    if ctx is not None:
+        return ctx
+    return SimpleContext()
+
+
+def _resolve_model_id_str(model_id: str | ModelIdentifier, backend_name: str) -> str:
+    """Resolve a model identifier to its string representation for a given backend."""
+    if isinstance(model_id, ModelIdentifier):
+        backend_to_attr = {
+            "ollama": "ollama_name",
+            "hf": "hf_model_name",
+            "huggingface": "hf_model_name",
+            "openai": "openai_name",
+            "watsonx": "watsonx_name",
+            "litellm": "hf_model_name",
+        }
+        attr = backend_to_attr.get(backend_name, "hf_model_name")
+        return getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
+    return str(model_id)
+
+
 # ---------------------------------------------------------------------------
 # Overloads: ollama
 # ---------------------------------------------------------------------------
@@ -255,9 +347,12 @@ def start_backend(
         ValueError: If both ``ctx`` and ``context_type`` are provided.
         Exception: If ``backend_name`` is not recognised.
     """
-    from .session import _resolve_backend_and_context
-
-    resolved_ctx, backend, _ = _resolve_backend_and_context(
-        backend_name, model_id, ctx, context_type, model_options, **backend_kwargs
-    )
+    resolved_ctx = _resolve_context(ctx, context_type)
+    backend_class = backend_name_to_class(backend_name)
+    if backend_class is None:
+        raise Exception(
+            f"Backend name {backend_name} unknown. Please see the docstring for "
+            "`mellea.stdlib.session.start_session` for a list of options."
+        )
+    backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
     return resolved_ctx, backend
