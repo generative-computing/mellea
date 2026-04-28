@@ -25,7 +25,7 @@ Every test for a `@generative` function falls into one of four levels:
 | **Type check** | `isinstance(result, bool)` | Yes — constrained decoding always returns the declared type |
 | **Structural check** | `result in ["positive", "negative"]` or field names present | Yes — schema enforcement is deterministic |
 | **Qualitative check** | `assert result is True` | No — depends on the model and prompt |
-| **Semantic evaluation** |	Judge model scores output against reference responses |	No — run separately, not a pytest assertion |
+| **Semantic evaluation** | Judge model scores output against reference responses | No — run separately, not a pytest assertion |
 
 *For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component for Generative Unit Tests](#the-unit_test_eval-component-for-generative-unit-tests) at the end of this page.*
 
@@ -306,15 +306,15 @@ def test_with_simple_validate_requirement(session):
 `mellea.stdlib.components.unit_test_eval` provides `TestBasedEval`, a
 `Component` that formats an LLM-as-a-judge evaluation task for generative unit testing. You load test cases
 from a JSON file and pass them to a judge session. This is useful for offline
-evaluation pipelines, 
-not for individual pytest assertions. 
+evaluation pipelines,
+not for individual pytest assertions.
 
-Given a task, you provide test cases that consist of evaluation instructions 
-and a set of examples, along with associated metadata. Each example, in conversational format, consists of an input 
-and (optional) target / reference response(s), which can be used to guide evaluation along with the evaluation instructions. 
-They can either be instantiated inline or in JSON format, with a separate JSON file per task. 
+Given a task, you provide test cases that consist of evaluation instructions
+and a set of examples, along with associated metadata. Each example, in conversational format, consists of an input
+and (optional) target / reference response(s), which can be used to guide evaluation along with the evaluation instructions.
+They can either be instantiated inline or in JSON format, with a separate JSON file per task.
 
-There are no limitations on the number of test examples per task, and each input can have multiple reference responses. 
+There are no limitations on the number of test examples per task, and each input can have multiple reference responses.
 The evaluation instructions apply to all the test cases in your task.
 
 ### JSON file format
@@ -379,11 +379,9 @@ for eval_case in test_evals:
 
 > **Note:** `TestBasedEval` calls the judge model once per input. For large
 > evaluation sets, consider batching or running evaluations asynchronously.
-
 > **CLI alternative:** The same evaluation can be run without writing Python:
 > `m eval run tests/eval_data/email_writer.json --backend ollama --model granite4:micro`
 > See `m eval run --help` for full options.
-
 
 ## CI strategy
 
