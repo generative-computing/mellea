@@ -474,6 +474,38 @@ class TestOptionalParameterRegression:
         assert validated["x"] == "hello"
         assert validated["y"] == "world"
 
+    def test_optional_basemodel_not_required(self):
+        """Test def f(email: Email | None = None) - Optional BaseModel param.
+
+        Confirms optional BaseModel params are absent from required, and that
+        validate_tool_arguments rejects a malformed nested dict in strict mode.
+        """
+
+        def send(email: Email | None = None) -> str:
+            """Send an email.
+
+            Args:
+                email: The email to send
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(send)
+        schema = tool.as_json_tool
+        params = schema["function"]["parameters"]
+
+        # email should NOT be required
+        assert "email" not in params.get("required", [])
+
+        # strict mode should reject a missing required nested field
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                tool,
+                {"email": {"to": "a@b.com"}},
+                strict=True,  # missing subject + body
+            )
+
     @pytest.mark.skip(
         reason="Nested model resolution not yet implemented. "
         "This test documents the expected behavior once recursive $ref resolution is added. "
