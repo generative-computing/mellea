@@ -35,18 +35,34 @@ pytestmark = pytest.mark.integration
 MODEL_ID = "ibm-granite/granite-4.0-micro"
 
 GOLDEN_TOKEN_IDS = {
+    # Pure numbers from query_rewrite corruptions
     "2023": [2366, 18],
-    "d.o.o": [67, 14778, 14778],
+    "650841823": [13655, 25496, 23848],
+    "409473852": [12378, 21505, 24571],
+    "914588298": [24579, 20691, 17690],
+    # Hyphenated numbers (DUNS) from query_rewrite corruptions
     "60-138-3818": [1399, 12, 10350, 12, 19162, 23],
+    "65-005-6716": [2397, 12, 8504, 12, 23403, 21],
+    # Text + dots/symbols from query_rewrite corruptions
+    "d.o.o": [67, 14778, 14778],
+    "D&B Score": [35, 49339, 18607],
+    "corp.net": [81827, 5181],
+    # Fiscal year compounds from context_relevance (financebench)
+    "FY2020": [82029, 2366, 15],
+    "FY2023": [82029, 2366, 18],
+    "Q3 2024": [48, 18, 220, 2366, 19],
+    "H1 2025": [39, 16, 220, 2366, 20],
+    # Text phrases with numbers from real RAG queries
+    "Broadcom in 2023": [69424, 884, 304, 220, 2366, 18],
+    "Maruti Enterprises in 2022": [12331, 32973, 67056, 304, 220, 2366, 17],
+    "spend in 2023": [2203, 408, 304, 220, 2366, 18],
+    "NAICS 541512": [7476, 19645, 220, 22058, 8358],
+    "IMAGINE d.o.o": [1829, 1929, 4069, 294, 14778, 14778],
+    # Standards and references
+    "ISO 9001:2015": [25141, 220, 7467, 16, 25, 679, 20],
+    "ref#2847": [1116, 2, 17058, 22],
+    # Baseline (matches across versions)
     "Hello world": [9906, 1917],
-    "relevant": [98673],
-    "irrelevant": [404, 98673],
-    "partially relevant": [4581, 34575, 9959],
-    "answerable": [9399, 481],
-    "unanswerable": [359, 9399, 481],
-    "CLEAR": [91449],
-    "faithful": [75710, 1285],
-    "unfaithful": [359, 75710, 1285],
 }
 
 
