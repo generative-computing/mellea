@@ -36,6 +36,11 @@ class StreamChunkingResult:
     Instances are created by :func:`stream_with_chunking`; do not instantiate
     directly.
 
+    Args:
+        mot: The :class:`~mellea.core.base.ModelOutputThunk` from the backend
+            generation call.
+        ctx: The generation context returned alongside the MOT.
+
     Attributes:
         completed: ``False`` if the stream exited early because a requirement
             returned ``"fail"`` during streaming; ``True`` otherwise.
