@@ -37,6 +37,7 @@ from ..helpers import (
     extract_model_tool_requests,
     get_current_event_loop,
     message_to_openai_message,
+    messages_to_docs,
     send_to_queue,
 )
 from ..stdlib.components import Message
@@ -322,6 +323,8 @@ class LiteLLMBackend(FormatterBackend):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([message_to_openai_message(m) for m in messages])
 
+        docs = messages_to_docs(messages)
+
         extra_params: dict[str, Any] = {}
         if _format is not None:
             extra_params["response_format"] = {
@@ -359,6 +362,7 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
+            extra_body={"documents": docs} if docs else None,
             reasoning_effort=thinking,  # type: ignore
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
             **extra_params,

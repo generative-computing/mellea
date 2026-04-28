@@ -460,6 +460,8 @@ class OpenAIBackend(FormatterBackend):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([message_to_openai_message(m) for m in messages])
 
+        docs = messages_to_docs(messages)
+
         extra_params: dict[str, Any] = {}
         if _format is not None:
             if self._server_type == _ServerType.OPENAI:
@@ -535,6 +537,7 @@ class OpenAIBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,  # type: ignore
             tools=formatted_tools if use_tools else None,  # type: ignore
+            extra_body={"documents": docs} if docs else None,
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **extra_params,
             **reasoning_params,  # type: ignore
