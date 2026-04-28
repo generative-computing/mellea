@@ -444,6 +444,124 @@ async def test_stream_validate_receives_individual_chunks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_trailing_fragment_is_flushed_to_consumer() -> None:
+    """Response without trailing whitespace: final sentence reaches astream() and stream_validate."""
+
+    class ChunkRecordingReq(Requirement):
+        def __init__(self) -> None:
+            self.seen_chunks: list[str] = []
+
+        def __copy__(self) -> "ChunkRecordingReq":
+            clone = ChunkRecordingReq()
+            clone.seen_chunks = []
+            return clone
+
+        def format_for_llm(self) -> str:
+            return "chunk recorder"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            self.seen_chunks.append(chunk)
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    # No trailing whitespace after the final sentence — SentenceChunker withholds it.
+    response = "First sentence. Second sentence."
+    backend = StreamingMockBackend(response, token_size=4)
+    req = ChunkRecordingReq()
+
+    captured: list[ChunkRecordingReq] = []
+    original_copy = ChunkRecordingReq.__copy__
+
+    def _capturing_copy(self: ChunkRecordingReq) -> ChunkRecordingReq:
+        clone = original_copy(self)
+        captured.append(clone)
+        return clone
+
+    ChunkRecordingReq.__copy__ = _capturing_copy  # type: ignore[method-assign]
+    try:
+        result = await stream_with_chunking(
+            _action(),
+            backend,
+            _ctx(),
+            quick_check_requirements=[req],
+            chunking="sentence",
+        )
+        yielded: list[str] = []
+        async for chunk in result.astream():
+            yielded.append(chunk)
+        await result.acomplete()
+    finally:
+        ChunkRecordingReq.__copy__ = original_copy  # type: ignore[method-assign]
+
+    # Both sentences reach the consumer, including the terminating one without trailing whitespace.
+    assert yielded == ["First sentence.", "Second sentence."]
+    # stream_validate was called on both — the flush path is not a shortcut.
+    assert captured[0].seen_chunks == ["First sentence.", "Second sentence."]
+    assert result.completed is True
+
+
+@pytest.mark.asyncio
+async def test_early_exit_on_trailing_fragment() -> None:
+    """A fail on the flushed fragment records a streaming failure and skips final validate()."""
+
+    class FailOnSecondSentence(Requirement):
+        def __init__(self) -> None:
+            self._count = 0
+
+        def format_for_llm(self) -> str:
+            return "fail on second sentence"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = chunk, backend, ctx
+            self._count += 1
+            if self._count >= 2:
+                return PartialValidationResult("fail", reason="second sentence hit")
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    response = "First sentence. Second sentence."
+    backend = StreamingMockBackend(response, token_size=4)
+    req = FailOnSecondSentence()
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+    )
+    yielded: list[str] = []
+    async for chunk in result.astream():
+        yielded.append(chunk)
+    await result.acomplete()
+
+    assert result.completed is False
+    assert len(result.streaming_failures) == 1
+    # First sentence was emitted; second (the flushed fragment) failed and wasn't emitted.
+    assert yielded == ["First sentence."]
+    # Early exit on fail skips final validate().
+    assert result.final_validations == []
+
+
+@pytest.mark.asyncio
 async def test_no_requirements_streams_without_validation() -> None:
     """quick_check_requirements=None → chunks produced, no validate() called."""
     response = "Chunk one. Chunk two. Chunk three. "

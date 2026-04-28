@@ -144,6 +144,35 @@ async def _orchestrate_streaming(
     failed_indices: set[int] = set()
     early_exit = False
 
+    async def _validate_and_emit(c: str) -> bool:
+        """Run stream_validate on chunk c across active requirements.
+
+        Returns True if a failure was recorded (caller should early-exit),
+        False otherwise (chunk was emitted to the consumer queue).
+        """
+        active = [
+            (i, req) for i, req in enumerate(cloned_reqs) if i not in failed_indices
+        ]
+        if active:
+            pvrs: list[PartialValidationResult] = list(
+                await asyncio.gather(
+                    *[
+                        req.stream_validate(c, backend=val_backend, ctx=ctx)
+                        for _, req in active
+                    ]
+                )
+            )
+            for (idx, req), pvr in zip(active, pvrs):
+                if pvr.success == "fail":
+                    failed_indices.add(idx)
+                    result.streaming_failures.append((req, pvr))
+
+        if failed_indices:
+            return True
+
+        await result._chunk_queue.put(c)
+        return False
+
     try:
         while not mot.is_computed():
             try:
@@ -157,35 +186,26 @@ async def _orchestrate_streaming(
             prev_chunk_count = len(chunks)
 
             for c in new_chunks:
-                active = [
-                    (i, req)
-                    for i, req in enumerate(cloned_reqs)
-                    if i not in failed_indices
-                ]
-                if active:
-                    pvrs: list[PartialValidationResult] = list(
-                        await asyncio.gather(
-                            *[
-                                req.stream_validate(c, backend=val_backend, ctx=ctx)
-                                for _, req in active
-                            ]
-                        )
-                    )
-                    for (idx, req), pvr in zip(active, pvrs):
-                        if pvr.success == "fail":
-                            failed_indices.add(idx)
-                            result.streaming_failures.append((req, pvr))
-
-                if failed_indices:
+                failed = await _validate_and_emit(c)
+                if failed:
                     early_exit = True
                     result.completed = False
                     await mot.cancel_generation()
                     break
 
-                await result._chunk_queue.put(c)
-
             if early_exit:
                 break
+
+        # Stream ended naturally: flush any withheld trailing fragment and
+        # run stream_validate on it. Skipped on early exit — the generation
+        # was cancelled, the trailing fragment is incomplete.
+        if not early_exit:
+            for c in chunking.flush(accumulated):
+                failed = await _validate_and_emit(c)
+                if failed:
+                    early_exit = True
+                    result.completed = False
+                    break
 
         result.full_text = accumulated
 
@@ -237,6 +257,12 @@ async def stream_with_chunking(
     :attr:`StreamChunkingResult.completed` is set to ``False``.  The
     failing chunk is not emitted to the consumer; use
     :attr:`StreamChunkingResult.streaming_failures` to inspect what failed.
+
+    When the stream ends naturally, any trailing fragment withheld by the
+    chunking strategy (see :meth:`~mellea.stdlib.chunking.ChunkingStrategy.flush`)
+    is released as a final chunk and run through ``stream_validate`` on the
+    same terms as the regular chunks.  On early exit, the trailing fragment
+    is discarded because the generation was cancelled mid-token.
 
     After the stream ends (naturally or via early exit), ``validate()`` is
     called on all requirements that did not return ``"fail"``.  Requirements

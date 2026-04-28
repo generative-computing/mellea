@@ -35,6 +35,27 @@ class ChunkingStrategy(ABC):
         """
         ...
 
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return any trailing fragment that ``split`` withheld.
+
+        Called once by the orchestrator after the stream has ended naturally
+        (not on early-exit cancellation).  Gives the chunker a chance to
+        release the final fragment that did not reach a terminator.
+
+        The default implementation returns an empty list — the trailing
+        fragment is discarded.  Built-in chunkers override this to return
+        the withheld fragment as a single-element list when non-empty.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            The trailing fragment as ``[fragment]`` if it should be treated
+            as a final chunk, or an empty list to discard it.
+        """
+        _ = accumulated_text
+        return []
+
 
 # Sentence boundary: sentence-ending punctuation, optionally followed by a closing
 # quote or paren, then whitespace.
@@ -94,6 +115,19 @@ class SentenceChunker(ChunkingStrategy):
 
         return chunks
 
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return the trailing sentence fragment (if any) as a final chunk."""
+        if not accumulated_text:
+            return []
+        remaining = accumulated_text
+        while True:
+            match = _SENTENCE_BOUNDARY.search(remaining)
+            if match is None:
+                break
+            remaining = remaining[match.end() :].lstrip()
+        trailing = remaining.strip()
+        return [trailing] if trailing else []
+
 
 class WordChunker(ChunkingStrategy):
     """Splits accumulated text on whitespace boundaries.
@@ -134,6 +168,18 @@ class WordChunker(ChunkingStrategy):
 
         return parts
 
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return the trailing word fragment (if any) as a final chunk."""
+        if not accumulated_text:
+            return []
+        if accumulated_text[-1].isspace():
+            return []
+        parts = _WHITESPACE.split(accumulated_text)
+        for part in reversed(parts):
+            if part:
+                return [part]
+        return []
+
 
 class ParagraphChunker(ChunkingStrategy):
     r"""Splits accumulated text on double-newline paragraph boundaries.
@@ -168,3 +214,13 @@ class ParagraphChunker(ChunkingStrategy):
 
         # _PARA_BOUNDARY.split on leading \n\n produces an empty first element.
         return [p for p in parts if p]
+
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return the trailing paragraph fragment (if any) as a final chunk."""
+        if not accumulated_text:
+            return []
+        if _PARA_BOUNDARY_END.search(accumulated_text):
+            return []
+        parts = _PARA_BOUNDARY.split(accumulated_text)
+        trailing = parts[-1] if parts else ""
+        return [trailing] if trailing else []
