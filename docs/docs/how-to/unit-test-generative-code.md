@@ -381,8 +381,8 @@ for eval_case in test_evals:
 > evaluation sets, consider batching or running evaluations asynchronously.
 
 > **CLI alternative:** The same evaluation can be run without writing Python:
-`-m eval run tests/eval_data/email_writer.json --backend ollama --model granite4:micro`
-> See `-m eval run --help` for full options.
+> `m eval run tests/eval_data/email_writer.json --backend ollama --model granite4:micro`
+> See `m eval run --help` for full options.
 
 
 ## CI strategy
