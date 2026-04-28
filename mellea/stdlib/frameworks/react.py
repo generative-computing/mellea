@@ -86,12 +86,6 @@ async def react(
     while (turn_num < loop_budget) or (loop_budget == -1):
         turn_num += 1
 
-        # -- Context compaction --
-        if compaction is not None:
-            context = await compaction.maybe_compact(
-                context, backend=backend, goal=goal
-            )
-
         MelleaLogger.get_logger().info(f"## ReACT TURN NUMBER {turn_num}")
 
         step, next_context = await mfuncs.aact(
@@ -139,5 +133,11 @@ async def react(
                 # The tool has already been called above.
                 step._underlying_value = str(tool_responses[0].content)
             return step, context
+
+        # Compact after the final-answer check so terminal turns skip it.
+        if compaction is not None:
+            context = await compaction.maybe_compact(
+                context, backend=backend, goal=goal
+            )
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")
