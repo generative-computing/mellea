@@ -283,6 +283,51 @@ class Requirement(Component[str]):
                 context=val_ctx,
             )
 
+    async def stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        """Hook for per-chunk streaming validation.
+
+        The default implementation returns ``PartialValidationResult("unknown")``
+        — meaning insufficient data to decide yet. Subclasses override this method
+        to inspect the current chunk and return ``"pass"`` or ``"fail"`` early.
+
+        Implementations may accumulate state on ``self`` across calls within a
+        single attempt. The orchestrator clones the requirement (``copy(req)``)
+        before each attempt, so state does not bleed across retries.
+
+        Shallow-copy caveat: mutable container fields (e.g. ``self._buffer = []``)
+        are shared by reference under ``copy()``. Reassign rather than mutate in
+        place (``self._buffer = self._buffer + [chunk]``, not
+        ``self._buffer.append(chunk)``), or override ``__copy__`` for proper
+        isolation.
+
+        Implementations must not call ``mot.astream()`` or otherwise read the
+        underlying stream; the orchestrator is the single consumer of the MOT
+        stream (see ``ModelOutputThunk.astream``). Requirements that need access
+        to the text seen so far should accumulate it themselves from the
+        ``chunk`` values they receive.
+
+        Args:
+            chunk: A single complete semantic chunk produced by the chunking
+                strategy (e.g. one sentence for ``SentenceChunker``). This is
+                the delta since the previous ``stream_validate`` call for this
+                attempt, not the accumulated output. Requirements that need
+                earlier context should retain it on ``self`` across calls.
+            backend: The inference backend, available for backend-assisted checks.
+            ctx: The current generation context. During streaming the MOT is
+                not yet computed, so ``ctx`` does not contain the generated
+                output; use ``chunk`` (and any state accumulated on ``self``)
+                instead.
+
+        Returns:
+            PartialValidationResult: ``"unknown"`` by default. Subclasses may return
+            ``"pass"`` (constraint satisfied so far) or ``"fail"`` (constraint violated,
+            streaming should be aborted). ``"pass"`` does not short-circuit the final
+            ``validate()`` call; the orchestrator decides whether to skip it.
+        """
+        return PartialValidationResult("unknown")
+
     def parts(self) -> list[Component | CBlock]:
         """Returns all of the constituent parts of a Requirement.
 
