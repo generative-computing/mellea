@@ -508,6 +508,11 @@ def validate_tool_arguments(
         convert_function_to_ollama_tool before validation. If a schema
         still contains $ref entries, this will return Any as a fallback.
         """
+        # Early exit for unresolved $ref: return Any to disable validation
+        # rather than silently mistype as str
+        if "$ref" in schema:
+            return Any
+
         json_type = schema.get("type", "string")
 
         # Handle nested objects with properties
@@ -525,9 +530,12 @@ def validate_tool_arguments(
 
             # Create a nested Pydantic model with deterministic name
             # Use sorted field names for consistent naming across runs
+            # Respect strict mode: forbid extra fields if caller requested strict=True
             model_name = f"Nested_{'_'.join(sorted(nested_fields.keys()))}"
             return create_model(
-                model_name, __config__=ConfigDict(extra="allow"), **nested_fields
+                model_name,
+                __config__=ConfigDict(extra="forbid" if strict else "allow"),
+                **nested_fields,
             )
 
         # Handle arrays
@@ -557,18 +565,28 @@ def validate_tool_arguments(
 
         # Handle anyOf (union types in JSON schema)
         if "anyOf" in schema:
+            # Filter out null sub-schemas before recursion to prevent them from
+            # contaminating the union if an unresolved $ref returns Any.
+            # Null becomes an explicit Optional[] wrapper instead.
+            has_null = any(s.get("type") == "null" for s in schema["anyOf"])
+            non_null_schemas = [s for s in schema["anyOf"] if s.get("type") != "null"]
+
             types_list = []
-            for sub_schema in schema["anyOf"]:
+            for sub_schema in non_null_schemas:
                 sub_type = _build_pydantic_type_from_schema(sub_schema)
                 types_list.append(sub_type)
 
-            if len(types_list) == 1:
-                return types_list[0]
+            if len(types_list) == 0:
+                result = Any
+            elif len(types_list) == 1:
+                result = types_list[0]
             else:
                 from functools import reduce
                 from operator import or_
 
-                return reduce(or_, types_list)
+                result = reduce(or_, types_list)
+
+            return (result | None) if has_null else result
 
         # Simple type mapping
         return JSON_TYPE_TO_PYTHON.get(json_type, Any)
@@ -918,8 +936,8 @@ def _is_complex_anyof(v: dict) -> bool:
         # Skip null types - they just indicate optionality
         if sub_schema.get("type") == "null":
             continue
-        # Check for references or nested properties
-        if "$ref" in sub_schema or "properties" in sub_schema:
+        # Check for references, nested properties, or allOf (inherited models)
+        if "$ref" in sub_schema or "properties" in sub_schema or "allOf" in sub_schema:
             return True
     return False
 
@@ -958,7 +976,7 @@ def convert_function_to_ollama_tool(
     defs = schema.get("$defs", schema.get("definitions", {}))
 
     for k, v in schema.get("properties", {}).items():
-        # Check if this property has a $ref (reference to a definition)
+        # First pass: inline all $refs (at top level and within anyOf)
         if "$ref" in v:
             # Resolve the reference and inline it
             ref_schema = _resolve_ref(v["$ref"], defs)
@@ -969,21 +987,36 @@ def convert_function_to_ollama_tool(
                 if parsed_docstring.get(k):
                     inlined["description"] = parsed_docstring[k]
                 schema["properties"][k] = inlined
+                v = inlined  # Update v to point to inlined schema
             else:
                 # Fallback if we can't resolve
                 schema["properties"][k] = {
                     "description": parsed_docstring.get(k, ""),
                     "type": "object",
                 }
-        # Check if this property is a nested object (has 'properties' or complex types)
-        # Narrow anyOf check to only complex unions, not Optional[primitive]
-        elif (
-            "properties" in v or "allOf" in v or ("anyOf" in v and _is_complex_anyof(v))
-        ):
+                v = schema["properties"][k]
+
+        # Inline $refs within anyOf
+        if "anyOf" in v:
+            for i, sub_schema in enumerate(v["anyOf"]):
+                if "$ref" in sub_schema:
+                    ref_schema = _resolve_ref(sub_schema["$ref"], defs)
+                    if ref_schema:
+                        # Inline the referenced schema
+                        v["anyOf"][i] = copy.deepcopy(ref_schema)
+
+        # Second pass: determine how to handle the property type
+        if "properties" in v or "allOf" in v or ("anyOf" in v and _is_complex_anyof(v)):
             # This is a complex/nested type - preserve the full schema
             # Only add description if we have one
             if parsed_docstring.get(k):
                 v["description"] = parsed_docstring[k]
+            # If anyOf contains null (making it Optional), remove from required
+            if "anyOf" in v and any(
+                t.get("type") == "null" for t in v.get("anyOf", [])
+            ):
+                if k in schema.get("required", []):
+                    schema["required"].remove(k)
             schema["properties"][k] = v
         else:
             # Simple type - use the original flattening logic
