@@ -678,10 +678,12 @@ async def test_cancel_generation_invoked_on_fail() -> None:
     call_count = 0
     real_cancel = ModelOutputThunk.cancel_generation
 
-    async def spy_cancel(self: ModelOutputThunk) -> None:
+    async def spy_cancel(
+        self: ModelOutputThunk, error: Exception | None = None
+    ) -> None:
         nonlocal call_count
         call_count += 1
-        await real_cancel(self)
+        await real_cancel(self, error)
 
     ModelOutputThunk.cancel_generation = spy_cancel  # type: ignore[method-assign]
     try:
@@ -702,10 +704,16 @@ async def test_cancel_generation_invoked_on_fail() -> None:
 
 @pytest.mark.asyncio
 async def test_exception_in_stream_validate_cancels_generation() -> None:
-    """If stream_validate raises, the orchestrator must still call
-    cancel_generation() — otherwise the backend producer blocks on the
-    (maxsize=20) queue — and surface the exception to the consumer via
-    astream()/acomplete()."""
+    """Verifies the orchestrator's exception-path cleanup: if stream_validate
+    raises, cancel_generation() is called and the exception surfaces to the
+    consumer via astream()/acomplete() without hanging.
+
+    This covers the cancel-on-exception path and the no-hang guarantee.
+    It does not directly exercise the worst-case "producer already blocked on
+    full queue" scenario (here the fail happens on chunk 1 so the queue never
+    fills); the cancel_generation drain logic is covered by its own tests in
+    test/core/.
+    """
 
     from mellea.core.base import ModelOutputThunk
 
@@ -736,10 +744,12 @@ async def test_exception_in_stream_validate_cancels_generation() -> None:
     call_count = 0
     real_cancel = ModelOutputThunk.cancel_generation
 
-    async def spy_cancel(self: ModelOutputThunk) -> None:
+    async def spy_cancel(
+        self: ModelOutputThunk, error: Exception | None = None
+    ) -> None:
         nonlocal call_count
         call_count += 1
-        await real_cancel(self)
+        await real_cancel(self, error)
 
     ModelOutputThunk.cancel_generation = spy_cancel  # type: ignore[method-assign]
     try:

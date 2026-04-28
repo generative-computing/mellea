@@ -364,7 +364,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             ).total_seconds() * 1000
             self._first_chunk_received = True
 
-    async def cancel_generation(self) -> None:
+    async def cancel_generation(self, error: Exception | None = None) -> None:
         """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
 
         Safe to call at any point during streaming. After this method returns,
@@ -375,6 +375,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
         Draining the internal queue after cancellation is necessary to release
         any ``asyncio.Queue.put()`` call that the generation task was blocked on
         (queue maxsize=20).
+
+        Args:
+            error: Optional cause attributed to the open telemetry span.  When
+                provided, this exception is recorded via ``set_span_error`` so
+                the span reflects the actual reason for cancellation (e.g. the
+                requirement failure or an unhandled exception from a streaming
+                validator).  When ``None``, a generic
+                ``RuntimeError("Generation cancelled")`` is recorded.
         """
         if self._computed:
             return
@@ -414,7 +422,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
         if span is not None:
             from ..telemetry import end_backend_span, set_span_error
 
-            set_span_error(span, RuntimeError("Generation cancelled"))
+            recorded: Exception = (
+                error if error is not None else RuntimeError("Generation cancelled")
+            )
+            set_span_error(span, recorded)
             end_backend_span(span)
             del self._meta["_telemetry_span"]
 

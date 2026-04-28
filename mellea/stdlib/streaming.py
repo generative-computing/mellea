@@ -247,8 +247,10 @@ async def _orchestrate_streaming(
         # otherwise mot._async_queue (maxsize=20) fills and the feeder task
         # blocks indefinitely. The spec (#891, #901) calls this out for the
         # "fail" path; the same reasoning applies to any unplanned exit.
+        # Pass `exc` so the backend telemetry span records the real cause
+        # rather than a generic "Generation cancelled".
         try:
-            await mot.cancel_generation()
+            await mot.cancel_generation(error=exc)
         except Exception as cleanup_exc:
             # Never let cleanup mask the original exception: log loudly and
             # continue to surface `exc` to the consumer.
@@ -304,9 +306,12 @@ async def stream_with_chunking(
     same terms as the regular chunks.  On early exit, the trailing fragment
     is discarded because the generation was cancelled mid-token.
 
-    After the stream ends (naturally or via early exit), ``validate()`` is
-    called on all requirements that did not return ``"fail"``.  Requirements
-    are cloned (``copy(req)``) before use so originals are never mutated.
+    After the stream ends naturally, ``validate()`` is called on every
+    requirement that did not return ``"fail"`` — both ``"pass"`` and
+    ``"unknown"`` trigger final validation.  On early exit, no ``validate()``
+    call is made; :attr:`StreamChunkingResult.final_validations` remains
+    empty.  Requirements are cloned (``copy(req)``) before use so originals
+    are never mutated.
 
     Requirements that need context beyond the current chunk should
     accumulate it themselves across ``stream_validate`` calls (e.g.
