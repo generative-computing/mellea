@@ -28,12 +28,12 @@ Example:
 
 import time
 
-from validation_helpers import validate_input_code, validate_qiskit_migration
+from validation_helpers import validate_qiskit_migration
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.stdlib.context import ChatContext, SimpleContext
-from mellea.stdlib.requirements import req, simple_validate
+from mellea.stdlib.requirements import Requirement, req, simple_validate
 from mellea.stdlib.sampling import MultiTurnStrategy, RepairTemplateStrategy
 
 # Optional system prompt for models not specialized for Qiskit.
@@ -74,6 +74,7 @@ def generate_validated_qiskit_code(
     *,
     system_prompt: str | None = None,
     grounding_context: dict[str, str] | None = None,
+    extra_requirements: list[Requirement] | None = None,
 ) -> tuple[str, bool, int]:
     """Generate Qiskit code that passes Qiskit migration validation.
 
@@ -89,6 +90,9 @@ def generate_validated_qiskit_code(
         strategy: Sampling strategy for handling validation failures
         system_prompt: Optional system prompt passed via ModelOption.SYSTEM_PROMPT
         grounding_context: Optional grounding context dict passed to m.instruct()
+        extra_requirements: Optional additional requirements appended to the QKT rule.
+            Use to inject per-problem validators (e.g. behavioral check() functions)
+            without modifying this function.
 
     Returns:
         Tuple of (generated_code, success, attempts_used)
@@ -107,7 +111,8 @@ def generate_validated_qiskit_code(
             req(
                 "Code must pass Qiskit migration validation (QKT rules)",
                 validation_fn=simple_validate(validate_qiskit_migration),
-            )
+            ),
+            *(extra_requirements or []),
         ],
         strategy=strategy,
         return_sampling_results=True,
