@@ -23,7 +23,13 @@ from mellea.stdlib.streaming import stream_with_chunking
 
 
 class MaxSentencesReq(Requirement):
-    """Fails if the model generates more than *limit* sentences mid-stream."""
+    """Fails if the model generates more than *limit* sentences mid-stream.
+
+    Each ``stream_validate`` call receives one complete sentence from the
+    :class:`~mellea.stdlib.chunking.SentenceChunker`.  The running count is
+    maintained on ``self`` — this is the standard pattern for requirements
+    that need context beyond a single chunk.
+    """
 
     def __init__(self, limit: int) -> None:
         self._limit = limit
@@ -35,8 +41,8 @@ class MaxSentencesReq(Requirement):
     async def stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
-        sentence_count = chunk.count(".") + chunk.count("!") + chunk.count("?")
-        if sentence_count > self._limit:
+        self._count += 1
+        if self._count > self._limit:
             return PartialValidationResult(
                 "fail",
                 reason=f"Response exceeded {self._limit} sentence limit mid-stream",

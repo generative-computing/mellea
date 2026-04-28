@@ -248,6 +248,19 @@ async def stream_with_chunking(
     directly — this orchestrator is the single consumer of the MOT stream.
 
     Note:
+        Chunks are emitted to the consumer (via
+        :meth:`StreamChunkingResult.astream`) only after every requirement's
+        ``stream_validate`` has returned for that chunk.  A slow validator
+        (for example, one that invokes an LLM) therefore adds latency to
+        every chunk — the consumer sees a chunk at most as quickly as the
+        slowest active validator.  This trade is deliberate in v1: it
+        preserves the invariant that the consumer never sees content that
+        has not been validated, which matters for UIs displaying generated
+        text live.  A future fast-path mode that emits chunks to the
+        consumer concurrently with validation (at the cost of that
+        invariant) may be added if a concrete use case calls for it.
+
+    Note:
         v1 retry is simple re-invocation of this function.  Plugin hooks
         (``SAMPLING_LOOP_START``, ``SAMPLING_REPAIR``, etc.) do not fire
         on retries — use the ``#902`` event types for observability instead.
