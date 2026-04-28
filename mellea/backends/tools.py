@@ -936,8 +936,8 @@ def _is_complex_anyof(v: dict) -> bool:
         # Skip null types - they just indicate optionality
         if sub_schema.get("type") == "null":
             continue
-        # Check for references, nested properties, or allOf (inherited models)
-        if "$ref" in sub_schema or "properties" in sub_schema or "allOf" in sub_schema:
+        # Check for references or nested properties (don't recursively check allOf)
+        if "$ref" in sub_schema or "properties" in sub_schema:
             return True
     return False
 
