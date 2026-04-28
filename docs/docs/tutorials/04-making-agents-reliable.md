@@ -13,7 +13,7 @@ By the end you will have covered:
 - Building a tool-using agent with `instruct()` and `ModelOption.TOOLS`
 - Enforcing structured output with requirements and a retry budget
 - Inspecting `SamplingResult` to understand failures
-- Detecting harmful outputs with `GuardianCheck`
+- Detecting harmful outputs with `guardian.guardian_check`
 - Grounding safety checks against retrieved context
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async) and
@@ -32,6 +32,8 @@ Start with two tools — a search stub and a calculator — and wire them into a
 # Returns: str
 import mellea
 from mellea.backends import ModelOption, tool
+from mellea.stdlib.components import ToolMessage
+from mellea.stdlib.context import ChatContext
 
 @tool
 def web_search(query: str) -> str:
@@ -55,18 +57,34 @@ def calculate(expression: str) -> str:
         return "Error: expression contains disallowed characters."
     return str(eval(expression))  # noqa: S307 — only safe characters pass the guard above
 
-m = mellea.start_session()
+m = mellea.start_session(ctx=ChatContext())
 
-response = m.instruct(
+result = m.instruct(
     "What is Mellea, and how many characters are in the word 'Mellea'?",
     model_options={ModelOption.TOOLS: [web_search, calculate]},
+    tool_calls=True,
 )
-print(str(response))
-# Output will vary — LLM responses depend on model and temperature.
+
+if result.tool_calls:
+    for name, tc in result.tool_calls.items():
+        output = tc.call_func()
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+    print(str(m.instruct("Answer the original question using the tool results.", tool_calls=False)))
+else:
+    print(str(result))
 ```
 
-The model can call either or both tools during its response. With no requirements
-attached, the output format is up to the model.
+```text
+Mellea is a Python framework designed for creating and managing generative programs. It provides tools and libraries that allow developers to build applications which can generate content or behaviors over time in an algorithmic manner. The framework likely includes features such as event handling, state management, and scheduling capabilities, making it easier to work with complex procedural logic.
+
+The word 'Mellea' consists of 6 characters.
+```
+
+> **Note:** LLM output is non-deterministic. The model may call one or both tools; the answer will reference whichever tool results it received.
+
+`ChatContext` is required here so tool result messages persist between the first
+`instruct` call and the follow-up. Without it, the session uses `SimpleContext`,
+which discards history between calls and the model answers as if no tools ran.
 
 ---
 
@@ -79,6 +97,8 @@ Require the agent to format its answer as a short structured response:
 # Returns: str
 import mellea
 from mellea.backends import ModelOption, tool
+from mellea.stdlib.components import ToolMessage
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import req, simple_validate
 
 @tool
@@ -102,31 +122,52 @@ def calculate(expression: str) -> str:
         return "Error: expression contains disallowed characters."
     return str(eval(expression))  # noqa: S307
 
-m = mellea.start_session()
+word_count_req = req(
+    "The response must be 50 words or fewer.",
+    validation_fn=simple_validate(
+        lambda x: (
+            len(x.split()) <= 50,
+            f"Response is {len(x.split())} words; must be 50 or fewer.",
+        )
+    ),
+)
 
-response = m.instruct(
+m = mellea.start_session(ctx=ChatContext())
+
+result = m.instruct(
     "What is Mellea, and how many characters are in the word 'Mellea'?",
     model_options={ModelOption.TOOLS: [web_search, calculate]},
-    requirements=[
-        req("The response must answer both questions."),
-        req(
-            "The response must be 50 words or fewer.",
-            validation_fn=simple_validate(
-                lambda x: (
-                    len(x.split()) <= 50,
-                    f"Response is {len(x.split())} words; must be 50 or fewer.",
-                )
-            ),
-        ),
-    ],
+    tool_calls=True,
 )
-print(str(response))
-# Output will vary — LLM responses depend on model and temperature.
+
+if result.tool_calls:
+    for name, tc in result.tool_calls.items():
+        output = tc.call_func()
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+    print(str(m.instruct(
+        "Answer the original question using the tool results.",
+        requirements=[
+            req("The response must answer both questions."),
+            word_count_req,
+        ],
+        tool_calls=False,
+    )))
+else:
+    print(str(result))
 ```
 
-The word-count requirement runs deterministically. The "answer both questions"
-requirement falls back to LLM-as-a-judge. If either fails, Mellea retries with
-the failure reason embedded in the repair request.
+```text
+Mellea is a Python framework designed for creating and managing generative programs, facilitating the development of complex algorithms and simulations with ease. The word 'Mellea' consists of 6 characters.
+```
+
+> **Note:** With the 50-word requirement enforced, the response will be concise and answer both questions. Wording varies by model and temperature.
+
+Requirements are placed on the synthesis call (the follow-up `instruct`) rather
+than the tool-call step — at the tool-call step the model returns structured
+tool invocations, not the final answer, so applying requirements there would
+validate the wrong output. The word-count check runs deterministically. The
+"answer both questions" requirement falls back to LLM-as-a-judge. If either
+fails, Mellea retries with the failure reason embedded in the repair request.
 
 ---
 
@@ -140,6 +181,8 @@ what happens when requirements fail:
 # Returns: None
 import mellea
 from mellea.backends import ModelOption, tool
+from mellea.stdlib.components import ToolMessage
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
@@ -164,55 +207,86 @@ def calculate(expression: str) -> str:
         return "Error: expression contains disallowed characters."
     return str(eval(expression))  # noqa: S307
 
-m = mellea.start_session()
+answer_requirements = [
+    req("The response must answer both questions."),
+    req(
+        "The response must be 50 words or fewer.",
+        validation_fn=simple_validate(
+            lambda x: (
+                len(x.split()) <= 50,
+                f"Response is {len(x.split())} words; must be 50 or fewer.",
+            )
+        ),
+    ),
+]
 
-result = m.instruct(
+m = mellea.start_session(ctx=ChatContext())
+
+# Step 1: run the tool-call step to collect tool results into the context.
+tool_result = m.instruct(
     "What is Mellea, and how many characters are in the word 'Mellea'?",
     model_options={ModelOption.TOOLS: [web_search, calculate]},
-    requirements=[
-        req("The response must answer both questions."),
-        req(
-            "The response must be 50 words or fewer.",
-            validation_fn=simple_validate(
-                lambda x: (
-                    len(x.split()) <= 50,
-                    f"Response is {len(x.split())} words; must be 50 or fewer.",
-                )
-            ),
-        ),
-    ],
-    strategy=RejectionSamplingStrategy(loop_budget=3),
-    return_sampling_results=True,
+    tool_calls=True,
 )
 
-if result.success:
-    print("Passed:", str(result.result))
+if tool_result.tool_calls:
+    for name, tc in tool_result.tool_calls.items():
+        output = tc.call_func()
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+
+# Step 2: synthesize with requirements and a retry budget, capturing all attempts.
+sampling = m.instruct(
+    "Answer the original question using the tool results.",
+    requirements=answer_requirements,
+    strategy=RejectionSamplingStrategy(loop_budget=3),
+    return_sampling_results=True,
+    tool_calls=False,
+)
+
+if sampling.success:
+    print("Passed:", str(sampling.result))
 else:
-    print(f"All {len(result.sample_generations)} attempts failed.")
-    for i, attempt in enumerate(result.sample_generations):
+    print(f"All {len(sampling.sample_generations)} attempts failed.")
+    for i, attempt in enumerate(sampling.sample_generations):
         print(f"  Attempt {i + 1}: {str(attempt.value)[:80]}...")
 ```
 
-`result.success` is `True` when at least one attempt satisfied all requirements.
-`result.sample_generations` gives you every attempt in order — useful for
+On a successful run (the most common case):
+
+```text
+Passed: Mellea is a Python framework designed for creating and managing generative programs, facilitating complex program generation tasks through its modular architecture. The word "Mellea" consists of 6 characters.
+```
+
+If all attempts exceed the word limit:
+
+```text
+All 3 attempts failed.
+  Attempt 1: Mellea is an open-source Python framework designed to help developers build generative...
+  Attempt 2: Based on the web search, Mellea is a Python framework for generative programs. The wor...
+  Attempt 3: Mellea is a Python framework. According to a web search, it helps build generative pro...
+```
+
+`sampling.success` is `True` when at least one attempt satisfied all requirements.
+`sampling.sample_generations` gives you every attempt in order — useful for
 debugging or for choosing the best available output when the budget runs out.
 
 ---
 
 ## Step 4: Adding Guardian harm detection
 
-[`GuardianCheck`](../reference/glossary#guardiancheck) wraps a `MelleaSession` call and evaluates the output against a
-set of [`GuardianRisk`](../reference/glossary#guardianrisk) category. Run it after your agent responds to flag outputs before
-they reach downstream code.
+Guardian intrinsics evaluate the output against specific risk criteria. Run them
+after your agent responds to flag outputs before they reach downstream code.
 
 ```python
 # Requires: mellea
 # Returns: None
 import mellea
 from mellea.backends import ModelOption, tool
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message, ToolMessage
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import req, simple_validate
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
-from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 @tool
 def web_search(query: str) -> str:
@@ -235,11 +309,23 @@ def calculate(expression: str) -> str:
         return "Error: expression contains disallowed characters."
     return str(eval(expression))  # noqa: S307
 
-m = mellea.start_session()
+m = mellea.start_session(ctx=ChatContext())
+
+question = "What is Mellea, and how many characters are in the word 'Mellea'?"
+
+tool_result = m.instruct(
+    question,
+    model_options={ModelOption.TOOLS: [web_search, calculate]},
+    tool_calls=True,
+)
+
+if tool_result.tool_calls:
+    for name, tc in tool_result.tool_calls.items():
+        output = tc.call_func()
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
 
 response = m.instruct(
-    "What is Mellea, and how many characters are in the word 'Mellea'?",
-    model_options={ModelOption.TOOLS: [web_search, calculate]},
+    "Answer the original question using the tool results.",
     requirements=[
         req("The response must answer both questions."),
         req(
@@ -252,58 +338,65 @@ response = m.instruct(
             ),
         ),
     ],
-    strategy=RejectionSamplingStrategy(loop_budget=3),
+    tool_calls=False,
 )
 
 output_text = str(response)
 
-# Run Guardian checks on the agent output.
-harm_check = GuardianCheck(
-    GuardianRisk.HARM,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
-)
-jailbreak_check = GuardianCheck(
-    GuardianRisk.JAILBREAK,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
+# Guardian intrinsics require a LocalHFBackend — they load LoRA adapters
+# that are not supported by OllamaModelBackend.
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+
+# Build a context containing the exchange to check.
+check_ctx = (
+    ChatContext()
+    .add(Message("user", question))
+    .add(Message("assistant", output_text))
 )
 
-# session.validate() returns a list of ValidationResult objects.
-validation_results = m.validate([harm_check, jailbreak_check])
+harm_score = guardian.guardian_check(check_ctx, guardian_backend, criteria="harm")
+jailbreak_score = guardian.guardian_check(check_ctx, guardian_backend, criteria="jailbreak")
 
-safe = all(r._result for r in validation_results)
+# Scores >= 0.5 indicate a detected risk.
+safe = harm_score < 0.5 and jailbreak_score < 0.5
 if safe:
     print("Output passed safety checks:", output_text)
 else:
-    for check_result in validation_results:
-        if not check_result._result:
-            print(f"Safety check failed — {check_result._reason}")
+    if harm_score >= 0.5:
+        print(f"Harm risk detected (score: {harm_score:.2f})")
+    if jailbreak_score >= 0.5:
+        print(f"Jailbreak risk detected (score: {jailbreak_score:.2f})")
 ```
 
-> **Note:** `m.validate()` evaluates the checks against the most recent session
-> output. Run it immediately after the `instruct()` call before any other session
-> activity modifies the context.
+```text
+Output passed safety checks: Mellea is a Python framework designed for creating generative programs, enabling users to build complex and dynamic applications with ease. The word "Mellea" consists of 6 characters.
+```
 
-Each `GuardianCheck` runs as an independent inference call against your local
-Ollama instance. The results are `ValidationResult` objects with `._result`
-(bool) and `._reason` (str).
+> **Note:** Guardian intrinsics load LoRA adapters and require `LocalHFBackend`.
+> They cannot run against `OllamaModelBackend`. The main agent and the Guardian
+> checks can use different backends — only the Guardian calls need `LocalHFBackend`.
+
+Scores are floats between 0.0 (safe) and 1.0 (risk detected); 0.5 is the
+threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
+`"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
+`"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
 ---
 
-## Step 5: Sharing a backend across Guardian checks
+## Step 5: Running multiple Guardian checks with a shared backend
 
-When you run multiple `GuardianCheck` instances, each one loads or contacts the
-model separately by default. Pass `backend=shared_backend` to reuse a single
-loaded backend and avoid the overhead of repeated initialisation:
+When running several Guardian criteria checks, instantiate `LocalHFBackend` once
+and pass it to each call to avoid reloading the model weights for every check:
 
 ```python
 # Requires: mellea
 # Returns: None
 import mellea
-from mellea.backends import ModelOption, model_ids, tool
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.backends import ModelOption, tool
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message, ToolMessage
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
 
 @tool
 def web_search(query: str) -> str:
@@ -314,50 +407,74 @@ def web_search(query: str) -> str:
     """
     return f"Top result for '{query}': Mellea is a Python framework for generative programs."
 
-m = mellea.start_session()
+m = mellea.start_session(ctx=ChatContext())
 
-response = m.instruct(
-    "What is Mellea?",
+question = "What is Mellea?"
+
+result = m.instruct(
+    question,
     model_options={ModelOption.TOOLS: [web_search]},
+    tool_calls=True,
 )
 
-# Create a single Guardian backend and reuse it across all checks.
-# Pull the model first: ollama pull granite3-guardian:2b
-guardian_backend = OllamaModelBackend(model_ids.IBM_GRANITE_GUARDIAN_3_0_2B.ollama_name)
+if result.tool_calls:
+    for name, tc in result.tool_calls.items():
+        output = tc.call_func()
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+    response = m.instruct("Answer the original question using the tool results.", tool_calls=False)
+else:
+    response = result
 
-checks = [
-    GuardianCheck(GuardianRisk.HARM, backend=guardian_backend),
-    GuardianCheck(GuardianRisk.PROFANITY, backend=guardian_backend),
-    GuardianCheck(GuardianRisk.ANSWER_RELEVANCE, backend=guardian_backend),
-    GuardianCheck(GuardianRisk.JAILBREAK, backend=guardian_backend),
-]
+output_text = str(response)
 
-results = m.validate(checks)
+# Load once, reuse across all criteria checks.
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
-for risk, result in zip(checks, results):
-    status = "PASS" if result._result else "FAIL"
-    print(f"[{status}] {risk}: {result._reason or 'ok'}")
+check_ctx = (
+    ChatContext()
+    .add(Message("user", question))
+    .add(Message("assistant", output_text))
+)
+
+criteria = ["harm", "profanity", "answer_relevance", "jailbreak"]
+for criterion in criteria:
+    score = guardian.guardian_check(check_ctx, guardian_backend, criteria=criterion)
+    status = "FAIL" if score >= 0.5 else "PASS"
+    print(f"[{status}] {criterion}: {score:.2f}")
 ```
 
-The full list of `GuardianRisk` values you can check:
-`HARM`, `GROUNDEDNESS`, `PROFANITY`, `ANSWER_RELEVANCE`, `JAILBREAK`,
-`FUNCTION_CALL`, `SOCIAL_BIAS`, `VIOLENCE`, `SEXUAL_CONTENT`,
-`UNETHICAL_BEHAVIOR`.
+```text
+[PASS] harm: 0.00
+[PASS] profanity: 0.00
+[PASS] answer_relevance: 0.07
+[PASS] jailbreak: 0.00
+```
+
+> **Note:** Guardian scores are deterministic for a given response string, but the
+> agent's answer varies by model and temperature, so exact scores will differ across
+> runs.
+
+The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
+`"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
+`"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
 ---
 
 ## Step 6: Groundedness checks with retrieved context
 
-When your agent retrieves documents before answering, add a `GROUNDEDNESS` check
-to confirm the response is grounded in what was retrieved rather than
-hallucinated:
+When your agent retrieves documents before answering, use
+`rag.flag_hallucinated_content` to confirm the response is faithful to what was
+retrieved rather than hallucinated:
 
 ```python
 # Requires: mellea
 # Returns: None
 import mellea
 from mellea.backends import ModelOption, tool
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Document, Message, ToolMessage
+from mellea.stdlib.components.intrinsic import rag
+from mellea.stdlib.context import ChatContext
 
 RETRIEVED_CONTEXT = (
     "Mellea is an open-source Python framework for building generative programs. "
@@ -375,37 +492,49 @@ def retrieve_docs(topic: str) -> str:
     # In production, call your vector store or search index here.
     return RETRIEVED_CONTEXT
 
-m = mellea.start_session()
+m = mellea.start_session(ctx=ChatContext())
 
-response = m.instruct(
-    "Using the retrieved documentation, describe what Mellea is.",
+question = "Using the retrieved documentation, describe what Mellea is."
+
+result = m.instruct(
+    question,
     model_options={ModelOption.TOOLS: [retrieve_docs]},
     grounding_context={"docs": RETRIEVED_CONTEXT},
+    tool_calls=True,
 )
+
+if result.tool_calls:
+    for name, tc in result.tool_calls.items():
+        output = tc.call_func()
+        m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
+    response = m.instruct("Answer the original question using the tool results.", tool_calls=False)
+else:
+    response = result
 
 output_text = str(response)
 
-# Check the response is grounded in the retrieved context.
-groundedness_check = GuardianCheck(
-    GuardianRisk.GROUNDEDNESS,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
-    context_text=RETRIEVED_CONTEXT,
-)
+# Check the response is faithful to the retrieved document.
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+doc = Document(text=RETRIEVED_CONTEXT, title="Mellea docs")
+check_ctx = ChatContext().add(Message("user", question))
+hallucination_result = rag.flag_hallucinated_content(output_text, [doc], check_ctx, guardian_backend)
 
-results = m.validate([groundedness_check])
-grounded = results[0]._result
-
-if grounded:
+flagged = [s for s in hallucination_result if s.get("faithfulness") == "No"]
+if not flagged:
     print("Grounded response:", output_text)
 else:
     print("Response may contain hallucinated content.")
-    print("Reason:", results[0]._reason)
+    for sentence in flagged:
+        print(f"  Flagged: {sentence['response_text']}")
 ```
 
-> **Tip:** Pass the same text you supplied as `grounding_context` to
-> `context_text` in `GuardianCheck`. This ensures the groundedness model
-> evaluates the response against exactly what the agent was given.
+```text
+Grounded response: Mellea is an open-source Python framework designed for building generative programs. It offers three primary functionalities: instruct(), @generative, and @mify as its core primitives. The unique aspect of Mellea lies in its backend-agnostic nature, meaning it can support various platforms such as Ollama, OpenAI, and also accommodate custom backends. This versatility makes it a powerful tool for developers looking to create flexible and adaptable generative applications.
+```
+
+> **Tip:** Pass the same text as both `grounding_context` to `instruct()` and as
+> the `Document` to `flag_hallucinated_content`. This ensures the faithfulness
+> check evaluates the response against exactly what the agent was given.
 
 ---
 
@@ -421,9 +550,11 @@ goal is reached or the step budget is exhausted:
 import asyncio
 import mellea
 from mellea.backends import tool
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.frameworks.react import react
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 @tool
 def web_search(query: str) -> str:
@@ -432,49 +563,50 @@ def web_search(query: str) -> str:
     Args:
         query: The search query.
     """
-    return f"Search result for '{query}': Mellea is a Python framework."
-
-@tool(name="calculator")
-def calculate(expression: str) -> str:
-    """Evaluate a safe arithmetic expression.
-
-    Args:
-        expression: An arithmetic expression.
-    """
-    allowed = set("0123456789 +-*/(). ")
-    if not all(c in allowed for c in expression):
-        return "Error: expression contains disallowed characters."
-    return str(eval(expression))  # noqa: S307
+    return f"Search result for '{query}': Mellea is a Python framework for generative programs."
 
 m = mellea.start_session()
 
-async def run_agent(goal: str) -> str:
+goal = "Use web_search to find out what Mellea is and report the definition."
+
+async def run_agent() -> str:
     result, _ = await react(
         goal=goal,
         context=ChatContext(),
         backend=m.backend,
-        tools=[web_search, calculate],
+        tools=[web_search],
     )
     return str(result)
 
-output = asyncio.run(run_agent(
-    "Find out what Mellea is, then calculate how many characters are in 'Mellea'."
-))
+output = asyncio.run(run_agent())
 
 # Validate the agent's final output.
-harm_check = GuardianCheck(
-    GuardianRisk.HARM,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+check_ctx = (
+    ChatContext()
+    .add(Message("user", goal))
+    .add(Message("assistant", output))
 )
-results = m.validate([harm_check])
+harm_score = guardian.guardian_check(check_ctx, guardian_backend, criteria="harm")
 
-if results[0]._result:
+if harm_score < 0.5:
     print("Agent output (safe):", output)
 else:
-    print("Agent output flagged:", results[0]._reason)
-# Output will vary — LLM responses depend on model and temperature.
+    print(f"Agent output flagged (harm score: {harm_score:.2f})")
 ```
+
+```text
+Agent output (safe): Mellea appears to be a Python framework specifically designed for creating generative programs. It provides tools and utilities that allow developers to build software systems where behavior or outcomes are determined by random or probabilistic processes, rather than fixed rules.
+```
+
+> **Note:** LLM output is non-deterministic. The `react()` loop runs sequentially —
+> each turn awaits the model before proceeding, so `ChatContext` is safe to use here
+> despite the async execution. The agent calls `web_search` to ground its answer, then
+> calls the built-in `final_answer` tool to signal completion. The Guardian harm check
+> runs after the loop using `LocalHFBackend` with the `guardian-core` LoRA adapter.
+> Your exact wording will vary.
+
+---
 
 > **Advanced:** `react()` implements the Reason + Act loop: the LLM alternates
 > between producing a reasoning step ("Thought") and invoking a tool ("Action")
@@ -493,12 +625,12 @@ agentic system:
 | Layer | What it adds |
 | --- | --- |
 | `instruct()` + `ModelOption.TOOLS` | LLM can call Python tools |
-| `requirements` + `simple_validate` | Deterministic and LLM-judged output constraints |
+| `requirements` + `simple_validate` on synthesis call | Deterministic and LLM-judged output constraints |
 | `RejectionSamplingStrategy` | Explicit retry budget |
 | `return_sampling_results=True` | Inspect every attempt for debugging |
-| `GuardianCheck` | Post-generation safety risk detection |
-| Shared `backend` | Amortise model loading across multiple checks |
-| `GuardianRisk.GROUNDEDNESS` + `context_text` | Detect hallucination relative to retrieved context |
+| `guardian.guardian_check` | Post-generation safety risk detection |
+| Shared `LocalHFBackend` | Amortise model loading across multiple checks |
+| `rag.flag_hallucinated_content` | Detect hallucination relative to retrieved context |
 | `react()` | Goal-driven multi-step agentic loop |
 
 ---
