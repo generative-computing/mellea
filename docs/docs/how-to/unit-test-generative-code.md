@@ -352,7 +352,7 @@ Each entry in the JSON array defines one test:
 ```python
 # Requires: mellea
 # Returns: None
-from mellea import MelleaSession, start_session
+from mellea import start_session
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
