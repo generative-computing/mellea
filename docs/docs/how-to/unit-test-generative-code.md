@@ -27,7 +27,7 @@ Every test for a `@generative` function falls into one of four levels:
 | **Qualitative check** | `assert result is True` | No — depends on the model and prompt |
 | **Semantic evaluation** |	Judge model scores output against reference responses |	No — run separately, not a pytest assertion |
 
-*For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component for Generative Unit Tests](#the-unit_test_eval-component-for-Generative-Unit-Tests) at the end of this page.*
+*For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component for Generative Unit Tests](#the-unit_test_eval-component-for-generative-unit-tests) at the end of this page.*
 
 Type and structural checks run in CI. Qualitative checks carry
 `@pytest.mark.qualitative` and are skipped in CI when `CICD=1` is set.
