@@ -16,6 +16,7 @@ from ..backends.model_options import ModelOption
 from ..core.backend import Backend
 from ..core.base import CBlock, Component, Context, ModelOutputThunk
 from ..core.requirement import PartialValidationResult, Requirement, ValidationResult
+from ..core.utils import MelleaLogger
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
 
 _CHUNKING_ALIASES: dict[str, type[ChunkingStrategy]] = {
@@ -75,6 +76,14 @@ class StreamChunkingResult:
         all chunks have been yielded, whether the stream completed normally or
         was cancelled early on a ``"fail"`` result.
 
+        **Single-consumer.** Chunks are delivered via an
+        :class:`asyncio.Queue` that this method drains; calling
+        ``astream()`` a second time on the same result blocks indefinitely
+        because the queue is empty and the terminating ``None`` sentinel
+        has already been consumed.  If you need the chunks after
+        iteration, capture them into a list during the first pass or use
+        :attr:`full_text` after :meth:`acomplete`.
+
         Yields:
             str: A validated text chunk from the chunking strategy.
 
@@ -115,6 +124,15 @@ class StreamChunkingResult:
         generation metadata copied from the original MOT.  Safe to call on
         early-exit results; ``value`` will reflect whatever was accumulated
         before cancellation.
+
+        Note:
+            On early exit, ``cancel_generation()`` forces the MOT into a
+            computed state without running the backend's
+            ``post_processing()``.  Telemetry fields on the returned thunk
+            (``generation.usage``, ``generation.ttfb_ms``, etc.) may
+            therefore be ``None`` or reflect the partial state at
+            cancellation time.  ``value`` and ``streaming`` are reliable;
+            usage totals are not.
 
         Returns:
             ModelOutputThunk: A computed thunk containing the streamed output.
@@ -178,7 +196,12 @@ async def _orchestrate_streaming(
             try:
                 delta = await mot.astream()
             except RuntimeError:
-                break
+                # Expected race: mot.is_computed() was False at the top of the
+                # loop but the stream finished before we re-entered astream().
+                # Any other RuntimeError is a real bug and must propagate.
+                if mot.is_computed():
+                    break
+                raise
 
             accumulated += delta
             chunks = chunking.split(accumulated)
@@ -220,6 +243,23 @@ async def _orchestrate_streaming(
             )
 
     except Exception as exc:
+        # Orchestrator is leaving — we must stop the backend producer too,
+        # otherwise mot._async_queue (maxsize=20) fills and the feeder task
+        # blocks indefinitely. The spec (#891, #901) calls this out for the
+        # "fail" path; the same reasoning applies to any unplanned exit.
+        try:
+            await mot.cancel_generation()
+        except Exception as cleanup_exc:
+            # Never let cleanup mask the original exception: log loudly and
+            # continue to surface `exc` to the consumer.
+            # TODO(#902): replace this log with an ErrorEvent emission.
+            MelleaLogger.get_logger().warning(
+                "stream_with_chunking: cancel_generation() raised during "
+                "exception cleanup (original: %r, cleanup: %r)",
+                exc,
+                cleanup_exc,
+            )
+        result.completed = False
         await result._chunk_queue.put(exc)
     finally:
         await result._chunk_queue.put(None)

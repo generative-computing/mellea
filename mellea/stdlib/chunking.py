@@ -116,7 +116,15 @@ class SentenceChunker(ChunkingStrategy):
         return chunks
 
     def flush(self, accumulated_text: str) -> list[str]:
-        """Return the trailing sentence fragment (if any) as a final chunk."""
+        """Return the trailing sentence fragment (if any) as a final chunk.
+
+        Trailing whitespace on the fragment is non-semantic for sentence
+        boundaries and is dropped via ``rstrip``.  Leading whitespace is
+        already removed by the loop's ``lstrip`` on each advance, so no
+        ``lstrip`` is needed here.  The result is the fragment's content
+        only, consistent with how :meth:`split` returns sentences without
+        trailing whitespace.
+        """
         if not accumulated_text:
             return []
         remaining = accumulated_text
@@ -125,7 +133,7 @@ class SentenceChunker(ChunkingStrategy):
             if match is None:
                 break
             remaining = remaining[match.end() :].lstrip()
-        trailing = remaining.strip()
+        trailing = remaining.rstrip()
         return [trailing] if trailing else []
 
 
@@ -216,7 +224,15 @@ class ParagraphChunker(ChunkingStrategy):
         return [p for p in parts if p]
 
     def flush(self, accumulated_text: str) -> list[str]:
-        """Return the trailing paragraph fragment (if any) as a final chunk."""
+        r"""Return the trailing paragraph fragment (if any) as a final chunk.
+
+        Unlike :class:`SentenceChunker.flush`, the fragment is returned
+        byte-for-byte without stripping.  Internal whitespace — including
+        a trailing single ``\n`` — can be semantically meaningful inside
+        a paragraph (e.g. a list item or a deliberate line break), and a
+        consumer validating paragraph content should see the fragment as
+        it was withheld.
+        """
         if not accumulated_text:
             return []
         if _PARA_BOUNDARY_END.search(accumulated_text):

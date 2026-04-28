@@ -433,14 +433,12 @@ async def test_stream_validate_receives_individual_chunks() -> None:
 
     assert len(captured) == 1
     seen = captured[0].seen_chunks
-    # Three complete sentences → three separate stream_validate calls.
-    assert len(seen) == 3
-    # Each chunk is one sentence, not a prefix of accumulated text.
-    for chunk in seen:
-        assert chunk.endswith(".")
-    # Lengths must not be monotonically growing (which would indicate accumulated text).
-    # With per-chunk semantics, each chunk is roughly the same length as one sentence.
-    assert not all(len(seen[i]) < len(seen[i + 1]) for i in range(len(seen) - 1))
+    # Exact match: three separate calls, one per complete sentence,
+    # each call receiving that sentence and nothing more.  Under the old
+    # accumulated-text semantics, seen would have been
+    # ["First sentence.", "First sentence. Second sentence.", ...] —
+    # exact match against the per-chunk list is the direct regression guard.
+    assert seen == ["First sentence.", "Second sentence.", "Third sentence."]
 
 
 @pytest.mark.asyncio
@@ -576,3 +574,190 @@ async def test_no_requirements_streams_without_validation() -> None:
     assert result.full_text == response
     assert result.final_validations == []
     assert result.streaming_failures == []
+
+
+@pytest.mark.asyncio
+async def test_multiple_chunks_in_one_batch_with_mid_batch_fail() -> None:
+    """When one astream() delta produces several complete chunks and one in
+    the middle fails, earlier chunks emit, failing chunk is recorded, later
+    chunks are neither validated nor emitted."""
+
+    captured: list[Any] = []
+
+    class FailOnNthChunk(Requirement):
+        def __init__(self, n: int) -> None:
+            self._n = n
+            self._calls = 0
+            self.seen: list[str] = []
+
+        def __copy__(self) -> "FailOnNthChunk":
+            clone = FailOnNthChunk(self._n)
+            captured.append(clone)
+            return clone
+
+        def format_for_llm(self) -> str:
+            return f"fail on chunk {self._n}"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = backend, ctx
+            self._calls += 1
+            self.seen.append(chunk)
+            if self._calls == self._n:
+                return PartialValidationResult("fail", reason=f"n={self._n}")
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            _ = backend, ctx, format, model_options
+            return ValidationResult(result=True)
+
+    # token_size larger than the whole response → one astream() delta delivers
+    # the full text, so chunking.split produces 4 sentences in a single batch.
+    response = "One. Two. Three. Four. "
+    backend = StreamingMockBackend(response, token_size=100)
+    req = FailOnNthChunk(n=2)
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+    )
+    yielded: list[str] = []
+    async for c in result.astream():
+        yielded.append(c)
+    await result.acomplete()
+
+    assert result.completed is False
+    assert len(result.streaming_failures) == 1
+    # Chunk 1 was validated and emitted; chunk 2 was validated and failed
+    # (NOT emitted); chunks 3 and 4 were NEITHER validated NOR emitted.
+    assert yielded == ["One."]
+    assert len(captured) == 1
+    assert captured[0].seen == ["One.", "Two."]
+    assert captured[0]._calls == 2
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_invoked_on_fail() -> None:
+    """Early exit on 'fail' must call mot.cancel_generation() — the spec reason
+    is that asyncio.Queue(maxsize=20) will block the producer if the consumer
+    stops without cancelling."""
+
+    from mellea.core.base import ModelOutputThunk
+
+    response = "word " * 50
+    backend = StreamingMockBackend(response, token_size=3)
+
+    class FailOnFirstChunk(Requirement):
+        def format_for_llm(self) -> str:
+            return "fail immediately"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = chunk, backend, ctx
+            return PartialValidationResult("fail", reason="nope")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            _ = backend, ctx, format, model_options
+            return ValidationResult(result=True)
+
+    call_count = 0
+    real_cancel = ModelOutputThunk.cancel_generation
+
+    async def spy_cancel(self: ModelOutputThunk) -> None:
+        nonlocal call_count
+        call_count += 1
+        await real_cancel(self)
+
+    ModelOutputThunk.cancel_generation = spy_cancel  # type: ignore[method-assign]
+    try:
+        result = await stream_with_chunking(
+            _action(),
+            backend,
+            _ctx(),
+            quick_check_requirements=[FailOnFirstChunk()],
+            chunking="word",
+        )
+        await asyncio.wait_for(result.acomplete(), timeout=5.0)
+    finally:
+        ModelOutputThunk.cancel_generation = real_cancel  # type: ignore[method-assign]
+
+    assert result.completed is False
+    assert call_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_exception_in_stream_validate_cancels_generation() -> None:
+    """If stream_validate raises, the orchestrator must still call
+    cancel_generation() — otherwise the backend producer blocks on the
+    (maxsize=20) queue — and surface the exception to the consumer via
+    astream()/acomplete()."""
+
+    from mellea.core.base import ModelOutputThunk
+
+    class RaisingReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "raises"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = chunk, backend, ctx
+            raise ValueError("boom")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            _ = backend, ctx, format, model_options
+            return ValidationResult(result=True)
+
+    response = "word " * 50  # enough to fill maxsize=20 queue without cleanup
+    backend = StreamingMockBackend(response, token_size=3)
+
+    call_count = 0
+    real_cancel = ModelOutputThunk.cancel_generation
+
+    async def spy_cancel(self: ModelOutputThunk) -> None:
+        nonlocal call_count
+        call_count += 1
+        await real_cancel(self)
+
+    ModelOutputThunk.cancel_generation = spy_cancel  # type: ignore[method-assign]
+    try:
+        result = await stream_with_chunking(
+            _action(),
+            backend,
+            _ctx(),
+            quick_check_requirements=[RaisingReq()],
+            chunking="word",
+        )
+        with pytest.raises(ValueError, match="boom"):
+            async for _chunk in result.astream():
+                pass
+        # acomplete must complete (not hang) even though the orchestration
+        # task raised, because cancel_generation was called in the except path.
+        await asyncio.wait_for(result.acomplete(), timeout=5.0)
+    finally:
+        ModelOutputThunk.cancel_generation = real_cancel  # type: ignore[method-assign]
+
+    assert result.completed is False
+    assert call_count >= 1
