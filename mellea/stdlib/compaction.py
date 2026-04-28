@@ -17,12 +17,13 @@ Example::
     from mellea.stdlib.compaction import KeepLastN
     from mellea.stdlib.frameworks.react import react
 
+    # Compact once the most recent model call reports > 8000 prompt+completion tokens.
     await react(
         goal="...",
         context=ChatContext(),
         backend=m.backend,
         tools=[search_tool],
-        compaction=KeepLastN(keep_n=5, threshold=20),
+        compaction=KeepLastN(keep_n=5, threshold=8000),
     )
 """
 
@@ -72,6 +73,26 @@ def _find_prefix_end(components: list[Component | CBlock]) -> int:
     return 0
 
 
+def _last_usage_tokens(context: ChatContext) -> int | None:
+    """Return ``total_tokens`` from the most recent ``ModelOutputThunk`` with usage.
+
+    Walks *context* back-to-front looking for a ``ModelOutputThunk`` whose
+    ``usage`` dict has been populated by a backend's ``post_processing``.
+    Falls back to ``prompt_tokens + completion_tokens`` when ``total_tokens``
+    is missing.  Returns ``None`` if no usable token count can be recovered —
+    typically the case before the first model call completes.
+    """
+    for c in reversed(context.as_list()):
+        if isinstance(c, ModelOutputThunk) and c.usage is not None:
+            total = c.usage.get("total_tokens")
+            if total is None:
+                pt = c.usage.get("prompt_tokens") or 0
+                ct = c.usage.get("completion_tokens") or 0
+                total = pt + ct
+            return total if total and total > 0 else None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Abstract base
 # ---------------------------------------------------------------------------
@@ -80,9 +101,16 @@ def _find_prefix_end(components: list[Component | CBlock]) -> int:
 class CompactionStrategy(abc.ABC):
     """Abstract base class for context compaction strategies.
 
-    Each strategy carries a ``threshold`` — the component count above which
-    compaction should fire.  The :meth:`should_compact` helper checks this so
-    callers don't need to track the threshold separately.
+    Each strategy carries a ``threshold`` — the token count above which
+    compaction should fire.  The :meth:`should_compact` helper reads the
+    most recent ``ModelOutputThunk.usage`` populated by the backend and
+    compares its total token count to ``threshold``.
+
+    Because ``usage`` is recorded when a model call completes, the measured
+    token count reflects the context as of the *previous* turn — any
+    components appended since (e.g. a tool response) are not yet included.
+    In practice this one-turn lag is negligible unless a single tool call
+    adds a very large payload.
 
     Subclasses implement :meth:`compact` which receives the current
     ``ChatContext`` and returns a compacted copy.  The method is ``async``
@@ -90,25 +118,35 @@ class CompactionStrategy(abc.ABC):
     transparently; synchronous strategies simply never ``await``.
 
     Args:
-        threshold (int): Trigger compaction when the number of context
-            components exceeds this value.
+        threshold (int): Trigger compaction when the most recent thunk's
+            total token usage exceeds this value.  ``0`` disables compaction.
     """
 
     def __init__(self, *, threshold: int = 0) -> None:
-        """Initialize with the component-count threshold."""
+        """Initialize with the token-count threshold."""
         self.threshold = threshold
 
     def should_compact(self, context: ChatContext) -> bool:
-        """Return ``True`` when *context* exceeds the configured threshold.
+        """Return ``True`` when the last thunk's token usage exceeds ``threshold``.
+
+        Reads ``total_tokens`` from the most recent ``ModelOutputThunk.usage``
+        in *context*.  Returns ``False`` when no thunk with usage is present
+        (e.g. before the first model call) or when ``threshold`` is not
+        positive.
 
         Args:
             context: The context to check.
 
         Returns:
-            ``True`` if the number of components exceeds ``self.threshold``
+            ``True`` if the recovered token count exceeds ``self.threshold``
             and ``self.threshold`` is greater than 0.
         """
-        return self.threshold > 0 and len(context.as_list()) > self.threshold
+        if self.threshold <= 0:
+            return False
+        tokens = _last_usage_tokens(context)
+        if tokens is None:
+            return False
+        return tokens > self.threshold
 
     async def maybe_compact(
         self,
@@ -163,7 +201,8 @@ class ClearAll(CompactionStrategy):
     The prefix is everything up to and including the first ``ReactInitiator``.
 
     Args:
-        threshold (int): Trigger compaction when context exceeds this many components.
+        threshold (int): Trigger compaction when the most recent thunk's total
+            token usage exceeds this value.
     """
 
     async def compact(
@@ -190,7 +229,8 @@ class KeepLastN(CompactionStrategy):
 
     Args:
         keep_n (int): Number of recent body components to retain.
-        threshold (int): Trigger compaction when context exceeds this many components.
+        threshold (int): Trigger compaction when the most recent thunk's total
+            token usage exceeds this value.
     """
 
     def __init__(self, *, keep_n: int = 5, threshold: int = 0) -> None:
@@ -230,7 +270,8 @@ class LLMSummarize(CompactionStrategy):
 
     Args:
         keep_n (int): Number of recent body components to retain verbatim.
-        threshold (int): Trigger compaction when context exceeds this many components.
+        threshold (int): Trigger compaction when the most recent thunk's total
+            token usage exceeds this value.
     """
 
     def __init__(self, *, keep_n: int = 5, threshold: int = 0) -> None:

@@ -20,6 +20,7 @@ from mellea.stdlib.compaction import (
     KeepLastN,
     LLMSummarize,
     _find_prefix_end,
+    _last_usage_tokens,
     rebuild_chat_context,
 )
 from mellea.stdlib.components.chat import Message
@@ -46,6 +47,17 @@ def _build_context(components: list[Component | CBlock]) -> ChatContext:
 
 def _msg(role: Message.Role, content: str) -> Message:
     return Message(role=role, content=content)
+
+
+def _thunk(total_tokens: int, value: str = "") -> ModelOutputThunk:
+    """Build a ModelOutputThunk with a populated usage dict."""
+    mot = ModelOutputThunk(value=value)
+    mot.usage = {
+        "prompt_tokens": total_tokens,
+        "completion_tokens": 0,
+        "total_tokens": total_tokens,
+    }
+    return mot
 
 
 # ---------------------------------------------------------------------------
@@ -98,19 +110,48 @@ class TestFindPrefixEnd:
 # ---------------------------------------------------------------------------
 
 
-class TestShouldCompact:
-    def test_below_threshold(self):
+class TestLastUsageTokens:
+    def test_no_thunk_returns_none(self):
         ctx = _build_context([_msg("user", "a"), _msg("assistant", "b")])
-        strategy = KeepLastN(keep_n=1, threshold=5)
+        assert _last_usage_tokens(ctx) is None
+
+    def test_thunk_without_usage_returns_none(self):
+        ctx = _build_context([_msg("user", "a"), ModelOutputThunk(value="b")])
+        assert _last_usage_tokens(ctx) is None
+
+    def test_reads_total_tokens(self):
+        ctx = _build_context([_msg("user", "a"), _thunk(total_tokens=150)])
+        assert _last_usage_tokens(ctx) == 150
+
+    def test_falls_back_to_prompt_plus_completion(self):
+        mot = ModelOutputThunk(value="x")
+        mot.usage = {"prompt_tokens": 40, "completion_tokens": 20}
+        ctx = _build_context([_msg("user", "a"), mot])
+        assert _last_usage_tokens(ctx) == 60
+
+    def test_uses_most_recent_thunk(self):
+        ctx = _build_context([_thunk(100), _msg("user", "x"), _thunk(500)])
+        assert _last_usage_tokens(ctx) == 500
+
+
+class TestShouldCompact:
+    def test_no_thunk_does_not_trigger(self):
+        ctx = _build_context([_msg("user", "a"), _msg("assistant", "b")])
+        strategy = KeepLastN(keep_n=1, threshold=100)
+        assert strategy.should_compact(ctx) is False
+
+    def test_below_threshold(self):
+        ctx = _build_context([_msg("user", "a"), _thunk(total_tokens=50)])
+        strategy = KeepLastN(keep_n=1, threshold=100)
         assert strategy.should_compact(ctx) is False
 
     def test_above_threshold(self):
-        ctx = _build_context([_msg("user", str(i)) for i in range(10)])
-        strategy = KeepLastN(keep_n=1, threshold=5)
+        ctx = _build_context([_msg("user", "a"), _thunk(total_tokens=500)])
+        strategy = KeepLastN(keep_n=1, threshold=100)
         assert strategy.should_compact(ctx) is True
 
     def test_zero_threshold_never_triggers(self):
-        ctx = _build_context([_msg("user", str(i)) for i in range(10)])
+        ctx = _build_context([_msg("user", "a"), _thunk(total_tokens=10_000)])
         strategy = KeepLastN(keep_n=1, threshold=0)
         assert strategy.should_compact(ctx) is False
 
@@ -193,6 +234,7 @@ class _ScriptedTurn:
 
     value: str
     tool_calls: dict[str, ModelToolCall] | None = None
+    total_tokens: int | None = None
 
 
 class ScriptedBackend(Backend):
@@ -215,6 +257,12 @@ class ScriptedBackend(Backend):
             value=turn.value, tool_calls=turn.tool_calls
         )
         mot._generate_log = GenerateLog(is_final_result=True)
+        if turn.total_tokens is not None:
+            mot.usage = {
+                "prompt_tokens": turn.total_tokens,
+                "completion_tokens": 0,
+                "total_tokens": turn.total_tokens,
+            }
         return mot, ctx.add(action).add(mot)
 
     async def generate_from_raw(
@@ -298,23 +346,28 @@ def _final_answer_call(answer: str = "42") -> _ScriptedTurn:
 
 
 def _tool_call_turn(
-    tool_name: str, tool: MelleaTool, thought: str = "thinking..."
+    tool_name: str,
+    tool: MelleaTool,
+    thought: str = "thinking...",
+    total_tokens: int | None = None,
 ) -> _ScriptedTurn:
     tc = ModelToolCall(name=tool_name, func=tool, args={})
-    return _ScriptedTurn(value=thought, tool_calls={tool_name: tc})
+    return _ScriptedTurn(
+        value=thought, tool_calls={tool_name: tc}, total_tokens=total_tokens
+    )
 
 
 class TestReactWithCompaction:
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_compaction_triggers_during_react(self):
-        """Compaction fires when context exceeds threshold, loop still completes."""
+        """Compaction fires when last thunk's token usage exceeds threshold."""
         search = _make_tool("search", "found it")
         backend = ScriptedBackend(
             [
-                _tool_call_turn("search", search, "step 1"),
-                _tool_call_turn("search", search, "step 2"),
-                _tool_call_turn("search", search, "step 3"),
+                _tool_call_turn("search", search, "step 1", total_tokens=200),
+                _tool_call_turn("search", search, "step 2", total_tokens=200),
+                _tool_call_turn("search", search, "step 3", total_tokens=200),
                 _final_answer_call("done"),
             ]
         )
@@ -325,7 +378,7 @@ class TestReactWithCompaction:
             backend=backend,
             tools=[search],
             loop_budget=10,
-            compaction=KeepLastN(keep_n=3, threshold=6),
+            compaction=KeepLastN(keep_n=3, threshold=100),
         )
         assert result.value == "done"
 
