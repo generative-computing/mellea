@@ -66,7 +66,7 @@ class ChunkEvent(StreamEvent):
     non-``"fail"`` for this chunk and the chunk has been placed on the
     consumer queue.
 
-    Attributes:
+    Args:
         text: The chunk text that was validated and emitted.
         chunk_index: Zero-based position of this chunk in the stream.
         attempt: Sampling attempt number (always ``1`` in v1).
@@ -84,7 +84,7 @@ class QuickCheckEvent(StreamEvent):
     One event per chunk, covering all active requirements in parallel.
     Not emitted when there are no ``quick_check_requirements``.
 
-    Attributes:
+    Args:
         chunk_index: Zero-based position of the chunk that was validated.
         attempt: Sampling attempt number (always ``1`` in v1).
         passed: ``True`` if all active requirements returned non-``"fail"``
@@ -107,7 +107,7 @@ class StreamingDoneEvent(StreamEvent):
     Only emitted on natural stream completion.  Not emitted on early exit
     (generation was cancelled before the stream finished) or on exception.
 
-    Attributes:
+    Args:
         attempt: Sampling attempt number (always ``1`` in v1).
         full_text: Complete accumulated text at stream end.
     """
@@ -123,7 +123,7 @@ class FullValidationEvent(StreamEvent):
     Only emitted when at least one requirement did not fail during streaming
     and the stream completed naturally.  Not emitted on early exit.
 
-    Attributes:
+    Args:
         attempt: Sampling attempt number (always ``1`` in v1).
         passed: ``True`` if all final
             :class:`~mellea.core.requirement.ValidationResult` objects passed.
@@ -145,7 +145,7 @@ class RetryEvent(StreamEvent):
     :func:`stream_with_chunking`.  When orchestrator-side retry is added,
     this event will fire before each re-attempt.
 
-    Attributes:
+    Args:
         attempt: Attempt number being started (1-based).
         reason: Human-readable reason for the retry.
     """
@@ -161,7 +161,7 @@ class CompletedEvent(StreamEvent):
     Always the last event before :meth:`StreamChunkingResult.events`
     terminates.  ``success`` reflects :attr:`StreamChunkingResult.completed`.
 
-    Attributes:
+    Args:
         success: ``True`` if the stream completed normally (no ``"fail"``
             result and no unhandled exception); ``False`` otherwise.
         full_text: Complete accumulated text.  On early exit or exception,
@@ -178,7 +178,7 @@ class CompletedEvent(StreamEvent):
 class ErrorEvent(StreamEvent):
     """Emitted when an unhandled exception occurs in the orchestrator.
 
-    Attributes:
+    Args:
         exception_type: Python class name of the exception
             (e.g. ``"ValueError"``).
         detail: String representation of the exception.  If
