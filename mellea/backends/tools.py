@@ -12,7 +12,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from typing import Any, Literal, overload
+from typing import Any, Generic, Literal, ParamSpec, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,16 +22,23 @@ from ..core import CBlock, Component, TemplateRepresentation
 from ..core.base import AbstractMelleaTool
 from .model_options import ModelOption
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-class MelleaTool(AbstractMelleaTool):
+
+class MelleaTool(AbstractMelleaTool[P, R]):
     """Tool class to represent a callable tool with an OpenAI-compatible JSON schema.
 
     Wraps a Python callable alongside its JSON schema representation so it can be
     registered with backends that support tool calling (OpenAI, Ollama, HuggingFace, etc.).
 
+    Type parameters:
+        P: Parameter specification for the underlying callable
+        R: Return type of the tool
+
     Args:
         name (str): The tool name used for identification and lookup.
-        tool_call (Callable): The underlying Python callable to invoke when the tool is run.
+        tool_call (Callable[P, R]): The underlying Python callable to invoke when the tool is run.
         as_json_tool (dict[str, Any]): The OpenAI-compatible JSON schema dict describing
             the tool's parameters.
 
@@ -42,25 +49,25 @@ class MelleaTool(AbstractMelleaTool):
 
     name: str
     _as_json_tool: dict[str, Any]
-    _call_tool: Callable[..., Any]
+    _call_tool: Callable[P, R]
 
     def __init__(
-        self, name: str, tool_call: Callable, as_json_tool: dict[str, Any]
+        self, name: str, tool_call: Callable[P, R], as_json_tool: dict[str, Any]
     ) -> None:
         """Initialize the tool with a name, tool call and as_json_tool dict."""
         self.name = name
         self._as_json_tool = as_json_tool
         self._call_tool = tool_call
 
-    def run(self, *args, **kwargs) -> Any:
+    def run(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the tool with the given arguments.
 
         Args:
-            args: Positional arguments forwarded to the underlying callable.
-            kwargs: Keyword arguments forwarded to the underlying callable.
+            *args: Positional arguments forwarded to the underlying callable.
+            **kwargs: Keyword arguments forwarded to the underlying callable.
 
         Returns:
-            Any: The return value of the underlying callable.
+            R: The return value of the underlying callable.
         """
         return self._call_tool(*args, **kwargs)
 
@@ -70,14 +77,14 @@ class MelleaTool(AbstractMelleaTool):
         return self._as_json_tool.copy()
 
     @classmethod
-    def from_langchain(cls, tool: Any) -> "MelleaTool":
+    def from_langchain(cls, tool: Any) -> "MelleaTool[P, Any]":
         """Create a MelleaTool from a LangChain tool object.
 
         Args:
             tool (Any): A ``langchain_core.tools.BaseTool`` instance to wrap.
 
         Returns:
-            MelleaTool: A Mellea tool wrapping the LangChain tool.
+            MelleaTool[P, Any]: A Mellea tool wrapping the LangChain tool.
 
         Raises:
             ImportError: If ``langchain-core`` is not installed.
@@ -117,14 +124,14 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_smolagents(cls, tool: Any) -> "MelleaTool":
+    def from_smolagents(cls, tool: Any) -> "MelleaTool[P, Any]":
         """Create a Tool from a HuggingFace smolagents tool object.
 
         Args:
             tool: A smolagents.Tool instance
 
         Returns:
-            MelleaTool: A Mellea tool wrapping the smolagents tool
+            MelleaTool[P, Any]: A Mellea tool wrapping the smolagents tool
 
         Raises:
             ImportError: If smolagents is not installed
@@ -172,18 +179,20 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_callable(cls, func: Callable, name: str | None = None) -> "MelleaTool":
+    def from_callable(
+        cls, func: Callable[P, R], name: str | None = None
+    ) -> "MelleaTool[P, R]":
         """Create a MelleaTool from a plain Python callable.
 
         Introspects the callable's signature and docstring to build an
         OpenAI-compatible JSON schema automatically.
 
         Args:
-            func (Callable): The Python callable to wrap as a tool.
+            func (Callable[P, R]): The Python callable to wrap as a tool.
             name (str | None): Optional name override; defaults to ``func.__name__``.
 
         Returns:
-            MelleaTool: A Mellea tool wrapping the callable.
+            MelleaTool[P, R]: A Mellea tool wrapping the callable with preserved parameter and return types.
         """
         # Use the function name if the name is '' or None.
         tool_name = name or func.__name__
@@ -195,28 +204,34 @@ class MelleaTool(AbstractMelleaTool):
 
 
 @overload
-def tool(func: Callable, *, name: str | None = None) -> MelleaTool: ...
+def tool(func: Callable[P, R], *, name: str | None = None) -> MelleaTool[P, R]: ...
 
 
 @overload
-def tool(*, name: str | None = None) -> Callable[[Callable], MelleaTool]: ...
+def tool(
+    *, name: str | None = None
+) -> Callable[[Callable[P, R]], MelleaTool[P, R]]: ...
 
 
 def tool(
-    func: Callable | None = None, name: str | None = None
-) -> MelleaTool | Callable[[Callable], MelleaTool]:
-    """Decorator to mark a function as a Mellea tool.
+    func: Callable[P, R] | None = None, name: str | None = None
+) -> MelleaTool[P, R] | Callable[[Callable[P, R]], MelleaTool[P, R]]:
+    """Decorator to mark a function as a Mellea tool with type-safe parameter and return types.
 
     This decorator wraps a function to make it usable as a tool without
     requiring explicit MelleaTool.from_callable() calls. The decorated
     function returns a MelleaTool instance that must be called via .run().
+
+    Type parameters:
+        P: Parameter specification of the decorated function
+        R: Return type of the decorated function
 
     Args:
         func: The function to decorate (when used without arguments)
         name: Optional custom name for the tool (defaults to function name)
 
     Returns:
-        A MelleaTool instance. Use .run() to invoke the tool.
+        A MelleaTool[P, R] instance with preserved parameter and return types. Use .run() to invoke.
         The returned object passes isinstance(result, MelleaTool) checks.
 
     Examples:
@@ -237,8 +252,8 @@ def tool(
         >>> # Can be used directly in tools list (no extraction needed)
         >>> tools = [get_weather]
         >>>
-        >>> # Must use .run() to invoke the tool
-        >>> result = get_weather.run(location="Boston")
+        >>> # Must use .run() to invoke the tool - now with type hints
+        >>> result = get_weather.run(location="Boston")  # IDE shows: location: str, days: int = 1
 
         With custom name (as decorator):
         >>> @tool(name="weather_api")
@@ -252,8 +267,8 @@ def tool(
         >>> differently_named_tool = tool(new_tool, name="different_name")
     """
 
-    def decorator(f: Callable) -> MelleaTool:
-        # Simply return the base MelleaTool instance
+    def decorator(f: Callable[P, R]) -> MelleaTool[P, R]:
+        # Simply return the base MelleaTool instance with preserved types
         return MelleaTool.from_callable(f, name=name)
 
     # Handle both @tool and @tool() syntax
