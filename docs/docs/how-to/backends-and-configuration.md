@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/guide/backends-and-configuration"
 title: "Backends and Configuration"
 description: "Configure Mellea to use Ollama, OpenAI, LiteLLM, HuggingFace, or WatsonX backends."
 # diataxis: how-to

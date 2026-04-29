@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/write-custom-verifiers"
 title: "Write Custom Verifiers"
 description: "Write validation functions that inspect LLM output and return pass/fail results with repair guidance."
 # diataxis: how-to

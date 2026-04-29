@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/context-and-sessions"
 title: "Context and Sessions"
 description: "How Component, Backend, Context, and Session fit together in Mellea's architecture."
 # diataxis: explanation

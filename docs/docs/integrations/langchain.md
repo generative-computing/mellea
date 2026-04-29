@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/langchain"
 title: "LangChain"
 description: "Use LangChain tools inside Mellea and seed a Mellea session with LangChain message history."
 # diataxis: how-to

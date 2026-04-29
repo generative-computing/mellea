@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/01-your-first-generative-program"
 title: "Tutorial: Your First Generative Program"
 description: "Build a document analysis pipeline step by step — from a single instruct() call to a composed, typed, validated generative program."
 # diataxis: tutorial

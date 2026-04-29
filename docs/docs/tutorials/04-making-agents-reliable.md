@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/04-making-agents-reliable"
 title: "Tutorial: Making Agents Reliable"
 description: "Add requirements validation and Guardian safety checks to a ReACT tool-using agent."
 # diataxis: tutorial

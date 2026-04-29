@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/custom-components"
 title: "Building Custom Components"
 description: "Implement the Component Protocol to create reusable, testable generative building blocks."
 # diataxis: how-to

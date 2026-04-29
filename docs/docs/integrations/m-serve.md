@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/m-serve"
 title: "m serve"
 description: "Run a Mellea program as an OpenAI-compatible chat endpoint with m serve."
 # diataxis: how-to
