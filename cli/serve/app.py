@@ -177,6 +177,23 @@ def make_chat_endpoint(module):
                     model_options=model_options,
                 )
 
+            # Leave as None since we don't track backend config fingerprints yet
+            system_fingerprint = None
+
+            # Handle streaming response
+            if request.stream:
+                return StreamingResponse(
+                    stream_chat_completion_chunks(
+                        output=output,
+                        completion_id=completion_id,
+                        model=request.model,
+                        created=created_timestamp,
+                        stream_options=request.stream_options,
+                        system_fingerprint=system_fingerprint,
+                    ),
+                    media_type="text/event-stream",
+                )
+
             # Extract tool calls from the ModelOutputThunk if available
             tool_calls_list = build_tool_calls(output)
             tool_calls = (
@@ -202,25 +219,6 @@ def make_chat_endpoint(module):
                 ]
                 | None
             ) = "tool_calls" if tool_calls else "stop"
-
-            # system_fingerprint represents backend config hash, not model name
-            # The model name is already in response.model (line 73)
-            # Leave as None since we don't track backend config fingerprints yet
-            system_fingerprint = None
-
-            # Handle streaming response
-            if request.stream:
-                return StreamingResponse(
-                    stream_chat_completion_chunks(
-                        output=output,
-                        completion_id=completion_id,
-                        model=request.model,
-                        created=created_timestamp,
-                        stream_options=request.stream_options,
-                        system_fingerprint=system_fingerprint,
-                    ),
-                    media_type="text/event-stream",
-                )
 
             return ChatCompletion(
                 id=completion_id,
