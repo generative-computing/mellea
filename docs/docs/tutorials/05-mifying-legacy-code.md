@@ -65,6 +65,8 @@ result = m.query(record, "What was this customer's last purchase?")
 print(str(result))
 ```
 
+**Sample output:**
+
 ```text
 The last purchase of the customer named Ada is wireless headphones.
 ```
@@ -107,22 +109,33 @@ result = m.query(record, "Is this a high-value customer?")
 print(str(result))
 ```
 
+**Sample output:**
+
 ```text
-Based on the information provided in your query, it's difficult to definitively categorize Ada as a "high-value" customer without additional context or comparison data. High-value customers are typically defined by their purchase frequency and average order value (AOV), not just by total spend.
+Based on the information provided in your query, it's difficult to
+definitively categorize Ada as a "high-value" customer without
+additional context or comparison data. High-value customers are
+typically defined by their purchase frequency and average order
+value (AOV), not just by total spend.
 
 From the given details:
 - Customer: Ada
 - Last Purchase: Wireless Headphones
 - Year-to-date Spend: £1240.50
 
-There is no information available about how often Ada has made purchases or what her typical spending per transaction looks like. Therefore, it's impossible to say whether this customer qualifies as high-value without more data.
+There is no information available about how often Ada has made
+purchases or what her typical spending per transaction looks like.
+Therefore, it's impossible to say whether this customer qualifies
+as high-value without more data.
 
-For a better understanding of Ada's value, consider gathering the following:
+For a better understanding of Ada's value, consider gathering the
+following:
 1. Total number of transactions over the year.
 2. Average order value (AOV).
 3. Time between purchases.
 
-Once these details are available, you can analyze them against your company's specific criteria for what constitutes a high-value customer.
+Once these details are available, you can analyze them against your
+company's specific criteria for what constitutes a high-value customer.
 ```
 
 > **Note:** LLM output is non-deterministic, output may vary.
@@ -154,10 +167,13 @@ result = m.query(record, "Classify this customer as low, medium, or high value."
 print(str(result))
 ```
 
+**Sample output:**
+
 ```text
-Based on the information provided — Ada spent £1240.50 this year — this customer
-would fall into a low-value tier. Low-value customers typically have annual spend
-under £2000, medium between £2000 and £10000, and high above £10000.
+Based on the information provided — Ada spent £1240.50 this year —
+this customer would fall into a low-value tier. Low-value customers
+typically have annual spend under £2000, medium between £2000 and
+£10000, and high above £10000.
 ```
 
 > **Note:** LLM output is non-deterministic, output may vary. The model only sees
@@ -199,6 +215,8 @@ transformed = m.transform(record, "Write a one-line CRM note for this customer."
 print(str(transformed.name))
 ```
 
+**Sample output:**
+
 ```text
 Ordered wireless headphones for home use.
 ```
@@ -234,12 +252,23 @@ result = m.query(record, "Is this a large or small account?")
 print(str(result))
 ```
 
+**Sample output:**
+
 ```text
-The term "large" or "small" for an account can be subjective and dependent on various factors, such as industry standards, company size, or specific business context.
+The term "large" or "small" for an account can be subjective and
+dependent on various factors, such as industry standards, company
+size, or specific business context.
 
-However, if we consider the given value of Acme Corp to be 58,000.0, this could potentially fall into a category typically defined as small businesses in some industries, particularly in the U.S., where "small" is often less than $6 million according to SBA guidelines for many sectors.
+However, if we consider the given value of Acme Corp to be 58,000.0,
+this could potentially fall into a category typically defined as small
+businesses in some industries, particularly in the U.S., where "small"
+is often less than $6 million according to SBA guidelines for many
+sectors.
 
-Please note that these classifications can vary greatly based on the industry and location. For a precise classification, it would be best to compare this value against relevant benchmarks or consult with a professional in your specific field.
+Please note that these classifications can vary greatly based on the
+industry and location. For a precise classification, it would be best
+to compare this value against relevant benchmarks or consult with a
+professional in your specific field.
 ```
 
 > **Note:** LLM output is non-deterministic, output may vary.

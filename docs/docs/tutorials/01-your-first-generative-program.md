@@ -42,8 +42,11 @@ summary = m.instruct(
 print(str(summary))
 ```
 
+**Sample output:**
+
 ```text
-The initial experience with the product's onboarding process was challenging but support staff provided valuable assistance later
+The initial experience with the product's onboarding process was
+challenging but support staff provided valuable assistance later.
 ```
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording.
@@ -83,8 +86,11 @@ feedback = (
 print(summarize_feedback(m, feedback))
 ```
 
+**Sample output:**
+
 ```text
-The onboarding process was complicated and time-consuming, but the support team proved to be highly beneficial upon successful connection.
+The onboarding process was complicated and time-consuming, but the
+support team proved to be highly beneficial upon successful connection.
 ```
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
@@ -124,8 +130,12 @@ feedback = (
 print(summarize_feedback(m, feedback))
 ```
 
+**Sample output:**
+
 ```text
-The onboarding process was confusing and time-consuming, but the support team proved to be very helpful upon successful completion of the initial steps.
+The onboarding process was confusing and time-consuming, but the
+support team proved to be very helpful upon successful completion
+of the initial steps.
 ```
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence capturing both the negative and positive aspects.
@@ -176,8 +186,11 @@ feedback = (
 print(summarize_feedback(m, feedback))
 ```
 
+**Sample output:**
+
 ```text
-Onboarding was confusing and lengthy, but support was helpful after issues were resolved.
+Onboarding was confusing and lengthy, but support was helpful after
+issues were resolved.
 ```
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence capturing fewer than 30 words.
@@ -230,6 +243,8 @@ def summarize_feedback(m: mellea.MelleaSession, text: str) -> str:
 m = mellea.start_session()
 print(summarize_feedback(m, "The onboarding was confusing and took far too long."))
 ```
+
+**Sample output:**
 
 ```text
 Onboarding process was found confusing and overly prolonged by customers.
@@ -317,8 +332,11 @@ analyze_feedback(
 )
 ```
 
+**Sample output:**
+
 ```text
-Summary:   Onboarding was confusing and lengthy, but support was helpful after contact.
+Summary:   Onboarding was confusing and lengthy, but support was
+           helpful after contact.
 Sentiment: mixed
 Complaint: onboarding was confusing and took far too long
 Positive:  Support was helpful once I got through

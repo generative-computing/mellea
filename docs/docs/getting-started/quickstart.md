@@ -20,6 +20,8 @@ email = m.instruct("Write an email inviting interns to an office party at 3:30pm
 print(str(email))
 ```
 
+**Sample output:**
+
 ```text
 Subject: Invitation to the Office Party
 
@@ -27,11 +29,18 @@ Dear [Intern's Name],
 
 I hope this message finds you well.
 
-We would like to extend a warm invitation to all interns for our upcoming Office Party, which is scheduled for today at 3:30 PM in the main conference room. 
+We would like to extend a warm invitation to all interns for our
+upcoming Office Party, which is scheduled for today at 3:30 PM in
+the main conference room.
 
-The event will provide an excellent opportunity for us to get to know each other better and create lasting memories together. There will be light refreshments, music, and networking opportunities.
+The event will provide an excellent opportunity for us to get to
+know each other better and create lasting memories together. There
+will be light refreshments, music, and networking opportunities.
 
-Kindly let us know if you are able to attend by replying to this email at your earliest convenience. If any special accommodations are needed due to health or religious reasons, please inform us as soon as possible so we can make the necessary arrangements.
+Kindly let us know if you are able to attend by replying to this
+email at your earliest convenience. If any special accommodations
+are needed due to health or religious reasons, please inform us as
+soon as possible so we can make the necessary arrangements.
 
 We look forward to seeing many of you there!
 
@@ -71,20 +80,39 @@ print(write_email(
 ))
 ```
 
+**Sample output:**
+
 ```text
-Subject: Appreciation for Your Efforts in Managing Intern Events and Snack Delivery
+Subject: Appreciation for Your Efforts in Managing Intern Events
+         and Snack Delivery
 
 Dear Olivia,
 
-I hope this message finds you well. I am writing to express my sincere appreciation for your outstanding efforts in organizing our recent intern events as well as handling the issue related to snack deliveries.
+I hope this message finds you well. I am writing to express my
+sincere appreciation for your outstanding efforts in organizing our
+recent intern events as well as handling the issue related to snack
+deliveries.
 
-Your ability to organize these events is truly commendable. You have managed to create an environment that is not only productive but also enjoyable for all participants, including our interns. Your dedication and hard work are evident in how seamlessly each event was executed, ensuring a smooth flow of activities and maintaining high levels of engagement among attendees.
+Your ability to organize these events is truly commendable. You have
+managed to create an environment that is not only productive but also
+enjoyable for all participants, including our interns. Your dedication
+and hard work are evident in how seamlessly each event was executed,
+ensuring a smooth flow of activities and maintaining high levels of
+engagement among attendees.
 
-Furthermore, I must acknowledge your proactive approach when it came to addressing the issue concerning snack deliveries. The fact that you were able to swiftly resolve this problem speaks volumes about your organizational skills, attention to detail, and ability to manage unexpected challenges effectively. 
+Furthermore, I must acknowledge your proactive approach when it came
+to addressing the issue concerning snack deliveries. The fact that
+you were able to swiftly resolve this problem speaks volumes about
+your organizational skills, attention to detail, and ability to
+manage unexpected challenges effectively.
 
-Your contributions have been invaluable in making these events successful and enjoyable for everyone involved. Your commitment towards maintaining a positive work environment reflects highly on our team culture.
+Your contributions have been invaluable in making these events
+successful and enjoyable for everyone involved. Your commitment
+towards maintaining a positive work environment reflects highly on
+our team culture.
 
-Thank you once again for all that you do. We are fortunate to have someone as dedicated and capable as you within our organization.
+Thank you once again for all that you do. We are fortunate to have
+someone as dedicated and capable as you within our organization.
 
 Best Regards,
 
@@ -118,18 +146,26 @@ m = mellea.start_session()
 print(write_email(m, name="Olivia", notes="Organized intern events."))
 ```
 
+**Sample output:**
+
 ```text
 subject: organized intern events
 
 hello olivia,
 
-i hope this message finds you well. 
+i hope this message finds you well.
 
-recently, we've been working diligently on organizing some exciting intern events for our team members to engage with and learn from each other. these activities are designed not just for fun but also as a platform for interns to showcase their skills and ideas.
+recently, we've been working diligently on organizing some exciting
+intern events for our team members to engage with and learn from
+each other. these activities are designed not just for fun but also
+as a platform for interns to showcase their skills and ideas.
 
-please feel free to reach out if you need any further information or wish to participate in planning some of the upcoming events. your input would be greatly appreciated.
+please feel free to reach out if you need any further information
+or wish to participate in planning some of the upcoming events.
+your input would be greatly appreciated.
 
-thank you for being an integral part of our team, and we look forward to seeing everyone at these gatherings.
+thank you for being an integral part of our team, and we look
+forward to seeing everyone at these gatherings.
 
 best regards,
 

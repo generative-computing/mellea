@@ -40,6 +40,8 @@ result = classify_sentiment(m, text="The product arrived damaged and support ign
 print(str(result))
 ```
 
+**Sample output:**
+
 ```text
 negative
 ```
@@ -89,6 +91,8 @@ result = analyse_feedback(
 )
 print(result.sentiment, result.key_issue, result.actionable)
 ```
+
+**Sample output:**
 
 ```text
 negative unclear onboarding process True
@@ -143,8 +147,14 @@ m = mellea.start_session()
 print(handle_ticket(m, "The app crashes on login every time.", "French"))
 ```
 
+**Sample output:**
+
 ```text
-Cher(e) utilisateur valoré(e), nous sommes vraiment désolés de savoir que vous rencontrez des problèmes de crash. Notre équipe travaille activement à la résolution de ce problème et à l'amélioration de votre expérience avec notre service. Nous vous remercions pour votre compréhension et votre patience.
+Cher(e) utilisateur valoré(e), nous sommes vraiment désolés de savoir
+que vous rencontrez des problèmes de crash. Notre équipe travaille
+activement à la résolution de ce problème et à l'amélioration de votre
+expérience avec notre service. Nous vous remercions pour votre
+compréhension et votre patience.
 ```
 
 > **Note:** LLM output is non-deterministic. The response will be in French (or whichever target language you specify) and will vary in wording.
@@ -206,11 +216,18 @@ grade = grade_essay(m, essay=essay)
 print(f"Grade with grammar context: {grade}")
 ```
 
+**Sample output:**
+
 ```text
 Grade: 85
-Feedback: ['Add more descriptive language to make your writing more vivid.', 'Include specific examples or details that support your point.', 'Consider adding a thesis statement to clarify the main argument of your essay.']
+Feedback: ['Add more descriptive language to make your writing more vivid.',
+           'Include specific examples or details that support your point.',
+           'Consider adding a thesis statement to clarify the argument.']
 Grade with teacher context: 85
-Feedback with teacher context: ['Add more descriptive language to make your writing more vivid.', 'Include specific examples or details that support your point.', 'Consider adding a thesis statement to clarify the main argument of your essay.']
+Feedback with teacher context: [
+  'Add more descriptive language to make your writing more vivid.',
+  'Include specific examples or details that support your point.',
+  'Consider adding a thesis statement to clarify the argument.']
 Grade with grammar context: 95
 ```
 
@@ -274,14 +291,21 @@ except ValueError as e:
     print(f"Validation failed: {e}")
 ```
 
+**Sample output:**
+
 ```text
 Dear Client,
 
-Given your age of 62 and a conservative risk tolerance, it's crucial to maintain the stability of your investments while also ensuring you can access funds within three years. Here are some steps we recommend:
+Given your age of 62 and a conservative risk tolerance, it's crucial
+to maintain the stability of your investments while also ensuring you
+can access funds within three years. Here are some steps we recommend:
 
-1. **Diversification**: Spread your investments across different asset classes such as stocks, bonds, real estate etc., to minimize risk.
-2. **Liquidity**: Ensure a portion of your portfolio is in liquid assets or short-term bonds for easy access within the next 3 years.
-3. **Volatility**: Consider investing in low-volatility funds or ETFs which can help mitigate the impact of market swings on your portfolio.
+1. **Diversification**: Spread your investments across different asset
+   classes such as stocks, bonds, real estate etc., to minimize risk.
+2. **Liquidity**: Ensure a portion of your portfolio is in liquid
+   assets or short-term bonds for easy access within the next 3 years.
+3. **Volatility**: Consider investing in low-volatility funds or ETFs
+   which can help mitigate the impact of market swings on your portfolio.
 ```
 
 > **Note:** LLM output is non-deterministic. The letter will vary in wording but should be 50+ words and free of prohibited compliance language (`"guaranteed returns"`, `"no risk"`, etc.). If either check fails, you will see `Validation failed: ...` instead.

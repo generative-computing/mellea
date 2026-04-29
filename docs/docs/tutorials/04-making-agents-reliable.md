@@ -74,8 +74,16 @@ else:
     print(str(result))
 ```
 
+**Sample output:**
+
 ```text
-Mellea is a Python framework designed for creating and managing generative programs. It provides tools and libraries that allow developers to build applications which can generate content or behaviors over time in an algorithmic manner. The framework likely includes features such as event handling, state management, and scheduling capabilities, making it easier to work with complex procedural logic.
+Mellea is a Python framework designed for creating and managing
+generative programs. It provides tools and libraries that allow
+developers to build applications which can generate content or
+behaviors over time in an algorithmic manner. The framework likely
+includes features such as event handling, state management, and
+scheduling capabilities, making it easier to work with complex
+procedural logic.
 
 The word 'Mellea' consists of 6 characters.
 ```
@@ -156,8 +164,13 @@ else:
     print(str(result))
 ```
 
+**Sample output:**
+
 ```text
-Mellea is a Python framework designed for creating and managing generative programs, facilitating the development of complex algorithms and simulations with ease. The word 'Mellea' consists of 6 characters.
+Mellea is a Python framework designed for creating and managing
+generative programs, facilitating the development of complex
+algorithms and simulations with ease. The word 'Mellea' consists
+of 6 characters.
 ```
 
 > **Note:** With the 50-word requirement enforced, the response will be concise and answer both questions. Wording varies by model and temperature.
@@ -253,17 +266,27 @@ else:
 
 On a successful run (the most common case):
 
+**Sample output:**
+
 ```text
-Passed: Mellea is a Python framework designed for creating and managing generative programs, facilitating complex program generation tasks through its modular architecture. The word "Mellea" consists of 6 characters.
+Passed: Mellea is a Python framework designed for creating and managing
+generative programs, facilitating complex program generation tasks
+through its modular architecture. The word "Mellea" consists of 6
+characters.
 ```
 
 If all attempts exceed the word limit:
 
+**Sample output:**
+
 ```text
 All 3 attempts failed.
-  Attempt 1: Mellea is an open-source Python framework designed to help developers build generative...
-  Attempt 2: Based on the web search, Mellea is a Python framework for generative programs. The wor...
-  Attempt 3: Mellea is a Python framework. According to a web search, it helps build generative pro...
+  Attempt 1: Mellea is an open-source Python framework designed to help
+             developers build generative...
+  Attempt 2: Based on the web search, Mellea is a Python framework for
+             generative programs. The wor...
+  Attempt 3: Mellea is a Python framework. According to a web search,
+             it helps build generative pro...
 ```
 
 `sampling.success` is `True` when at least one attempt satisfied all requirements.
@@ -368,8 +391,13 @@ else:
         print(f"Jailbreak risk detected (score: {jailbreak_score:.2f})")
 ```
 
+**Sample output:**
+
 ```text
-Output passed safety checks: Mellea is a Python framework designed for creating generative programs, enabling users to build complex and dynamic applications with ease. The word "Mellea" consists of 6 characters.
+Output passed safety checks: Mellea is a Python framework designed
+for creating generative programs, enabling users to build complex
+and dynamic applications with ease. The word "Mellea" consists of
+6 characters.
 ```
 
 > **Note:** Guardian intrinsics load LoRA adapters and require `LocalHFBackend`.
@@ -442,6 +470,8 @@ for criterion in criteria:
     status = "FAIL" if score >= 0.5 else "PASS"
     print(f"[{status}] {criterion}: {score:.2f}")
 ```
+
+**Sample output:**
 
 ```text
 [PASS] harm: 0.00
@@ -531,8 +561,17 @@ else:
         print(f"  Flagged: {sentence['response_text']}")
 ```
 
+**Sample output:**
+
 ```text
-Grounded response: Mellea is an open-source Python framework designed for building generative programs. It offers three primary functionalities: instruct(), @generative, and @mify as its core primitives. The unique aspect of Mellea lies in its backend-agnostic nature, meaning it can support various platforms such as Ollama, OpenAI, and also accommodate custom backends. This versatility makes it a powerful tool for developers looking to create flexible and adaptable generative applications.
+Grounded response: Mellea is an open-source Python framework designed
+for building generative programs. It offers three primary
+functionalities: instruct(), @generative, and @mify as its core
+primitives. The unique aspect of Mellea lies in its backend-agnostic
+nature, meaning it can support various platforms such as Ollama,
+OpenAI, and also accommodate custom backends. This versatility makes
+it a powerful tool for developers looking to create flexible and
+adaptable generative applications.
 ```
 
 > **Tip:** Pass the same text as both `grounding_context` to `instruct()` and as
@@ -598,8 +637,14 @@ else:
     print(f"Agent output flagged (harm score: {harm_score:.2f})")
 ```
 
+**Sample output:**
+
 ```text
-Agent output (safe): Mellea appears to be a Python framework specifically designed for creating generative programs. It provides tools and utilities that allow developers to build software systems where behavior or outcomes are determined by random or probabilistic processes, rather than fixed rules.
+Agent output (safe): Mellea appears to be a Python framework
+specifically designed for creating generative programs. It provides
+tools and utilities that allow developers to build software systems
+where behavior or outcomes are determined by random or probabilistic
+processes, rather than fixed rules.
 ```
 
 > **Note:** LLM output is non-deterministic. The `react()` loop runs sequentially —

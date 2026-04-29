@@ -44,8 +44,11 @@ async def main():
 asyncio.run(main())
 ```
 
+**Sample output:**
+
 ```text
-The customer experienced confusion during the initial setup process which was time-consuming, but support was beneficial once connected.
+The customer experienced confusion during the initial setup process
+which was time-consuming, but support was beneficial once connected.
 ```
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
@@ -94,8 +97,11 @@ asyncio.run(stream_summary(
 ))
 ```
 
+**Sample output:**
+
 ```text
-The customer found the onboarding process confusing and lengthy but received good support assistance afterwards.
+The customer found the onboarding process confusing and lengthy but
+received good support assistance afterwards.
 ```
 
 > **Note:** With streaming enabled, tokens print incrementally as they arrive. The example above shows the completed output. Your terminal will display each token as it is generated. LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
@@ -156,11 +162,19 @@ for summary in summaries:
     print(summary)
 ```
 
+**Sample output:**
+
 ```text
-The initial user experience was challenging with lengthy onboarding process but the support team proved to be very helpful post-onboarding.
-The product functions well; however, there are frequent issues with the mobile app crashing, and user inquiries to the support team have not been addressed.
-The customer received fast, high-quality deliveries that matched their expectations, indicating satisfaction with the service and willingness to reorder.
-The customer has been billed twice and is still awaiting a refund despite the two-week duration.
+The initial user experience was challenging with lengthy onboarding
+process but the support team proved to be very helpful post-onboarding.
+The product functions well; however, there are frequent issues with
+the mobile app crashing, and user inquiries to the support team have
+not been addressed.
+The customer received fast, high-quality deliveries that matched their
+expectations, indicating satisfaction with the service and willingness
+to reorder.
+The customer has been billed twice and is still awaiting a refund
+despite the two-week duration.
 ```
 
 > **Note:** LLM output is non-deterministic. You will see four summary lines, one per input, in the same order as `FEEDBACK_BATCH`.
@@ -226,12 +240,17 @@ asyncio.run(analyze_feedback(
 ))
 ```
 
+**Sample output:**
+
 ```text
-Summary:   The customer experienced confusion during the onboarding process which was lengthy, but support was beneficial upon successful navigation.
+Summary:   The customer experienced confusion during the onboarding
+           process which was lengthy, but support was beneficial
+           upon successful navigation.
 Sentiment: mixed
 Issues:    {
   "main_complaint": "The onboarding process was confusing and time-consuming",
-  "positive_aspect": "Support provided assistance once the user was able to contact them",
+  "positive_aspect": "Support provided assistance once the user was
+                      able to contact them",
   "urgency": "Medium"
 }
 ```
@@ -274,8 +293,15 @@ async def sequential_chat():
 asyncio.run(sequential_chat())
 ```
 
+**Sample output:**
+
 ```text
-Of course! If you have any specific topics or questions in mind, feel free to share them, and I'll do my best to provide detailed information on the subject. You might be interested in a variety of areas such as technology advancements, health tips, travel destinations, historical events, scientific discoveries, or even everyday life advice. Just let me know what you're curious about!
+Of course! If you have any specific topics or questions in mind, feel
+free to share them, and I'll do my best to provide detailed information
+on the subject. You might be interested in a variety of areas such as
+technology advancements, health tips, travel destinations, historical
+events, scientific discoveries, or even everyday life advice. Just let
+me know what you're curious about!
 ```
 
 > **Note:** LLM output is non-deterministic. Your result will vary in wording.
