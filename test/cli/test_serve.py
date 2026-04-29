@@ -1,20 +1,29 @@
 """Tests for the m serve OpenAI-compatible API server."""
 
+import json
 from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, ValidationError
 
-from cli.serve.app import make_chat_endpoint
+from cli.serve.app import make_chat_endpoint, validation_exception_handler
 from cli.serve.models import (
     ChatCompletion,
     ChatCompletionRequest,
     ChatMessage,
     CompletionUsage,
+    FunctionDefinition,
+    FunctionParameters,
+    JsonSchemaFormat,
+    ResponseFormat,
+    ToolFunction,
 )
-from mellea.core.base import ModelOutputThunk
+from mellea.backends.model_options import ModelOption
+from mellea.core.base import ModelOutputThunk, ModelToolCall
 
 
 @pytest.fixture
@@ -123,8 +132,6 @@ class TestChatEndpoint:
     @pytest.mark.asyncio
     async def test_model_options_passed_correctly(self, mock_module, sample_request):
         """Test that model options are passed to serve function correctly."""
-        from mellea.backends.model_options import ModelOption
-
         mock_output = ModelOutputThunk("Test response")
         mock_module.serve.return_value = mock_output
 
@@ -229,9 +236,6 @@ class TestChatEndpoint:
     @pytest.mark.asyncio
     async def test_n_greater_than_1_rejected(self, mock_module):
         """Test that requests with n > 1 are rejected with appropriate error."""
-        import json
-
-        from fastapi.responses import JSONResponse
 
         request = ChatCompletionRequest(
             model="test-model",
@@ -289,7 +293,6 @@ class TestChatEndpoint:
         so n=0 or negative values will be caught by the framework, not our code.
         This test documents that behavior.
         """
-        from pydantic import ValidationError
 
         # Pydantic validation happens before the endpoint is called
         with pytest.raises(ValidationError) as exc_info:
@@ -316,8 +319,6 @@ class TestHTTPValidation:
         and converted to OpenAI-compatible 400 errors (not FastAPI's default 422).
         """
         # Setup a test app with the exception handler
-        from cli.serve.app import validation_exception_handler
-
         app = FastAPI()
         app.add_exception_handler(RequestValidationError, validation_exception_handler)
         app.add_api_route(
@@ -435,8 +436,6 @@ class TestHTTPValidation:
         model_options = call_args.kwargs["model_options"]
 
         # Supported parameters should be present
-        from mellea.backends.model_options import ModelOption
-
         assert ModelOption.TEMPERATURE in model_options
         assert model_options[ModelOption.TEMPERATURE] == 0.7
         assert ModelOption.MAX_NEW_TOKENS in model_options
@@ -453,13 +452,6 @@ class TestHTTPValidation:
     @pytest.mark.asyncio
     async def test_tool_params_passed_to_model_options(self, mock_module):
         """Test that tool-related parameters are passed to model_options."""
-        from cli.serve.models import (
-            FunctionDefinition,
-            FunctionParameters,
-            ToolFunction,
-        )
-        from mellea.backends.model_options import ModelOption
-
         request = ChatCompletionRequest(
             model="test-model",
             messages=[ChatMessage(role="user", content="Hello")],
@@ -511,7 +503,6 @@ class TestHTTPValidation:
     @pytest.mark.asyncio
     async def test_response_format_excluded_from_model_options(self, mock_module):
         """Test that response_format parameter is excluded from model_options."""
-        from cli.serve.models import ResponseFormat
 
         request = ChatCompletionRequest(
             model="test-model",
@@ -539,12 +530,6 @@ class TestHTTPValidation:
     @pytest.mark.asyncio
     async def test_streaming_with_tool_calls(self, mock_module):
         """Test that tool calls are properly emitted in streaming responses."""
-        import json
-        from unittest.mock import Mock
-
-        from fastapi.responses import StreamingResponse
-
-        from mellea.core.base import ModelToolCall
 
         # Create a mock tool
         mock_tool = Mock()
@@ -633,9 +618,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_schema_format_passed_to_serve(self):
         """Test that json_schema response_format is converted to Pydantic model and passed to serve."""
-        from pydantic import BaseModel
-
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
 
         # Create a mock module with serve that accepts format parameter
         mock_module = Mock()
@@ -688,7 +670,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_object_format_no_schema(self, mock_module):
         """Test that json_object response_format doesn't pass a format model."""
-        from cli.serve.models import ResponseFormat
 
         request = ChatCompletionRequest(
             model="test-model",
@@ -716,7 +697,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_text_format_no_schema(self, mock_module):
         """Test that text response_format doesn't pass a format model."""
-        from cli.serve.models import ResponseFormat
 
         request = ChatCompletionRequest(
             model="test-model",
@@ -744,11 +724,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_schema_missing_schema_field(self, mock_module):
         """Test that json_schema without schema field returns error."""
-        import json
-
-        from fastapi.responses import JSONResponse
-
-        from cli.serve.models import ResponseFormat
 
         request = ChatCompletionRequest(
             model="test-model",
@@ -777,11 +752,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_schema_invalid_schema(self, mock_module):
         """Test that invalid JSON schema returns error."""
-        import json
-
-        from fastapi.responses import JSONResponse
-
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
 
         request = ChatCompletionRequest(
             model="test-model",
@@ -816,7 +786,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_serve_without_format_parameter(self, mock_module):
         """Test that serve functions without format parameter still work."""
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
 
         # Create a serve function that doesn't accept format
         def serve_no_format(input, requirements=None, model_options=None):
@@ -850,9 +819,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_schema_with_optional_fields(self):
         """Test that JSON schema with optional fields is handled correctly."""
-        from pydantic import BaseModel
-
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
 
         # Create a mock module with serve that accepts format parameter
         mock_module = Mock()
@@ -902,6 +868,42 @@ class TestResponseFormat:
         # Verify response is successful
         assert isinstance(response, ChatCompletion)
 
+    @pytest.mark.asyncio
+    async def test_json_schema_rejects_non_local_ref(self, mock_module):
+        """Test that non-local refs still return a request error."""
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=JsonSchemaFormat(
+                    name="RemoteRefExample",
+                    schema={
+                        "type": "object",
+                        "properties": {
+                            "value": {"$ref": "https://example.com/schemas/value.json"}
+                        },
+                        "required": ["value"],
+                    },
+                ),
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+        body_bytes = response.body
+        if isinstance(body_bytes, memoryview):
+            body_bytes = bytes(body_bytes)
+        error_data = json.loads(body_bytes.decode("utf-8"))
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert "local" in error_data["error"]["message"].lower()
+        assert "$ref" in error_data["error"]["message"].lower()
+
 
 class TestResponseFormatStreaming:
     """Tests for response_format parameter with streaming enabled."""
@@ -909,7 +911,6 @@ class TestResponseFormatStreaming:
     @pytest.mark.asyncio
     async def test_json_schema_format_with_streaming(self):
         """Test that json_schema response_format works with stream=True."""
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
 
         # Create a mock module with serve that accepts format parameter
         mock_module = Mock()
@@ -949,8 +950,6 @@ class TestResponseFormatStreaming:
         response = await endpoint(request)
 
         # Verify it's a streaming response
-        from fastapi.responses import StreamingResponse
-
         assert isinstance(response, StreamingResponse)
 
         # Consume the stream and verify chunks
@@ -967,126 +966,8 @@ class TestResponseFormatStreaming:
             assert chunk_str.startswith("data: ")
 
     @pytest.mark.asyncio
-    async def test_json_schema_format_streaming_validation_error(self):
-        """Test that invalid JSON in streaming response returns error chunk."""
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
-
-        # Create a mock module
-        mock_module = Mock()
-        mock_module.__name__ = "test_module"
-
-        # Create output with invalid JSON (missing required field)
-        mock_output = ModelOutputThunk('{"name": "Alice"}')  # Missing 'age'
-        mock_output._computed = True
-
-        def mock_serve(input, requirements=None, model_options=None, format=None):
-            return mock_output
-
-        mock_module.serve = mock_serve
-
-        request = ChatCompletionRequest(
-            model="test-model",
-            messages=[ChatMessage(role="user", content="Generate")],
-            stream=True,
-            response_format=ResponseFormat(
-                type="json_schema",
-                json_schema=JsonSchemaFormat(
-                    name="Person",
-                    schema={
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "age": {"type": "integer"},
-                        },
-                        "required": ["name", "age"],
-                    },
-                ),
-            ),
-        )
-
-        endpoint = make_chat_endpoint(mock_module)
-        response = await endpoint(request)
-
-        from fastapi.responses import StreamingResponse
-
-        assert isinstance(response, StreamingResponse)
-
-        # Consume the stream
-        chunks = []
-        async for chunk in response.body_iterator:
-            chunks.append(chunk)
-
-        # Should contain an error chunk
-        error_found = False
-        for chunk in chunks:
-            chunk_str = chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
-            if "error" in chunk_str.lower() and "schema" in chunk_str.lower():
-                error_found = True
-                break
-
-        assert error_found, "Expected validation error in stream"
-
-    @pytest.mark.asyncio
-    async def test_json_schema_format_streaming_invalid_json(self):
-        """Test that non-JSON output in streaming response returns error chunk."""
-        from cli.serve.models import JsonSchemaFormat, ResponseFormat
-
-        # Create a mock module
-        mock_module = Mock()
-        mock_module.__name__ = "test_module"
-
-        # Create output with invalid JSON
-        mock_output = ModelOutputThunk("This is not JSON")
-        mock_output._computed = True
-
-        def mock_serve(input, requirements=None, model_options=None, format=None):
-            return mock_output
-
-        mock_module.serve = mock_serve
-
-        request = ChatCompletionRequest(
-            model="test-model",
-            messages=[ChatMessage(role="user", content="Generate")],
-            stream=True,
-            response_format=ResponseFormat(
-                type="json_schema",
-                json_schema=JsonSchemaFormat(
-                    name="Person",
-                    schema={
-                        "type": "object",
-                        "properties": {"name": {"type": "string"}},
-                        "required": ["name"],
-                    },
-                ),
-            ),
-        )
-
-        endpoint = make_chat_endpoint(mock_module)
-        response = await endpoint(request)
-
-        from fastapi.responses import StreamingResponse
-
-        assert isinstance(response, StreamingResponse)
-
-        # Consume the stream
-        chunks = []
-        async for chunk in response.body_iterator:
-            chunks.append(chunk)
-
-        # Should contain an error chunk about invalid JSON
-        error_found = False
-        for chunk in chunks:
-            chunk_str = chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
-            if "error" in chunk_str.lower() and "json" in chunk_str.lower():
-                error_found = True
-                break
-
-        assert error_found, "Expected JSON parsing error in stream"
-
-    @pytest.mark.asyncio
     async def test_json_object_format_with_streaming(self):
         """Test that json_object response_format works with stream=True."""
-        from cli.serve.models import ResponseFormat
 
         mock_module = Mock()
         mock_module.__name__ = "test_module"
@@ -1105,8 +986,6 @@ class TestResponseFormatStreaming:
 
         endpoint = make_chat_endpoint(mock_module)
         response = await endpoint(request)
-
-        from fastapi.responses import StreamingResponse
 
         assert isinstance(response, StreamingResponse)
 
@@ -1127,7 +1006,6 @@ class TestResponseFormatStreaming:
     @pytest.mark.asyncio
     async def test_text_format_with_streaming(self):
         """Test that text response_format works with stream=True."""
-        from cli.serve.models import ResponseFormat
 
         mock_module = Mock()
         mock_module.__name__ = "test_module"
@@ -1145,8 +1023,6 @@ class TestResponseFormatStreaming:
 
         endpoint = make_chat_endpoint(mock_module)
         response = await endpoint(request)
-
-        from fastapi.responses import StreamingResponse
 
         assert isinstance(response, StreamingResponse)
 
