@@ -582,7 +582,11 @@ async def _orchestrate_streaming(
             # block above, so cancel_generation() may not have been called.
             # Guard here ensures the backend producer is always stopped, even on
             # external task cancellation (e.g. asyncio.wait_for timeout).
+            # Also mark completion as failed for any BaseException path (e.g.
+            # CancelledError) that bypassed the except block — otherwise
+            # result.completed stays True and CompletedEvent / metrics lie.
             if not mot.is_computed():
+                result.completed = False
                 try:
                     await mot.cancel_generation()
                 except BaseException:

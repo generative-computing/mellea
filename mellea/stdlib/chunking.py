@@ -14,6 +14,15 @@ class ChunkingStrategy(ABC):
     that has not yet reached a chunk boundary is withheld — it is not included in
     the returned list. Each call is stateless and idempotent given the same input.
 
+    **Performance:** ``split()`` is called on every streaming delta, re-scanning
+    the full accumulated text each time (O(n) in total accumulated length per
+    call).  The orchestrator tracks ``prev_chunk_count`` to extract only the new
+    chunks.  This keeps the chunker stateless and removes the need for ``reset()``
+    or deep-copy support, at the cost of re-scanning text already seen.  For
+    typical model outputs (a few KB) the cost is negligible; for very long
+    streams, a stateful chunker that only processes the new delta would be more
+    efficient.
+
     End-of-stream contract: ``split()`` always withholds the trailing fragment.
     When the stream terminates, callers are responsible for processing any remainder:
     take the full accumulated text, identify everything after the last returned
@@ -27,7 +36,12 @@ class ChunkingStrategy(ABC):
 
         Args:
             accumulated_text: The full text accumulated so far, including all
-                previously seen tokens and the latest delta.
+                previously seen tokens and the latest delta.  Implementations
+                that scan this string are O(n) in accumulated length per call.
+                Stateful implementations that only process the new delta are
+                possible but must never mutate state on ``self`` in place —
+                use reassignment (``self._buf = self._buf + [x]``) so that
+                ``copy()``-based cloning in the orchestrator works correctly.
 
         Returns:
             A list of complete chunks. If no chunk boundary has been reached yet,

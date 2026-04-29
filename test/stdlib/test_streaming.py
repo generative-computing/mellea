@@ -1089,3 +1089,64 @@ async def test_concurrent_astream_and_events() -> None:
 
     chunk_evts = [e for e in evts if isinstance(e, ChunkEvent)]
     assert [e.chunk_index for e in chunk_evts] == list(range(len(chunks)))
+
+
+# ---------------------------------------------------------------------------
+# CancelledError path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cancelled_task_sets_completed_false() -> None:
+    """External task cancellation must leave result.completed=False.
+
+    CancelledError is a BaseException and bypasses except Exception, so
+    the finally block is responsible for setting result.completed=False.
+    Regression: without the fix, result.completed stays True and
+    CompletedEvent / record_sampling_outcome lie to callers.
+
+    Uses a backend whose token feed blocks on an asyncio.Event that is
+    never set, guaranteeing the orchestrator is suspended at astream()
+    when the task is cancelled.
+
+    Requires ``await asyncio.sleep(0)`` before ``cancel()`` — see inline
+    comment.  Python 3.12's C Task implementation skips the coroutine body
+    entirely (including finally blocks) when cancelled before the first
+    ``coro.send(None)``.
+    """
+    gate = asyncio.Event()  # never set — feed task blocks indefinitely
+
+    async def _blocking_feed(mot: ModelOutputThunk) -> None:
+        await gate.wait()
+
+    class BlockingBackend(Backend):
+        async def _generate_from_context(
+            self, action: Any, ctx: Any, **kwargs: Any
+        ) -> tuple[ModelOutputThunk, Any]:
+            mot = _make_mot()
+            task = asyncio.create_task(_blocking_feed(mot))
+            _ = task
+            return mot, ctx.add(action).add(mot)
+
+        async def generate_from_raw(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError
+
+    result = await stream_with_chunking(
+        _action(), BlockingBackend(), _ctx(), chunking="word"
+    )
+    assert result._orchestration_task is not None
+
+    # Yield once so the orchestration task starts and reaches its first real
+    # await (Queue.get inside astream).  Without this, the task is cancelled
+    # before coro.send(None) is ever called, and Python skips the coroutine
+    # body entirely — the finally block never runs.
+    await asyncio.sleep(0)
+
+    result._orchestration_task.cancel()
+
+    try:
+        await result._orchestration_task
+    except BaseException:
+        pass
+
+    assert result.completed is False
