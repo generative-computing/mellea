@@ -5,11 +5,17 @@ consumes a streaming :class:`~mellea.core.base.ModelOutputThunk`, applies a
 :class:`~mellea.stdlib.chunking.ChunkingStrategy` to produce semantic chunks,
 and runs :meth:`~mellea.core.requirement.Requirement.stream_validate` on each
 chunk in parallel.  Higher-level streaming APIs build on this function.
+
+The orchestrator emits typed :class:`StreamEvent` objects that consumers can
+observe via :meth:`StreamChunkingResult.events`.  Raw validated chunks remain
+available via :meth:`StreamChunkingResult.astream`.
 """
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Sequence
 from copy import copy
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..backends.model_options import ModelOption
@@ -17,6 +23,14 @@ from ..core.backend import Backend
 from ..core.base import CBlock, Component, Context, ModelOutputThunk
 from ..core.requirement import PartialValidationResult, Requirement, ValidationResult
 from ..core.utils import MelleaLogger
+from ..telemetry.metrics import (
+    classify_error,
+    record_error,
+    record_requirement_check,
+    record_requirement_failure,
+    record_sampling_outcome,
+)
+from ..telemetry.tracing import set_span_error, trace_application
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
 
 _CHUNKING_ALIASES: dict[str, type[ChunkingStrategy]] = {
@@ -25,14 +39,170 @@ _CHUNKING_ALIASES: dict[str, type[ChunkingStrategy]] = {
     "paragraph": ParagraphChunker,
 }
 
+# ---------------------------------------------------------------------------
+# Streaming event types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StreamEvent:
+    """Base class for all streaming events emitted by :func:`stream_with_chunking`.
+
+    The ``timestamp`` field is auto-populated at instantiation time; callers
+    do not set it.
+
+    Attributes:
+        timestamp: Unix timestamp (seconds) at the moment the event was created.
+    """
+
+    timestamp: float = field(default_factory=time.time, init=False)
+
+
+@dataclass
+class ChunkEvent(StreamEvent):
+    """Emitted after each validated chunk is delivered to the consumer.
+
+    Fired after all active requirements' ``stream_validate`` calls return
+    non-``"fail"`` for this chunk and the chunk has been placed on the
+    consumer queue.
+
+    Attributes:
+        text: The chunk text that was validated and emitted.
+        chunk_index: Zero-based position of this chunk in the stream.
+        attempt: Sampling attempt number (always ``1`` in v1).
+    """
+
+    text: str
+    chunk_index: int
+    attempt: int
+
+
+@dataclass
+class QuickCheckEvent(StreamEvent):
+    """Emitted after each per-chunk streaming validation batch.
+
+    One event per chunk, covering all active requirements in parallel.
+    Not emitted when there are no ``quick_check_requirements``.
+
+    Attributes:
+        chunk_index: Zero-based position of the chunk that was validated.
+        attempt: Sampling attempt number (always ``1`` in v1).
+        passed: ``True`` if all active requirements returned non-``"fail"``
+            for this chunk.
+        results: :class:`~mellea.core.requirement.PartialValidationResult`
+            from each active requirement, in the same order as the active
+            slice of ``quick_check_requirements``.
+    """
+
+    chunk_index: int
+    attempt: int
+    passed: bool
+    results: list[PartialValidationResult]
+
+
+@dataclass
+class StreamingDoneEvent(StreamEvent):
+    """Emitted when the raw token stream ends, before final validation.
+
+    Only emitted on natural stream completion.  Not emitted on early exit
+    (generation was cancelled before the stream finished) or on exception.
+
+    Attributes:
+        attempt: Sampling attempt number (always ``1`` in v1).
+        full_text: Complete accumulated text at stream end.
+    """
+
+    attempt: int
+    full_text: str
+
+
+@dataclass
+class FullValidationEvent(StreamEvent):
+    """Emitted after the final :meth:`~mellea.core.requirement.Requirement.validate` calls complete.
+
+    Only emitted when at least one requirement did not fail during streaming
+    and the stream completed naturally.  Not emitted on early exit.
+
+    Attributes:
+        attempt: Sampling attempt number (always ``1`` in v1).
+        passed: ``True`` if all final
+            :class:`~mellea.core.requirement.ValidationResult` objects passed.
+        results: :class:`~mellea.core.requirement.ValidationResult` from each
+            non-failed requirement, in requirement order.
+    """
+
+    attempt: int
+    passed: bool
+    results: list[ValidationResult]
+
+
+@dataclass
+class RetryEvent(StreamEvent):
+    """Reserved for future use.
+
+    Defined for API completeness — ``RetryEvent`` is not emitted by the
+    v1 orchestrator because v1 retry is caller-driven re-invocation of
+    :func:`stream_with_chunking`.  When orchestrator-side retry is added,
+    this event will fire before each re-attempt.
+
+    Attributes:
+        attempt: Attempt number being started (1-based).
+        reason: Human-readable reason for the retry.
+    """
+
+    attempt: int
+    reason: str
+
+
+@dataclass
+class CompletedEvent(StreamEvent):
+    """Emitted when the orchestrator exits, including early-exit cases.
+
+    Always the last event before :meth:`StreamChunkingResult.events`
+    terminates.  ``success`` reflects :attr:`StreamChunkingResult.completed`.
+
+    Attributes:
+        success: ``True`` if the stream completed normally (no ``"fail"``
+            result and no unhandled exception); ``False`` otherwise.
+        full_text: Complete accumulated text.  On early exit or exception,
+            reflects whatever was accumulated before cancellation.
+        attempts_used: Number of orchestrator invocations (always ``1`` in v1).
+    """
+
+    success: bool
+    full_text: str
+    attempts_used: int
+
+
+@dataclass
+class ErrorEvent(StreamEvent):
+    """Emitted when an unhandled exception occurs in the orchestrator.
+
+    Attributes:
+        exception_type: Python class name of the exception
+            (e.g. ``"ValueError"``).
+        detail: String representation of the exception.  If
+            ``cancel_generation()`` also raised during cleanup, the cleanup
+            error is appended.
+    """
+
+    exception_type: str
+    detail: str
+
+
+# ---------------------------------------------------------------------------
+# Result container
+# ---------------------------------------------------------------------------
+
 
 class StreamChunkingResult:
     """Result of a :func:`stream_with_chunking` operation.
 
     Provides async iteration over validated text chunks as they complete
-    (:meth:`astream`), a blocking :meth:`acomplete` for awaiting the full
-    result including final validation, and :attr:`as_thunk` for wrapping the
-    output as a :class:`~mellea.core.base.ModelOutputThunk`.
+    (:meth:`astream`), typed :class:`StreamEvent` objects via :meth:`events`,
+    a blocking :meth:`acomplete` for awaiting the full result including final
+    validation, and :attr:`as_thunk` for wrapping the output as a
+    :class:`~mellea.core.base.ModelOutputThunk`.
 
     Instances are created by :func:`stream_with_chunking`; do not instantiate
     directly.
@@ -60,6 +230,7 @@ class StreamChunkingResult:
         self._mot = mot
         self._ctx = ctx
         self._chunk_queue: asyncio.Queue[str | None | Exception] = asyncio.Queue()
+        self._event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         self._orchestration_task: asyncio.Task[None] | None = None
         self._done = asyncio.Event()
 
@@ -97,6 +268,49 @@ class StreamChunkingResult:
                 return
             if isinstance(item, Exception):
                 raise item
+            yield item
+
+    async def events(self) -> AsyncIterator[StreamEvent]:
+        """Yield typed streaming events as they are emitted by the orchestrator.
+
+        Each yielded object is a :class:`StreamEvent` subclass describing a
+        point in the orchestration lifecycle.  Consumers can dispatch on type:
+
+        .. code-block:: python
+
+            async for event in result.events():
+                match event:
+                    case ChunkEvent():
+                        print(f"chunk {event.chunk_index}: {event.text!r}")
+                    case QuickCheckEvent(passed=False):
+                        print(f"chunk {event.chunk_index} failed validation")
+                    case CompletedEvent():
+                        print(f"done — success={event.success}")
+
+        Typical event order (natural completion with requirements):
+
+        1. :class:`ChunkEvent` / :class:`QuickCheckEvent` pairs, one per chunk.
+        2. :class:`StreamingDoneEvent` — raw token stream has ended.
+        3. :class:`FullValidationEvent` — final ``validate()`` calls returned.
+        4. :class:`CompletedEvent` — orchestrator is exiting.
+
+        On early exit: :class:`QuickCheckEvent` (``passed=False``) is the
+        last validation event, followed by :class:`CompletedEvent`.  No
+        :class:`StreamingDoneEvent` or :class:`FullValidationEvent` is emitted.
+
+        On exception: :class:`ErrorEvent` followed by :class:`CompletedEvent`.
+
+        **Single-consumer.**  Events are delivered via a queue that this method
+        drains; a second call after the first iteration completes blocks
+        indefinitely.
+
+        Yields:
+            StreamEvent: A typed event from the orchestrator.
+        """
+        while True:
+            item = await self._event_queue.get()
+            if item is None:
+                return
             yield item
 
     async def acomplete(self) -> None:
@@ -149,6 +363,11 @@ class StreamChunkingResult:
         return thunk
 
 
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+
 async def _orchestrate_streaming(
     result: StreamChunkingResult,
     mot: ModelOutputThunk,
@@ -161,120 +380,223 @@ async def _orchestrate_streaming(
     prev_chunk_count = 0
     failed_indices: set[int] = set()
     early_exit = False
+    chunk_index = 0
 
-    async def _validate_and_emit(c: str) -> bool:
-        """Run stream_validate on chunk c across active requirements.
+    with trace_application("stream_with_chunking") as span:
 
-        Returns True if a failure was recorded (caller should early-exit),
-        False otherwise (chunk was emitted to the consumer queue).
-        """
-        active = [
-            (i, req) for i, req in enumerate(cloned_reqs) if i not in failed_indices
-        ]
-        if active:
-            pvrs: list[PartialValidationResult] = list(
-                await asyncio.gather(
-                    *[
-                        req.stream_validate(c, backend=val_backend, ctx=ctx)
-                        for _, req in active
-                    ]
+        async def _process_chunk(c: str, ci: int) -> bool:
+            """Validate *c*, emit events, push to consumer queue.
+
+            Returns ``True`` if a ``"fail"`` was recorded (caller should
+            trigger early exit), ``False`` if the chunk was validated and
+            emitted successfully.
+            """
+            active = [
+                (i, req) for i, req in enumerate(cloned_reqs) if i not in failed_indices
+            ]
+            pvrs: list[PartialValidationResult] = []
+            if active:
+                pvrs = list(
+                    await asyncio.gather(
+                        *[
+                            req.stream_validate(c, backend=val_backend, ctx=ctx)
+                            for _, req in active
+                        ]
+                    )
                 )
-            )
-            for (idx, req), pvr in zip(active, pvrs):
-                if pvr.success == "fail":
-                    failed_indices.add(idx)
-                    result.streaming_failures.append((req, pvr))
+                for (idx, req), pvr in zip(active, pvrs):
+                    if pvr.success == "fail":
+                        failed_indices.add(idx)
+                        result.streaming_failures.append((req, pvr))
 
-        if failed_indices:
-            return True
-
-        await result._chunk_queue.put(c)
-        return False
-
-    try:
-        while not mot.is_computed():
-            try:
-                delta = await mot.astream()
-            except RuntimeError:
-                # Expected race: mot.is_computed() was False at the top of the
-                # loop but the stream finished before we re-entered astream().
-                # Any other RuntimeError is a real bug and must propagate.
-                if mot.is_computed():
-                    break
-                raise
-
-            accumulated += delta
-            chunks = chunking.split(accumulated)
-            new_chunks = chunks[prev_chunk_count:]
-            prev_chunk_count = len(chunks)
-
-            for c in new_chunks:
-                failed = await _validate_and_emit(c)
-                if failed:
-                    early_exit = True
-                    result.completed = False
-                    await mot.cancel_generation()
-                    break
-
-            if early_exit:
-                break
-
-        # Stream ended naturally: flush any withheld trailing fragment and
-        # run stream_validate on it. Skipped on early exit — the generation
-        # was cancelled, the trailing fragment is incomplete.
-        if not early_exit:
-            for c in chunking.flush(accumulated):
-                failed = await _validate_and_emit(c)
-                if failed:
-                    early_exit = True
-                    result.completed = False
-                    break
-
-        result.full_text = accumulated
-
-        non_failed = [
-            req for i, req in enumerate(cloned_reqs) if i not in failed_indices
-        ]
-        if non_failed and not early_exit:
-            result.final_validations = list(
-                await asyncio.gather(
-                    *[req.validate(val_backend, ctx) for req in non_failed]
+                any_fail = bool(failed_indices)
+                qc_event = QuickCheckEvent(
+                    chunk_index=ci, attempt=1, passed=not any_fail, results=pvrs
                 )
-            )
+                await result._event_queue.put(qc_event)
+                if span is not None:
+                    span.add_event(
+                        "quick_check",
+                        {
+                            "chunk_index": ci,
+                            "passed": not any_fail,
+                            "requirement_count": len(active),
+                        },
+                    )
+                for (_, req), pvr in zip(active, pvrs):
+                    record_requirement_check(type(req).__name__)
+                    if pvr.success == "fail":
+                        record_requirement_failure(type(req).__name__, pvr.reason or "")
 
-    except Exception as exc:
-        # Orchestrator is leaving — we must stop the backend producer too,
-        # otherwise mot._async_queue (maxsize=20) fills and the feeder task
-        # blocks indefinitely. The spec (#891, #901) calls this out for the
-        # "fail" path; the same reasoning applies to any unplanned exit.
-        # Pass `exc` so the backend telemetry span records the real cause
-        # rather than a generic "Generation cancelled".
+                if failed_indices:
+                    return True
+
+            await result._chunk_queue.put(c)
+            chunk_ev = ChunkEvent(text=c, chunk_index=ci, attempt=1)
+            await result._event_queue.put(chunk_ev)
+            if span is not None:
+                span.add_event("chunk", {"chunk_index": ci, "text_length": len(c)})
+            return False
+
         try:
-            await mot.cancel_generation(error=exc)
-        except Exception as cleanup_exc:
-            # Never let cleanup mask the original exception: log loudly and
-            # continue to surface `exc` to the consumer.
-            # TODO(#902): replace this log with an ErrorEvent emission.
-            MelleaLogger.get_logger().warning(
-                "stream_with_chunking: cancel_generation() raised during "
-                "exception cleanup (original: %r, cleanup: %r)",
-                exc,
-                cleanup_exc,
-            )
-        result.completed = False
-        await result._chunk_queue.put(exc)
-    finally:
-        # CancelledError (BaseException, not Exception) bypasses the except
-        # block above, so cancel_generation() may not have been called.
-        # Guard here ensures the backend producer is always stopped, even on
-        # external task cancellation (e.g. asyncio.wait_for timeout).
-        if not mot.is_computed():
+            while not mot.is_computed():
+                try:
+                    delta = await mot.astream()
+                except RuntimeError:
+                    # Expected race: mot.is_computed() was False at the top of the
+                    # loop but the stream finished before we re-entered astream().
+                    # Any other RuntimeError is a real bug and must propagate.
+                    if mot.is_computed():
+                        break
+                    raise
+
+                accumulated += delta
+                chunks = chunking.split(accumulated)
+                new_chunks = chunks[prev_chunk_count:]
+                prev_chunk_count = len(chunks)
+
+                for c in new_chunks:
+                    failed = await _process_chunk(c, chunk_index)
+                    if failed:
+                        early_exit = True
+                        result.completed = False
+                        await mot.cancel_generation()
+                        if span is not None:
+                            set_span_error(
+                                span,
+                                RuntimeError(
+                                    "Streaming validation failed: "
+                                    + (result.streaming_failures[-1][1].reason or "")
+                                ),
+                            )
+                        break
+                    chunk_index += 1
+
+                if early_exit:
+                    break
+
+            # Stream ended naturally: flush any withheld trailing fragment.
+            # Skipped on early exit — the generation was cancelled.
+            if not early_exit:
+                for c in chunking.flush(accumulated):
+                    failed = await _process_chunk(c, chunk_index)
+                    if failed:
+                        early_exit = True
+                        result.completed = False
+                        if span is not None:
+                            set_span_error(
+                                span,
+                                RuntimeError(
+                                    "Streaming validation failed on flush: "
+                                    + (result.streaming_failures[-1][1].reason or "")
+                                ),
+                            )
+                        break
+                    chunk_index += 1
+
+            result.full_text = accumulated
+
+            if not early_exit:
+                streaming_done = StreamingDoneEvent(attempt=1, full_text=accumulated)
+                await result._event_queue.put(streaming_done)
+                if span is not None:
+                    span.add_event(
+                        "streaming_done", {"full_text_length": len(accumulated)}
+                    )
+
+                non_failed = [
+                    req for i, req in enumerate(cloned_reqs) if i not in failed_indices
+                ]
+                if non_failed:
+                    vrs: list[ValidationResult] = list(
+                        await asyncio.gather(
+                            *[req.validate(val_backend, ctx) for req in non_failed]
+                        )
+                    )
+                    result.final_validations = vrs
+                    all_passed = all(vr.as_bool() for vr in vrs)
+                    full_val_ev = FullValidationEvent(
+                        attempt=1, passed=all_passed, results=vrs
+                    )
+                    await result._event_queue.put(full_val_ev)
+                    if span is not None:
+                        span.add_event(
+                            "full_validation",
+                            {
+                                "passed": all_passed,
+                                "requirement_count": len(non_failed),
+                            },
+                        )
+
+        except Exception as exc:
+            # Orchestrator is leaving — stop the backend producer.
+            result.full_text = accumulated  # best-effort partial capture
             try:
-                await mot.cancel_generation()
-            except BaseException:
-                pass
-        await result._chunk_queue.put(None)
-        result._done.set()
+                await mot.cancel_generation(error=exc)
+                error_detail = str(exc)
+            except Exception as cleanup_exc:
+                # Never let cleanup mask the original exception.
+                error_detail = f"{exc!r} (cancel cleanup raised: {cleanup_exc!r})"
+                MelleaLogger.get_logger().debug(
+                    "stream_with_chunking: cancel_generation() raised during "
+                    "exception cleanup (original: %r, cleanup: %r)",
+                    exc,
+                    cleanup_exc,
+                )
+            error_ev = ErrorEvent(
+                exception_type=type(exc).__name__, detail=error_detail
+            )
+            await result._event_queue.put(error_ev)
+            if span is not None:
+                span.add_event(
+                    "error",
+                    {
+                        "exception_type": error_ev.exception_type,
+                        "detail": error_ev.detail,
+                    },
+                )
+                set_span_error(span, exc)
+            record_error(
+                error_type=classify_error(exc),
+                model=result._mot.generation.model or "unknown",
+                provider=result._mot.generation.provider or "unknown",
+                exception_class=type(exc).__name__,
+            )
+            result.completed = False
+            await result._chunk_queue.put(exc)
+        finally:
+            # CancelledError (BaseException, not Exception) bypasses the except
+            # block above, so cancel_generation() may not have been called.
+            # Guard here ensures the backend producer is always stopped, even on
+            # external task cancellation (e.g. asyncio.wait_for timeout).
+            if not mot.is_computed():
+                try:
+                    await mot.cancel_generation()
+                except BaseException:
+                    pass
+
+            completed_ev = CompletedEvent(
+                success=result.completed, full_text=result.full_text, attempts_used=1
+            )
+            await result._event_queue.put(completed_ev)
+            if span is not None:
+                span.add_event(
+                    "completed",
+                    {
+                        "success": result.completed,
+                        "full_text_length": len(result.full_text),
+                    },
+                )
+            record_sampling_outcome("stream_with_chunking", success=result.completed)
+
+            await result._chunk_queue.put(None)
+            await result._event_queue.put(None)
+            result._done.set()
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 async def stream_with_chunking(
@@ -322,6 +644,10 @@ async def stream_with_chunking(
     empty.  Requirements are cloned (``copy(req)``) before use so originals
     are never mutated.
 
+    The orchestrator emits typed :class:`StreamEvent` objects throughout
+    execution.  Consume them via :meth:`StreamChunkingResult.events` in
+    parallel with or instead of :meth:`StreamChunkingResult.astream`.
+
     Requirements that need context beyond the current chunk should
     accumulate it themselves across ``stream_validate`` calls (e.g.
     ``self._seen = self._seen + chunk``).  They must not read ``mot.astream()``
@@ -343,7 +669,8 @@ async def stream_with_chunking(
     Note:
         v1 retry is simple re-invocation of this function.  Plugin hooks
         (``SAMPLING_LOOP_START``, ``SAMPLING_REPAIR``, etc.) do not fire
-        on retries — use the ``#902`` event types for observability instead.
+        during streaming — use :meth:`StreamChunkingResult.events` for
+        observability instead.
 
     Args:
         action: The component or content block to generate from.
@@ -361,7 +688,8 @@ async def stream_with_chunking(
 
     Returns:
         StreamChunkingResult: A result object providing :meth:`~StreamChunkingResult.astream`
-            for incremental chunk consumption and
+            for incremental chunk consumption, :meth:`~StreamChunkingResult.events` for
+            typed streaming events, and
             :meth:`~StreamChunkingResult.acomplete` for blocking until done.
 
     Raises:
