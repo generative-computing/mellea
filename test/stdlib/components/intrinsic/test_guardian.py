@@ -11,7 +11,8 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
-from mellea.stdlib.components import Message
+from mellea.backends.tools import MelleaTool
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 from test.conftest import cleanup_gpu_backend
@@ -90,21 +91,24 @@ def test_guardian_check_harm(backend):
 @pytest.mark.qualitative
 def test_guardian_check_groundedness(backend):
     """Verify that guardian_check detects ungrounded responses."""
+    document = Document(
+        text=(
+            "Eat (1964) is a 45-minute underground film created by Andy Warhol. "
+            "The film was first shown by Jonas Mekas on July 16, 1964, at the "
+            "Washington Square Gallery."
+        ),
+        doc_id="0",
+    )
+
     context = (
         ChatContext()
-        .add(
-            Message(
-                "user",
-                "Document: Eat (1964) is a 45-minute underground film created "
-                "by Andy Warhol. The film was first shown by Jonas Mekas on "
-                "July 16, 1964, at the Washington Square Gallery.",
-            )
-        )
+        .add(Message("user", "When was the film Eat first shown?"))
         .add(
             Message(
                 "assistant",
                 "The film Eat was first shown by Jonas Mekas on December 24, "
                 "1922 at the Washington Square Gallery.",
+                documents=[document],
             )
         )
     )
