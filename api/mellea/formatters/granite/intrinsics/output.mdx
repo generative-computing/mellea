@@ -1,0 +1,278 @@
+---
+title: "mellea.formatters.granite.intrinsics.output"
+sidebarTitle: "mellea.formatters.granite.intrinsics.output"
+description: "Classes and functions that implement common aspects of output processing for intrinsics."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Classes and functions that implement common aspects of output processing for intrinsics.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `TransformationRule` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L41" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for transformation rules to apply to JSON outputs of intrinsics.
+
+**Args:**
+- `config`: Configuration of the parent output processor, as parsed YAML.
+- `input_path_expr`: Path expression matching all
+instances of the field that this rule transforms. Elements can be
+strings for object fields, integers for list indices, or `None`
+for wildcard matches.
+
+**Attributes:**
+- `YAML_NAME`: The name used to identify this rule in YAML
+configuration files. Subclasses must set this to a non-`None` string.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `rule_name` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L100" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+rule_name(self) -> str
+```
+
+Return the YAML name that identifies this transformation rule.
+
+**Returns:**
+- The value of `YAML_NAME` for this rule subclass.
+
+**Raises:**
+- `ValueError`: If `YAML_NAME` has not been set by the subclass.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `apply` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L130" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+apply(self, parsed_json: Any, reparsed_json: Any, logprobs: ChatCompletionLogProbs | None, chat_completion: ChatCompletion | None) -> Any
+```
+
+Apply this transformation rule to the parsed model output.
+
+**Args:**
+- `parsed_json`: Output of running model results through
+\:func\:`json.loads()`, plus applying zero or more prior
+transformation rules.
+- `reparsed_json`: Output of running the same model results
+through \:func\:`json_util.reparse_json_with_offsets()`,
+preserving position information on literal values.
+- `logprobs`: Optional logprobs result
+associated with the original model output string, or `None`
+if no logprobs were present.
+- `chat_completion`: The chat completion request
+that produced this output. Required by some rules.
+
+**Returns:**
+- Transformed copy of `parsed_json` after applying this rule.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `InPlaceTransformation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L188" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for TransformationRules that replace values in place in JSON.
+
+Base class for `TransformationRule`s that replace values in place in the source
+JSON. The values replaced can be a scalar, object, or list.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `AddFieldsTransformation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L218" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for TransformationRules that add values to JSON.
+
+Base class for `TransformationRule`s that add one or more values adjacent to
+an existing value in the source JSON.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `TokenToFloat` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L279" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Transformation rule that decodes token logprobs to a floating point number.
+
+The floating point number replaces the original categorical value in the JSON.
+
+**Args:**
+- `config`: Configuration of the parent output processor, as parsed YAML.
+- `input_path_expr`: Path expression matching all
+instances of the field that this rule transforms.
+- `categories_to_values`: Mapping
+from categorical labels to floating-point values. Defaults to
+`None`.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"likelihood"`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `DecodeSentences` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L481" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Transformation rule that decodes sentence refs into begin, end, text tuples.
+
+**Args:**
+- `config`: Configuration of the parent output processor, as parsed YAML.
+- `input_path_expr`: Path expression matching all
+instances of the field that this rule transforms.
+- `source`: Name of the location to look for sentences; must be
+`"last_message"` or `"documents"`.
+- `output_names`: Mapping from output role name (`"begin"`,
+`"end"`, `"text"`, `"document_id"`) to the name of the new
+field to add in the result JSON.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"decode_sentences"`.
+- `begin_name`: Name of the output field that receives the
+sentence begin offset; extracted from `output_names`, or `None`
+if not configured.
+- `end_name`: Name of the output field that receives the
+sentence end offset; extracted from `output_names`, or `None`
+if not configured.
+- `text_name`: Name of the output field that receives the
+sentence text; extracted from `output_names`, or `None` if not
+configured.
+- `document_id_name`: Name of the output field that receives
+the document ID (only used when `source="documents"`); extracted
+from `output_names`, or `None` if not configured.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Explode` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L726" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Expand list-valued attributes in a list of records.
+
+Turn each row in a list of records into zero or more rows by expanding
+the elements of a list-valued attribute.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"explode"`.
+- `target_field`: Name of the list-valued field within each record
+to expand.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `DropDuplicates` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L797" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Remove duplicate records from a list of records.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"drop_duplicates"`.
+- `target_fields`: Names of fields used to determine whether two
+records are considered duplicates.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Project` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L851" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Project records down to a specified set of fields.
+
+Project records down to a specified set of fields.  Can also rename the
+retained fields.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"project"`.
+- `retained_fields`: Mapping from original field name to the
+(possibly renamed) output field name. Initialized from either a
+list of field names (identity mapping) or an explicit mapping.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Nest` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L905" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Convert a value within a JSON structure into a record with a single field.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"nest"`.
+- `field_name`: Name of the single field in the output JSON object
+that wraps each matching value.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MergeSpans` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L936" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Merge adjacent spans into larger spans.
+
+**Args:**
+- `config`: Parsed YAML config for IO processing.
+- `input_path_expr`: Path expression for the list of records to merge.
+- `group_fields`: List of fields used for grouping prior to merging
+spans.
+- `begin_field`: Name of the field that holds the begin offset of
+spans.
+- `end_field`: Name of the field that holds the end offset of spans.
+- `text_field`: Optional field containing covered text strings
+that should be concatenated when spans are merged. Defaults to
+`None`.
+
+**Attributes:**
+- `YAML_NAME`: YAML configuration key for this rule; always
+`"merge_spans"`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `IntrinsicsResultProcessor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/output.py#L1202" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+General-purpose chat completion result processor for intrinsics.
+
+General-purpose chat completion result processor for use with the models that
+implement intrinsics. Reads parameters of the model's input and output formats
+from a YAML configuration file and edits the input chat completion appropriately.
+
+**Attributes:**
+- `config`: Parsed YAML configuration file for the target intrinsic.
+- `rules`: Ordered list of transformation rules
+that this processor applies to each choice in a chat completion
+response.
+
+**Args:**
+- `config_file`: Optional path to a YAML
+configuration file. Exactly one of `config_file` and
+`config_dict` must be provided.
+- `config_dict`: Optional pre-parsed YAML configuration dict.
+Exactly one of `config_file` and `config_dict` must be
+provided.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

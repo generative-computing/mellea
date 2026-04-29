@@ -1,0 +1,73 @@
+---
+title: "mellea.stdlib.requirements.tool_reqs"
+sidebarTitle: "mellea.stdlib.requirements.tool_reqs"
+description: "[`Requirement`](../../core/requirement#class-requirement) factories for tool-use validation."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+[`Requirement`](../../core/requirement#class-requirement) factories for tool-use validation.
+
+
+
+
+
+Provides `uses_tool`, a [`Requirement`](../../core/requirement#class-requirement) factory that validates whether a model
+response includes a call to a specified tool — useful when you need to enforce tool
+invocation via rejection sampling rather than relying solely on the model's
+`tool_choice` setting. Also provides `tool_arg_validator`, which validates the
+value of a specific argument to a named tool. Both accept either the tool's string
+name or its callable.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `uses_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/requirements/tool_reqs.py#L26" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+uses_tool(tool_name: str | Callable, check_only: bool = False) -> Requirement
+```
+
+
+Forces the model to call a given tool.
+
+**Args:**
+- `tool_name`: The tool that must be called; this can be either the name of the tool or the Callable for the tool.
+- `check_only`: Propagates to the Requirement.
+
+Use `tool_choice` if the OpenAI `tool_choice` model option is supported by your model and inference engine.
+
+**Returns:**
+- A [`Requirement`](../../core/requirement#class-requirement) that validates whether the specified tool was called.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tool_arg_validator` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/requirements/tool_reqs.py#L54" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+tool_arg_validator(description: str, tool_name: str | Callable | None, arg_name: str, validation_fn: Callable, check_only: bool = False) -> Requirement
+```
+
+
+A requirement that passes only if `validation_fn` returns a True value for the *value* of the `arg_name` argument to `tool_name`.
+
+If `tool_name` is not specified, then this requirement is enforced for *every* tool that was called.
+
+**Args:**
+- `description`: The Requirement description.
+- `tool_name`: The (optional) tool name to validate. When None, all tools are checked.
+- `arg_name`: The argument to check.
+- `validation_fn`: A validation function for validating the value of the `arg_name` argument.
+- `check_only`: propagates the `check_only` flag to the requirement.
+
+**Returns:**
+- A [`Requirement`](../../core/requirement#class-requirement) that validates the specified tool argument.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

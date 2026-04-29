@@ -1,0 +1,63 @@
+---
+title: "mellea.formatters.granite.base.optional"
+sidebarTitle: "mellea.formatters.granite.base.optional"
+description: "Context-manager helpers for gracefully handling optional import dependencies."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Context-manager helpers for gracefully handling optional import dependencies.
+
+
+
+
+
+Provides `import_optional`, a context manager that catches `ImportError` and
+re-raises it with a human-readable install hint (e.g. `pip install <package>[extra]`),
+and `nltk_check`, a variant tailored to NLTK data-download errors. Used by Granite
+formatter modules that have optional third-party dependencies.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `import_optional` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/optional.py#L25" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+import_optional(extra_name: str)
+```
+
+
+Handle optional imports.
+
+**Args:**
+- `extra_name`: Package extra to suggest in the install hint
+(e.g. `pip install mellea[extra_name]`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `nltk_check` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/optional.py#L45" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+nltk_check(feature_name: str)
+```
+
+
+Variation on import_optional for nltk.
+
+**Args:**
+- `feature_name`: Name of the feature that requires NLTK, used in the error message.
+
+**Raises:**
+- `ImportError`: If the `nltk` package is not installed or required
+NLTK data (e.g. `punkt_tab`) has not been downloaded,
+re-raised with a descriptive message and installation
+instructions.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

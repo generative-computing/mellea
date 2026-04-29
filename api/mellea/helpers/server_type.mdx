@@ -1,0 +1,49 @@
+---
+title: "mellea.helpers.server_type"
+sidebarTitle: "mellea.helpers.server_type"
+description: "Utilities for detecting and classifying the target inference server."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Utilities for detecting and classifying the target inference server.
+
+
+
+
+
+Defines the `_ServerType` enum (`LOCALHOST`, `OPENAI`, `REMOTE_VLLM`,
+`UNKNOWN`) and `_server_type`, which classifies a URL by hostname. Also provides
+`is_vllm_server_with_structured_output`, which probes a server's `/version`
+endpoint to determine whether it supports the `structured_outputs` parameter
+introduced in vLLM ≥ 0.12.0. Used by the OpenAI-compatible backend to choose between
+`guided_json` and `structured_outputs` request formats.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_vllm_server_with_structured_output` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/server_type.py#L48" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_vllm_server_with_structured_output(base_url: str, headers: Mapping[str, Any]) -> bool
+```
+
+
+Attempts to determine if the backend is a vllm server with version >= v0.12.0. Defaults to false.
+
+v0.12.0 was the last version to support guided_json params. It's now under structured_outputs.
+
+**Args:**
+- `base_url`: Base url for LLM API.
+- `headers`: Additional headers to pass to the request.
+
+**Returns:**
+- True if the server is vLLM >= v0.12.0, False otherwise.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

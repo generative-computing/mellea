@@ -1,0 +1,49 @@
+---
+title: "mellea.plugins.hooks.validation"
+sidebarTitle: "mellea.plugins.hooks.validation"
+description: "Validation hook payloads."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Validation hook payloads.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ValidationPreCheckPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/hooks/validation.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `validation_pre_check` — before requirement validation.
+
+**Attributes:**
+- `requirements`: List of [`Requirement`](../../core/requirement#class-requirement) instances to validate (writable).
+- `target`: The [`CBlock`](../../core/base#class-cblock) being validated, or `None` when validating the full context.
+- `context`: The [`Context`](../../core/base#class-context) used for validation.
+- `model_options`: Dict of model options for backend-based validators (writable).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ValidationPostCheckPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/hooks/validation.py#L28" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `validation_post_check` — after validation completes.
+
+**Attributes:**
+- `requirements`: List of [`Requirement`](../../core/requirement#class-requirement) instances that were evaluated.
+- `results`: List of [`ValidationResult`](../../core/requirement#class-validationresult) instances (writable).
+- `all_validations_passed`: `True` when every requirement passed (writable).
+- `passed_count`: Number of requirements that passed.
+- `failed_count`: Number of requirements that failed.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

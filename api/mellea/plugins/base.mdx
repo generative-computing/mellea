@@ -1,0 +1,171 @@
+---
+title: "mellea.plugins.base"
+sidebarTitle: "mellea.plugins.base"
+description: "Base types for the Mellea plugin system."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Base types for the Mellea plugin system.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PluginMeta` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L18" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Metadata attached to Plugin subclasses.
+
+**Args:**
+- `name`: Unique identifier for the plugin.
+- `priority`: Execution priority — lower numbers execute first.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Plugin` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L57" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for multi-hook Mellea plugins.
+
+Subclasses get automatic context-manager support and plugin metadata::
+
+    class PIIRedactor(Plugin, name="pii-redactor", priority=5):
+        @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL)
+        async def redact_input(self, payload, ctx):
+            ...
+
+    with PIIRedactor():
+        result = session.instruct("...")
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PluginViolationError` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L135" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Raised when a plugin blocks execution in enforce mode.
+
+**Args:**
+- `hook_type`: The hook point where the violation occurred.
+- `reason`: Human-readable reason for the violation.
+- `code`: Machine-readable violation code.
+- `plugin_name`: Name of the plugin that raised the violation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MelleaBasePayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L169" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Frozen base — all payloads are immutable by design.
+
+Plugins must use `model_copy(update=\{...\})` to propose modifications
+and return the copy via `PluginResult.modified_payload`.  The plugin
+manager applies the hook's `HookPayloadPolicy` to filter changes to
+writable fields only.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MelleaPlugin` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L185" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for Mellea plugins with lifecycle hooks and typed accessors.
+
+Use this when you need lifecycle hooks (`initialize`/`shutdown`)
+or typed context accessors.  For simpler plugins, prefer `@hook`
+on standalone functions or `@plugin` on plain classes.
+
+Instances support the context manager protocol for temporary activation::
+
+    class MyPlugin(MelleaPlugin):
+        def __init__(self):
+            super().__init__(PluginConfig(name="my-plugin", hooks=[...]))
+
+        async def some_hook(self, payload, ctx):
+            ...
+
+    with MyPlugin() as p:
+        result, ctx = instruct("...", ctx, backend)
+
+    # or async
+    async with MyPlugin() as p:
+        result, ctx = await ainstruct("...", ctx, backend)
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_backend` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L209" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_backend(self, context: PluginContext) -> Backend | None
+```
+
+Get the Backend from the plugin context.
+
+**Args:**
+- `context`: The plugin context provided by the hook framework.
+
+**Returns:**
+- The active Backend, or `None` if unavailable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_mellea_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L220" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_mellea_context(self, context: PluginContext) -> Context | None
+```
+
+Get the Mellea Context from the plugin context.
+
+**Args:**
+- `context`: The plugin context provided by the hook framework.
+
+**Returns:**
+- The active Mellea Context, or `None` if unavailable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_session` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L231" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_session(self, context: PluginContext) -> MelleaSession | None
+```
+
+Get the MelleaSession from the plugin context.
+
+**Args:**
+- `context`: The plugin context provided by the hook framework.
+
+**Returns:**
+- The active MelleaSession, or `None` if unavailable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `plugin_config` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/base.py#L243" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+plugin_config(self) -> dict[str, Any]
+```
+
+Plugin-specific configuration from PluginConfig.config.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

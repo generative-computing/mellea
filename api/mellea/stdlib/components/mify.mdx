@@ -1,0 +1,240 @@
+---
+title: "mellea.stdlib.components.mify"
+sidebarTitle: "mellea.stdlib.components.mify"
+description: "The `@mify` decorator for turning Python objects into [`Component`](../../core/base#class-component)s."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+The `@mify` decorator for turning Python objects into [`Component`](../../core/base#class-component)s.
+
+
+
+
+
+`mify` wraps an existing Python class or instance with the `MifiedProtocol`
+interface, exposing its fields as named spans and its documented methods as
+[`MelleaTool`](../../backends/tools#class-melleatool) instances callable by the LLM. The resulting `MifiedProtocol` object
+can be queried, transformed, and formatted for a language model without any manual
+[`Component`](../../core/base#class-component) subclassing. Use `mify` when you have an existing domain object
+(dataclass, Pydantic model, or plain class) that you want to expose directly to an
+LLM-driven pipeline.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `mify` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L301" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+mify(*args, **kwargs) -> object
+```
+
+
+M-ify an object or class.
+
+Allows the object (or instances of the class) to be used in m sessions and with m functions.
+
+For the args below, only specify an _include or an _exclude of for fields and funcs. If both are specified,
+include takes precedence. If you specify the same item to be included and excluded, nothing will be included.
+
+If fields_include or fields_exclude are set:
+- the stringify_func will not be used to represent this object to the model
+- you must specify a template field or a template in the template_order field that handles a dict with those fields as keys
+- it's advised to use fields_include due to the many dunder fields and inherited fields an object/class might have
+
+Mify sets attributes on the object/class. If the object isn't already an mified/mobject, it will overwrite
+the attributes and methods of the object/class necessary for it to be mified.
+
+**Args:**
+- `obj`: A class or an instance of a class to mify. Omit when using as a
+decorator with arguments (e.g. `@mify(fields_include=\{...\})`).
+- `query_type`: A specific query component type to use when querying a model.
+Defaults to `Query`.
+- `transform_type`: A specific transform component type to use when
+transforming with a model. Defaults to `Transform`.
+- `fields_include`: Fields of the object to include in its representation to
+models. When set, `stringify_func` is not used.
+- `fields_exclude`: Fields of the object to exclude from its representation
+to models.
+- `funcs_include`: Functions of the object to expose as tools to models.
+- `funcs_exclude`: Functions of the object to hide from models.
+- `template`: A Jinja2 template string. Takes precedence over
+`template_order` when provided.
+- `template_order`: A template name or list of names used when searching for
+applicable templates.
+- `parsing_func`: Not yet implemented.
+- `stringify_func`: A callable used to create a string representation of the
+object for `content_as_string`.
+
+**Returns:**
+- An object if an object was passed in or a decorator (callable) to mify classes.
+- If an object is returned, that object will be the same object that was passed in.
+- For example,
+- ```
+- obj = mify(obj)
+- obj.format_for_llm()
+- ```
+- and
+- ```
+- mify(obj)
+- obj.format_for_llm()
+- ```
+- are equivalent.
+- Most IDEs will not correctly show the type hints for the newly added functions
+- for either an mify object or instances of an mified class. For IDE support, write
+- ```
+- assert isinstance(obj, MifiedProtocol)
+- ```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MifiedProtocol` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L29" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Adds additional functionality to the MObjectProtocol and modifies MObject functions so that mified objects can be more easily interacted with and modified.
+
+See the mify decorator for more information.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L46" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Return the constituent sub-components of this mified object.
+
+TODO\: we need to rewrite this component to use format_for_llm and initializer correctly.
+
+For now an empty list is the correct behavior.
+
+[no-index]
+
+**Returns:**
+- list\[Component | CBlock]: Always an empty list for mified objects.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_query_object` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L60" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_query_object(self, query: str) -> Query
+```
+
+Return the instantiated query object for this mified object.
+
+[no-index]
+
+**Args:**
+- `query`: The natural-language query string.
+
+**Returns:**
+- A `Query` component wrapping this object and the given query.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_transform_object` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L73" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_transform_object(self, transformation: str) -> Transform
+```
+
+Return the instantiated transform object for this mified object.
+
+[no-index]
+
+**Args:**
+- `transformation`: The natural-language transformation description.
+
+**Returns:**
+- A `Transform` component wrapping this object and the
+- given transformation description.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `content_as_string` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+content_as_string(self) -> str
+```
+
+Return the content of the mified object as a plain string.
+
+[no-index]
+
+Delegates to the `stringify_func` passed to `mify` when one was
+provided; otherwise falls back to `str(self)`.
+
+**Returns:**
+- String representation of the mified object's content.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L195" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Return the [`TemplateRepresentation`](../../core/base#class-templaterepresentation) for this mified object.
+
+[no-index]
+
+Sets the [`TemplateRepresentation`](../../core/base#class-templaterepresentation) fields based on the object and the
+configuration values supplied to `mify` (fields, templates, tools, etc.).
+
+See the `mify` decorator for more details.
+
+**Returns:**
+- The formatted representation including args,
+- tools, and template ordering.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parse` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mify.py#L241" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parse(self, computed: ModelOutputThunk) -> str
+```
+
+Parse the model output into a string value.
+
+[no-index]
+
+Delegates to `_parse` and wraps any exception in a
+[`ComponentParseError`](../../core/base#class-componentparseerror) to give callers a consistent error type.
+
+**Args:**
+- `computed`: The raw model output to parse.
+
+**Returns:**
+- The string value extracted from `computed`.
+
+**Raises:**
+- [`ComponentParseError`](../../core/base#class-componentparseerror): If `_parse` raises any exception during
+parsing.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

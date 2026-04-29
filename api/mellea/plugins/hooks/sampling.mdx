@@ -1,0 +1,91 @@
+---
+title: "mellea.plugins.hooks.sampling"
+sidebarTitle: "mellea.plugins.hooks.sampling"
+description: "Sampling pipeline hook payloads."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Sampling pipeline hook payloads.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingLoopStartPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/hooks/sampling.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `sampling_loop_start` — when sampling strategy begins.
+
+**Attributes:**
+- `strategy_name`: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
+- `action`: The [`Component`](../../core/base#class-component) being sampled.
+- `context`: The [`Context`](../../core/base#class-context) at the start of sampling.
+- `requirements`: List of [`Requirement`](../../core/requirement#class-requirement) instances to validate against.
+- `loop_budget`: Maximum number of sampling iterations allowed (writable).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingIterationPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/hooks/sampling.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `sampling_iteration` — after each sampling attempt.
+
+**Attributes:**
+- `strategy_name`: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
+- `iteration`: 1-based iteration number within the sampling loop.
+- `action`: The [`Component`](../../core/base#class-component) used for this attempt.
+- `result`: The [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) produced by this attempt.
+- `validation_results`: List of `(Requirement, ValidationResult)` tuples.
+- `all_validations_passed`: `True` when **every** requirement in `validation_results`
+passed for this iteration (i.e., the sampling attempt succeeded).
+- `valid_count`: Number of requirements that passed.
+- `total_count`: Total number of requirements evaluated.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingRepairPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/hooks/sampling.py#L56" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `sampling_repair` — when repair is invoked after validation failure.
+
+**Attributes:**
+- `repair_type`: Kind of repair (strategy-dependent, e.g. `"rejection"`, `"template"`).
+- `failed_action`: The [`Component`](../../core/base#class-component) that failed validation.
+- `failed_result`: The [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) that failed validation.
+- `failed_validations`: List of `(Requirement, ValidationResult)` tuples that failed.
+- `repair_action`: The repaired [`Component`](../../core/base#class-component) to use for the next attempt.
+- `repair_context`: The [`Context`](../../core/base#class-context) to use for the next attempt.
+- `repair_iteration`: 1-based iteration at which the repair was triggered.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingLoopEndPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/plugins/hooks/sampling.py#L79" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `sampling_loop_end` — when sampling completes.
+
+**Attributes:**
+- `strategy_name`: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
+- `success`: `True` if at least one attempt passed all requirements.
+- `iterations_used`: Total number of iterations the loop executed.
+- `final_result`: The selected [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) (best success or best failure).
+- `final_action`: The [`Component`](../../core/base#class-component) that produced `final_result`.
+- `final_context`: The [`Context`](../../core/base#class-context) associated with `final_result`.
+- `failure_reason`: Human-readable reason when `success` is `False`.
+- `all_results`: List of [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) from every iteration.
+- `all_validations`: Nested list — `all_validations[i]` is the list of
+`(Requirement, ValidationResult)` tuples for iteration *i*.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

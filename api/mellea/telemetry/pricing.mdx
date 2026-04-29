@@ -1,0 +1,93 @@
+---
+title: "mellea.telemetry.pricing"
+sidebarTitle: "mellea.telemetry.pricing"
+description: "LLM pricing via litellm's pricing API."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+LLM pricing via litellm's pricing API.
+
+
+
+
+
+Pricing metrics require the litellm package (`mellea[litellm]`). Pricing is
+auto-enabled when litellm is installed and can be explicitly controlled via the
+`MELLEA_PRICING_ENABLED` environment variable.
+
+`MELLEA_PRICING_ENABLED` tri-state:
+  - `"true"`  + litellm installed  → enabled
+  - `"true"`  + litellm absent     → warning, disabled
+  - `"false"` (any)                → disabled (silent)
+  - unset       + litellm installed  → enabled (auto)
+  - unset       + litellm absent     → disabled (silent)
+
+Pricing is only active when `MELLEA_METRICS_ENABLED` is also set.
+
+Custom pricing:
+  Set `MELLEA_PRICING_FILE` to a JSON file using litellm's native per-token
+  schema. Minimal entries with only cost fields are supported::
+
+      \{
+        "my-model": \{
+          "input_cost_per_token": 0.000003,
+          "output_cost_per_token": 0.000015
+        \}
+      \}
+
+  Optional cache fields: `cache_read_input_token_cost`,
+  `cache_creation_input_token_cost`.
+
+Environment variables:
+  - MELLEA_PRICING_ENABLED: Tri-state pricing flag (true/false/unset).
+  - MELLEA_PRICING_FILE: Path to a JSON file with custom model pricing.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `compute_cost` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/telemetry/pricing.py#L100" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+compute_cost(model: str, provider: str | None, prompt_tokens: int | None, completion_tokens: int | None, cached_tokens: int | None = None, cache_creation_tokens: int | None = None) -> float | None
+```
+
+
+Estimate request cost in USD using litellm's pricing data.
+
+**Args:**
+- `model`: Model identifier (e.g. `"gpt-5.4"`, `"claude-sonnet-4-6"`).
+- `provider`: Provider name from the backend (e.g. `"openai"`, `"watsonx"`).
+Passed to litellm as `custom_llm_provider` to aid model resolution —
+e.g. `"watsonx"` causes litellm to try `watsonx/ibm/granite-4-h-small`.
+- `prompt_tokens`: Total prompt tokens including any cached tokens, or `None`.
+- `completion_tokens`: Number of completion tokens, or `None`.
+- `cached_tokens`: Tokens served from prompt cache, or `None`.
+- `cache_creation_tokens`: Tokens written to prompt cache, or `None`.
+
+**Returns:**
+- Estimated cost in USD, or `None` if pricing is disabled or no pricing
+- data exists for the model.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_pricing_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/telemetry/pricing.py#L146" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_pricing_enabled() -> bool
+```
+
+
+Return True if pricing metrics are enabled.
+
+**Returns:**
+- True if litellm is available and pricing is not explicitly disabled.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

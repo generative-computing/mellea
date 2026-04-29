@@ -1,0 +1,70 @@
+---
+title: "mellea.formatters.granite.granite3.granite33.output"
+sidebarTitle: "mellea.formatters.granite.granite3.granite33.output"
+description: "Parser which receives Granite 3.3 model output and returns the constituents of the output."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Parser which receives Granite 3.3 model output and returns the constituents of the output.
+
+
+
+
+
+The output from the lowest level of the parser is a dictionary as follows:
+
+    * "citations": List of citations
+    * "docs": List of document references
+    * "hallucinations": List of hallucinations
+    * "response": Model response text without the above constituents
+
+This dict is further refined into dataclasses before being returned as an extended
+`AssistantMessage`.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite33OutputProcessor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/granite3/granite33/output.py#L533" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Output processor for version 3.3 of the main Granite models, all sizes.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/granite3/granite33/output.py#L536" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(self, model_output: str, chat_completion: ChatCompletion | None = None) -> AssistantMessage
+```
+
+Parse Granite 3.3 model output into a structured assistant message.
+
+**Args:**
+- `model_output`: Raw text output from the Granite 3.3 model.
+- `chat_completion`: The original chat completion
+request that produced `model_output`. Used to determine which
+output features (thinking, tools, citations, hallucinations) to
+parse. Defaults to `None`.
+
+**Returns:**
+- A :class:`Granite3AssistantMessage` containing the
+parsed response text, optional tool calls, chain-of-thought
+reasoning, citations, documents, and hallucination annotations.
+
+**Raises:**
+- `ValueError`: If parsing citations, documents, or hallucinations from
+the model output fails.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,89 @@
+export const SidebarFix = () => (
+  <script
+    dangerouslySetInnerHTML={{
+      __html: `
+        (function () {
+          const INTERVAL_MS = 500;
+
+          const upgradeSidebar = () => {
+            const links = document.querySelectorAll('a[href^="#"]');
+
+            links.forEach((link) => {
+              if (link.dataset.badged === "true") return;
+
+              const rawText = (link.textContent || "").trim();
+
+              // ========== FUNC ==========
+              if (rawText.startsWith("FUNC ")) {
+                const label = rawText.replace(/^FUNC\\s+/, "").trim();
+
+                while (link.firstChild) link.removeChild(link.firstChild);
+
+                // 👉 Make the whole link a single flex row & prevent wrapping
+                link.style.display = "flex";
+                link.style.alignItems = "center";
+                link.style.whiteSpace = "nowrap";
+                link.style.columnGap = "0.5rem";
+
+                const badge = document.createElement("span");
+                badge.style.marginRight = "0.5rem";
+                badge.style.display = "inline-flex";
+                badge.style.alignItems = "center";
+                badge.style.borderRadius = "9999px";
+                badge.style.padding = "0rem 0.6rem";
+                badge.style.fontSize = "0.5rem";
+                badge.style.fontWeight = "700";
+                badge.style.letterSpacing = "0.05em";
+                badge.style.backgroundColor = "rgba(48, 100, 227, 0.20)";
+                badge.style.color = "#1D4ED8";
+
+                badge.textContent = "FUNC";
+
+                link.appendChild(badge);
+                link.appendChild(document.createTextNode(label));
+                link.dataset.badged = "true";
+                return;
+              }
+
+              // ========== CLASS ==========
+              if (rawText.startsWith("CLASS ")) {
+                const label = rawText.replace(/^CLASS\\s+/, "").trim();
+
+                while (link.firstChild) link.removeChild(link.firstChild);
+
+                // 👉 Same flex / nowrap treatment for class links
+                link.style.display = "flex";
+                link.style.alignItems = "center";
+                link.style.whiteSpace = "nowrap";
+                link.style.columnGap = "0.5rem";
+
+                const badge = document.createElement("span");
+                badge.style.marginRight = "0.5rem";
+                badge.style.display = "inline-flex";
+                badge.style.alignItems = "center";
+                badge.style.borderRadius = "9999px";
+                badge.style.padding = "0rem 0.6rem";
+                badge.style.fontSize = "0.5rem";
+                badge.style.fontWeight = "700";
+                badge.style.letterSpacing = "0.05em";
+                badge.style.backgroundColor = "rgba(74, 222, 128, 0.20)";
+                badge.style.color = "#15803D";
+
+                badge.textContent = "CLASS";
+
+                link.appendChild(badge);
+                link.appendChild(document.createTextNode(label));
+                link.dataset.badged = "true";
+                return;
+              }
+            });
+          };
+
+          upgradeSidebar();
+          setInterval(upgradeSidebar, INTERVAL_MS);
+        })();
+      `,
+    }}
+
+/>
+);

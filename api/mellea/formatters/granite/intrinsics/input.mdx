@@ -1,0 +1,144 @@
+---
+title: "mellea.formatters.granite.intrinsics.input"
+sidebarTitle: "mellea.formatters.granite.intrinsics.input"
+description: "Classes and functions that implement common aspects of input processing for intrinsics."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Classes and functions that implement common aspects of input processing for intrinsics.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sentence_delimiter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/input.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sentence_delimiter(tag: str, sentence_num: int) -> str
+```
+
+
+Return a tag string that identifies the beginning of the indicated sentence.
+
+**Args:**
+- `tag`: Tag string prefix, e.g. `"i"` or `"c"`.
+- `sentence_num`: Zero-based index of the sentence.
+
+**Returns:**
+- Tag string (including trailing space) that identifies the beginning of
+- the indicated sentence in sentence-tagged text.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `mark_sentence_boundaries` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/input.py#L50" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+mark_sentence_boundaries(split_strings: list[list[str]], tag_prefix: str, index: int = 0) -> tuple[list[str], int]
+```
+
+
+Modify input strings by inserting sentence boundary markers.
+
+Modify one or more input strings by inserting a tag in the form
+`<[prefix][number]>`
+at the location of each sentence boundary.
+
+**Args:**
+- `split_strings`: Input string(s), pre-split into sentences.
+- `tag_prefix`: String to place before the number part of each tagged
+sentence boundary.
+- `index`: Starting index for sentence numbering. Defaults to 0. Pass a
+non-zero value to continue numbering from a prior call.
+
+**Returns:**
+- tuple\[list\[str], int]: Tuple of (list of input strings with all sentence
+- boundaries marked, next available index after the last sentence).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `move_documents_to_message` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/input.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+move_documents_to_message(chat_completion: ChatCompletion | dict, how: str = 'string') -> ChatCompletion | dict
+```
+
+
+Move RAG documents from extra_body to first message.
+
+By convention, our canned JSON requests place RAG documents in extra_body/documents.
+Some models do not accept this parameter.
+This function edits a request by putting the documents into the first turn of the
+messages.
+
+**Args:**
+- `chat_completion`: A chat completion request as dataclass or parsed JSON.
+- `how`: How to serialize the documents; supported values are `"string"`,
+`"json"`, and `"roles"`.
+
+**Returns:**
+- A copy of `chat_completion` with any documents under `extra_body`
+- moved to the first message. Returned type will be the same as the input type.
+- May return original object if no edits are necessary.
+
+**Raises:**
+- `TypeError`: If `chat_completion` is not a \:class\:`ChatCompletion` or
+`dict`.
+- `ValueError`: If `how` is not one of `"string"`, `"json"`, or
+`"roles"`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `IntrinsicsRewriter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/intrinsics/input.py#L168" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+General-purpose chat completion rewriter for intrinsics.
+
+General-purpose chat completion rewriter for use with models that implement
+LLM intrinsics. Reads parameters of the model's input and output formats
+from a YAML configuration file and edits the input chat completion appropriately.
+
+**Args:**
+- `config_file`: Path to the YAML configuration file for the
+target intrinsic. Mutually exclusive with `config_dict`.
+- `config_dict`: Inline configuration dictionary. Mutually exclusive with
+`config_file`.
+- `model_name`: Optional model name used to locate model-specific overrides
+within the configuration.
+
+**Attributes:**
+- `config`: Parsed YAML configuration file for the target intrinsic.
+- `response_format`: JSON Schema of the expected response format.
+- `parameters`: Additional parameters (key-value pairs) that this
+rewriter adds to all chat completion requests.
+- `extra_body_parameters`: Extended vLLM-specific parameters that go
+under the `extra_body` element of each request. These are merged
+with any existing `extra_body` content in incoming requests.
+- `instruction`: Optional instruction template. When present,
+a new user message is appended with the formatted instruction.
+- `sentence_boundaries`: Optional sentence-boundary
+marking specification, mapping location strings (`"last_message"`
+or `"documents"`) to marker prefixes (e.g. `"c"` produces
+`<c0>`, `<c1>`, …).
+- `docs_as_message`: Optional specification for moving
+documents from `extra_body/documents` to a user message at the
+start of the messages list. Value must be `"string"`, `"json"`,
+or `"roles"`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

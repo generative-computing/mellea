@@ -1,0 +1,137 @@
+---
+title: "mellea.helpers.openai_compatible_helpers"
+sidebarTitle: "mellea.helpers.openai_compatible_helpers"
+description: "A file for helper functions that deal with OpenAI API compatible helpers."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+A file for helper functions that deal with OpenAI API compatible helpers.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `extract_model_tool_requests` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/openai_compatible_helpers.py#L27" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+extract_model_tool_requests(tools: dict[str, AbstractMelleaTool], response: dict[str, Any]) -> dict[str, ModelToolCall] | None
+```
+
+
+Extract tool calls from the dict representation of an OpenAI-like chat response object.
+
+**Args:**
+- `tools`: Mapping of tool name to `AbstractMelleaTool` for lookup.
+- `response`: Dict representation of an OpenAI-compatible chat completion message
+(must contain a `"message"` key).
+
+**Returns:**
+- Mapping of tool name to [`ModelToolCall`](../core/base#class-modeltoolcall) for each requested tool call, or
+- `None` if no tool calls were found.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `chat_completion_delta_merge` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/openai_compatible_helpers.py#L69" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+chat_completion_delta_merge(chunks: list[dict], force_all_tool_calls_separate: bool = False) -> dict
+```
+
+
+Merge a list of deltas from `ChatCompletionChunk`s into a single dict representing the `ChatCompletion` choice.
+
+**Args:**
+- `chunks`: The list of dicts that represent the message deltas.
+- `force_all_tool_calls_separate`: If `True`, tool calls in separate message
+deltas will not be merged even if their index values are the same. Use
+when providers do not return the correct index value for tool calls; all
+tool calls must then be fully populated in a single delta.
+
+**Returns:**
+- A single merged dict representing the assembled `ChatCompletion` choice,
+- with `finish_reason`, `index`, and a `message` sub-dict containing
+- `content`, `role`, and `tool_calls`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `message_to_openai_message` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/openai_compatible_helpers.py#L157" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+message_to_openai_message(msg: Message) -> dict
+```
+
+
+Serialise a Mellea `Message` to the format required by OpenAI-compatible API providers.
+
+**Args:**
+- `msg`: The `Message` object to serialise.
+
+**Returns:**
+- A dict with `"role"` and `"content"` fields. When the message carries
+- images, `"content"` is a list of text and image-URL dicts; otherwise it
+- is a plain string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `messages_to_docs` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/openai_compatible_helpers.py#L198" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]
+```
+
+
+Extract all `Document` objects from a list of `Message` objects.
+
+**Args:**
+- `msgs`: List of `Message` objects whose `_docs` attributes are inspected.
+
+**Returns:**
+- A list of dicts, each with a `"text"` key and optional `"title"` and
+- `"doc_id"` keys, suitable for passing to an OpenAI-compatible RAG API.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `build_completion_usage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/openai_compatible_helpers.py#L224" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None
+```
+
+
+Build a normalized usage object from a model output, if available.
+
+**Args:**
+- `output`: Model output object whose `generation.usage` mapping contains
+token counts.
+
+**Returns:**
+- A `CompletionUsage` object when usage metadata is present on the
+- output, otherwise `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CompletionUsage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/openai_compatible_helpers.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Token usage statistics for a completion request.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

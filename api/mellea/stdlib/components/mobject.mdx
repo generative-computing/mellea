@@ -1,0 +1,328 @@
+---
+title: "mellea.stdlib.components.mobject"
+sidebarTitle: "mellea.stdlib.components.mobject"
+description: "`MObject`, `Query`, `Transform`, and `MObjectProtocol` for query/transform workflows."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`MObject`, `Query`, `Transform`, and `MObjectProtocol` for query/transform workflows.
+
+
+
+
+
+Defines the `MObjectProtocol` protocol for objects that can be queried and
+transformed by an LLM, and the concrete `MObject` base class that implements it.
+Also provides the `Query` and `Transform` [`Component`](../../core/base#class-component) subtypes, which wrap an
+object with a natural-language question or mutation instruction respectively. These
+primitives underpin `@mify` and can be composed directly to build document Q&A
+or structured extraction pipelines.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Query` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L21" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A [`Component`](../../core/base#class-component) that pairs an `MObject` with a natural-language question.
+
+Wraps the object and its query string into a [`TemplateRepresentation`](../../core/base#class-templaterepresentation) so the
+formatter can render both together in a prompt, optionally forwarding the
+object's tools and fields to the template.
+
+**Args:**
+- `obj`: The object to be queried.
+- `query`: The natural-language question to ask about the object.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L38" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Return the constituent parts of this query component.
+
+**Returns:**
+- list\[Component | CBlock]: A list containing the wrapped object.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L46" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Format this query for the language model.
+
+**Returns:**
+- TemplateRepresentation | str: A [`TemplateRepresentation`](../../core/base#class-templaterepresentation) containing
+- the query string, the wrapped object, and any tools or fields from the
+- object's own representation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L79" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A [`Component`](../../core/base#class-component) that pairs an `MObject` with a natural-language mutation instruction.
+
+Wraps the object and its transformation description into a
+[`TemplateRepresentation`](../../core/base#class-templaterepresentation) so the formatter can render both together in a prompt,
+optionally forwarding the object's tools and fields to the template.
+
+**Args:**
+- `obj`: The object to be transformed.
+- `transformation`: The natural-language description of the transformation.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L96" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Return the constituent parts of this transform component.
+
+**Returns:**
+- list\[Component | CBlock]: A list containing the wrapped object.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L104" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Format this transform for the language model.
+
+**Returns:**
+- TemplateRepresentation | str: A [`TemplateRepresentation`](../../core/base#class-templaterepresentation) containing
+- the transformation description, the wrapped object, and any tools or
+- fields from the object's own representation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MObjectProtocol` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L138" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Protocol to describe the necessary functionality of a MObject. Implementers should prefer inheriting from MObject than MObjectProtocol.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L141" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Return a list of parts for this MObject.
+
+**Returns:**
+- list\[Component | CBlock]: The constituent sub-components.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_query_object` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L149" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_query_object(self, query: str) -> Query
+```
+
+Return the instantiated query object.
+
+**Args:**
+- `query`: The query string.
+
+**Returns:**
+- A `Query` component wrapping this object and the given
+- query string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_transform_object` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L161" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_transform_object(self, transformation: str) -> Transform
+```
+
+Return the instantiated transform object.
+
+**Args:**
+- `transformation`: The transformation description string.
+
+**Returns:**
+- A `Transform` component wrapping this object and the
+- given transformation description.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `content_as_string` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L173" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+content_as_string(self) -> str
+```
+
+Return the content of this MObject as a plain string.
+
+The default value is just `str(self)`.
+Subclasses should override this method.
+
+**Returns:**
+- String representation of this object's content.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L192" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Return the template representation used by the formatter.
+
+The default [`TemplateRepresentation`](../../core/base#class-templaterepresentation) uses automatic parsing for tools
+and fields. Content is retrieved from `content_as_string()`.
+
+**Returns:**
+- TemplateRepresentation | str: The formatted representation for the
+- language model.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MObject` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L209" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+An extension of [`Component`](../../core/base#class-component) for adding query and transform operations.
+
+**Args:**
+- `query_type`: The `Query` subclass to use when constructing query
+components. Defaults to `Query`.
+- `transform_type`: The `Transform` subclass to use when constructing
+transform components. Defaults to `Transform`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L226" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+MObject has no parts because of how format_for_llm is defined.
+
+**Returns:**
+- list\[Component | CBlock]: Always an empty list.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_query_object` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L234" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_query_object(self, query: str) -> Query
+```
+
+Return the instantiated query object.
+
+**Args:**
+- `query`: The query string.
+
+**Returns:**
+- A `Query` component wrapping this object and the given
+- query string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_transform_object` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L246" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_transform_object(self, transformation: str) -> Transform
+```
+
+Return the instantiated transform object.
+
+**Args:**
+- `transformation`: The transformation description string.
+
+**Returns:**
+- A `Transform` component wrapping this object and the
+- given transformation description.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `content_as_string` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L258" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+content_as_string(self) -> str
+```
+
+Return the content of this MObject as a plain string.
+
+The default value is just `str(self)`.
+Subclasses should override this method.
+
+**Returns:**
+- String representation of this object's content.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/mobject.py#L293" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Return the template representation used by the formatter.
+
+The default [`TemplateRepresentation`](../../core/base#class-templaterepresentation) uses automatic parsing for tools
+and fields. Content is retrieved from `content_as_string()`.
+
+**Returns:**
+- TemplateRepresentation | str: The formatted representation for the
+- language model.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
