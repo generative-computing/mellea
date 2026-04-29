@@ -11,7 +11,7 @@ uv run python docs/examples/intrinsics/citations.py
 import json
 
 from mellea import model_ids, start_backend
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 
 ctx, backend = start_backend(
@@ -32,8 +32,9 @@ assistant_response = (
     "purchasing The Dominion."
 )
 documents = [
-    (
-        "Keith Rupert Murdoch was born on 11 March 1931 in Melbourne, Australia, "
+    Document(
+        doc_id="1",
+        text="Keith Rupert Murdoch was born on 11 March 1931 in Melbourne, Australia, "
         "the son of Sir Keith Murdoch (1885-1952) and Dame Elisabeth Murdoch (nee "
         "Greene; 1909-2012). He is of English, Irish, and Scottish ancestry. Murdoch's "
         "parents were also born in Melbourne. Keith Murdoch was a war correspondent "
@@ -66,11 +67,12 @@ documents = [
         "the controlling share in a leading Australian independent label, Michael "
         "Gudinski's Mushroom Records; he merged that with Festival Records, and the "
         "result was Festival Mushroom Records (FMR). Both Festival and FMR were "
-        "managed by Murdoch's son James Murdoch for several years."
+        "managed by Murdoch's son James Murdoch for several years.",
     ),
-    (
-        "This document has nothing to do with Rupert Murdoch. This document is "
-        "two sentences long."
+    Document(
+        doc_id="2",
+        text="This document has nothing to do with Rupert Murdoch. This document is "
+        "two sentences long.",
     ),
 ]
 

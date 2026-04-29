@@ -15,7 +15,7 @@ uv run python docs/examples/intrinsics/context_attribution.py
 import json
 
 from mellea import model_ids, start_backend
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
 
 ctx, backend = start_backend(
@@ -51,8 +51,9 @@ assistant_response = (
     "their marriage in 1969."
 )
 documents = [
-    (
-        "The Plastic Ono Band is a band formed by John Lennon and Yoko Ono in 1969 "
+    Document(
+        doc_id="0",
+        text="The Plastic Ono Band is a band formed by John Lennon and Yoko Ono in 1969 "
         "as a vehicle for their collaborative and solo projects. Lennon and Ono had "
         "begun a personal and artistic relationship in 1968, collaborating on several "
         "experimental releases. Following their marriage in 1969, they decided that all "
@@ -83,10 +84,11 @@ documents = [
         "They also performed at the Jerry Lewis MDA Labor Day Telethon. The last "
         "collaboration of the Plastic Ono Elephant's Memory Band was Ono's double album "
         "Approximately Infinite Universe. It was recorded throughout the fall of 1972, "
-        "and was released in January 1973."
+        "and was released in January 1973.",
     ),
-    (
-        "The Plastic Ono Band is a band formed by John Lennon and Yoko Ono in 1969 "
+    Document(
+        doc_id="1",
+        text="The Plastic Ono Band is a band formed by John Lennon and Yoko Ono in 1969 "
         "as a vehicle for their collaborative and solo projects. Lennon and Ono had "
         "begun a personal and artistic relationship in 1968, collaborating on several "
         "experimental releases. Following their marriage in 1969, they decided that all "
@@ -126,10 +128,11 @@ documents = [
         "Ono's return to music in 1980 for the album Double Fantasy, they played with "
         "an all-new group of studio musicians who were not billed as any variation of "
         "the Plastic Ono Band name. Lennon was shot and killed shortly after the release "
-        "of the album."
+        "of the album.",
     ),
-    (
-        "John Winston Ono Lennon  (9 October 1940 - 8 December 1980) was an English "
+    Document(
+        doc_id="2",
+        text="John Winston Ono Lennon  (9 October 1940 - 8 December 1980) was an English "
         "singer, songwriter, and peace activist who co-founded the Beatles, the most "
         "commercially successful band in the history of popular music. He and fellow "
         "member Paul McCartney formed a much-celebrated songwriting partnership. Along "
@@ -170,7 +173,7 @@ documents = [
         'here, he belongs to me, and he always will." He said he was trying to '
         "re-establish a connection with the then 17-year-old, and confidently predicted, "
         '"Julian and I will have a relationship in the future." After his death it was '
-        "revealed that he had left Julian very little in his will."
+        "revealed that he had left Julian very little in his will.",
     ),
 ]
 

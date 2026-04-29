@@ -100,7 +100,7 @@ def find_context_attributions(
             Message(
                 "assistant",
                 response,
-                documents=_coerce_documents(documents, auto_doc_id=True),
+                documents=_coerce_documents(documents, auto_doc_id=False),
             )
         ),
         backend,
