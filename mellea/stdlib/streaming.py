@@ -49,10 +49,10 @@ class StreamEvent:
     """Base class for all streaming events emitted by :func:`stream_with_chunking`.
 
     The ``timestamp`` field is auto-populated at instantiation time; callers
-    do not set it.  Subclasses that add fields **must** declare them before the
-    ``timestamp`` field would conflict, and any new ``init=False`` fields must
-    use ``field(... , init=False)`` so the dataclass does not expose them as
-    constructor arguments.
+    do not set it.  Because ``timestamp`` has ``init=False`` it is never part
+    of ``__init__``, so subclasses may declare additional fields in any order
+    without conflict.  Any new ``init=False`` fields on subclasses must also
+    use ``field(..., init=False)``.
 
     Attributes:
         timestamp: Unix timestamp (seconds) at the moment the event was created.
@@ -239,6 +239,7 @@ class StreamChunkingResult:
         self._event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         self._orchestration_task: asyncio.Task[None] | None = None
         self._done = asyncio.Event()
+        self._events_consumed: bool = False
 
         self.completed: bool = True
         self.full_text: str = ""
@@ -295,7 +296,9 @@ class StreamChunkingResult:
 
         Typical event order (natural completion with requirements):
 
-        1. :class:`ChunkEvent` / :class:`QuickCheckEvent` pairs, one per chunk.
+        1. :class:`QuickCheckEvent` / :class:`ChunkEvent` pairs, one per chunk
+           (validation fires first; the chunk is released to the consumer only
+           after passing).
         2. :class:`StreamingDoneEvent` — raw token stream has ended.
         3. :class:`FullValidationEvent` — final ``validate()`` calls returned.
         4. :class:`CompletedEvent` — orchestrator is exiting.
@@ -307,18 +310,26 @@ class StreamChunkingResult:
         On exception: :class:`ErrorEvent` followed by :class:`CompletedEvent`.
 
         **Single-consumer.**  Events are delivered via a queue that this method
-        drains; a second call after the first iteration completes blocks
-        indefinitely.
+        drains; calling ``events()`` a second time raises :exc:`RuntimeError`.
 
         Yields:
             StreamEvent: A typed event from the orchestrator.
 
+        Raises:
+            RuntimeError: If called more than once on the same result.
+
         Note:
-            ``events()`` itself never raises.  If the orchestrator encounters
-            an unhandled exception, an :class:`ErrorEvent` is emitted and
-            iteration ends normally.  Exceptions surface to the caller via
-            :meth:`astream` (as a re-raised exception) or :meth:`acomplete`.
+            ``events()`` itself never raises from the event stream.  If the
+            orchestrator encounters an unhandled exception, an
+            :class:`ErrorEvent` is emitted and iteration ends normally.
+            Exceptions surface to the caller via :meth:`astream` (as a
+            re-raised exception) or :meth:`acomplete`.
         """
+        if self._events_consumed:
+            raise RuntimeError(
+                "events() is single-consumer; this iterator has already been drained"
+            )
+        self._events_consumed = True
         while True:
             item = await self._event_queue.get()
             if item is None:
@@ -341,7 +352,11 @@ class StreamChunkingResult:
                 :meth:`astream` consumers — they do **not** propagate here.
         """
         await self._done.wait()
-        if self._orchestration_task is not None and self._orchestration_task.done():
+        if (
+            self._orchestration_task is not None
+            and self._orchestration_task.done()
+            and not self._orchestration_task.cancelled()
+        ):
             exc = self._orchestration_task.exception()
             if exc is not None:
                 raise exc
@@ -488,9 +503,18 @@ async def _orchestrate_streaming(
                 if early_exit:
                     break
 
-            # Stream ended naturally: flush any withheld trailing fragment.
-            # Skipped on early exit — the generation was cancelled.
+            # Stream ended naturally: emit StreamingDoneEvent first (the raw
+            # token stream is finished regardless of what flush validation does),
+            # then flush any withheld trailing fragment.
+            # Skipped entirely on early exit — the generation was cancelled.
             if not early_exit:
+                streaming_done = StreamingDoneEvent(attempt=1, full_text=accumulated)
+                await result._event_queue.put(streaming_done)
+                if span is not None:
+                    span.add_event(
+                        "streaming_done", {"full_text_length": len(accumulated)}
+                    )
+
                 for c in chunking.flush(accumulated):
                     failed = await _process_chunk(c, chunk_index)
                     if failed:
@@ -507,13 +531,6 @@ async def _orchestrate_streaming(
             result.full_text = accumulated
 
             if not early_exit:
-                streaming_done = StreamingDoneEvent(attempt=1, full_text=accumulated)
-                await result._event_queue.put(streaming_done)
-                if span is not None:
-                    span.add_event(
-                        "streaming_done", {"full_text_length": len(accumulated)}
-                    )
-
                 non_failed = [
                     req for i, req in enumerate(cloned_reqs) if i not in failed_indices
                 ]
@@ -526,7 +543,7 @@ async def _orchestrate_streaming(
                     result.final_validations = vrs
                     all_passed = all(vr.as_bool() for vr in vrs)
                     full_val_ev = FullValidationEvent(
-                        attempt=1, passed=all_passed, results=vrs
+                        attempt=1, passed=all_passed, results=list(vrs)
                     )
                     await result._event_queue.put(full_val_ev)
                     if span is not None:
@@ -543,20 +560,26 @@ async def _orchestrate_streaming(
             # that CompletedEvent.success and result.completed are consistent
             # if the consumer observes them during ErrorEvent processing.
             result.completed = False
-            # Orchestrator is leaving — stop the backend producer.
             result.full_text = accumulated  # best-effort partial capture
-            try:
-                await mot.cancel_generation(error=exc)
+            # Only cancel generation if the stream hasn't already completed
+            # (e.g. an exception from the final validate() call arrives after
+            # the token stream ended naturally — cancelling an already-computed
+            # MOT is a no-op at best and misleading in telemetry).
+            if not mot.is_computed():
+                try:
+                    await mot.cancel_generation(error=exc)
+                    error_detail = str(exc)
+                except Exception as cleanup_exc:
+                    # Never let cleanup mask the original exception.
+                    error_detail = f"{exc!r} (cancel cleanup raised: {cleanup_exc!r})"
+                    MelleaLogger.get_logger().debug(
+                        "stream_with_chunking: cancel_generation() raised during "
+                        "exception cleanup (original: %r, cleanup: %r)",
+                        exc,
+                        cleanup_exc,
+                    )
+            else:
                 error_detail = str(exc)
-            except Exception as cleanup_exc:
-                # Never let cleanup mask the original exception.
-                error_detail = f"{exc!r} (cancel cleanup raised: {cleanup_exc!r})"
-                MelleaLogger.get_logger().debug(
-                    "stream_with_chunking: cancel_generation() raised during "
-                    "exception cleanup (original: %r, cleanup: %r)",
-                    exc,
-                    cleanup_exc,
-                )
             error_ev = ErrorEvent(
                 exception_type=type(exc).__name__, detail=error_detail
             )
@@ -595,7 +618,11 @@ async def _orchestrate_streaming(
             completed_ev = CompletedEvent(
                 success=result.completed, full_text=result.full_text, attempts_used=1
             )
-            await result._event_queue.put(completed_ev)
+            # Use put_nowait for the terminal bookkeeping: both queues are
+            # unbounded so this can never raise QueueFull, and it eliminates
+            # the await points that could be interrupted by a pending
+            # CancelledError before _done.set() runs.
+            result._event_queue.put_nowait(completed_ev)
             if span is not None:
                 span.add_event(
                     "completed",
@@ -606,8 +633,8 @@ async def _orchestrate_streaming(
                 )
             record_sampling_outcome("stream_with_chunking", success=result.completed)
 
-            await result._chunk_queue.put(None)
-            await result._event_queue.put(None)
+            result._chunk_queue.put_nowait(None)
+            result._event_queue.put_nowait(None)
             result._done.set()
 
 

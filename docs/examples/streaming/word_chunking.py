@@ -52,10 +52,11 @@ class ForbiddenWordReq(Requirement):
 
     def __init__(self, forbidden: set[str]) -> None:
         super().__init__()
+        self._forbidden_display = sorted(forbidden)
         self._forbidden = {w.lower() for w in forbidden}
 
     def format_for_llm(self) -> str:
-        return f"Do not use any of the following words: {', '.join(sorted(self._forbidden))}."
+        return f"Do not use any of the following words: {', '.join(self._forbidden_display)}."
 
     async def stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context

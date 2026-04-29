@@ -607,6 +607,27 @@ async def test_no_requirements_streams_without_validation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_no_requirements_events_omits_full_validation_event() -> None:
+    """With no quick_check_requirements, events() emits StreamingDoneEvent but
+    NOT FullValidationEvent — there is nothing to validate at stream end."""
+    response = "Chunk one. Chunk two. "
+    backend = StreamingMockBackend(response, token_size=3)
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=None, chunking="sentence"
+    )
+    await result.acomplete()
+
+    evts = [e async for e in result.events()]
+    types = [type(e) for e in evts]
+
+    assert StreamingDoneEvent in types
+    assert FullValidationEvent not in types
+    assert isinstance(evts[-1], CompletedEvent)
+    assert evts[-1].success is True
+
+
+@pytest.mark.asyncio
 async def test_multiple_chunks_in_one_batch_with_mid_batch_fail() -> None:
     """When one astream() delta produces several complete chunks and one in
     the middle fails, earlier chunks emit, failing chunk is recorded, later
@@ -851,7 +872,7 @@ def test_stream_event_types_have_auto_timestamp() -> None:
 
 @pytest.mark.asyncio
 async def test_event_emission_order_happy_path() -> None:
-    """Happy path: ChunkEvent/QuickCheckEvent pairs, then StreamingDoneEvent,
+    """Happy path: QuickCheckEvent/ChunkEvent pairs, then StreamingDoneEvent,
     FullValidationEvent, CompletedEvent(success=True)."""
     response = "First sentence. Second sentence. "
     backend = StreamingMockBackend(response, token_size=4)
@@ -881,6 +902,13 @@ async def test_event_emission_order_happy_path() -> None:
     assert [e.chunk_index for e in chunk_events] == [0, 1]
     assert [e.chunk_index for e in qc_events] == [0, 1]
     assert all(e.passed for e in qc_events)
+
+    # QuickCheckEvent fires before ChunkEvent within each pair: validation must
+    # complete before the chunk is released to the consumer queue.
+    for ci in range(2):
+        qc_pos = evts.index(qc_events[ci])
+        ch_pos = evts.index(chunk_events[ci])
+        assert qc_pos < ch_pos, f"chunk {ci}: QuickCheckEvent must precede ChunkEvent"
 
 
 @pytest.mark.asyncio
@@ -1115,6 +1143,7 @@ async def test_cancelled_task_sets_completed_false() -> None:
     ``coro.send(None)``.
     """
     gate = asyncio.Event()  # never set — feed task blocks indefinitely
+    feed_task: asyncio.Task[None] | None = None
 
     async def _blocking_feed(mot: ModelOutputThunk) -> None:
         await gate.wait()
@@ -1123,9 +1152,9 @@ async def test_cancelled_task_sets_completed_false() -> None:
         async def _generate_from_context(
             self, action: Any, ctx: Any, **kwargs: Any
         ) -> tuple[ModelOutputThunk, Any]:
+            nonlocal feed_task
             mot = _make_mot()
-            task = asyncio.create_task(_blocking_feed(mot))
-            _ = task
+            feed_task = asyncio.create_task(_blocking_feed(mot))
             return mot, ctx.add(action).add(mot)
 
         async def generate_from_raw(self, *args: Any, **kwargs: Any) -> Any:
@@ -1149,4 +1178,19 @@ async def test_cancelled_task_sets_completed_false() -> None:
     except BaseException:
         pass
 
+    # Primary assertion: completed must be False after external cancellation.
     assert result.completed is False
+
+    # The finally block must have run to completion: _done must be set and
+    # acomplete() must not hang.  This is the actual failure mode the fix
+    # guards against — if _done is never set, acomplete() blocks forever.
+    assert result._done.is_set()
+    await asyncio.wait_for(result.acomplete(), timeout=2.0)
+
+    # Clean up the blocking feed task to avoid "Task destroyed while pending".
+    if feed_task is not None:
+        feed_task.cancel()
+        try:
+            await feed_task
+        except BaseException:
+            pass
