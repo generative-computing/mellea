@@ -82,7 +82,7 @@ class QuickCheckEvent(StreamEvent):
     """Emitted after each per-chunk streaming validation batch.
 
     One event per chunk, covering all active requirements in parallel.
-    Not emitted when there are no ``quick_check_requirements``.
+    Not emitted when there are no ``requirements``.
 
     Attributes:
         chunk_index: Zero-based position of the chunk that was validated.
@@ -91,7 +91,7 @@ class QuickCheckEvent(StreamEvent):
             for this chunk.
         results: :class:`~mellea.core.requirement.PartialValidationResult`
             from each active requirement, in the same order as the active
-            slice of ``quick_check_requirements``.
+            slice of ``requirements``.
     """
 
     chunk_index: int
@@ -215,7 +215,10 @@ class StreamChunkingResult:
     Attributes:
         completed: ``False`` if the stream exited early because a requirement
             returned ``"fail"`` during streaming; ``True`` otherwise.
-        full_text: The complete generated text accumulated during streaming.
+        full_text: The generated text available after streaming completes.
+            On natural completion, the full accumulated text.  On early exit
+            (a requirement returned ``"fail"``), only the validated and emitted
+            portion — i.e. what consumers received via :meth:`astream`.
             Available after :meth:`acomplete` returns.
         final_validations: :class:`~mellea.core.requirement.ValidationResult`
             objects from the final :meth:`~mellea.core.requirement.Requirement.validate`
@@ -369,8 +372,8 @@ class StreamChunkingResult:
 
         Returns a new thunk with ``value`` set to :attr:`full_text` and
         generation metadata copied from the original MOT.  Safe to call on
-        early-exit results; ``value`` will reflect whatever was accumulated
-        before cancellation.
+        early-exit results; ``value`` reflects the validated and emitted
+        portion (same as :attr:`full_text` — see its docstring).
 
         Note:
             On early exit, ``cancel_generation()`` forces the MOT into a
@@ -415,6 +418,7 @@ async def _orchestrate_streaming(
     val_backend: Backend,
 ) -> None:
     accumulated = ""
+    emitted_end = 0  # byte offset in accumulated after the last emitted chunk
     prev_chunk_count = 0
     failed_indices: set[int] = set()
     early_exit = False
@@ -508,6 +512,9 @@ async def _orchestrate_streaming(
                                 ),
                             )
                         break
+                    pos = accumulated.find(c, emitted_end)
+                    if pos >= 0:
+                        emitted_end = pos + len(c)
                     chunk_index += 1
 
                 if early_exit:
@@ -530,9 +537,15 @@ async def _orchestrate_streaming(
                                 ),
                             )
                         break
+                    pos = accumulated.find(c, emitted_end)
+                    if pos >= 0:
+                        emitted_end = pos + len(c)
                     chunk_index += 1
 
-            result.full_text = accumulated
+            # On early exit, full_text is the portion of accumulated that was
+            # actually validated and emitted to the consumer. On natural
+            # completion, the full accumulated text is used.
+            result.full_text = accumulated[:emitted_end] if early_exit else accumulated
 
             if not early_exit:
                 streaming_done = StreamingDoneEvent(attempt=1, full_text=accumulated)
