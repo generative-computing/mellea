@@ -294,8 +294,8 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
         # Generate a unique ID for this tool call
         tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
-        # Serialize the arguments to JSON string
-        args_json = json.dumps(model_tool_call.args)
+        # Serialize arguments to JSON with str fallback for non-serializable types
+        args_json = json.dumps(model_tool_call.args, default=str)
 
         tool_call: ToolCallDict = {
             "id": tool_call_id,
