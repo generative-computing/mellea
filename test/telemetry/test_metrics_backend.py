@@ -103,6 +103,7 @@ def _setup_metrics_provider(metrics_module, metric_reader):
     metrics_module._requirement_checks_counter = None
     metrics_module._requirement_failures_counter = None
     metrics_module._tool_calls_counter = None
+    metrics_module._cost_counter = None
     return provider
 
 
@@ -313,6 +314,13 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+    # Verify cost metric — litellm has pricing for ibm/granite-4-h-small on watsonx
+    cost = get_metric_value(
+        metrics_data, "mellea.llm.cost.usd", {"gen_ai.provider.name": "watsonx"}
+    )
+    assert cost is not None, "Cost should be recorded for a known watsonx model"
+    assert cost > 0, f"Cost should be > 0, got {cost}"
 
     # Verify latency metrics (watsonx is non-streaming only)
     duration_dp = _find_histogram_data_point(

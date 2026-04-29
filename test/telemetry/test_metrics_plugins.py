@@ -307,8 +307,9 @@ async def test_cost_plugin_records_cost_for_known_model(cost_plugin):
 
         mock_cost.assert_called_once_with(
             model="test-model",
-            input_tokens=100,
-            output_tokens=50,
+            provider="test-provider",
+            prompt_tokens=100,
+            completion_tokens=50,
             cached_tokens=0,
             cache_creation_tokens=0,
         )
@@ -326,7 +327,7 @@ async def test_cost_plugin_cache_tokens_forwarded(cost_plugin):
     """
     payload = _make_cost_payload(
         usage={
-            "prompt_tokens": 100,  # LiteLLM-normalised: 40 base + 50 cache_read + 10 cache_creation
+            "prompt_tokens": 100,
             "completion_tokens": 20,
             "total_tokens": 120,
             "prompt_tokens_details": {"cached_tokens": 50},
@@ -342,8 +343,9 @@ async def test_cost_plugin_cache_tokens_forwarded(cost_plugin):
 
         mock_cost.assert_called_once_with(
             model="test-model",
-            input_tokens=40,  # prompt_tokens (100) - cached_tokens (50) - cache_creation (10)
-            output_tokens=20,
+            provider="test-provider",
+            prompt_tokens=100,  # full amount; litellm handles cached-token deduction internally
+            completion_tokens=20,
             cached_tokens=50,
             cache_creation_tokens=10,
         )
@@ -397,8 +399,9 @@ async def test_cost_plugin_unknown_model_provider_fallback(cost_plugin):
 
         mock_cost.assert_called_once_with(
             model="unknown",
-            input_tokens=10,
-            output_tokens=5,
+            provider=None,  # gen.provider is None; "unknown" fallback only used for record_cost
+            prompt_tokens=10,
+            completion_tokens=5,
             cached_tokens=0,
             cache_creation_tokens=0,
         )

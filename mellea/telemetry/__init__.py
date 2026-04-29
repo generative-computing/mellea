@@ -90,6 +90,7 @@ from .metrics import (
     record_tool_call,
     record_ttfb,
 )
+from .pricing import is_pricing_enabled
 from .tracing import (
     end_backend_span,
     is_application_tracing_enabled,
@@ -118,6 +119,7 @@ __all__ = [
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",
+    "is_pricing_enabled",
     "record_cost",
     "record_error",
     "record_request_duration",
