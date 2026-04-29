@@ -11,7 +11,6 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
-from mellea.backends.tools import MelleaTool
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
