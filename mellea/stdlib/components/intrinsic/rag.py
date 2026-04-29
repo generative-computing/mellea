@@ -14,7 +14,7 @@ def check_answerability(
     documents: collections.abc.Iterable[Document],
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> str:
     """Test a user's question for answerability.
 
     Intrinsic function that checks whether the question in the last user turn of a
@@ -40,9 +40,7 @@ def check_answerability(
     return result_json["answerability"]
 
 
-def rewrite_question(
-    question: str, context: ChatContext, backend: AdapterMixin
-) -> float:
+def rewrite_question(question: str, context: ChatContext, backend: AdapterMixin) -> str:
     """Rewrite a user's question for retrieval.
 
     Intrinsic function that rewrites the question in the next user turn into a
@@ -131,7 +129,7 @@ def find_citations(
 
 def check_context_relevance(
     question: str, document: Document, context: ChatContext, backend: AdapterMixin
-) -> float:
+) -> str:
     """Test whether a document is relevant to a user's question.
 
     Intrinsic function that checks whether a single document contains part or all of

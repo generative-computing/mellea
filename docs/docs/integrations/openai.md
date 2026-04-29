@@ -258,6 +258,73 @@ m = MelleaSession(
 > LiteLLM provides a verified integration — see
 > [Backends and Configuration](../how-to/backends-and-configuration).
 
+## Intrinsics with Granite Switch
+
+Granite Switch models embed LoRA/aLoRA adapters directly in the model weights.
+When served via vLLM, these adapters enable intrinsic functions (RAG quality
+checks, safety evaluation, requirement validation) through the OpenAI-compatible
+API without loading adapter weights at runtime.
+
+Start a vLLM server with the Granite Switch model:
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+    --model <granite-switch-model-id> \
+    --dtype bfloat16 \
+    --enable-prefix-caching
+```
+
+Then create a backend with `load_embedded_adapters=True`:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
+```
+
+The high-level intrinsic wrappers (`rag.check_answerability`,
+`core.check_certainty`, etc.) work identically with this backend. See
+[Intrinsics](../advanced/intrinsics) for the full list of available intrinsics.
+
+> **Note:** `load_embedded_adapters=True` downloads adapter I/O configurations
+> from the model's HuggingFace repository on first use. No adapter weights are
+> transferred — the adapters are already part of the model. Only intrinsics
+> embedded in the model are available — check the model's `adapter_index.json`
+> for the list.
+
+For more control, load adapters manually with `load_embedded_adapters=False`:
+
+```python
+from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=False,
+)
+
+# Load a single adapter from the model's HuggingFace repo
+adapters = EmbeddedIntrinsicAdapter.from_hub(
+    IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+    intrinsic_name="answerability",
+)
+for adapter in adapters:
+    backend.add_adapter(adapter)
+```
+
 ## Troubleshooting
 
 ### `OPENAI_API_KEY` not set error
@@ -279,4 +346,5 @@ local servers, list available models from the server's API or UI.
 ---
 
 **See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
-[Enforce Structured Output](../how-to/enforce-structured-output)
+[Enforce Structured Output](../how-to/enforce-structured-output) |
+[Official Granite Switch Documentation](GRANITE_SWITCH_DOCS)
