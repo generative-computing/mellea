@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/use-images-and-vision"
 title: "Use Images and Vision Models"
 description: "Pass images to instruct() and chat() calls, and configure vision-capable backends."
 # diataxis: how-to

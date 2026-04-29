@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/bedrock"
 title: "AWS Bedrock"
 description: "Run Mellea with AWS Bedrock models using the Bedrock Mantle backend or LiteLLM."
 # diataxis: how-to

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/mcp"
 title: "MCP Integration"
 description: "Expose Mellea functions as Model Context Protocol tools, callable from Claude Desktop, Cursor, and any MCP-compatible client."
 # diataxis: how-to

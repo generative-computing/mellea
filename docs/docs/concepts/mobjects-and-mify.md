@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/mobjects-and-mify"
 title: "MObjects and mify"
 description: "How the @mify decorator turns any Python class into an LLM-queryable object with controlled field and method exposure."
 # diataxis: explanation

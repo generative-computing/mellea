@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/troubleshooting/faq"
 title: "FAQ"
 description: "Answers to frequently asked questions about Mellea installation, backends, and generative functions."
 # diataxis: reference

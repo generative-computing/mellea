@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/index"
 title: "Examples"
 description: "Complete working programs demonstrating Mellea patterns in production-like scenarios."
 # diataxis: reference
