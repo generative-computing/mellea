@@ -418,7 +418,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Drain again for any final item the task put before terminating.
         _drain()
 
-        span = self._meta.get("_telemetry_span")
+        span = self._meta.pop("_telemetry_span", None)
         if span is not None:
             from ..telemetry import end_backend_span, set_span_error
 
@@ -427,7 +427,6 @@ class ModelOutputThunk(CBlock, Generic[S]):
             )
             set_span_error(span, recorded)
             end_backend_span(span)
-            del self._meta["_telemetry_span"]
 
         if self._underlying_value is None:
             self._underlying_value = ""

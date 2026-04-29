@@ -264,6 +264,15 @@ async def _orchestrate_streaming(
         result.completed = False
         await result._chunk_queue.put(exc)
     finally:
+        # CancelledError (BaseException, not Exception) bypasses the except
+        # block above, so cancel_generation() may not have been called.
+        # Guard here ensures the backend producer is always stopped, even on
+        # external task cancellation (e.g. asyncio.wait_for timeout).
+        if not mot.is_computed():
+            try:
+                await mot.cancel_generation()
+            except BaseException:
+                pass
         await result._chunk_queue.put(None)
         result._done.set()
 

@@ -1,4 +1,4 @@
-# pytest: ollama, integration
+# pytest: ollama, e2e
 
 """Streaming generation with per-chunk validation using stream_with_chunking().
 
@@ -32,6 +32,7 @@ class MaxSentencesReq(Requirement):
     """
 
     def __init__(self, limit: int) -> None:
+        super().__init__()
         self._limit = limit
         self._count = 0
 

@@ -122,6 +122,7 @@ class FailAfterWordsReq(Requirement):
     """
 
     def __init__(self, threshold: int) -> None:
+        super().__init__()
         self._threshold = threshold
         self._word_count = 0
 
@@ -146,6 +147,7 @@ class BackendRecordingReq(Requirement):
     """Records which backend was passed to stream_validate and validate."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.seen_backends: list[Any] = []
 
     def __copy__(self) -> "BackendRecordingReq":
@@ -174,6 +176,7 @@ class MutationDetectorReq(Requirement):
     """Tracks how many times stream_validate was called on this instance."""
 
     def __init__(self) -> None:
+        super().__init__()
         self._call_count = 0
 
     def format_for_llm(self) -> str:
@@ -291,22 +294,37 @@ async def test_quick_check_backend_routing() -> None:
 
     req = BackendRecordingReq()
 
-    result = await stream_with_chunking(
-        _action(),
-        main_backend,
-        _ctx(),
-        quick_check_requirements=[req],
-        chunking="sentence",
-        quick_check_backend=val_backend,
-    )
-    await result.acomplete()
+    # Capture the cloned requirement so we can inspect which backends it saw.
+    captured: list[BackendRecordingReq] = []
+    original_copy = BackendRecordingReq.__copy__
 
-    # The clone's seen_backends should only contain val_backend
-    # (The original req was never called; clones were.)
-    # Verify via final_validations side-effect: at least one backend recorded
+    def _capturing_copy(self: BackendRecordingReq) -> BackendRecordingReq:
+        clone = original_copy(self)
+        captured.append(clone)
+        return clone
+
+    BackendRecordingReq.__copy__ = _capturing_copy  # type: ignore[method-assign]
+    try:
+        result = await stream_with_chunking(
+            _action(),
+            main_backend,
+            _ctx(),
+            quick_check_requirements=[req],
+            chunking="sentence",
+            quick_check_backend=val_backend,
+        )
+        await result.acomplete()
+    finally:
+        BackendRecordingReq.__copy__ = original_copy  # type: ignore[method-assign]
+
     assert result.completed is True
-    # The original req._seen_backends is untouched (clone isolation)
+    # The original was never called — only clones are used.
     assert req.seen_backends == []
+    # The clone must have seen val_backend for every call (stream_validate + validate),
+    # never main_backend. This is the actual routing assertion.
+    assert len(captured) == 1
+    assert len(captured[0].seen_backends) > 0
+    assert all(b is val_backend for b in captured[0].seen_backends)
 
 
 @pytest.mark.asyncio
