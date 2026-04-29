@@ -82,7 +82,7 @@ def test_alora_training_integration():
         adapter_path = tmpdir_path / "test_alora_adapter"
 
         # Train aLoRA adapter with minimal settings
-        # Using smallest Granite model: granite-4.0-micro (3B params)
+        # Using smallest Granite model: granite-4.1-3b (3B params)
         train_model(
             dataset_path=str(dataset_path),
             base_model="ibm-granite/granite-4.1-3b",

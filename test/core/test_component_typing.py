@@ -6,7 +6,7 @@ import pytest
 
 import mellea.stdlib.functional as mfuncs
 from mellea import MelleaSession, start_session
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import (
     CBlock,
@@ -65,10 +65,10 @@ def backend(gh_run: int):
     """Shared backend."""
     if gh_run == 1:
         return OllamaModelBackend(
-            model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name  # type: ignore
+            model_id=IBM_GRANITE_4_1_3B.ollama_name  # type: ignore
         )
     else:
-        return OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+        return OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
 
 
 @pytest.fixture(scope="module")
