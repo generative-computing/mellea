@@ -95,6 +95,26 @@ IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
     watsonx_name="ibm/granite-4-h-small",  # Keeping hybrid version here for backwards compatibility.
 )
 
+# Granite 4.1
+
+IBM_GRANITE_4_1_30B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-30b",
+    ollama_name="granite4.1:30b",
+    mlx_name="ibm-granite/granite-4.1-30b-fp8",
+)
+
+IBM_GRANITE_4_1_8B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-8b",
+    ollama_name="granite4.1:8b",
+    mlx_name="ibm-granite/granite-4.1-8b-fp8",
+)
+
+IBM_GRANITE_4_1_3B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-3b",
+    ollama_name="granite4.1:3b",
+    mlx_name="ibm-granite/granite-4.1-3b-fp8",
+)
+
 # Granite 3.3 Vision Model (2B)
 IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-vision-3.3-2b",
