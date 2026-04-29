@@ -39,7 +39,7 @@ __all__ = [
     "FullValidationEvent",
     "ParagraphChunker",
     "QuickCheckEvent",
-    "RetryEvent",
+    "RetryEvent",  # defined but not emitted in v1 — reserved for future retry support
     "SentenceChunker",
     "StreamChunkingResult",
     "StreamEvent",

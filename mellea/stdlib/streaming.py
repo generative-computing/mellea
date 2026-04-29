@@ -30,7 +30,7 @@ from ..telemetry.metrics import (
     record_requirement_failure,
     record_sampling_outcome,
 )
-from ..telemetry.tracing import set_span_error, trace_application
+from ..telemetry.tracing import set_span_error, set_span_status_error, trace_application
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
 
 _CHUNKING_ALIASES: dict[str, type[ChunkingStrategy]] = {
@@ -49,7 +49,10 @@ class StreamEvent:
     """Base class for all streaming events emitted by :func:`stream_with_chunking`.
 
     The ``timestamp`` field is auto-populated at instantiation time; callers
-    do not set it.
+    do not set it.  Subclasses that add fields **must** declare them before the
+    ``timestamp`` field would conflict, and any new ``init=False`` fields must
+    use ``field(... , init=False)`` so the dataclass does not expose them as
+    constructor arguments.
 
     Attributes:
         timestamp: Unix timestamp (seconds) at the moment the event was created.
@@ -230,6 +233,9 @@ class StreamChunkingResult:
         self._mot = mot
         self._ctx = ctx
         self._chunk_queue: asyncio.Queue[str | None | Exception] = asyncio.Queue()
+        # If no consumer calls events(), events accumulate in this queue until
+        # the result object is garbage-collected.  That is intentional — event
+        # production is unconditional; consumption is opt-in.
         self._event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         self._orchestration_task: asyncio.Task[None] | None = None
         self._done = asyncio.Event()
@@ -306,6 +312,12 @@ class StreamChunkingResult:
 
         Yields:
             StreamEvent: A typed event from the orchestrator.
+
+        Note:
+            ``events()`` itself never raises.  If the orchestrator encounters
+            an unhandled exception, an :class:`ErrorEvent` is emitted and
+            iteration ends normally.  Exceptions surface to the caller via
+            :meth:`astream` (as a re-raised exception) or :meth:`acomplete`.
         """
         while True:
             item = await self._event_queue.get()
@@ -322,7 +334,11 @@ class StreamChunkingResult:
         exhaustion, this call is effectively a no-op.
 
         Raises:
-            Exception: Propagates any error from the orchestration task.
+            BaseException: Propagates any :class:`BaseException` that escaped
+                the orchestration task entirely (e.g. ``KeyboardInterrupt``).
+                Ordinary :class:`Exception` types are caught by the orchestrator,
+                surfaced as :class:`ErrorEvent` objects, and re-raised to
+                :meth:`astream` consumers — they do **not** propagate here.
         """
         await self._done.wait()
         if self._orchestration_task is not None and self._orchestration_task.done():
@@ -409,7 +425,7 @@ async def _orchestrate_streaming(
                         failed_indices.add(idx)
                         result.streaming_failures.append((req, pvr))
 
-                any_fail = bool(failed_indices)
+                any_fail = any(pvr.success == "fail" for pvr in pvrs)
                 qc_event = QuickCheckEvent(
                     chunk_index=ci, attempt=1, passed=not any_fail, results=pvrs
                 )
@@ -462,12 +478,9 @@ async def _orchestrate_streaming(
                         result.completed = False
                         await mot.cancel_generation()
                         if span is not None:
-                            set_span_error(
-                                span,
-                                RuntimeError(
-                                    "Streaming validation failed: "
-                                    + (result.streaming_failures[-1][1].reason or "")
-                                ),
+                            reason = result.streaming_failures[-1][1].reason or ""
+                            set_span_status_error(
+                                span, f"Streaming validation failed: {reason}"
                             )
                         break
                     chunk_index += 1
@@ -484,12 +497,9 @@ async def _orchestrate_streaming(
                         early_exit = True
                         result.completed = False
                         if span is not None:
-                            set_span_error(
-                                span,
-                                RuntimeError(
-                                    "Streaming validation failed on flush: "
-                                    + (result.streaming_failures[-1][1].reason or "")
-                                ),
+                            reason = result.streaming_failures[-1][1].reason or ""
+                            set_span_status_error(
+                                span, f"Streaming validation failed on flush: {reason}"
                             )
                         break
                     chunk_index += 1
@@ -529,6 +539,10 @@ async def _orchestrate_streaming(
                         )
 
         except Exception as exc:
+            # Mark as failed immediately — before any event is enqueued — so
+            # that CompletedEvent.success and result.completed are consistent
+            # if the consumer observes them during ErrorEvent processing.
+            result.completed = False
             # Orchestrator is leaving — stop the backend producer.
             result.full_text = accumulated  # best-effort partial capture
             try:
@@ -562,7 +576,6 @@ async def _orchestrate_streaming(
                 provider=result._mot.generation.provider or "unknown",
                 exception_class=type(exc).__name__,
             )
-            result.completed = False
             await result._chunk_queue.put(exc)
         finally:
             # CancelledError (BaseException, not Exception) bypasses the except

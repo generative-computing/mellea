@@ -7,6 +7,7 @@ All tests are unit tests (no @pytest.mark.ollama needed).
 """
 
 import asyncio
+import time
 from typing import Any
 from unittest.mock import patch
 
@@ -733,6 +734,7 @@ async def test_cancel_generation_invoked_on_fail() -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_chunking_alias_raises_value_error() -> None:
+    """An unrecognised chunking alias raises ValueError before any backend call."""
     backend = StreamingMockBackend("hello world")
     with pytest.raises(ValueError, match="unknown_alias"):
         await stream_with_chunking(_action(), backend, _ctx(), chunking="unknown_alias")
@@ -816,8 +818,6 @@ async def test_exception_in_stream_validate_cancels_generation() -> None:
 
 def test_stream_event_types_have_auto_timestamp() -> None:
     """All seven event types set timestamp automatically; callers do not pass it."""
-    import time
-
     before = time.time()
     all_events = [
         ChunkEvent(text="hello", chunk_index=0, attempt=1),
