@@ -23,7 +23,7 @@ print(f"***** email ****\n{w(email_v1)}\n*******")
 # from mellea.stdlib.base import SimpleContext
 # m = MelleaSession(
 #     backend=OllamaModelBackend(
-#         model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
+#         model_id=model_ids.IBM_GRANITE_4_1_3B,
 #         model_options={ModelOption.MAX_NEW_TOKENS: 200},
 #     ),
 #     ctx=SimpleContext()

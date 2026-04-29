@@ -18,7 +18,7 @@ By the end you will have covered:
 - Using `stringify_func` for custom text representations
 
 **Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

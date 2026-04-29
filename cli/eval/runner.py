@@ -150,7 +150,7 @@ def create_session(
         else:
             model_id = model
     else:
-        model_id = mellea.model_ids.IBM_GRANITE_4_MICRO_3B
+        model_id = mellea.model_ids.IBM_GRANITE_4_1_3B
 
     try:
         backend_lower = backend.lower()

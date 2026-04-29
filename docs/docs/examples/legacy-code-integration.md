@@ -24,7 +24,7 @@ class or instance so you can pass it directly to session methods like `m.act()`,
 
 - [Quick Start](../getting-started/quickstart) complete
 - [MObjects and mify](../concepts/mobjects-and-mify) concept page (recommended background)
-- Ollama running locally with `granite4:micro` pulled
+- Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
 

@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.e2e]
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.formatters import TemplateFormatter
@@ -25,8 +25,8 @@ from mellea.stdlib.context import ChatContext, SimpleContext
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
     return OpenAIBackend(
-        model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore
-        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name),  # type: ignore
+        model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_1_3B.hf_model_name),  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )

@@ -10,7 +10,7 @@ description: "Run your first generative program in minutes."
 ## Hello world
 
 By default, `start_session()` connects to Ollama and uses **IBM Granite 4 Micro**
-(`granite4:micro`). Make sure Ollama is running before you run this:
+(`granite4.1:3b`). Make sure Ollama is running before you run this:
 
 ```python
 import mellea
@@ -191,7 +191,7 @@ HuggingFace, and WatsonX are also supported. See
 
 ## Troubleshooting
 
-**`granite4:micro` not found** — run `ollama pull granite4:micro` before starting.
+**`granite4.1:3b` not found** — run `ollama pull granite4.1:3b` before starting.
 
 **Python 3.13 `outlines` install failure** — `outlines` requires a Rust compiler.
 Either install [Rust](https://www.rust-lang.org/tools/install) or pin Python to 3.12.

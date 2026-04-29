@@ -129,7 +129,7 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.context import SimpleContext
 
 backend = OllamaModelBackend(
-    "granite4:micro",
+    "granite4.1:3b",
     model_options={"temperature": 0.2},
 )
 m = MelleaSession(backend, SimpleContext())

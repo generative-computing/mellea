@@ -62,7 +62,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_1_3B,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,

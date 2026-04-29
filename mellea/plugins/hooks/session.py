@@ -31,7 +31,7 @@ class SessionPostInitPayload(MelleaBasePayload):
 
     Attributes:
         session_id: UUID string identifying this session.
-        model_id: Model identifier used by the backend (e.g. ``"granite4:micro"``).
+        model_id: Model identifier used by the backend (e.g. ``"granite4.1:3b"``).
         context: The initial ``Context`` instance for this session.
     """
 
