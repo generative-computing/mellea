@@ -5,7 +5,7 @@
 Demonstrates:
 - Subclassing Requirement to override stream_validate() for early-exit checks
 - Calling stream_with_chunking() with sentence-level chunking
-- Consuming validated chunks via astream() as they arrive
+- Observing the full event vocabulary via events() as they arrive
 - Awaiting full completion with acomplete() to access final_validations and full_text
 """
 
@@ -19,7 +19,14 @@ from mellea.core.requirement import (
     ValidationResult,
 )
 from mellea.stdlib.components import Instruction
-from mellea.stdlib.streaming import stream_with_chunking
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamingDoneEvent,
+    stream_with_chunking,
+)
 
 
 class MaxSentencesReq(Requirement):
@@ -77,9 +84,24 @@ async def main() -> None:
         action, backend, ctx, quick_check_requirements=[req], chunking="sentence"
     )
 
-    print("Streaming chunks as they arrive:")
-    async for chunk in result.astream():
-        print(f"  CHUNK: {chunk!r}")
+    print("Streaming events as they arrive:")
+    async for event in result.events():
+        match event:
+            case ChunkEvent():
+                print(f"  CHUNK[{event.chunk_index}]: {event.text!r}")
+            case QuickCheckEvent(passed=False):
+                print(
+                    f"  QUICK_CHECK[{event.chunk_index}]: FAIL — "
+                    f"{event.results[0].reason if event.results else 'unknown reason'}"
+                )
+            case QuickCheckEvent():
+                print(f"  QUICK_CHECK[{event.chunk_index}]: pass")
+            case StreamingDoneEvent():
+                print(f"  STREAMING_DONE: {len(event.full_text)} chars accumulated")
+            case FullValidationEvent():
+                print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
+            case CompletedEvent():
+                print(f"  COMPLETED: success={event.success}")
 
     await result.acomplete()
 
