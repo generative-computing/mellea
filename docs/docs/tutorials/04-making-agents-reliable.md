@@ -378,7 +378,7 @@ Output passed safety checks: Mellea is a Python framework designed for creating 
 
 Scores are floats between 0.0 (safe) and 1.0 (risk detected); 0.5 is the
 threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
-`"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
+`"profanity"`, `"violence"`, `"sexual_content"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
 ---
@@ -499,7 +499,6 @@ question = "Using the retrieved documentation, describe what Mellea is."
 result = m.instruct(
     question,
     model_options={ModelOption.TOOLS: [retrieve_docs]},
-    grounding_context={"docs": RETRIEVED_CONTEXT},
     tool_calls=True,
 )
 
@@ -507,7 +506,11 @@ if result.tool_calls:
     for name, tc in result.tool_calls.items():
         output = tc.call_func()
         m.ctx = m.ctx.add(ToolMessage("tool", str(output), output, name, tc.args, tc))
-    response = m.instruct("Answer the original question using the tool results.", tool_calls=False)
+    response = m.instruct(
+        "Answer the original question using the tool results.",
+        grounding_context={"docs": RETRIEVED_CONTEXT},
+        tool_calls=False,
+    )
 else:
     response = result
 

@@ -161,7 +161,6 @@ change the behaviour of every function in a session by injecting context once.
 
 ```python
 # Requires: mellea
-# Returns: FeedbackAnalysis
 from mellea import generative, start_session
 from mellea.stdlib.context import ChatContext
 from mellea.core import CBlock
