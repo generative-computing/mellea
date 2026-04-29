@@ -76,7 +76,9 @@ IBM_GRANITE_4_HYBRID_350m = ModelIdentifier(
 
 # Granite 4.1 Dense Models
 IBM_GRANITE_4_1_3B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.1-3b", ollama_name="granite4.1:3b"
+    hf_model_name="ibm-granite/granite-4.1-3b",
+    ollama_name="granite4.1:3b",
+    watsonx_name=None,
 )
 
 IBM_GRANITE_4_1_8B = ModelIdentifier(
