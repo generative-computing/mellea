@@ -8,10 +8,9 @@ uv run python docs/examples/intrinsics/factuality_correction.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
-from mellea.stdlib.context import ChatContext
 
 user_text = "Why does February have 28 days?"
 response_text = "February has 28 days because it was named after the Roman god of war, Mars, and the Romans believed that the month should have an even number of days to symbolize balance and fairness in war."
@@ -82,28 +81,16 @@ document = Document(
 )
 
 # Create the backend.
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-# --- Alternative: OpenAI backend with Granite Switch (requires vLLM server) ---
-# Requires the adapter for this intrinsic to be embedded in the Granite Switch
-# model. See docs/examples/granite-switch/ for a full runnable example.
-# from mellea.backends.openai import OpenAIBackend
-# from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
-# from mellea.formatters import TemplateFormatter
-#
-# backend = OpenAIBackend(
-#     model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-#     formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
-#     base_url="http://localhost:8000/v1",  # vLLM server URL
-#     api_key="EMPTY",
-#     load_embedded_adapters=True,
-# )
-# --- End alternative ---
-context = (
-    ChatContext()
-    .add(document)
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
+
+ctx = (
+    ctx.add(document)
     .add(Message("user", user_text))
     .add(Message("assistant", response_text))
 )
 
-result = guardian.factuality_correction(context, backend)
+result = guardian.factuality_correction(ctx, backend)
 print(f"Result of factuality correction: {result}")  # corrected response string

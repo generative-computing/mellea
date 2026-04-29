@@ -14,31 +14,18 @@ uv run python docs/examples/intrinsics/guardian_core.py
 
 import json
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import guardian
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-# --- Alternative: OpenAI backend with Granite Switch (requires vLLM server) ---
-# Requires the adapter for this intrinsic to be embedded in the Granite Switch
-# model. See docs/examples/granite-switch/ for a full runnable example.
-# from mellea.backends.openai import OpenAIBackend
-# from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
-# from mellea.formatters import TemplateFormatter
-#
-# backend = OpenAIBackend(
-#     model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-#     formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
-#     base_url="http://localhost:8000/v1",  # vLLM server URL
-#     api_key="EMPTY",
-#     load_embedded_adapters=True,
-# )
-# --- End alternative ---
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
 # ---- Example 1: Prompt-level harm detection ----
 print("--- Example 1: Prompt-level Harm Detection ---")
-context = ChatContext().add(Message("user", "How can I hack my friend's email?"))
+context = ctx.add(Message("user", "How can I hack my friend's email?"))
 score = guardian.guardian_check(context, backend, criteria="harm", target_role="user")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")
@@ -46,18 +33,16 @@ print()
 
 # ---- Example 2: Response-level social bias detection ----
 print("--- Example 2: Response-level Social Bias Detection ---")
-context = (
-    ChatContext()
-    .add(Message("user", "What qualities are important for effective leadership?"))
-    .add(
-        Message(
-            "assistant",
-            "Both physical and mental strength are important. Historically, "
-            "Karethians have been viewed as more resilient and capable of "
-            "withstanding the pressures that come with leadership roles, while "
-            "Dravaren are often viewed as nurturing and more suited for "
-            "supportive roles.",
-        )
+context = ctx.add(
+    Message("user", "What qualities are important for effective leadership?")
+).add(
+    Message(
+        "assistant",
+        "Both physical and mental strength are important. Historically, "
+        "Karethians have been viewed as more resilient and capable of "
+        "withstanding the pressures that come with leadership roles, while "
+        "Dravaren are often viewed as nurturing and more suited for "
+        "supportive roles.",
     )
 )
 score = guardian.guardian_check(context, backend, criteria="social_bias")
@@ -77,10 +62,8 @@ response = (
     "The film Eat was first shown by Jonas Mekas on December 24, 1922 "
     "at the Washington Square Gallery at 530 West Broadway."
 )
-context = (
-    ChatContext()
-    .add(Message("user", f"Document: {document}"))
-    .add(Message("assistant", response))
+context = ctx.add(Message("user", f"Document: {document}")).add(
+    Message("assistant", response)
 )
 score = guardian.guardian_check(context, backend, criteria="groundedness")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
@@ -89,7 +72,7 @@ print()
 
 # ---- Example 4: Custom criteria (PII detection) ----
 print("--- Example 4: Custom Criteria (PII Detection) ---")
-context = ChatContext().add(Message("user", "Hi, you can use my SSN : 123-1234-1245."))
+context = ctx.add(Message("user", "Hi, you can use my SSN : 123-1234-1245."))
 custom_criteria = (
     "User message contains personal information or sensitive personal "
     "information that is included as a part of a prompt."
@@ -132,10 +115,8 @@ user_text = "Fetch the first 15 comments for the IBM video with ID 456789123."
 response_text = str(
     [{"name": "comment_list", "arguments": {"video_id": 456789123, "count": 15}}]
 )
-context = (
-    ChatContext()
-    .add(Message("user", f"{tools_text}\n\n{user_text}"))
-    .add(Message("assistant", response_text))
+context = ctx.add(Message("user", f"{tools_text}\n\n{user_text}")).add(
+    Message("assistant", response_text)
 )
 score = guardian.guardian_check(context, backend, criteria="function_call")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
@@ -144,11 +125,9 @@ print()
 
 # ---- Example 6: Answer relevance check ----
 print("--- Example 6: Answer Relevance Check ---")
-context = (
-    ChatContext()
-    .add(Message("user", "In what month did the AFL season originally begin?"))
-    .add(Message("assistant", "The AFL season now begins in February."))
-)
+context = ctx.add(
+    Message("user", "In what month did the AFL season originally begin?")
+).add(Message("assistant", "The AFL season now begins in February."))
 score = guardian.guardian_check(context, backend, criteria="answer_relevance")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")
