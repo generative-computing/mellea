@@ -19,17 +19,17 @@ ctx, backend = start_backend(
 
 ctx = (
     ctx.add(Message("assistant", "Welcome to pet questions!"))
-    .add(Message("user", "I have two pets, a dog named Rex and a cat named Lucy."))
     .add(
         Message(
-            "assistant",
+            "user",
+            "I have two pets, a dog named Rex and a cat named Lucy. "
             "Rex spends a lot of time in the backyard and outdoors, "
-            "and Luna is always inside.",
+            "and Lucy is always inside.",
         )
     )
     .add(
         Message(
-            "user",
+            "assistant",
             "Sounds good! Rex must love exploring outside, while Lucy "
             "probably enjoys her cozy indoor life.",
         )
