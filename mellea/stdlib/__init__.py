@@ -13,17 +13,37 @@ Streaming chunking strategies (for use with streaming validation) are available 
 ``mellea.stdlib.chunking`` and re-exported here for convenience.  The core streaming
 orchestration primitive :func:`~mellea.stdlib.streaming.stream_with_chunking` and
 its result type :class:`~mellea.stdlib.streaming.StreamChunkingResult` are also
-re-exported here.
+re-exported here, alongside the full :class:`~mellea.stdlib.streaming.StreamEvent`
+vocabulary for typed event observation.
 """
 
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
-from .streaming import StreamChunkingResult, stream_with_chunking
+from .streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    ErrorEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    RetryEvent,
+    StreamChunkingResult,
+    StreamEvent,
+    StreamingDoneEvent,
+    stream_with_chunking,
+)
 
 __all__ = [
+    "ChunkEvent",
     "ChunkingStrategy",
+    "CompletedEvent",
+    "ErrorEvent",
+    "FullValidationEvent",
     "ParagraphChunker",
+    "QuickCheckEvent",
+    "RetryEvent",
     "SentenceChunker",
     "StreamChunkingResult",
+    "StreamEvent",
+    "StreamingDoneEvent",
     "WordChunker",
     "stream_with_chunking",
 ]
