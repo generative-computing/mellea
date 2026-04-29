@@ -127,7 +127,7 @@ def test_from_langchain_args_handling(caplog):
 @pytest.mark.ollama
 @pytest.mark.e2e
 def test_from_langchain_generation(session: MelleaSession):
-    t = MelleaTool.from_langchain(langchain_tool)
+    t: MelleaTool = MelleaTool.from_langchain(langchain_tool)
 
     out = session.instruct(
         "Call the langchain_tool.",
