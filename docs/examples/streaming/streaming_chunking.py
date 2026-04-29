@@ -114,6 +114,8 @@ async def main() -> None:
                 print(f"  FULL_VALIDATION: {'PASS' if event.passed else 'FAIL'}")
             case CompletedEvent():
                 print(f"  COMPLETED: success={event.success}")
+            case _:
+                pass  # RetryEvent and any future event types
 
     await result.acomplete()
 
