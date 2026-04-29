@@ -40,9 +40,14 @@ summary = m.instruct(
     "Support was helpful once I got through."
 )
 print(str(summary))
-# Example output (will vary by model and temperature):
-#   "The customer found onboarding confusing and slow, but appreciated the helpful support."
 ```
+
+```text Sample output
+The initial experience with the product's onboarding process was
+challenging but support staff provided valuable assistance later.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording.
 
 `instruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). Calling `str()` on it (or accessing
 `.value`) gives you the string. This is already a generative program: it calls an
@@ -77,8 +82,14 @@ feedback = (
     "Support was helpful once I got through."
 )
 print(summarize_feedback(m, feedback))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+The onboarding process was complicated and time-consuming, but the
+support team proved to be highly beneficial upon successful connection.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
 
 The description is now a [Jinja2](https://jinja.palletsprojects.com/) template. Variables are rendered at generation time,
 not embedded in the source code.
@@ -113,8 +124,15 @@ feedback = (
     "Support was helpful once I got through."
 )
 print(summarize_feedback(m, feedback))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+The onboarding process was confusing and time-consuming, but the
+support team proved to be very helpful upon successful completion
+of the initial steps.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence capturing both the negative and positive aspects.
 
 Requirements are validated by LLM-as-a-judge by default. If a requirement fails,
 Mellea sends the model the failure reason and asks it to repair the output.
@@ -160,8 +178,14 @@ feedback = (
     "Support was helpful once I got through."
 )
 print(summarize_feedback(m, feedback))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Onboarding was confusing and lengthy, but support was helpful after
+issues were resolved.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence capturing fewer than 30 words.
 
 The word-count check is deterministic: it runs in microseconds. The "single
 sentence" check is left for LLM-as-a-judge since counting sentences is harder
@@ -211,6 +235,12 @@ def summarize_feedback(m: mellea.MelleaSession, text: str) -> str:
 m = mellea.start_session()
 print(summarize_feedback(m, "The onboarding was confusing and took far too long."))
 ```
+
+```text Sample output
+Onboarding process was found confusing and overly prolonged by customers.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence fewer than 30 words.
 
 With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult) with
 `.success`, `.result`, and `.sample_generations`. This gives you programmatic
@@ -290,8 +320,18 @@ analyze_feedback(
     "The onboarding was confusing and took far too long. "
     "Support was helpful once I got through."
 )
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Summary:   Onboarding was confusing and lengthy, but support was
+           helpful after contact.
+Sentiment: mixed
+Complaint: onboarding was confusing and took far too long
+Positive:  Support was helpful once I got through
+Urgency:   not mentioned
+```
+
+> **Note:** LLM output is non-deterministic. Wording will vary, but `Sentiment` will be one of `positive`, `negative`, or `mixed`, and `FeedbackIssues` fields will be populated strings.
 
 Each step in the pipeline is an independent LLM call with a typed interface. The
 output of `summarize_feedback` feeds `classify_sentiment`; the original feedback
