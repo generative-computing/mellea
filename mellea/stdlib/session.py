@@ -18,7 +18,7 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-from ..backends.model_ids import IBM_GRANITE_4_MICRO_3B, ModelIdentifier
+from ..backends.model_ids import IBM_GRANITE_4_1_3B, ModelIdentifier
 from ..core import (
     Backend,
     BaseModelSubclass,
@@ -129,7 +129,7 @@ def backend_name_to_class(name: str) -> Any:
 
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_1_3B,
     ctx: Context | None = None,
     *,
     model_options: dict | None = None,

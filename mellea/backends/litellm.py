@@ -79,8 +79,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama_chat/"
-        + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
+        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
         formatter: ChatFormatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
