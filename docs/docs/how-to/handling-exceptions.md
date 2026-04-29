@@ -262,7 +262,7 @@ from mellea.backends import model_ids
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 def instruct_with_fallback(text: str) -> str:
-    m_fast = MelleaSession(OllamaModelBackend(model_ids.IBM_GRANITE_4_MICRO_3B))
+    m_fast = MelleaSession(OllamaModelBackend(model_ids.IBM_GRANITE_4_1_3B))
     result = m_fast.instruct(
         text,
         strategy=RejectionSamplingStrategy(loop_budget=3),

@@ -444,7 +444,7 @@ from mellea.telemetry import create_counter, create_histogram, create_up_down_co
 
 # Monotonically increasing values
 requests = create_counter("myapp.requests", unit="1", description="Total requests")
-requests.add(1, {"backend": "ollama", "model": "granite4:micro"})
+requests.add(1, {"backend": "ollama", "model": "granite4.1:3b"})
 
 # Value distributions
 latency = create_histogram("myapp.latency", unit="ms", description="Request latency")

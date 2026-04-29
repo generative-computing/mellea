@@ -90,7 +90,7 @@ With structured JSON output enabled, the same `SUCCESS` record looks like:
   "thread_id": 6179762176,
   "session_id": "550e8400-e29b-41d4-a716-446655440000",
   "backend": "OllamaModelBackend",
-  "model_id": "granite4:micro",
+  "model_id": "granite4.1:3b",
   "strategy": "RejectionSamplingStrategy",
   "loop_budget": 3
 }

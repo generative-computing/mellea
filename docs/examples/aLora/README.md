@@ -19,7 +19,7 @@ Now let's train a model:
 
 ```
 m alora train \
-    --basemodel ibm-granite/granite-4.0-micro \
+    --basemodel ibm-granite/granite-4.1-3b \
     --outfile stembolts_model \
     --adapter alora \
     stembolt_failure_dataset.jsonl
@@ -69,7 +69,7 @@ After uploading your adapter, you can auto-generate a README for the HuggingFace
 m alora add-readme \
     --name $HF_USERNAME/stembolts \
     --io-yaml io.yaml \
-    --basemodel granite-4.0-micro \
+    --basemodel granite-4.1-3b \
     stembolt_failure_dataset.jsonl
 ```
 
@@ -79,7 +79,7 @@ You can provide a `--hints` file with additional domain context to improve the g
 m alora add-readme \
     --name $HF_USERNAME/stembolts \
     --io-yaml io.yaml \
-    --basemodel granite-4.0-micro \
+    --basemodel granite-4.1-3b \
     --hints hints.txt
     stembolt_failure_dataset.jsonl
 ```
@@ -94,7 +94,7 @@ You can now create a new adapter class for this model somewhere in your python p
 from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 
 class StemboltAdapter(CustomIntrinsicAdapter):
-    def __init__(self, base_model_name:str="granite-4.0-micro"):
+    def __init__(self, base_model_name:str="granite-4.1-3b"):
         super().__init__(
             model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
             intrinsic_name="stembolts",
@@ -108,10 +108,10 @@ Using this adapter requires adding it to a backend:
 from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(
-    model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
+    model_id="ibm-granite/granite-4.1-3b", cache=SimpleLRUCache(5)
 )
 
-backend.add_adapter(StemboltAdapter(base_model_name="granite-4.0-micro"))
+backend.add_adapter(StemboltAdapter(base_model_name="granite-4.1-3b"))
 ```
 
 A full example of how to use this adapter as a requirement is found in `101_example.py`

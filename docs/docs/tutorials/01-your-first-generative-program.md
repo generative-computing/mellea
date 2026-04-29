@@ -20,7 +20,7 @@ By the end you will have covered:
 > see [Tutorial 03: Using Generative Stubs](../tutorials/03-using-generative-stubs).
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
-Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro` downloaded.
+Mellea installed (`uv add mellea`), Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

@@ -112,7 +112,7 @@ client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
 # Enable streaming with stream=True
 stream = client.chat.completions.create(
     messages=[{"role": "user", "content": "Tell me a story"}],
-    model="granite4:micro-h",
+    model="granite4.1:3b",
     stream=True,
 )
 

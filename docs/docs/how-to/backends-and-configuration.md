@@ -13,7 +13,7 @@ configure the backend when you create a session.
 
 ## Default backend
 
-`start_session()` defaults to **Ollama** with **IBM Granite 4 Micro** (`granite4:micro`).
+`start_session()` defaults to **Ollama** with **IBM Granite 4 Micro** (`granite4.1:3b`).
 No API keys needed — just have Ollama running:
 
 ```python
@@ -142,7 +142,7 @@ Run models locally using HuggingFace transformers:
 from mellea import MelleaSession
 from mellea.backends.huggingface import LocalHFBackend
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 m = MelleaSession(backend=backend)
 ```
 

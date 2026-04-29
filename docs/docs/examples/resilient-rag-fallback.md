@@ -23,7 +23,7 @@ the survivors to a grounded `m.instruct()` call.
 - [Quick Start](../getting-started/quickstart) complete
 - `faiss-cpu` and `sentence-transformers` installed, **or** run via `uv run`
   which installs them automatically from the inline script block
-- Ollama running locally with `granite4:micro` pulled (or a Mistral model — see
+- Ollama running locally with `granite4.1:3b` pulled (or a Mistral model — see
   the session setup section below)
 
 Install dependencies manually if you are not using `uv run`:

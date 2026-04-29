@@ -37,7 +37,7 @@ Use the `m alora train` command to fine-tune a LoRA or aLoRA adapter requirement
 
 ```bash
 m alora train path/to/data.jsonl \
-  --basemodel ibm-granite/granite-4.0-micro \
+  --basemodel ibm-granite/granite-4.1-3b \
   --outfile ./checkpoints/alora_adapter \
   --adapter alora \
   --device auto \
@@ -48,7 +48,7 @@ m alora train path/to/data.jsonl \
   --grad-accum 4
 ```
 
-> **Note on Model Selection**: Only non-hybrid models (e.g., `granite-4.0-micro`) are 
+> **Note on Model Selection**: Only non-hybrid models (e.g., `granite-4.1-3b`) are 
 > currently supported for LoRA or aLoRA training.
 > Mamba/Transformers hybrid models like `granite-4.0-h-micro` will produce low-quality 
 > results with Mellea's current hard-coded settings for parameter-efficient fine tuning.

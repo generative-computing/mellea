@@ -53,7 +53,7 @@ instance, so any tool that follows the LangChain `BaseTool` interface works with
 further configuration.
 
 > **Backend note:** Tool calling requires a backend and model that support function
-> calling (e.g., Ollama with `granite4:micro`, OpenAI with `gpt-4o`). The default
+> calling (e.g., Ollama with `granite4.1:3b`, OpenAI with `gpt-4o`). The default
 > Ollama setup supports this.
 
 ## Seeding a session with LangChain message history
