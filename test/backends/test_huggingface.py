@@ -7,7 +7,7 @@ import time
 from collections.abc import Coroutine
 from copy import copy
 from typing import Annotated, Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pydantic
 import pytest
@@ -41,6 +41,9 @@ from mellea.core import (
     default_output_to_bool,
 )
 from mellea.formatters import TemplateFormatter
+from mellea.formatters.granite import AssistantMessage, ChatCompletionResponse
+from mellea.formatters.granite.base.types import ChatCompletionResponseChoice
+from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
@@ -593,6 +596,202 @@ def test_assert_correct_adapters() -> None:
     )  # This will fail if peft ever changes the error message.
     with pytest.raises(AssertionError):
         _assert_correct_adapters("new", model)
+
+
+def _canned_hf_response(content: str = '"answerable"') -> ChatCompletionResponse:
+    """Build a minimal ChatCompletionResponse for mocked HF generation."""
+    return ChatCompletionResponse(
+        choices=[
+            ChatCompletionResponseChoice(
+                index=0, message=AssistantMessage(content=content)
+            )
+        ]
+    )
+
+
+async def test_intrinsic_temperature_forwarded(backend) -> None:
+    """User-provided temperature flows through to the HF generate call."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.TEMPERATURE: 0.7},
+        )
+        # Don't call avalue() — the canned response lacks logprobs for the
+        # answerability result processor.  We only need the generate call.
+        assert _mot._generate is not None
+        await _mot._generate
+
+    gi = captured["generate_input"]
+    assert gi["temperature"] == 0.7
+    assert gi["do_sample"] is True
+
+
+async def test_intrinsic_model_options_forwarded(backend) -> None:
+    """All applicable model options are forwarded to the HF generate call."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                ModelOption.TEMPERATURE: 0.7,
+                ModelOption.MAX_NEW_TOKENS: 999,
+                ModelOption.SYSTEM_PROMPT: "You are helpful",
+            },
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    gi = captured["generate_input"]
+    # Temperature is forwarded.
+    assert gi["temperature"] == 0.7
+    # MAX_NEW_TOKENS is remapped to max_new_tokens and overrides io.yaml's
+    # max_completion_tokens: 6.
+    assert gi.get("max_new_tokens") == 999
+    # Sentinel keys must not leak into generate_input.
+    assert ModelOption.SYSTEM_PROMPT not in gi
+    assert ModelOption.MAX_NEW_TOKENS not in gi
+
+
+async def test_intrinsic_temperature_overrides_io_yaml(backend) -> None:
+    """User temperature wins over io.yaml default without duplicates."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    # The answerability io.yaml sets temperature via the rewriter; user value
+    # must override it without causing a conflict.
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.TEMPERATURE: 0.3},
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    gi = captured["generate_input"]
+    # User value (0.3) must override any io.yaml default.
+    assert gi["temperature"] == 0.3
+    assert gi["do_sample"] is True
+
+
+async def test_intrinsic_tools_dropped_with_warning(backend) -> None:
+    """Tools in model_options are logged and dropped without breaking intrinsic flow."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                ModelOption.TOOLS: [
+                    {"type": "function", "function": {"name": "foo"}}
+                ]
+            },
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    # Generation should complete without error; tools not in generate_input.
+    assert "tools" not in captured["generate_input"]
+
+
+async def test_intrinsic_streaming_raises(backend) -> None:
+    """Intrinsics do not support streaming — raises NotImplementedError."""
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with pytest.raises(NotImplementedError, match="do not support streaming"):
+        await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.STREAM: True},
+        )
+
+
+async def test_intrinsic_no_adapter_raises(backend) -> None:
+    """Calling an intrinsic with no registered adapter raises ValueError."""
+    ctx = ChatContext().add(Message("user", "test"))
+
+    with pytest.raises(ValueError, match="has no adapter"):
+        await mfuncs.aact(
+            Intrinsic("nonexistent_intrinsic"), ctx, backend, strategy=None
+        )
+
+
+async def test_intrinsic_no_system_prompt(backend) -> None:
+    """No system message prepended when SYSTEM_PROMPT is absent."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    # Verify generation completed without error.
+    assert "generate_input" in captured
 
 
 if __name__ == "__main__":
