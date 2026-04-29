@@ -7,6 +7,10 @@ any list of ``AbstractMelleaTool`` instances and a ``ChatContext`` for multi-tur
 history tracking. Raises ``RuntimeError`` if the loop ends without a final answer.
 """
 
+from collections.abc import Awaitable, Callable
+
+import pydantic
+
 # from PIL import Image as PILImage
 from mellea.backends.model_options import ModelOption
 from mellea.core.backend import Backend, BaseModelSubclass
@@ -24,6 +28,14 @@ from mellea.stdlib.components.react import (
 from mellea.stdlib.context import ChatContext
 
 
+class TrueOrFalse(pydantic.BaseModel):
+    """Response indicating whether the ReACT agent has completed its task."""
+
+    answer: bool = pydantic.Field(
+        description="True if you have enough information to answer the user's question, False if you need more tool calls"
+    )
+
+
 async def react(
     goal: str,
     context: ChatContext,
@@ -36,6 +48,19 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
+    answer_check: Callable[
+        [
+            str,
+            ComputedModelOutputThunk[str],
+            ChatContext,
+            Backend,
+            dict | None,
+            int,
+            int,
+        ],
+        Awaitable[bool],
+    ]
+    | None = None,
 ) -> tuple[ComputedModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
@@ -47,6 +72,11 @@ async def react(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tools: the list of tools to use
         loop_budget: the number of steps allowed; use -1 for unlimited
+        answer_check: optional callable to determine if the agent has completed its task.
+            Called every iteration when no tool calls are made and step.value exists (if provided).
+            Receives (goal, step, context, backend, model_options, turn_num, loop_budget).
+            Returns bool indicating if the task is complete.
+            If None, no answer check is performed (loop continues until finalizer or budget exhausted).
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -106,9 +136,31 @@ async def react(
                 if tool_res.name == MELLEA_FINALIZER_TOOL:
                     is_final = True
 
+        # Check if the agent has completed its task (runs every iteration if answer_check is provided and there's a value)
+        # The answer_check function can decide when to actually check based on turn_num and loop_budget
+        elif not is_final and answer_check and step.value:
+            have_answer = await answer_check(
+                goal, step, context, backend, model_options, turn_num, loop_budget
+            )
+
+            if have_answer:
+                # Create a synthetic finalizer tool response to be consistent with normal loop
+                finalizer_response = ToolMessage(
+                    role="tool",
+                    content=step.value or "",
+                    tool_output=step.value or "",
+                    name=MELLEA_FINALIZER_TOOL,
+                    args={},
+                    tool=None,  # type: ignore
+                )
+                tool_responses = [finalizer_response]
+                context = context.add(finalizer_response)
+                is_final = True
+
         if is_final:
             assert len(tool_responses) == 1, "multiple tools were called with 'final'"
 
+            # Apply format if requested
             if format is not None:
                 step, next_context = await mfuncs.aact(
                     action=ReactThought(),
