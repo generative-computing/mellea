@@ -20,9 +20,7 @@ email = m.instruct("Write an email inviting interns to an office party at 3:30pm
 print(str(email))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Subject: Invitation to the Office Party
 
 Dear [Intern's Name],
@@ -80,9 +78,7 @@ print(write_email(
 ))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Subject: Appreciation for Your Efforts in Managing Intern Events
          and Snack Delivery
 
@@ -146,9 +142,7 @@ m = mellea.start_session()
 print(write_email(m, name="Olivia", notes="Organized intern events."))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 subject: organized intern events
 
 hello olivia,

@@ -40,9 +40,7 @@ result = classify_sentiment(m, text="The product arrived damaged and support ign
 print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 negative
 ```
 
@@ -92,9 +90,7 @@ result = analyse_feedback(
 print(result.sentiment, result.key_issue, result.actionable)
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 negative unclear onboarding process True
 ```
 
@@ -147,9 +143,7 @@ m = mellea.start_session()
 print(handle_ticket(m, "The app crashes on login every time.", "French"))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Cher(e) utilisateur valoré(e), nous sommes vraiment désolés de savoir
 que vous rencontrez des problèmes de crash. Notre équipe travaille
 activement à la résolution de ce problème et à l'amélioration de votre
@@ -216,9 +210,7 @@ grade = grade_essay(m, essay=essay)
 print(f"Grade with grammar context: {grade}")
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Grade: 85
 Feedback: ['Add more descriptive language to make your writing more vivid.',
            'Include specific examples or details that support your point.',
@@ -291,9 +283,7 @@ except ValueError as e:
     print(f"Validation failed: {e}")
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Dear Client,
 
 Given your age of 62 and a conservative risk tolerance, it's crucial

@@ -74,9 +74,7 @@ else:
     print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Mellea is a Python framework designed for creating and managing
 generative programs. It provides tools and libraries that allow
 developers to build applications which can generate content or
@@ -164,9 +162,7 @@ else:
     print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Mellea is a Python framework designed for creating and managing
 generative programs, facilitating the development of complex
 algorithms and simulations with ease. The word 'Mellea' consists
@@ -266,9 +262,7 @@ else:
 
 On a successful run (the most common case):
 
-**Sample output:**
-
-```text
+```text Sample output
 Passed: Mellea is a Python framework designed for creating and managing
 generative programs, facilitating complex program generation tasks
 through its modular architecture. The word "Mellea" consists of 6
@@ -277,9 +271,7 @@ characters.
 
 If all attempts exceed the word limit:
 
-**Sample output:**
-
-```text
+```text Sample output
 All 3 attempts failed.
   Attempt 1: Mellea is an open-source Python framework designed to help
              developers build generative...
@@ -391,9 +383,7 @@ else:
         print(f"Jailbreak risk detected (score: {jailbreak_score:.2f})")
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Output passed safety checks: Mellea is a Python framework designed
 for creating generative programs, enabling users to build complex
 and dynamic applications with ease. The word "Mellea" consists of
@@ -471,9 +461,7 @@ for criterion in criteria:
     print(f"[{status}] {criterion}: {score:.2f}")
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 [PASS] harm: 0.00
 [PASS] profanity: 0.00
 [PASS] answer_relevance: 0.07
@@ -561,9 +549,7 @@ else:
         print(f"  Flagged: {sentence['response_text']}")
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Grounded response: Mellea is an open-source Python framework designed
 for building generative programs. It offers three primary
 functionalities: instruct(), @generative, and @mify as its core
@@ -637,9 +623,7 @@ else:
     print(f"Agent output flagged (harm score: {harm_score:.2f})")
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Agent output (safe): Mellea appears to be a Python framework
 specifically designed for creating generative programs. It provides
 tools and utilities that allow developers to build software systems

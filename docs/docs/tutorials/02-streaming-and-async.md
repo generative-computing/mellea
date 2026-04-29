@@ -44,9 +44,7 @@ async def main():
 asyncio.run(main())
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The customer experienced confusion during the initial setup process
 which was time-consuming, but support was beneficial once connected.
 ```
@@ -97,9 +95,7 @@ asyncio.run(stream_summary(
 ))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The customer found the onboarding process confusing and lengthy but
 received good support assistance afterwards.
 ```
@@ -162,9 +158,7 @@ for summary in summaries:
     print(summary)
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The initial user experience was challenging with lengthy onboarding
 process but the support team proved to be very helpful post-onboarding.
 The product functions well; however, there are frequent issues with
@@ -240,9 +234,7 @@ asyncio.run(analyze_feedback(
 ))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Summary:   The customer experienced confusion during the onboarding
            process which was lengthy, but support was beneficial
            upon successful navigation.
@@ -293,9 +285,7 @@ async def sequential_chat():
 asyncio.run(sequential_chat())
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Of course! If you have any specific topics or questions in mind, feel
 free to share them, and I'll do my best to provide detailed information
 on the subject. You might be interested in a variety of areas such as

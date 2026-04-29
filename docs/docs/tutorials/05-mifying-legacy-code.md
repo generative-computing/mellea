@@ -65,9 +65,7 @@ result = m.query(record, "What was this customer's last purchase?")
 print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The last purchase of the customer named Ada is wireless headphones.
 ```
 
@@ -109,9 +107,7 @@ result = m.query(record, "Is this a high-value customer?")
 print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Based on the information provided in your query, it's difficult to
 definitively categorize Ada as a "high-value" customer without
 additional context or comparison data. High-value customers are
@@ -167,9 +163,7 @@ result = m.query(record, "Classify this customer as low, medium, or high value."
 print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Based on the information provided — Ada spent £1240.50 this year —
 this customer would fall into a low-value tier. Low-value customers
 typically have annual spend under £2000, medium between £2000 and
@@ -215,9 +209,7 @@ transformed = m.transform(record, "Write a one-line CRM note for this customer."
 print(str(transformed.name))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Ordered wireless headphones for home use.
 ```
 
@@ -252,9 +244,7 @@ result = m.query(record, "Is this a large or small account?")
 print(str(result))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The term "large" or "small" for an account can be subjective and
 dependent on various factors, such as industry standards, company
 size, or specific business context.

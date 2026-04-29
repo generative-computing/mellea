@@ -42,9 +42,7 @@ summary = m.instruct(
 print(str(summary))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The initial experience with the product's onboarding process was
 challenging but support staff provided valuable assistance later.
 ```
@@ -86,9 +84,7 @@ feedback = (
 print(summarize_feedback(m, feedback))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The onboarding process was complicated and time-consuming, but the
 support team proved to be highly beneficial upon successful connection.
 ```
@@ -130,9 +126,7 @@ feedback = (
 print(summarize_feedback(m, feedback))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 The onboarding process was confusing and time-consuming, but the
 support team proved to be very helpful upon successful completion
 of the initial steps.
@@ -186,9 +180,7 @@ feedback = (
 print(summarize_feedback(m, feedback))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Onboarding was confusing and lengthy, but support was helpful after
 issues were resolved.
 ```
@@ -244,9 +236,7 @@ m = mellea.start_session()
 print(summarize_feedback(m, "The onboarding was confusing and took far too long."))
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Onboarding process was found confusing and overly prolonged by customers.
 ```
 
@@ -332,9 +322,7 @@ analyze_feedback(
 )
 ```
 
-**Sample output:**
-
-```text
+```text Sample output
 Summary:   Onboarding was confusing and lengthy, but support was
            helpful after contact.
 Sentiment: mixed
