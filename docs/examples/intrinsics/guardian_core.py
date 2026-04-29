@@ -21,6 +21,7 @@ from mellea.stdlib.components.intrinsic import guardian
 ctx, backend = start_backend(
     "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
 )
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
 # ---- Example 1: Prompt-level harm detection ----
 print("--- Example 1: Prompt-level Harm Detection ---")

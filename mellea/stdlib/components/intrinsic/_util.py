@@ -5,7 +5,12 @@ import json
 import warnings
 
 from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
+from ....backends.adapters import (
+    AdapterMixin,
+    AdapterType,
+    EmbeddedIntrinsicAdapter,
+    IntrinsicAdapter,
+)
 from ....core import Backend
 from ....stdlib import functional as mfuncs
 from ...components import Document
@@ -140,14 +145,47 @@ def call_intrinsic(
     base_model_name = backend.base_model_name
     if base_model_name is None:
         raise ValueError("Backend has no model ID")
-    adapter = IntrinsicAdapter(
-        intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
+
+    # Check if the backend already has the adapter.
+    has_adapter = any(
+        qualified_name.startswith(f"{intrinsic_name}_")
+        for qualified_name in backend.list_adapters()
     )
-    if adapter.qualified_name not in backend.list_adapters():
-        backend.add_adapter(adapter)
+
+    # TODO: We should improve this logic. For now, we know that there are two cases of
+    # adapter loading: 1. regular adapters, and 2. embedded adapters.
+    if not has_adapter:
+        # EmbeddedAdapters get grabbed directly from the hf repo.
+        if getattr(backend, "_uses_embedded_adapters", False):
+            repo_id: str = (
+                getattr(backend, "_adapter_source", None)
+                or getattr(backend, "_model_id", None)
+                or base_model_name
+            )
+            adapters = EmbeddedIntrinsicAdapter.from_source(
+                repo_id, intrinsic_name=intrinsic_name
+            )
+            # Only one adapter should be returned, but we add any returned here in case.
+            for adapter in adapters:
+                backend.add_adapter(adapter)
+        else:
+            # Regular IntrinsicAdapters utilize a catalog to download during their instantiation.
+            intrinsic_adapter = IntrinsicAdapter(
+                intrinsic_name,
+                adapter_type=AdapterType.LORA,
+                base_model_name=base_model_name,
+            )
+            backend.add_adapter(intrinsic_adapter)
 
     # Create the AST node for the action we wish to perform.
-    intrinsic = Intrinsic(intrinsic_name, intrinsic_kwargs=kwargs)
+    intrinsic = Intrinsic(
+        intrinsic_name,
+        intrinsic_kwargs=kwargs,
+        adapter_types=(
+            AdapterType.ALORA,
+            AdapterType.LORA,
+        ),  # Forcibly allow either type of adapter. The intrinsic itself doesn't care as long as an adapter exists.
+    )
 
     # Execute the AST node.
     model_output_thunk, _ = mfuncs.act(

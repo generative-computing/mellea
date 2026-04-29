@@ -26,8 +26,7 @@ See: [act() and aact()](./act-and-aact)
 
 An **Activated LoRA** (aLoRA) is a LoRA adapter dynamically loaded by
 `LocalHFBackend` at inference time to serve as a lightweight requirement verifier.
-Instead of running a full LLM call to check a requirement, the adapter is activated
-on the same model weights already in memory.
+Instead of running a full LLM call to check a requirement, the adapter is activated on the same model weights already in memory. [Granite Switch](#granite-switch) models embed these adapters directly in the model weights, enabling intrinsic functions via `OpenAIBackend` without runtime adapter loading.
 
 See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)
 
@@ -292,6 +291,16 @@ See: [Making Agents Reliable](../tutorials/04-making-agents-reliable)
 
 ---
 
+## Granite Switch
+
+A Granite model variant with LoRA and aLoRA adapters pre-baked into the model weights. When served via vLLM and accessed through `OpenAIBackend` with `load_embedded_adapters=True`, these embedded adapters enable [Intrinsics](../advanced/intrinsics) (RAG quality checks, requirement validation, safety evaluation) without runtime adapter loading. Only intrinsics embedded in the model are available — check the model's `adapter_index.json`.
+
+See: [Official Granite Switch Documentation](GRANITE_SWITCH_DOCS) |
+[Intrinsics](../advanced/intrinsics) |
+[OpenAI and OpenAI-Compatible APIs](../integrations/openai)
+
+---
+
 ## KV smashing
 
 The technique of concatenating key-value attention caches from separately prefilled
@@ -359,10 +368,7 @@ See: [Use Images and Vision Models](../how-to/use-images-and-vision)
 
 ## Intrinsic
 
-An `Intrinsic` is a backend-level primitive in Mellea — a structured generation
-operation with special handling (e.g., constrained decoding, RAG retrieval). The
-`LocalHFBackend` exposes Intrinsics directly; server backends route them through
-adapter endpoints.
+An `Intrinsic` is a backend-level primitive in Mellea — a structured generation operation with special handling (e.g., constrained decoding, RAG retrieval). `LocalHFBackend` exposes Intrinsics via runtime adapter loading. `OpenAIBackend` supports Intrinsics when backed by a [Granite Switch](#granite-switch) model with `load_embedded_adapters=True`.
 
 See: [Intrinsics](../advanced/intrinsics)
 

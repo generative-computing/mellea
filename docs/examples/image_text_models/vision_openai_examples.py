@@ -2,6 +2,7 @@
 
 """Examples using vision models with OpenAI backend."""
 
+import os
 import pathlib
 
 from PIL import Image
@@ -24,9 +25,13 @@ from mellea.stdlib.context import ChatContext
 #     OpenAIBackend(model_id="qwen/qwen2.5-vl-7b", base_url="http://127.0.0.1:1234/v1"), ctx=ChatContext()
 # )
 
+_ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
+if not _ollama_host.startswith("http"):
+    _ollama_host = f"http://{_ollama_host}"
+
 m = MelleaSession(
     OpenAIBackend(
-        model_id="qwen2.5vl:7b", base_url="http://localhost:11434/v1", api_key="ollama"
+        model_id="qwen2.5vl:7b", base_url=f"{_ollama_host}/v1", api_key="ollama"
     ),
     ctx=ChatContext(),
 )

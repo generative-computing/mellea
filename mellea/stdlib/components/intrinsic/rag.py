@@ -20,7 +20,7 @@ def check_answerability(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> str:
     """Test a user's question for answerability.
 
     Intrinsic function that checks whether the question in the last user turn of a

@@ -102,14 +102,18 @@ sandbox = [
     "llm-sandbox[docker]>=0.3.23",
 ]
 
+switch = [
+    "huggingface-hub>=0.33.4",
+]
+
 backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
-    "cpex>=0.1.0.dev10; python_version >= '3.11'",
+    "cpex>=0.1.0.dev12; python_version >= '3.11'",
     "grpcio>=1.78.0",
 ]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks,cli]"]
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups
@@ -318,7 +322,7 @@ disable_error_code = [
 # -----------------------------
 
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,Wight,Aer,aer,preemptable'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,Wight,Aer,aer,preemptable,ans'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"

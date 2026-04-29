@@ -18,6 +18,7 @@ from mellea.stdlib.components.intrinsic import core
 ctx, backend = start_backend(
     "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
 )
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
 response, ctx = mfuncs.chat("What is 2 + 2?", ctx, backend)  # type: ignore
 print(f"Response: {response.content}")

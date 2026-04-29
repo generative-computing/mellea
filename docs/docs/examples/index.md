@@ -78,6 +78,7 @@ to run.
 | -------- | ------------- |
 | `aLora/` | Training aLoRA adapters for fast constraint checking; performance optimisation |
 | `intrinsics/` | Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks |
+| `granite-switch/` | Running intrinsics via OpenAI backend with Granite Switch embedded adapters |
 | `sofai/` | Two-tier sampling: fast-model iteration with escalation to a slow model; cost optimisation |
 
 ### Multimodal

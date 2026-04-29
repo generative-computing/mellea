@@ -3,6 +3,7 @@
 from .adapter import (
     AdapterMixin,
     AdapterType,
+    EmbeddedIntrinsicAdapter,
     IntrinsicAdapter,
     LocalHFAdapter,
     fetch_intrinsic_metadata,
@@ -12,6 +13,7 @@ from .adapter import (
 __all__ = [
     "AdapterMixin",
     "AdapterType",
+    "EmbeddedIntrinsicAdapter",
     "IntrinsicAdapter",
     "LocalHFAdapter",
     "fetch_intrinsic_metadata",

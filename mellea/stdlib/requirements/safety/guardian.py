@@ -97,7 +97,9 @@ class GuardianCheck(Requirement):
             the appropriate 8B model for the chosen backend.
         device (str | None): Device string for HuggingFace inference (e.g.
             ``"cuda"``).
-        ollama_url (str): Base URL for the Ollama server.
+        ollama_url (str | None): Base URL for the Ollama server.  When
+            ``None``, reads ``OLLAMA_HOST`` from the environment (falling back
+            to ``http://localhost:11434``).
         thinking (bool): Enable chain-of-thought reasoning mode in the Guardian model.
         custom_criteria (str | None): Free-text criteria string used in place of a
             standard ``GuardianRisk`` value.
@@ -114,7 +116,7 @@ class GuardianCheck(Requirement):
         backend_type: BackendType = "ollama",
         model_version: str | None = None,
         device: str | None = None,
-        ollama_url: str = "http://localhost:11434",
+        ollama_url: str | None = None,
         thinking: bool = False,
         custom_criteria: str | None = None,
         context_text: str | None = None,
