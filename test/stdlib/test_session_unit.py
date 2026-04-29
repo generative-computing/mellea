@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mellea import start_backend
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext, SimpleContext
@@ -15,7 +16,6 @@ from mellea.stdlib.session import (
     _resolve_context,
     backend_name_to_class,
     get_session,
-    start_backend,
     start_session,
 )
 

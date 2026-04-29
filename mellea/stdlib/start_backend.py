@@ -351,8 +351,8 @@ def start_backend(
     backend_class = backend_name_to_class(backend_name)
     if backend_class is None:
         raise Exception(
-            f"Backend name {backend_name} unknown. Please see the docstring for "
-            "`mellea.stdlib.session.start_session` for a list of options."
+            f"Backend name {backend_name} unknown. Valid options are: "
+            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`."
         )
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
     return resolved_ctx, backend
