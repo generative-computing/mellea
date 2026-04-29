@@ -245,12 +245,29 @@ def set_span_error(span: Any, exception: Exception) -> None:
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))  # type: ignore
 
 
+def set_span_status_error(span: Any, description: str) -> None:
+    """Mark a span as ERROR without recording a phantom exception event.
+
+    Use this for validation failures and other non-exception error conditions
+    where the span should be marked failed but no exception was actually raised.
+    Calling ``set_span_error`` in these cases would create a misleading recorded
+    exception event in OTEL traces.
+
+    Args:
+        span: The span object (may be None if tracing is disabled)
+        description: Human-readable reason for the failure.
+    """
+    if span is not None and _OTEL_AVAILABLE:
+        span.set_status(trace.Status(trace.StatusCode.ERROR, description))  # type: ignore
+
+
 __all__ = [
     "end_backend_span",
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "set_span_attribute",
     "set_span_error",
+    "set_span_status_error",
     "start_backend_span",
     "trace_application",
     "trace_backend",
