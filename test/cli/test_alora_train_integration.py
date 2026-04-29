@@ -45,7 +45,7 @@ def test_alora_training_integration():
     3. Verifies adapter files are created with correct PEFT 0.18+ format
     4. Cleans up temporary files
 
-    Uses ibm-granite/granite-4.0-micro (smallest Granite model, 3B params).
+    Uses ibm-granite/granite-4.1-3b (smallest Granite model, 3B params).
     """
     from cli.alora.train import train_model
 
@@ -85,7 +85,7 @@ def test_alora_training_integration():
         # Using smallest Granite model: granite-4.0-micro (3B params)
         train_model(
             dataset_path=str(dataset_path),
-            base_model="ibm-granite/granite-4.0-micro",
+            base_model="ibm-granite/granite-4.1-3b",
             output_file=str(adapter_path),
             adapter="alora",
             epochs=1,  # Just 1 epoch for speed
@@ -186,7 +186,7 @@ def test_alora_training_integration():
 
         # Additional verification: Verify invocation tokens are correct
         # The default invocation prompt is "<|start_of_role|>check_requirement<|end_of_role|>"
-        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-micro")
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.1-3b")
         default_invocation_prompt = "<|start_of_role|>check_requirement<|end_of_role|>"
         expected_tokens = tokenizer.encode(
             default_invocation_prompt, add_special_tokens=False
@@ -204,9 +204,7 @@ def test_alora_training_integration():
         from transformers import AutoModelForCausalLM
 
         base_model = AutoModelForCausalLM.from_pretrained(
-            "ibm-granite/granite-4.0-micro",
-            device_map="auto",
-            torch_dtype=torch.bfloat16,
+            "ibm-granite/granite-4.1-3b", device_map="auto", torch_dtype=torch.bfloat16
         )
 
         # Load the trained adapter
@@ -350,7 +348,7 @@ def test_lora_training_integration():
         # Train standard LoRA adapter
         train_model(
             dataset_path=str(dataset_path),
-            base_model="ibm-granite/granite-4.0-micro",
+            base_model="ibm-granite/granite-4.1-3b",
             output_file=str(adapter_path),
             adapter="lora",  # Standard LoRA, not aLoRA
             epochs=1,
