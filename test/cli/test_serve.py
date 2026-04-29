@@ -614,6 +614,9 @@ class TestHTTPValidation:
         tool_call_chunk = chunks[2]
         tool_calls = tool_call_chunk["choices"][0]["delta"]["tool_calls"]
         assert len(tool_calls) == 1
+        # Verify required index field is present (OpenAI streaming spec requirement)
+        assert "index" in tool_calls[0], "tool_calls delta must include index field"
+        assert tool_calls[0]["index"] == 0
         assert tool_calls[0]["function"]["name"] == "get_weather"
         assert "location" in tool_calls[0]["function"]["arguments"]
         assert tool_call_chunk["choices"][0]["finish_reason"] is None

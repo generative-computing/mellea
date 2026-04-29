@@ -14,11 +14,11 @@ from .models import (
     ChatCompletionChunk,
     ChatCompletionChunkChoice,
     ChatCompletionChunkDelta,
-    ChatCompletionMessageToolCall,
+    ChatCompletionMessageToolCallDelta,
     OpenAIError,
     OpenAIErrorResponse,
     StreamOptions,
-    ToolCallFunction,
+    ToolCallFunctionDelta,
 )
 
 
@@ -108,17 +108,18 @@ async def stream_chat_completion_chunks(
         tool_calls_list = build_tool_calls(output)
 
         if tool_calls_list:
-            # Convert to ChatCompletionMessageToolCall objects
+            # Convert to ChatCompletionMessageToolCallDelta objects with required index
             tool_calls = [
-                ChatCompletionMessageToolCall(
+                ChatCompletionMessageToolCallDelta(
+                    index=idx,
                     id=tc["id"],
                     type=tc["type"],
-                    function=ToolCallFunction(
+                    function=ToolCallFunctionDelta(
                         name=tc["function"]["name"],
                         arguments=tc["function"]["arguments"],
                     ),
                 )
-                for tc in tool_calls_list
+                for idx, tc in enumerate(tool_calls_list)
             ]
 
             # Emit tool calls in a separate chunk before the final chunk
