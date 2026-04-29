@@ -455,7 +455,7 @@ for criterion in criteria:
 > runs.
 
 The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
-`"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
+`"profanity"`, `"violence"`, `"sexual_content"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
 ---
