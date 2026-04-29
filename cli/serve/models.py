@@ -39,7 +39,7 @@ class JsonSchemaFormat(BaseModel):
     """JSON Schema definition."""
 
     strict: bool | None = None
-    """Whether to enforce strict schema validation."""
+    """Accepted for OpenAI compatibility; currently ignored by ``m serve``."""
 
     model_config = {"populate_by_name": True}
 

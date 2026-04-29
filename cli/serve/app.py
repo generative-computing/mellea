@@ -15,7 +15,7 @@ try:
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse, StreamingResponse
-    from pydantic import BaseModel, create_model
+    from pydantic import BaseModel
 except ImportError as e:
     raise ImportError(
         "The 'm serve' command requires extra dependencies. "
@@ -33,7 +33,9 @@ from .models import (
     OpenAIError,
     OpenAIErrorResponse,
 )
+from .schema_converter import json_schema_to_pydantic
 from .streaming import stream_chat_completion_chunks
+from .utils import extract_finish_reason
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
@@ -92,58 +94,6 @@ def create_openai_error_response(
     )
 
 
-def _json_schema_to_pydantic(
-    schema: dict[str, Any], model_name: str = "DynamicModel"
-) -> type[BaseModel]:
-    """Convert a JSON Schema to a Pydantic model dynamically.
-
-    Args:
-        schema: JSON Schema definition (must have 'properties' and 'type': 'object').
-        model_name: Name for the generated Pydantic model.
-
-    Returns:
-        A dynamically created Pydantic model class.
-
-    Raises:
-        ValueError: If the schema is invalid or unsupported.
-    """
-    if not isinstance(schema, dict):
-        raise ValueError("Schema must be a dictionary")
-
-    if schema.get("type") != "object":
-        raise ValueError("Only object-type schemas are supported")
-
-    properties = schema.get("properties", {})
-    required = schema.get("required", [])
-
-    if not properties:
-        raise ValueError("Schema must have 'properties' field")
-
-    # Map JSON Schema types to Python types
-    type_mapping = {
-        "string": str,
-        "integer": int,
-        "number": float,
-        "boolean": bool,
-        "array": list,
-        "object": dict,
-    }
-
-    # Build field definitions for create_model
-    field_definitions: dict[str, Any] = {}
-    for field_name, field_schema in properties.items():
-        field_type = field_schema.get("type", "string")
-        python_type = type_mapping.get(field_type, str)
-
-        # Handle optional fields
-        if field_name in required:
-            field_definitions[field_name] = (python_type, ...)
-        else:
-            field_definitions[field_name] = (python_type | None, None)
-
-    return create_model(model_name, **field_definitions)
-
-
 def _build_model_options(request: ChatCompletionRequest) -> dict:
     """Build model_options dict from OpenAI-compatible request parameters."""
     excluded_fields = {
@@ -191,6 +141,10 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
 
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
+    # Inspect serve function once at endpoint creation time
+    serve_sig = inspect.signature(module.serve)
+    accepts_format = "format" in serve_sig.parameters
+    is_async = inspect.iscoroutinefunction(module.serve)
 
     async def endpoint(request: ChatCompletionRequest):
         try:
@@ -220,7 +174,7 @@ def make_chat_endpoint(module):
                             param="response_format.json_schema",
                         )
                     try:
-                        format_model = _json_schema_to_pydantic(
+                        format_model = json_schema_to_pydantic(
                             request.response_format.json_schema.schema_,
                             request.response_format.json_schema.name,
                         )
@@ -235,43 +189,22 @@ def make_chat_endpoint(module):
                 # Note: "json_object" mode is not yet implemented - the backend
                 # receives no signal to produce JSON output (same as "text" mode)
 
-            # Check if serve function accepts format parameter
-            serve_sig = inspect.signature(module.serve)
-            accepts_format = "format" in serve_sig.parameters
+            # Build kwargs for serve call
+            serve_kwargs: dict[str, Any] = {
+                "input": request.messages,
+                "requirements": request.requirements,
+                "model_options": model_options,
+            }
+            if accepts_format:
+                serve_kwargs["format"] = format_model
 
             # Detect if serve is async or sync and handle accordingly
-            if inspect.iscoroutinefunction(module.serve):
+            if is_async:
                 # It's async, await it directly
-                if accepts_format:
-                    output = await module.serve(
-                        input=request.messages,
-                        requirements=request.requirements,
-                        model_options=model_options,
-                        format=format_model,
-                    )
-                else:
-                    output = await module.serve(
-                        input=request.messages,
-                        requirements=request.requirements,
-                        model_options=model_options,
-                    )
+                output = await module.serve(**serve_kwargs)
             else:
                 # It's sync, run in thread pool to avoid blocking event loop
-                if accepts_format:
-                    output = await asyncio.to_thread(
-                        module.serve,
-                        input=request.messages,
-                        requirements=request.requirements,
-                        model_options=model_options,
-                        format=format_model,
-                    )
-                else:
-                    output = await asyncio.to_thread(
-                        module.serve,
-                        input=request.messages,
-                        requirements=request.requirements,
-                        model_options=model_options,
-                    )
+                output = await asyncio.to_thread(module.serve, **serve_kwargs)
 
             # system_fingerprint represents backend config hash, not model name
             # The model name is already in response.model (line 73)
@@ -288,7 +221,6 @@ def make_chat_endpoint(module):
                         created=created_timestamp,
                         stream_options=request.stream_options,
                         system_fingerprint=system_fingerprint,
-                        format_model=format_model,
                     ),
                     media_type="text/event-stream",
                 )
@@ -303,7 +235,7 @@ def make_chat_endpoint(module):
                         message=ChatCompletionMessage(
                             content=output.value, role="assistant"
                         ),
-                        finish_reason=output.finish_reason,
+                        finish_reason=extract_finish_reason(output),
                     )
                 ],
                 object="chat.completion",  # type: ignore
