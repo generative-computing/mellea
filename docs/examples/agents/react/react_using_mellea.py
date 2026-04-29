@@ -46,7 +46,8 @@ async def main():
     #     context=ChatContext(),
     #     backend=m.backend,
     #     tools=[search_tool],
-    #     format=Email
+    #     format=Email,
+    #     loop_budget=20,
     # )
     # print(out)
 
