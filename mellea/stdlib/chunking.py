@@ -35,6 +35,27 @@ class ChunkingStrategy(ABC):
         """
         ...
 
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return any trailing fragment that ``split`` withheld.
+
+        Called once by the orchestrator after the stream has ended naturally
+        (not on early-exit cancellation).  Gives the chunker a chance to
+        release the final fragment that did not reach a terminator.
+
+        The default implementation returns an empty list — the trailing
+        fragment is discarded.  Built-in chunkers override this to return
+        the withheld fragment as a single-element list when non-empty.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            The trailing fragment as ``[fragment]`` if it should be treated
+            as a final chunk, or an empty list to discard it.
+        """
+        _ = accumulated_text
+        return []
+
 
 # Sentence boundary: sentence-ending punctuation, optionally followed by a closing
 # quote or paren, then whitespace.
@@ -94,6 +115,36 @@ class SentenceChunker(ChunkingStrategy):
 
         return chunks
 
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return the trailing sentence fragment (if any) as a final chunk.
+
+        Trailing whitespace on the fragment is non-semantic for sentence
+        boundaries and is dropped via ``rstrip``.  Leading whitespace is
+        already removed by the loop's ``lstrip`` on each advance, so no
+        ``lstrip`` is needed here.  The result is the fragment's content
+        only, consistent with how :meth:`split` returns sentences without
+        trailing whitespace.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            A single-element list containing the trailing sentence fragment
+            with leading and trailing whitespace stripped, or an empty list
+            when there is no fragment (all content ended in a sentence
+            boundary or the input is empty/whitespace-only).
+        """
+        if not accumulated_text:
+            return []
+        remaining = accumulated_text
+        while True:
+            match = _SENTENCE_BOUNDARY.search(remaining)
+            if match is None:
+                break
+            remaining = remaining[match.end() :].lstrip()
+        trailing = remaining.rstrip()
+        return [trailing] if trailing else []
+
 
 class WordChunker(ChunkingStrategy):
     """Splits accumulated text on whitespace boundaries.
@@ -134,6 +185,32 @@ class WordChunker(ChunkingStrategy):
 
         return parts
 
+    def flush(self, accumulated_text: str) -> list[str]:
+        """Return the trailing word fragment (if any) as a final chunk.
+
+        The trailing fragment is the text after the last whitespace run when
+        the accumulated text does not end with whitespace.  When it does end
+        with whitespace, every word is already complete and no fragment is
+        released.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            A single-element list containing the trailing word fragment, or
+            an empty list when the input ends with whitespace (every word
+            already complete) or is empty.
+        """
+        if not accumulated_text:
+            return []
+        if accumulated_text[-1].isspace():
+            return []
+        parts = _WHITESPACE.split(accumulated_text)
+        for part in reversed(parts):
+            if part:
+                return [part]
+        return []
+
 
 class ParagraphChunker(ChunkingStrategy):
     r"""Splits accumulated text on double-newline paragraph boundaries.
@@ -168,3 +245,29 @@ class ParagraphChunker(ChunkingStrategy):
 
         # _PARA_BOUNDARY.split on leading \n\n produces an empty first element.
         return [p for p in parts if p]
+
+    def flush(self, accumulated_text: str) -> list[str]:
+        r"""Return the trailing paragraph fragment (if any) as a final chunk.
+
+        Unlike :class:`SentenceChunker.flush`, the fragment is returned
+        byte-for-byte without stripping.  Internal whitespace — including
+        a trailing single ``\n`` — can be semantically meaningful inside
+        a paragraph (e.g. a list item or a deliberate line break), and a
+        consumer validating paragraph content should see the fragment as
+        it was withheld.
+
+        Args:
+            accumulated_text: The full accumulated text at stream end.
+
+        Returns:
+            A single-element list containing the trailing paragraph fragment
+            byte-for-byte, or an empty list when the input ends with a
+            paragraph boundary (``\n\n`` or more) or is empty.
+        """
+        if not accumulated_text:
+            return []
+        if _PARA_BOUNDARY_END.search(accumulated_text):
+            return []
+        parts = _PARA_BOUNDARY.split(accumulated_text)
+        trailing = parts[-1] if parts else ""
+        return [trailing] if trailing else []
