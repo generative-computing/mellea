@@ -14,6 +14,7 @@ from .models import (
     OpenAIErrorResponse,
     StreamOptions,
 )
+from .utils import extract_finish_reason
 
 
 async def stream_chat_completion_chunks(
@@ -25,6 +26,11 @@ async def stream_chat_completion_chunks(
     system_fingerprint: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate OpenAI-compatible SSE chat completion chunks from a model output.
+
+    This function acts as a pass-through streaming layer, forwarding chunks directly
+    from the backend to the client without buffering or validation. Format validation
+    for structured outputs happens at the module level (in the serve function) and
+    client side, not in this streaming layer.
 
     Args:
         output: The model output object to stream.
@@ -112,7 +118,7 @@ async def stream_chat_completion_chunks(
                 ChatCompletionChunkChoice(
                     index=0,
                     delta=ChatCompletionChunkDelta(content=None),
-                    finish_reason="stop",
+                    finish_reason=extract_finish_reason(output),
                 )
             ],
             object="chat.completion.chunk",

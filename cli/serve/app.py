@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import uuid
+from typing import Any
 
 try:
     import typer
@@ -14,6 +15,7 @@ try:
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse, StreamingResponse
+    from pydantic import BaseModel
 except ImportError as e:
     raise ImportError(
         "The 'm serve' command requires extra dependencies. "
@@ -31,7 +33,9 @@ from .models import (
     OpenAIError,
     OpenAIErrorResponse,
 )
+from .schema_converter import json_schema_to_pydantic
 from .streaming import stream_chat_completion_chunks
+from .utils import extract_finish_reason
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
@@ -108,7 +112,7 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "presence_penalty",  # Presence penalty - not yet implemented
         "frequency_penalty",  # Frequency penalty - not yet implemented
         "logit_bias",  # Logit bias - not yet implemented
-        "response_format",  # Response format (json_object) - not yet implemented
+        "response_format",  # Response format - handled separately
         "functions",  # Legacy function calling - not yet implemented
         "function_call",  # Legacy function calling - not yet implemented
         "tools",  # Tool calling - not yet implemented
@@ -137,6 +141,10 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
 
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
+    # Inspect serve function once at endpoint creation time
+    serve_sig = inspect.signature(module.serve)
+    accepts_format = "format" in serve_sig.parameters
+    is_async = inspect.iscoroutinefunction(module.serve)
 
     async def endpoint(request: ChatCompletionRequest):
         try:
@@ -154,22 +162,49 @@ def make_chat_endpoint(module):
 
             model_options = _build_model_options(request)
 
+            # Handle response_format
+            format_model: type[BaseModel] | None = None
+            if request.response_format is not None:
+                if request.response_format.type == "json_schema":
+                    if request.response_format.json_schema is None:
+                        return create_openai_error_response(
+                            status_code=400,
+                            message="json_schema field is required when response_format.type is 'json_schema'",
+                            error_type="invalid_request_error",
+                            param="response_format.json_schema",
+                        )
+                    try:
+                        format_model = json_schema_to_pydantic(
+                            request.response_format.json_schema.schema_,
+                            request.response_format.json_schema.name,
+                        )
+                    except ValueError as e:
+                        return create_openai_error_response(
+                            status_code=400,
+                            message=f"Invalid JSON schema: {e!s}",
+                            error_type="invalid_request_error",
+                            param="response_format.json_schema.schema",
+                        )
+                # For "json_object" and "text", format_model remains None
+                # Note: "json_object" mode is not yet implemented - the backend
+                # receives no signal to produce JSON output (same as "text" mode)
+
+            # Build kwargs for serve call
+            serve_kwargs: dict[str, Any] = {
+                "input": request.messages,
+                "requirements": request.requirements,
+                "model_options": model_options,
+            }
+            if accepts_format:
+                serve_kwargs["format"] = format_model
+
             # Detect if serve is async or sync and handle accordingly
-            if inspect.iscoroutinefunction(module.serve):
+            if is_async:
                 # It's async, await it directly
-                output = await module.serve(
-                    input=request.messages,
-                    requirements=request.requirements,
-                    model_options=model_options,
-                )
+                output = await module.serve(**serve_kwargs)
             else:
                 # It's sync, run in thread pool to avoid blocking event loop
-                output = await asyncio.to_thread(
-                    module.serve,
-                    input=request.messages,
-                    requirements=request.requirements,
-                    model_options=model_options,
-                )
+                output = await asyncio.to_thread(module.serve, **serve_kwargs)
 
             # system_fingerprint represents backend config hash, not model name
             # The model name is already in response.model (line 73)
@@ -200,7 +235,7 @@ def make_chat_endpoint(module):
                         message=ChatCompletionMessage(
                             content=output.value, role="assistant"
                         ),
-                        finish_reason="stop",
+                        finish_reason=extract_finish_reason(output),
                     )
                 ],
                 object="chat.completion",  # type: ignore
