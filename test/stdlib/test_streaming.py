@@ -8,6 +8,7 @@ All tests are unit tests (no @pytest.mark.ollama needed).
 
 import asyncio
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -19,7 +20,17 @@ from mellea.core.requirement import (
     ValidationResult,
 )
 from mellea.stdlib.context import SimpleContext
-from mellea.stdlib.streaming import stream_with_chunking
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    ErrorEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    RetryEvent,
+    StreamEvent,
+    StreamingDoneEvent,
+    stream_with_chunking,
+)
 
 # ---------------------------------------------------------------------------
 # StreamingMockBackend
@@ -721,6 +732,13 @@ async def test_cancel_generation_invoked_on_fail() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unknown_chunking_alias_raises_value_error() -> None:
+    backend = StreamingMockBackend("hello world")
+    with pytest.raises(ValueError, match="unknown_alias"):
+        await stream_with_chunking(_action(), backend, _ctx(), chunking="unknown_alias")
+
+
+@pytest.mark.asyncio
 async def test_exception_in_stream_validate_cancels_generation() -> None:
     """Verifies the orchestrator's exception-path cleanup: if stream_validate
     raises, cancel_generation() is called and the exception surfaces to the
@@ -789,3 +807,285 @@ async def test_exception_in_stream_validate_cancels_generation() -> None:
 
     assert result.completed is False
     assert call_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Event type construction
+# ---------------------------------------------------------------------------
+
+
+def test_stream_event_types_have_auto_timestamp() -> None:
+    """All seven event types set timestamp automatically; callers do not pass it."""
+    import time
+
+    before = time.time()
+    all_events = [
+        ChunkEvent(text="hello", chunk_index=0, attempt=1),
+        QuickCheckEvent(
+            chunk_index=0,
+            attempt=1,
+            passed=True,
+            results=[PartialValidationResult("unknown")],
+        ),
+        StreamingDoneEvent(attempt=1, full_text="hello"),
+        FullValidationEvent(
+            attempt=1, passed=True, results=[ValidationResult(result=True)]
+        ),
+        RetryEvent(attempt=2, reason="too long"),
+        CompletedEvent(success=True, full_text="hello", attempts_used=1),
+        ErrorEvent(exception_type="ValueError", detail="boom"),
+    ]
+    after = time.time()
+
+    for ev in all_events:
+        assert isinstance(ev, StreamEvent)
+        assert before <= ev.timestamp <= after, (
+            f"{type(ev).__name__} timestamp out of range"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Event emission — happy path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_event_emission_order_happy_path() -> None:
+    """Happy path: ChunkEvent/QuickCheckEvent pairs, then StreamingDoneEvent,
+    FullValidationEvent, CompletedEvent(success=True)."""
+    response = "First sentence. Second sentence. "
+    backend = StreamingMockBackend(response, token_size=4)
+    req = AlwaysUnknownReq()
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+    )
+    await result.acomplete()
+
+    evts: list[StreamEvent] = [e async for e in result.events()]
+
+    assert isinstance(evts[-1], CompletedEvent)
+    assert evts[-1].success is True
+    assert evts[-1].attempts_used == 1
+
+    types = [type(e) for e in evts]
+    assert StreamingDoneEvent in types
+    assert types.index(StreamingDoneEvent) < types.index(CompletedEvent)
+    assert FullValidationEvent in types
+    assert types.index(FullValidationEvent) > types.index(StreamingDoneEvent)
+
+    chunk_events = [e for e in evts if isinstance(e, ChunkEvent)]
+    qc_events = [e for e in evts if isinstance(e, QuickCheckEvent)]
+    assert len(chunk_events) == 2
+    assert len(qc_events) == 2
+    assert [e.chunk_index for e in chunk_events] == [0, 1]
+    assert [e.chunk_index for e in qc_events] == [0, 1]
+    assert all(e.passed for e in qc_events)
+
+
+@pytest.mark.asyncio
+async def test_streaming_done_event_carries_full_text() -> None:
+    """StreamingDoneEvent.full_text matches full_text on the result."""
+    response = "One sentence. Two sentences. "
+    backend = StreamingMockBackend(response, token_size=5)
+
+    result = await stream_with_chunking(_action(), backend, _ctx(), chunking="sentence")
+    await result.acomplete()
+
+    evts = [e async for e in result.events()]
+    done_events = [e for e in evts if isinstance(e, StreamingDoneEvent)]
+    assert len(done_events) == 1
+    assert done_events[0].full_text == result.full_text
+
+
+# ---------------------------------------------------------------------------
+# Event emission — early exit
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_event_emission_on_early_exit() -> None:
+    """Early exit: QuickCheckEvent(passed=False) present; no StreamingDoneEvent
+    or FullValidationEvent; CompletedEvent(success=False)."""
+    response = "word " * 30
+    backend = StreamingMockBackend(response, token_size=3)
+    req = FailAfterWordsReq(threshold=2)
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="word"
+    )
+    await result.acomplete()
+
+    evts = [e async for e in result.events()]
+
+    assert isinstance(evts[-1], CompletedEvent)
+    assert evts[-1].success is False
+
+    types = [type(e) for e in evts]
+    assert FullValidationEvent not in types
+    assert StreamingDoneEvent not in types
+
+    fail_qc = [e for e in evts if isinstance(e, QuickCheckEvent) and not e.passed]
+    assert len(fail_qc) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Event emission — exception path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_error_event_on_stream_validate_exception() -> None:
+    """When stream_validate raises, ErrorEvent is emitted and CompletedEvent follows."""
+
+    class RaisingReq2(Requirement):
+        def format_for_llm(self) -> str:
+            return "raises"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            raise RuntimeError("test-error")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    backend = StreamingMockBackend("hello world", token_size=5)
+    result = await stream_with_chunking(
+        _action(),
+        backend,
+        _ctx(),
+        quick_check_requirements=[RaisingReq2()],
+        chunking="word",
+    )
+    with pytest.raises(RuntimeError, match="test-error"):
+        async for _c in result.astream():
+            pass
+    await asyncio.wait_for(result.acomplete(), timeout=5.0)
+
+    evts = [e async for e in result.events()]
+
+    error_events = [e for e in evts if isinstance(e, ErrorEvent)]
+    assert len(error_events) == 1
+    assert error_events[0].exception_type == "RuntimeError"
+    assert "test-error" in error_events[0].detail
+
+    assert isinstance(evts[-1], CompletedEvent)
+    assert evts[-1].success is False
+
+
+# ---------------------------------------------------------------------------
+# Metric helper calls
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_record_requirement_check_called_per_chunk() -> None:
+    """record_requirement_check is called once per chunk per active requirement."""
+    response = "One. Two. "
+    backend = StreamingMockBackend(response, token_size=3)
+    req = AlwaysUnknownReq()
+
+    with patch("mellea.stdlib.streaming.record_requirement_check") as mock_check:
+        result = await stream_with_chunking(
+            _action(),
+            backend,
+            _ctx(),
+            quick_check_requirements=[req],
+            chunking="sentence",
+        )
+        await result.acomplete()
+
+    assert mock_check.call_count == 2
+    for call in mock_check.call_args_list:
+        assert call.args[0] == "AlwaysUnknownReq"
+
+
+@pytest.mark.asyncio
+async def test_record_requirement_failure_called_on_fail() -> None:
+    """record_requirement_failure is called with class name and reason on fail."""
+    response = "word " * 10
+    backend = StreamingMockBackend(response, token_size=3)
+    req = FailAfterWordsReq(threshold=2)
+
+    with patch("mellea.stdlib.streaming.record_requirement_failure") as mock_fail:
+        result = await stream_with_chunking(
+            _action(), backend, _ctx(), quick_check_requirements=[req], chunking="word"
+        )
+        await result.acomplete()
+
+    assert mock_fail.call_count >= 1
+    first_call = mock_fail.call_args_list[0]
+    assert first_call.args[0] == "FailAfterWordsReq"
+    assert first_call.args[1] == "too many words"
+
+
+@pytest.mark.asyncio
+async def test_record_sampling_outcome_success() -> None:
+    """record_sampling_outcome called with success=True on normal completion."""
+    response = "One sentence. "
+    backend = StreamingMockBackend(response, token_size=4)
+
+    with patch("mellea.stdlib.streaming.record_sampling_outcome") as mock_outcome:
+        result = await stream_with_chunking(
+            _action(), backend, _ctx(), chunking="sentence"
+        )
+        await result.acomplete()
+
+    mock_outcome.assert_called_once_with("stream_with_chunking", success=True)
+
+
+@pytest.mark.asyncio
+async def test_record_sampling_outcome_failure_on_early_exit() -> None:
+    """record_sampling_outcome called with success=False on early exit."""
+    response = "word " * 20
+    backend = StreamingMockBackend(response, token_size=3)
+    req = FailAfterWordsReq(threshold=1)
+
+    with patch("mellea.stdlib.streaming.record_sampling_outcome") as mock_outcome:
+        result = await stream_with_chunking(
+            _action(), backend, _ctx(), quick_check_requirements=[req], chunking="word"
+        )
+        await result.acomplete()
+
+    mock_outcome.assert_called_once_with("stream_with_chunking", success=False)
+
+
+# ---------------------------------------------------------------------------
+# Concurrent astream() + events()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_concurrent_astream_and_events() -> None:
+    """astream() and events() can be consumed concurrently without interference."""
+    response = "Alpha. Beta. Gamma. "
+    backend = StreamingMockBackend(response, token_size=4)
+    req = AlwaysUnknownReq()
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+    )
+
+    async def drain_chunks() -> list[str]:
+        return [c async for c in result.astream()]
+
+    async def drain_events() -> list[StreamEvent]:
+        return [e async for e in result.events()]
+
+    chunks, evts = await asyncio.gather(drain_chunks(), drain_events())
+    await result.acomplete()
+
+    assert len(chunks) == 3
+    assert isinstance(evts[-1], CompletedEvent)
+    assert evts[-1].success is True
+
+    chunk_evts = [e for e in evts if isinstance(e, ChunkEvent)]
+    assert [e.chunk_index for e in chunk_evts] == list(range(len(chunks)))
