@@ -1,16 +1,19 @@
 """Unit tests for functional.py pure helpers — no backend, no LLM required.
 
-Covers _parse_and_clean_image_args image preprocessing.
+Covers _parse_and_clean_image_args image preprocessing and chat() document forwarding.
 """
 
 import base64
 import io
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image as PILImage
 
 from mellea.core import ImageBlock
-from mellea.stdlib.functional import _parse_and_clean_image_args
+from mellea.stdlib.components import Document, Message
+from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.functional import _parse_and_clean_image_args, chat
 
 
 def _make_image_block() -> ImageBlock:
@@ -60,6 +63,49 @@ def test_pil_images_converted_to_image_blocks():
 def test_non_list_raises():
     with pytest.raises(AssertionError, match="Images should be a list"):
         _parse_and_clean_image_args("not_a_list")  # type: ignore
+
+
+# --- chat() document forwarding ---
+
+
+@patch("mellea.stdlib.functional.act")
+def test_chat_forwards_documents_to_message(mock_act):
+    """Verify that chat() passes documents through to the Message it constructs."""
+    # Set up mock to return a fake assistant message and context
+    assistant_msg = Message(role="assistant", content="reply")
+    mock_result = MagicMock()
+    mock_result.parsed_repr = assistant_msg
+    mock_ctx = SimpleContext()
+    mock_act.return_value = (mock_result, mock_ctx)
+
+    backend = MagicMock()
+    ctx = SimpleContext()
+
+    chat("hello", ctx, backend, documents=["grounding text", "more context"])
+
+    # Inspect the Message that was passed to act()
+    user_message = mock_act.call_args[0][0]
+    assert isinstance(user_message, Message)
+    assert user_message._docs is not None
+    assert len(user_message._docs) == 2
+    assert all(isinstance(d, Document) for d in user_message._docs)
+    assert user_message._docs[0].text == "grounding text"
+    assert user_message._docs[1].text == "more context"
+
+
+@patch("mellea.stdlib.functional.act")
+def test_chat_no_documents_by_default(mock_act):
+    """Verify that chat() passes None documents when not specified."""
+    assistant_msg = Message(role="assistant", content="reply")
+    mock_result = MagicMock()
+    mock_result.parsed_repr = assistant_msg
+    mock_act.return_value = (mock_result, SimpleContext())
+
+    chat("hello", SimpleContext(), MagicMock())
+
+    user_message = mock_act.call_args[0][0]
+    assert isinstance(user_message, Message)
+    assert user_message._docs is None
 
 
 if __name__ == "__main__":

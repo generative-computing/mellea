@@ -8,7 +8,7 @@ the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
 ``Message`` objects.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
 from ...core import (
@@ -20,14 +20,11 @@ from ...core import (
     ModelToolCall,
     TemplateRepresentation,
 )
-from .docs.document import Document
+from .docs.document import Document, _coerce_to_documents
 
 
 class Message(Component["Message"]):
     """A single Message in a Chat history.
-
-    TODO: we may want to deprecate this Component entirely.
-    The fact that some Component gets rendered as a chat message is `Formatter` miscellania.
 
     Args:
         role (str): The role that this message came from (e.g., ``"user"``,
@@ -51,14 +48,14 @@ class Message(Component["Message"]):
         content: str,
         *,
         images: None | list[ImageBlock] = None,
-        documents: None | list[Document] = None,
+        documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
         self._images = images
-        self._docs = documents
+        self._docs = _coerce_to_documents(documents)
 
     @property
     def images(self) -> None | list[str]:
@@ -106,7 +103,15 @@ class Message(Component["Message"]):
 
         docs = []
         if self._docs is not None:
-            docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
+            # Do a quick format of each document.
+            docs = [
+                # Equivalent to: "[Document <ID>] <TITLE>: <TEXT>...".
+                f"[Document{' ' + str(doc.doc_id) if doc.doc_id else ''}] {str(doc.title) + ': ' if doc.title else ''}{doc.text}"[
+                    :20
+                ]
+                + "..."
+                for doc in self._docs
+            ]
         return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
 
     def _parse(self, computed: ModelOutputThunk) -> "Message":

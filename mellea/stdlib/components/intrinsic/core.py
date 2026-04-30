@@ -5,7 +5,8 @@ import collections.abc
 from ....backends.adapters import AdapterMixin
 from ...components import Document, Message
 from ...context import ChatContext
-from ._util import _coerce_documents, _resolve_response, call_intrinsic
+from ..docs.document import _coerce_to_documents
+from ._util import _resolve_response, call_intrinsic
 
 
 def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
@@ -100,7 +101,7 @@ def find_context_attributions(
             Message(
                 "assistant",
                 response,
-                documents=_coerce_documents(documents, auto_doc_id=False),
+                documents=_coerce_to_documents(documents, auto_doc_id=False),
             )
         ),
         backend,

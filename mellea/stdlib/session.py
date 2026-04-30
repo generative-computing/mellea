@@ -10,6 +10,7 @@ session.
 
 from __future__ import annotations
 
+import collections.abc
 import contextlib
 import contextvars
 import inspect
@@ -47,7 +48,7 @@ from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
 from ..telemetry.context import with_context
-from .components import Message
+from .components import Document, Message
 from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
 from .start_backend import (
@@ -565,6 +566,7 @@ class MelleaSession:
         role: Message.Role = "user",
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -576,6 +578,8 @@ class MelleaSession:
             content: The message text to send.
             role: The role for the outgoing message (default ``"user"``).
             images: Optional list of images to include in the message.
+            documents: Optional documents to attach to the message. Each element
+                may be a string or a ``Document`` object.
             user_variables: Optional Jinja variable substitutions applied to ``content``.
             format: Optional Pydantic model for constrained decoding of the response.
             model_options: Additional model options to merge with backend defaults.
@@ -590,6 +594,7 @@ class MelleaSession:
             backend=self.backend,
             role=role,
             images=images,
+            documents=documents,
             user_variables=user_variables,
             format=format,
             model_options=model_options,
@@ -958,6 +963,7 @@ class MelleaSession:
         role: Message.Role = "user",
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -969,6 +975,8 @@ class MelleaSession:
             content: The message text to send.
             role: The role for the outgoing message (default ``"user"``).
             images: Optional list of images to include in the message.
+            documents: Optional documents to attach to the message. Each element
+                may be a string or a ``Document`` object.
             user_variables: Optional Jinja variable substitutions applied to ``content``.
             format: Optional Pydantic model for constrained decoding of the response.
             model_options: Additional model options to merge with backend defaults.
@@ -983,6 +991,7 @@ class MelleaSession:
             backend=self.backend,
             role=role,
             images=images,
+            documents=documents,
             user_variables=user_variables,
             format=format,
             model_options=model_options,

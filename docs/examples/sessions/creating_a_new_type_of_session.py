@@ -1,5 +1,6 @@
 # pytest: ollama, qualitative, e2e
 
+from collections.abc import Iterable
 from typing import Literal
 
 from PIL import Image as PILImage
@@ -14,7 +15,7 @@ from mellea.core import (
     ImageBlock,
     Requirement,
 )
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import reqify
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
@@ -45,6 +46,7 @@ class ChatCheckingSession(MelleaSession):
         | Literal["tool"] = "user",
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        documents: Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -66,6 +68,8 @@ class ChatCheckingSession(MelleaSession):
         chat_msg = super().chat(
             content,
             role,
+            images=images,
+            documents=documents,
             user_variables=user_variables,
             format=format,
             model_options=model_options,
