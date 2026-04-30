@@ -8,7 +8,7 @@ the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
 ``Message`` objects.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Iterable
 from typing import Any, Literal
 
 from ...core import (
@@ -20,14 +20,11 @@ from ...core import (
     ModelToolCall,
     TemplateRepresentation,
 )
-from .docs.document import Document
+from .docs.document import Document, _coerce_documents
 
 
 class Message(Component["Message"]):
     """A single Message in a Chat history.
-
-    TODO: we may want to deprecate this Component entirely.
-    The fact that some Component gets rendered as a chat message is `Formatter` miscellania.
 
     Args:
         role (str): The role that this message came from (e.g., ``"user"``,
@@ -51,14 +48,14 @@ class Message(Component["Message"]):
         content: str,
         *,
         images: None | list[ImageBlock] = None,
-        documents: None | list[Document] = None,
+        documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
         self._images = images
-        self._docs = documents
+        self._docs = _coerce_documents(documents)
 
     @property
     def images(self) -> None | list[str]:

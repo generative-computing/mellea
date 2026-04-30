@@ -5,7 +5,8 @@ import collections.abc
 from ....backends.adapters import AdapterMixin
 from ...components import Document, Message
 from ...context import ChatContext
-from ._util import _coerce_documents, _resolve_response, call_intrinsic
+from ..docs.document import _coerce_documents
+from ._util import _resolve_response, call_intrinsic
 
 
 def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
