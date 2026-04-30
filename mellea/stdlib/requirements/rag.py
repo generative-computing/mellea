@@ -5,8 +5,7 @@ import re
 from collections.abc import Iterable
 
 from ...backends.adapters import AdapterMixin
-from ...core import Backend, CBlock, Context, Requirement, ValidationResult
-from ...core.utils import FancyLogger
+from ...core import Backend, CBlock, Context, FancyLogger, Requirement, ValidationResult
 from ..components import Document, Message
 from ..context import ChatContext
 
