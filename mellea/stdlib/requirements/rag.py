@@ -5,11 +5,18 @@ import re
 from collections.abc import Iterable
 
 from ...backends.adapters import AdapterMixin
-from ...core import Backend, CBlock, Context, FancyLogger, Requirement, ValidationResult
+from ...core import (
+    Backend,
+    CBlock,
+    Context,
+    MelleaLogger,
+    Requirement,
+    ValidationResult,
+)
 from ..components import Document, Message
 from ..context import ChatContext
 
-logger = FancyLogger.get_logger()
+logger = MelleaLogger.get_logger()
 
 
 class GroundednessRequirement(Requirement):
