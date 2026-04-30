@@ -9,6 +9,7 @@ YAML_OPTIONAL_FIELDS = [
     "logprobs_workaround",
     "docs_as_message",
     "instruction",
+    "name",
     "parameters",
     "sentence_boundaries",
 ]
