@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/instruct-validate-repair"
 title: "The Instruction Model"
 description: "How instruct(), requirements, and the IVR loop work in Mellea."
 # diataxis: explanation

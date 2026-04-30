@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/unit-test-generative-code"
 title: "Unit Test Generative Code"
 description: "Write reliable tests for @generative functions using pytest markers and output validation."
 # diataxis: how-to

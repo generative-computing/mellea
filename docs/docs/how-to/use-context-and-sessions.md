@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/use-context-and-sessions"
 title: "Context and Sessions"
 sidebarTitle: "Extending Sessions"
 description: "Extend MelleaSession to add custom validation, logging, and filtering behavior."

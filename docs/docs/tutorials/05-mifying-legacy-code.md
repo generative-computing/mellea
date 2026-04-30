@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/05-mifying-legacy-code"
 title: "Tutorial: Mifying Legacy Code"
 description: "Add LLM query and transform capabilities to existing Python classes without rewriting them."
 # diataxis: tutorial

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/legacy-code-integration"
 title: "Legacy Code Integration with @mify"
 description: "Apply the @mify decorator to existing Python classes so a Mellea session can act on, query, and transform your objects without rewriting them."
 # diataxis: reference

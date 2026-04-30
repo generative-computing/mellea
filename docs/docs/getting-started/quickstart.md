@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/getting-started/quickstart"
 title: "Quick Start"
 description: "Run your first generative program in minutes."
 # diataxis: tutorial

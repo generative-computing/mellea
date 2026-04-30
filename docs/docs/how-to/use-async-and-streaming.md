@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/use-async-and-streaming"
 title: "Async and Streaming"
 description: "Use async methods, parallel generation, and streaming output with Mellea."
 # diataxis: how-to

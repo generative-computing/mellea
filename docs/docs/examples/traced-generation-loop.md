@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/traced-generation-loop"
 title: "Traced Generation Loop"
 description: "Enable OpenTelemetry tracing for a multi-operation Mellea session using environment variables, and export spans to Jaeger or any OTLP backend."
 # diataxis: reference

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/generative-programming"
 title: "Generative Programming"
 description: "The ideas behind Mellea — what generative programs are, why they're hard, and how Mellea addresses those challenges."
 # diataxis: explanation

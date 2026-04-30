@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/getting-started/installation"
 title: "Installation"
 description: "Install Mellea and set up your Python environment."
 # diataxis: tutorial

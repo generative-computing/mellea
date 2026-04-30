@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/evaluation-and-observability/tracing"
 title: "Tracing"
 description: "Export distributed traces from Mellea using OpenTelemetry semantic conventions."
 # diataxis: how-to

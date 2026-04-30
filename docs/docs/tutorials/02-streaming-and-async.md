@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/02-streaming-and-async"
 title: "Tutorial: Streaming and Async"
 description: "Make LLM calls non-blocking, stream tokens as they arrive, and process batches concurrently."
 # diataxis: tutorial

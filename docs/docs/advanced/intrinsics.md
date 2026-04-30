@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/intrinsics"
 title: "Intrinsics"
 description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters with Granite models."
 # diataxis: how-to
