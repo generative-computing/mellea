@@ -176,6 +176,7 @@ _YAML_JSON_COMBOS_LIST = [
         task="uncertainty",
         # Granite 4.0 adapters not currently available
         repo_id="ibm-granite/granitelib-core-r1.0",
+        revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
     ),
     # aLoRA adapter for this intrinsic not currently available
     # YamlJsonCombo(
@@ -216,6 +217,7 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "context-attribution.json",
         task="context-attribution",
         repo_id="ibm-granite/granitelib-core-r1.0",
+        revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
     ),
     # gpt-oss-20b intrinsics (canned output tests only, no inference)
     YamlJsonCombo(
