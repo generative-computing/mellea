@@ -1,257 +1,218 @@
-"""Unit tests for the pricing registry."""
+"""Unit tests for the litellm-backed pricing module."""
 
 import importlib
 import json
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mellea.telemetry import pricing
 
-@pytest.fixture
-def custom_pricing(tmp_path, monkeypatch):
-    """Load a custom pricing dict into the module singleton; restore on teardown."""
-    import mellea.telemetry.pricing
 
-    def _load(pricing_dict: dict) -> None:
-        pricing_file = tmp_path / "pricing.json"
-        pricing_file.write_text(json.dumps(pricing_dict))
-        monkeypatch.setenv("MELLEA_PRICING_FILE", str(pricing_file))
-        importlib.reload(mellea.telemetry.pricing)
-
-    yield _load
-
+@pytest.fixture()
+def restore_pricing(monkeypatch):
+    """Restore litellm import state and reload pricing module after each test."""
+    original_litellm = sys.modules.get("litellm", ...)
+    yield
+    monkeypatch.delenv("MELLEA_PRICING_ENABLED", raising=False)
     monkeypatch.delenv("MELLEA_PRICING_FILE", raising=False)
-    importlib.reload(mellea.telemetry.pricing)
+    if original_litellm is ...:
+        sys.modules.pop("litellm", None)
+    else:
+        sys.modules["litellm"] = original_litellm
+    importlib.reload(pricing)
 
 
-@pytest.fixture
-def fresh_registry(monkeypatch):
-    """Return a fresh PricingRegistry with no MELLEA_PRICING_FILE set."""
-    monkeypatch.delenv("MELLEA_PRICING_FILE", raising=False)
-    from mellea.telemetry.pricing import PricingRegistry
-
-    return PricingRegistry()
-
-
-def test_compute_cost_known_model(fresh_registry):
-    """Known model returns a non-None float cost."""
-    cost = fresh_registry.compute_cost("gpt-5.4", input_tokens=1000, output_tokens=500)
-    assert cost is not None
-    # gpt-5.4: 1000 * 2.5/1m + 500 * 15.0/1m = 0.0025 + 0.0075 = 0.010
-    assert abs(cost - 0.010) < 1e-9
+@pytest.fixture()
+def mock_litellm_pricing():
+    """Patch pricing into an enabled state with a mock litellm."""
+    mock = MagicMock()
+    mock.cost_per_token.return_value = (0.001, 0.002)
+    with (
+        patch("mellea.telemetry.pricing._PRICING_ENABLED", True),
+        patch("mellea.telemetry.pricing.litellm", mock),
+        patch("mellea.telemetry.pricing._warned_models", set()),
+    ):
+        yield mock
 
 
-def test_compute_cost_unknown_model(fresh_registry, caplog):
-    """Unknown model returns None and logs a warning."""
+# ---------------------------------------------------------------------------
+# Tri-state flag — module init logic
+# ---------------------------------------------------------------------------
+
+
+def test_tri_state_false_disables_explicitly(monkeypatch, restore_pricing):
+    """MELLEA_PRICING_ENABLED=false disables pricing regardless of litellm."""
+    monkeypatch.setenv("MELLEA_PRICING_ENABLED", "false")
+    monkeypatch.setitem(sys.modules, "litellm", MagicMock())
+    importlib.reload(pricing)
+    assert pricing._PRICING_ENABLED is False
+
+
+def test_tri_state_true_with_litellm_enables(monkeypatch, restore_pricing):
+    """MELLEA_PRICING_ENABLED=true with litellm present enables pricing."""
+    monkeypatch.setenv("MELLEA_PRICING_ENABLED", "true")
+    monkeypatch.setitem(sys.modules, "litellm", MagicMock())
+    importlib.reload(pricing)
+    assert pricing._PRICING_ENABLED is True
+
+
+def test_tri_state_true_without_litellm_warns_and_disables(
+    monkeypatch, restore_pricing
+):
+    """MELLEA_PRICING_ENABLED=true without litellm emits a warning and disables."""
+    monkeypatch.setenv("MELLEA_PRICING_ENABLED", "true")
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    with pytest.warns(UserWarning, match="litellm is not installed"):
+        importlib.reload(pricing)
+    assert pricing._PRICING_ENABLED is False
+
+
+def test_tri_state_unset_with_litellm_auto_enables(monkeypatch, restore_pricing):
+    """Unset MELLEA_PRICING_ENABLED with litellm present auto-enables pricing."""
+    monkeypatch.delenv("MELLEA_PRICING_ENABLED", raising=False)
+    monkeypatch.setitem(sys.modules, "litellm", MagicMock())
+    importlib.reload(pricing)
+    assert pricing._PRICING_ENABLED is True
+
+
+def test_tri_state_unset_without_litellm_silent_disable(
+    monkeypatch, restore_pricing, recwarn
+):
+    """Unset MELLEA_PRICING_ENABLED without litellm silently disables (no warning)."""
+    monkeypatch.delenv("MELLEA_PRICING_ENABLED", raising=False)
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    importlib.reload(pricing)
+    assert pricing._PRICING_ENABLED is False
+    assert not any("litellm is not installed" in str(w.message) for w in recwarn.list)
+
+
+# ---------------------------------------------------------------------------
+# MELLEA_PRICING_FILE — _register_custom_pricing
+# ---------------------------------------------------------------------------
+
+
+def test_register_custom_pricing_calls_register_model(tmp_path):
+    """_register_custom_pricing passes loaded JSON to litellm.register_model."""
+    data = {"my-model": {"input_cost_per_token": 1e-6, "output_cost_per_token": 2e-6}}
+    pricing_file = tmp_path / "pricing.json"
+    pricing_file.write_text(json.dumps(data))
+
+    mock_litellm = MagicMock()
+    with patch("mellea.telemetry.pricing.litellm", mock_litellm):
+        pricing._register_custom_pricing(str(pricing_file))
+
+    mock_litellm.register_model.assert_called_once_with(data)
+
+
+def test_register_custom_pricing_file_not_found(caplog):
+    """Missing file path logs a warning without raising."""
     import logging
 
     with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        cost = fresh_registry.compute_cost("nonexistent-model-xyz", 100, 50)
+        pricing._register_custom_pricing("/nonexistent/pricing.json")
+
+    assert any("nonexistent" in r.message for r in caplog.records)
+
+
+def test_register_custom_pricing_invalid_json(tmp_path, caplog):
+    """Invalid JSON logs a warning without raising."""
+    import logging
+
+    bad = tmp_path / "bad.json"
+    bad.write_text("not json {{{")
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        pricing._register_custom_pricing(str(bad))
+
+    assert any("Invalid JSON" in r.message for r in caplog.records)
+
+
+def test_register_custom_pricing_not_a_dict(tmp_path, caplog):
+    """Non-dict JSON logs a warning without raising."""
+    import logging
+
+    list_file = tmp_path / "list.json"
+    list_file.write_text(json.dumps([1, 2, 3]))
+
+    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
+        pricing._register_custom_pricing(str(list_file))
+
+    assert any("JSON object" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# compute_cost — delegation to litellm
+# ---------------------------------------------------------------------------
+
+
+def test_compute_cost_delegates_to_litellm(mock_litellm_pricing):
+    """compute_cost passes correct args to litellm.cost_per_token."""
+    mock_litellm_pricing.cost_per_token.return_value = (0.0025, 0.0075)
+    cost = pricing.compute_cost("gpt-5.4", "openai", 1000, 500)
+
+    assert cost == pytest.approx(0.010)
+    mock_litellm_pricing.cost_per_token.assert_called_once_with(
+        model="gpt-5.4",
+        custom_llm_provider="openai",
+        prompt_tokens=1000,
+        completion_tokens=500,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+
+
+def test_compute_cost_passes_full_prompt_tokens_to_litellm(mock_litellm_pricing):
+    """prompt_tokens is forwarded as-is; litellm handles cached-token deduction internally."""
+    pricing.compute_cost(
+        "gpt-5.4",
+        "openai",
+        prompt_tokens=100,
+        completion_tokens=20,
+        cached_tokens=50,
+        cache_creation_tokens=10,
+    )
+
+    _, kwargs = mock_litellm_pricing.cost_per_token.call_args
+    assert kwargs["prompt_tokens"] == 100
+    assert kwargs["cache_read_input_tokens"] == 50
+    assert kwargs["cache_creation_input_tokens"] == 10
+
+
+def test_compute_cost_none_tokens_treated_as_zero(mock_litellm_pricing):
+    """None token and provider values are treated as zero/None."""
+    pricing.compute_cost("gpt-5.4", None, None, None)
+
+    _, kwargs = mock_litellm_pricing.cost_per_token.call_args
+    assert kwargs["prompt_tokens"] == 0
+    assert kwargs["completion_tokens"] == 0
+    assert kwargs["custom_llm_provider"] is None
+
+
+def test_compute_cost_disabled_returns_none():
+    """compute_cost returns None immediately when pricing is disabled."""
+    mock_litellm = MagicMock()
+    with (
+        patch("mellea.telemetry.pricing._PRICING_ENABLED", False),
+        patch("mellea.telemetry.pricing.litellm", mock_litellm),
+    ):
+        cost = pricing.compute_cost("gpt-5.4", None, 100, 50)
 
     assert cost is None
-    assert any("nonexistent-model-xyz" in record.message for record in caplog.records)
+    mock_litellm.cost_per_token.assert_not_called()
 
 
-def test_compute_cost_none_tokens(fresh_registry):
-    """None tokens are treated as zero without raising; None cache args produce same cost as omitting them."""
-    cost = fresh_registry.compute_cost("gpt-5.4", input_tokens=None, output_tokens=None)
-    assert cost == 0.0
-
-    base = fresh_registry.compute_cost(
-        "claude-sonnet-4-6", input_tokens=500, output_tokens=100
-    )
-    with_none = fresh_registry.compute_cost(
-        "claude-sonnet-4-6",
-        input_tokens=500,
-        output_tokens=100,
-        cached_tokens=None,
-        cache_creation_tokens=None,
-    )
-    assert base == with_none
-
-
-def test_compute_cost_zero_tokens(fresh_registry):
-    """Zero tokens produce zero cost."""
-    cost = fresh_registry.compute_cost(
-        "claude-sonnet-4-6", input_tokens=0, output_tokens=0
-    )
-    assert cost == 0.0
-
-
-def test_custom_pricing_override(custom_pricing):
-    """MELLEA_PRICING_FILE overrides built-in prices."""
-    custom_pricing({"my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0}})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    cost = compute_cost("my-custom-model", 1000, 1000)
-    assert cost is not None
-    assert abs(cost - 0.003) < 1e-9
-
-
-def test_custom_pricing_overrides_builtin(custom_pricing):
-    """Custom file can override built-in prices for existing models."""
-    custom_pricing({"gpt-5.4": {"input_per_1m": 999.0, "output_per_1m": 999.0}})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    cost = compute_cost("gpt-5.4", 1000, 0)
-    assert cost is not None
-    assert abs(cost - 0.999) < 1e-9
-
-
-def test_custom_pricing_file_not_found(monkeypatch, caplog):
-    """Missing MELLEA_PRICING_FILE logs warning and falls back to built-ins."""
+def test_compute_cost_unknown_model_warns_once(mock_litellm_pricing, caplog):
+    """Exception from litellm → None + log warning on first failure only."""
     import logging
 
-    monkeypatch.setenv("MELLEA_PRICING_FILE", "/nonexistent/path/pricing.json")
-
-    from mellea.telemetry.pricing import PricingRegistry
-
+    mock_litellm_pricing.cost_per_token.side_effect = ValueError("No model data")
     with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        registry = PricingRegistry()
+        cost = pricing.compute_cost("unknown-model-xyz", None, 100, 50)
+        assert cost is None
+        assert any("unknown-model-xyz" in r.message for r in caplog.records)
+        caplog.clear()
+        pricing.compute_cost("unknown-model-xyz", None, 100, 50)
 
-    assert any("nonexistent" in record.message for record in caplog.records)
-    # Built-in pricing still works
-    assert registry.compute_cost("gpt-5.4", 1000, 0) is not None
-
-
-def test_custom_pricing_invalid_json(tmp_path, monkeypatch, caplog):
-    """Invalid JSON in MELLEA_PRICING_FILE logs warning and falls back to built-ins."""
-    import logging
-
-    bad_file = tmp_path / "bad.json"
-    bad_file.write_text("this is not json {{{")
-
-    monkeypatch.setenv("MELLEA_PRICING_FILE", str(bad_file))
-
-    from mellea.telemetry.pricing import PricingRegistry
-
-    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        registry = PricingRegistry()
-
-    assert any("Invalid JSON" in record.message for record in caplog.records)
-    # Built-in pricing still works
-    assert registry.compute_cost("claude-sonnet-4-6", 1000, 0) is not None
-
-
-def test_invalid_entry_not_a_dict(custom_pricing, caplog):
-    """Non-dict pricing entry is skipped with a warning."""
-    import logging
-
-    custom_pricing({"bad-model": "not-a-dict"})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        cost = compute_cost("bad-model", 1000, 1000)
-
-    assert cost is None
-    assert any("not a dict" in record.message for record in caplog.records)
-
-
-def test_invalid_entry_non_numeric_value(custom_pricing, caplog):
-    """Non-numeric pricing value is skipped with a warning."""
-    import logging
-
-    custom_pricing({"bad-model": {"input_per_1m": "cheap", "output_per_1m": 1.0}})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        cost = compute_cost("bad-model", 1000, 1000)
-
-    assert cost is None
-    assert any("invalid" in record.message for record in caplog.records)
-
-
-def test_invalid_entry_negative_value(custom_pricing, caplog):
-    """Negative pricing value is skipped with a warning."""
-    import logging
-
-    custom_pricing({"bad-model": {"input_per_1m": -1.0, "output_per_1m": 1.0}})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        cost = compute_cost("bad-model", 1000, 1000)
-
-    assert cost is None
-    assert any("invalid" in record.message for record in caplog.records)
-
-
-@pytest.mark.parametrize("bad_val", [float("nan"), float("inf")])
-def test_invalid_entry_non_finite_value(custom_pricing, caplog, bad_val):
-    """nan and inf pricing values are skipped with a warning."""
-    import logging
-
-    custom_pricing({"bad-model": {"input_per_1m": bad_val, "output_per_1m": 1.0}})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        cost = compute_cost("bad-model", 1000, 1000)
-
-    assert cost is None
-    assert any("invalid" in record.message for record in caplog.records)
-
-
-def test_invalid_entry_no_recognised_keys(custom_pricing, caplog):
-    """Entry with no recognised pricing keys is skipped with a warning."""
-    import logging
-
-    custom_pricing({"bad-model": {"input_per_1k": 3.0, "output_per_1k": 15.0}})
-
-    from mellea.telemetry.pricing import compute_cost
-
-    with caplog.at_level(logging.WARNING, logger="mellea.telemetry.pricing"):
-        cost = compute_cost("bad-model", 1000, 1000)
-
-    assert cost is None
-    assert any("required keys" in record.message for record in caplog.records)
-
-
-def test_compute_cost_with_cached_tokens(fresh_registry):
-    """Cache read tokens are priced at cache_read_per_1m rate."""
-    # claude-sonnet-4-6: cache_read_per_1m = 0.30
-    # 1000 cached_tokens * 0.30 / 1e6 = 0.0003
-    cost = fresh_registry.compute_cost(
-        "claude-sonnet-4-6", input_tokens=0, output_tokens=0, cached_tokens=1000
-    )
-    assert cost is not None
-    assert abs(cost - 0.0003) < 1e-9
-
-
-def test_compute_cost_with_cache_creation_tokens(fresh_registry):
-    """Cache creation tokens are priced at cache_write_per_1m rate."""
-    # claude-sonnet-4-6: cache_write_per_1m = 3.75
-    # 1000 cache_creation_tokens * 3.75 / 1e6 = 0.00375
-    cost = fresh_registry.compute_cost(
-        "claude-sonnet-4-6", input_tokens=0, output_tokens=0, cache_creation_tokens=1000
-    )
-    assert cost is not None
-    assert abs(cost - 0.00375) < 1e-9
-
-
-def test_compute_cost_cache_tokens_model_without_cache_pricing(fresh_registry):
-    """Cache token args are silently ignored for models with no cache pricing fields."""
-    # gpt-5.4 has no cache_write_per_1m, only cache_read_per_1m
-    base_cost = fresh_registry.compute_cost(
-        "gpt-5.4", input_tokens=1000, output_tokens=0
-    )
-    cost_with_creation = fresh_registry.compute_cost(
-        "gpt-5.4", input_tokens=1000, output_tokens=0, cache_creation_tokens=500
-    )
-    assert base_cost is not None
-    assert cost_with_creation is not None
-    assert abs(base_cost - cost_with_creation) < 1e-9
-
-
-def test_compute_cost_openai_cache_read(fresh_registry):
-    """OpenAI cache_read_per_1m (50% of input) is applied correctly."""
-    # gpt-5.4: cache_read_per_1m = 1.25
-    # 1000 cached_tokens * 1.25 / 1e6 = 0.00125
-    cost = fresh_registry.compute_cost(
-        "gpt-5.4", input_tokens=0, output_tokens=0, cached_tokens=1000
-    )
-    assert cost is not None
-    assert abs(cost - 0.00125) < 1e-9
+    assert not any("unknown-model-xyz" in r.message for r in caplog.records)

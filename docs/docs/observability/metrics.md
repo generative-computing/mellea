@@ -193,34 +193,49 @@ is available. No code changes are required.
 
 ### Pricing data
 
-Mellea ships with built-in pricing for current OpenAI and Anthropic models. Prices
-are approximate and may become stale as providers update their rates. For models
-without built-in pricing, cost is not recorded and a warning is logged instead.
+Cost metrics use `litellm` (`mellea[litellm]`) as a pricing library. This is
+independent of the LiteLLM backend — pricing works with any Mellea backend, but
+cost is only recorded for models that `litellm` has pricing data for. Local and
+private model IDs (Ollama, HuggingFace, custom deployments) will log a one-time
+warning per model and produce no cost metric.
+
+Pricing is auto-enabled when `litellm` is installed. Use `MELLEA_PRICING_ENABLED`
+to override:
+
+| `MELLEA_PRICING_ENABLED` | litellm installed | Result |
+| ------------------------- | ----------------- | ------ |
+| `false` | either | Disabled (no warning) |
+| `true` | yes | Enabled |
+| `true` | no | Disabled + warning |
+| unset | yes | Enabled automatically |
+| unset | no | Disabled (no warning) |
 
 ### Custom pricing
 
-Override built-in prices or add pricing for any model using a JSON file:
+Override or add pricing for any model using a JSON file with litellm's native
+per-token schema:
 
 ```bash
 export MELLEA_PRICING_FILE=/path/to/my-pricing.json
 ```
 
-The file format maps model IDs to per-million-token rates:
-
 ```json
 {
-  "my-custom-model": {"input_per_1m": 1.0, "output_per_1m": 2.0, "cache_write_per_1m": 1.25, "cache_read_per_1m": 0.10},
-  "gpt-5.4": {"input_per_1m": 2.5, "output_per_1m": 15.0, "cache_read_per_1m": 1.25}
+  "my-custom-model": {
+    "input_cost_per_token": 0.000001,
+    "output_cost_per_token": 0.000002
+  },
+  "claude-sonnet-4-6": {
+    "input_cost_per_token": 0.000003,
+    "output_cost_per_token": 0.000015,
+    "cache_read_input_token_cost": 0.0000003,
+    "cache_creation_input_token_cost": 0.000003750
+  }
 }
 ```
 
-Custom entries replace the entire built-in entry for that model. Errors loading the file are logged as
-warnings and built-in prices are used as a fallback.
-
-> **Note:** Anthropic does not distinguish 5-minute from 1-hour cache writes in
-> `cache_creation_input_tokens`. Mellea uses the 5-minute rate for `cache_write_per_1m`
-> (1.25× base input). Override it in a custom pricing file if you primarily use 1-hour
-> writes (2× base input).
+Minimal entries with only cost fields are accepted. Errors loading the file are
+logged as warnings and litellm's built-in pricing is used as a fallback.
 
 ## Operational metrics
 

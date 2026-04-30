@@ -8,10 +8,9 @@ uv run python docs/examples/intrinsics/factuality_detection.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
-from mellea.stdlib.context import ChatContext
 
 user_text = "Is Ozzy Osbourne still alive?"
 response_text = "Yes, Ozzy Osbourne is alive in 2025 and preparing for another world tour, continuing to amaze fans with his energy and resilience."
@@ -25,13 +24,16 @@ document = Document(
 )
 
 # Create the backend.
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = (
-    ChatContext()
-    .add(document)
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
+
+ctx = (
+    ctx.add(document)
     .add(Message("user", user_text))
     .add(Message("assistant", response_text))
 )
 
-result = guardian.factuality_detection(context, backend)
+result = guardian.factuality_detection(ctx, backend)
 print(f"Result of factuality detection: {result}")  # string "yes" or "no"

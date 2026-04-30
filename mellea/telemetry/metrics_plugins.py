@@ -175,8 +175,9 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
         prompt_tokens = gen.usage.get("prompt_tokens") or 0
         cost = compute_cost(
             model=model,
-            input_tokens=prompt_tokens - cached_tokens - cache_creation,
-            output_tokens=gen.usage.get("completion_tokens"),
+            provider=gen.provider,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=gen.usage.get("completion_tokens"),
             cached_tokens=cached_tokens,
             cache_creation_tokens=cache_creation,
         )

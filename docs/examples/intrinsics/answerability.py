@@ -8,21 +8,26 @@ uv run python docs/examples/intrinsics/answerability.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document, Message
+from mellea import model_ids, start_backend
 from mellea.stdlib.components.intrinsic import rag
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext().add(Message("assistant", "Hello there, how can I help you?"))
-next_user_turn = "What is the square root of 4?"
-documents_answerable = [Document("The square root of 4 is 2.")]
-documents_unanswerable = [Document("The square root of 8 is not 2.")]
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
-result = rag.check_answerability(next_user_turn, documents_answerable, context, backend)
+result = rag.check_answerability(
+    "What is the square root of 4?",
+    documents=["The square root of 4 is 2."],
+    context=ctx,
+    backend=backend,
+)
 print(f"Result of answerability check when answer is in documents: {result}")
 
 result = rag.check_answerability(
-    next_user_turn, documents_unanswerable, context, backend
+    "What is the square root of 4?",
+    documents=["The square root of 8 is not 2."],
+    context=ctx,
+    backend=backend,
 )
 print(f"Result of answerability check when answer is not in documents: {result}")

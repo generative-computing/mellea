@@ -10,6 +10,7 @@ import pytest
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
@@ -108,6 +109,23 @@ def test_find_context_attributions(backend):
     )
     # Even with temperature set to 0, there's some indeterminism with the the response.
     # Check only the initial responses for correctness.
+    assert result[:7] == expected
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="Context attribution count varies non-deterministically across runs",
+)
+@pytest.mark.qualitative
+def test_find_context_attributions_resolve(backend):
+    """Verify context-attribution when response is resolved from context."""
+    context, assistant_response, documents = _read_rag_input_json(
+        "context-attribution.json"
+    )
+    context = context.add(ModelOutputThunk(value=assistant_response))
+    expected = _read_rag_output_json("context-attribution.json")
+
+    result = core.find_context_attributions(None, documents, context, backend)
     assert result[:7] == expected
 
 

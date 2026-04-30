@@ -10,10 +10,9 @@ uv run python docs/examples/intrinsics/requirement_check.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import core
-from mellea.stdlib.context import ChatContext
 
 user_text = "Invite for an IBM office party."
 response_text = """
@@ -40,12 +39,12 @@ We look forward to seeing everyone there and celebrating our hard work together.
 """
 requirement = "Use a professional tone."
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = (
-    ChatContext()
-    .add(Message("user", user_text))
-    .add(Message("assistant", response_text))
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
 )
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
-result = core.requirement_check(context, backend, requirement)
+ctx = ctx.add(Message("user", user_text)).add(Message("assistant", response_text))
+
+result = core.requirement_check(ctx, backend, requirement)
 print(f"Requirements Satisfied: {result}")  # float between 0.0 and 1.0

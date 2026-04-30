@@ -29,17 +29,21 @@ class Intrinsic(Component[str]):
         intrinsic_kwargs (dict): Keyword arguments passed to the intrinsic.
         intrinsic_name (str): User-visible name of this intrinsic (property).
         adapter_types (tuple[AdapterType, ...]): Available adapter types that
-            implement this intrinsic (property).
+            implement this intrinsic (property). Defaults to values in self.metadata.
     """
 
     def __init__(
-        self, intrinsic_name: str, intrinsic_kwargs: dict | None = None
+        self,
+        intrinsic_name: str,
+        intrinsic_kwargs: dict | None = None,
+        adapter_types: tuple[AdapterType, ...] | None = None,
     ) -> None:
         """Initialize Intrinsic by fetching metadata for the named intrinsic from the catalog."""
         self.metadata = fetch_intrinsic_metadata(intrinsic_name)
         if intrinsic_kwargs is None:
             intrinsic_kwargs = {}
         self.intrinsic_kwargs = intrinsic_kwargs
+        self._adapter_types = adapter_types
 
     @property
     def intrinsic_name(self):
@@ -49,7 +53,11 @@ class Intrinsic(Component[str]):
     @property
     def adapter_types(self) -> tuple[AdapterType, ...]:
         """Tuple of available adapter types that implement this intrinsic."""
-        return self.metadata.adapter_types
+        return (
+            self._adapter_types
+            if self._adapter_types is not None
+            else self.metadata.adapter_types
+        )
 
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this intrinsic component.

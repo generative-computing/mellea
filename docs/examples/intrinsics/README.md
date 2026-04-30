@@ -56,7 +56,7 @@ Identifies sentences in conversation history and documents that most influenced 
 - **Adapter System**: Using LoRA/aLoRA adapters for specific tasks
 - **RAG Evaluation**: Assessing retrieval-augmented generation quality
 - **Quality Metrics**: Measuring relevance, groundedness, and accuracy
-- **Backend Integration**: Adding adapters to different backend types
+- **Backend Integration**: Adding adapters to different backend types (LocalHFBackend with runtime adapters, OpenAIBackend with Granite Switch embedded adapters)
 
 ## Basic Usage
 
@@ -74,12 +74,40 @@ backend.add_adapter(adapter)
 
 # Use intrinsic
 out, new_ctx = mfuncs.act(
-    Intrinsic("requirement_check",
-              intrinsic_kwargs={"requirement": "The assistant is helpful."}),
+    Intrinsic(
+        "requirement_check",
+        intrinsic_kwargs={"requirement": "The assistant is helpful."}),
     ctx,
     backend
 )
 ```
+
+OpenAIBackends also support a type of embedded adapter for Granite Switch models:
+```python
+backend = OpenAIBackend(
+        model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+        load_embedded_adapters=True,  # Auto-loads adapters from huggingface repo.
+        ...
+)
+
+# Assumes the model has the `requirement_check` adapter embedded.
+out, new_ctx = mfuncs.act(
+    Intrinsic(
+        "requirement_check",
+        intrinsic_kwargs={"requirement": "The assistant is helpful."}),
+    ctx,
+    backend
+)
+```
+
+For complete runnable examples using the OpenAI backend with Granite Switch,
+see [`../granite-switch/`](../granite-switch/).
+
+> **Note:** Not all intrinsics are embedded in every Granite Switch model. The
+> current model includes: `answerability`, `citations`, `context_relevance`,
+> `guardian-core`, `hallucination_detection`, `query_clarification`,
+> `query_rewrite`, and `requirement-check`. Check the model's
+> `adapter_index.json` for the full list.
 
 ## Available Intrinsics
 

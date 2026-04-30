@@ -48,8 +48,13 @@ from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
 from ..telemetry.context import with_context
 from .components import Message
-from .context import SimpleContext
+from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
+from .start_backend import (
+    _resolve_context,
+    _resolve_model_id_str,
+    backend_name_to_class,
+)
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
@@ -74,71 +79,15 @@ def get_session() -> MelleaSession:
     return session
 
 
-def backend_name_to_class(name: str) -> Any:
-    """Resolves backend names to Backend classes.
-
-    Args:
-        name: Short backend name, e.g. ``"ollama"``, ``"hf"``, ``"openai"``,
-            ``"watsonx"``, or ``"litellm"``.
-
-    Returns:
-        The corresponding ``Backend`` class, or ``None`` if the name is unrecognised.
-
-    Raises:
-        ImportError: If the requested backend has optional dependencies that are
-            not installed (e.g. ``mellea[hf]``, ``mellea[watsonx]``, or
-            ``mellea[litellm]``).
-    """
-    if name == "ollama":
-        from ..backends.ollama import OllamaModelBackend
-
-        return OllamaModelBackend
-    elif name == "hf" or name == "huggingface":
-        try:
-            from mellea.backends.huggingface import LocalHFBackend
-
-            return LocalHFBackend
-        except ImportError as e:
-            raise ImportError(
-                "The 'hf' backend requires extra dependencies. "
-                "Please install them with: pip install 'mellea[hf]'"
-            ) from e
-    elif name == "openai":
-        from ..backends.openai import OpenAIBackend
-
-        return OpenAIBackend
-    elif name == "watsonx":
-        try:
-            from ..backends.watsonx import WatsonxAIBackend
-
-            return WatsonxAIBackend
-        except ImportError as e:
-            raise ImportError(
-                "The 'watsonx' backend requires extra dependencies. "
-                "Please install them with: pip install 'mellea[watsonx]'"
-            ) from e
-    elif name == "litellm":
-        try:
-            from ..backends.litellm import LiteLLMBackend
-
-            return LiteLLMBackend
-        except ImportError as e:
-            raise ImportError(
-                "The 'litellm' backend requires extra dependencies. "
-                "Please install them with: pip install 'mellea[litellm]'"
-            ) from e
-    else:
-        return None
-
-
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_4_1_3B,
     ctx: Context | None = None,
     *,
+    context_type: Literal["simple", "chat"] | None = None,
     model_options: dict | None = None,
     plugins: list[Any] | None = None,
-    **backend_kwargs,
+    **backend_kwargs: Any,
 ) -> MelleaSession:
     """Start a new Mellea session. Can be used as a context manager or called directly.
 
@@ -157,8 +106,11 @@ def start_session(
             - "litellm": Use the LiteLLM backend
         model_id: Model identifier or name. Can be a `ModelIdentifier` from
             mellea.backends.model_ids or a string model name.
-        ctx: Context manager for conversation history. Defaults to SimpleContext().
-            Use ChatContext() for chat-style conversations.
+        ctx: Context instance for conversation history. Defaults to
+            ``SimpleContext()``. Mutually exclusive with ``context_type``.
+        context_type: Shorthand for creating a context — ``"simple"`` for
+            ``SimpleContext``, ``"chat"`` for ``ChatContext``. Mutually
+            exclusive with ``ctx``.
         model_options: Additional model configuration options that will be passed
             to the backend (e.g., temperature, max_tokens, etc.).
         plugins: Optional list of plugins scoped to this session. Accepts
@@ -171,6 +123,7 @@ def start_session(
         or called directly with session methods.
 
     Raises:
+        ValueError: If both ``ctx`` and ``context_type`` are provided.
         Exception: If ``backend_name`` is not one of the recognised backend
             identifiers.
         ImportError: If the requested backend requires optional dependencies
@@ -186,9 +139,8 @@ def start_session(
         with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
             response = session.chat("Write a poem")
 
-        # Using HuggingFace with ChatContext for conversations
-        from mellea.stdlib.base import ChatContext
-        with start_session("hf", "microsoft/DialoGPT-medium", ctx=ChatContext()):
+        # Using context_type shorthand for chat conversations
+        with start_session("ollama", context_type="chat") as session:
             session.chat("Hello!")
             session.chat("How are you?")  # Remembers previous message
 
@@ -200,28 +152,21 @@ def start_session(
     """
     logger = MelleaLogger.get_logger()
 
-    # Get model_id string for logging and tracing
-    if isinstance(model_id, ModelIdentifier):
-        backend_to_attr = {
-            "ollama": "ollama_name",
-            "hf": "hf_model_name",
-            "huggingface": "hf_model_name",
-            "openai": "openai_name",
-            "watsonx": "watsonx_name",
-            "litellm": "hf_model_name",
-        }
-        attr = backend_to_attr.get(backend_name, "hf_model_name")
-        model_id_str = (
-            getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
+    # Validate args.
+    resolved_ctx = _resolve_context(ctx, context_type)
+    model_id_str = _resolve_model_id_str(model_id, backend_name)
+    backend_class = backend_name_to_class(backend_name)
+    if backend_class is None:
+        raise Exception(
+            f"Backend name {backend_name} unknown. Valid options are: "
+            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`."
         )
-    else:
-        model_id_str = str(model_id)
 
     with trace_application(
         "start_session",
         backend=backend_name,
         model_id=model_id_str,
-        context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+        context_type=resolved_ctx.__class__.__name__,
     ):
         # --- session_pre_init hook ---
         if has_plugins(HookType.SESSION_PRE_INIT):
@@ -231,7 +176,7 @@ def start_session(
                 backend_name=backend_name,
                 model_id=model_id_str,
                 model_options=model_options,
-                context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+                context_type=resolved_ctx.__class__.__name__,
             )
             _, pre_payload = _run_async_in_thread(
                 invoke_hook(HookType.SESSION_PRE_INIT, pre_payload)
@@ -258,16 +203,13 @@ def start_session(
                 model_id, model_options=model_options, **backend_kwargs
             )
 
-        if ctx is None:
-            ctx = SimpleContext()
-
         logger.info(
             f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
-            f"context={ctx.__class__.__name__}"
+            f"context={resolved_ctx.__class__.__name__}"
             + (f", model_options={model_options}" if model_options else "")
         )
 
-        session = MelleaSession(backend, ctx)
+        session = MelleaSession(backend, resolved_ctx)
 
         # Register session-scoped plugins
         if plugins:
