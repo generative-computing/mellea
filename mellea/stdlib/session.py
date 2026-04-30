@@ -18,7 +18,11 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-from ..backends.model_ids import IBM_GRANITE_4_1_3B, ModelIdentifier
+from ..backends.model_ids import (
+    IBM_GRANITE_4_1_3B,
+    IBM_GRANITE_4_HYBRID_SMALL,
+    ModelIdentifier,
+)
 from ..core import (
     Backend,
     BaseModelSubclass,
@@ -242,7 +246,17 @@ def start_session(
                 f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
             )
         assert backend_class is not None
-        backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+        if "watsonx" in backend_name:
+            # Temp hack for watsonx for granite 4.1
+            backend = backend_class(
+                IBM_GRANITE_4_HYBRID_SMALL.watsonx_name,
+                model_options=model_options,
+                **backend_kwargs,
+            )
+        else:
+            backend = backend_class(
+                model_id, model_options=model_options, **backend_kwargs
+            )
 
         if ctx is None:
             ctx = SimpleContext()
