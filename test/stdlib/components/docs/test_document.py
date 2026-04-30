@@ -2,7 +2,11 @@
 
 import warnings
 
-from mellea.stdlib.components.docs.document import Document, _coerce_document, _coerce_documents
+from mellea.stdlib.components.docs.document import (
+    Document,
+    _coerce_document,
+    _coerce_documents,
+)
 
 
 def test_document_parts_returns_empty_list():
@@ -20,7 +24,7 @@ def test_document_format_for_llm():
 
 def test_document_format_for_llm_no_title():
     doc = Document("just text")
-    assert doc.format_for_llm() == "just text"
+    assert doc.format_for_llm() == "[Document]\njust text"
 
 
 class TestCoerceDocuments:
