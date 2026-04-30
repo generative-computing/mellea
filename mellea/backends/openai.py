@@ -510,7 +510,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
                 if reroute_to_alora:
                     mot = await self._generate_from_intrinsic(
-                        alora_action, ctx, model_options=model_opts
+                        alora_action,
+                        ctx,
+                        model_options=model_opts,
+                        tool_calls=tool_calls,
                     )
                     if span is not None:
                         mot._meta["_telemetry_span"] = span
@@ -518,7 +521,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
-                    action, ctx, model_options=model_opts
+                    action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
                 if span is not None:
                     mot._meta["_telemetry_span"] = span
@@ -539,7 +542,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         return mot, new_ctx
 
     async def _generate_from_intrinsic(
-        self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """Generate a completion for an intrinsic action using an embedded adapter.
 
@@ -549,10 +557,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         post-processes the model output through the intrinsic's result
         processor.
 
+        Intrinsics default to options provided by `io.yaml`. Model options
+        override these defaults. All model options besides streaming are
+        respected.
+
         Args:
             action (Intrinsic): The intrinsic component to execute.
             ctx (Context): The current generation context (must be a chat context).
             model_options (dict[str, Any]): Merged model options for this call.
+            tool_calls (bool): If ``True``, expose available tools to the model
+                and parse tool-call responses.
 
         Returns:
             ModelOutputThunk: A thunk that lazily resolves to the processed
@@ -561,13 +575,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Raises:
             ValueError: If no embedded adapter is registered for the requested
                 intrinsic.
+            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter.
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
 
         # Intrinsics don't support streaming because of their post-processing step.
         if model_options.get(ModelOption.STREAM, False):
-            raise NotImplementedError("Intrinsics do not support streaming.")
+            raise NotImplementedError(
+                "Intrinsics do not support streaming due to structured output parsing."
+            )
 
         # --- adapter lookup ------------------------------------------------
         adapter = get_adapter_for_intrinsic(
@@ -642,11 +659,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # for embedded adapters the actual model is self._model_id.
             api_params.pop("model", None)
 
-        # Intrinsics do not support tool calling; drop tools if provided.
-        if ModelOption.TOOLS in model_options:
-            MelleaLogger.get_logger().info(
-                "Tools are not supported for intrinsic generation; dropping tools from model_options."
-            )
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            add_tools_from_context_actions(tools, [action])
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+        formatted_tools = convert_tools_to_json(tools)
+        use_tools = len(formatted_tools) > 0
 
         # Handle thinking/reasoning.
         thinking = model_options.get(ModelOption.THINKING, None)
@@ -679,6 +701,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         chat_response = self._async_client.chat.completions.create(
             model=self._model_id,
             messages=messages_dicts,  # type: ignore
+            tools=formatted_tools if use_tools else None,  # type: ignore
             extra_body=extra_body,
             **api_params,
         )
@@ -726,7 +749,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         output._post_process = functools.partial(
             self.post_processing,
-            tools={},
+            tools=tools,
             conversation=conversation,
             thinking=thinking,
             seed=model_options.get(ModelOption.SEED, None),
