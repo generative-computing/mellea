@@ -5,7 +5,7 @@ tests (from main branch) are in test_serve_streaming.py.
 """
 
 import json
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -328,7 +328,11 @@ class TestStreamingUsageField:
     async def test_usage_included_when_stream_options_set(self):
         """Test that usage is included in final chunk when stream_options.include_usage=True."""
         output = ModelOutputThunk("Response")
-        output.usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
 
         chunks = []
         async for chunk_data in stream_chat_completion_chunks(
@@ -353,7 +357,11 @@ class TestStreamingUsageField:
     async def test_usage_excluded_when_stream_options_not_set(self):
         """Test that usage is excluded when stream_options is None."""
         output = ModelOutputThunk("Response")
-        output.usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
 
         chunks = []
         async for chunk_data in stream_chat_completion_chunks(
@@ -375,7 +383,11 @@ class TestStreamingUsageField:
     async def test_usage_excluded_when_include_usage_false(self):
         """Test that usage is excluded when stream_options.include_usage=False."""
         output = ModelOutputThunk("Response")
-        output.usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        output.generation.usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
 
         chunks = []
         async for chunk_data in stream_chat_completion_chunks(
