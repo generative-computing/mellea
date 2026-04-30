@@ -275,7 +275,7 @@ class TestToolCalling:
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
         }
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 50,
             "completion_tokens": 20,
             "total_tokens": 70,

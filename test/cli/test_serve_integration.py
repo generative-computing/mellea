@@ -196,7 +196,7 @@ class TestStreamingIntegration:
     def test_streaming_with_usage_field(self, client, mock_module):
         """Test streaming response includes usage when stream_options.include_usage=True."""
         mock_output = ModelOutputThunk("Response")
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 10,
             "completion_tokens": 5,
             "total_tokens": 15,
@@ -346,7 +346,7 @@ class TestToolCallingIntegration:
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
         }
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 50,
             "completion_tokens": 20,
             "total_tokens": 70,
@@ -481,7 +481,7 @@ class TestStreamingWithToolCalls:
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
         }
-        mock_output.usage = {
+        mock_output.generation.usage = {
             "prompt_tokens": 30,
             "completion_tokens": 15,
             "total_tokens": 45,
