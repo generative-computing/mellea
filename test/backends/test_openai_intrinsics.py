@@ -362,3 +362,40 @@ def test_call_intrinsic_context_relevance(call_intrinsic_backend):
         question, documents[0], context, call_intrinsic_backend
     )
     assert result in ["relevant", "irrelevant", "partially relevant"]
+
+
+# ---------------------------------------------------------------------------
+# Tool calling with intrinsics
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.qualitative
+def test_intrinsic_with_tools(backend: OpenAIBackend):
+    """Verify intrinsics complete successfully when tools are provided."""
+    from mellea.backends import ModelOption
+    from mellea.backends.tools import MelleaTool
+
+    def get_temperature(location: str) -> int:
+        """Returns the temperature of a city.
+
+        Args:
+            location: A city name.
+        """
+        return 21
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+    intrinsic = Intrinsic("answerability")
+
+    result, _ = mfuncs.act(
+        intrinsic,
+        ctx,
+        backend,
+        strategy=None,
+        tool_calls=True,
+        model_options={ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]},
+    )
+
+    assert result.value is not None
+    assert len(result.value) > 0
+    parsed = json.loads(result.value)
+    assert isinstance(parsed, dict)

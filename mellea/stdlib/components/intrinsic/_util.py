@@ -134,6 +134,7 @@ def call_intrinsic(
     backend: AdapterMixin,
     /,
     kwargs: dict | None = None,
+    model_options: dict | None = None,
 ):
     """Shared code for invoking intrinsics.
 
@@ -188,11 +189,16 @@ def call_intrinsic(
     )
 
     # Execute the AST node.
+    default_opts: dict = {ModelOption.TEMPERATURE: 0.0}
+    if model_options is not None:
+        default_opts.update(model_options)
+
     model_output_thunk, _ = mfuncs.act(
         intrinsic,
         context,
         backend,
-        model_options={ModelOption.TEMPERATURE: 0.0},
+        model_options=default_opts,
+        tool_calls=True,
         # No rejection sampling, please
         strategy=None,
     )

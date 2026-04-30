@@ -435,7 +435,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 if reroute_to_alora:
                     # Keep the alora requirement handling separate for now.
                     mot = await self._generate_from_intrinsic(
-                        alora_action, ctx, model_options=model_opts
+                        alora_action,
+                        ctx,
+                        model_options=model_opts,
+                        tool_calls=tool_calls,
                     )
                     # Store span for telemetry
                     if span is not None:
@@ -444,7 +447,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
-                    action, ctx, model_options=model_opts
+                    action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
                 # Store span for telemetry
                 if span is not None:
@@ -492,14 +495,58 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return out
 
     async def _generate_from_intrinsic(
-        self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
     ) -> ModelOutputThunk:
+        """Generate a completion for an intrinsic action using an adapter.
+
+        Applies the intrinsic's I/O rewriter to transform the conversation,
+        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        Granite Switch chat template activates the correct adapter, and
+        post-processes the model output through the intrinsic's result
+        processor.
+
+        Intrinsics default to options provided by `io.yaml`. Model options
+        override these defaults. All model options besides streaming are
+        respected. We add `do_sample=True` if `temperature != 0.0` and `temperature is not None`.
+
+        Args:
+            action (Intrinsic): The intrinsic component to execute.
+            ctx (Context): The current generation context (must be a chat context).
+            model_options (dict[str, Any]): Merged model options for this call.
+            tool_calls (bool): If ``True``, expose available tools to the model
+                and parse tool-call responses.
+
+        Returns:
+            ModelOutputThunk: A thunk that lazily resolves to the processed
+            intrinsic output.
+
+        Raises:
+            ValueError: If no adapter is registered for the requested intrinsic.
+            TypeError: If the adapter isn't an IntrinsicAdapter.
+        """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
 
-        if len(model_options.items()) > 0:
-            MelleaLogger.get_logger().info(
-                "passing in model options when generating with an intrinsic; only temperature and seed are kept from model options"
+        seed = model_options.get(ModelOption.SEED, None)
+        if seed is not None:
+            set_seed(seed)
+
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+        # Intrinsics don't support streaming because of their post-processing step.
+        if model_options.get(ModelOption.STREAM, False):
+            raise NotImplementedError(
+                "Intrinsics do not support streaming due to structured output parsing."
             )
 
         linearized_ctx = ctx.view_for_generation()
@@ -513,18 +560,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
         #       through their rewriters.
 
+        # Extract system prompt and prepend to conversation.
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         conversation: list[dict] = []
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
         docs = messages_to_docs(ctx_as_message_list)
-
-        seed = model_options.get(ModelOption.SEED, None)
-        if seed is not None:
-            set_seed(seed)
-
-        # Intrinsics don't support streaming because of their post-processing step.
-        if model_options.get(ModelOption.STREAM, False):
-            raise NotImplementedError("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -551,19 +594,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             config_dict=intrinsic_config
         )
 
+        # The pydantic models used by the intrinsic rewriter are stricter than the actual OpenAI SDK.
+        # Extract the "function" fields from each json tool which contains `{"name":..., "description":..., "parameters":...}`.
+        formatted_tools = [tool["function"] for tool in convert_tools_to_json(tools)]
         # Convert our conversation into a proper chat completions dict.
         # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
         request_json: dict = {
             "messages": conversation,
             "extra_body": {"documents": docs},
+            "tools": formatted_tools if len(formatted_tools) > 0 else None,
         }
 
-        # Convert other parameters from Mellea proprietary format to standard format.
-        for model_option in model_options:
-            if model_option == ModelOption.TEMPERATURE:
-                request_json["temperature"] = model_options[model_option]
-
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # Extract temperature and apply it to the rewritten request so that
+        # chat_completion_request_to_transformers_inputs handles the
+        # do_sample/temperature logic correctly.
+        temperature = model_options.pop(ModelOption.TEMPERATURE, None)
+        if temperature is not None:
+            rewritten = rewritten.model_copy(update={"temperature": temperature})
 
         # TODO: Handle caching here. granite_formatters doesn't tell us what changed,
         #       so we will have to invalidate the cache on our side. This requires
@@ -574,6 +623,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 rewritten, self._tokenizer, self._model
             )
         )
+
+        # Apply remaining user model options directly to generate_input,
+        # overwriting any values set by the util function or io.yaml defaults.
+        # We don't update other_input since those inputs are specific to `generate_with_transformers`
+        # and not covered by model options.
+        user_params = self._make_backend_specific_and_remove(model_options)
+        generate_input.update(user_params)
 
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
@@ -625,8 +681,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             conversation=conversation,
             input_ids=generate_input["input_tokens"],
             _format=None,
-            tool_calls=False,
-            tools={},
+            tool_calls=tool_calls,
+            tools=tools,
             seed=seed,
         )
 
