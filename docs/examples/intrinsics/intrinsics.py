@@ -15,7 +15,7 @@ backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)
 # Requires the adapter for this intrinsic to be embedded in the Granite Switch
 # model. See docs/examples/granite-switch/ for a full runnable example.
 # from mellea.backends.openai import OpenAIBackend
-# from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+# from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
 # from mellea.formatters import TemplateFormatter
 #
 # backend = OpenAIBackend(
