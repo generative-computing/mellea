@@ -1,4 +1,4 @@
-"""Unit and integration tests for mellea.stdlib.compaction."""
+"""Unit and integration tests for mellea.stdlib.frameworks.react_compaction."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,7 +16,7 @@ from mellea.core.base import (
     ModelOutputThunk,
     ModelToolCall,
 )
-from mellea.stdlib.compaction import (
+from mellea.stdlib.frameworks.react_compaction import (
     ClearAll,
     KeepLastN,
     LLMSummarize,
