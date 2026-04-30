@@ -83,11 +83,11 @@ def _last_usage_tokens(context: ChatContext) -> int | None:
     typically the case before the first model call completes.
     """
     for c in reversed(context.as_list()):
-        if isinstance(c, ModelOutputThunk) and c.usage is not None:
-            total = c.usage.get("total_tokens")
+        if isinstance(c, ModelOutputThunk) and c.generation.usage is not None:
+            total = c.generation.usage.get("total_tokens")
             if total is None:
-                pt = c.usage.get("prompt_tokens") or 0
-                ct = c.usage.get("completion_tokens") or 0
+                pt = c.generation.usage.get("prompt_tokens") or 0
+                ct = c.generation.usage.get("completion_tokens") or 0
                 total = pt + ct
             return total if total and total > 0 else None
     return None
