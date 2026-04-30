@@ -145,7 +145,7 @@ class TemplateFormatter(ChatFormatter):
         if expected_vars:
             unused_keys = set(stringified_template_args.keys()) - expected_vars
             if unused_keys:
-                MelleaLogger.get_logger().debug(
+                MelleaLogger.get_logger().warn(
                     f"TemplateRepresentation for {representation.obj.__class__.__name__} "
                     f"provides keys not referenced by template '{template.name}': {sorted(unused_keys)}"
                 )

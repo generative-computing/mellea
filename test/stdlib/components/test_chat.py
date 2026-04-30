@@ -20,7 +20,7 @@ def test_message_with_docs():
     assert docs[0]["text"] == doc.text
     assert docs[0]["title"] == doc.title
 
-    assert "[Document]..." in str(msg)
+    assert "[Document] Im a titl..." in str(msg)
 
     tr = msg.format_for_llm()
     assert tr.args["documents"]
@@ -346,6 +346,15 @@ class TestMessageDocumentRendering:
         assert result["role"] == "user"
         assert result["content"] == "main content"
         assert "supporting text" not in result["content"]
+
+    def test_print_message_with_docs_renders_document_format(self, formatter):
+        """Verify exact rendered format of documents within a Message."""
+        doc = Document("The capital of France is Paris.", title="Geography", doc_id="7")
+        msg = Message("user", "What is the capital of France?", documents=[doc])
+        result = formatter.print(msg)
+        assert "What is the capital of France?" in result
+        assert "[Document 7]" in result
+        assert "Geography: The capital of France is Paris." in result
 
 
 if __name__ == "__main__":

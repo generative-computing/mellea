@@ -9,7 +9,7 @@ retrieval-augmented generation (RAG) workflows.
 import collections.abc
 import warnings
 
-from ....core import CBlock, Component, ModelOutputThunk
+from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class Document(Component[str]):
@@ -41,20 +41,23 @@ class Document(Component[str]):
         """
         return []
 
-    def format_for_llm(self) -> str:
-        """Formats the `Document` into a string.
+    def format_for_llm(self) -> TemplateRepresentation:
+        """Formats the `Document` as a ``TemplateRepresentation``.
 
-        Returns: a string
+        Returns: a TemplateRepresentation with text, title, and doc_id args.
         """
-        # Format: "[Document <doc_id>]\n<title>: <text>".
-        return f"[Document{' ' + str(self.doc_id) if self.doc_id else ''}]\n{str(self.title) + ': ' if self.title else ''}{self.text}"
+        return TemplateRepresentation(
+            obj=self,
+            args={"text": self.text, "title": self.title, "doc_id": self.doc_id},
+            template_order=["*", "Document"],
+        )
 
     def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""
 
 
-def _coerce_documents(
+def _coerce_to_documents(
     documents: collections.abc.Iterable[str | Document] | None,
     *,
     auto_doc_id: bool = False,
@@ -90,7 +93,7 @@ def _coerce_documents(
     return result
 
 
-def _coerce_document(document: str | Document) -> Document:
+def _coerce_to_document(document: str | Document) -> Document:
     """Convert a single string or Document into a Document."""
     if isinstance(document, str):
         return Document(text=document)

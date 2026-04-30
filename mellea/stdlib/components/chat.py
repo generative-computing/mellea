@@ -20,7 +20,7 @@ from ...core import (
     ModelToolCall,
     TemplateRepresentation,
 )
-from .docs.document import Document, _coerce_documents
+from .docs.document import Document, _coerce_to_documents
 
 
 class Message(Component["Message"]):
@@ -55,7 +55,7 @@ class Message(Component["Message"]):
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
         self._images = images
-        self._docs = _coerce_documents(documents)
+        self._docs = _coerce_to_documents(documents)
 
     @property
     def images(self) -> None | list[str]:
@@ -103,7 +103,15 @@ class Message(Component["Message"]):
 
         docs = []
         if self._docs is not None:
-            docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
+            # Do a quick format of each document.
+            docs = [
+                # Equivalent to: "[Document <ID>] <TITLE>: <TEXT>...".
+                f"[Document{' ' + str(doc.doc_id) if doc.doc_id else ''}] {str(doc.title) + ': ' if doc.title else ''}{doc.text}"[
+                    :20
+                ]
+                + "..."
+                for doc in self._docs
+            ]
         return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
 
     def _parse(self, computed: ModelOutputThunk) -> "Message":

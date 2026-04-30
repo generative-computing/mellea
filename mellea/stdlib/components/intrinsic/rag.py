@@ -6,7 +6,7 @@ from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from ..docs.document import _coerce_document, _coerce_documents
+from ..docs.document import _coerce_to_document, _coerce_to_documents
 from ._util import _resolve_question, _resolve_response, call_intrinsic
 
 
@@ -38,7 +38,9 @@ def check_answerability(
     question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "answerability",
-        context.add(Message("user", question, documents=_coerce_documents(documents))),
+        context.add(
+            Message("user", question, documents=_coerce_to_documents(documents))
+        ),
         backend,
     )
     return result_json["answerability"]
@@ -98,7 +100,9 @@ def clarify_query(
     question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_clarification",
-        context.add(Message("user", question, documents=_coerce_documents(documents))),
+        context.add(
+            Message("user", question, documents=_coerce_to_documents(documents))
+        ),
         backend,
     )
     return result_json["clarification"]
@@ -142,7 +146,7 @@ def find_citations(
             Message(
                 "assistant",
                 response,
-                documents=_coerce_documents(documents, auto_doc_id=False),
+                documents=_coerce_to_documents(documents, auto_doc_id=False),
             )
         ),
         backend,
@@ -178,7 +182,7 @@ def check_context_relevance(
         - "partially relevant"
     """
     question, context = _resolve_question(question, context, backend)
-    document = _coerce_document(document)
+    document = _coerce_to_document(document)
     result_json = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
@@ -221,7 +225,7 @@ def flag_hallucinated_content(
     result_json = call_intrinsic(
         "hallucination_detection",
         context.add(
-            Message("assistant", response, documents=_coerce_documents(documents))
+            Message("assistant", response, documents=_coerce_to_documents(documents))
         ),
         backend,
     )
