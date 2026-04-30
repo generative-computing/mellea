@@ -40,6 +40,9 @@ class GroundednessRequirement(Requirement):
             grounded. If False (default), response is grounded iff all spans
             needing citations are FULLY supported. If True, response is grounded
             if spans are fully or partially supported.
+        max_new_tokens: Maximum tokens for LLM judgment outputs. Increase this
+            if LLM outputs are being truncated (particularly for complex
+            responses with many spans). Default is 500.
         description: Custom description for the requirement. If None,
             generates a default description.
 
@@ -63,10 +66,12 @@ class GroundednessRequirement(Requirement):
         self,
         documents: Iterable[Document] | Iterable[str] | None = None,
         allow_partial_support: bool = False,
+        max_new_tokens: int = 500,
         description: str | None = None,
     ):
         """Initialize grounded requirement."""
         self.allow_partial_support = allow_partial_support
+        self.max_new_tokens = max_new_tokens
 
         # Convert documents to Document objects if provided
         if documents is not None:
@@ -177,14 +182,11 @@ class GroundednessRequirement(Requirement):
 
         try:
             # Step 1: Citation Generation
-            # Call intrinsic directly for explicit control over model options
-            from ..components.intrinsic._util import call_intrinsic
+            # Import lazily to avoid circular dependency
+            from ..components.intrinsic.rag import find_citations
 
-            citation_context = context_before_response.add(
-                Message("assistant", response, documents=list(documents))
-            )
-            citations: list[dict] = call_intrinsic(
-                "citations", citation_context, backend
+            citations: list[dict] = find_citations(
+                response, list(documents), context_before_response, backend
             )
             logger.debug(
                 f"Step 1 - Citations generated: {len(citations)} citations found"
@@ -219,7 +221,12 @@ class GroundednessRequirement(Requirement):
         # Step 3: Citation Support
         try:
             span_support = await self._assess_citation_support(
-                response, citations, span_necessity, backend, context_before_response
+                response,
+                citations,
+                span_necessity,
+                backend,
+                context_before_response,
+                documents,
             )
             logger.debug(
                 f"Step 3 - Citation support assessed: {len(span_support)} spans"
@@ -273,7 +280,10 @@ class GroundednessRequirement(Requirement):
             result, _ = await backend.generate_from_context(
                 action,
                 context,
-                model_options={"temperature": 0.0, "max_new_tokens": 500},
+                model_options={
+                    "temperature": 0.0,
+                    "max_new_tokens": self.max_new_tokens,
+                },
             )
             await result.avalue()
             output_text = result.value
@@ -295,6 +305,7 @@ class GroundednessRequirement(Requirement):
         span_necessity: dict[tuple[int, int], bool],
         backend: Backend,
         context: ChatContext,
+        documents: list[Document],
     ) -> dict[tuple[int, int], str]:
         """Assess level of support for spans that need citations.
 
@@ -307,6 +318,7 @@ class GroundednessRequirement(Requirement):
             span_necessity: Mapping of span (begin, end) to needs_citation flag
             backend: Backend for LLM judgment
             context: Chat context
+            documents: List of source documents for context in LLM assessment
 
         Returns:
             Dictionary mapping span (begin, end) to support level
@@ -358,7 +370,7 @@ class GroundednessRequirement(Requirement):
             return span_support
 
         # Single batch LLM call for all spans
-        prompt = self._build_batch_support_prompt(response, spans_to_assess)
+        prompt = self._build_batch_support_prompt(response, spans_to_assess, documents)
         logger.debug(
             f"Batch support assessment prompt (spans={len(spans_to_assess)}):\n{prompt}\n"
         )
@@ -368,7 +380,10 @@ class GroundednessRequirement(Requirement):
             result, _ = await backend.generate_from_context(
                 action,
                 context,
-                model_options={"temperature": 0.0, "max_new_tokens": 500},
+                model_options={
+                    "temperature": 0.0,
+                    "max_new_tokens": self.max_new_tokens,
+                },
             )
             await result.avalue()
             output_text = result.value
@@ -424,7 +439,7 @@ class GroundednessRequirement(Requirement):
         covered_ranges.sort()
         merged_ranges: list[tuple[int, int]] = []
         for begin, end in covered_ranges:
-            if merged_ranges and begin <= merged_ranges[-1][1]:
+            if merged_ranges and begin < merged_ranges[-1][1]:
                 merged_ranges[-1] = (
                     merged_ranges[-1][0],
                     max(merged_ranges[-1][1], end),
@@ -437,41 +452,38 @@ class GroundednessRequirement(Requirement):
             f"Response span extraction - coverage: {covered_chars}/{len(response)} chars covered by citations"
         )
 
-        # Check if a position is covered by any citation
-        def is_covered(pos: int) -> bool:
-            for begin, end in merged_ranges:
-                if begin <= pos < end:
-                    return True
-                if begin > pos:
-                    break
-            return False
-
         # Extract spans by finding boundaries between covered and uncovered regions
+        # Iterate over merged_ranges boundaries rather than every character for efficiency
         spans: list[dict] = []
-        current_span_start = 0
-        current_is_covered = is_covered(0) if response else False
 
-        for i in range(1, len(response) + 1):
-            # Check if we're at a boundary (coverage changed or end of response)
-            at_end = i == len(response)
-            next_is_covered = False if at_end else is_covered(i)
-            at_boundary = at_end or next_is_covered != current_is_covered
+        # Build boundary points from merged ranges
+        boundaries = [0]  # Start of response
+        for begin, end in merged_ranges:
+            boundaries.append(begin)
+            boundaries.append(end)
+        boundaries.append(len(response))  # End of response
+        boundaries = sorted(set(boundaries))  # Remove duplicates and sort
 
-            if at_boundary:
-                span_text = response[current_span_start:i].strip()
-                if span_text:  # Only include non-empty spans
-                    spans.append(
-                        {
-                            "begin": current_span_start,
-                            "end": i,
-                            "text": span_text,
-                            "is_cited": current_is_covered,
-                        }
-                    )
+        # Process each span between boundaries
+        for i in range(len(boundaries) - 1):
+            span_start = boundaries[i]
+            span_end = boundaries[i + 1]
 
-                current_span_start = i
-                if not at_end:
-                    current_is_covered = next_is_covered
+            # Determine if this span is covered by any merged range
+            is_cited = any(
+                begin <= span_start and span_end <= end for begin, end in merged_ranges
+            )
+
+            span_text = response[span_start:span_end].strip()
+            if span_text:  # Only include non-empty spans
+                spans.append(
+                    {
+                        "begin": span_start,
+                        "end": span_end,
+                        "text": span_text,
+                        "is_cited": is_cited,
+                    }
+                )
 
         logger.debug(f"Response span extraction - extracted {len(spans)} spans")
         for span in spans:
@@ -518,7 +530,7 @@ class GroundednessRequirement(Requirement):
         return prompt
 
     def _build_batch_support_prompt(
-        self, response: str, spans_to_assess: list[dict]
+        self, response: str, spans_to_assess: list[dict], documents: list[Document]
     ) -> str:
         """Build prompt to assess citation support level for multiple spans at once.
 
@@ -530,6 +542,7 @@ class GroundednessRequirement(Requirement):
             spans_to_assess: List of span dicts with keys:
                 - text: span text
                 - citations: list of citation records for this span
+            documents: List of source documents for context
 
         Returns:
             Formatted prompt for LLM expecting JSON array output
@@ -561,13 +574,26 @@ class GroundednessRequirement(Requirement):
 
         spans_formatted = ",\n".join(span_assessments)
 
+        # Build source documents section for context
+        documents_section = ""
+        if documents:
+            doc_lines = []
+            for doc in documents:
+                doc_id = doc.doc_id if hasattr(doc, "doc_id") else "unknown"
+                doc_text = doc.text if hasattr(doc, "text") else str(doc)
+                doc_lines.append(f"Document {doc_id}:\n{doc_text}")
+            documents_section = "Source Documents:\n" + "\n\n".join(doc_lines) + "\n\n"
+
         prompt = (
-            "Assess the level of support for each response span based on provided citations.\n\n"
+            "Assess the level of support for each response span based on provided citations "
+            "and source documents.\n\n"
             "For each span, determine if the citations fully support, partially support, "
-            "or do not support the span.\n\n"
+            "or do not support the span. Consider the full context from the source documents "
+            "where the citations appear.\n\n"
             "Respond with a JSON array of the form:\n"
             '[{"span_id": ..., "support_level": ...}, ...]\n\n'
             "Support levels must be ONLY one of: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED.\n\n"
+            f"{documents_section}"
             f"Response context:\n{response}\n\n"
             f"Spans to assess:\n[\n{spans_formatted}\n]\n\n"
             "JSON Output:\n"

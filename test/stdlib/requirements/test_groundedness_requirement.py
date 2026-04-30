@@ -317,7 +317,7 @@ async def test_identify_citation_necessity_none_output():
 
 
 @pytest.mark.asyncio
-async def test_assess_citation_support_overlap_edge_case():
+async def test_assess_citation_support_overlap_edge_case(sample_docs):
     """Test citation support assessment with edge cases in span-citation overlap.
 
     This tests the scenario where a span is marked as not having citations,
@@ -355,7 +355,7 @@ async def test_assess_citation_support_overlap_edge_case():
     context = ChatContext().add(Message("user", "Test question"))
 
     span_support = await req._assess_citation_support(
-        response, citations, span_necessity, mock_backend, context
+        response, citations, span_necessity, mock_backend, context, sample_docs
     )
 
     # Should attempt to assess support even though span isn't covered by citations
@@ -404,7 +404,7 @@ async def test_identify_citation_necessity_prompt_as_action():
     assert messages[0].content == "Original context message"
 
 
-def test_build_batch_support_prompt():
+def test_build_batch_support_prompt(sample_docs):
     """Test building the batch support prompt for multiple spans."""
     req = GroundednessRequirement()
 
@@ -430,7 +430,7 @@ def test_build_batch_support_prompt():
         },
     ]
 
-    prompt = req._build_batch_support_prompt(response, spans_to_assess)
+    prompt = req._build_batch_support_prompt(response, spans_to_assess, sample_docs)
 
     # Verify prompt structure
     assert "JSON array" in prompt or "json" in prompt.lower()
