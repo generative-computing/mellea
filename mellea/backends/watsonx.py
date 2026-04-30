@@ -379,7 +379,12 @@ class WatsonxAIBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+        conversation.extend(
+            [{"role": m.role, "content": self.formatter.print(m)} for m in messages]
+        )
 
         if _format is not None:
             model_opts["response_format"] = {

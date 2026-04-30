@@ -7,11 +7,7 @@ from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
 from ..docs.document import _coerce_document, _coerce_documents
-from ._util import (
-    _resolve_question,
-    _resolve_response,
-    call_intrinsic,
-)
+from ._util import _resolve_question, _resolve_response, call_intrinsic
 
 
 def check_answerability(

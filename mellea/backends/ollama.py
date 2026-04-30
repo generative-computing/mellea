@@ -368,9 +368,11 @@ class OllamaModelBackend(FormatterBackend):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
         conversation.extend(
             [
-                {"role": m.role, "content": m.content, "images": m.images}
+                {"role": m.role, "content": self.formatter.print(m), "images": m.images}
                 for m in messages
             ]
         )

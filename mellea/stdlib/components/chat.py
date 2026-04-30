@@ -8,7 +8,7 @@ the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
 ``Message`` objects.
 """
 
-from collections.abc import Mapping, Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
 from ...core import (

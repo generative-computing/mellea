@@ -46,14 +46,8 @@ class Document(Component[str]):
 
         Returns: a string
         """
-        doc = ""
-        if self.doc_id is not None:
-            doc += f"document ID '{self.doc_id}': "
-        if self.title is not None:
-            doc += f"'{self.title}': "
-        doc += f"{self.text}"
-
-        return doc
+        # Format: "[Document <doc_id>]\n<title>: <text>".
+        return f"[Document{' ' + str(self.doc_id) if self.doc_id else ''}]\n{str(self.title) + ': ' if self.title else ''}{self.text}"
 
     def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
