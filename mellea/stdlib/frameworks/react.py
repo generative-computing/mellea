@@ -53,7 +53,6 @@ async def react(
             exceeds the strategy's configured threshold
             (e.g. ``KeepLastN(keep_n=5, threshold=20)``).
 
-
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
 

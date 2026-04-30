@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from mellea.backends.tools import MelleaTool
 from mellea.core.backend import Backend, BaseModelSubclass
 from mellea.core.base import (
     C,
@@ -52,7 +53,7 @@ def _msg(role: Message.Role, content: str) -> Message:
 def _thunk(total_tokens: int, value: str = "") -> ModelOutputThunk:
     """Build a ModelOutputThunk with a populated usage dict."""
     mot = ModelOutputThunk(value=value)
-    mot.usage = {
+    mot.generation.usage = {
         "prompt_tokens": total_tokens,
         "completion_tokens": 0,
         "total_tokens": total_tokens,
@@ -125,7 +126,7 @@ class TestLastUsageTokens:
 
     def test_falls_back_to_prompt_plus_completion(self):
         mot = ModelOutputThunk(value="x")
-        mot.usage = {"prompt_tokens": 40, "completion_tokens": 20}
+        mot.generation.usage = {"prompt_tokens": 40, "completion_tokens": 20}
         ctx = _build_context([_msg("user", "a"), mot])
         assert _last_usage_tokens(ctx) == 60
 
@@ -258,7 +259,7 @@ class ScriptedBackend(Backend):
         )
         mot._generate_log = GenerateLog(is_final_result=True)
         if turn.total_tokens is not None:
-            mot.usage = {
+            mot.generation.usage = {
                 "prompt_tokens": turn.total_tokens,
                 "completion_tokens": 0,
                 "total_tokens": turn.total_tokens,
@@ -327,9 +328,6 @@ class TestLLMSummarize:
 # ---------------------------------------------------------------------------
 # Integration: react() with compaction
 # ---------------------------------------------------------------------------
-
-
-from mellea.backends.tools import MelleaTool
 
 
 def _make_tool(name: str, return_value: str = "tool_result") -> MelleaTool:
