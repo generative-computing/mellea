@@ -35,10 +35,19 @@ def policy_guardrails(
 
     context = context.add(Message("user", judge_protocol))
     result_json = call_intrinsic("policy-guardrails", context, backend)
-    if backend.model_id == model_ids.IBM_GRANITE_4_MICRO_3B:
+
+    if "label" not in result_json.keys() and "score" not in result_json.keys():
+        raise Exception(
+            "Expected Guardian result to have label xor score, but found neither."
+        )
+    elif "label" not in result_json.keys() and "score" in result_json.keys():
+        return result_json["score"]
+    elif "label" in result_json.keys() and "score" not in result_json.keys():
         return result_json["label"]
     else:
-        return result_json["score"]
+        raise Exception(
+            "Expected Guardian result to have label xor score, but found both."
+        )
 
 
 _SYSTEM_PROMPT = (
