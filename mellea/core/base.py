@@ -21,7 +21,15 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Generic, Literal, Protocol, TypeVar, runtime_checkable
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    ParamSpec,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -947,8 +955,16 @@ class Context(abc.ABC):
         ...
 
 
-class AbstractMelleaTool(abc.ABC):
-    """Abstract base class for Mellea Tool.
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class AbstractMelleaTool(abc.ABC, Generic[P, R]):
+    """Abstract base class for Mellea Tool with parameter and return type support.
+
+    Type parameters:
+        P: Parameter specification for the tool's callable (via ParamSpec)
+        R: Return type of the tool
 
     Attributes:
         name (str): The unique name used to identify the tool in JSON descriptions and tool-call dispatch.
@@ -960,7 +976,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args: Any, **kwargs: Any) -> Any:
+    def run(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Executes the tool with the provided arguments and returns the result.
 
         Args:
@@ -968,7 +984,7 @@ class AbstractMelleaTool(abc.ABC):
             **kwargs: Keyword arguments forwarded to the tool implementation.
 
         Returns:
-            Any: The result produced by the tool; the concrete type depends on the implementation.
+            R: The result produced by the tool; the concrete type depends on the implementation.
         """
 
     @property
