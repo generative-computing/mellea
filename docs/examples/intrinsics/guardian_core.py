@@ -15,7 +15,7 @@ uv run python docs/examples/intrinsics/guardian_core.py
 import json
 
 from mellea import model_ids, start_backend
-from mellea.stdlib.components import Message, Document
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 
 ctx, backend = start_backend(
@@ -65,10 +65,8 @@ response = (
     "The film Eat was first shown by Jonas Mekas on December 24, 1922 "
     "at the Washington Square Gallery at 530 West Broadway."
 )
-context = (
-    ctx
-    .add(Message("user", "When was the film Eat first shown?"))
-    .add(Message("assistant", response, documents=[document]))
+context = ctx.add(Message("user", "When was the film Eat first shown?")).add(
+    Message("assistant", response, documents=[document])
 )
 score = guardian.guardian_check(context, backend, criteria="groundedness")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
