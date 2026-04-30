@@ -415,9 +415,7 @@ async def test_tools_dropped_with_warning():
             backend,
             strategy=None,
             model_options={
-                ModelOption.TOOLS: [
-                    {"type": "function", "function": {"name": "foo"}}
-                ]
+                ModelOption.TOOLS: [{"type": "function", "function": {"name": "foo"}}]
             },
         )
         await mot.avalue()
@@ -443,10 +441,7 @@ async def test_no_system_prompt_omitted():
         return_value=mock_client,
     ):
         mot, _ = await mfuncs.aact(
-            Intrinsic("answerability"),
-            ctx,
-            backend,
-            strategy=None,
+            Intrinsic("answerability"), ctx, backend, strategy=None
         )
         await mot.avalue()
 
@@ -472,10 +467,7 @@ async def test_reasoning_effort_from_io_yaml_only():
         return_value=mock_client,
     ):
         mot, _ = await mfuncs.aact(
-            Intrinsic("answerability"),
-            ctx,
-            backend,
-            strategy=None,
+            Intrinsic("answerability"), ctx, backend, strategy=None
         )
         await mot.avalue()
 

@@ -731,9 +731,7 @@ async def test_intrinsic_tools_dropped_with_warning(backend) -> None:
             backend,
             strategy=None,
             model_options={
-                ModelOption.TOOLS: [
-                    {"type": "function", "function": {"name": "foo"}}
-                ]
+                ModelOption.TOOLS: [{"type": "function", "function": {"name": "foo"}}]
             },
         )
         assert _mot._generate is not None
@@ -782,10 +780,7 @@ async def test_intrinsic_no_system_prompt(backend) -> None:
         side_effect=mock_generate_with_transformers,
     ):
         _mot, _ = await mfuncs.aact(
-            Intrinsic("answerability"),
-            ctx,
-            backend,
-            strategy=None,
+            Intrinsic("answerability"), ctx, backend, strategy=None
         )
         assert _mot._generate is not None
         await _mot._generate
