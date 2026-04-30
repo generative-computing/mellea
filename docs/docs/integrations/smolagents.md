@@ -46,7 +46,7 @@ if result.tool_calls:
 description and parameter types are preserved exactly.
 
 > **Backend note:** Tool calling requires a backend and model that support function
-> calling (e.g., Ollama with `granite4:micro`, OpenAI with `gpt-4o`). The default
+> calling (e.g., Ollama with `granite4.1:3b`, OpenAI with `gpt-4o`). The default
 > Ollama setup supports this.
 >
 > **Full example:** [`docs/examples/tools/smolagents_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tools/smolagents_example.py)

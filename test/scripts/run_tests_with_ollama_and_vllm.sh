@@ -40,8 +40,7 @@ else
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
 OLLAMA_MODEL_LIST=(
-    "granite4:micro"
-    "granite4:micro-h"
+    "granite4.1:3b"
     "granite3.2-vision"
     "llama3.2"
     "qwen2.5vl:7b"
@@ -59,7 +58,7 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
     fi
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
-VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.0-micro}"
+VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.1-3b}"
 VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.4}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"

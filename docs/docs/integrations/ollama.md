@@ -34,7 +34,7 @@ background service.
 ## Default setup
 
 `start_session()` connects to Ollama on `localhost:11434` and uses
-**IBM Granite 4 Micro** (`granite4:micro`) by default. On first run, Mellea
+**IBM Granite 4 Micro** (`granite4.1:3b`) by default. On first run, Mellea
 automatically pulls the model if it is not already downloaded:
 
 ```python
@@ -47,7 +47,7 @@ print(str(email))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-> **Note:** The first run pulls `granite4:micro` (~2 GB). Subsequent runs start
+> **Note:** The first run pulls `granite4.1:3b` (~2 GB). Subsequent runs start
 > immediately from the local cache.
 
 ## Switching models
@@ -75,7 +75,7 @@ m = start_session(model_id=model_ids.IBM_GRANITE_3_3_8B)
 Pull models before using them (or let Mellea pull on first use):
 
 ```bash
-ollama pull granite4:micro
+ollama pull granite4.1:3b
 ollama pull llama3.2:3b
 ollama pull mistral:7b
 ```
@@ -84,8 +84,8 @@ ollama pull mistral:7b
 
 | `model_ids` constant | Ollama name | Notes |
 | -------------------- | ----------- | ----- |
-| `IBM_GRANITE_4_MICRO_3B` | `granite4:micro` | Default. Fast, low memory (~2 GB). |
-| `IBM_GRANITE_4_HYBRID_MICRO` | `granite4:micro-h` | Hybrid variant with extended thinking. |
+| `IBM_GRANITE_4_1_3B` | `granite4.1:3b` | Default. Fast, low memory (~2 GB). |
+| `IBM_GRANITE_4_1_8B` | `granite4.1:8b` | Higher quality, ~5 GB. |
 | `IBM_GRANITE_3_3_8B` | `granite3.3:8b` | Higher quality, ~5 GB. |
 | `IBM_GRANITE_3_3_VISION_2B` | `ibm/granite3.3-vision:2b` | Vision model for image inputs. |
 | `META_LLAMA_3_2_3B` | `llama3.2:3b` | Compact Llama model. |
@@ -131,7 +131,7 @@ from mellea.backends.ollama import OllamaModelBackend
 
 m = MelleaSession(
     OllamaModelBackend(
-        model_id="granite4:micro",
+        model_id="granite4.1:3b",
         base_url="http://my-gpu-server:11434",
     )
 )
@@ -152,7 +152,7 @@ from mellea.backends.ollama import OllamaModelBackend
 
 m = MelleaSession(
     OllamaModelBackend(
-        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id=model_ids.IBM_GRANITE_4_1_3B,
         model_options={
             ModelOption.TEMPERATURE: 0.1,
             ModelOption.SEED: 42,
@@ -193,7 +193,7 @@ print(str(response))
 ```
 
 > **Backend note:** Vision requires a model that supports image inputs. The default
-> `granite4:micro` is text-only. Pull a vision model explicitly before using images:
+> `granite4.1:3b` is text-only. Pull a vision model explicitly before using images:
 > `ollama pull ibm/granite3.3-vision:2b`.
 
 ## Ollama's OpenAI-compatible endpoint
@@ -236,7 +236,7 @@ let Mellea pull it automatically on first use.
 
 Ollama loads the model into memory on the first request. Subsequent requests in the
 same session are much faster. On machines with less than 8 GB RAM, consider using
-`granite4:micro` or `llama3.2:1b`.
+`granite4.1:3b` or `llama3.2:1b`.
 
 ### Intel Mac torch errors
 

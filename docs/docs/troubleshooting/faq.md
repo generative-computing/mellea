@@ -38,7 +38,7 @@ m = MelleaSession(
 )
 ```
 
-## How do I use a model other than `granite4:micro`?
+## How do I use a model other than `granite4.1:3b`?
 
 Pass the `model_id` parameter to `start_session()`:
 

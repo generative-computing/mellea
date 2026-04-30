@@ -373,8 +373,7 @@ models must be pulled locally before running the tests that need them.
 
 **CI (unit + integration tests):**
 
-- `granite4:micro` — default model for `start_session()` and most examples
-- `granite4:micro-h` — hybrid variant used by conftest fixtures
+- `granite4.1:3b` — default model for `start_session()` and most examples
 
 **Examples (`docs/examples/`):**
 
@@ -399,7 +398,7 @@ models must be pulled locally before running the tests that need them.
 Pull everything:
 
 ```bash
-for m in granite4:micro granite4:micro-h deepseek-r1:8b \
+for m in granite4.1:3b deepseek-r1:8b \
   granite3-guardian:2b granite3.2-vision granite3.3:8b granite4:latest \
   llama3.2 llama3.2:3b \
   qwen2.5vl:7b granite4:small-h llama3.2:1b llama3:8b llava mistral:7b \
