@@ -711,13 +711,23 @@ async def test_intrinsic_temperature_overrides_io_yaml(backend) -> None:
     assert gi["do_sample"] is True
 
 
-async def test_intrinsic_tools_dropped_with_warning(backend) -> None:
-    """Tools in model_options are logged and dropped without breaking intrinsic flow."""
+async def test_intrinsic_tools_in_generate_input(backend) -> None:
+    """Tools passed via tool_calls=True appear in the tokenized generate input."""
+    from mellea.backends.tools import MelleaTool
+
     captured: dict = {}
 
     def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
         captured["generate_input"] = generate_input.copy()
         return _canned_hf_response()
+
+    def get_temperature(location: str) -> int:
+        """Returns the temperature of a city.
+
+        Args:
+            location: A city name.
+        """
+        return 21
 
     ctx = ChatContext().add(Message("user", "Is the sky blue?"))
 
@@ -730,15 +740,22 @@ async def test_intrinsic_tools_dropped_with_warning(backend) -> None:
             ctx,
             backend,
             strategy=None,
+            tool_calls=True,
             model_options={
-                ModelOption.TOOLS: [{"type": "function", "function": {"name": "foo"}}]
+                ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]
             },
         )
         assert _mot._generate is not None
         await _mot._generate
 
-    # Generation should complete without error; tools not in generate_input.
-    assert "tools" not in captured["generate_input"]
+    # Decode the input tokens and verify the tool name and tool markers are present.
+    input_tokens = captured["generate_input"]["input_tokens"]
+    decoded = backend._tokenizer.decode(input_tokens[0])
+    print(decoded)
+    assert "get_temperature" in decoded
+    assert "available_tools" in decoded, (
+        "expected string from system prompt with tool calls not found; if you changed the model, that might have caused this issue"
+    )
 
 
 async def test_intrinsic_streaming_raises(backend) -> None:

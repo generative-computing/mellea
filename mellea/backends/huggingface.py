@@ -541,7 +541,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if tool_calls:
             add_tools_from_model_options(tools, model_options)
             add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
-            add_tools_from_context_actions(tools, [action])
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Intrinsics don't support streaming because of their post-processing step.
@@ -595,9 +594,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             config_dict=intrinsic_config
         )
 
+        # The pydantic models used by the intrinsic rewriter are stricter than the actual OpenAI SDK.
+        # Extract the "function" fields from each json tool which contains `{"name":..., "description":..., "parameters":...}`.
+        formatted_tools = [tool["function"] for tool in convert_tools_to_json(tools)]
         # Convert our conversation into a proper chat completions dict.
         # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
-        formatted_tools = convert_tools_to_json(tools)
         request_json: dict = {
             "messages": conversation,
             "extra_body": {"documents": docs},

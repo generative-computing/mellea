@@ -664,7 +664,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if tool_calls:
             add_tools_from_model_options(tools, model_options)
             add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
-            add_tools_from_context_actions(tools, [action])
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         formatted_tools = convert_tools_to_json(tools)

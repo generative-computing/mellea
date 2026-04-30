@@ -10,9 +10,12 @@ import pytest
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_options import ModelOption
+from mellea.backends.tools import MelleaTool
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.components.intrinsic._util import call_intrinsic
 from mellea.stdlib.context import ChatContext
 from test.conftest import cleanup_gpu_backend
 from test.predicates import require_gpu
@@ -127,6 +130,29 @@ def test_find_context_attributions_resolve(backend):
 
     result = core.find_context_attributions(None, documents, context, backend)
     assert result[:7] == expected
+
+
+@pytest.mark.qualitative
+def test_certainty_with_tools(backend):
+    """Verify intrinsics work when tools are provided."""
+    context, _ = _read_input_json("uncertainty.json")
+
+    def get_temperature(location: str) -> int:
+        """Returns the temperature of a city.
+
+        Args:
+            location: A city name.
+        """
+        return 21
+
+    result_json = call_intrinsic(
+        "uncertainty",
+        context,
+        backend,
+        model_options={ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]},
+    )
+    print(result_json)
+    assert 0.0 <= result_json["certainty"] <= 1.0
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ class ModelOption:
     ```
 
     Attributes:
-        TOOLS (str): Sentinel key for a list or dict of tools to expose for tool calling.
+        TOOLS (str): Sentinel key for a list or dict of ``MelleaTool`` instances to expose for tool calling.
         MAX_NEW_TOKENS (str): Sentinel key for the maximum number of new tokens to generate.
         SYSTEM_PROMPT (str): Sentinel key for the system prompt string.
         TEMPERATURE (str): Key for the sampling temperature (passed through to the backend).
@@ -32,7 +32,7 @@ class ModelOption:
     """
 
     TOOLS = "@@@tools@@@"
-    """Must be a list[Callable] or a dict[str, Callable] where str is the name of the function."""
+    """Must be a list[MelleaTool] or a dict[str, MelleaTool]. Use ``MelleaTool.from_callable()`` or the ``@tool`` decorator to wrap plain callables."""
 
     MAX_NEW_TOKENS = "@@@max_new_tokens@@@"
     SYSTEM_PROMPT = "@@@system_prompt@@@"

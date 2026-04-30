@@ -394,37 +394,6 @@ async def test_reasoning_effort_user_overrides_io_yaml():
     assert call_kwargs.kwargs.get("reasoning_effort") == "high"
 
 
-async def test_tools_dropped_with_warning():
-    """Tools in model_options are dropped for intrinsics; not passed to API."""
-    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
-    ctx = _make_context()
-    mock_create = AsyncMock(return_value=_simple_chat_completion())
-
-    mock_client = MagicMock()
-    mock_client.chat.completions.create = mock_create
-
-    with patch.object(
-        OpenAIBackend,
-        "_async_client",
-        new_callable=PropertyMock,
-        return_value=mock_client,
-    ):
-        mot, _ = await mfuncs.aact(
-            Intrinsic("answerability"),
-            ctx,
-            backend,
-            strategy=None,
-            model_options={
-                ModelOption.TOOLS: [{"type": "function", "function": {"name": "foo"}}]
-            },
-        )
-        await mot.avalue()
-
-    call_kwargs = mock_create.call_args
-    # tools= must not appear in the API call
-    assert "tools" not in call_kwargs.kwargs or call_kwargs.kwargs["tools"] is None
-
-
 async def test_no_system_prompt_omitted():
     """When SYSTEM_PROMPT is not provided, no system message is prepended."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
@@ -501,3 +470,47 @@ async def test_reasoning_effort_bool_true():
 
     call_kwargs = mock_create.call_args
     assert call_kwargs.kwargs.get("reasoning_effort") == "medium"
+
+
+async def test_tools_passed_to_api():
+    """Tools are forwarded to chat.completions.create when tool_calls=True."""
+    from mellea.backends.tools import MelleaTool
+
+    def get_temperature(location: str) -> int:
+        """Returns the temperature of a city.
+
+        Args:
+            location: A city name.
+        """
+        return 21
+
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            tool_calls=True,
+            model_options={
+                ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    tools = call_kwargs.kwargs.get("tools")
+    assert tools is not None
+    assert len(tools) == 1
+    assert tools[0]["function"]["name"] == "get_temperature"
