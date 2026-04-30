@@ -87,6 +87,24 @@ def test_message_format_for_llm_structure():
     assert tr.args["documents"] is None
 
 
+def test_message_documents_string_coercion():
+    msg = Message("user", "hello", documents=["doc one", "doc two"])
+    assert msg._docs is not None
+    assert len(msg._docs) == 2
+    assert all(isinstance(d, Document) for d in msg._docs)
+    assert msg._docs[0].text == "doc one"
+    assert msg._docs[1].text == "doc two"
+
+
+def test_message_documents_mixed_coercion():
+    doc = Document("existing", doc_id="x")
+    msg = Message("user", "hello", documents=["new text", doc])
+    assert msg._docs is not None
+    assert len(msg._docs) == 2
+    assert msg._docs[0].text == "new text"
+    assert msg._docs[1] is doc
+
+
 # --- Message._parse — no tool calls ---
 
 
