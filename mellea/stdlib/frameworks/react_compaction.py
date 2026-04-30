@@ -14,7 +14,7 @@ first ``ReactInitiator``) so the model retains its goal and tool definitions.
 
 Example::
 
-    from mellea.stdlib.compaction import KeepLastN
+    from mellea.stdlib.frameworks.react_compaction import KeepLastN
     from mellea.stdlib.frameworks.react import react
 
     # Compact once the most recent model call reports > 8000 prompt+completion tokens.

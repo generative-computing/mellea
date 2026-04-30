@@ -15,7 +15,7 @@ from mellea.core.utils import MelleaLogger
 from mellea.stdlib import functional as mfuncs
 
 # from mellea.stdlib.components.docs.document import Document
-from mellea.stdlib.compaction import CompactionStrategy
+from mellea.stdlib.frameworks.react_compaction import CompactionStrategy
 from mellea.stdlib.components.chat import ToolMessage
 from mellea.stdlib.components.react import (
     MELLEA_FINALIZER_TOOL,
