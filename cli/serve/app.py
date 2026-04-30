@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import uuid
+from typing import Literal
 
 try:
     import typer
@@ -21,15 +22,20 @@ except ImportError as e:
     ) from e
 
 from mellea.backends.model_options import ModelOption
-from mellea.helpers.openai_compatible_helpers import build_completion_usage
+from mellea.helpers.openai_compatible_helpers import (
+    build_completion_usage,
+    build_tool_calls,
+)
 
 from .models import (
     ChatCompletion,
     ChatCompletionMessage,
+    ChatCompletionMessageToolCall,
     ChatCompletionRequest,
     Choice,
     OpenAIError,
     OpenAIErrorResponse,
+    ToolCallFunction,
 )
 from .streaming import stream_chat_completion_chunks
 
@@ -111,14 +117,14 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "response_format",  # Response format (json_object) - not yet implemented
         "functions",  # Legacy function calling - not yet implemented
         "function_call",  # Legacy function calling - not yet implemented
-        "tools",  # Tool calling - not yet implemented
-        "tool_choice",  # Tool choice - not yet implemented
     }
     openai_to_model_option = {
         "temperature": ModelOption.TEMPERATURE,
         "max_tokens": ModelOption.MAX_NEW_TOKENS,
         "seed": ModelOption.SEED,
         "stream": ModelOption.STREAM,
+        "tools": ModelOption.TOOLS,
+        "tool_choice": ModelOption.TOOL_CHOICE,
     }
 
     # Get all non-None fields
@@ -171,8 +177,6 @@ def make_chat_endpoint(module):
                     model_options=model_options,
                 )
 
-            # system_fingerprint represents backend config hash, not model name
-            # The model name is already in response.model (line 73)
             # Leave as None since we don't track backend config fingerprints yet
             system_fingerprint = None
 
@@ -190,6 +194,32 @@ def make_chat_endpoint(module):
                     media_type="text/event-stream",
                 )
 
+            # Extract tool calls from the ModelOutputThunk if available
+            tool_calls_list = build_tool_calls(output)
+            tool_calls = (
+                [
+                    ChatCompletionMessageToolCall(
+                        id=tc["id"],
+                        type=tc["type"],
+                        function=ToolCallFunction(
+                            name=tc["function"]["name"],
+                            arguments=tc["function"]["arguments"],
+                        ),
+                    )
+                    for tc in tool_calls_list
+                ]
+                if tool_calls_list
+                else None
+            )
+
+            # Determine finish_reason based on tool calls
+            finish_reason: (
+                Literal[
+                    "stop", "length", "content_filter", "tool_calls", "function_call"
+                ]
+                | None
+            ) = "tool_calls" if tool_calls else "stop"
+
             return ChatCompletion(
                 id=completion_id,
                 model=request.model,
@@ -198,9 +228,11 @@ def make_chat_endpoint(module):
                     Choice(
                         index=0,
                         message=ChatCompletionMessage(
-                            content=output.value, role="assistant"
+                            content=output.value,
+                            role="assistant",
+                            tool_calls=tool_calls,
                         ),
-                        finish_reason="stop",
+                        finish_reason=finish_reason,
                     )
                 ],
                 object="chat.completion",  # type: ignore
