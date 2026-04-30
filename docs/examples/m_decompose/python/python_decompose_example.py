@@ -32,7 +32,7 @@ def run_decompose(task_prompt: str) -> DecompPipelineResult:
 
     result = decompose(
         task_prompt=task_prompt,
-        model_id="granite3.3:8b",  # Note micro will not properly create tags, need 8b
+        model_id="granite4:small-h",
         backend=DecompBackend.ollama,  # Use Ollama backend
         backend_req_timeout=300,  # 5 minute timeout
     )

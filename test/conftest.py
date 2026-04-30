@@ -34,7 +34,7 @@ def _check_ollama_available():
     """Check if Ollama is available by checking if port 11434 is listening.
 
     Note: This only checks if Ollama is running, not which models are loaded.
-    Tests may still fail if required models (e.g., granite4:micro) are not pulled.
+    Tests may still fail if required models (e.g., granite4.1:3b) are not pulled.
     """
     import socket
 
@@ -562,7 +562,7 @@ def pytest_runtest_setup(item):
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
-            for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
+            for model in ["granite4.1:3b", "granite3.2-vision"]:
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",
@@ -588,7 +588,7 @@ def pytest_runtest_setup(item):
                 port = os.environ.get("OLLAMA_PORT", "11434")
                 ollama_base = f"http://{host_str}:{port}"
             logger.info("Evicting ollama models from VRAM after ollama group...")
-            for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
+            for model in ["granite4.1:3b", "granite3.2-vision"]:
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",

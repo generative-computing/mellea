@@ -48,6 +48,7 @@
     }
   },
   "max_completion_tokens": 15,
+  "temperature": 0.0,
   "logprobs": true,
   "top_logprobs": 10
 }

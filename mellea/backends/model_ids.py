@@ -74,6 +74,25 @@ IBM_GRANITE_4_HYBRID_350m = ModelIdentifier(
     watsonx_name=None,
 )
 
+# Granite 4.1 Dense Models
+IBM_GRANITE_4_1_3B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-3b",
+    ollama_name="granite4.1:3b",
+    watsonx_name=None,
+)
+
+IBM_GRANITE_4_1_8B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-8b", ollama_name="granite4.1:8b"
+)
+
+IBM_GRANITE_4_1_30B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.1-30b", ollama_name="granite4.1:30b"
+)
+
+IBM_GRANITE_GUARDIAN_4_1_8B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-guardian-4.1-8b"
+)
+
 
 # Deprecated Granite 3 models - kept for backward compatibility
 # These maintain their original model references (not upgraded to Granite 4)
@@ -89,10 +108,6 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
     watsonx_name="ibm/granite-3-3-8b-instruct",
 )
 
-# Deprecated: Use IBM_GRANITE_4_HYBRID_MICRO or IBM_GRANITE_4_HYBRID_SMALL instead
-# Kept for backward compatibility with per-backend model selection:
-# - Ollama/HF: Uses MICRO (fits in CI memory constraints)
-# - Watsonx: Uses SMALL (required for watsonx support)
 IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-micro",
     ollama_name="granite4:micro",

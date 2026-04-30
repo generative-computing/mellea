@@ -16,7 +16,7 @@ By the end you will have covered:
 - Context behaviour with concurrent async calls
 
 **Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 
@@ -40,10 +40,16 @@ async def main():
         "Support was helpful once I got through."
     )
     print(str(result))
-    # Output will vary — LLM responses depend on model and temperature.
 
 asyncio.run(main())
 ```
+
+```text Sample output
+The customer experienced confusion during the initial setup process
+which was time-consuming, but support was beneficial once connected.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
 
 `ainstruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). `await`-ing it starts generation
 immediately; `str(result)` resolves the value when it is ready. Every other
@@ -71,6 +77,7 @@ async def stream_summary(feedback: str) -> str:
         "Summarise this customer feedback in one sentence: {{text}}",
         user_variables={"text": feedback},
         model_options={ModelOption.STREAM: True},
+        strategy=None,
     )
 
     chunks = []
@@ -86,14 +93,22 @@ asyncio.run(stream_summary(
     "The onboarding was confusing and took far too long. "
     "Support was helpful once I got through."
 ))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+The customer found the onboarding process confusing and lengthy but
+received good support assistance afterwards.
+```
+
+> **Note:** With streaming enabled, tokens print incrementally as they arrive. The example above shows the completed output. Your terminal will display each token as it is generated. LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
 
 How `astream()` works:
 
 - Each call returns only the **new content** since the previous call.
 - When generation is complete, `is_computed()` returns `True` and the final
   `astream()` call returns the remaining content.
+- `strategy=None` is required to get a lazy thunk — without it, `ainstruct()` returns
+  a pre-computed thunk and `is_computed()` is already `True` before the loop runs.
 - Do not call `astream()` from multiple coroutines on the same thunk simultaneously.
 
 ---
@@ -141,8 +156,22 @@ async def summarise_batch(items: list[str]) -> list[str]:
 summaries = asyncio.run(summarise_batch(FEEDBACK_BATCH))
 for summary in summaries:
     print(summary)
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+The initial user experience was challenging with lengthy onboarding
+process but the support team proved to be very helpful post-onboarding.
+The product functions well; however, there are frequent issues with
+the mobile app crashing, and user inquiries to the support team have
+not been addressed.
+The customer received fast, high-quality deliveries that matched their
+expectations, indicating satisfaction with the service and willingness
+to reorder.
+The customer has been billed twice and is still awaiting a refund
+despite the two-week duration.
+```
+
+> **Note:** LLM output is non-deterministic. You will see four summary lines, one per input, in the same order as `FEEDBACK_BATCH`.
 
 The four requests are in flight simultaneously. Total wall-clock time is
 roughly the latency of the slowest single call, rather than the sum of all four.
@@ -197,7 +226,6 @@ async def analyze_feedback(feedback: str) -> None:
     print(f"Summary:   {summary}")
     print(f"Sentiment: {str(sentiment)}")
     print(f"Issues:    {issues_thunk.value}")
-    # Output will vary — LLM responses depend on model and temperature.
 
 
 asyncio.run(analyze_feedback(
@@ -205,6 +233,21 @@ asyncio.run(analyze_feedback(
     "Support was helpful once I got through."
 ))
 ```
+
+```text Sample output
+Summary:   The customer experienced confusion during the onboarding
+           process which was lengthy, but support was beneficial
+           upon successful navigation.
+Sentiment: mixed
+Issues:    {
+  "main_complaint": "The onboarding process was confusing and time-consuming",
+  "positive_aspect": "Support provided assistance once the user was
+                      able to contact them",
+  "urgency": "Medium"
+}
+```
+
+> **Note:** LLM output is non-deterministic, your output may vary based on model and temperature.
 
 ---
 
@@ -238,10 +281,20 @@ async def sequential_chat():
     r1 = await m.achat("Hello.")
     r2 = await m.achat("Tell me more.")  # safe — r1 is fully resolved
     print(str(r2))
-    # Output will vary — LLM responses depend on model and temperature.
 
 asyncio.run(sequential_chat())
 ```
+
+```text Sample output
+Of course! If you have any specific topics or questions in mind, feel
+free to share them, and I'll do my best to provide detailed information
+on the subject. You might be interested in a variety of areas such as
+technology advancements, health tips, travel destinations, historical
+events, scientific discoveries, or even everyday life advice. Just let
+me know what you're curious about!
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording.
 
 For parallel generation, keep the default `SimpleContext`.
 

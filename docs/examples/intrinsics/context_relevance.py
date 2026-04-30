@@ -8,30 +8,16 @@ uv run python docs/examples/intrinsics/context_relevance.py
 ```
 """
 
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document
+from mellea import model_ids, start_backend
 from mellea.stdlib.components.intrinsic import rag
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-# --- Alternative: OpenAI backend with Granite Switch (requires vLLM server) ---
-# Requires the adapter for this intrinsic to be embedded in the Granite Switch
-# model. See docs/examples/granite-switch/ for a full runnable example.
-# from mellea.backends.openai import OpenAIBackend
-# from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
-# from mellea.formatters import TemplateFormatter
-#
-# backend = OpenAIBackend(
-#     model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-#     formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
-#     base_url="http://localhost:8000/v1",  # vLLM server URL
-#     api_key="EMPTY",
-#     load_embedded_adapters=True,
-# )
-# --- End alternative ---
-context = ChatContext()
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+)
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
+
 question = "Who is the CEO of Microsoft?"
-document = Document(
+document = (
     # Document text does not say who is the CEO.
     "Microsoft Corporation is an American multinational corporation and technology "
     "conglomerate headquartered in Redmond, Washington.[2] Founded in 1975, the "
@@ -42,5 +28,5 @@ document = Document(
     "valuable brands globally."
 )
 
-result = rag.check_context_relevance(question, document, context, backend)
+result = rag.check_context_relevance(question, document, ctx, backend)
 print(f"Result of context relevance check with irrelevant document: {result}")

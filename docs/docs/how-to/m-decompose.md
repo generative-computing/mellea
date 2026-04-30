@@ -25,7 +25,7 @@ m decompose run --input-file task.txt --out-dir ./output/
 > **Note:** The output directory must already exist — the command will error if it
 > does not. On first run with Ollama, the default model will be downloaded
 > automatically (~15 GB for the full model). Use `--model-id` with a smaller model
-> (e.g. `granite4:micro`) to avoid the large download.
+> (e.g. `granite4.1:3b`) to avoid the large download.
 
 This produces a subdirectory under `./output/` (one per task job):
 
@@ -59,7 +59,7 @@ python output/m_decomp_result/m_decomp_result.py
 
 ## Backend options
 
-`m decompose` defaults to Ollama with `granite4:micro`. Pass `--backend` and
+`m decompose` defaults to Ollama with `granite4.1:3b`. Pass `--backend` and
 `--model-id` to use a different inference engine:
 
 ```bash
@@ -86,7 +86,7 @@ from cli.decompose.pipeline import DecompBackend, decompose
 
 result = decompose(
     task_prompt="Write a short blog post about morning exercise.",
-    model_id="granite4:micro",
+    model_id="granite4.1:3b",
     backend=DecompBackend.ollama,
 )
 
