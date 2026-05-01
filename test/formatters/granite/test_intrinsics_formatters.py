@@ -406,6 +406,66 @@ def test_read_yaml():
     IntrinsicsRewriter(config_file=local_path)
 
 
+def test_name_field_accepted_by_make_config_dict():
+    """make_config_dict accepts 'name' as an optional field without error."""
+    config_with_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+        "name": "my_intrinsic_display_name",
+    }
+    result = intrinsics_util.make_config_dict(config_dict=config_with_name)
+    assert result is not None
+    assert result["name"] == "my_intrinsic_display_name"
+    # Other optional fields are filled with None
+    assert result["parameters"] is None
+    assert result["sentence_boundaries"] is None
+    assert result["instruction"] is None
+
+    # Without name, it defaults to None
+    config_without_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+    }
+    result2 = intrinsics_util.make_config_dict(config_dict=config_without_name)
+    assert result2 is not None
+    assert result2["name"] is None
+
+
+def test_rewriter_transform_with_name_field():
+    """IntrinsicsRewriter.transform() produces identical output with or without 'name'."""
+    config_with_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+        "name": "answerability_v2",
+        "parameters": {"max_completion_tokens": 64},
+        "sentence_boundaries": None,
+        "instruction": None,
+    }
+    config_without_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+        "parameters": {"max_completion_tokens": 64},
+        "sentence_boundaries": None,
+        "instruction": None,
+    }
+
+    rewriter_with = IntrinsicsRewriter(config_dict=config_with_name)
+    rewriter_without = IntrinsicsRewriter(config_dict=config_without_name)
+
+    json_data = _read_file(_INPUT_JSON_DIR / "simple.json")
+    before = ChatCompletion.model_validate_json(json_data)
+
+    after_with = rewriter_with.transform(before)
+    after_without = rewriter_without.transform(before)
+
+    # Both should produce identical output (name is metadata-only)
+    assert after_with.model_dump_json() == after_without.model_dump_json()
+
+
 _CANNED_INPUT_EXPECTED_DIR = _TEST_DATA_DIR / "test_canned_input"
 
 
