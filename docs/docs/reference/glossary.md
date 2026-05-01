@@ -295,7 +295,7 @@ See: [Making Agents Reliable](../tutorials/04-making-agents-reliable)
 
 A Granite model variant with LoRA and aLoRA adapters pre-baked into the model weights. When served via vLLM and accessed through `OpenAIBackend` with `load_embedded_adapters=True`, these embedded adapters enable [Intrinsics](../advanced/intrinsics) (RAG quality checks, requirement validation, safety evaluation) without runtime adapter loading. Only intrinsics embedded in the model are available — check the model's `adapter_index.json`.
 
-See: [Official Granite Switch Documentation](GRANITE_SWITCH_DOCS) |
+See: [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch) |
 [Intrinsics](../advanced/intrinsics) |
 [OpenAI and OpenAI-Compatible APIs](../integrations/openai)
 

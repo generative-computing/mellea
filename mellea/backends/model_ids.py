@@ -135,10 +135,20 @@ IBM_GRANITE_4_TINY_PREVIEW_BASE_7B = ModelIdentifier(
 )
 
 # Pre-Built Granite Switch Models
-IBM_GRANITE_SWITCH_4_1_3B = ModelIdentifier(
-    hf_model_name="GrizleeBer/gs-test-1"  # TODO: Placeholder. Change this value.
+IBM_GRANITE_SWITCH_4_1_3B_PREVIEW = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-switch-4.1-3b-preview"
 )
-"""Granite Switch."""  # Document what adapters are included by default here.
+"""Granite Switch Preview Model. Adapters: `citations`, `query_rewrite`, `query_clarification`, `hallucination_detection`, `answerability`, `policy-guardrails`, `guardian-core`, `uncertainty`, `requirement-check`, `context-attribution`, `factuality-detection`, `factuality-correction`."""  # Document what adapters are included by default here.
+
+IBM_GRANITE_SWITCH_4_1_8B_PREVIEW = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-switch-4.1-8b-preview"
+)
+"""Granite Switch Preview Model. Adapters: `citations`, `query_rewrite`, `query_clarification`, `hallucination_detection`, `answerability`, `policy-guardrails`, `guardian-core`, `uncertainty`, `requirement-check`, `context-attribution`, `factuality-detection`, `factuality-correction`."""  # Document what adapters are included by default here.
+
+IBM_GRANITE_SWITCH_4_1_30B_PREVIEW = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-switch-4.1-30b-preview"
+)
+"""Granite Switch Preview Model. Adapters: `citations`, `query_rewrite`, `query_clarification`, `hallucination_detection`, `answerability`, `policy-guardrails`, `guardian-core`, `uncertainty`, `requirement-check`, `context-attribution`, `factuality-detection`, `factuality-correction`."""  # Document what adapters are included by default here.
 
 #####################
 #### Meta models ####
