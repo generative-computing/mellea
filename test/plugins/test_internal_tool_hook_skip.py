@@ -1,8 +1,9 @@
-"""Tests for skipping tool hooks on framework-internal tools (e.g. final_answer).
+"""Tests for control-flow tool signalling on tool hook payloads.
 
-Verifies that TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks are bypassed for
-internal tools when the skip flag is enabled (default), and that user tools
-are always subject to hooks regardless of the flag.
+Verifies that TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks always fire for all
+tools (including framework-internal ones like ``final_answer``), and that the
+``is_control_flow`` field is correctly populated so plugins can decide their
+own policy.
 """
 
 from __future__ import annotations
@@ -15,14 +16,9 @@ import pytest
 pytest.importorskip("cpex.framework")
 
 from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
-from mellea.plugins import hook, register
-from mellea.plugins.manager import (
-    is_internal_tool,
-    set_skip_hooks_for_internal_tools,
-    shutdown_plugins,
-    skip_hooks_for_internal_tools,
-)
-from mellea.plugins.types import HookType
+from mellea.plugins import block, hook, is_internal_tool, register
+from mellea.plugins.manager import shutdown_plugins
+from mellea.plugins.types import HookType, PluginMode
 from mellea.stdlib.functional import _acall_tools
 
 # ---------------------------------------------------------------------------
@@ -68,89 +64,71 @@ class TestIsInternalTool:
 
 
 # ---------------------------------------------------------------------------
-# Tests — hook skip behaviour
+# Tests — hooks always fire, payload carries is_control_flow
 # ---------------------------------------------------------------------------
 
 
-class TestInternalToolHookSkip:
-    async def test_internal_tool_skips_pre_hook(self) -> None:
-        """TOOL_PRE_INVOKE does not fire for final_answer when skip is enabled."""
+class TestControlFlowPayloadField:
+    async def test_pre_hook_fires_for_internal_tool(self) -> None:
+        """TOOL_PRE_INVOKE fires for final_answer with is_control_flow=True."""
         tool = _RecordingTool("final_answer")
         tc = ModelToolCall(name="final_answer", func=tool, args={"answer": "42"})
         result = _make_result(tc)
 
-        fired: list[str] = []
+        captured: list[Any] = []
 
         @hook(HookType.TOOL_PRE_INVOKE)
         async def spy(payload, *_):
-            fired.append(payload.model_tool_call.name)
+            captured.append(payload)
 
         register(spy)
 
-        msgs = await _acall_tools(result, MagicMock())
+        await _acall_tools(result, MagicMock())
 
-        assert fired == []
-        assert len(msgs) == 1
-        assert "final_answer" in msgs[0].content or "result from" in msgs[0].content
+        assert len(captured) == 1
+        assert captured[0].model_tool_call.name == "final_answer"
+        assert captured[0].is_control_flow is True
 
-    async def test_internal_tool_skips_post_hook(self) -> None:
-        """TOOL_POST_INVOKE does not fire for final_answer when skip is enabled."""
+    async def test_post_hook_fires_for_internal_tool(self) -> None:
+        """TOOL_POST_INVOKE fires for final_answer with is_control_flow=True."""
         tool = _RecordingTool("final_answer")
         tc = ModelToolCall(name="final_answer", func=tool, args={"answer": "42"})
         result = _make_result(tc)
 
-        fired: list[str] = []
+        captured: list[Any] = []
 
         @hook(HookType.TOOL_POST_INVOKE)
         async def spy(payload, *_):
-            fired.append(payload.model_tool_call.name)
+            captured.append(payload)
 
         register(spy)
 
         await _acall_tools(result, MagicMock())
 
-        assert fired == []
+        assert len(captured) == 1
+        assert captured[0].is_control_flow is True
 
-    async def test_internal_tool_hooks_fire_when_disabled(self) -> None:
-        """Hooks fire for final_answer when skip is explicitly disabled."""
-        set_skip_hooks_for_internal_tools(False)
-
-        tool = _RecordingTool("final_answer")
-        tc = ModelToolCall(name="final_answer", func=tool, args={"answer": "42"})
-        result = _make_result(tc)
-
-        fired: list[str] = []
-
-        @hook(HookType.TOOL_PRE_INVOKE)
-        async def spy(payload, *_):
-            fired.append(payload.model_tool_call.name)
-
-        register(spy)
-
-        await _acall_tools(result, MagicMock())
-
-        assert fired == ["final_answer"]
-
-    async def test_user_tool_always_runs_hooks(self) -> None:
-        """A non-internal tool always fires hooks regardless of skip config."""
+    async def test_user_tool_has_control_flow_false(self) -> None:
+        """User tools get is_control_flow=False."""
         tool = _RecordingTool("search")
         tc = ModelToolCall(name="search", func=tool, args={})
         result = _make_result(tc)
 
-        fired: list[str] = []
+        captured: list[Any] = []
 
         @hook(HookType.TOOL_PRE_INVOKE)
         async def spy(payload, *_):
-            fired.append(payload.model_tool_call.name)
+            captured.append(payload)
 
         register(spy)
 
         await _acall_tools(result, MagicMock())
 
-        assert fired == ["search"]
+        assert len(captured) == 1
+        assert captured[0].is_control_flow is False
 
-    async def test_mixed_calls_only_skip_internal(self) -> None:
-        """In a batch with both internal and user tools, only user tool triggers hooks."""
+    async def test_mixed_batch_sets_flag_correctly(self) -> None:
+        """In a batch, each tool gets the correct is_control_flow value."""
         internal_tool = _RecordingTool("final_answer")
         user_tool = _RecordingTool("search")
         tc_internal = ModelToolCall(
@@ -159,31 +137,68 @@ class TestInternalToolHookSkip:
         tc_user = ModelToolCall(name="search", func=user_tool, args={})
         result = _make_result(tc_internal, tc_user)
 
-        fired: list[str] = []
+        captured: list[Any] = []
 
         @hook(HookType.TOOL_PRE_INVOKE)
         async def spy(payload, *_):
-            fired.append(payload.model_tool_call.name)
+            captured.append(payload)
 
         register(spy)
 
+        await _acall_tools(result, MagicMock())
+
+        assert len(captured) == 2
+        by_name = {p.model_tool_call.name: p for p in captured}
+        assert by_name["final_answer"].is_control_flow is True
+        assert by_name["search"].is_control_flow is False
+
+
+# ---------------------------------------------------------------------------
+# Tests — plugin pattern: allowlist that skips control-flow tools
+# ---------------------------------------------------------------------------
+
+
+class TestAllowlistPluginPattern:
+    async def test_allowlist_does_not_block_control_flow_tool(self) -> None:
+        """An allowlist plugin using is_control_flow guard does not block final_answer."""
+        allowed_tools = frozenset({"search"})
+
+        @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
+        async def enforce_allowlist(payload, _):
+            if payload.is_control_flow:
+                return
+            if payload.model_tool_call.name not in allowed_tools:
+                return block(f"Tool '{payload.model_tool_call.name}' not permitted")
+
+        register(enforce_allowlist)
+
+        internal_tool = _RecordingTool("final_answer")
+        tc = ModelToolCall(
+            name="final_answer", func=internal_tool, args={"answer": "ok"}
+        )
+        result = _make_result(tc)
+
         msgs = await _acall_tools(result, MagicMock())
+        assert len(msgs) == 1
 
-        assert "search" in fired
-        assert "final_answer" not in fired
-        assert len(msgs) == 2
+    async def test_allowlist_still_blocks_unknown_user_tools(self) -> None:
+        """The allowlist pattern still blocks non-allowed user tools."""
+        from mellea.plugins.base import PluginViolationError
 
+        allowed_tools = frozenset({"search"})
 
-# ---------------------------------------------------------------------------
-# Tests — shutdown reset
-# ---------------------------------------------------------------------------
+        @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
+        async def enforce_allowlist(payload, _):
+            if payload.is_control_flow:
+                return
+            if payload.model_tool_call.name not in allowed_tools:
+                return block(f"Tool '{payload.model_tool_call.name}' not permitted")
 
+        register(enforce_allowlist)
 
-class TestShutdownResetsSkipFlag:
-    async def test_shutdown_resets_skip_flag(self) -> None:
-        set_skip_hooks_for_internal_tools(False)
-        assert skip_hooks_for_internal_tools() is False
+        unknown_tool = _RecordingTool("hack_system")
+        tc = ModelToolCall(name="hack_system", func=unknown_tool, args={})
+        result = _make_result(tc)
 
-        await shutdown_plugins()
-
-        assert skip_hooks_for_internal_tools() is True
+        with pytest.raises(PluginViolationError, match="not permitted"):
+            await _acall_tools(result, MagicMock())

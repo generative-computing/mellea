@@ -30,12 +30,7 @@ from ..core import (
 )
 from ..helpers import _run_async_in_thread
 from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
-from ..plugins.manager import (
-    has_plugins,
-    invoke_hook,
-    is_internal_tool,
-    skip_hooks_for_internal_tools,
-)
+from ..plugins.manager import has_plugins, invoke_hook, is_internal_tool
 from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
 from .components import (
@@ -1292,11 +1287,13 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         return outputs
 
     for name, tool in tool_calls.items():
-        run_hooks = not (skip_hooks_for_internal_tools() and is_internal_tool(name))
+        control_flow = is_internal_tool(name)
 
         # --- tool_pre_invoke ---
-        if run_hooks and has_plugins(HookType.TOOL_PRE_INVOKE):
-            pre_payload = ToolPreInvokePayload(model_tool_call=tool)
+        if has_plugins(HookType.TOOL_PRE_INVOKE):
+            pre_payload = ToolPreInvokePayload(
+                model_tool_call=tool, is_control_flow=control_flow
+            )
             _, pre_payload = await invoke_hook(
                 HookType.TOOL_PRE_INVOKE, pre_payload, backend=backend
             )
@@ -1334,7 +1331,7 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         )
 
         # --- tool_post_invoke ---
-        if run_hooks and has_plugins(HookType.TOOL_POST_INVOKE):
+        if has_plugins(HookType.TOOL_POST_INVOKE):
             post_payload = ToolPostInvokePayload(
                 model_tool_call=tool,
                 tool_output=output,
@@ -1342,6 +1339,7 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
                 execution_time_ms=latency_ms,
                 success=success,
                 error=error,
+                is_control_flow=control_flow,
             )
             _, post_payload = await invoke_hook(
                 HookType.TOOL_POST_INVOKE, post_payload, backend=backend
