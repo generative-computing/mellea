@@ -776,7 +776,7 @@ async def test_intrinsic_no_adapter_raises(backend) -> None:
     """Calling an intrinsic with no registered adapter raises ValueError."""
     ctx = ChatContext().add(Message("user", "test"))
 
-    with pytest.raises(ValueError, match="has no adapter"):
+    with pytest.raises(ValueError, match="Unknown intrinsic name"):
         await mfuncs.aact(
             Intrinsic("nonexistent_intrinsic"), ctx, backend, strategy=None
         )
