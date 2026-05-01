@@ -38,6 +38,9 @@ def _read_file(name):
 
 _TEST_DATA_DIR = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 
+_TEST_OUTPUT_DIR = pathlib.Path(os.path.dirname(__file__)) / "test_output"
+"""Directory string we compare against something from _TEST_DATA_DIR is written"""
+
 # Location from which our tests download adapters and YAML files
 _RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
@@ -46,6 +49,55 @@ _CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
 _INPUT_YAML_DIR = _TEST_DATA_DIR / "input_yaml"
 _INPUT_ARGS_DIR = _TEST_DATA_DIR / "input_args"
+
+
+def _substitute_root(
+    child_path: pathlib.Path, old_root: pathlib.Path, new_root: pathlib.Path
+):
+    """Change a path rooted in one root directory to the same path rooted in another.
+
+    Handles common corner cases such as when a given path has multiple equivalent
+    string representations.
+
+    :param child_path: A path that is a descedent of a known root
+    :param old_root: Root directory that is an ancestor of ``child_path``
+    :param new_root: Root directory to substitute for ``old_root``
+
+    :returns: A version of ``child_path`` in which the prefix corresponding to
+    ``old_root`` has been replaced with ``new_root``
+    """
+    # Resolve paths to handle symlinks, relative components, and other corner cases
+    child_path = child_path.resolve()
+    old_root = old_root.resolve()
+    new_root = new_root.resolve()
+
+    # Get the relative path from old_root to child_path
+    try:
+        relative_path = child_path.relative_to(old_root)
+    except ValueError:
+        raise ValueError(f"{child_path} is not a descendant of {old_root}")
+
+    # Construct new path with the new root
+    return new_root / relative_path
+
+
+def _dump_output(expected_file: pathlib.Path, actual_string: str):
+    """Dump outputs to disk to aid debugging.
+
+    Given the string representation of something that the current test is about to
+    compare against a canned output and the location of said canned output, write
+    the string to a controlled place on the filesystem to aid debugging.
+
+    :param expected_file: Location of the file we're going to compare against
+    :param actual_string: String that the current test case produced that
+    """
+    actual_file = _substitute_root(expected_file, _TEST_DATA_DIR, _TEST_OUTPUT_DIR)
+
+    if not os.path.exists(actual_file.parent):
+        os.makedirs(actual_file.parent)
+
+    with open(actual_file, "w", encoding="utf-8") as f:
+        f.write(actual_string)
 
 
 class YamlJsonCombo(pydantic.BaseModel):
@@ -428,6 +480,7 @@ def test_canned_input(yaml_json_combo_no_alora):
     after_json = after.model_dump_json(indent=2)
 
     expected_file = _CANNED_INPUT_EXPECTED_DIR / f"{cfg.short_name}.json"
+    _dump_output(expected_file, after_json)
     with open(expected_file, encoding="utf-8") as f:
         expected_json = f.read()
 
