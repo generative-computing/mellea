@@ -62,6 +62,10 @@ class StreamChunkingResult:
         self._chunk_queue: asyncio.Queue[str | None | Exception] = asyncio.Queue()
         self._orchestration_task: asyncio.Task[None] | None = None
         self._done = asyncio.Event()
+        # Stashed so acomplete() surfaces orchestrator failures even when the
+        # consumer never iterates astream(). Cleared once consumed by
+        # whichever of the two reads it first.
+        self._orchestration_exception: BaseException | None = None
 
         self.completed: bool = True
         self.full_text: str = ""
@@ -96,6 +100,10 @@ class StreamChunkingResult:
             if item is None:
                 return
             if isinstance(item, Exception):
+                if self._orchestration_exception is None:
+                    # Already surfaced by acomplete(); don't raise twice.
+                    continue
+                self._orchestration_exception = None
                 raise item
             yield item
 
@@ -111,10 +119,16 @@ class StreamChunkingResult:
             Exception: Propagates any error from the orchestration task.
         """
         await self._done.wait()
+        # Raise-once: if astream() already consumed the exception, the stash
+        # is already None and this is a no-op.
+        exc = self._orchestration_exception
+        if exc is not None:
+            self._orchestration_exception = None
+            raise exc
         if self._orchestration_task is not None and self._orchestration_task.done():
-            exc = self._orchestration_task.exception()
-            if exc is not None:
-                raise exc
+            task_exc = self._orchestration_task.exception()
+            if task_exc is not None:
+                raise task_exc
 
     @property
     def as_thunk(self) -> ModelOutputThunk:
@@ -262,18 +276,26 @@ async def _orchestrate_streaming(
                 cleanup_exc,
             )
         result.completed = False
+        result._orchestration_exception = exc
         await result._chunk_queue.put(exc)
     finally:
         # CancelledError (BaseException, not Exception) bypasses the except
         # block above, so cancel_generation() may not have been called.
-        # Guard here ensures the backend producer is always stopped, even on
-        # external task cancellation (e.g. asyncio.wait_for timeout).
+        # Catch only Exception here so CancelledError / KeyboardInterrupt /
+        # SystemExit still propagate to the caller.
         if not mot.is_computed():
             try:
                 await mot.cancel_generation()
-            except BaseException:
+            except Exception:
                 pass
-        await result._chunk_queue.put(None)
+        # put_nowait + set() are synchronous — no await point, so they cannot
+        # be interrupted by task cancellation. Consumers waiting on
+        # _done.wait() are always released, even if the task was cancelled
+        # mid-cleanup. The queue is unbounded, so QueueFull cannot occur.
+        try:
+            result._chunk_queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
         result._done.set()
 
 

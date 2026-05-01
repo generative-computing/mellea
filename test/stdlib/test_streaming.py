@@ -789,3 +789,91 @@ async def test_exception_in_stream_validate_cancels_generation() -> None:
 
     assert result.completed is False
     assert call_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_acomplete_surfaces_exception_without_astream() -> None:
+    """acomplete() must surface orchestrator exceptions even when the
+    consumer never iterates astream().
+
+    The alternative — only delivering the exception through the chunk queue
+    — silently swallows validator failures for callers who skip astream().
+    """
+
+    class RaisingReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "raises"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = chunk, backend, ctx
+            raise ValueError("surfaced-without-astream")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            _ = backend, ctx, format, model_options
+            return ValidationResult(result=True)
+
+    response = "word " * 50
+    backend = StreamingMockBackend(response, token_size=3)
+
+    result = await stream_with_chunking(
+        _action(),
+        backend,
+        _ctx(),
+        quick_check_requirements=[RaisingReq()],
+        chunking="word",
+    )
+    # Deliberately skip astream(). wait_for bounds any hang.
+    with pytest.raises(ValueError, match="surfaced-without-astream"):
+        await asyncio.wait_for(result.acomplete(), timeout=5.0)
+
+    assert result.completed is False
+    # Raise-once: a second acomplete() must not re-raise.
+    await asyncio.wait_for(result.acomplete(), timeout=5.0)
+
+
+@pytest.mark.asyncio
+async def test_external_task_cancellation_releases_consumers() -> None:
+    """External cancellation of the orchestration task must still set _done.
+
+    If the finally cleanup itself contains an ``await`` (e.g. awaiting a
+    terminator put into the chunk queue), CancelledError re-raises at that
+    await and ``_done.set()`` never runs — any consumer blocked on
+    ``acomplete()`` hangs forever. The cleanup must therefore end with
+    synchronous operations only.
+    """
+    response = "word " * 200  # long enough that streaming is still in progress
+    backend = StreamingMockBackend(response, token_size=2)
+
+    result = await stream_with_chunking(
+        _action(),
+        backend,
+        _ctx(),
+        quick_check_requirements=[AlwaysUnknownReq()],
+        chunking="word",
+    )
+
+    assert result._orchestration_task is not None
+    # Yield once so the orchestration task enters its main loop before we
+    # cancel it.
+    await asyncio.sleep(0.01)
+
+    # Same mechanism asyncio.wait_for uses on timeout.
+    result._orchestration_task.cancel()
+
+    # _done must be set by the finally cleanup. A hang would time out here.
+    await asyncio.wait_for(result._done.wait(), timeout=2.0)
+    assert result._done.is_set()
+
+    # acomplete() surfaces the CancelledError via task.exception() and must
+    # not hang.
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(result.acomplete(), timeout=2.0)
