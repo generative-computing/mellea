@@ -16,5 +16,6 @@
       }
     }
   },
-  "max_completion_tokens": 6
+  "max_completion_tokens": 6,
+  "temperature": 0.0
 }
