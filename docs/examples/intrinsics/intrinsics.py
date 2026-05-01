@@ -29,7 +29,7 @@ backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)
 
 # Create the Adapter. IntrinsicAdapter's default to ALORAs.
 req_adapter = IntrinsicAdapter(
-    "requirement_check", base_model_name=backend.base_model_name
+    "requirement-check", base_model_name=backend.base_model_name
 )
 
 # Add the adapter to the backend.
@@ -43,15 +43,15 @@ ctx = ctx.add(Message("assistant", "Hello; yes! What can I help with?"))
 # ALORA and then LORA adapters.
 out, new_ctx = mfuncs.act(
     Intrinsic(
-        "requirement_check",
+        "requirement-check",
         intrinsic_kwargs={"requirement": "The assistant is helpful."},
     ),
     ctx,
     backend,
 )
 
-# Print the output. The requirement_check adapter has a specific output format:
-print(out)  # {"requirement_likelihood": 1.0}
+# Print the output. The requirement-check adapter has a specific output format:
+print(out)  # {"requirement_check": {"score": 0.41272119992000356}}
 
 # The AloraRequirement uses this adapter. It automatically parses that output
 # when validating the output.
