@@ -1,5 +1,3 @@
-# pytest: ollama, huggingface, e2e
-
 """[DEPRECATED] RepairTemplateStrategy Example with Actual Function Call Validation.
 
 Demonstrates how RepairTemplateStrategy repairs responses using actual function calls.

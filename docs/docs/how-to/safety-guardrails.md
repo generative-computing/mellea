@@ -189,7 +189,10 @@ to determine compliance with certainty.
 
 `factuality_detection()` evaluates whether the assistant's response is factually
 consistent with the documents in context. The context must contain source
-documents, a user question, and the assistant's answer.
+documents added via `ChatContext().add(Document(...))`, a user question, and the
+assistant's answer. This differs from `guardian_check(criteria="groundedness")`,
+which expects documents attached to the assistant message via
+`Message(..., documents=[...])` — see [Build a RAG Pipeline](../how-to/build-a-rag-pipeline#step-5-check-groundedness-optional).
 
 Returns `"yes"` if the response is factually incorrect (contains unsupported or
 contradicted claims), or `"no"` if it is factually correct:
@@ -197,6 +200,11 @@ contradicted claims), or `"no"` if it is factually correct:
 > **Note:** `"yes"` means factuality issues **were** detected — the response is
 > incorrect. `"no"` means the response is factually consistent with the context.
 > This is easy to misread; test against `== "yes"` to catch errors.
+>
+> **Type annotation:** The source annotation for `factuality_detection()` (and
+> `factuality_correction()`) currently reads `-> float`, which is incorrect — both
+> functions return `str` at runtime. The annotation will be fixed in a future release
+> (tracked as #934). Do not rely on the type hint; use the string comparisons shown here.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend

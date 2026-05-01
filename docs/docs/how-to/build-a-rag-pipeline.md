@@ -184,7 +184,7 @@ retrieved documents. This requires `pip install "mellea[hf]"`:
 
 ```python
 # Requires: mellea[hf]
-# Returns: None
+# Returns: float (0.0–1.0 risk score)
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian

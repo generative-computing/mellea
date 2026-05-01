@@ -334,8 +334,8 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 > [`factuality_detection()`](#factuality_detection) from the Guardian Intrinsics
 > instead. See [Safety Guardrails](../how-to/safety-guardrails).
 
-A `Requirement` subclass that validated LLM outputs using a separately loaded
-Granite Guardian model. Required an independent Ollama or HuggingFace backend
+A deprecated `Requirement` subclass that validates LLM outputs using a separately loaded
+Granite Guardian model. Requires an independent Ollama or HuggingFace backend
 for the Guardian model.
 
 See: [Security and Taint Tracking (deprecated)](../advanced/security-and-taint-tracking)
