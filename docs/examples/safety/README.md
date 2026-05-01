@@ -1,28 +1,26 @@
-# Safety Examples (Deprecated)
+# Safety Examples (Removed)
 
-> **Deprecated.** These examples use the `GuardianCheck` API, which is deprecated
-> as of Mellea v0.4 and will emit `DeprecationWarning` on use.
->
-> For the current Guardian API, see:
-> - **[`../intrinsics/`](../intrinsics/)** — replacement examples using Guardian Intrinsics
-> - **[Safety Guardrails how-to](https://mellea.dev/how-to/safety-guardrails)** — full documentation
+The `GuardianCheck` example files that previously lived here have been deleted.
+`docs/examples/intrinsics/guardian_core.py`, `factuality_detection.py`,
+`factuality_correction.py`, and `policy_guardrails.py` are the replacements.
 
-## Files
+## Migration gap: `RepairTemplateStrategy` + Guardian
 
-### guardian.py
+The old `repair_with_guardian.py` demonstrated using `GuardianCheck` as a
+`Requirement` inside `RepairTemplateStrategy` — the Guardian verdict (including
+its chain-of-thought `_reason` string) was fed back into the repair loop as repair
+guidance. This pattern **has no direct equivalent** in the Guardian Intrinsics API:
 
-`GuardianCheck` examples using Granite Guardian 3.3 8B via Ollama.
+- Guardian Intrinsics return a `float` score, not a `Requirement` result, so they
+  cannot be passed to `m.validate()` or used directly in `RepairTemplateStrategy`.
+- The `thinking=True` / `_reason` chain-of-thought output from `GuardianCheck` is
+  not exposed in the new API.
 
-### guardian_huggingface.py
-
-`GuardianCheck` examples using a HuggingFace backend with shared backend reuse.
-
-### repair_with_guardian.py
-
-`GuardianCheck` combined with `RepairTemplateStrategy`. Note: this pattern has no direct
-equivalent in the Guardian Intrinsics API.
+If you need repair-on-safety-failure behaviour with the new API, the closest
+approach is to call `guardian.guardian_check()` manually after generation and
+re-invoke `m.instruct()` with an additional requirement on failure.
 
 ## Related Documentation
 
-- [Security and Taint Tracking (deprecated)](../../../docs/docs/advanced/security-and-taint-tracking.md)
-- [Safety Guardrails (current)](../../../docs/docs/how-to/safety-guardrails.md)
+- [Safety Guardrails (current)](../../docs/docs/how-to/safety-guardrails.md)
+- [Security and Taint Tracking (deprecated)](../../docs/docs/advanced/security-and-taint-tracking.md)

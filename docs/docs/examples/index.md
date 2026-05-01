@@ -61,7 +61,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
-| `safety/` | *(Deprecated)* `GuardianCheck` examples — see `intrinsics/` for the current API |
+| `safety/` | *(Examples removed — see README for migration notes, including the `RepairTemplateStrategy` gap)* |
 
 ### Integration and deployment
 
