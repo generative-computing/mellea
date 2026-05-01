@@ -149,9 +149,10 @@ print(f"PII score: {score:.4f}")
 ```
 
 > **Migrating from `GuardianRisk`?** Not all deprecated `GuardianRisk` enum
-> values have a corresponding `CRITERIA_BANK` key. For any risk category not
-> listed in the table above, pass a custom free-text description as the
-> `criteria` argument.
+> values have a corresponding `CRITERIA_BANK` key. Notably,
+> `GuardianRisk.SEXUAL_CONTENT` has no equivalent key — pass a custom free-text
+> criteria string instead. For any other risk category not listed in the table
+> above, do the same.
 
 ## Policy compliance
 
@@ -200,11 +201,6 @@ contradicted claims), or `"no"` if it is factually correct:
 > **Note:** `"yes"` means factuality issues **were** detected — the response is
 > incorrect. `"no"` means the response is factually consistent with the context.
 > This is easy to misread; test against `== "yes"` to catch errors.
->
-> **Type annotation:** The source annotation for `factuality_detection()` (and
-> `factuality_correction()`) currently reads `-> float`, which is incorrect — both
-> functions return `str` at runtime. The annotation will be fixed in a future release
-> (tracked as #934). Do not rely on the type hint; use the string comparisons shown here.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend

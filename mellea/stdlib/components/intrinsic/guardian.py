@@ -172,7 +172,7 @@ def guardian_check(
     return result_json["guardian"]["score"]
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
     """Determine if the last response is factually incorrect.
 
     Intrinsic function that evaluates the factuality of the
@@ -197,7 +197,7 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
     return result_json["score"]
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
     """Corrects the last response so that it is factually correct.
 
     Intrinsic function that corrects the assistant's response to a user's

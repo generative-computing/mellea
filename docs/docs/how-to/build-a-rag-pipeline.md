@@ -6,6 +6,7 @@ description: "Combine vector retrieval with Mellea's generative filtering and gr
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea faiss-cpu sentence-transformers`, Ollama running locally.
+Step 5 (groundedness checking) additionally requires `pip install "mellea[hf]"`.
 
 Retrieval-augmented generation (RAG) reduces hallucination by grounding the
 model's answer in documents you supply. Mellea adds two things a plain RAG loop
@@ -180,7 +181,7 @@ answer = m.instruct(
 
 After generation, use [`guardian_check()`](../how-to/safety-guardrails) with
 `criteria="groundedness"` to verify the answer does not hallucinate beyond the
-retrieved documents. This requires `pip install "mellea[hf]"`:
+retrieved documents:
 
 ```python
 # Requires: mellea[hf]

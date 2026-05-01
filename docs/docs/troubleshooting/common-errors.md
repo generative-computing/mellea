@@ -221,8 +221,9 @@ See [Safety Guardrails](../how-to/safety-guardrails) for full usage.
 
 - Double-check the `criteria` argument — use a key from `CRITERIA_BANK` (e.g.
   `"harm"`, `"groundedness"`) or a free-text criteria string.
-- For groundedness checks, include the source document as a `"user"` message in
-  the evaluation `ChatContext`.
+- For groundedness checks, attach source documents via `documents=[Document(...)]`
+  on the `Message("assistant", ...)` in the evaluation context — not as a separate
+  user message.
 - Scores below `0.5` are safe; at or above `0.5` indicates risk detected.
 
 ### Deprecated `GuardianCheck` warnings
