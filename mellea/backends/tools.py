@@ -12,7 +12,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from typing import Any, Generic, Literal, ParamSpec, TypeVar, overload
+from typing import Any, Literal, ParamSpec, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -77,14 +77,14 @@ class MelleaTool(AbstractMelleaTool[P, R]):
         return self._as_json_tool.copy()
 
     @classmethod
-    def from_langchain(cls, tool: Any) -> "MelleaTool[P, Any]":
+    def from_langchain(cls, tool: Any) -> "MelleaTool[..., Any]":
         """Create a MelleaTool from a LangChain tool object.
 
         Args:
             tool (Any): A ``langchain_core.tools.BaseTool`` instance to wrap.
 
         Returns:
-            MelleaTool[P, Any]: A Mellea tool wrapping the LangChain tool.
+            MelleaTool[..., Any]: A Mellea tool wrapping the LangChain tool.
 
         Raises:
             ImportError: If ``langchain-core`` is not installed.
@@ -124,14 +124,14 @@ class MelleaTool(AbstractMelleaTool[P, R]):
             ) from e
 
     @classmethod
-    def from_smolagents(cls, tool: Any) -> "MelleaTool[P, Any]":
+    def from_smolagents(cls, tool: Any) -> "MelleaTool[..., Any]":
         """Create a Tool from a HuggingFace smolagents tool object.
 
         Args:
             tool: A smolagents.Tool instance
 
         Returns:
-            MelleaTool[P, Any]: A Mellea tool wrapping the smolagents tool
+            MelleaTool[..., Any]: A Mellea tool wrapping the smolagents tool
 
         Raises:
             ImportError: If smolagents is not installed
