@@ -109,7 +109,7 @@ switch = [
 backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
-    "cpex>=0.1.0.dev12; python_version >= '3.11'",
+    "cpex>=0.1.0rc1",
     "grpcio>=1.78.0",
 ]
 

@@ -883,7 +883,7 @@ toml = [
 
 [[package]]
 name = "cpex"
-version = "0.1.0.dev12"
+version = "0.1.0rc1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -899,9 +899,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0d/f6/d5a194b338b3d55b1b9b8619baafa504ae8146168cf4b91fcefa95811a16/cpex-0.1.0.dev12.tar.gz", hash = "sha256:9fb08e0fa27236747c26c841260951a83252029c0e55a7550c65a060473f200c", size = 3475629, upload-time = "2026-04-23T17:34:14.434Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/f1/608f5295bcd77a62ce520c91c76ba9fe07c50378e2600aeb7edbf80298c2/cpex-0.1.0rc1.tar.gz", hash = "sha256:36c8c85395073f5a8e828ab972b7a3eedc9f68066e6665473090947481319915", size = 1211891, upload-time = "2026-05-01T03:04:54.602Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/39/ed/f70537bd8adbf1f847a703e02c3abd2cdc53dfa87e44977aa25dd163774b/cpex-0.1.0.dev12-py3-none-any.whl", hash = "sha256:5c10688b6f7ca8c3673fce9dfd94d0b3a348e0e63566546ced5068574a38403e", size = 236654, upload-time = "2026-04-23T17:34:12.592Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/e5/a9f07008443e42eceedb433dfd683e480f648c2db4072190aa7ac4209c9d/cpex-0.1.0rc1-py3-none-any.whl", hash = "sha256:6aa9395af7792653dfa18815f11f9c34ebc5ac91284a47f40834ba3f507a7f21", size = 241048, upload-time = "2026-05-01T03:04:52.996Z" },
 ]
 
 [[package]]
@@ -3558,7 +3558,7 @@ typecheck = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "boto3", marker = "extra == 'litellm'" },
-    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'hooks'", specifier = ">=0.1.0.dev12" },
+    { name = "cpex", marker = "extra == 'hooks'", specifier = ">=0.1.0rc1" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },
