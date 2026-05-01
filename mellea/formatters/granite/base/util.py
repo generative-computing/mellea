@@ -162,6 +162,7 @@ def chat_completion_request_to_transformers_inputs(
     tokenizer_input = {
         "conversation": request["messages"],
         "add_generation_prompt": True,
+        "tools": request["tools"],
     }
 
     # pylint: disable=unsupported-membership-test

@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from ..backends.tools import validate_tool_arguments
-from ..core import MelleaLogger, ModelToolCall
+from ..core import Formatter, MelleaLogger, ModelToolCall
 from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..stdlib.components import Document, Message
 
@@ -154,17 +154,23 @@ def chat_completion_delta_merge(
     return merged
 
 
-def message_to_openai_message(msg: Message) -> dict:
+def message_to_openai_message(msg: Message, formatter: Formatter | None = None) -> dict:
     """Serialise a Mellea ``Message`` to the format required by OpenAI-compatible API providers.
 
     Args:
         msg: The ``Message`` object to serialise.
+        formatter: Optional formatter used to render the message content (including
+            documents) through the template system. When ``None``, uses the raw
+            ``msg.content`` string without document rendering.
 
     Returns:
         A dict with ``"role"`` and ``"content"`` fields. When the message carries
         images, ``"content"`` is a list of text and image-URL dicts; otherwise it
         is a plain string.
     """
+    # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+    # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+    content = formatter.print(msg) if formatter else msg.content
     if msg.images is not None:
         img_list = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
@@ -173,10 +179,10 @@ def message_to_openai_message(msg: Message) -> dict:
 
         return {
             "role": msg.role,
-            "content": [{"type": "text", "text": msg.content}, *img_list],
+            "content": [{"type": "text", "text": content}, *img_list],
         }
     else:
-        return {"role": msg.role, "content": msg.content}
+        return {"role": msg.role, "content": content}
         # Target format:
         # {
         #     "role": "user",

@@ -510,7 +510,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
                 if reroute_to_alora:
                     mot = await self._generate_from_intrinsic(
-                        alora_action, ctx, model_options=model_opts
+                        alora_action,
+                        ctx,
+                        model_options=model_opts,
+                        tool_calls=tool_calls,
                     )
                     if span is not None:
                         mot._meta["_telemetry_span"] = span
@@ -518,7 +521,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
-                    action, ctx, model_options=model_opts
+                    action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
                 if span is not None:
                     mot._meta["_telemetry_span"] = span
@@ -539,7 +542,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         return mot, new_ctx
 
     async def _generate_from_intrinsic(
-        self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """Generate a completion for an intrinsic action using an embedded adapter.
 
@@ -549,10 +557,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         post-processes the model output through the intrinsic's result
         processor.
 
+        Intrinsics default to options provided by `io.yaml`. Model options
+        override these defaults. All model options besides streaming are
+        respected.
+
         Args:
             action (Intrinsic): The intrinsic component to execute.
             ctx (Context): The current generation context (must be a chat context).
             model_options (dict[str, Any]): Merged model options for this call.
+            tool_calls (bool): If ``True``, expose available tools to the model
+                and parse tool-call responses.
 
         Returns:
             ModelOutputThunk: A thunk that lazily resolves to the processed
@@ -561,17 +575,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         Raises:
             ValueError: If no embedded adapter is registered for the requested
                 intrinsic.
+            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter.
         """
         if not ctx.is_chat_context:
             raise NotImplementedError("Intrinsics require a chat context.")
 
         # Intrinsics don't support streaming because of their post-processing step.
         if model_options.get(ModelOption.STREAM, False):
-            raise NotImplementedError("Intrinsics do not support streaming.")
-
-        if len(model_options.items()) > 0:
-            MelleaLogger.get_logger().info(
-                "passing in model options when generating with an intrinsic; only temperature and seed are kept from model options"
+            raise NotImplementedError(
+                "Intrinsics do not support streaming due to structured output parsing."
             )
 
         # --- adapter lookup ------------------------------------------------
@@ -611,15 +623,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         #       Intrinsics modify the context through their rewriters.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
+        # Extract system prompt and prepend to conversation.
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         conversation: list[dict] = []
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([message_to_openai_message(m) for m in messages])
 
         docs = messages_to_docs(messages)
-
-        # Seed and temperature are used in the api call. The rewriter doesn't pass them
-        # along so we set them explicitly below.
-        seed = model_options.get(ModelOption.SEED, None)
-        temperature = model_options.get(ModelOption.TEMPERATURE, None)
 
         # Convert our conversation into a proper chat completions dict.
         request_json: dict = {
@@ -634,6 +645,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if rewritten.extra_body is not None:
             extra_body = rewritten.extra_body.model_dump(exclude_unset=True)
 
+        # Start with rewriter parameters (io.yaml defaults).
         api_params: dict[str, Any] = {}
         if rewriter.parameters:
             api_params.update(rewriter.parameters)
@@ -647,11 +659,32 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # for embedded adapters the actual model is self._model_id.
             api_params.pop("model", None)
 
-        if seed is not None:
-            api_params["seed"] = seed
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
-        if temperature is not None:
-            api_params["temperature"] = temperature
+        formatted_tools = convert_tools_to_json(tools)
+        use_tools = len(formatted_tools) > 0
+
+        # Handle thinking/reasoning.
+        thinking = model_options.get(ModelOption.THINKING, None)
+        if type(thinking) is bool and thinking:
+            thinking = "medium"
+
+        # Remap and filter remaining model options, then overlay onto api_params
+        # so user values override rewriter/io.yaml defaults.
+        user_api_params = self._make_backend_specific_and_remove(
+            model_options, is_chat_context=True
+        )
+        api_params.update(user_api_params)
+
+        # Add reasoning_effort last so it overrides any io.yaml default and
+        # avoids duplicate kwargs in the API call.
+        if thinking is not None:
+            api_params["reasoning_effort"] = thinking
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
@@ -667,6 +700,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         chat_response = self._async_client.chat.completions.create(
             model=self._model_id,
             messages=messages_dicts,  # type: ignore
+            tools=formatted_tools if use_tools else None,  # type: ignore
             extra_body=extra_body,
             **api_params,
         )
@@ -714,10 +748,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         output._post_process = functools.partial(
             self.post_processing,
-            tools={},
+            tools=tools,
             conversation=conversation,
-            thinking=None,
-            seed=seed,
+            thinking=thinking,
+            seed=model_options.get(ModelOption.SEED, None),
             _format=None,
         )
 
@@ -811,7 +845,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([message_to_openai_message(m) for m in messages])
+        conversation.extend(
+            [message_to_openai_message(m, self.formatter) for m in messages]
+        )
 
         extra_params: dict[str, Any] = {}
         if _format is not None:

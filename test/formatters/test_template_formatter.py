@@ -310,5 +310,52 @@ def test_to_chat_messages_not_parsed_repr(tf: TemplateFormatter):
     assert messages[0].content == "different content"
 
 
+def test_unused_template_args_inline_warns(tf: TemplateFormatter, caplog):
+    """Debug message emitted when inline template does not use all provided args."""
+    import logging
+
+    repr = TemplateRepresentation(
+        obj=Instruction("desc"),
+        args={"description": "hello", "extra_key": "unused"},
+        template="{{description}}",
+    )
+    with caplog.at_level(logging.DEBUG, logger="mellea"):
+        tf._render_representation(repr, {"description": "hello", "extra_key": "unused"})
+
+    assert any("not referenced by template" in r.message for r in caplog.records)
+    assert any("extra_key" in r.message for r in caplog.records)
+
+
+def test_no_unused_keys_warning_when_all_used(
+    tf: TemplateFormatter, instr: Instruction, caplog
+):
+    """No debug message when all args keys are consumed by the file-loaded template."""
+    import logging
+
+    repr = instr.format_for_llm()
+    args = {k: tf._stringify(v) for k, v in repr.args.items()}
+    with caplog.at_level(logging.DEBUG, logger="mellea"):
+        tf._render_representation(repr, args)
+
+    assert not any("not referenced by template" in r.message for r in caplog.records)
+
+
+def test_unused_template_args_file_loaded_warns(tf: TemplateFormatter, caplog):
+    """Debug message emitted when a file-loaded template ignores some provided args."""
+    import logging
+
+    repr = TemplateRepresentation(
+        obj=Instruction("content"),
+        args={"content": "hello", "unused_key": "unused_value"},
+        template_order=["MObject"],
+    )
+    with caplog.at_level(logging.DEBUG, logger="mellea"):
+        tf._render_representation(
+            repr, {"content": "hello", "unused_key": "unused_value"}
+        )
+
+    assert any("unused_key" in r.message for r in caplog.records)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

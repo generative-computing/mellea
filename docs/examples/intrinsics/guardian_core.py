@@ -15,7 +15,7 @@ uv run python docs/examples/intrinsics/guardian_core.py
 import json
 
 from mellea import model_ids, start_backend
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 
 ctx, backend = start_backend(
@@ -52,18 +52,21 @@ print()
 
 # ---- Example 3: RAG groundedness check ----
 print("--- Example 3: RAG Groundedness Check ---")
-document = (
-    "Eat (1964) is a 45-minute underground film created by Andy Warhol and "
-    "featuring painter Robert Indiana, filmed on Sunday, February 2, 1964, "
-    "in Indiana's studio. The film was first shown by Jonas Mekas on July 16, "
-    "1964, at the Washington Square Gallery at 530 West Broadway."
+document = Document(
+    text=(
+        "Eat (1964) is a 45-minute underground film created by Andy Warhol and "
+        "featuring painter Robert Indiana, filmed on Sunday, February 2, 1964, "
+        "in Indiana's studio. The film was first shown by Jonas Mekas on July 16, "
+        "1964, at the Washington Square Gallery at 530 West Broadway."
+    ),
+    doc_id="0",
 )
 response = (
     "The film Eat was first shown by Jonas Mekas on December 24, 1922 "
     "at the Washington Square Gallery at 530 West Broadway."
 )
-context = ctx.add(Message("user", f"Document: {document}")).add(
-    Message("assistant", response)
+context = ctx.add(Message("user", "When was the film Eat first shown?")).add(
+    Message("assistant", response, documents=[document])
 )
 score = guardian.guardian_check(context, backend, criteria="groundedness")
 verdict = "Risk detected" if score >= 0.5 else "Safe"

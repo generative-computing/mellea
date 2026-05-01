@@ -1,7 +1,8 @@
 import pytest
 
 from mellea.core import CBlock, ModelOutputThunk, TemplateRepresentation
-from mellea.helpers import messages_to_docs
+from mellea.formatters.template_formatter import TemplateFormatter
+from mellea.helpers import message_to_openai_message, messages_to_docs
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.chat import ToolMessage, as_chat_history
 from mellea.stdlib.context import ChatContext
@@ -19,7 +20,7 @@ def test_message_with_docs():
     assert docs[0]["text"] == doc.text
     assert docs[0]["title"] == doc.title
 
-    assert "Im a titl..." in str(msg)
+    assert "[Document] Im a titl..." in str(msg)
 
     tr = msg.format_for_llm()
     assert tr.args["documents"]
@@ -85,6 +86,24 @@ def test_message_format_for_llm_structure():
     assert tr.args["content"] is msg._content_cblock
     assert tr.args["images"] is None
     assert tr.args["documents"] is None
+
+
+def test_message_documents_string_coercion():
+    msg = Message("user", "hello", documents=["doc one", "doc two"])
+    assert msg._docs is not None
+    assert len(msg._docs) == 2
+    assert all(isinstance(d, Document) for d in msg._docs)
+    assert msg._docs[0].text == "doc one"
+    assert msg._docs[1].text == "doc two"
+
+
+def test_message_documents_mixed_coercion():
+    doc = Document("existing", doc_id="x")
+    msg = Message("user", "hello", documents=["new text", doc])
+    assert msg._docs is not None
+    assert len(msg._docs) == 2
+    assert msg._docs[0].text == "new text"
+    assert msg._docs[1] is doc
 
 
 # --- Message._parse — no tool calls ---
@@ -249,6 +268,93 @@ def test_as_chat_history_with_parsed_mot():
     history = as_chat_history(ctx)
     assert len(history) == 2
     assert history[1].content == "reply"
+
+
+# --- Formatter rendering of Message documents ---
+
+
+class TestMessageDocumentRendering:
+    """Tests that documents on Messages are rendered through the formatter."""
+
+    @pytest.fixture
+    def formatter(self):
+        return TemplateFormatter(model_id="test-model")
+
+    def test_print_message_without_docs(self, formatter):
+        msg = Message("user", "hello")
+        result = formatter.print(msg)
+        assert result == "hello"
+
+    def test_print_message_with_docs(self, formatter):
+        doc = Document("The answer is 42.", title="Guide", doc_id="1")
+        msg = Message("user", "What is the answer?", documents=[doc])
+        result = formatter.print(msg)
+        assert "What is the answer?" in result
+        assert "[Document 1]" in result
+        assert "Guide:" in result
+        assert "The answer is 42." in result
+
+    def test_print_message_with_multiple_docs(self, formatter):
+        docs = [
+            Document("First doc content.", doc_id="0"),
+            Document("Second doc content.", doc_id="1"),
+        ]
+        msg = Message("user", "Summarize these.", documents=docs)
+        result = formatter.print(msg)
+        assert "Summarize these." in result
+        assert "First doc content." in result
+        assert "Second doc content." in result
+
+    def test_print_message_with_string_docs(self, formatter):
+        msg = Message("user", "question", documents=["raw doc text"])
+        result = formatter.print(msg)
+        assert "question" in result
+        assert "raw doc text" in result
+
+    def test_to_chat_messages_preserves_docs_for_print(self, formatter):
+        """Messages with docs survive to_chat_messages() and can be printed."""
+        doc = Document("grounding info", title="Ref")
+        msg = Message("user", "query", documents=[doc])
+
+        messages = formatter.to_chat_messages([msg])
+        assert len(messages) == 1
+
+        returned_msg = messages[0]
+        # Role is still accessible as a separate field
+        assert returned_msg.role == "user"
+        # Documents are preserved
+        assert returned_msg._docs is not None
+        assert len(returned_msg._docs) == 1
+        # Formatter print renders docs into content
+        rendered = formatter.print(returned_msg)
+        assert "query" in rendered
+        assert "grounding info" in rendered
+        assert "Ref:" in rendered
+
+    def test_message_to_openai_message_with_formatter(self, formatter):
+        doc = Document("supporting text", doc_id="d1")
+        msg = Message("user", "main content", documents=[doc])
+        result = message_to_openai_message(msg, formatter)
+        assert result["role"] == "user"
+        assert "main content" in result["content"]
+        assert "supporting text" in result["content"]
+
+    def test_message_to_openai_message_without_formatter_drops_docs(self):
+        doc = Document("supporting text", doc_id="d1")
+        msg = Message("user", "main content", documents=[doc])
+        result = message_to_openai_message(msg)
+        assert result["role"] == "user"
+        assert result["content"] == "main content"
+        assert "supporting text" not in result["content"]
+
+    def test_print_message_with_docs_renders_document_format(self, formatter):
+        """Verify exact rendered format of documents within a Message."""
+        doc = Document("The capital of France is Paris.", title="Geography", doc_id="7")
+        msg = Message("user", "What is the capital of France?", documents=[doc])
+        result = formatter.print(msg)
+        assert "What is the capital of France?" in result
+        assert "[Document 7]" in result
+        assert "Geography: The capital of France is Paris." in result
 
 
 if __name__ == "__main__":
