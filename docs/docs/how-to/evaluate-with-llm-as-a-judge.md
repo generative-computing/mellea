@@ -1,5 +1,5 @@
 ---
-canonical: "https://docs.mellea.ai/evaluation-and-observability/evaluate-with-llm-as-a-judge"
+canonical: "https://docs.mellea.ai/how-to/evaluate-with-llm-as-a-judge"
 title: "Evaluate with LLM-as-a-Judge"
 description: "Use the LLM itself to evaluate output quality — inline as a requirement, or as a standalone validation pass."
 # diataxis: how-to

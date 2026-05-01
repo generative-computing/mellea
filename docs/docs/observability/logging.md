@@ -1,5 +1,5 @@
 ---
-canonical: "https://docs.mellea.ai/evaluation-and-observability/logging"
+canonical: "https://docs.mellea.ai/observability/logging"
 title: "Logging"
 description: "Configure Mellea's console logging and export logs to OTLP collectors."
 # diataxis: how-to

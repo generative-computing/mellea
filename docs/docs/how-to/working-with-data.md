@@ -1,5 +1,5 @@
 ---
-canonical: "https://docs.mellea.ai/guide/working-with-data"
+canonical: "https://docs.mellea.ai/how-to/working-with-data"
 title: "Working with Data"
 description: "Ground instructions with documents, build RAG pipelines, and use MObjects and RichDocument."
 # diataxis: how-to

@@ -1,5 +1,5 @@
 ---
-canonical: "https://docs.mellea.ai/guide/glossary"
+canonical: "https://docs.mellea.ai/reference/glossary"
 title: "Glossary"
 description: "Definitions of Mellea-specific terms and concepts."
 # diataxis: reference
