@@ -1,5 +1,3 @@
-# pytest: ollama, huggingface, e2e
-
 """[DEPRECATED] Example of using GuardianCheck with HuggingFace backend for direct model inference.
 
 This example shows how to reuse the Guardian backend across multiple validators

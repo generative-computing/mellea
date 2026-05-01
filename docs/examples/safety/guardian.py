@@ -1,5 +1,3 @@
-# pytest: ollama, e2e
-
 """[DEPRECATED] Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B.
 
 .. deprecated:: 0.4
