@@ -1,6 +1,7 @@
 # pytest: huggingface, e2e
 
 import mellea.stdlib.functional as mfuncs
+from mellea.backends import model_ids
 from mellea.backends.adapters.adapter import AdapterType, IntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
@@ -9,7 +10,7 @@ from mellea.stdlib.context import ChatContext
 # This is an example for how you would directly use intrinsics. See `mellea/stdlib/intrinsics/rag.py`
 # for helper functions.
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
+backend = LocalHFBackend(model_id=model_ids.IBM_GRANITE_4_1_3B)
 # --- Alternative: OpenAI backend with Granite Switch (requires vLLM server) ---
 # Requires the adapter for this intrinsic to be embedded in the Granite Switch
 # model. See docs/examples/granite-switch/ for a full runnable example.
@@ -28,7 +29,7 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
 
 # Create the Adapter. IntrinsicAdapter's default to ALORAs.
 req_adapter = IntrinsicAdapter(
-    "requirement_check", base_model_name=backend.base_model_name
+    "requirement-check", base_model_name=backend.base_model_name
 )
 
 # Add the adapter to the backend.
@@ -42,15 +43,15 @@ ctx = ctx.add(Message("assistant", "Hello; yes! What can I help with?"))
 # ALORA and then LORA adapters.
 out, new_ctx = mfuncs.act(
     Intrinsic(
-        "requirement_check",
+        "requirement-check",
         intrinsic_kwargs={"requirement": "The assistant is helpful."},
     ),
     ctx,
     backend,
 )
 
-# Print the output. The requirement_check adapter has a specific output format:
-print(out)  # {"requirement_likelihood": 1.0}
+# Print the output. The requirement-check adapter has a specific output format:
+print(out)  # {"requirement_check": {"score": 0.41272119992000356}}
 
 # The AloraRequirement uses this adapter. It automatically parses that output
 # when validating the output.

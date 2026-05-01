@@ -254,6 +254,7 @@ _YAML_JSON_COMBOS = {c.short_name: c for c in _YAML_JSON_COMBOS_LIST}
 
 # Base models that are small enough to run locally with transformers
 _LOCAL_BASE_MODELS = {
+    "ibm-granite/granite-4.1-3b",
     "ibm-granite/granite-4.0-micro",
     "ibm-granite/granite-3.3-2b-instruct",
 }
