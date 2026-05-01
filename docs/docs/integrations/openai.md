@@ -278,12 +278,12 @@ Then create a backend with `load_embedded_adapters=True`:
 
 ```python
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
 
 backend = OpenAIBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
     base_url="http://localhost:8000/v1",
     api_key="EMPTY",
     load_embedded_adapters=True,
@@ -305,12 +305,12 @@ For more control, load adapters manually with `load_embedded_adapters=False`:
 ```python
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
 
 backend = OpenAIBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
     base_url="http://localhost:8000/v1",
     api_key="EMPTY",
     load_embedded_adapters=False,
@@ -318,7 +318,7 @@ backend = OpenAIBackend(
 
 # Load a single adapter from the model's HuggingFace repo
 adapters = EmbeddedIntrinsicAdapter.from_hub(
-    IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     intrinsic_name="answerability",
 )
 for adapter in adapters:
@@ -347,4 +347,4 @@ local servers, list available models from the server's API or UI.
 
 **See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
 [Enforce Structured Output](../how-to/enforce-structured-output) |
-[Official Granite Switch Documentation](GRANITE_SWITCH_DOCS)
+[Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)
