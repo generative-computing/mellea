@@ -54,17 +54,15 @@ def backend():
     """Shared HuggingFace backend for all tests in this module.
 
     Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    The "requirement_check" intrinsic only has adapters for Granite 3.3 models.
+    The "requirement-check" intrinsic only has adapters for Granite 3.3 models.
     Granite 4 adapters are not yet available.
     Other intrinsics are not affected by this issue.
     """
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
-        cache=SimpleLRUCache(5),
+        model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
     )
     backend.add_adapter(
-        IntrinsicAdapter("requirement_check", base_model_name=backend.base_model_name)
+        IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
     )
     backend.add_adapter(
         IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
@@ -88,7 +86,7 @@ def session(backend):
 def test_adapters(backend) -> None:
     assert len(backend._added_adapters.items()) > 0
 
-    expected_qualified_name = "requirement_check_alora"
+    expected_qualified_name = "requirement-check_alora"
     adapter = backend._added_adapters[expected_qualified_name]
     backend.load_adapter(adapter.qualified_name)
     assert adapter.qualified_name in backend._loaded_adapters
@@ -125,7 +123,7 @@ def test_constraint_lora_with_requirement(session, backend) -> None:
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert "requirement_likelihood" in str(val_result.reason)
+    assert "requirement_check" in str(val_result.reason)
 
 
 @pytest.mark.qualitative
@@ -158,7 +156,7 @@ def test_constraint_lora_override_does_not_override_alora(session, backend) -> N
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert "requirement_likelihood" in str(val_result.reason)
+    assert "requirement_check" in str(val_result.reason)
 
     # Ensure the ValidationResult has its thunk and context set. Ensure the context has
     # the correct actions / results in it.
@@ -366,7 +364,7 @@ async def test_generate_with_lock(backend) -> None:
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement-check", base_model_name=b.base_model_name)
     )
     b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
 
@@ -397,7 +395,7 @@ async def test_generate_with_lock(backend) -> None:
     ctx = ChatContext().add(Message("user", "hello"))
     act = CBlock("hello")
     raw_act = CBlock("goodb")
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
     answerability_intrinsic = Intrinsic("answerability")
 
     def call_backend_generate():
@@ -462,7 +460,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))
     act = CBlock("hello")
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
     answerability_intrinsic = Intrinsic("answerability")
 
     # Create a few model output thunks:
@@ -516,7 +514,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
 @pytest.mark.qualitative
 async def test_streaming_error_with_intrinsics(backend) -> None:
     ctx = ChatContext().add(Message("user", "hello"))
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
 
     with pytest.raises(Exception, match="Intrinsics do not support streaming"):
         _, _ = await backend.generate_from_context(
@@ -540,7 +538,7 @@ async def test_error_during_generate_with_lock(backend) -> None:
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement-check", base_model_name=b.base_model_name)
     )
 
     regular_generate = b._model.generate
@@ -559,7 +557,7 @@ async def test_error_during_generate_with_lock(backend) -> None:
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))
     act = CBlock("hello")
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
 
     reg_mot, _ = await b.generate_from_context(act, ctx)
     req_mot, _ = await b.generate_from_context(req_intrinsic, ctx)
@@ -753,7 +751,7 @@ async def test_intrinsic_tools_in_generate_input(backend) -> None:
     decoded = backend._tokenizer.decode(input_tokens[0])
     print(decoded)
     assert "get_temperature" in decoded
-    assert "available_tools" in decoded, (
+    assert "access to the following tools" in decoded, (
         "expected string from system prompt with tool calls not found; if you changed the model, that might have caused this issue"
     )
 

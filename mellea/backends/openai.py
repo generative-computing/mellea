@@ -481,7 +481,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # Requirements can be automatically rerouted to a requirement adapter.
             if isinstance(action, Requirement):
                 reroute_to_alora = self.default_to_constraint_checking_alora
-                adapter_name = "requirement_check"
+                adapter_name = "requirement-check"
 
                 if isinstance(action, ALoraRequirement):
                     reroute_to_alora = True

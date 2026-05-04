@@ -159,7 +159,7 @@ def flag_hallucinated_content(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> list[dict]:
     """Flag potentially-hallucinated sentences in an agent's response.
 
     Intrinsic function that checks whether the sentences in an agent's response to a
