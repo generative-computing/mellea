@@ -36,13 +36,13 @@ def requirement_check_to_bool(x: CBlock | str) -> bool:
     req_dict: dict[str, Any] = json.loads(output)
 
     likelihood = req_dict.get("requirement_check", None)
-    if likelihood is None:
+    if not isinstance(likelihood, dict):
         MelleaLogger.get_logger().warning(
             f"could not get value from alora requirement output; looking for `requirement_check` in {req_dict}"
         )
         return False
     
-    score = getattr(likelihood, "score", None)
+    score = likelihood.get("score", None)
     if score is None:
         MelleaLogger.get_logger().warning(
             f"could not get value from alora requirement output; looking for `score` in {req_dict}"
@@ -64,7 +64,7 @@ class ALoraRequirement(Requirement, Intrinsic):
     Args:
         description (str): Human-readable requirement description.
         intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
-            Defaults to ``"requirement_check"``.
+            Defaults to ``"requirement-check"``.
 
     Attributes:
         use_aloras (bool): Always ``True``; this class always attempts to use

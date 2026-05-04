@@ -47,7 +47,7 @@ import mellea.stdlib.functional as mfuncs
 
 out, new_ctx = mfuncs.act(
     Intrinsic(
-        "requirement_check",
+        "requirement-check",
         intrinsic_kwargs={"requirement": "The assistant is helpful."}),
     ctx,
     backend
