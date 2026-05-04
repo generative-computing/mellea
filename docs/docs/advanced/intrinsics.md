@@ -226,7 +226,7 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
 # Register an adapter by task name
 req_adapter = CustomIntrinsicAdapter(
-    "requirement_check",
+    "requirement-check",
     base_model_name=backend.base_model_name,
 )
 backend.add_adapter(req_adapter)
@@ -237,7 +237,7 @@ ctx = ctx.add(Message("assistant", "Yes! What can I help with?"))
 
 out, _ = mfuncs.act(
     Intrinsic(
-        "requirement_check",
+        "requirement-check",
         intrinsic_kwargs={"requirement": "The assistant is helpful."},
     ),
     ctx,
@@ -249,4 +249,4 @@ print(out)  # {"requirement_likelihood": 1.0}
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
 HuggingFace repository configuration instead of the intrinsic catalog.
-Output format is task-specific — `requirement_check` returns a likelihood score.
+Output format is task-specific — `requirement-check` returns a likelihood score.
