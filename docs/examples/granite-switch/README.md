@@ -26,11 +26,7 @@ python -m vllm.entrypoints.openai.api_server \
 
 ## Available adapters
 
-Not all intrinsics are embedded in every Granite Switch model. Check the model's
-`adapter_index.json` for the list of available adapters. The current model
-includes: `answerability`, `citations`, `context_relevance`, `guardian-core`,
-`hallucination_detection`, `query_clarification`, `query_rewrite`, and
-`requirement-check`.
+Not all intrinsics are embedded in every Granite Switch model. You should check the model's `adapter_index.json` file for a definitive list. For granite switch models pre-built by IBM, we include a list of models in the Mellea `model_id`.
 
 ## Files
 
@@ -52,7 +48,11 @@ Shows how to manually load embedded adapters using
 you only need a subset of adapters or want more control over adapter
 registration.
 
+## Architecture
+![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
+
 ## Related
 
 - [`../intrinsics/`](../intrinsics/) — the same intrinsics using `LocalHFBackend`
-- [Intrinsics documentation](../../docs/docs/advanced/intrinsics.md)
+- [Intrinsics Documentation](../../docs/docs/advanced/intrinsics.md)
+- [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch) 
