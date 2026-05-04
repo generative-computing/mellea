@@ -19,6 +19,7 @@ reliable than prompting a general-purpose model for these specialized micro-task
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
 >   `load_embedded_adapters=True`. Only intrinsics embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
+>   See `docs/docs/examples/granite-switch/README.md`
 >
 > Intrinsics do not work with Ollama or other remote backends.
 

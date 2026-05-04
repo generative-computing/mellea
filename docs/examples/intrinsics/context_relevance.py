@@ -14,7 +14,7 @@ from mellea.stdlib.components.intrinsic import rag
 ctx, backend = start_backend(
     "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
 )
-# NOTE: this example uses Granite 4.0 micro because there is no context_relevance intrinsic for Graniet 4.1
+# NOTE: this example uses Granite 4.0 micro because there is no context_relevance intrinsic for Granite 4.1
 
 question = "Who is the CEO of Microsoft?"
 document = (
