@@ -10,7 +10,7 @@ from ...core import (
     TemplateRepresentation,
     blockify,
 )
-from .chat import Message, ToolMessage, as_chat_history
+from .chat import Message, ToolMessage, as_chat_history, as_generic_chat_history
 from .docs.document import Document
 from .instruction import Instruction
 from .intrinsic import Intrinsic
@@ -36,6 +36,7 @@ __all__ = [
     "ToolMessage",
     "Transform",
     "as_chat_history",
+    "as_generic_chat_history",
     "blockify",
     "mify",
 ]

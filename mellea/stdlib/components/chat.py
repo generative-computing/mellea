@@ -3,12 +3,14 @@
 Defines ``Message``, the ``Component`` subtype used to represent a single turn in a
 chat history with a ``role`` (``user``, ``assistant``, ``system``, or ``tool``),
 text ``content``, and optional ``images`` and ``documents`` attachments. Also provides
-``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments) and
-the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
-``Message`` objects.
+``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments), and
+utilities for converting a ``Context`` into a flat list of ``Message`` objects:
+``as_chat_history`` (strict typing) and ``as_generic_chat_history`` (flexible with
+configurable formatter).
 """
 
-from collections.abc import Iterable, Mapping
+import logging
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal
 
 from ...core import (
@@ -21,6 +23,8 @@ from ...core import (
     TemplateRepresentation,
 )
 from .docs.document import Document, _coerce_to_documents
+
+_logger = logging.getLogger(__name__)
 
 
 class Message(Component["Message"]):
@@ -276,3 +280,65 @@ def as_chat_history(ctx: Context) -> list[Message]:
         history = [_to_msg(c) for c in all_ctx_events]
         assert None not in history, "Could not render this context as a chat history."
         return history  # type: ignore
+
+
+def _default_formatter(obj: Any) -> str:
+    """Default formatter for unknown component types.
+
+    Logs a warning and converts the object to a string representation.
+    """
+    _logger.warning(
+        f"Unknown component type {type(obj).__name__} in as_generic_chat_history; "
+        f"converting to string representation."
+    )
+    return str(obj)
+
+
+def as_generic_chat_history(
+    ctx: Context, formatter: Callable[[Any], str] | None = None
+) -> list[Message]:
+    """Returns a list of Messages corresponding to a Context, with flexible type handling.
+
+    This function is more permissive than ``as_chat_history()``, allowing arbitrary
+    component types. Unknown types are converted to strings using a configurable
+    formatter, making it suitable for general-purpose use where context composition
+    may be heterogeneous.
+
+    Args:
+        ctx: A linear ``Context`` that may contain ``Message``, ``ModelOutputThunk``,
+            or other ``Component`` types.
+        formatter: Optional callable that converts unknown types to strings.
+            Defaults to ``_default_formatter`` which logs a warning and stringifies.
+
+    Returns:
+        List of ``Message`` objects in conversation order.
+
+    Raises:
+        Exception: If the context history is non-linear and cannot be cast to a
+            flat list.
+    """
+    if formatter is None:
+        formatter = _default_formatter
+
+    def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message:
+        match c:
+            case Message():
+                return c
+            case ModelOutputThunk():
+                if isinstance(c.parsed_repr, Message):
+                    return c.parsed_repr
+                # Use value if parsed_repr is None or not a Message
+                content = (
+                    str(c.value) if c.parsed_repr is None else formatter(c.parsed_repr)
+                )
+                return Message(role="assistant", content=content)
+            case CBlock():
+                return Message(role="user", content=str(c))
+            case _:
+                content = formatter(c)
+                return Message(role="user", content=content)
+
+    all_ctx_events = ctx.as_list()
+    if all_ctx_events is None:
+        raise Exception("Trying to cast a non-linear history into a chat history.")
+    return [_to_msg(c) for c in all_ctx_events]
