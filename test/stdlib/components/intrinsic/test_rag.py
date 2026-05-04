@@ -31,6 +31,9 @@ pytestmark = [
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
 
+TEST_OUTPUT_ROOT = pathlib.Path(os.path.dirname(__file__)) / "test_output"
+"""Location where the tests in this file dump internal outputs for debugging."""
+
 
 @pytest.fixture(name="backend", scope="module")
 def _backend():
@@ -73,16 +76,30 @@ def _read_input_json(file_name: str):
 def _read_output_json(file_name: str):
     """Shared code for reading canned outputs stored in JSON files and converting
     to Mellea types.
+
+    By convention, canned outputs hold the contents of
+    ``<completion>["choices"][0]["message"]["content"]``,
+    where ``<completion>`` is a JSON chat completion after post-processing.
     """
     with open(DATA_ROOT / "output_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
+    return json_data
 
-    # Output is in OpenAI chat completion response format. Assume only one choice.
-    result_str = json_data["choices"][0]["message"]["content"]
 
-    # Intrinsic outputs are always JSON, serialized to a string for OpenAI
-    # compatibility.
-    return json.loads(result_str)
+def _dump_output_json(file_name: str, to_write):
+    """Shared code for dumping a test's generated JSON data.
+
+    Dump the Python data structures that that will be compared against canned
+    JSON output files. Outputs go to the local directory ``test_output``.
+
+    If you are sure the current output is correct, you can use this output to update
+    the contents of the ``testdata`` directory.
+    """
+    target_path = TEST_OUTPUT_ROOT / "output_json" / file_name
+    if not os.path.exists(target_path.parent):
+        os.makedirs(target_path.parent)
+    with open(target_path, "w", encoding="utf-8") as f:
+        json.dump(to_write, f, indent=2)
 
 
 @pytest.mark.qualitative
@@ -116,7 +133,6 @@ def test_query_rewrite(backend):
     assert result == expected
 
 
-@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
 @pytest.mark.qualitative
 def test_citations(backend):
     """Verify that the citations intrinsic functions properly."""
@@ -125,7 +141,14 @@ def test_citations(backend):
 
     # First call triggers adapter loading
     result = rag.find_citations(assistant_response, docs, context, backend)
-    assert result == expected
+    _dump_output_json("citations.json", result)
+    # There are some known differences between GPU and CPU output due to different
+    # matrix multiply implementations. Ignore those differences but attempt to complete
+    # the test when they are not present.
+    try:
+        assert result == expected
+    except AssertionError as ae:
+        pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
 
     # Second call hits a different code path from the first one
     result = rag.find_citations(assistant_response, docs, context, backend)
@@ -157,14 +180,12 @@ def test_hallucination_detection(backend):
 
     # First call triggers adapter loading
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
-    # pytest.approx() chokes on lists of records, so we do this complicated dance.
-    for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert r == e
+    _dump_output_json("hallucination_detection.json", result)
+    assert result == expected
 
     # Second call hits a different code path from the first one
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
-    for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert r == e
+    assert result == expected
 
 
 @pytest.mark.qualitative
@@ -231,7 +252,6 @@ def test_query_rewrite_resolve(backend):
     assert result == expected
 
 
-@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
 @pytest.mark.qualitative
 def test_citations_resolve(backend):
     """Verify citations when response is resolved from context."""
@@ -240,7 +260,13 @@ def test_citations_resolve(backend):
     expected = _read_output_json("citations.json")
 
     result = rag.find_citations(None, docs, context, backend)
-    assert result == expected
+    # There are some known differences between GPU and CPU output due to different
+    # matrix multiply implementations. Ignore those differences but attempt to complete
+    # the test when they are not present.
+    try:
+        assert result == expected
+    except AssertionError as ae:
+        pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
 
 
 @pytest.mark.qualitative
@@ -262,8 +288,7 @@ def test_hallucination_detection_resolve(backend):
     expected = _read_output_json("hallucination_detection.json")
 
     result = rag.flag_hallucinated_content(None, docs, context, backend)
-    for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert r == e
+    assert result == expected
 
 
 @pytest.mark.qualitative

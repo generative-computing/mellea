@@ -767,15 +767,13 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
     # Output processing
     transformed_responses = result_processor.transform(responses, transformed_input)
-
-    # Pull this string out of the debugger to create a fresh expected file.
     transformed_str = transformed_responses.model_dump_json(indent=4)
-    print(transformed_str)
 
-    with open(
-        _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json",
-        encoding="utf-8",
-    ) as f:
+    # If you are certain that the output is correct, you can use the file written here
+    # to create a fresh expected file.
+    expected_file = _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json"
+    _dump_output(expected_file, transformed_str)
+    with open(expected_file, encoding="utf-8") as f:
         expected = ChatCompletionResponse.model_validate_json(f.read())
     # expected_str = expected.model_dump_json(indent=4)
 
@@ -802,7 +800,7 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
                 assert t_json == pytest.approx(e_json, abs=0.1)
     except AssertionError as e:
-        # Known intermittent failure under Transformers 5.0
+        # Known intermittent failure under Transformers 5.0.
         if cfg.short_name == "hallucination_detection":
             pytest.xfail("Known failure due to Transformers 5.0")
         raise e
