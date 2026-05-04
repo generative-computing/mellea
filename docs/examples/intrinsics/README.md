@@ -78,9 +78,7 @@ see [`../granite-switch/`](../granite-switch/).
 - **uncertainty**: Estimate certainty about answering a question
 
 ## Architecture
-<p align="center">
-<img width="800" src="../../docs/images/granite-libraries-mellea-architecture.png" alt="Granite Libraries Software Stack Architecture in Mellea">
-</img>
+![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
 
 ## Related Documentation
 

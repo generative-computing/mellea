@@ -49,9 +49,7 @@ you only need a subset of adapters or want more control over adapter
 registration.
 
 ## Architecture
-<p align="center">
-<img width="800" src="../../docs/images/granite-libraries-mellea-architecture.png" alt="Granite Libraries Software Stack Architecture in Mellea">
-</img>
+![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
 
 ## Related
 
