@@ -19,9 +19,6 @@ Checks if a question can be answered given the context.
 ### citations.py
 Validates and extracts citations from generated text.
 
-### context_relevance.py
-Assesses if retrieved context is relevant to a query.
-
 ### hallucination_detection.py
 Detects when model outputs contain hallucinated information.
 
@@ -104,7 +101,7 @@ For complete runnable examples using the OpenAI backend with Granite Switch,
 see [`../granite-switch/`](../granite-switch/).
 
 > **Note:** Not all intrinsics are embedded in every Granite Switch model. The
-> current model includes: `answerability`, `citations`, `context_relevance`,
+> current model includes: `answerability`, `citations`, 
 > `guardian-core`, `hallucination_detection`, `query_clarification`,
 > `query_rewrite`, and `requirement-check`. Check the model's
 > `adapter_index.json` for the full list.
@@ -114,7 +111,6 @@ see [`../granite-switch/`](../granite-switch/).
 - **requirement_check**: Validate requirements (used by ALoraRequirement)
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
-- **context_relevance**: Assess context-query relevance
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
 - **uncertainty**: Estimate certainty about answering a question

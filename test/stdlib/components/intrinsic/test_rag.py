@@ -156,23 +156,6 @@ def test_citations(backend):
 
 
 @pytest.mark.qualitative
-def test_context_relevance(backend):
-    """Verify that the context relevance intrinsic functions properly."""
-    context, question, docs = _read_input_json("context_relevance.json")
-
-    # Context relevance can only check against a single document at a time.
-    document = docs[0]
-
-    # First call triggers adapter loading
-    result = rag.check_context_relevance(question, document, context, backend)
-    assert result == "irrelevant"
-
-    # Second call hits a different code path from the first one
-    result = rag.check_context_relevance(question, document, context, backend)
-    assert result == "irrelevant"
-
-
-@pytest.mark.qualitative
 def test_hallucination_detection(backend):
     """Verify that the hallucination detection intrinsic functions properly."""
     context, assistant_response, docs = _read_input_json("hallucination_detection.json")
@@ -267,17 +250,6 @@ def test_citations_resolve(backend):
         assert result == expected
     except AssertionError as ae:
         pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
-
-
-@pytest.mark.qualitative
-def test_context_relevance_resolve(backend):
-    """Verify context relevance when question is resolved from context."""
-    context, question, docs = _read_input_json("context_relevance.json")
-    context = context.add(Message("user", question))
-    document = docs[0]
-
-    result = rag.check_context_relevance(None, document, context, backend)
-    assert result == "irrelevant"
 
 
 @pytest.mark.qualitative

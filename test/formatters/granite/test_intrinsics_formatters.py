@@ -183,13 +183,6 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
         task="hallucination_detection",
     ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="hallucination_detection_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
-    #     task="hallucination_detection",
-    #     is_alora=True
-    # ),
     YamlJsonCombo(
         short_name="query_clarification",
         inputs_file=_INPUT_JSON_DIR / "query_clarification.json",
@@ -200,70 +193,11 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
     ),
-    # NOTE for the following two entries:
-    # The "requirement_check" intrinsic has not yet been ported to the latest format
-    # or to Granite 4.0.
-    YamlJsonCombo(
-        short_name="requirement_check",
-        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
-        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
-        task="requirement_check",
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
-    YamlJsonCombo(
-        short_name="requirement_check_alora",
-        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
-        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
-        task="requirement_check",
-        is_alora=True,
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
-    YamlJsonCombo(
-        short_name="uncertainty",
-        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-        task="uncertainty",
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/granitelib-core-r1.0",
-        revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="uncertainty_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-    #     task="uncertainty",
-    #     is_alora=True,
-    #     # Granite 4.0 adapters not currently available
-    #     repo_id="ibm-granite/granitelib-core-r1.0",
-    # ),
-    YamlJsonCombo(
-        short_name="context_relevance",
-        inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
-        arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
-        task="context_relevance",
-    ),
-    YamlJsonCombo(
-        short_name="context_relevance_alora",
-        inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
-        arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
-        task="context_relevance",
-        is_alora=True,
-    ),
     YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
     ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="citations_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "citations.json",
-    #     task="citations",
-    #     is_alora=True,
-    # ),
     YamlJsonCombo(
         short_name="context-attribution",
         inputs_file=_INPUT_JSON_DIR / "context-attribution.json",

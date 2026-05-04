@@ -28,7 +28,7 @@ python -m vllm.entrypoints.openai.api_server \
 
 Not all intrinsics are embedded in every Granite Switch model. Check the model's
 `adapter_index.json` for the list of available adapters. The current model
-includes: `answerability`, `citations`, `context_relevance`, `guardian-core`,
+includes: `answerability`, `citations`, `guardian-core`,
 `hallucination_detection`, `query_clarification`, `query_rewrite`, and
 `requirement-check`.
 

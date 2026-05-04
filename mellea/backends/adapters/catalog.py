@@ -76,7 +76,6 @@ _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     IntriniscsCatalogEntry(name="answerability", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="citations", repo_id=_RAG_REPO),
-    IntriniscsCatalogEntry(name="context_relevance", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="hallucination_detection", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="query_clarification", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="query_rewrite", repo_id=_RAG_REPO),
