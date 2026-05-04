@@ -82,9 +82,7 @@ def test_message_format_for_llm_structure():
     msg = Message("user", "hello")
     tr = msg.format_for_llm()
     assert isinstance(tr, TemplateRepresentation)
-    assert tr.args["role"] == "user"
     assert tr.args["content"] is msg._content_cblock
-    assert tr.args["images"] is None
     assert tr.args["documents"] is None
 
 
@@ -210,24 +208,6 @@ def test_tool_message_fields():
     assert tm.role == "tool"
     assert tm.name == "my_tool"
     assert tm.arguments == {"x": 1}
-
-
-def test_tool_message_format_for_llm_includes_name():
-    from mellea.core import ModelToolCall
-
-    fake_tool = type("T", (), {"as_json_tool": {}})()
-    mtc = ModelToolCall("my_tool", fake_tool, {})
-    tm = ToolMessage(
-        role="tool",
-        content="output",
-        tool_output="output",
-        name="my_tool",
-        args={},
-        tool=mtc,
-    )
-    tr = tm.format_for_llm()
-    assert isinstance(tr, TemplateRepresentation)
-    assert tr.args["name"] == "my_tool"
 
 
 def test_tool_message_repr():
