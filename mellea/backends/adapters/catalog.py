@@ -78,31 +78,15 @@ _INTRINSICS_CATALOG_ENTRIES = [
     IntriniscsCatalogEntry(name="citations", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="context_relevance", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="hallucination_detection", repo_id=_RAG_REPO),
-    IntriniscsCatalogEntry(
-        name="query_clarification", repo_id=_RAG_REPO, adapter_types=(AdapterType.LORA,)
-    ),
+    IntriniscsCatalogEntry(name="query_clarification", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="query_rewrite", repo_id=_RAG_REPO),
     ############################################
     # Guardian Intrinsics
     ############################################
-    IntriniscsCatalogEntry(
-        name="policy-guardrails",
-        repo_id=_GUARDIAN_REPO,
-        adapter_types=(AdapterType.LORA,),
-    ),
-    IntriniscsCatalogEntry(
-        name="guardian-core", repo_id=_GUARDIAN_REPO, adapter_types=(AdapterType.LORA,)
-    ),
-    IntriniscsCatalogEntry(
-        name="factuality-detection",
-        repo_id=_GUARDIAN_REPO,
-        adapter_types=(AdapterType.LORA,),
-    ),
-    IntriniscsCatalogEntry(
-        name="factuality-correction",
-        repo_id=_GUARDIAN_REPO,
-        adapter_types=(AdapterType.LORA,),
-    ),
+    IntriniscsCatalogEntry(name="policy-guardrails", repo_id=_GUARDIAN_REPO),
+    IntriniscsCatalogEntry(name="guardian-core", repo_id=_GUARDIAN_REPO),
+    IntriniscsCatalogEntry(name="factuality-detection", repo_id=_GUARDIAN_REPO),
+    IntriniscsCatalogEntry(name="factuality-correction", repo_id=_GUARDIAN_REPO),
 ]
 
 _INTRINSICS_CATALOG = {e.name: e for e in _INTRINSICS_CATALOG_ENTRIES}

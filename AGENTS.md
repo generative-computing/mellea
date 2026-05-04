@@ -178,7 +178,7 @@ Intrinsics are specialized LoRA adapters that add task-specific capabilities (RA
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1) |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
@@ -187,7 +187,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = (
     ChatContext()
     .add(Message("user", "What is the square root of 4?"))
@@ -223,5 +223,5 @@ https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name
 
 Core and Guardian intrinsics (include model subfolder):
 ```
-https://huggingface.co/ibm-granite/granitelib-{core,guardian}-r1.0/blob/main/{intrinsic_name}/granite-4.0-micro/README.md
+https://huggingface.co/ibm-granite/granitelib-{core,guardian,rag}-r1.0/blob/main/{intrinsic_name}/granite-4.1-{3b,8b,30b}/{lora,alora}/README.md
 ```

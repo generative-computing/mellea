@@ -772,13 +772,27 @@ async def test_intrinsic_streaming_raises(backend) -> None:
         )
 
 
-async def test_intrinsic_no_adapter_raises(backend) -> None:
+async def test_unknown_intrinsic_no_adapter_raises(backend) -> None:
+    """Calling an unknown intrinsic with no registered adapter raises ValueError."""
+    ctx = ChatContext().add(Message("user", "test"))
+
+    with pytest.raises(ValueError, match="Unknown intrinsic name"):
+        await mfuncs.aact(
+            Intrinsic("nonexistent_intrinsic"), ctx, backend, strategy=None
+        )
+
+
+async def test_known_intrinsic_no_adapter_raises(backend) -> None:
     """Calling an intrinsic with no registered adapter raises ValueError."""
     ctx = ChatContext().add(Message("user", "test"))
 
     with pytest.raises(ValueError, match="has no adapter"):
         await mfuncs.aact(
-            Intrinsic("nonexistent_intrinsic"), ctx, backend, strategy=None
+            # Explicitly pass in a known Intrinsic that isn't loaded.
+            Intrinsic("uncertainty"),
+            ctx,
+            backend,
+            strategy=None,
         )
 
 

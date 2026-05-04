@@ -39,7 +39,7 @@ DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
 
 
-BASE_MODEL = "ibm-granite/granite-4.0-micro"
+BASE_MODEL = "ibm-granite/granite-4.1-3b"
 
 
 @pytest.fixture(name="backend", scope="module")

@@ -6,7 +6,7 @@ from cli.alora.readme_generator import generate_readme, make_readme_jinja_dict
 if __name__ == "__main__":
     generate_readme(
         dataset_path="stembolt_failure_dataset.jsonl",
-        base_model="granite-4.0-micro",
+        base_model="granite-4.1-3b",
         prompt_file=None,
         output_path="stembolts_model_readme.md",
         name="your-username/stembolts-alora",

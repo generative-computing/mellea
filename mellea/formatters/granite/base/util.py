@@ -164,9 +164,7 @@ def chat_completion_request_to_transformers_inputs(
         "add_generation_prompt": True,
     }
 
-    # Copy tools if present. Do this carefully, because we can't guarantee that
-    # "tools is None" is the same as "tools not present" across all tokenizers
-    if "tools" in request:
+    if request.get("tools") is not None:
         tokenizer_input["tools"] = request["tools"]
 
     # pylint: disable=unsupported-membership-test

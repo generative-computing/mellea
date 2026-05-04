@@ -37,13 +37,13 @@ pytestmark = [
 # ---------------------------------------------------------------------------
 # Imports (after markers so collection-time skips fire first)
 # ---------------------------------------------------------------------------
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.backends.openai import OpenAIBackend
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.components.docs.document import Document
-from mellea.stdlib.components.intrinsic import rag
+from mellea.stdlib.components.intrinsic import core as intrinsic_core, guardian, rag
 from mellea.stdlib.context import ChatContext
 from test.formatters.granite.test_intrinsics_formatters import (
     _YAML_JSON_COMBOS_WITH_MODEL,
@@ -54,7 +54,7 @@ from test.formatters.granite.test_intrinsics_formatters import (
 # Configuration
 # ---------------------------------------------------------------------------
 SWITCH_MODEL_ID = os.environ.get(
-    "GRANITE_SWITCH_MODEL_ID", IBM_GRANITE_SWITCH_4_1_3B.hf_model_name
+    "GRANITE_SWITCH_MODEL_ID", IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name
 )
 
 
@@ -355,13 +355,21 @@ def test_call_intrinsic_answerability(call_intrinsic_backend):
 
 
 @pytest.mark.qualitative
-def test_call_intrinsic_context_relevance(call_intrinsic_backend):
-    """call_intrinsic path: check_context_relevance returns a score between 0 and 1."""
-    context, question, documents = _read_rag_input("context_relevance.json")
-    result = rag.check_context_relevance(
-        question, documents[0], context, call_intrinsic_backend
+def test_call_intrinsic_requirement_check(call_intrinsic_backend):
+    """call_intrinsic path: requirement_check returns a score between 0 and 1."""
+    with open(_RAG_TEST_DATA / "requirement_check.json", encoding="utf-8") as f:
+        data = json.load(f)
+
+    context = ChatContext()
+    for m in data["messages"]:
+        context = context.add(Message(m["role"], m["content"]))
+
+    requirement = data["requirement"]
+    result = intrinsic_core.requirement_check(
+        context, call_intrinsic_backend, requirement=requirement
     )
-    assert result in ["relevant", "irrelevant", "partially relevant"]
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -399,3 +407,186 @@ def test_intrinsic_with_tools(backend: OpenAIBackend):
     assert len(result.value) > 0
     parsed = json.loads(result.value)
     assert isinstance(parsed, dict)
+
+
+# ---------------------------------------------------------------------------
+# Guardian intrinsic tests — exercise the high-level convenience wrappers
+# ---------------------------------------------------------------------------
+
+_GUARDIAN_TEST_DATA = (
+    pathlib.Path(__file__).parent.parent
+    / "stdlib"
+    / "components"
+    / "intrinsic"
+    / "testdata"
+    / "input_json"
+)
+
+
+def _read_guardian_input(file_name: str) -> ChatContext:
+    """Read guardian test input and convert to a ChatContext."""
+    with open(_GUARDIAN_TEST_DATA / file_name, encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    context = ChatContext()
+    for m in json_data["messages"]:
+        role = m["role"]
+        content = m["content"]
+        context = context.add(Message(role, content))
+
+    return context
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_policy_guardrails(call_intrinsic_backend):
+    """call_intrinsic path: policy_guardrails returns a compliance label."""
+    context = _read_guardian_input("policy_guardrails.json")
+
+    policy_text = (
+        "hiring managers should steer away from any questions that directly seek "
+        'information about protected classes\u2014such as "how old are you," "where are '
+        'you from," "what year did you graduate" or "what are your plans for having kids."'
+    )
+
+    result = guardian.policy_guardrails(
+        context, call_intrinsic_backend, policy_text=policy_text
+    )
+    assert result in ("Yes", "No", "Ambiguous")
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_guardian_check_harm(call_intrinsic_backend):
+    """call_intrinsic path: guardian_check detects harmful prompts."""
+    context = _read_guardian_input("guardian_core.json")
+
+    result = guardian.guardian_check(
+        context, call_intrinsic_backend, criteria="harm", target_role="user"
+    )
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_guardian_check_groundedness(call_intrinsic_backend):
+    """call_intrinsic path: guardian_check detects ungrounded responses."""
+    document = Document(
+        text=(
+            "Eat (1964) is a 45-minute underground film created by Andy Warhol. "
+            "The film was first shown by Jonas Mekas on July 16, 1964, at the "
+            "Washington Square Gallery."
+        ),
+        doc_id="0",
+    )
+
+    context = (
+        ChatContext()
+        .add(Message("user", "When was the film Eat first shown?"))
+        .add(
+            Message(
+                "assistant",
+                "The film Eat was first shown by Jonas Mekas on December 24, "
+                "1922 at the Washington Square Gallery.",
+                documents=[document],
+            )
+        )
+    )
+
+    result = guardian.guardian_check(
+        context, call_intrinsic_backend, criteria="groundedness"
+    )
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_guardian_check_function_call(call_intrinsic_backend):
+    """call_intrinsic path: guardian_check detects function call hallucinations."""
+    tools = [
+        {
+            "name": "comment_list",
+            "description": "Fetches a list of comments for a specified IBM video.",
+            "parameters": {
+                "aweme_id": {
+                    "description": "The ID of the IBM video.",
+                    "type": "int",
+                    "default": "7178094165614464282",
+                },
+                "cursor": {
+                    "description": "The cursor for pagination. Defaults to 0.",
+                    "type": "int, optional",
+                    "default": "0",
+                },
+                "count": {
+                    "description": "The number of comments to fetch. Maximum is 30. Defaults to 20.",
+                    "type": "int, optional",
+                    "default": "20",
+                },
+            },
+        }
+    ]
+    tools_text = "Available tools:\n" + json.dumps(tools, indent=2)
+    user_text = "Fetch the first 15 comments for the IBM video with ID 456789123."
+    # Deliberately wrong: uses "video_id" instead of "aweme_id"
+    response_text = str(
+        [{"name": "comment_list", "arguments": {"video_id": 456789123, "count": 15}}]
+    )
+
+    context = (
+        ChatContext()
+        .add(Message("user", f"{tools_text}\n\n{user_text}"))
+        .add(Message("assistant", response_text))
+    )
+
+    result = guardian.guardian_check(
+        context, call_intrinsic_backend, criteria="function_call"
+    )
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_factuality_detection(call_intrinsic_backend):
+    """call_intrinsic path: factuality_detection returns a yes/no label."""
+    with open(_GUARDIAN_TEST_DATA / "factuality_detection.json", encoding="utf-8") as f:
+        data = json.load(f)
+
+    context = ChatContext()
+    docs = [
+        Document(text=d["text"], doc_id=d.get("doc_id"))
+        for d in data.get("extra_body", {}).get("documents", [])
+    ]
+    messages = data["messages"]
+    for i, m in enumerate(messages):
+        is_last = i == len(messages) - 1
+        if is_last and docs:
+            context = context.add(Message(m["role"], m["content"], documents=docs))
+        else:
+            context = context.add(Message(m["role"], m["content"]))
+
+    result = guardian.factuality_detection(context, call_intrinsic_backend)
+    assert result in ("yes", "no")
+
+
+@pytest.mark.qualitative
+def test_call_intrinsic_factuality_correction(call_intrinsic_backend):
+    """call_intrinsic path: factuality_correction returns corrected text or 'none'."""
+    with open(
+        _GUARDIAN_TEST_DATA / "factuality_correction.json", encoding="utf-8"
+    ) as f:
+        data = json.load(f)
+
+    context = ChatContext()
+    docs = [
+        Document(text=d["text"], doc_id=d.get("doc_id"))
+        for d in data.get("extra_body", {}).get("documents", [])
+    ]
+    messages = data["messages"]
+    for i, m in enumerate(messages):
+        is_last = i == len(messages) - 1
+        if is_last and docs:
+            context = context.add(Message(m["role"], m["content"], documents=docs))
+        else:
+            context = context.add(Message(m["role"], m["content"]))
+
+    result = guardian.factuality_correction(context, call_intrinsic_backend)
+    assert isinstance(result, str)
