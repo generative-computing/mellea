@@ -404,7 +404,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if isinstance(action, Requirement):
                 # See docs/dev/requirement_aLoRA_rerouting.md
                 reroute_to_alora = self.default_to_constraint_checking_alora
-                adapter_name = "requirement_check"
+                adapter_name = "requirement-check"
 
                 if isinstance(action, ALoraRequirement):
                     reroute_to_alora = True
@@ -416,7 +416,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                # Check if a requirement_check (or AloraRequirement specified) adapter
+                # Check if a requirement-check (or AloraRequirement specified) adapter
                 # exists.
                 alora_req_adapter = get_adapter_for_intrinsic(
                     adapter_name, [AdapterType.ALORA], self._added_adapters
