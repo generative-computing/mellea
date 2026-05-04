@@ -41,7 +41,7 @@ def requirement_check_to_bool(x: CBlock | str) -> bool:
             f"could not get value from alora requirement output; looking for `requirement_check` in {req_dict}"
         )
         return False
-    
+
     score = likelihood.get("score", None)
     if score is None:
         MelleaLogger.get_logger().warning(

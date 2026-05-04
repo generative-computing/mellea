@@ -59,8 +59,7 @@ def backend():
     Other intrinsics are not affected by this issue.
     """
     backend = LocalHFBackend(
-        model_id=model_ids.IBM_GRANITE_4_1_3B,
-        cache=SimpleLRUCache(5),
+        model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
     )
     backend.add_adapter(
         IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
