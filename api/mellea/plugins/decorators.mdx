@@ -1,0 +1,63 @@
+---
+title: "mellea.plugins.decorators"
+sidebarTitle: "mellea.plugins.decorators"
+description: "Mellea hook decorator."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Mellea hook decorator.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `hook` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/decorators.py#L26" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+hook(hook_type: str) -> Callable
+```
+
+
+Register an async function or method as a hook handler.
+
+**Args:**
+- `hook_type`: The hook point name (e.g., `"generation_pre_call"`).
+- `mode`: Execution mode — `PluginMode.SEQUENTIAL` (default), `PluginMode.CONCURRENT`,
+  `PluginMode.AUDIT`, or `PluginMode.FIRE_AND_FORGET`.
+- `priority`: Lower numbers execute first. For methods on a [`Plugin`](base#class-plugin) subclass, falls back
+      to the class-level priority, then 50. For standalone functions, defaults to 50.
+
+**Returns:**
+- A decorator that attaches `HookMeta` to the decorated function.
+
+**Raises:**
+- `TypeError`: If the decorated function is not `async def`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `HookMeta` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/decorators.py#L12" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Metadata attached by the @hook decorator.
+
+**Args:**
+- `hook_type`: The hook point name (e.g., `"generation_pre_call"`).
+- `mode`: Execution mode for the hook handler.
+- `priority`: Execution priority — lower numbers execute first.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

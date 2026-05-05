@@ -1,0 +1,163 @@
+---
+title: "mellea.backends.cache"
+sidebarTitle: "mellea.backends.cache"
+description: "Cache abstractions and implementations for model state."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Cache abstractions and implementations for model state.
+
+
+
+
+
+Defines the abstract `Cache` interface with `put`, `get`, and
+`current_size` methods, and provides a concrete `SimpleLRUCache` that evicts
+the least-recently-used entry when capacity is exceeded — optionally calling an
+`on_evict` callback (e.g. to free GPU memory). Used by local HuggingFace backends
+to store and reuse KV cache state across requests.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Cache` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L16" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A Cache for storing model state (e.g., kv cache).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `put` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L22" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+put(self, key: str | int, value: Any) -> None
+```
+
+Insert a value into the cache under the given key.
+
+May trigger eviction of existing entries if the cache is at capacity.
+
+**Args:**
+- `key`: The cache key to store the value under.
+- `value`: The value to store.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L34" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get(self, key: str | int) -> Any | None
+```
+
+Retrieve a value from the cache by key.
+
+May affect which entries are considered for future eviction (e.g. LRU ordering).
+
+**Args:**
+- `key`: The cache key to look up.
+
+**Returns:**
+- Any | None: The cached value, or `None` if `key` has no cached entry.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `current_size` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L48" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+current_size(self) -> int
+```
+
+Return the number of entries currently stored in the cache.
+
+**Returns:**
+- Count of items currently held in the cache; useful for debugging.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SimpleLRUCache` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L57" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A simple `LRU <https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)>`_ cache.
+
+Evicts the least-recently-used entry when capacity is exceeded, optionally
+invoking an `on_evict` callback (e.g. to free GPU memory). Used by local
+HuggingFace backends to store and reuse KV cache state across requests.
+
+**Args:**
+- `capacity`: Maximum number of items to store in the cache.
+- `on_evict`: Optional callback invoked with the
+evicted value whenever an entry is removed to make room for a new one.
+
+**Attributes:**
+- `cache`: Internal ordered dict used for LRU tracking; always
+initialised empty at construction.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `current_size` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+current_size(self) -> int
+```
+
+Return the number of entries currently stored in the cache.
+
+**Returns:**
+- Count of items currently held in the cache; useful for debugging.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L88" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get(self, key: str | int) -> Any | None
+```
+
+Retrieve a value from the cache, promoting it to most-recently-used.
+
+**Args:**
+- `key`: The cache key to look up.
+
+**Returns:**
+- Any | None: The cached value, or `None` if `key` is not present.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `put` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/backends/cache.py#L105" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+put(self, key: str | int, value: Any) -> None
+```
+
+Insert or update a value in the cache.
+
+If the cache is at capacity and the key is new, the least-recently-used
+entry is evicted first, invoking the `on_evict` callback if set.
+
+**Args:**
+- `key`: The cache key to store the value under.
+- `value`: The value to cache.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

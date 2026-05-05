@@ -1,0 +1,166 @@
+---
+title: "mellea.plugins.registry"
+sidebarTitle: "mellea.plugins.registry"
+description: "Plugin registration and helpers."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Plugin registration and helpers.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `modify` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/registry.py#L47" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+modify(payload: Any, **field_updates: Any) -> Any
+```
+
+
+Convenience helper for returning a modifying [`PluginResult`](base#class-pluginresult).
+
+Creates an immutable copy of `payload` with `field_updates` applied and
+wraps it in a `PluginResult(continue_processing=True)`.  Only fields
+listed in the hook's `HookPayloadPolicy.writable_fields` will be accepted
+by the framework; changes to read-only fields are silently discarded.
+
+Mirrors `block()` for the modification case::
+
+    # instead of:
+    modified = payload.model_copy(update=\{"model_output": new_mot\})
+    return PluginResult(continue_processing=True, modified_payload=modified)
+
+    # write:
+    return modify(payload, model_output=new_mot)
+
+**Args:**
+- `payload`: The original (frozen) payload received by the hook.
+- `**field_updates`: Fields to update on the payload copy.
+
+**Returns:**
+- A [`PluginResult`](base#class-pluginresult) with `continue_processing=True` and the modified payload.
+
+**Raises:**
+- `ImportError`: If the ContextForge plugin framework is not installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `block` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/registry.py#L85" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+block(reason: str) -> Any
+```
+
+
+Convenience helper for returning a blocking [`PluginResult`](base#class-pluginresult).
+
+**Args:**
+- `reason`: Short reason for the violation.
+- `code`: Machine-readable violation code.
+- `description`: Longer description (defaults to `reason`).
+- `details`: Additional structured details.
+
+**Returns:**
+- A [`PluginResult`](base#class-pluginresult) with `continue_processing=False` and a violation.
+
+**Raises:**
+- `ImportError`: If the ContextForge plugin framework is not installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `register` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/registry.py#L122" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+register(items: Callable | Any | PluginSet | list[Callable | Any | PluginSet]) -> None
+```
+
+
+Register plugins globally or for a specific session.
+
+When `session_id` is `None`, plugins are global (fire for all invocations).
+When `session_id` is provided, plugins fire only within that session.
+
+Accepts standalone `@hook` functions, `@plugin`-decorated class instances,
+`MelleaPlugin` instances, [`PluginSet`](pluginset#class-pluginset) instances, or lists thereof.
+
+**Args:**
+- `items`: One or more plugins to register — standalone `@hook` functions,
+`@plugin`-decorated class instances, `MelleaPlugin` instances,
+[`PluginSet`](pluginset#class-pluginset) instances, or a list of any combination.
+- `session_id`: Optional session identifier. When provided, the plugins are
+scoped to that session and automatically deregistered on session cleanup.
+
+**Raises:**
+- `ImportError`: If the ContextForge plugin framework is not installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `unregister` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/registry.py#L473" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+unregister(items: Callable | Any | PluginSet | list[Callable | Any | PluginSet]) -> None
+```
+
+
+Unregister globally-registered plugins.
+
+Accepts the same items as `register()`: standalone `@hook`-decorated
+functions, [`Plugin`](base#class-plugin) subclass instances, `MelleaPlugin` instances,
+[`PluginSet`](pluginset#class-pluginset) instances, or lists thereof.
+
+Silently ignores items that are not currently registered.
+
+**Args:**
+- `items`: One or more plugins to unregister — same types accepted by
+`register()`.
+
+**Raises:**
+- `ImportError`: If the ContextForge plugin framework is not installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `plugin_scope` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/registry.py#L514" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope
+```
+
+
+Return a context manager that temporarily registers plugins for a block of code.
+
+Accepts the same items as `register()`: standalone `@hook`-decorated
+functions, `@plugin`-decorated class instances, `MelleaPlugin` instances,
+and [`PluginSet`](pluginset#class-pluginset) instances — or any mix thereof.
+
+Supports both synchronous and asynchronous `with` statements::
+
+    # Sync functional API
+    with plugin_scope(log_hook, audit_plugin):
+        result, ctx = instruct("Summarize this", ctx, backend)
+
+    # Async functional API
+    async with plugin_scope(safety_hook, rate_limit_plugin):
+        result, ctx = await ainstruct("Generate code", ctx, backend)
+
+**Args:**
+- `*items`: One or more plugins to register for the duration of the block.
+
+**Returns:**
+- A context manager that registers the given plugins on entry and
+- deregisters them on exit.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

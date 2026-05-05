@@ -1,0 +1,65 @@
+---
+title: "mellea.formatters.chat_formatter"
+sidebarTitle: "mellea.formatters.chat_formatter"
+description: "`ChatFormatter` for converting context histories to chat-message lists."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`ChatFormatter` for converting context histories to chat-message lists.
+
+
+
+
+
+`ChatFormatter` is the standard formatter used by mellea's legacy backends. Its
+`to_chat_messages` method linearises a sequence of [`Component`](../core/base#class-component) and [`CBlock`](../core/base#class-cblock)
+objects into `Message` objects with `user`, `assistant`, or `tool` roles,
+handling [`ModelOutputThunk`](../core/base#class-modeloutputthunk) responses, image attachments, and parsed structured
+outputs. Concrete backends call this formatter when preparing input for a chat
+completion endpoint.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/chat_formatter.py#L21" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Formatter used by Legacy backends to format Contexts as Messages.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_chat_messages` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/chat_formatter.py#L24" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]
+```
+
+Convert a linearized chat history into a list of chat messages.
+
+Iterates over each element in the context history and converts it to a
+`Message` with an appropriate role. [`ModelOutputThunk`](../core/base#class-modeloutputthunk) instances are
+treated as assistant responses, while all other [`Component`](../core/base#class-component) and
+[`CBlock`](../core/base#class-cblock) objects default to the `user` role. Image attachments and
+parsed structured outputs are handled transparently.
+
+**Args:**
+- `cs`: The linearized sequence of context
+components and code blocks to convert.
+
+**Returns:**
+- list[Message]: A list of `Message` objects ready for submission to
+a chat completion endpoint.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

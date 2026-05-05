@@ -1,0 +1,120 @@
+---
+title: "mellea.formatters.granite.intrinsics.util"
+sidebarTitle: "mellea.formatters.granite.intrinsics.util"
+description: "Common utility functions for this package."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Common utility functions for this package.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `make_config_dict` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/intrinsics/util.py#L24" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+make_config_dict(config_file: str | pathlib.Path | None = None, config_dict: dict | None = None) -> dict | None
+```
+
+
+Create a configuration dictionary from YAML file or dict.
+
+This function is not a public API and is not intended for use outside this library.
+
+Common initialization code for reading YAML config files in factory classes.
+Also parses JSON fields.
+
+**Args:**
+- `config_file`: Path to a YAML configuration file. Exactly one of `config_file`
+and `config_dict` must be provided.
+- `config_dict`: Pre-parsed configuration dict (from `yaml.safe_load()`). Exactly
+one of `config_file` and `config_dict` must be provided.
+
+**Returns:**
+- Validated configuration dict with optional fields set to `None` and JSON
+- string fields parsed to Python objects.
+
+**Raises:**
+- `ValueError`: If both or neither of `config_file` and `config_dict` are
+provided, if a required field is missing, if an unexpected top-level
+field is encountered, or if a JSON field cannot be parsed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `obtain_lora` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/intrinsics/util.py#L100" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+obtain_lora(revision: str = 'main', alora: bool = False, cache_dir: str | None = None, file_glob: str = '*') -> pathlib.Path
+```
+
+
+Download and cache an adapter that implements and intrinsic.
+
+Downloads a LoRA or aLoRA adapter from a collection of adapters that follow the
+same layout as the [Granite Intrinsics Library](
+https://huggingface.co/ibm-granite/granitelib-rag-r1.0). Caches the downloaded
+adapter files on local disk.
+
+**Args:**
+- `intrinsic_name`: Short name of the intrinsic model, such as `"certainty"`.
+- `target_model_name`: Name of the base model for the LoRA or aLoRA adapter.
+- `repo_id`: Hugging Face Hub repository containing a collection of LoRA and/or
+aLoRA adapters for intrinsics.
+- `revision`: Git revision of the repository to download from.
+- `alora`: If `True`, load the aLoRA version of the intrinsic; otherwise use LoRA.
+- `cache_dir`: Local directory to use as a cache (Hugging Face Hub format), or
+`None` to use the default location.
+- `file_glob`: Only files matching this glob will be downloaded to the cache.
+
+**Returns:**
+- Full path to the local copy of the specified (a)LoRA adapter, suitable for
+- passing to commands that serve the adapter.
+
+**Raises:**
+- `ValueError`: If the specified intrinsic adapter cannot be found in the
+Hugging Face Hub repository at the expected path.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `obtain_io_yaml` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/intrinsics/util.py#L175" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+obtain_io_yaml(revision: str = 'main', alora: bool = False, cache_dir: str | None = None) -> pathlib.Path
+```
+
+
+Download cached `io.yaml` configuration file for an intrinsic.
+
+Downloads an `io.yaml` configuration file for an intrinsic
+with a model repository that follows the format of the
+[Granite Intrinsics Library](
+https://huggingface.co/ibm-granite/granitelib-rag-r1.0) if one is not
+already in the local cache.
+
+**Args:**
+- `intrinsic_name`: Short name of the intrinsic model, such as `"certainty"`.
+- `target_model_name`: Name of the base model for the LoRA or aLoRA adapter.
+- `repo_id`: Hugging Face Hub repository containing a collection of LoRA and/or
+aLoRA adapters for intrinsics.
+- `revision`: Git revision of the repository to download from.
+- `alora`: If `True`, load the aLoRA version of the intrinsic; otherwise use LoRA.
+- `cache_dir`: Local directory to use as a cache (Hugging Face Hub format), or
+`None` to use the default location.
+
+**Returns:**
+- Full path to the local copy of the `io.yaml` file, suitable for passing to
+- `IntrinsicsRewriter`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
