@@ -19,6 +19,10 @@ class ChunkingStrategy(ABC):
     take the full accumulated text, identify everything after the last returned
     chunk boundary, and handle it appropriately (e.g. pass to a final validator
     or discard).
+
+    Note: this ABC operates on text streams only. Multi-modal output (audio
+    segments, image regions) is not supported — the ``accumulated_text: str``
+    signatures on ``split`` and ``flush`` preclude it.
     """
 
     @abstractmethod
