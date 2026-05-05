@@ -191,7 +191,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 docs = [Document(text=doc, doc_id=str(i)) for i, doc in enumerate(relevant)]
 eval_ctx = (
@@ -247,7 +247,7 @@ def search(query: str, docs: list[str], index: IndexFlatIP,
     return [docs[i] for i in indices[0]]
 
 
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 
 def rag(docs: list[str], query: str) -> str | None:

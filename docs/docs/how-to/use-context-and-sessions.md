@@ -147,7 +147,7 @@ class SafeChatSession(MelleaSession):
         return super().chat(content, role, **kwargs)
 
 
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 m = SafeChatSession(
     backend=OllamaModelBackend(),
     guardian_backend=guardian_backend,
