@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
@@ -49,6 +49,13 @@ class ResponseFormat(BaseModel):
 
     json_schema: JsonSchemaFormat | None = None
     """JSON Schema definition when type is 'json_schema'."""
+
+    @model_validator(mode="after")
+    def validate_json_schema_required(self) -> "ResponseFormat":
+        """Validate that json_schema is provided when type is 'json_schema'."""
+        if self.type == "json_schema" and self.json_schema is None:
+            raise ValueError("json_schema field is required when type is 'json_schema'")
+        return self
 
 
 class StreamOptions(BaseModel):

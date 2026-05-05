@@ -723,31 +723,19 @@ class TestResponseFormat:
 
     @pytest.mark.asyncio
     async def test_json_schema_missing_schema_field(self, mock_module):
-        """Test that json_schema without schema field returns error."""
+        """Test that json_schema without schema field raises ValidationError."""
+        from pydantic import ValidationError
 
-        request = ChatCompletionRequest(
-            model="test-model",
-            messages=[ChatMessage(role="user", content="Generate")],
-            response_format=ResponseFormat(
+        # Should raise ValidationError when creating ResponseFormat
+        with pytest.raises(ValidationError) as exc_info:
+            ResponseFormat(
                 type="json_schema",
                 json_schema=None,  # Missing schema
-            ),
-        )
+            )
 
-        endpoint = make_chat_endpoint(mock_module)
-        response = await endpoint(request)
-
-        # Should return error
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 400
-
-        body_bytes = response.body
-        if isinstance(body_bytes, memoryview):
-            body_bytes = bytes(body_bytes)
-        error_data = json.loads(body_bytes.decode("utf-8"))
-        assert "error" in error_data
-        assert error_data["error"]["type"] == "invalid_request_error"
-        assert "json_schema" in error_data["error"]["message"].lower()
+        # Verify error message mentions json_schema requirement
+        error_str = str(exc_info.value)
+        assert "json_schema" in error_str.lower()
 
     @pytest.mark.asyncio
     async def test_json_schema_invalid_schema(self, mock_module):
