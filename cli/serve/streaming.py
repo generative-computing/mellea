@@ -18,7 +18,6 @@ from .models import (
     OpenAIError,
     OpenAIErrorResponse,
     StreamOptions,
-    ToolCallFunctionDelta,
 )
 
 

@@ -35,7 +35,6 @@ from .models import (
     Choice,
     OpenAIError,
     OpenAIErrorResponse,
-    ToolCallFunction,
 )
 from .streaming import stream_chat_completion_chunks
 
