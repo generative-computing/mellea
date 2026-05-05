@@ -1,3 +1,118 @@
+## [v0.5.0](https://github.com/generative-computing/mellea/releases/tag/v0.5.0) - 2026-05-05
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### New Features
+* feat(telemetry): latency histograms for LLM request duration and TTFB (#463) by @ajbozarth in https://github.com/generative-computing/mellea/pull/782
+* feat: rename generative slots -> generative stubs by @jakelorocco in https://github.com/generative-computing/mellea/pull/801
+* feat: (m-decompose) Module Prompt V3 by @csbobby in https://github.com/generative-computing/mellea/pull/770
+* feat: simplify plugin tests; fix plugin resetting by @jakelorocco in https://github.com/generative-computing/mellea/pull/819
+* feat: add examples and tooling tests to run_tests_with_ollama_and_vllm by @jakelorocco in https://github.com/generative-computing/mellea/pull/821
+* feat: add return types to invoke_hook  by @jakelorocco in https://github.com/generative-computing/mellea/pull/707
+* feat: separate out remaining dependencies and improve tests by @jakelorocco in https://github.com/generative-computing/mellea/pull/789
+* feat: add error counter metrics categorized by semantic type (#465) by @ajbozarth in https://github.com/generative-computing/mellea/pull/856
+* refactor: improve fancylogger implementation by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/792
+* refactor: add otel tracing filter to logging by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/859
+* feat: streaming support in m serve OpenAI API server by @markstur in https://github.com/generative-computing/mellea/pull/823
+* feat: first pass at carrying contextvars though async flows by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/878
+* refactor: add print statements to show code flow in mify example by @code4days in https://github.com/generative-computing/mellea/pull/870
+* feat: add pricing registry and cost metrics (#464) by @ajbozarth in https://github.com/generative-computing/mellea/pull/882
+* feat: add operational counters for sampling, requirements, and tools (#467) by @ajbozarth in https://github.com/generative-computing/mellea/pull/883
+* feat: add --skip-resource-checks flag to bypass hardware capability g… by @ajbozarth in https://github.com/generative-computing/mellea/pull/889
+* refactor!: partition ModelOutputThunk execution metadata into Generat… by @ajbozarth in https://github.com/generative-computing/mellea/pull/908
+* feat: add additional logging handlers by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/907
+* feat(core): add PartialValidationResult with tri-state semantics by @planetf1 in https://github.com/generative-computing/mellea/pull/924
+* feat(stdlib): add ChunkingStrategy ABC and built-in chunkers by @planetf1 in https://github.com/generative-computing/mellea/pull/923
+* feat: add prompt cache token support to cost telemetry by @ajbozarth in https://github.com/generative-computing/mellea/pull/936
+* feat: add stream_validate() hook to Requirement (#900) by @planetf1 in https://github.com/generative-computing/mellea/pull/925
+* feat(examples): add extra_requirements param to IVR qiskit validation by @ajbozarth in https://github.com/generative-computing/mellea/pull/955
+* feat: add embedded adapters (granite switch) to openai backend by @jakelorocco in https://github.com/generative-computing/mellea/pull/881
+* refactor(telemetry): replace builtin_pricing.json with litellm pricing API by @ajbozarth in https://github.com/generative-computing/mellea/pull/956
+* feat: simplify intrinsics (code and examples) by @jakelorocco in https://github.com/generative-computing/mellea/pull/946
+* feat: granite4.1 by @avinash2692 in https://github.com/generative-computing/mellea/pull/964
+* feat: allow `name` field in intrinsics io.yaml by @ink-pad in https://github.com/generative-computing/mellea/pull/980
+* feat: handle message docs correctly by @jakelorocco in https://github.com/generative-computing/mellea/pull/975
+* feat: update granite library examples to use Granite 4.1 3B adapters. by @nrfulton in https://github.com/generative-computing/mellea/pull/981
+### Bug Fixes
+* fix: restore example collection during directory traversal (#794) by @planetf1 in https://github.com/generative-computing/mellea/pull/795
+* fix: redirect /how-to/safety-guardrails to existing security page (#788) by @planetf1 in https://github.com/generative-computing/mellea/pull/803
+* fix(cli): handle sync/async serve functions in m serve by @markstur in https://github.com/generative-computing/mellea/pull/784
+* fix: evict Ollama models between test modules to prevent memory starvation by @planetf1 in https://github.com/generative-computing/mellea/pull/804
+* fix: sofai graph coloring example — broken model and incorrect problem #806 by @planetf1 in https://github.com/generative-computing/mellea/pull/807
+* fix: flush MPS cache in alora test GPU cleanup (#790) by @planetf1 in https://github.com/generative-computing/mellea/pull/800
+* fix(test): widen hallucination detection tolerance (#809) by @planetf1 in https://github.com/generative-computing/mellea/pull/810
+* fix: reload module for telemetry testing so all tests can run by @jakelorocco in https://github.com/generative-computing/mellea/pull/805
+* fix: handle stale .vllm-venv in test runner by @planetf1 in https://github.com/generative-computing/mellea/pull/829
+* fix: remove all mentions to RITS by @guicho271828 in https://github.com/generative-computing/mellea/pull/868
+* fix: granite33 response_end span uses sentence length not full respon… by @planetf1 in https://github.com/generative-computing/mellea/pull/845
+* fix: run zizmor checker for github actions to ensure security by @jakelorocco in https://github.com/generative-computing/mellea/pull/854
+* fix: render Click \b verbatim blocks in CLI reference docs (#866) by @planetf1 in https://github.com/generative-computing/mellea/pull/867
+* fix: fixes invalid workflow file by @markstur in https://github.com/generative-computing/mellea/pull/877
+* fix: granite33 citation spans wrong for duplicate sentences (#851) by @planetf1 in https://github.com/generative-computing/mellea/pull/872
+* fix: fixing test bugs with xfail by @avinash2692 in https://github.com/generative-computing/mellea/pull/886
+* fix: handle nested JSON in parse_judge_output via raw_decode by @sjoerdvink99 in https://github.com/generative-computing/mellea/pull/875
+* fix: disable OCR in RichDocument CI test to avoid modelscope.cn download by @ajbozarth in https://github.com/generative-computing/mellea/pull/888
+* fix: update hallucination_detection fixture for upstream NA enum addition by @ajbozarth in https://github.com/generative-computing/mellea/pull/918
+* fix: remove wall time checks from tracing_backend tests by @jakelorocco in https://github.com/generative-computing/mellea/pull/927
+* fix: add missing nav and fix cli ref by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/922
+* fix: add vllm pytest marker back by @jakelorocco in https://github.com/generative-computing/mellea/pull/933
+* fix: raise ValueError on duplicate subtask tags in reorder_subtasks by @sjoerdvink99 in https://github.com/generative-computing/mellea/pull/874
+* fix: replace asyncio.sleep FAF guards with deterministic awaits by @ajbozarth in https://github.com/generative-computing/mellea/pull/919
+* fix: removing ollama hardcoding in examples, guardian, and test by @avinash2692 in https://github.com/generative-computing/mellea/pull/912
+* fix: pin uncertainty and context-attribution revisions and update uncertai… by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/970
+* fix: swap python decompose example model by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/968
+* fix: model options with intrinsics by @jakelorocco in https://github.com/generative-computing/mellea/pull/972
+* fix: add guardian intrinsic document by @subhajitchaudhury in https://github.com/generative-computing/mellea/pull/966
+* fix: key in json object returned by policy_guardrails intrinsic by @monindersingh in https://github.com/generative-computing/mellea/pull/979
+* fix: default intrinsic adapter types by @jakelorocco in https://github.com/generative-computing/mellea/pull/994
+* fix: issues introduced by intrinsic changes by @jakelorocco in https://github.com/generative-computing/mellea/pull/986
+* fix: update model ids and documentation links for switch by @jakelorocco in https://github.com/generative-computing/mellea/pull/997
+* fix: move test_huggingface.py to granite4.1; and small rag intrinsic … by @jakelorocco in https://github.com/generative-computing/mellea/pull/1008
+* fix: prevent major releases by @jakelorocco in https://github.com/generative-computing/mellea/pull/1016
+### Documentation
+* docs: add redirects for former pages by @psschwei in https://github.com/generative-computing/mellea/pull/846
+* docs: add CLI reference page and remove CLI from API docs (#704) by @planetf1 in https://github.com/generative-computing/mellea/pull/852
+* docs: add AI attribution policy by @ajbozarth in https://github.com/generative-computing/mellea/pull/848
+* docs: consolidate how-to section by @psschwei in https://github.com/generative-computing/mellea/pull/893
+* docs: add generation_error hook to plugins page, remove stale plan doc by @ajbozarth in https://github.com/generative-computing/mellea/pull/887
+* docs: fix 'convienance' -> 'convenience' (5 occurrences) by @MukundaKatta in https://github.com/generative-computing/mellea/pull/894
+* docs: move glossary to reference section by @psschwei in https://github.com/generative-computing/mellea/pull/892
+* docs: document two session creation patterns by @akihikokuroda in https://github.com/generative-computing/mellea/pull/906
+* docs: add backend selection lookup table by @akihikokuroda in https://github.com/generative-computing/mellea/pull/905
+* docs: restructure sidebar — split Observability from Evaluation, move LLM-as-a-Judge to How-To by @ajbozarth in https://github.com/generative-computing/mellea/pull/895
+* docs: add metadata to code block by @akihikokuroda in https://github.com/generative-computing/mellea/pull/917
+* docs: test based eval documentation by @seirasto in https://github.com/generative-computing/mellea/pull/916
+* docs: fix link to CONTRIBUTING guide by @seirasto in https://github.com/generative-computing/mellea/pull/960
+* docs: add expected output blocks and update quickstart examples by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/957
+* docs: add architecture diagram for intrinsics by @jakelorocco in https://github.com/generative-computing/mellea/pull/998
+### Other Changes
+* chore: update governance by @psschwei in https://github.com/generative-computing/mellea/pull/799
+* test: add unit tests for stdlib/requirements (#814) by @planetf1 in https://github.com/generative-computing/mellea/pull/820
+* test: add tool_arg_validator edge case test, fix typo (#826) by @planetf1 in https://github.com/generative-computing/mellea/pull/831
+* test: add unit tests for helpers (#815) by @planetf1 in https://github.com/generative-computing/mellea/pull/847
+* test: add unit tests for granite formatters (#812) by @planetf1 in https://github.com/generative-computing/mellea/pull/818
+* test: unit tests for backend pure logic (cache, catalog, bedrock) by @planetf1 in https://github.com/generative-computing/mellea/pull/832
+* chore: add info for working with intrinsics to AGENTS.md by @psschwei in https://github.com/generative-computing/mellea/pull/768
+* test: add unit and integration tests for stdlib components (#817) by @planetf1 in https://github.com/generative-computing/mellea/pull/830
+* test: unit tests for CLI decompose and eval pure-logic helpers (#861) by @planetf1 in https://github.com/generative-computing/mellea/pull/863
+* test: pure-logic unit tests for stdlib, core, backends, telemetry (#860) by @planetf1 in https://github.com/generative-computing/mellea/pull/862
+* ci: add actionlint to validate workflow files on PRs by @planetf1 in https://github.com/generative-computing/mellea/pull/880
+* chore: Update expected test outputs to reflect upstream config changes by @frreiss in https://github.com/generative-computing/mellea/pull/897
+* chore: removing some comments by @avinash2692 in https://github.com/generative-computing/mellea/pull/978
+* test: add tests for new intrinsic field name by @jakelorocco in https://github.com/generative-computing/mellea/pull/988
+* release: bump minor version by @jakelorocco in https://github.com/generative-computing/mellea/pull/977
+* ci: add action for holding PRs (preventing merge) by @psschwei in https://github.com/generative-computing/mellea/pull/1014
+
+## New Contributors
+* @sjoerdvink99 made their first contribution in https://github.com/generative-computing/mellea/pull/875
+* @MukundaKatta made their first contribution in https://github.com/generative-computing/mellea/pull/894
+* @seirasto made their first contribution in https://github.com/generative-computing/mellea/pull/916
+* @subhajitchaudhury made their first contribution in https://github.com/generative-computing/mellea/pull/966
+* @monindersingh made their first contribution in https://github.com/generative-computing/mellea/pull/979
+
+**Full Changelog**: https://github.com/generative-computing/mellea/compare/v0.4.2...v0.5.0
+
 ## [v0.4.2](https://github.com/generative-computing/mellea/releases/tag/v0.4.2) - 2026-04-08
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
