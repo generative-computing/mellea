@@ -179,7 +179,7 @@ def make_chat_endpoint(module):
                         format_model = json_schema_to_pydantic(
                             json_schema.schema_, json_schema.name
                         )
-                    except ValueError as e:
+                    except (ValueError, TypeError) as e:
                         return create_openai_error_response(
                             status_code=400,
                             message=f"Invalid JSON schema: {e!s}",
