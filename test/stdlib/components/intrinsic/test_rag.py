@@ -52,7 +52,7 @@ def _backend():
 
 @pytest.fixture(name="backend_4_0", scope="module")
 def _backend_4_0():
-    """Granite 4.0 backend used only by tests that don't have Granite 4.1 models.."""
+    """Granite 4.0 backend used only by tests that don't have Granite 4.1 models."""
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
