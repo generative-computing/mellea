@@ -194,18 +194,10 @@ def make_chat_endpoint(module):
                     media_type="text/event-stream",
                 )
 
-            # Extract tool calls from the ModelOutputThunk if available
             tool_calls_list = build_tool_calls(output)
             tool_calls = (
                 [
-                    ChatCompletionMessageToolCall(
-                        id=tc["id"],
-                        type=tc["type"],
-                        function=ToolCallFunction(
-                            name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"],
-                        ),
-                    )
+                    ChatCompletionMessageToolCall.model_validate(tc)
                     for tc in tool_calls_list
                 ]
                 if tool_calls_list

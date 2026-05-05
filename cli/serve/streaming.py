@@ -104,21 +104,12 @@ async def stream_chat_completion_chunks(
                     )
                     yield f"data: {chunk.model_dump_json()}\n\n"
 
-        # Extract tool calls from the ModelOutputThunk if available
         tool_calls_list = build_tool_calls(output)
 
         if tool_calls_list:
             # Convert to ChatCompletionMessageToolCallDelta objects with required index
             tool_calls = [
-                ChatCompletionMessageToolCallDelta(
-                    index=idx,
-                    id=tc["id"],
-                    type=tc["type"],
-                    function=ToolCallFunctionDelta(
-                        name=tc["function"]["name"],
-                        arguments=tc["function"]["arguments"],
-                    ),
-                )
+                ChatCompletionMessageToolCallDelta.model_validate({**tc, "index": idx})
                 for idx, tc in enumerate(tool_calls_list)
             ]
 

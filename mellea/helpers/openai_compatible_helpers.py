@@ -1,6 +1,7 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
 import json
+import uuid
 from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel
@@ -278,9 +279,6 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
         List of ``ToolCallDict`` objects when tool calls are present,
         otherwise ``None``.
     """
-    import json
-    import uuid
-
     # Check for tool calls - ModelOutputThunk always has tool_calls attribute
     if (
         output.tool_calls is None

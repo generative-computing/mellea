@@ -5,7 +5,7 @@ tests (from main branch) are in test_serve_streaming.py.
 """
 
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -416,10 +416,10 @@ class TestStreamingErrorHandling:
         output = ModelOutputThunk("")
         output._computed = False
 
-        async def mock_astream_error():
-            raise RuntimeError("Simulated streaming error")
-
-        output.astream = mock_astream_error
+        # Use AsyncMock with side_effect to raise error
+        output.astream = AsyncMock(
+            side_effect=RuntimeError("Simulated streaming error")
+        )
 
         # Collect chunks
         chunks = []
