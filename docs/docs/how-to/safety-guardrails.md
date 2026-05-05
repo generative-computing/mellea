@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/safety-guardrails"
 title: "Safety Guardrails"
 description: "Use Guardian Intrinsics to detect harmful, biased, ungrounded, or policy-violating content in LLM outputs."
 # diataxis: how-to
