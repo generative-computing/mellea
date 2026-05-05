@@ -37,15 +37,71 @@ def _read_file(name):
 
 
 _TEST_DATA_DIR = pathlib.Path(os.path.dirname(__file__)) / "testdata"
+_TEST_OUTPUT_DIR = pathlib.Path(os.path.dirname(__file__)) / "test_output"
+"""Directory string we substitute for _TEST_DATA_DIR when writing debug outputs."""
 
 # Location from which our tests download adapters and YAML files
 _RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
 
+_DEFAULT_BASE_MODEL = "ibm-granite/granite-4.1-3b"
+
 
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
 _INPUT_YAML_DIR = _TEST_DATA_DIR / "input_yaml"
 _INPUT_ARGS_DIR = _TEST_DATA_DIR / "input_args"
+
+
+def _substitute_root(
+    child_path: pathlib.Path, old_root: pathlib.Path, new_root: pathlib.Path
+):
+    """Change a path rooted in one root directory to the same path rooted in another.
+
+    Handles common corner cases such as when a given path has multiple equivalent
+    string representations.
+
+    Args:
+        child_path: A path that is a descendant of a known root.
+        old_root: Root directory that is an ancestor of ``child_path``.
+        new_root: Root directory to substitute for ``old_root``.
+
+    Returns:
+        A version of ``child_path`` in which the prefix corresponding to
+        ``old_root`` has been replaced with ``new_root``.
+    """
+    # Resolve paths to handle symlinks, relative components, and other corner cases
+    child_path = child_path.resolve()
+    old_root = old_root.resolve()
+    new_root = new_root.resolve()
+
+    # Get the relative path from old_root to child_path
+    try:
+        relative_path = child_path.relative_to(old_root)
+    except ValueError:
+        raise ValueError(f"{child_path} is not a descendant of {old_root}")
+
+    # Construct new path with the new root
+    return new_root / relative_path
+
+
+def _dump_output(expected_file: pathlib.Path, actual_string: str):
+    """Dump outputs to disk to aid debugging.
+
+    Given the string representation of something that the current test is about to
+    compare against a canned output and the location of said canned output, write
+    the string to a controlled place on the filesystem to aid debugging.
+
+    Args:
+        expected_file: Location of the file we're going to compare against.
+        actual_string: String that the current test case produced.
+    """
+    actual_file = _substitute_root(expected_file, _TEST_DATA_DIR, _TEST_OUTPUT_DIR)
+
+    if not os.path.exists(actual_file.parent):
+        os.makedirs(actual_file.parent)
+
+    with open(actual_file, "w", encoding="utf-8") as f:
+        f.write(actual_string)
 
 
 class YamlJsonCombo(pydantic.BaseModel):
@@ -71,7 +127,7 @@ class YamlJsonCombo(pydantic.BaseModel):
     loaded."""
     revision: str = "main"
     """Revision or branch of the Hugging Face `repo_id`."""
-    base_model_id: str = "ibm-granite/granite-4.0-micro"
+    base_model_id: str = _DEFAULT_BASE_MODEL
     """Base model on which the target adapter was trained. Should be small enough to
     run on the CI server."""
 
@@ -131,13 +187,6 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
         task="hallucination_detection",
     ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="hallucination_detection_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
-    #     task="hallucination_detection",
-    #     is_alora=True
-    # ),
     YamlJsonCombo(
         short_name="query_clarification",
         inputs_file=_INPUT_JSON_DIR / "query_clarification.json",
@@ -148,50 +197,13 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
     ),
-    # NOTE for the following two entries:
-    # The "requirement_check" intrinsic has not yet been ported to the latest format
-    # or to Granite 4.0.
-    YamlJsonCombo(
-        short_name="requirement_check",
-        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
-        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
-        task="requirement_check",
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
-    YamlJsonCombo(
-        short_name="requirement_check_alora",
-        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
-        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
-        task="requirement_check",
-        is_alora=True,
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
-    YamlJsonCombo(
-        short_name="uncertainty",
-        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-        task="uncertainty",
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/granitelib-core-r1.0",
-        revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="uncertainty_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-    #     task="uncertainty",
-    #     is_alora=True,
-    #     # Granite 4.0 adapters not currently available
-    #     repo_id="ibm-granite/granitelib-core-r1.0",
-    # ),
     YamlJsonCombo(
         short_name="context_relevance",
         inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
         arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
         task="context_relevance",
+        # No Granite 4.1 version of this adapter
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     YamlJsonCombo(
         short_name="context_relevance_alora",
@@ -199,25 +211,22 @@ _YAML_JSON_COMBOS_LIST = [
         arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
         task="context_relevance",
         is_alora=True,
+        # No Granite 4.1 version of this adapter
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
     ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="citations_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "citations.json",
-    #     task="citations",
-    #     is_alora=True,
-    # ),
     YamlJsonCombo(
         short_name="context-attribution",
         inputs_file=_INPUT_JSON_DIR / "context-attribution.json",
         task="context-attribution",
         repo_id="ibm-granite/granitelib-core-r1.0",
         revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
+        # No Granite 4.1 version of this adapter at the selected Git commit
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     # gpt-oss-20b intrinsics (canned output tests only, no inference)
     YamlJsonCombo(
@@ -489,6 +498,7 @@ def test_canned_input(yaml_json_combo_no_alora):
     after_json = after.model_dump_json(indent=2)
 
     expected_file = _CANNED_INPUT_EXPECTED_DIR / f"{cfg.short_name}.json"
+    _dump_output(expected_file, after_json)
     with open(expected_file, encoding="utf-8") as f:
         expected_json = f.read()
 
@@ -714,15 +724,13 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
     # Output processing
     transformed_responses = result_processor.transform(responses, transformed_input)
-
-    # Pull this string out of the debugger to create a fresh expected file.
     transformed_str = transformed_responses.model_dump_json(indent=4)
-    print(transformed_str)
 
-    with open(
-        _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json",
-        encoding="utf-8",
-    ) as f:
+    # If you are certain that the output is correct, you can use the file written here
+    # to create a fresh expected file.
+    expected_file = _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json"
+    _dump_output(expected_file, transformed_str)
+    with open(expected_file, encoding="utf-8") as f:
         expected = ChatCompletionResponse.model_validate_json(f.read())
     # expected_str = expected.model_dump_json(indent=4)
 
@@ -749,7 +757,7 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
                 assert t_json == pytest.approx(e_json, abs=0.1)
     except AssertionError as e:
-        # Known intermittent failure under Transformers 5.0
+        # Known intermittent failure under Transformers 5.0.
         if cfg.short_name == "hallucination_detection":
             pytest.xfail("Known failure due to Transformers 5.0")
         raise e
