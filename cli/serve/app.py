@@ -7,7 +7,7 @@ import os
 import sys
 import time
 import uuid
-from typing import Any, Literal
+from typing import Any, cast, Literal
 
 try:
     import typer
@@ -34,6 +34,7 @@ from .models import (
     ChatCompletionMessageToolCall,
     ChatCompletionRequest,
     Choice,
+    JsonSchemaFormat,
     OpenAIError,
     OpenAIErrorResponse,
 )
@@ -170,17 +171,13 @@ def make_chat_endpoint(module):
             format_model: type[BaseModel] | None = None
             if request.response_format is not None:
                 if request.response_format.type == "json_schema":
-                    if request.response_format.json_schema is None:
-                        return create_openai_error_response(
-                            status_code=400,
-                            message="json_schema field is required when response_format.type is 'json_schema'",
-                            error_type="invalid_request_error",
-                            param="response_format.json_schema",
-                        )
+                    # json_schema presence is validated by ResponseFormat.model_validator
+                    json_schema = cast(
+                        JsonSchemaFormat, request.response_format.json_schema
+                    )
                     try:
                         format_model = json_schema_to_pydantic(
-                            request.response_format.json_schema.schema_,
-                            request.response_format.json_schema.name,
+                            json_schema.schema_, json_schema.name
                         )
                     except ValueError as e:
                         return create_openai_error_response(
