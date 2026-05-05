@@ -8,6 +8,10 @@ FinishReason = Literal[
 def extract_finish_reason(output: Any) -> FinishReason:
     """Extract finish_reason from ModelOutputThunk metadata.
 
+    Checks backend-specific metadata fields in order: Ollama, OpenAI, LiteLLM.
+    Backends without finish_reason metadata (e.g., HuggingFace) fall through to
+    the default "stop" value.
+
     Args:
         output: The model output thunk containing response metadata.
 
@@ -44,6 +48,13 @@ def extract_finish_reason(output: Any) -> FinishReason:
                 finish_reason = choices[0].get("finish_reason")
                 if finish_reason in valid_reasons:
                     return finish_reason
+
+        # LiteLLM backend stores response dict in litellm_chat_response
+        litellm_response = output._meta.get("litellm_chat_response")
+        if litellm_response and isinstance(litellm_response, dict):
+            finish_reason = litellm_response.get("finish_reason")
+            if finish_reason in valid_reasons:
+                return finish_reason
 
     # Default to "stop" per OpenAI spec
     return "stop"

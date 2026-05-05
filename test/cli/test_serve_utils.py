@@ -183,3 +183,82 @@ class TestExtractFinishReason:
         # Create a simple object without _meta
         output = Mock(spec=[])
         assert extract_finish_reason(output) == "stop"
+
+    def test_litellm_finish_reason_stop(self):
+        """Test extraction of 'stop' from LiteLLM litellm_chat_response."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": "stop"}}
+        assert extract_finish_reason(output) == "stop"
+
+    def test_litellm_finish_reason_length(self):
+        """Test extraction of 'length' from LiteLLM litellm_chat_response."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": "length"}}
+        assert extract_finish_reason(output) == "length"
+
+    def test_litellm_finish_reason_tool_calls(self):
+        """Test extraction of 'tool_calls' from LiteLLM litellm_chat_response."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": "tool_calls"}}
+        assert extract_finish_reason(output) == "tool_calls"
+
+    def test_litellm_finish_reason_content_filter(self):
+        """Test extraction of 'content_filter' from LiteLLM litellm_chat_response."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": "content_filter"}}
+        assert extract_finish_reason(output) == "content_filter"
+
+    def test_litellm_finish_reason_function_call(self):
+        """Test extraction of 'function_call' from LiteLLM litellm_chat_response."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": "function_call"}}
+        assert extract_finish_reason(output) == "function_call"
+
+    def test_litellm_finish_reason_none(self):
+        """Test that default 'stop' is returned when LiteLLM finish_reason is None."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": None}}
+        assert extract_finish_reason(output) == "stop"
+
+    def test_litellm_missing_finish_reason_key(self):
+        """Test that default 'stop' is returned when finish_reason key is missing."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {}}
+        assert extract_finish_reason(output) == "stop"
+
+    def test_litellm_non_dict_response(self):
+        """Test that default 'stop' is returned when litellm_chat_response is not a dict."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": "not a dict"}
+        assert extract_finish_reason(output) == "stop"
+
+    def test_backend_precedence_ollama_openai_litellm(self):
+        """Test that backends are checked in order: Ollama, OpenAI, LiteLLM."""
+        output = ModelOutputThunk("test response")
+        chat_response = Mock()
+        chat_response.done_reason = "length"
+        output._meta = {
+            "chat_response": chat_response,
+            "oai_chat_response": {"choices": [{"finish_reason": "stop", "index": 0}]},
+            "litellm_chat_response": {"finish_reason": "content_filter"},
+        }
+        # Should return Ollama's done_reason (checked first)
+        assert extract_finish_reason(output) == "length"
+
+    def test_litellm_used_when_ollama_and_openai_missing(self):
+        """Test that LiteLLM finish_reason is used when Ollama and OpenAI data missing."""
+        output = ModelOutputThunk("test response")
+        output._meta = {"litellm_chat_response": {"finish_reason": "tool_calls"}}
+        assert extract_finish_reason(output) == "tool_calls"
+
+    def test_openai_takes_precedence_over_litellm(self):
+        """Test that OpenAI finish_reason is checked before LiteLLM."""
+        output = ModelOutputThunk("test response")
+        output._meta = {
+            "oai_chat_response": {
+                "choices": [{"finish_reason": "content_filter", "index": 0}]
+            },
+            "litellm_chat_response": {"finish_reason": "stop"},
+        }
+        # Should return OpenAI's finish_reason (checked before LiteLLM)
+        assert extract_finish_reason(output) == "content_filter"
