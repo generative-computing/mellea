@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/data-extraction-pipeline"
 title: "Data Extraction Pipeline"
 description: "Use the @generative decorator with a typed return value to extract structured data from unstructured text in a single declarative function."
 # diataxis: reference

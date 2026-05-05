@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/community/code-of-conduct"
 title: "Code of Conduct"
 description: "Standards and enforcement for the Mellea community."
 # diataxis: reference

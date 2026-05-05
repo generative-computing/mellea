@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/ollama"
 title: "Ollama"
 description: "Run Mellea with local models via Ollama — the default backend."
 # diataxis: how-to

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/build-a-rag-pipeline"
 title: "Build a RAG Pipeline"
 description: "Combine vector retrieval with Mellea's generative filtering and grounded generation to build a reliable retrieval-augmented generation system."
 # diataxis: how-to

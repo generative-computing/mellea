@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/troubleshooting/common-errors"
 title: "Common Errors"
 description: "Common errors, diagnostic steps, and fixes for Mellea programs."
 # diataxis: reference

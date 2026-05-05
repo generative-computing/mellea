@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/tools-and-agents"
 title: "Tools and Agents"
 description: "Give LLMs access to tools, build ReACT agents, and validate tool call arguments."
 # diataxis: how-to

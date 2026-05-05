@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/resilient-rag-fallback"
 title: "Resilient RAG with Fallback Filtering"
 description: "Build a retrieval-augmented generation pipeline that uses FAISS for vector search and a @generative relevance filter to remove noise before generation."
 # diataxis: reference

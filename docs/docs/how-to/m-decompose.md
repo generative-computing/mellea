@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/m-decompose"
 title: "m decompose"
 description: "Break complex tasks into ordered, executable subtasks with the m decompose CLI."
 # diataxis: how-to

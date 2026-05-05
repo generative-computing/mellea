@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/generative-functions"
 title: "Generative Functions"
 description: "Define type-safe LLM functions with @generative and Pydantic structured output."
 # diataxis: how-to

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/observability/metrics"
 title: "Metrics"
 description: "Automatically collect LLM metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
 # diataxis: how-to

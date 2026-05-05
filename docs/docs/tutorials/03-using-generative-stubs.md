@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/03-using-generative-stubs"
 title: "Tutorial: Using Generative Stubs"
 description: "Replace ad-hoc instruct() calls with typed, composable @generative functions."
 # diataxis: tutorial
