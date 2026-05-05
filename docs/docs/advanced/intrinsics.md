@@ -30,7 +30,7 @@ Set up the backend once and reuse it across intrinsic calls:
 # Returns: LocalHFBackend
 from mellea.backends.huggingface import LocalHFBackend
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 ```
 
 Or, with a Granite Switch model via the OpenAI backend:
@@ -61,7 +61,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = ChatContext().add(Message("assistant", "Hello! How can I help you?"))
 question = "What is the square root of 4?"
 
@@ -78,13 +78,13 @@ Assess whether a document is relevant to a question:
 
 ```python
 # Requires: mellea[hf]
-# Returns: float
+# Returns: str
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = ChatContext()
 question = "Who is the CEO of Microsoft?"
 document = Document(
@@ -93,7 +93,7 @@ document = Document(
 )
 
 result = rag.check_context_relevance(question, document, context, backend)
-print(result)  # False — the document does not mention the CEO
+print(result)  # 'partially relevant' — doc is about Microsoft but not its CEO
 ```
 
 ## Hallucination detection
@@ -108,7 +108,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = (
     ChatContext()
     .add(Message("assistant", "Hello! How can I help you?"))
@@ -137,7 +137,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = ChatContext().add(Message("user", "Who attended the meeting?"))
 documents = [
     Document("Meeting attendees: Alice, Bob, Carol."),
@@ -162,7 +162,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = (
     ChatContext()
     .add(Message("assistant", "Welcome to pet questions!"))
@@ -189,7 +189,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = ChatContext().add(
     Message("user", "How did Murdoch expand in Australia versus New Zealand?")
 )
@@ -222,7 +222,7 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 # Register an adapter by task name
 req_adapter = CustomIntrinsicAdapter(

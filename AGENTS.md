@@ -178,7 +178,7 @@ Intrinsics are specialized LoRA adapters that add task-specific capabilities (RA
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant; returns a string label (e.g. `'relevant'`, `'partially relevant'`, `'irrelevant'`) |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
