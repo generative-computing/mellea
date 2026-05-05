@@ -1,0 +1,40 @@
+# Blocks merge when the "do-not-merge/hold" label is applied to a PR.
+#
+# Uses pull_request_target so the label event from forks also triggers this
+# check. This workflow does NOT check out or execute PR code — do not add
+# actions/checkout of the PR head ref or run steps that reference
+# PR-controlled files.
+
+name: "Hold"
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+  merge_group:
+
+permissions: {}
+
+jobs:
+  hold:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check for hold label
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const HOLD_LABEL = 'do-not-merge/hold';
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            if (labels.includes(HOLD_LABEL)) {
+              core.setFailed(
+                `PR is labeled "${HOLD_LABEL}". ` +
+                `Remove the label to allow this check to pass.`
+              );
+            } else {
+              core.info(`No "${HOLD_LABEL}" label present.`);
+            }
+      - name: Skip in merge queue
+        if: github.event_name == 'merge_group'
+        run: echo "Hold status already validated before entering the merge queue"
