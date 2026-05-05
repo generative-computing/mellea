@@ -422,6 +422,7 @@ directory = "htmlcov"
 
 version_source = "tag_only"
 branch = "main"
+major_on_zero = false
 
 # configure types which should trigger minor and patch version bumps respectively
 # (note that they must be a subset of the configured allowed types):
