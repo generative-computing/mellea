@@ -37,9 +37,8 @@ def _read_file(name):
 
 
 _TEST_DATA_DIR = pathlib.Path(os.path.dirname(__file__)) / "testdata"
-
 _TEST_OUTPUT_DIR = pathlib.Path(os.path.dirname(__file__)) / "test_output"
-"""Directory string we compare against something from _TEST_DATA_DIR is written"""
+"""Directory string we substitute for _TEST_DATA_DIR when writing debug outputs."""
 
 # Location from which our tests download adapters and YAML files
 _RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
