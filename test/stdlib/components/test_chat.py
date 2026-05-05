@@ -321,6 +321,39 @@ def test_as_generic_chat_history_with_unparsed_mot():
     assert "raw output" in history[1].content
 
 
+def test_as_generic_chat_history_with_string_parsed_repr():
+    """ModelOutputThunk with string parsed_repr (e.g., from CBlock action)."""
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    # Simulate a ModelOutputThunk with a string parsed_repr,
+    # as would result from a CBlock action completing
+    mot = ModelOutputThunk(value="reply text", parsed_repr="reply text")
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert history[1].content == "reply text"
+
+
+def test_as_generic_chat_history_with_non_message_parsed_repr():
+    """ModelOutputThunk with non-Message, non-string parsed_repr uses formatter."""
+
+    def custom_formatter(obj: object) -> str:
+        if isinstance(obj, dict):
+            return f"dict:{obj}"
+        return str(obj)
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    # parsed_repr is a dict (could be structured data from a model)
+    mot = ModelOutputThunk(value="raw", parsed_repr={"key": "value"})
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx, formatter=custom_formatter)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert "dict:" in history[1].content
+
+
 def test_as_generic_chat_history_with_cblock():
     """CBlocks are converted to Messages with 'user' role."""
     ctx = ChatContext()
