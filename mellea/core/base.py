@@ -320,6 +320,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
+        self._cancelled: bool = False
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
@@ -430,7 +431,19 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         if self._underlying_value is None:
             self._underlying_value = ""
+        self._cancelled = True
         self._computed = True
+
+    @property
+    def cancelled(self) -> bool:
+        """``True`` if :meth:`cancel_generation` ran to completion on this MOT.
+
+        A normally-completed MOT leaves this ``False``; only an actual
+        cancellation via :meth:`cancel_generation` flips it.  Consumers holding
+        a computed MOT can use this to distinguish a genuine result from one
+        cut short (for example by a streaming requirement failure).
+        """
+        return self._cancelled
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
