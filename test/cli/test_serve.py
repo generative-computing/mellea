@@ -687,9 +687,8 @@ class TestResponseFormat:
         call_args = mock_module.serve.call_args
         assert call_args is not None
 
-        # For json_object, format should be None (no specific schema)
-        if "format" in call_args.kwargs:
-            assert call_args.kwargs["format"] is None
+        # For json_object, format should not be passed (no specific schema)
+        assert "format" not in call_args.kwargs
 
         # Verify response is successful
         assert isinstance(response, ChatCompletion)
@@ -714,9 +713,8 @@ class TestResponseFormat:
         call_args = mock_module.serve.call_args
         assert call_args is not None
 
-        # For text, format should be None
-        if "format" in call_args.kwargs:
-            assert call_args.kwargs["format"] is None
+        # For text, format should not be passed
+        assert "format" not in call_args.kwargs
 
         # Verify response is successful
         assert isinstance(response, ChatCompletion)
