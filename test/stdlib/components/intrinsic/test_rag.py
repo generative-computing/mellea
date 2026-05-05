@@ -104,7 +104,7 @@ def _read_output_json(file_name: str):
 def _dump_output_json(file_name: str, to_write):
     """Shared code for dumping a test's generated JSON data.
 
-    Dump the Python data structures that that will be compared against canned
+    Dump the Python data structures that will be compared against canned
     JSON output files. Outputs go to the local directory ``test_output``.
 
     If you are sure the current output is correct, you can use this output to update
