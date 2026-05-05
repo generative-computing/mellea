@@ -45,6 +45,8 @@ _TEST_OUTPUT_DIR = pathlib.Path(os.path.dirname(__file__)) / "test_output"
 _RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
 
+_DEFAULT_BASE_MODEL = "ibm-granite/granite-4.1-3b"
+
 
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
 _INPUT_YAML_DIR = _TEST_DATA_DIR / "input_yaml"
@@ -126,7 +128,7 @@ class YamlJsonCombo(pydantic.BaseModel):
     loaded."""
     revision: str = "main"
     """Revision or branch of the Hugging Face `repo_id`."""
-    base_model_id: str = "ibm-granite/granite-4.0-micro"
+    base_model_id: str = _DEFAULT_BASE_MODEL
     """Base model on which the target adapter was trained. Should be small enough to
     run on the CI server."""
 
@@ -201,6 +203,8 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
         arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
         task="context_relevance",
+        # No Granite 4.1 version of this adapter
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     YamlJsonCombo(
         short_name="context_relevance_alora",
@@ -208,6 +212,8 @@ _YAML_JSON_COMBOS_LIST = [
         arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
         task="context_relevance",
         is_alora=True,
+        # No Granite 4.1 version of this adapter
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     YamlJsonCombo(
         short_name="citations",
@@ -220,6 +226,8 @@ _YAML_JSON_COMBOS_LIST = [
         task="context-attribution",
         repo_id="ibm-granite/granitelib-core-r1.0",
         revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
+        # No Granite 4.1 version of this adapter at the selected Git commit
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     # gpt-oss-20b intrinsics (canned output tests only, no inference)
     YamlJsonCombo(
