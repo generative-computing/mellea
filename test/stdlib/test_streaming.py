@@ -721,6 +721,67 @@ async def test_cancel_generation_invoked_on_fail() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cancelled_flag_reflects_cancellation_state() -> None:
+    """The ``cancelled`` property on ModelOutputThunk distinguishes an early-exit
+    cancellation from a normal completion and propagates through ``as_thunk``."""
+
+    # Early exit → cancelled is True, is_computed True, propagates through as_thunk.
+    fail_response = "word " * 50
+    fail_backend = StreamingMockBackend(fail_response, token_size=3)
+
+    class FailImmediately(Requirement):
+        def format_for_llm(self) -> str:
+            return "fail immediately"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            _ = chunk, backend, ctx
+            return PartialValidationResult("fail", reason="nope")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            _ = backend, ctx, format, model_options
+            return ValidationResult(result=True)
+
+    fail_result = await stream_with_chunking(
+        _action(),
+        fail_backend,
+        _ctx(),
+        quick_check_requirements=[FailImmediately()],
+        chunking="word",
+    )
+    await asyncio.wait_for(fail_result.acomplete(), timeout=5.0)
+
+    assert fail_result.completed is False
+    assert fail_result.as_thunk.cancelled is True
+    assert fail_result.as_thunk.is_computed() is True
+
+    # Normal completion → cancelled is False.
+    ok_response = "Hello world. How are you. "
+    ok_backend = StreamingMockBackend(ok_response, token_size=3)
+
+    ok_result = await stream_with_chunking(
+        _action(),
+        ok_backend,
+        _ctx(),
+        quick_check_requirements=[AlwaysUnknownReq()],
+        chunking="sentence",
+    )
+    await ok_result.acomplete()
+
+    assert ok_result.completed is True
+    assert ok_result.as_thunk.cancelled is False
+    assert ok_result.as_thunk.is_computed() is True
+
+
+@pytest.mark.asyncio
 async def test_exception_in_stream_validate_cancels_generation() -> None:
     """Verifies the orchestrator's exception-path cleanup: if stream_validate
     raises, cancel_generation() is called and the exception surfaces to the
