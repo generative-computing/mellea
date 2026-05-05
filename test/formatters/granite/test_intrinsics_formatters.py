@@ -59,12 +59,14 @@ def _substitute_root(
     Handles common corner cases such as when a given path has multiple equivalent
     string representations.
 
-    :param child_path: A path that is a descedent of a known root
-    :param old_root: Root directory that is an ancestor of ``child_path``
-    :param new_root: Root directory to substitute for ``old_root``
+    Args:
+        child_path: A path that is a descendant of a known root.
+        old_root: Root directory that is an ancestor of ``child_path``.
+        new_root: Root directory to substitute for ``old_root``.
 
-    :returns: A version of ``child_path`` in which the prefix corresponding to
-    ``old_root`` has been replaced with ``new_root``
+    Returns:
+        A version of ``child_path`` in which the prefix corresponding to
+        ``old_root`` has been replaced with ``new_root``.
     """
     # Resolve paths to handle symlinks, relative components, and other corner cases
     child_path = child_path.resolve()
@@ -88,8 +90,9 @@ def _dump_output(expected_file: pathlib.Path, actual_string: str):
     compare against a canned output and the location of said canned output, write
     the string to a controlled place on the filesystem to aid debugging.
 
-    :param expected_file: Location of the file we're going to compare against
-    :param actual_string: String that the current test case produced that
+    Args:
+        expected_file: Location of the file we're going to compare against.
+        actual_string: String that the current test case produced.
     """
     actual_file = _substitute_root(expected_file, _TEST_DATA_DIR, _TEST_OUTPUT_DIR)
 
