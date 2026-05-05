@@ -107,6 +107,14 @@ CRITERIA_BANK = {
         "irrelevant if it fails to directly answer or meet the specific "
         "intent of the query."
     ),
+    "context_relevance": (
+        "A document is deemed irrelevant when it doesn't contain information "
+        "pertinent to the query's specific needs. This means the retrieved or "
+        "provided content fails to adequately address the question at hand. "
+        "Irrelevant information could be on a different topic, originate from "
+        "an unrelated field, or simply not offer any valuable insights for "
+        "crafting a suitable response."
+    ),
     "function_call": (
         "Function call hallucination occurs when a text includes function "
         "calls that either don't adhere to the correct format defined by the "

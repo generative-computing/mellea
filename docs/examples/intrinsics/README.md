@@ -2,57 +2,6 @@
 
 This directory contains examples for using Mellea's intrinsic functions - specialized model capabilities accessed through adapters.
 
-<<<<<<< HEAD
-## Files
-
-### intrinsics.py
-Core example showing how to directly use intrinsics with adapters.
-
-**Key Features:**
-- Creating and adding adapters to backends
-- Using `Intrinsic` component for specialized tasks
-- Working with Granite Common adapters (aLoRA-based)
-- Understanding adapter output formats
-
-### answerability.py
-Checks if a question can be answered given the context.
-
-### citations.py
-Validates and extracts citations from generated text.
-
-### context_relevance.py
-Assesses if retrieved context is relevant to a query.
-
-### hallucination_detection.py
-Detects when model outputs contain hallucinated information.
-
-### query_rewrite.py
-Rewrites queries for better retrieval or understanding.
-
-### uncertainty.py
-Estimates the model's certainty about answering a question.
-
-### requirement_check.py
-Detect if text adheres to provided requirements.
-
-### policy_guardrails.py
-Checks if a scenario is compliant/non-compliant/ambiguous with respect to a given policy,
-
-### guardian_core.py
-Uses the guardian-core LoRA adapter for safety risk detection, including prompt-level harm, response-level social bias, RAG groundedness, and custom criteria.
-
-### factuality_detection.py
-Detects if the the model's output is factually incorrect relative to context.
-
-### factuality_correction.py
-Corrects a factually incorrect response relative to context.
-
-### context_attribution.py
-Identifies sentences in conversation history and documents that most influenced the response.
-
-
-=======
->>>>>>> main
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
