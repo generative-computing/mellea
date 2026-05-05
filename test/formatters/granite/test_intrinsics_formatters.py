@@ -194,6 +194,19 @@ _YAML_JSON_COMBOS_LIST = [
         task="query_rewrite",
     ),
     YamlJsonCombo(
+        short_name="context_relevance",
+        inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
+        arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
+        task="context_relevance",
+    ),
+    YamlJsonCombo(
+        short_name="context_relevance_alora",
+        inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
+        arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
+        task="context_relevance",
+        is_alora=True,
+    ),
+    YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",

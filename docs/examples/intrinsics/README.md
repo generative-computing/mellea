@@ -20,6 +20,9 @@ Checks if a question can be answered given the context.
 ### citations.py
 Validates and extracts citations from generated text.
 
+### context_relevance.py
+Assesses if retrieved context is relevant to a query.
+
 ### hallucination_detection.py
 Detects when model outputs contain hallucinated information.
 
@@ -114,6 +117,7 @@ see [`../granite-switch/`](../granite-switch/).
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
 - **context-attribution**: Identify context sentences that most influenced response
+- **context_relevance**: Assess context-query relevance
 - **factuality_correction**: Correct factually incorrect responses
 - **factuality_detection**: Detect factually incorrect responses
 - **guardian-core**: Safety risk detection (harm, bias, groundedness, custom criteria)

@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"context_relevance\": \"irrelevant\"}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

@@ -154,6 +154,45 @@ def find_citations(
     return result_json
 
 
+def check_context_relevance(
+    question: str | None,
+    document: str | Document,
+    context: ChatContext,
+    backend: AdapterMixin,
+) -> str:
+    """Test whether a document is relevant to a user's question.
+
+    Intrinsic function that checks whether a single document contains part or all of
+    the answer to a user's question. Does not consider the context in which the
+    question was asked.
+
+    Args:
+        question: Question that the user has posed. When ``None``, the question
+            is extracted from the last user message in ``context``.
+        document: A retrieved document snippet. May be a ``Document`` or a plain
+            string (automatically wrapped in ``Document``).
+        context: The chat up to the point where the user asked a question.
+        backend: Backend instance that supports the adapters that implement this
+            intrinsic.
+
+    Returns:
+        Context relevance judgement as one of the following strings:
+        - "relevant"
+        - "irrelevant"
+        - "partially relevant"
+    """
+    question, context = _resolve_question(question, context, backend)
+    document = _coerce_to_document(document)
+    result_json = call_intrinsic(
+        "context_relevance",
+        context.add(Message("user", question)),
+        backend,
+        # Target document is passed as an argument
+        kwargs={"document_content": document.text},
+    )
+    return result_json["context_relevance"]
+
+
 def flag_hallucinated_content(
     response: str | None,
     documents: collections.abc.Iterable[str | Document],

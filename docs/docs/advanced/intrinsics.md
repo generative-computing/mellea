@@ -72,6 +72,30 @@ print(rag.check_answerability(question, docs_answerable, context, backend))   # 
 print(rag.check_answerability(question, docs_not_answerable, context, backend))  # False
 ```
 
+## Context relevance
+
+Assess whether a document is relevant to a question:
+
+```python
+# Requires: mellea[hf]
+# Returns: float
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Document
+from mellea.stdlib.components.intrinsic import rag
+from mellea.stdlib.context import ChatContext
+
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+context = ChatContext()
+question = "Who is the CEO of Microsoft?"
+document = Document(
+    "Microsoft Corporation is an American multinational corporation "
+    "headquartered in Redmond, Washington."
+)
+
+result = rag.check_context_relevance(question, document, context, backend)
+print(result)  # False — the document does not mention the CEO
+```
+
 ## Hallucination detection
 
 Flag sentences in an assistant response that are not grounded in the source documents:
