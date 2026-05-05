@@ -327,7 +327,9 @@ def as_generic_chat_history(
             case ModelOutputThunk():
                 if isinstance(c.parsed_repr, Message):
                     return c.parsed_repr
-                # Use value if parsed_repr is None or not a Message
+                if isinstance(c.parsed_repr, str):
+                    return Message(role="assistant", content=c.parsed_repr)
+                # Use value if parsed_repr is None or some other type
                 content = (
                     str(c.value) if c.parsed_repr is None else formatter(c.parsed_repr)
                 )
