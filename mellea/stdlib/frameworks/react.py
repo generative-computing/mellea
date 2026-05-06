@@ -72,14 +72,16 @@ async def react(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tools: the list of tools to use
         loop_budget: the number of steps allowed; use -1 for unlimited
-        answer_check: optional callable to determine if the agent has completed its task.
-            Called every iteration when no tool calls are made and step.value exists (if provided).
-            Receives (goal, step, context, backend, model_options, turn_num, loop_budget).
-            Returns bool indicating if the task is complete.
-            If None, no answer check is performed (loop continues until finalizer or budget exhausted).
+        answer_check: Optional async callable invoked each iteration when no tool
+            calls are made and ``step.value`` is non-empty. Receives ``goal`` (str),
+            ``step`` (ComputedModelOutputThunk[str]), ``context`` (ChatContext),
+            ``backend`` (Backend), ``model_options`` (dict | None), ``turn_num`` (int),
+            and ``loop_budget`` (int). Return ``True`` to accept ``step.value`` as the
+            final answer, ``False`` to continue. If ``None``, the loop runs until
+            ``final_answer`` is called or ``loop_budget`` is exhausted.
 
     Returns:
-        A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        Tuple of ``(ComputedModelOutputThunk[str], ChatContext)`` — the final answer thunk and updated context.
 
     Raises:
         RuntimeError: if the loop ends before a final answer is found
