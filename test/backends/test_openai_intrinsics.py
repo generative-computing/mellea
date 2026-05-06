@@ -556,14 +556,10 @@ def test_call_intrinsic_factuality_detection(call_intrinsic_backend):
         for d in data.get("extra_body", {}).get("documents", [])
     ]
     messages = data["messages"]
-    for i, m in enumerate(messages):
-        is_last = i == len(messages) - 1
-        if is_last and docs:
-            context = context.add(Message(m["role"], m["content"], documents=docs))
-        else:
-            context = context.add(Message(m["role"], m["content"]))
+    for m in messages:
+        context = context.add(Message(m["role"], m["content"]))
 
-    result = guardian.factuality_detection(context, call_intrinsic_backend)
+    result = guardian.factuality_detection(docs, context, call_intrinsic_backend)
     assert result in ("yes", "no")
 
 
@@ -581,12 +577,8 @@ def test_call_intrinsic_factuality_correction(call_intrinsic_backend):
         for d in data.get("extra_body", {}).get("documents", [])
     ]
     messages = data["messages"]
-    for i, m in enumerate(messages):
-        is_last = i == len(messages) - 1
-        if is_last and docs:
-            context = context.add(Message(m["role"], m["content"], documents=docs))
-        else:
-            context = context.add(Message(m["role"], m["content"]))
+    for m in messages:
+        context = context.add(Message(m["role"], m["content"]))
 
-    result = guardian.factuality_correction(context, call_intrinsic_backend)
+    result = guardian.factuality_correction(docs, context, call_intrinsic_backend)
     assert isinstance(result, str)

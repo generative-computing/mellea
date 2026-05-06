@@ -9,7 +9,9 @@ from ..docs.document import _coerce_to_documents
 from ._util import _resolve_response, call_intrinsic
 
 
-def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
+def check_certainty(
+    context: ChatContext, backend: AdapterMixin, model_options: dict | None = None
+) -> float:
     """Estimate the model's certainty about its last response.
 
     Intrinsic function that evaluates how certain the model is about the
@@ -19,11 +21,15 @@ def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
     Args:
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Certainty score as a float (higher = more certain).
     """
-    result_json = call_intrinsic("uncertainty", context, backend)
+    result_json = call_intrinsic(
+        "uncertainty", context, backend, model_options=model_options
+    )
     return result_json["certainty"]
 
 
@@ -37,7 +43,10 @@ _EVALUATION_PROMPT = (
 
 
 def requirement_check(
-    context: ChatContext, backend: AdapterMixin, requirement: str
+    context: ChatContext,
+    backend: AdapterMixin,
+    requirement: str,
+    model_options: dict | None = None,
 ) -> float:
     """Detect if text adheres to provided requirements.
 
@@ -49,13 +58,17 @@ def requirement_check(
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         requirement: Set of requirements to satisfy.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
     """
     eval_message = f"<requirements>: {requirement}\n{_EVALUATION_PROMPT}"
     context = context.add(Message("user", eval_message))
-    result_json = call_intrinsic("requirement-check", context, backend)
+    result_json = call_intrinsic(
+        "requirement-check", context, backend, model_options=model_options
+    )
     return result_json["requirement_check"]["score"]
 
 
@@ -64,6 +77,7 @@ def find_context_attributions(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> list[dict]:
     """Find sentences in conversation history and documents that most influence an LLM's response.
 
@@ -71,28 +85,27 @@ def find_context_attributions(
     documents that were most important to the LLM in generating each sentence in the
     assistant response.
 
-    :param response: Assistant response. When ``None``, the response is extracted
-        from the last assistant output in ``context``.
-    :param documents: Documents that were used to generate ``response``. Each element
-        may be a ``Document`` or a plain string. Strings are wrapped in ``Document``
-        with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...); for explicit
-        control, pass ``Document`` objects with ``doc_id`` set. ``Document`` objects
-        without ``doc_id`` trigger a warning because the intrinsic uses ``doc_id`` to
-        identify attribution sources.
-    :param context: Context of the dialog between user and assistant, ending with a
-        user query
-    :param backend: Backend that supports intrinsic adapters
+    Args:
+        response: Assistant response. When ``None``, the response is extracted
+            from the last assistant output in ``context``.
+        documents: Documents that were used to generate ``response``. Each element
+            may be a ``Document`` or a plain string. Strings are wrapped in ``Document``
+            with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...); for explicit
+            control, pass ``Document`` objects with ``doc_id`` set. ``Document`` objects
+            without ``doc_id`` trigger a warning because the intrinsic uses ``doc_id`` to
+            identify attribution sources.
+        context: Context of the dialog between user and assistant, ending with a
+            user query.
+        backend: Backend that supports intrinsic adapters.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
-    :return: List of records with the following fields:
-        * ``response_begin``
-        * ``response_end``
-        * ``response_text``
-        * ``attribution_doc_id``
-        * ``attribution_msg_index``
-        * ``attribution_begin``
-        * ``attribution_end``
-        * ``attribution_text``
-    Begin and end offsets are character offsets into their respective UTF-8 strings.
+    Returns:
+        List of records with the following fields: ``response_begin``,
+        ``response_end``, ``response_text``, ``attribution_doc_id``,
+        ``attribution_msg_index``, ``attribution_begin``, ``attribution_end``,
+        ``attribution_text``. Begin and end offsets are character offsets into
+        their respective UTF-8 strings.
     """
     response, context = _resolve_response(response, context)
     result_json = call_intrinsic(
@@ -105,5 +118,6 @@ def find_context_attributions(
             )
         ),
         backend,
+        model_options=model_options,
     )
     return result_json

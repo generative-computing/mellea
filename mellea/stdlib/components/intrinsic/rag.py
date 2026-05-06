@@ -15,6 +15,7 @@ def check_answerability(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> str:
     """Test a user's question for answerability.
 
@@ -31,6 +32,8 @@ def check_answerability(
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters
             for answerability checks.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         A string value of either "answerable" or "unanswerable"
@@ -42,12 +45,16 @@ def check_answerability(
             Message("user", question, documents=_coerce_to_documents(documents))
         ),
         backend,
+        model_options=model_options,
     )
     return result_json["answerability"]
 
 
 def rewrite_question(
-    question: str | None, context: ChatContext, backend: AdapterMixin
+    question: str | None,
+    context: ChatContext,
+    backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> str:
     """Rewrite a user's question for retrieval.
 
@@ -60,13 +67,18 @@ def rewrite_question(
             user message in ``context``.
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Rewritten version of ``question``.
     """
     question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
-        "query_rewrite", context.add(Message("user", question)), backend
+        "query_rewrite",
+        context.add(Message("user", question)),
+        backend,
+        model_options=model_options,
     )
     return result_json["rewritten_question"]
 
@@ -76,6 +88,7 @@ def clarify_query(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> str:
     """Generate clarification for an ambiguous query.
 
@@ -92,6 +105,8 @@ def clarify_query(
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports the adapters that implement
             this intrinsic.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Clarification question string (e.g., "Do you mean A or B?"), or
@@ -104,6 +119,7 @@ def clarify_query(
             Message("user", question, documents=_coerce_to_documents(documents))
         ),
         backend,
+        model_options=model_options,
     )
     return result_json["clarification"]
 
@@ -113,6 +129,7 @@ def find_citations(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> list[dict]:
     """Find information in documents that supports an assistant response.
 
@@ -132,6 +149,8 @@ def find_citations(
             the user has just asked a question that will be answered with RAG documents.
         backend: Backend that supports one of the adapters that implements this
             intrinsic.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         List of records with the following fields: ``response_begin``,
@@ -150,6 +169,7 @@ def find_citations(
             )
         ),
         backend,
+        model_options=model_options,
     )
     return result_json
 
@@ -159,6 +179,7 @@ def check_context_relevance(
     document: str | Document,
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> str:
     """Test whether a document is relevant to a user's question.
 
@@ -174,6 +195,8 @@ def check_context_relevance(
         context: The chat up to the point where the user asked a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Context relevance judgement as one of the following strings:
@@ -189,6 +212,7 @@ def check_context_relevance(
         backend,
         # Target document is passed as an argument
         kwargs={"document_content": document.text},
+        model_options=model_options,
     )
     return result_json["context_relevance"]
 
@@ -198,6 +222,7 @@ def flag_hallucinated_content(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> list[dict]:
     """Flag potentially-hallucinated sentences in an agent's response.
 
@@ -215,6 +240,8 @@ def flag_hallucinated_content(
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         List of records with the following fields: ``response_begin``,
@@ -228,5 +255,6 @@ def flag_hallucinated_content(
             Message("assistant", response, documents=_coerce_to_documents(documents))
         ),
         backend,
+        model_options=model_options,
     )
     return result_json
