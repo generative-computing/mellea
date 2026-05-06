@@ -40,7 +40,7 @@ async def last_loop_completion_check(
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 async def test_react_direct_answer_without_tools():
     """Test that ReACT handles direct answers when model doesn't call tools.
 
@@ -71,7 +71,7 @@ async def test_react_direct_answer_without_tools():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 async def test_react_direct_answer_with_unused_tools():
     """Test that ReACT handles direct answers even when tools are available.
 
@@ -103,6 +103,3 @@ async def test_react_direct_answer_with_unused_tools():
     # The answer should mention Paris
     answer_lower = out.value.lower()
     assert "paris" in answer_lower
-
-
-# Made with Bob
