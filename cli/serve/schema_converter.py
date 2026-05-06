@@ -1,6 +1,5 @@
 """Helpers for converting OpenAI-style JSON Schema response formats."""
 
-from enum import Enum
 from typing import Annotated, Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Strict, create_model
@@ -128,18 +127,6 @@ def json_schema_to_pydantic(
             raise ValueError(
                 f"{_format_path(path)} enum values must be string, integer, number, or boolean"
             )
-
-        if value_type is str:
-            enum_name = _sanitize_model_name(
-                path.replace(".", "_").replace("[", "_").replace("]", "")
-            )
-            members = {
-                (
-                    value.upper() if value and value[0].isalpha() else f"VALUE_{index}"
-                ): value
-                for index, value in enumerate(enum_values)
-            }
-            return Enum(enum_name or "GeneratedEnum", members)
 
         return Literal[tuple(enum_values)]
 

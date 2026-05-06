@@ -307,3 +307,51 @@ def test_json_schema_allows_missing_type_in_allof_branches():
     parsed_user = parsed.model_dump()["user"]
     assert parsed_user["name"] == "Alice"
     assert parsed_user["age"] == 30
+
+
+def test_json_schema_supports_case_variant_enum_values():
+    """Test that enum values differing only in case are preserved correctly.
+
+    Regression test for issue where ["open", "OPEN"] would collapse to a
+    single enum member, causing validation to fail for one of the values.
+    """
+    model = json_schema_to_pydantic(
+        {
+            "type": "object",
+            "properties": {"status": {"type": "string", "enum": ["open", "OPEN"]}},
+            "required": ["status"],
+        },
+        "CaseVariantEnumExample",
+    )
+
+    # Both case variants should validate successfully
+    parsed_lower = model.model_validate({"status": "open"})
+    assert parsed_lower.model_dump()["status"] == "open"
+
+    parsed_upper = model.model_validate({"status": "OPEN"})
+    assert parsed_upper.model_dump()["status"] == "OPEN"
+
+    # Invalid value should still fail
+    with pytest.raises(Exception):
+        model.model_validate({"status": "closed"})
+
+
+def test_json_schema_supports_time_period_enum():
+    """Test AM/PM style enums that are common in migrated schemas."""
+    model = json_schema_to_pydantic(
+        {
+            "type": "object",
+            "properties": {"period": {"type": "string", "enum": ["AM", "PM"]}},
+            "required": ["period"],
+        },
+        "TimePeriodExample",
+    )
+
+    parsed_am = model.model_validate({"period": "AM"})
+    assert parsed_am.model_dump()["period"] == "AM"
+
+    parsed_pm = model.model_validate({"period": "PM"})
+    assert parsed_pm.model_dump()["period"] == "PM"
+
+    with pytest.raises(Exception):
+        model.model_validate({"period": "am"})
