@@ -86,12 +86,7 @@ class Message(Component["Message"]):
         """
         return TemplateRepresentation(
             obj=self,
-            args={
-                "role": self.role,
-                "content": self._content_cblock,
-                "images": self._images,
-                "documents": self._docs,
-            },
+            args={"content": self._content_cblock, "documents": self._docs},
             template_order=["*", "Message"],
         )
 
@@ -218,21 +213,6 @@ class ToolMessage(Message):
         self.arguments = args
         self._tool_output = tool_output
         self._tool = tool
-
-    def format_for_llm(self) -> TemplateRepresentation:
-        """Return the same representation as ``Message`` with a ``name`` field added to the args dict.
-
-        Returns:
-            TemplateRepresentation: Template representation including the tool
-            name alongside the standard message fields.
-        """
-        message_repr = super().format_for_llm()
-        args = message_repr.args
-        args["name"] = self.name
-
-        return TemplateRepresentation(
-            obj=self, args=args, template_order=["*", "Message"]
-        )
 
     def __repr__(self) -> str:
         """Pretty representation of messages, because they are a special case."""
