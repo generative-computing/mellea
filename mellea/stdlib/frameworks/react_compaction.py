@@ -212,7 +212,16 @@ class ClearAll(CompactionStrategy):
         backend: Backend | None = None,
         goal: str | None = None,
     ) -> ChatContext:
-        """Return a context containing only the prefix."""
+        """Return a context containing only the prefix.
+
+        Args:
+            context: The context to compact.
+            backend: Unused by this strategy; accepted for interface compatibility.
+            goal: Unused by this strategy; accepted for interface compatibility.
+
+        Returns:
+            A new ``ChatContext`` containing only the prefix components.
+        """
         components = context.as_list()
         prefix_end = _find_prefix_end(components)
         compacted = components[:prefix_end]
@@ -245,7 +254,18 @@ class KeepLastN(CompactionStrategy):
         backend: Backend | None = None,
         goal: str | None = None,
     ) -> ChatContext:
-        """Return a context with the prefix and the last *keep_n* body components."""
+        """Return a context with the prefix and the last *keep_n* body components.
+
+        Args:
+            context: The context to compact.
+            backend: Unused by this strategy; accepted for interface compatibility.
+            goal: Unused by this strategy; accepted for interface compatibility.
+
+        Returns:
+            A new ``ChatContext`` with the prefix plus the most recent *keep_n*
+            body components, or the original *context* if the body is already
+            at or below *keep_n* in length.
+        """
         components = context.as_list()
         prefix_end = _find_prefix_end(components)
         prefix = components[:prefix_end]
@@ -287,6 +307,17 @@ class LLMSummarize(CompactionStrategy):
         goal: str | None = None,
     ) -> ChatContext:
         """Return a context with the prefix, an LLM summary, and recent body components.
+
+        Args:
+            context: The context to compact.
+            backend: Backend used to generate the summary; required.
+            goal: The react goal string, included in the summary prompt; required.
+
+        Returns:
+            A new ``ChatContext`` containing the prefix, a single summary
+            ``Message`` produced by the backend, and the most recent *keep_n*
+            body components verbatim. Returns the original *context* if the
+            body is already at or below *keep_n* in length.
 
         Raises:
             ValueError: If *backend* or *goal* are not provided.
