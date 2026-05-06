@@ -33,6 +33,7 @@ to run.
 | `context/` | Context inspection, sampling with context trees, parallel context branches |
 | `sessions/` | Custom session types and backend selection |
 | `async/` | How to utilize basic async capabilities |
+| `streaming/` | `stream_with_chunking()` with per-chunk validation, typed event vocabulary, early-exit on fail |
 
 ### Data and documents
 

@@ -175,6 +175,128 @@ asyncio.run(sequential_chat())
 
 For parallel generation, use `SimpleContext`.
 
+## Streaming with per-chunk validation
+
+`stream_with_chunking()` adds per-chunk validation to a streaming generation.
+It splits the accumulated text into semantic units (sentences, words, or
+paragraphs), calls `stream_validate()` on each chunk in parallel, and can
+exit early if any requirement returns `"fail"` — preventing the consumer from
+seeing invalid content mid-stream.
+
+The primary way to observe a `stream_with_chunking()` run is via typed
+`StreamEvent` objects from `result.events()`:
+
+```python
+# Requires: mellea
+# Returns: None
+import asyncio
+
+from mellea.core.backend import Backend
+from mellea.core.base import Context
+from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
+from mellea.stdlib.components import Instruction
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamingDoneEvent,
+    stream_with_chunking,
+)
+
+
+class MaxSentencesReq(Requirement):
+    """Fails if the model generates more than *limit* sentences."""
+
+    def __init__(self, limit: int) -> None:
+        super().__init__()
+        self._limit = limit
+        self._count = 0
+
+    def format_for_llm(self) -> str:
+        return f"The response must be at most {self._limit} sentences."
+
+    async def stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        self._count += 1
+        if self._count > self._limit:
+            return PartialValidationResult("fail", reason="Too many sentences")
+        return PartialValidationResult("unknown")
+
+    async def validate(
+        self, backend: Backend, ctx: Context, *, format=None, model_options=None
+    ) -> ValidationResult:
+        return ValidationResult(result=True)
+
+
+async def main() -> None:
+    from mellea.stdlib.session import start_session
+
+    m = start_session()
+    action = Instruction("Write a two-sentence summary of the water cycle.")
+    req = MaxSentencesReq(limit=3)
+
+    result = await stream_with_chunking(
+        action, m.backend, m.ctx, quick_check_requirements=[req], chunking="sentence"
+    )
+
+    async for event in result.events():
+        match event:
+            case ChunkEvent():
+                print(f"  chunk[{event.chunk_index}]: {event.text!r}")
+            case QuickCheckEvent(passed=False):
+                print(f"  FAIL at chunk {event.chunk_index}: {event.results}")
+            case StreamingDoneEvent():
+                print(f"  stream done — {len(event.full_text)} chars")
+            case FullValidationEvent():
+                print(f"  final: {'pass' if event.passed else 'fail'}")
+            case CompletedEvent():
+                print(f"  completed — success={event.success}")
+            case _:
+                pass  # ErrorEvent and other future types
+
+    await result.acomplete()
+    print(f"completed={result.completed}, failures={len(result.streaming_failures)}")
+
+
+asyncio.run(main())
+```
+
+If you only need the raw validated text without event metadata, use
+`result.astream()` instead:
+
+```python
+result = await stream_with_chunking(
+    action, m.backend, m.ctx, quick_check_requirements=[req], chunking="sentence"
+)
+async for chunk in result.astream():
+    print(chunk)
+await result.acomplete()
+```
+
+Both `astream()` (raw chunks) and `events()` are available on the same result
+object. They use independent queues, so you can run them concurrently with
+`asyncio.gather`. Both are **single-consumer** — a second iteration on either
+will block indefinitely.
+
+### The `stream_validate` tri-state
+
+Each call to `stream_validate` returns a `PartialValidationResult` with one of
+three values:
+
+| Value | Meaning |
+| ----- | ------- |
+| `"unknown"` | No conclusion yet — wait for the full output before judging. |
+| `"pass"` | This chunk is valid so far (informational; does not skip final `validate()`). |
+| `"fail"` | Invalid — cancel the stream immediately and record a streaming failure. |
+
+After a natural stream end, `validate()` is called on every non-`"fail"`
+requirement (both `"pass"` and `"unknown"`). This means `"pass"` from
+`stream_validate` does **not** replace the final `validate()` call.
+
+> **See also:** [The Requirements System — Streaming validation](../concepts/requirements-system#streaming-validation)
+
 ---
 
 **See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async) | [act() and aact()](../how-to/act-and-aact)

@@ -301,3 +301,30 @@ requirements = [
 All requirements are validated after each generation attempt. The repair request lists
 every requirement that failed, not just the first one, so the model can address all
 issues in a single repair pass.
+
+## Streaming validation
+
+`stream_validate()` is the streaming counterpart to `validate()`. It is called
+once per semantic chunk as tokens arrive from the model, before the full output
+is available. Requirements that need to detect problems early — too many
+sentences, a prohibited keyword in the first paragraph, unexpected JSON
+structure mid-output — override `stream_validate()` to express that logic.
+
+`stream_validate()` returns a `PartialValidationResult` with a tri-state `success`
+field:
+
+- `"unknown"` — no conclusion yet; the chunk is passed to the consumer and
+  `validate()` will be called at stream end.
+- `"pass"` — the chunk looks valid so far; it is passed to the consumer and
+  `validate()` is still called at stream end (a streaming pass is informational,
+  not final).
+- `"fail"` — the stream is cancelled immediately; no further chunks reach the
+  consumer; `validate()` is skipped for this requirement.
+
+State isolation is per-clone: `stream_with_chunking()` copies each requirement
+with `copy()` before starting the orchestrator, so the original objects are never
+mutated. Requirements that accumulate state across chunks (e.g. a running word
+count) should reassign mutable containers rather than mutate in place, since
+clones share the original's `__dict__` values at copy time.
+
+> **See also:** [Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation)
