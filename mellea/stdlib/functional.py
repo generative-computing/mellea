@@ -601,6 +601,7 @@ async def aact(
             pre_exec_payload = ComponentPreExecutePayload(
                 component_type=_component_type_name,
                 action=action,
+                context_view=context.view_for_generation(),
                 requirements=requirements or [],
                 model_options=model_options or {},
                 format=format,
