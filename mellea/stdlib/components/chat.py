@@ -282,7 +282,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
         return history  # type: ignore
 
 
-def _default_formatter(obj: Any) -> str:
+def _default_formatter(obj: object) -> str:
     """Default formatter for unknown component types.
 
     Logs a warning and converts the object to a string representation.
