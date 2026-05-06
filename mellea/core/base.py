@@ -320,6 +320,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
+        self._cancelled: bool = False
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
@@ -363,6 +364,86 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 datetime.datetime.now() - self._start
             ).total_seconds() * 1000
             self._first_chunk_received = True
+
+    async def cancel_generation(self, error: Exception | None = None) -> None:
+        """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
+
+        Safe to call at any point during streaming. After this method returns,
+        ``is_computed()`` is ``True`` and ``value`` contains whatever text was
+        accumulated before cancellation.  Calling on an already-computed MOT
+        is a no-op.
+
+        Draining the internal queue after cancellation is necessary to release
+        any ``asyncio.Queue.put()`` call that the generation task was blocked on
+        (queue maxsize=20).
+
+        Args:
+            error: Optional cause attributed to the open telemetry span.  When
+                provided, this exception is recorded via ``set_span_error`` so
+                the span reflects the actual reason for cancellation (e.g. the
+                requirement failure or an unhandled exception from a streaming
+                validator).  When ``None``, a generic
+                ``RuntimeError("Generation cancelled")`` is recorded.
+        """
+        if self._computed:
+            return
+
+        def _drain() -> None:
+            while not self._async_queue.empty():
+                try:
+                    self._async_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+        if self._generate is not None and not self._generate.done():
+            self._generate.cancel()
+
+        if self._generate_extra is not None and not self._generate_extra.done():
+            self._generate_extra.cancel()
+
+        # Drain before awaiting — unblocks any put() the task is stuck on.
+        _drain()
+
+        if self._generate is not None:
+            try:
+                await self._generate
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        if self._generate_extra is not None:
+            try:
+                await self._generate_extra
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        # Drain again for any final item the task put before terminating.
+        _drain()
+
+        span = self._meta.pop("_telemetry_span", None)
+        if span is not None:
+            from ..telemetry import end_backend_span, set_span_error
+
+            recorded: Exception = (
+                error if error is not None else RuntimeError("Generation cancelled")
+            )
+            set_span_error(span, recorded)
+            end_backend_span(span)
+
+        if self._underlying_value is None:
+            self._underlying_value = ""
+        self._cancelled = True
+        self._computed = True
+
+    @property
+    def cancelled(self) -> bool:
+        """``True`` if :meth:`cancel_generation` ran to completion on this MOT.
+
+        A normally-completed MOT leaves this ``False``; only an actual
+        cancellation via :meth:`cancel_generation` flips it.  Consumers holding
+        a computed MOT can use this to distinguish a genuine result from one
+        cut short (for example by a streaming requirement failure).
+        """
+        return self._cancelled
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
