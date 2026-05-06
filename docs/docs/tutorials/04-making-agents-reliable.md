@@ -361,7 +361,7 @@ output_text = str(response)
 
 # Guardian intrinsics require a LocalHFBackend — they load LoRA adapters
 # that are not supported by OllamaModelBackend.
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 # Build a context containing the exchange to check.
 check_ctx = (
@@ -397,7 +397,7 @@ and dynamic applications with ease. The word "Mellea" consists of
 
 Scores are floats between 0.0 (safe) and 1.0 (risk detected); 0.5 is the
 threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
-`"profanity"`, `"violence"`, `"sexual_content"`, `"unethical_behavior"`, `"groundedness"`,
+`"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
 ---
@@ -447,7 +447,7 @@ else:
 output_text = str(response)
 
 # Load once, reuse across all criteria checks.
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 check_ctx = (
     ChatContext()
@@ -474,7 +474,7 @@ for criterion in criteria:
 > runs.
 
 The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
-`"profanity"`, `"violence"`, `"sexual_content"`, `"unethical_behavior"`, `"groundedness"`,
+`"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
 ---
@@ -536,7 +536,7 @@ else:
 output_text = str(response)
 
 # Check the response is faithful to the retrieved document.
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 doc = Document(text=RETRIEVED_CONTEXT, title="Mellea docs")
 check_ctx = ChatContext().add(Message("user", question))
 hallucination_result = rag.flag_hallucinated_content(output_text, [doc], check_ctx, guardian_backend)
@@ -610,7 +610,7 @@ async def run_agent() -> str:
 output = asyncio.run(run_agent())
 
 # Validate the agent's final output.
-guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 check_ctx = (
     ChatContext()
     .add(Message("user", goal))

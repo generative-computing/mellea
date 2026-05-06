@@ -7,6 +7,7 @@ description: "Combine vector retrieval with Mellea's generative filtering and gr
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea faiss-cpu sentence-transformers`, Ollama running locally.
+Step 5 (groundedness checking) additionally requires `pip install "mellea[hf]"`.
 
 Retrieval-augmented generation (RAG) reduces hallucination by grounding the
 model's answer in documents you supply. Mellea adds two things a plain RAG loop
@@ -31,7 +32,7 @@ Embedding model  →  vector search  →  top-k candidates
                                             |
                                             v
                                        Final answer
-                              (optional: GuardianCheck groundedness)
+                              (optional: guardian_check groundedness)
 ```
 
 ---
@@ -179,34 +180,37 @@ answer = m.instruct(
 
 ## Step 5: Check groundedness (optional)
 
-After generation, use [`GuardianCheck`](../reference/glossary#guardiancheck) with `GuardianRisk.GROUNDEDNESS` to
-verify the answer does not hallucinate beyond the retrieved documents:
+After generation, use [`guardian_check()`](../how-to/safety-guardrails) with
+`criteria="groundedness"` to verify the answer does not hallucinate beyond the
+retrieved documents:
 
 ```python
-# Requires: mellea
-# Returns: bool
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
+# Requires: mellea[hf]
+# Returns: float (0.0–1.0 risk score)
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
 
-groundedness_check = GuardianCheck(
-    GuardianRisk.GROUNDEDNESS,
-    backend_type="ollama",
-    ollama_url="http://localhost:11434",
-    context_text="\n\n".join(relevant),
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+
+docs = [Document(text=doc, doc_id=str(i)) for i, doc in enumerate(relevant)]
+eval_ctx = (
+    ChatContext()
+    .add(Message("user", query))
+    .add(Message("assistant", str(answer), documents=docs))
 )
 
-results = m.validate([groundedness_check])
-if results[0]._result:
-    print("Grounded answer:", str(answer))
+score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="groundedness")
+if score < 0.5:
+    print(f"Grounded answer (score: {score:.4f}):", str(answer))
 else:
-    print("Answer may contain hallucinated content:", results[0]._reason)
+    print(f"Groundedness risk detected (score: {score:.4f})")
 ```
 
-Pass the same text to `context_text` that you used in `grounding_context` —
-this ensures the groundedness model evaluates the answer against exactly what
-the generator was given.
-
-> **Backend note:** `GuardianCheck` requires `granite3-guardian:2b` pulled in Ollama.
-> Run `ollama pull granite3-guardian:2b` before using it.
+Include the same documents in the evaluation context that you passed to
+`grounding_context` — this ensures the groundedness model evaluates the answer
+against exactly what the generator was given.
 
 ---
 
@@ -219,8 +223,11 @@ from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 
 from mellea import generative, start_session
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components.intrinsic import guardian
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import req, simple_validate
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 
 @generative
@@ -239,6 +246,9 @@ def search(query: str, docs: list[str], index: IndexFlatIP,
            model: SentenceTransformer, k: int = 5) -> list[str]:
     _, indices = index.search(model.encode([query]), k)
     return [docs[i] for i in indices[0]]
+
+
+guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 
 def rag(docs: list[str], query: str) -> str | None:
@@ -260,14 +270,15 @@ def rag(docs: list[str], query: str) -> str | None:
         requirements=[req("Answer only from the provided documents.")],
     )
 
-    results = m.validate([GuardianCheck(
-        GuardianRisk.GROUNDEDNESS,
-        backend_type="ollama",
-        ollama_url="http://localhost:11434",
-        context_text="\n\n".join(relevant),
-    )])
-    if not results[0]._result:
-        print("Warning: groundedness check failed:", results[0]._reason)
+    docs_for_eval = [Document(text=doc, doc_id=str(i)) for i, doc in enumerate(relevant)]
+    eval_ctx = (
+        ChatContext()
+        .add(Message("user", query))
+        .add(Message("assistant", str(answer), documents=docs_for_eval))
+    )
+    score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="groundedness")
+    if score >= 0.5:
+        print(f"Warning: groundedness risk detected (score: {score:.4f})")
 
     return str(answer)
 ```
@@ -282,7 +293,7 @@ def rag(docs: list[str], query: str) -> str | None:
 | `is_relevant` docstring | How strictly the filter interprets relevance | Adjust phrasing to match your domain |
 | `grounding_context` key names | Tracing and debugging in spans | Use descriptive names in production |
 | `requirements` on `m.instruct()` | Answer length, citation, tone | Add after baseline quality is good |
-| GuardianCheck `context_text` | What the groundedness model checks against | Match exactly what you pass to `grounding_context` |
+| `guardian_check` document context | What the groundedness model checks against | Match exactly what you pass to `grounding_context` |
 
 ---
 

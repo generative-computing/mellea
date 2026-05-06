@@ -1,127 +1,26 @@
-# Safety Examples
+# Safety Examples (Removed)
 
-This directory contains examples of using Granite Guardian models for content safety and validation.
+The `GuardianCheck` example files that previously lived here have been deleted.
+`docs/examples/intrinsics/guardian_core.py`, `factuality_detection.py`,
+`factuality_correction.py`, and `policy_guardrails.py` are the replacements.
 
-## Files
+## Migration gap: `RepairTemplateStrategy` + Guardian
 
-### guardian.py
-Comprehensive examples of using the enhanced GuardianCheck requirement with Granite Guardian 3.3 8B.
+The old `repair_with_guardian.py` demonstrated using `GuardianCheck` as a
+`Requirement` inside `RepairTemplateStrategy` — the Guardian verdict (including
+its chain-of-thought `_reason` string) was fed back into the repair loop as repair
+guidance. This pattern **has no direct equivalent** in the Guardian Intrinsics API:
 
-**Key Features:**
-- Multiple risk types (harm, jailbreak, social bias, etc.)
-- Thinking mode for detailed reasoning
-- Custom criteria for domain-specific safety
-- Groundedness detection
-- Function call hallucination detection
-- Multiple backend support (Ollama, HuggingFace)
+- Guardian Intrinsics return a `float` score, not a `Requirement` result, so they
+  cannot be passed to `m.validate()` or used directly in `RepairTemplateStrategy`.
+- The `thinking=True` / `_reason` chain-of-thought output from `GuardianCheck` is
+  not exposed in the new API.
 
-### guardian_huggingface.py
-Using Guardian models with HuggingFace backend.
-
-### repair_with_guardian.py
-Combining Guardian safety checks with automatic repair.
-
-## Concepts Demonstrated
-
-- **Content Safety**: Detecting harmful, biased, or inappropriate content
-- **Jailbreak Detection**: Identifying attempts to bypass safety measures
-- **Groundedness**: Ensuring responses are factually grounded
-- **Function Call Validation**: Detecting hallucinated tool calls
-- **Multi-Risk Assessment**: Checking multiple safety criteria
-- **Thinking Mode**: Getting detailed reasoning for safety decisions
-
-## Available Risk Types
-
-```python
-from mellea.stdlib.requirements.safety.guardian import GuardianRisk
-
-# Built-in risk types
-GuardianRisk.HARM              # Harmful content
-GuardianRisk.JAILBREAK         # Jailbreak attempts
-GuardianRisk.SOCIAL_BIAS       # Social bias
-GuardianRisk.GROUNDEDNESS      # Factual grounding
-GuardianRisk.FUNCTION_CALL     # Function call hallucination
-# ... and more
-```
-
-## Basic Usage
-
-```python
-from mellea import start_session
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
-
-# Create guardian with specific risk type
-guardian = GuardianCheck(GuardianRisk.HARM, thinking=True)
-
-# Use in validation
-m = start_session()
-m.chat("Write a professional email.")
-is_safe = m.validate([guardian])
-
-print(f"Content is safe: {is_safe[0]._result}")
-if is_safe[0]._reason:
-    print(f"Reasoning: {is_safe[0]._reason}")
-```
-
-## Advanced Usage
-
-### Custom Criteria
-```python
-custom_guardian = GuardianCheck(
-    custom_criteria="Check for inappropriate content in educational context"
-)
-```
-
-### Groundedness Detection
-```python
-groundedness_guardian = GuardianCheck(
-    GuardianRisk.GROUNDEDNESS,
-    thinking=True,
-    context_text="Reference text for grounding check..."
-)
-```
-
-### Function Call Validation
-```python
-function_guardian = GuardianCheck(
-    GuardianRisk.FUNCTION_CALL,
-    thinking=True,
-    tools=[tool_definition]
-)
-```
-
-### Multiple Guardians
-```python
-guardians = [
-    GuardianCheck(GuardianRisk.HARM),
-    GuardianCheck(GuardianRisk.JAILBREAK),
-    GuardianCheck(GuardianRisk.SOCIAL_BIAS),
-]
-results = m.validate(guardians)
-```
-
-## Thinking Mode
-
-Enable `thinking=True` to get detailed reasoning:
-```python
-guardian = GuardianCheck(GuardianRisk.HARM, thinking=True)
-result = m.validate([guardian])
-print(result[0]._reason)  # Detailed explanation
-```
-
-## Backend Support
-
-- **Ollama**: `backend_type="ollama"` (default)
-- **HuggingFace**: `backend_type="huggingface"`
-- **Custom**: Pass your own backend instance
-
-## Models
-
-- Granite Guardian 3.0 2B
-- Granite Guardian 3.3 8B (recommended)
+If you need repair-on-safety-failure behaviour with the new API, the closest
+approach is to call `guardian.guardian_check()` manually after generation and
+re-invoke `m.instruct()` with an additional requirement on failure.
 
 ## Related Documentation
 
-- See `mellea/stdlib/requirements/safety/guardian.py` for implementation
-- See `test/stdlib/requirements/` for more examples
-- See IBM Granite Guardian documentation for model details
+- [Safety Guardrails (current)](../../docs/docs/how-to/safety-guardrails.md)
+- [Security and Taint Tracking (deprecated)](../../docs/docs/advanced/security-and-taint-tracking.md)
