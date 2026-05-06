@@ -13,9 +13,13 @@ class ToolPreInvokePayload(MelleaBasePayload):
     Attributes:
         model_tool_call: The ``ModelToolCall`` about to be executed (writable —
             plugins may modify arguments or swap the tool entirely).
+        is_control_flow: ``True`` when this tool is used for framework control
+            flow (e.g. ``final_answer`` in ReAct) rather than data processing.
+            Plugins should check this field to decide whether to act.
     """
 
     model_tool_call: Any = None
+    is_control_flow: bool = False
 
 
 class ToolPostInvokePayload(MelleaBasePayload):
@@ -29,6 +33,9 @@ class ToolPostInvokePayload(MelleaBasePayload):
         execution_time_ms: Wall-clock time of the tool execution in milliseconds.
         success: ``True`` if the tool executed without raising an exception.
         error: The ``Exception`` raised during execution, or ``None`` on success.
+        is_control_flow: ``True`` when this tool is used for framework control
+            flow (e.g. ``final_answer`` in ReAct) rather than data processing.
+            Plugins should check this field to decide whether to act.
     """
 
     model_tool_call: Any = None
@@ -37,3 +44,4 @@ class ToolPostInvokePayload(MelleaBasePayload):
     execution_time_ms: int = 0
     success: bool = True
     error: Any = None
+    is_control_flow: bool = False

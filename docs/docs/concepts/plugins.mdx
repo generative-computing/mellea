@@ -659,7 +659,7 @@ async def cap_tokens(payload, ctx):
 
 **Fires:** Before invoking a tool from LLM output.
 
-**Payload fields:** `model_tool_call` (contains `name`, `args`, `callable`)
+**Payload fields:** `model_tool_call` (contains `name`, `args`, `callable`), `is_control_flow`
 
 **Writable fields:** `model_tool_call`
 
@@ -675,11 +675,15 @@ async def enforce_tool_allowlist(payload, ctx):
         return block(f"Tool '{payload.model_tool_call.name}' not permitted", code="TOOL_NOT_ALLOWED")
 ```
 
+<Note>
+The payload includes an `is_control_flow` field that is `True` for framework control-flow tools (e.g. the ReAct loop's `final_answer`). Allowlist plugins should check this field to avoid blocking internal tools. See [Control-flow tools](#control-flow-tools) for the recommended pattern.
+</Note>
+
 #### `tool_post_invoke`
 
 **Fires:** After tool execution completes.
 
-**Payload fields:** `model_tool_call`, `tool_output`, `tool_message`, `execution_time_ms`, `success`, `error`
+**Payload fields:** `model_tool_call`, `tool_output`, `tool_message`, `execution_time_ms`, `success`, `error`, `is_control_flow`
 
 **Writable fields:** `tool_output`
 
@@ -811,13 +815,15 @@ The `tool_pre_invoke` and `tool_post_invoke` hooks give you fine-grained control
 
 ### Tool allow-listing
 
-Block any tool not on an explicit approved list:
+Block any tool not on an explicit approved list. The `is_control_flow` guard ensures framework tools like `final_answer` are not blocked:
 
 ```python
 ALLOWED_TOOLS = frozenset({"get_weather", "calculator"})
 
 @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
 async def enforce_tool_allowlist(payload, ctx):
+    if payload.is_control_flow:
+        return  # framework control-flow tools are exempt
     tool_name = payload.model_tool_call.name
     if tool_name not in ALLOWED_TOOLS:
         return block(f"Tool '{tool_name}' is not permitted", code="TOOL_NOT_ALLOWED")
@@ -878,6 +884,43 @@ with start_session(plugins=[tool_security]) as m:
 ```
 
 See the [full tool hooks example](https://github.com/generative-computing/mellea/blob/main/docs/examples/plugins/tool_hooks.py).
+
+### Control-flow tools
+
+Mellea's frameworks use internal tools for control flow. For example, the [ReAct loop](../reference/glossary#react) uses a `final_answer` tool to signal that the agent has finished reasoning. These tools flow through the same invocation path as user-defined tools — hooks always fire for them — but the payload carries an `is_control_flow` flag so each plugin can decide its own policy.
+
+The recommended pattern for allowlist plugins is to skip control-flow tools explicitly:
+
+```python
+ALLOWED_TOOLS = frozenset({"get_weather", "calculator"})
+
+@hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
+async def enforce_tool_allowlist(payload, ctx):
+    if payload.is_control_flow:
+        return  # framework control-flow tools are exempt
+    if payload.model_tool_call.name not in ALLOWED_TOOLS:
+        return block(f"Tool '{payload.model_tool_call.name}' not permitted")
+```
+
+Logging and telemetry plugins typically do **not** check this flag — they observe all tool calls including control-flow tools:
+
+```python
+@hook(HookType.TOOL_POST_INVOKE, mode=PluginMode.FIRE_AND_FORGET)
+async def log_all_tools(payload, ctx):
+    logger.info("tool=%s control_flow=%s ms=%d", payload.model_tool_call.name,
+                payload.is_control_flow, payload.execution_time_ms)
+```
+
+#### Querying the registry
+
+Use `is_internal_tool()` to check whether a tool name is a known control-flow tool:
+
+```python
+from mellea.plugins import is_internal_tool
+
+is_internal_tool("final_answer")  # True
+is_internal_tool("get_weather")   # False
+```
 
 ---
 
@@ -972,18 +1015,19 @@ All public symbols are available from a single import:
 
 ```python
 from mellea.plugins import (
-    HookType,            # Enum of all hook types (e.g., GENERATION_PRE_CALL)
-    Plugin,              # Base class for class-based plugins
-    PluginMode,          # Execution mode enum (SEQUENTIAL, TRANSFORM, AUDIT, CONCURRENT, FIRE_AND_FORGET)
-    PluginResult,        # Return type for hooks that modify or block
-    PluginSet,           # Named group of hooks/plugins for composition
-    PluginViolationError,# Exception raised when a hook blocks execution
-    block,               # Helper to create a blocking PluginResult
-    hook,                # Decorator to register an async function as a hook handler
-    modify,              # Helper to create a modifying PluginResult
-    plugin_scope,        # Context manager for with-block scoped activation
-    register,            # Register hooks/plugins globally or per-session
-    unregister,          # Remove globally-registered hooks/plugins
+    HookType,                        # Enum of all hook types (e.g., GENERATION_PRE_CALL)
+    Plugin,                          # Base class for class-based plugins
+    PluginMode,                      # Execution mode enum (SEQUENTIAL, TRANSFORM, ...)
+    PluginResult,                    # Return type for hooks that modify or block
+    PluginSet,                       # Named group of hooks/plugins for composition
+    PluginViolationError,            # Exception raised when a hook blocks execution
+    block,                           # Helper to create a blocking PluginResult
+    hook,                            # Decorator to register an async function as a hook handler
+    is_internal_tool,                # Check if a tool is a framework control-flow tool
+    modify,                          # Helper to create a modifying PluginResult
+    plugin_scope,                    # Context manager for with-block scoped activation
+    register,                        # Register hooks/plugins globally or per-session
+    unregister,                      # Remove globally-registered hooks/plugins
 )
 ```
 
@@ -997,6 +1041,7 @@ from mellea.plugins import (
 | `plugin_scope(*items)` | Context manager that registers on enter, deregisters on exit |
 | `block(reason, *, code, details)` | Create a blocking `PluginResult` |
 | `modify(payload, **field_updates)` | Create a modifying `PluginResult` via `model_copy` |
+| `is_internal_tool(tool_name)` | Returns `True` if the tool is a framework control-flow tool (e.g. `final_answer`) |
 | `HookType` | Enum with all 18 hook types |
 | `PluginMode` | Enum: `SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET` |
 | `PluginResult` | Typed result with `continue_processing`, `modified_payload`, and `violation` |
