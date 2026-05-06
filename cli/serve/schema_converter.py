@@ -293,7 +293,13 @@ def json_schema_to_pydantic(
                 raise ValueError(f"{_format_path(path)} enum must be an array")
             return _enum_annotation(enum_values, path)
 
-        field_type = normalized_schema.get("type", "string")
+        field_type = normalized_schema.get("type")
+        if field_type is None:
+            raise ValueError(
+                f"{_format_path(path)} schema must have a 'type' keyword. "
+                "JSON Schema without 'type' is valid but not supported by this converter. "
+                "Please add an explicit type (e.g., 'string', 'integer', 'object', 'array')."
+            )
         is_nullable = False
         if isinstance(field_type, list):
             non_null_types = [item for item in field_type if item != "null"]

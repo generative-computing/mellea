@@ -205,3 +205,105 @@ def test_json_schema_supports_nested_ref_in_array_items():
 
     with pytest.raises(Exception):
         model.model_validate({"tags": [{"label": "alpha", "extra": True}]})
+
+
+def test_json_schema_rejects_missing_type_on_property():
+    """Test that properties without explicit type raise ValueError."""
+    with pytest.raises(
+        ValueError,
+        match=r"schema must have a 'type' keyword.*not supported by this converter",
+    ):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {"data": {"description": "anything"}},
+                "required": ["data"],
+            }
+        )
+
+
+def test_json_schema_rejects_missing_type_on_nested_object():
+    """Test that nested objects without type raise ValueError."""
+    with pytest.raises(
+        ValueError,
+        match=r"schema must have a 'type' keyword.*not supported by this converter",
+    ):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "properties": {"name": {"type": "string"}},
+                        "required": ["name"],
+                    }
+                },
+                "required": ["user"],
+            }
+        )
+
+
+def test_json_schema_rejects_missing_type_on_array_items():
+    """Test that array items without type raise ValueError."""
+    with pytest.raises(
+        ValueError,
+        match=r"schema must have a 'type' keyword.*not supported by this converter",
+    ):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {
+                    "items": {"type": "array", "items": {"description": "any item"}}
+                },
+                "required": ["items"],
+            }
+        )
+
+
+def test_json_schema_rejects_missing_type_in_anyof_branch():
+    """Test that anyOf branches without type raise ValueError."""
+    with pytest.raises(
+        ValueError,
+        match=r"schema must have a 'type' keyword.*not supported by this converter",
+    ):
+        json_schema_to_pydantic(
+            {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "anyOf": [{"type": "string"}, {"description": "anything"}]
+                    }
+                },
+                "required": ["value"],
+            }
+        )
+
+
+def test_json_schema_allows_missing_type_in_allof_branches():
+    """Test that allOf branches without type default to object (intentional)."""
+    # allOf is specifically for merging object fragments, so missing type
+    # defaults to "object" rather than raising an error
+    model = json_schema_to_pydantic(
+        {
+            "type": "object",
+            "properties": {
+                "user": {
+                    "allOf": [
+                        {
+                            "properties": {"name": {"type": "string"}},
+                            "required": ["name"],
+                        },
+                        {
+                            "properties": {"age": {"type": "integer"}},
+                            "required": ["age"],
+                        },
+                    ]
+                }
+            },
+            "required": ["user"],
+        }
+    )
+
+    parsed = model.model_validate({"user": {"name": "Alice", "age": 30}})
+    parsed_user = parsed.model_dump()["user"]
+    assert parsed_user["name"] == "Alice"
+    assert parsed_user["age"] == 30
