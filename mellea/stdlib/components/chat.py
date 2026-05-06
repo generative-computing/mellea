@@ -295,7 +295,7 @@ def _default_formatter(obj: Any) -> str:
 
 
 def as_generic_chat_history(
-    ctx: Context, formatter: Callable[[Any], str] | None = None
+    ctx: Context, formatter: Callable[[object], str] | None = None
 ) -> list[Message]:
     """Returns a list of Messages corresponding to a Context, with flexible type handling.
 
@@ -329,13 +329,26 @@ def as_generic_chat_history(
                     return c.parsed_repr
                 if isinstance(c.parsed_repr, str):
                     return Message(role="assistant", content=c.parsed_repr)
-                # Use value if parsed_repr is None or some other type
-                content = (
-                    str(c.value) if c.parsed_repr is None else formatter(c.parsed_repr)
-                )
+                # Use value if parsed_repr is None
+                if c.parsed_repr is None:
+                    if c.value is None:
+                        raise ValueError(
+                            "ModelOutputThunk has no value and no parsed_repr — was it evaluated?"
+                        )
+                    content = str(c.value)
+                else:
+                    _logger.warning(
+                        f"ModelOutputThunk.parsed_repr is {type(c.parsed_repr).__name__}, "
+                        f"not a Message; falling back to value."
+                    )
+                    content = formatter(c.parsed_repr)
                 return Message(role="assistant", content=content)
             case CBlock():
-                return Message(role="user", content=str(c))
+                if type(c) is not CBlock:
+                    content = formatter(c)
+                else:
+                    content = str(c)
+                return Message(role="user", content=content)
             case _:
                 content = formatter(c)
                 return Message(role="user", content=content)
