@@ -231,5 +231,60 @@ async def test_react_rejects_non_chat_context():
         await react(goal="g", context=Mock(), backend=Mock(), tools=None)
 
 
+@pytest.mark.asyncio
+async def test_react_answer_check_terminates_on_direct_response():
+    """answer_check returning True on a no-tool-call turn exits the loop."""
+    backend = ScriptedBackend([_ScriptedTurn(value="42")])
+
+    async def always_done(goal, step, ctx, backend, opts, turn, budget):
+        return True
+
+    result, _ = await react(
+        goal="answer",
+        context=ChatContext(),
+        backend=backend,
+        tools=None,
+        loop_budget=5,
+        answer_check=always_done,
+    )
+    assert result.value == "42"
+
+
+@pytest.mark.asyncio
+async def test_react_answer_check_continues_when_false():
+    """answer_check returning False on a no-tool-call turn continues the loop."""
+    backend = ScriptedBackend(
+        [
+            _ScriptedTurn(
+                value="thinking..."
+            ),  # First turn, answer_check returns False
+            _final_answer_call("42"),  # Second turn, model calls final_answer
+        ]
+    )
+
+    call_count = 0
+
+    async def check_on_second_call(goal, step, ctx, backend, opts, turn, budget):
+        nonlocal call_count
+        call_count += 1
+        # Return False on first call to test the continue branch
+        # On second call, model will use final_answer tool instead
+        return False
+
+    result, _ = await react(
+        goal="answer",
+        context=ChatContext(),
+        backend=backend,
+        tools=None,
+        loop_budget=5,
+        answer_check=check_on_second_call,
+    )
+
+    # Verify answer_check was called once (returned False, loop continued)
+    assert call_count == 1
+    # Verify we got the final answer from the second turn
+    assert result.value == "42"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
