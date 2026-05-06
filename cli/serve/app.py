@@ -179,10 +179,15 @@ def make_chat_endpoint(module):
                         format_model = json_schema_to_pydantic(
                             json_schema.schema_, json_schema.name
                         )
-                    except (ValueError, TypeError) as e:
+                    except (ValueError, TypeError, RecursionError) as e:
+                        message = (
+                            "Invalid JSON schema: recursive $ref is not supported"
+                            if isinstance(e, RecursionError)
+                            else f"Invalid JSON schema: {e!s}"
+                        )
                         return create_openai_error_response(
                             status_code=400,
-                            message=f"Invalid JSON schema: {e!s}",
+                            message=message,
                             error_type="invalid_request_error",
                             param="response_format.json_schema.schema",
                         )

@@ -2,8 +2,6 @@
 
 from unittest.mock import Mock
 
-import pytest
-
 from cli.serve.utils import extract_finish_reason
 from mellea.core.base import ModelOutputThunk
 

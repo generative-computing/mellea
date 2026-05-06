@@ -39,6 +39,7 @@ def json_schema_to_pydantic(
 
     Still unsupported and will raise ``ValueError``:
     - non-local refs
+    - recursive ``$ref`` cycles
     - tuple-style array schemas
     - object schemas without ``properties`` unless they are pure
       ``additionalProperties`` maps
@@ -64,6 +65,8 @@ def json_schema_to_pydantic(
 
     ref_cache: dict[str, Any] = {}
     model_cache: dict[str, type[BaseModel]] = {}
+    in_flight_refs: set[str] = set()
+    ref_name_by_schema_id: dict[int, str] = {}
 
     def _sanitize_model_name(name: str) -> str:
         sanitized = "".join(ch if ch.isalnum() else "_" for ch in name).strip("_")
@@ -72,12 +75,18 @@ def json_schema_to_pydantic(
     def _format_path(path: str) -> str:
         return path or "<root>"
 
-    def _resolve_ref(ref: str) -> dict[str, Any]:
+    def _resolve_ref(ref: str) -> tuple[str, dict[str, Any]]:
         if ref in ref_cache:
             resolved = ref_cache[ref]
             if not isinstance(resolved, dict):
                 raise ValueError(f"Resolved ref is invalid: {ref}")
-            return resolved
+
+            for prefix in ("#/$defs/", "#/definitions/"):
+                if ref.startswith(prefix):
+                    return ref[len(prefix) :], resolved
+            raise ValueError(
+                f"Only local $ref values into $defs/definitions are supported: {ref}"
+            )
 
         prefixes = ("#/$defs/", "#/definitions/")
         for prefix in prefixes:
@@ -89,7 +98,8 @@ def json_schema_to_pydantic(
                 if not isinstance(target, dict):
                     raise ValueError(f"Ref target must be an object: {ref}")
                 ref_cache[ref] = target
-                return target
+                ref_name_by_schema_id[id(target)] = key
+                return key, target
 
         raise ValueError(
             f"Only local $ref values into $defs/definitions are supported: {ref}"
@@ -230,7 +240,7 @@ def json_schema_to_pydantic(
             ref = normalized["$ref"]
             if not isinstance(ref, str):
                 raise ValueError(f"{_format_path(path)} $ref must be a string")
-            resolved = _resolve_ref(ref)
+            _, resolved = _resolve_ref(ref)
             sibling_keywords = {k: v for k, v in normalized.items() if k != "$ref"}
             if sibling_keywords:
                 merged = dict(resolved)
@@ -347,59 +357,69 @@ def json_schema_to_pydantic(
     def _object_schema_to_model(
         object_schema: dict[str, Any], current_model_name: str, path: str
     ) -> type[BaseModel]:
-        normalized_schema = _normalize_schema(object_schema, path)
-        if normalized_schema.get("type") != "object":
-            raise ValueError(f"{_format_path(path)} must be an object schema")
+        current_ref_name = ref_name_by_schema_id.get(id(object_schema))
+        if current_ref_name is not None:
+            if current_ref_name in in_flight_refs:
+                raise ValueError("recursive $ref is not supported")
+            in_flight_refs.add(current_ref_name)
 
-        cache_key = f"{current_model_name}:{id(object_schema)}"
-        cached = model_cache.get(cache_key)
-        if cached is not None:
-            return cached
+        try:
+            normalized_schema = _normalize_schema(object_schema, path)
+            if normalized_schema.get("type") != "object":
+                raise ValueError(f"{_format_path(path)} must be an object schema")
 
-        properties = normalized_schema.get("properties", {})
-        required = normalized_schema.get("required", [])
-        additional_properties = normalized_schema.get("additionalProperties", True)
+            cache_key = f"{current_model_name}:{id(object_schema)}"
+            cached = model_cache.get(cache_key)
+            if cached is not None:
+                return cached
 
-        if not isinstance(required, list):
-            raise ValueError(f"{_format_path(path)} 'required' must be an array")
+            properties = normalized_schema.get("properties", {})
+            required = normalized_schema.get("required", [])
+            additional_properties = normalized_schema.get("additionalProperties", True)
 
-        if not isinstance(properties, dict):
-            raise ValueError(f"{_format_path(path)} 'properties' must be an object")
+            if not isinstance(required, list):
+                raise ValueError(f"{_format_path(path)} 'required' must be an array")
 
-        if not properties:
-            if isinstance(additional_properties, dict):
+            if not isinstance(properties, dict):
+                raise ValueError(f"{_format_path(path)} 'properties' must be an object")
+
+            if not properties:
+                if isinstance(additional_properties, dict):
+                    raise ValueError(
+                        f"{_format_path(path)} is a pure additionalProperties map and should "
+                        "be used as a field type, not as a model root"
+                    )
                 raise ValueError(
-                    f"{_format_path(path)} is a pure additionalProperties map and should "
-                    "be used as a field type, not as a model root"
+                    f"{_format_path(path)} must have a non-empty 'properties' object"
                 )
-            raise ValueError(
-                f"{_format_path(path)} must have a non-empty 'properties' object"
+
+            field_definitions: dict[str, Any] = {}
+            for field_name, field_schema in properties.items():
+                child_path = f"{path}.{field_name}" if path else field_name
+                annotation = _schema_to_type(field_schema, child_path)
+                if field_name in required:
+                    field_definitions[field_name] = (annotation, ...)
+                else:
+                    field_definitions[field_name] = (annotation | None, None)
+
+            if additional_properties not in (True, False):
+                raise ValueError(
+                    f"{_format_path(path)} only supports boolean additionalProperties "
+                    "when combined with named properties"
+                )
+
+            model_config = ConfigDict(
+                extra="forbid" if additional_properties is False else "ignore",
+                use_enum_values=True,
             )
-
-        field_definitions: dict[str, Any] = {}
-        for field_name, field_schema in properties.items():
-            child_path = f"{path}.{field_name}" if path else field_name
-            annotation = _schema_to_type(field_schema, child_path)
-            if field_name in required:
-                field_definitions[field_name] = (annotation, ...)
-            else:
-                field_definitions[field_name] = (annotation | None, None)
-
-        if additional_properties not in (True, False):
-            raise ValueError(
-                f"{_format_path(path)} only supports boolean additionalProperties "
-                "when combined with named properties"
+            dynamic_model = create_model(
+                current_model_name, __config__=model_config, **field_definitions
             )
-
-        model_config = ConfigDict(
-            extra="forbid" if additional_properties is False else "ignore",
-            use_enum_values=True,
-        )
-        dynamic_model = create_model(
-            current_model_name, __config__=model_config, **field_definitions
-        )
-        model_cache[cache_key] = dynamic_model
-        return dynamic_model
+            model_cache[cache_key] = dynamic_model
+            return dynamic_model
+        finally:
+            if current_ref_name is not None:
+                in_flight_refs.remove(current_ref_name)
 
     if not isinstance(schema, dict):
         raise ValueError("Schema must be a dictionary")

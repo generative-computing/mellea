@@ -890,6 +890,50 @@ class TestResponseFormat:
         assert "local" in error_data["error"]["message"].lower()
         assert "$ref" in error_data["error"]["message"].lower()
 
+    @pytest.mark.asyncio
+    async def test_json_schema_rejects_recursive_ref(self, mock_module):
+        """Test that recursive local refs return a request error instead of crashing."""
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Generate")],
+            response_format=ResponseFormat(
+                type="json_schema",
+                json_schema=JsonSchemaFormat(
+                    name="RecursiveNode",
+                    schema={
+                        "type": "object",
+                        "$defs": {
+                            "Node": {
+                                "type": "object",
+                                "properties": {
+                                    "val": {"type": "integer"},
+                                    "child": {"$ref": "#/$defs/Node"},
+                                },
+                                "required": ["val"],
+                            }
+                        },
+                        "properties": {"root": {"$ref": "#/$defs/Node"}},
+                        "required": ["root"],
+                    },
+                ),
+            ),
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+        body_bytes = response.body
+        if isinstance(body_bytes, memoryview):
+            body_bytes = bytes(body_bytes)
+        error_data = json.loads(body_bytes.decode("utf-8"))
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert "recursive" in error_data["error"]["message"].lower()
+        assert "$ref" in error_data["error"]["message"].lower()
+
 
 class TestResponseFormatStreaming:
     """Tests for response_format parameter with streaming enabled."""
