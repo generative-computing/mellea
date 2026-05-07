@@ -523,10 +523,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # but we must not leak the span.
             span = self._meta.get("_telemetry_span")
             if span is not None:
-                from ..telemetry import end_backend_span, set_span_error
+                from ..telemetry.backend_instrumentation import finalize_backend_span
 
-                set_span_error(span, chunks[-1])
-                end_backend_span(span)
+                finalize_backend_span(span, error=chunks[-1])
                 del self._meta["_telemetry_span"]
 
             # Fire generation_error hook (FIRE_AND_FORGET — does not block the raise)

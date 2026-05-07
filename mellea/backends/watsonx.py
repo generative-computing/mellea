@@ -303,7 +303,12 @@ class WatsonxAIBackend(FormatterBackend):
             "The watsonx.ai backend only supports chat-like contexts."
         )
         span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
+            backend=self,
+            action=action,
+            ctx=ctx,
+            format=format,
+            tool_calls=tool_calls,
+            model_options=model_options,
         )
 
         _model_id_str = str(getattr(self, "model_id", "unknown"))
@@ -606,20 +611,15 @@ class WatsonxAIBackend(FormatterBackend):
         # Record tracing if span exists
         span = mot._meta.get("_telemetry_span")
         if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
+            from ..telemetry.backend_instrumentation import finalize_backend_span
+
+            finalize_backend_span(
+                span,
+                response=response,
+                usage=usage,
+                model_id=str(self._get_watsonx_model_id()),
+                conversation=conversation,
             )
-
-            if usage:
-                record_token_usage(span, usage)
-            if response is not None:
-                record_response_metadata(span, response)
-
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up span reference
             del mot._meta["_telemetry_span"]
 
         # Generate the log for this ModelOutputThunk.

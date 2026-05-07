@@ -289,7 +289,9 @@ class OllamaModelBackend(FormatterBackend):
                 and an updated context that includes ``action`` and the new output.
         """
         # Start span without auto-closing (will be closed in post_processing)
-        span = start_generate_span(self, action, ctx, format, tool_calls)
+        span = start_generate_span(
+            self, action, ctx, format, tool_calls, model_options=model_options
+        )
 
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
@@ -720,21 +722,23 @@ class OllamaModelBackend(FormatterBackend):
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")
         if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
+            from ..telemetry.backend_instrumentation import finalize_backend_span
+
+            output_text: str | None = None
+            if response is not None:
+                try:
+                    msg = getattr(response, "message", None)
+                    if msg is not None:
+                        output_text = str(getattr(msg, "content", "") or "")
+                except Exception:
+                    pass
+
+            finalize_backend_span(
+                span,
+                usage=mot.generation.usage if mot.generation.usage else None,
+                conversation=conversation,
+                output_text=output_text,
             )
-
-            if response:
-                if mot.generation.usage:
-                    record_token_usage(span, mot.generation.usage)
-                record_response_metadata(span, response)
-
-            # Close the span now that telemetry is recorded
-            end_backend_span(span)
-
-            # Clean up the span reference
             del mot._meta["_telemetry_span"]
 
 

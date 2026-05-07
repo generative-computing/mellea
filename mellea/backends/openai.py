@@ -467,7 +467,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Start span without auto-closing (will be closed in post_processing)
         span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
+            backend=self,
+            action=action,
+            ctx=ctx,
+            format=format,
+            tool_calls=tool_calls,
+            model_options=model_options,
         )
 
         _model_id_str = str(getattr(self, "model_id", "unknown"))
@@ -1122,18 +1127,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")
         if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
+            from ..telemetry.backend_instrumentation import finalize_backend_span
 
-            if usage:
-                record_token_usage(span, usage)
-            record_response_metadata(span, response)
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up the span reference
+            finalize_backend_span(
+                span,
+                response=response,
+                usage=usage,
+                model_id=self._model_id,
+                conversation=conversation,
+            )
             del mot._meta["_telemetry_span"]
 
     @overload
