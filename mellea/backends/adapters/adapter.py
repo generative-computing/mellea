@@ -15,7 +15,7 @@ from typing import TypeVar
 
 import yaml
 
-from ...core import Backend
+from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
 from ...formatters.granite.intrinsics.constants import BASE_MODEL_TO_CANONICAL_NAME
 from ...helpers import _ServerType
@@ -200,6 +200,14 @@ class IntrinsicAdapter(LocalHFAdapter):
                 self.intrinsic_name, self.base_model_name, is_alora
             )
             if overlay is not None:
+                MelleaLogger.get_logger().info(
+                    "Using in-repo io.yaml overlay for intrinsic '%s' "
+                    "(base_model=%s, alora=%s) at %s",
+                    self.intrinsic_name,
+                    self.base_model_name,
+                    is_alora,
+                    overlay,
+                )
                 config_file = overlay
             else:
                 config_file = intrinsics.obtain_io_yaml(
