@@ -2,12 +2,15 @@
 
 import base64
 import json
+from datetime import datetime
+from decimal import Decimal
 
 import pytest
 
 from mellea.backends.tools import MelleaTool
-from mellea.core.base import ImageBlock
+from mellea.core.base import ImageBlock, ModelOutputThunk, ModelToolCall
 from mellea.helpers.openai_compatible_helpers import (
+    build_tool_calls,
     chat_completion_delta_merge,
     extract_model_tool_requests,
     message_to_openai_message,
@@ -357,6 +360,31 @@ class TestMessagesToDocs:
         assert len(result) == 2
         assert result[0]["text"] == "a"
         assert result[1]["text"] == "b"
+
+
+# --- build_tool_calls ---
+
+
+class TestBuildToolCalls:
+    def test_with_non_json_serializable_args(self):
+        """Non-JSON-serializable values (datetime, Decimal) are converted to strings."""
+        tool = _make_tool("test_tool")
+        tool_call = ModelToolCall(
+            name="test_tool",
+            func=tool,
+            args={"timestamp": datetime(2024, 1, 15), "amount": Decimal("123.45")},
+        )
+        output = ModelOutputThunk(value="test", tool_calls={"test_tool": tool_call})
+
+        result = build_tool_calls(output)
+
+        assert result is not None
+        assert len(result) == 1
+        # Verify arguments are valid JSON and values were converted to strings
+        args = json.loads(result[0]["function"]["arguments"])
+        assert isinstance(args["timestamp"], str)
+        assert "2024-01-15" in args["timestamp"]
+        assert args["amount"] == "123.45"
 
 
 if __name__ == "__main__":

@@ -78,16 +78,16 @@ def session(backend) -> MelleaSession:
 
 def test_mot_init_typing():
     mot = ModelOutputThunk[float](value="1")
-    assert hasattr(mot, "__orig_class__"), (
-        "mots are generics and should have this field"
+    assert "__orig_class__" in mot.__dict__, (
+        "mots are generics and should have this field in instance dict"
     )
     assert get_args(mot.__orig_class__)[0] is float, (  # type: ignore
         f"expected float, got {get_args(mot.__orig_class__)[0]} as mot type"  # type: ignore
     )  # type: ignore
 
     unknown_mot = ModelOutputThunk(value="2")
-    assert not hasattr(unknown_mot, "__orig_class__"), (
-        "unknown mots / mots with no type defined at instantiate don't have this attribute"
+    assert "__orig_class__" not in unknown_mot.__dict__, (
+        "unknown mots / mots with no type defined at instantiate don't have this attribute in instance dict"
     )
 
 
