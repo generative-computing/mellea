@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
