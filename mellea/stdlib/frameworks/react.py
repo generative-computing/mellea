@@ -15,6 +15,7 @@ from mellea.core.utils import MelleaLogger
 from mellea.stdlib import functional as mfuncs
 
 # from mellea.stdlib.components.docs.document import Document
+from mellea.stdlib.frameworks.react_compaction import CompactionStrategy
 from mellea.stdlib.components.chat import ToolMessage
 from mellea.stdlib.components.react import (
     MELLEA_FINALIZER_TOOL,
@@ -36,6 +37,7 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
+    compaction: CompactionStrategy | None = None,
 ) -> tuple[ComputedModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
@@ -47,6 +49,9 @@ async def react(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tools: the list of tools to use
         loop_budget: the number of steps allowed; use -1 for unlimited
+        compaction: an optional ``CompactionStrategy`` to apply when the context
+            exceeds the strategy's configured threshold
+            (e.g. ``KeepLastN(keep_n=5, threshold=20)``).
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -79,6 +84,7 @@ async def react(
     turn_num = 0
     while (turn_num < loop_budget) or (loop_budget == -1):
         turn_num += 1
+
         MelleaLogger.get_logger().info(f"## ReACT TURN NUMBER {turn_num}")
 
         step, next_context = await mfuncs.aact(
@@ -128,5 +134,11 @@ async def react(
                 # The tool has already been called above.
                 step._underlying_value = str(tool_responses[0].content)
             return step, context
+
+        # Compact after the final-answer check so terminal turns skip it.
+        if compaction is not None:
+            context = await compaction.maybe_compact(
+                context, backend=backend, goal=goal
+            )
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")
