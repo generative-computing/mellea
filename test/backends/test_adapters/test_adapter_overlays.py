@@ -1,9 +1,11 @@
-"""Tests for the in-repo ``io.yaml`` overlay mechanism in ``IntrinsicAdapter``.
+"""Tests for the catalog-declared ``io.yaml`` overlay mechanism in ``IntrinsicAdapter``.
 
-Overlays let Mellea ship ``io.yaml`` content ahead of an upstream release; the
-adapter loader prefers them over the Hugging Face cache when present. These
-tests exercise the resolution helper and the adapter's use of it, using only
-the overlay files that ship with the repo (no network access).
+Overlays let Mellea ship ``io.yaml`` content ahead of an upstream release: a
+catalog entry points at an in-repo overlay directory via
+``io_yaml_overlay_dir``, and the adapter loader prefers that file over the
+Hugging Face cache when present. These tests exercise the resolution helper
+and the adapter's use of it, using only the overlay files that ship with the
+repo (no network access).
 """
 
 import importlib.resources
@@ -13,8 +15,8 @@ from unittest.mock import patch
 import pytest
 
 from mellea.backends.adapters import IntrinsicAdapter
-from mellea.backends.adapters.adapter import _find_overlay_io_yaml
-from mellea.backends.adapters.catalog import AdapterType
+from mellea.backends.adapters.adapter import _resolve_catalog_overlay
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 
 GUARDIAN_INTRINSICS = [
     "guardian-core",
@@ -27,9 +29,8 @@ GUARDIAN_INTRINSICS = [
 @pytest.mark.parametrize("intrinsic_name", GUARDIAN_INTRINSICS)
 def test_overlay_resolves_for_granite_4_1_3b_lora(intrinsic_name):
     """Each Guardian intrinsic has a lora overlay for granite-4.1-3b."""
-    path = _find_overlay_io_yaml(
-        intrinsic_name, "ibm-granite/granite-4.1-3b", alora=False
-    )
+    metadata = fetch_intrinsic_metadata(intrinsic_name)
+    path = _resolve_catalog_overlay(metadata, "ibm-granite/granite-4.1-3b", alora=False)
     assert path is not None
     assert path.is_file()
     assert path.name == "io.yaml"
@@ -42,27 +43,27 @@ def test_overlay_resolves_for_granite_4_1_3b_lora(intrinsic_name):
 @pytest.mark.parametrize("intrinsic_name", GUARDIAN_INTRINSICS)
 def test_overlay_resolves_with_canonical_short_name(intrinsic_name):
     """Passing the canonical short model name finds the same overlay."""
-    long_form = _find_overlay_io_yaml(
-        intrinsic_name, "ibm-granite/granite-4.1-3b", alora=False
+    metadata = fetch_intrinsic_metadata(intrinsic_name)
+    long_form = _resolve_catalog_overlay(
+        metadata, "ibm-granite/granite-4.1-3b", alora=False
     )
-    short_form = _find_overlay_io_yaml(intrinsic_name, "granite-4.1-3b", alora=False)
+    short_form = _resolve_catalog_overlay(metadata, "granite-4.1-3b", alora=False)
     assert long_form == short_form
 
 
-def test_overlay_returns_none_for_unknown_intrinsic():
-    """Helper returns None when no overlay is present."""
-    path = _find_overlay_io_yaml(
-        "answerability", "ibm-granite/granite-4.1-3b", alora=False
-    )
+def test_overlay_returns_none_when_catalog_has_no_overlay_dir():
+    """Helper returns None for intrinsics whose catalog entry declares no overlay."""
+    metadata = fetch_intrinsic_metadata("answerability")
+    assert metadata.io_yaml_overlay_dir is None
+    path = _resolve_catalog_overlay(metadata, "ibm-granite/granite-4.1-3b", alora=False)
     assert path is None
 
 
 def test_overlay_returns_none_for_unknown_model():
     """Helper returns None when the intrinsic has no overlay for the given model."""
-    # guardian-core exists, but not against a made-up model name
-    path = _find_overlay_io_yaml(
-        "guardian-core", "granite-nonexistent-model", alora=False
-    )
+    # guardian-core has an overlay dir, but not against a made-up model name.
+    metadata = fetch_intrinsic_metadata("guardian-core")
+    path = _resolve_catalog_overlay(metadata, "granite-nonexistent-model", alora=False)
     assert path is None
 
 
@@ -73,12 +74,9 @@ def test_overlay_distinguishes_lora_and_alora():
     from the lora variant (a comment line is missing). Confirm the resolver
     picks up that distinction rather than collapsing both to the same file.
     """
-    lora_path = _find_overlay_io_yaml(
-        "factuality-correction", "granite-4.1-3b", alora=False
-    )
-    alora_path = _find_overlay_io_yaml(
-        "factuality-correction", "granite-4.1-3b", alora=True
-    )
+    metadata = fetch_intrinsic_metadata("factuality-correction")
+    lora_path = _resolve_catalog_overlay(metadata, "granite-4.1-3b", alora=False)
+    alora_path = _resolve_catalog_overlay(metadata, "granite-4.1-3b", alora=True)
     assert lora_path is not None
     assert alora_path is not None
     assert lora_path != alora_path
@@ -112,7 +110,8 @@ def test_policy_guardrails_micro_overlay_preserves_label_variant():
     This preserves upstream's current drift. When upstream converges on a single
     schema, the overlay can be updated to match.
     """
-    path = _find_overlay_io_yaml("policy-guardrails", "granite-4.0-micro", alora=False)
+    metadata = fetch_intrinsic_metadata("policy-guardrails")
+    path = _resolve_catalog_overlay(metadata, "granite-4.0-micro", alora=False)
     assert path is not None
     content = path.read_text(encoding="utf-8")
     assert '"label"' in content

@@ -26,13 +26,21 @@ import pathlib
 import pytest
 import yaml
 
-from mellea.backends.adapters.adapter import _find_overlay_io_yaml
+from mellea.backends.adapters.adapter import _resolve_catalog_overlay
+from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
 from mellea.formatters.granite.base.types import (
     AssistantMessage,
     ChatCompletion,
     UserMessage,
 )
 from mellea.formatters.granite.intrinsics.input import IntrinsicsRewriter
+
+
+def _overlay_path(intrinsic_name: str) -> pathlib.Path | None:
+    """Resolve the granite-4.1-3b lora overlay via the catalog."""
+    metadata = fetch_intrinsic_metadata(intrinsic_name)
+    return _resolve_catalog_overlay(metadata, "granite-4.1-3b", alora=False)
+
 
 # --- expected envelope strings (copied verbatim from the pre-refactor helpers) ---
 
@@ -109,7 +117,7 @@ _EXPECTED_FACTUALITY_CORRECTION_ENVELOPE = """
 
 
 def _load_overlay_instruction(intrinsic_name: str) -> str:
-    path = _find_overlay_io_yaml(intrinsic_name, "granite-4.1-3b", alora=False)
+    path = _overlay_path(intrinsic_name)
     assert path is not None, f"no overlay for {intrinsic_name}"
     with open(path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -166,7 +174,7 @@ def _rewriter_last_message(intrinsic_name: str, **kwargs: str) -> str:
     """Build a rewriter from the overlay yaml and return the content of the
     user message the rewriter appends to a minimal two-turn context.
     """
-    yaml_path = _find_overlay_io_yaml(intrinsic_name, "granite-4.1-3b", alora=False)
+    yaml_path = _overlay_path(intrinsic_name)
     assert yaml_path is not None
     rewriter = IntrinsicsRewriter(config_file=yaml_path)
     before = _base_context()
@@ -204,7 +212,7 @@ def test_rewriter_factuality_correction_appends_expected_message():
 
 def test_rewriter_preserves_preexisting_conversation():
     """The envelope is appended as a new user message; history is untouched."""
-    yaml_path = _find_overlay_io_yaml("guardian-core", "granite-4.1-3b", alora=False)
+    yaml_path = _overlay_path("guardian-core")
     rewriter = IntrinsicsRewriter(config_file=yaml_path)
     before = _base_context()
     after = rewriter.transform(before, criteria="c", target_role="assistant")
@@ -250,7 +258,7 @@ def _generic_path_last_message(intrinsic_name: str, **intrinsic_kwargs: str) -> 
     ``OpenAIBackend`` do: build the rewriter from the adapter's ``io.yaml``
     (here, the overlay), then call ``transform`` with ``action.intrinsic_kwargs``.
     """
-    yaml_path = _find_overlay_io_yaml(intrinsic_name, "granite-4.1-3b", alora=False)
+    yaml_path = _overlay_path(intrinsic_name)
     assert yaml_path is not None
     rewriter = IntrinsicsRewriter(config_file=yaml_path)
 
