@@ -269,6 +269,23 @@ def build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None:
     )
 
 
+def has_tool_calls(output: ModelOutputThunk) -> bool:
+    """Check if a model output has tool calls.
+
+    Args:
+        output: Model output thunk that may expose a ``tool_calls`` mapping.
+
+    Returns:
+        ``True`` if the output has non-empty tool calls, ``False`` otherwise.
+    """
+    return (
+        hasattr(output, "tool_calls")
+        and output.tool_calls is not None
+        and isinstance(output.tool_calls, dict)
+        and bool(output.tool_calls)
+    )
+
+
 def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
     """Build OpenAI-compatible tool calls from a model output, if available.
 
@@ -279,14 +296,10 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
         List of ``ToolCallDict`` objects when tool calls are present,
         otherwise ``None``.
     """
-    # Check for tool calls - ModelOutputThunk always has tool_calls attribute
-    if (
-        output.tool_calls is None
-        or not isinstance(output.tool_calls, dict)
-        or not output.tool_calls
-    ):
+    if not has_tool_calls(output):
         return None
 
+    assert output.tool_calls is not None
     tool_calls: list[ToolCallDict] = []
     for model_tool_call in output.tool_calls.values():
         # Generate a unique ID for this tool call

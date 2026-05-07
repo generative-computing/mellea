@@ -135,12 +135,6 @@ async def stream_chat_completion_chunks(
             )
             yield f"data: {tool_call_chunk.model_dump_json()}\n\n"
 
-        # Determine finish_reason based on tool calls
-        finish_reason: (
-            Literal["stop", "length", "content_filter", "tool_calls", "function_call"]
-            | None
-        ) = "tool_calls" if tool_calls_list else extract_finish_reason(output)
-
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
         include_usage = stream_options is not None and stream_options.include_usage
@@ -155,7 +149,7 @@ async def stream_chat_completion_chunks(
                 ChatCompletionChunkChoice(
                     index=0,
                     delta=ChatCompletionChunkDelta(content=None),
-                    finish_reason=finish_reason,
+                    finish_reason=extract_finish_reason(output),
                 )
             ],
             object="chat.completion.chunk",

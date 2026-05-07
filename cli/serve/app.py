@@ -239,14 +239,6 @@ def make_chat_endpoint(module):
                 else None
             )
 
-            # Determine finish_reason based on 1) tool calls 2) output
-            finish_reason: (
-                Literal[
-                    "stop", "length", "content_filter", "tool_calls", "function_call"
-                ]
-                | None
-            ) = "tool_calls" if tool_calls else extract_finish_reason(output)
-
             return ChatCompletion(
                 id=completion_id,
                 model=request.model,
@@ -259,7 +251,7 @@ def make_chat_endpoint(module):
                             role="assistant",
                             tool_calls=tool_calls,
                         ),
-                        finish_reason=finish_reason,
+                        finish_reason=extract_finish_reason(output),
                     )
                 ],
                 object="chat.completion",  # type: ignore
