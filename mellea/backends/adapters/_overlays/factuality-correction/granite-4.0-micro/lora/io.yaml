@@ -1,0 +1,29 @@
+# Model name string, or null to use whatever is provided in the chat completion request.
+name: factuality-correction
+model: ~
+# JSON schema of the model's output
+response_format: |
+  {
+    "title": "Factuality Correction Intrinsic",
+    "type": "object",  
+    "properties": {    
+      "correction": {      
+        "type": "string"    
+      }  
+    },  
+    "required": ["correction"] 
+  }
+transformations: ~
+instruction: |2
+
+  <guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
+
+  ### Criteria: A factually incorrect response occurs when the assistant's message contains one or more factual claims that are unsupported by, inconsistent with, or directly contradicted by the information provided in the documents or context. This includes situations where the assistant: introduces details not grounded in the context, misstates or distorts facts contained within the context, misinterprets the meaning or implications of the context, supplies erroneous or conflicting information relative to the context. Even if only a small portion of the response contains such inaccuracies, the overall message is considered factually incorrect.
+
+  ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
+parameters:
+  # corrected response can several hundred tokens at high temperatures
+  max_completion_tokens: 4096
+  temperature: 0.0
+# No sentence boundary detection
+sentence_boundaries: ~

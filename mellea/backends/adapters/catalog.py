@@ -5,8 +5,16 @@ LoRA and aLoRA adapters that implement said intrinsics.
 """
 
 import enum
+import pathlib
 
 import pydantic
+
+# TODO(#1017): remove ``_OVERLAY_ROOT``, the ``io_yaml_overlay_dir`` catalog
+# field, and the ``_overlays/`` directory once the Guardian intrinsics ship
+# ``io.yaml`` upstream in the Granite Intrinsics Library. The overlays are a
+# temporary bridge so the generic ``Intrinsic`` path works for Guardian; once
+# upstream ships the templates, the HF-cached copies are authoritative.
+_OVERLAY_ROOT = pathlib.Path(__file__).parent / "_overlays"
 
 
 class AdapterType(enum.Enum):
@@ -51,6 +59,15 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         default=(AdapterType.LORA, AdapterType.ALORA),
         description="Adapter types that are known to be available for this intrinsic.",
     )
+    io_yaml_overlay_dir: pathlib.Path | None = pydantic.Field(
+        default=None,
+        description="Optional directory of in-repo ``io.yaml`` files that "
+        "override the HuggingFace-cached versions. Layout mirrors the HF "
+        "repo: ``<overlay_dir>/<canonical-model>/<lora|alora>/io.yaml``. "
+        "Intended as a temporary bridge for intrinsics whose upstream "
+        "io.yaml has not yet shipped; remove the entry once upstream "
+        "ships the template.",
+    )
 
 
 # Mellea will update which repositories are linked as new ones come online. The original
@@ -83,10 +100,26 @@ _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     # Guardian Intrinsics
     ############################################
-    IntriniscsCatalogEntry(name="policy-guardrails", repo_id=_GUARDIAN_REPO),
-    IntriniscsCatalogEntry(name="guardian-core", repo_id=_GUARDIAN_REPO),
-    IntriniscsCatalogEntry(name="factuality-detection", repo_id=_GUARDIAN_REPO),
-    IntriniscsCatalogEntry(name="factuality-correction", repo_id=_GUARDIAN_REPO),
+    IntriniscsCatalogEntry(
+        name="policy-guardrails",
+        repo_id=_GUARDIAN_REPO,
+        io_yaml_overlay_dir=_OVERLAY_ROOT / "policy-guardrails",
+    ),
+    IntriniscsCatalogEntry(
+        name="guardian-core",
+        repo_id=_GUARDIAN_REPO,
+        io_yaml_overlay_dir=_OVERLAY_ROOT / "guardian-core",
+    ),
+    IntriniscsCatalogEntry(
+        name="factuality-detection",
+        repo_id=_GUARDIAN_REPO,
+        io_yaml_overlay_dir=_OVERLAY_ROOT / "factuality-detection",
+    ),
+    IntriniscsCatalogEntry(
+        name="factuality-correction",
+        repo_id=_GUARDIAN_REPO,
+        io_yaml_overlay_dir=_OVERLAY_ROOT / "factuality-correction",
+    ),
 ]
 
 _INTRINSICS_CATALOG = {e.name: e for e in _INTRINSICS_CATALOG_ENTRIES}

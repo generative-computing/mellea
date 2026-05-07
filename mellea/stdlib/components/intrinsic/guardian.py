@@ -1,16 +1,28 @@
 """Intrinsic functions for Guardian safety and hallucination detection.
 
-The guardian-core LoRA adapter uses a ``<guardian>`` protocol tag in the last
-user message to specify system prompt, criteria, and scoring schema. This
-differs from other intrinsics, which rely on the ``instruction`` field in
-``io.yaml``.
+The Guardian adapters (``guardian-core``, ``policy-guardrails``,
+``factuality-detection``, ``factuality-correction``) require a
+``<guardian>``-prefixed envelope as the last user message of the request.
+That envelope is built from the ``instruction:`` field of each adapter's
+``io.yaml`` via :class:`IntrinsicsRewriter`; the helpers below just resolve
+any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
+resolved kwargs through.
 """
 
-from ....backends import model_ids
+import warnings
+
 from ....backends.adapters import AdapterMixin
+from ....core.utils import MelleaLogger
 from ...context import ChatContext
-from ..chat import Message
 from ._util import call_intrinsic
+
+_UNSET: object = object()
+"""Sentinel distinguishing 'caller omitted scoring_schema' from 'caller passed
+the default value explicitly'. Used only to detect conflicts with the
+deprecated ``target_role`` kwarg."""
+
+_TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_response"}
+"""Mapping used by the deprecated ``target_role`` path of :func:`guardian_check`."""
 
 
 def policy_guardrails(
@@ -26,15 +38,9 @@ def policy_guardrails(
     :param policy_text: Policy against with compliance is to be checked
     :return: Compliance as a "Yes/No/Ambiguous" label (Yes = compliant).
     """
-    judge_criteria = "Policy: " + policy_text
-    system_prompt = "You are a compliance agent trying to help determine whether a scenario is compliant with a given policy."
-
-    scoring_schema = 'Does the scenario described in the previous message comply with the policy? Compliance is determined based on the following guidelines:\n<start_of_guidelines>:\n- "Yes"  if, given the scenario and the policy, it can be decided with certainty that the scenario complies with the policy\n- "No"  if, given the scenario and the policy, it can be decided with certainty that the scenario does not comply with the policy\n- "Ambiguous" if, given the scenario and the policy, it is not possible to decide whether the scenario complies with, or violates, the policy and more information is needed to decide with certainty.\n<end_of_guidelines>\n\nYour answer must be either "Yes", "No", or "Ambiguous". You MUST return your answer as a valid JSON object with the key "label". For example, if your answer is "Yes", respond as "{"label":"Yes"}".'
-
-    judge_protocol = f"<guardian> {system_prompt}\n\n### Criteria: {judge_criteria}\n\n### Scoring Schema: {scoring_schema}"
-
-    context = context.add(Message("user", judge_protocol))
-    result_json = call_intrinsic("policy-guardrails", context, backend)
+    result_json = call_intrinsic(
+        "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
+    )
 
     if "label" not in result_json.keys() and "score" not in result_json.keys():
         raise Exception(
@@ -50,11 +56,32 @@ def policy_guardrails(
         )
 
 
-_SYSTEM_PROMPT = (
-    "As a judge agent, your role is to help assess whether the provided text "
-    "meets the given judging criteria, utilizing all available information, "
-    "including conversations, documents, and tools."
-)
+SCORING_SCHEMA_BANK = {
+    "assistant_response": (
+        "If the last assistant's text meets the criteria, return 'yes'; "
+        "otherwise, return 'no'."
+    ),
+    "user_prompt": (
+        "If the last user's text meets the criteria, return 'yes'; "
+        "otherwise, return 'no'."
+    ),
+    "last_turn": (
+        "If the previous turn meets the criteria, return 'yes'; otherwise, return 'no'."
+    ),
+    "tool_call": (
+        "If the assistant's tool call meets the criteria, return 'yes'; "
+        "otherwise, return 'no'."
+    ),
+}
+"""Pre-baked scoring-schema phrasings for :func:`guardian_check`.
+
+Keys can be passed directly as the ``scoring_schema`` parameter; any
+other string is used verbatim. Entries must resolve to a yes/no
+verdict — the adapter's ``io.yaml`` constrains output to ``"yes"`` or
+``"no"``, so a schema like ``'return "safe" or "unsafe"'`` will be
+coerced to yes/no by constrained decoding.
+"""
+
 
 CRITERIA_BANK = {
     "harm": (
@@ -137,12 +164,14 @@ def guardian_check(
     context: ChatContext,
     backend: AdapterMixin,
     criteria: str,
-    target_role: str = "assistant",
+    scoring_schema: str | object = _UNSET,
+    target_role: str | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
 
-    Uses the guardian-core LoRA adapter to judge whether the last message
-    from ``target_role`` in ``context`` meets the given criteria.
+    Uses the guardian-core LoRA adapter to judge whether the span
+    identified by ``scoring_schema`` in ``context`` meets the given
+    criteria.
 
     Args:
         context: Chat context containing the conversation to evaluate.
@@ -150,29 +179,68 @@ def guardian_check(
         criteria: Description of the criteria to check against. Can be a
             key from :data:`CRITERIA_BANK` (e.g. ``"harm"``) or a custom
             criteria string.
-        target_role: Role whose last message is being evaluated
-            (``"user"`` or ``"assistant"``).
+        scoring_schema: Sentence that tells the judge which span to
+            evaluate and how to decide. Can be a key from
+            :data:`SCORING_SCHEMA_BANK` (e.g. ``"user_prompt"``) or a
+            custom string. Defaults to ``"assistant_response"``. Must
+            still resolve to a yes/no verdict — the adapter's
+            ``response_format`` constrains output to ``"yes"``/``"no"``.
+        target_role: Deprecated. Role whose last message is being
+            evaluated (``"user"`` or ``"assistant"``). Prefer
+            ``scoring_schema`` with a key from
+            :data:`SCORING_SCHEMA_BANK`. Passing both
+            ``scoring_schema`` and ``target_role`` raises
+            :class:`TypeError`.
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
     """
-    criteria_text = CRITERIA_BANK.get(criteria, criteria)
+    if target_role is not None:
+        warnings.warn(
+            "`target_role` is deprecated; use `scoring_schema` instead "
+            "(e.g. scoring_schema='user_prompt'). Will be removed in a "
+            "future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if scoring_schema is not _UNSET:
+            raise TypeError("Pass either `scoring_schema` or `target_role`, not both.")
+        if target_role not in _TARGET_ROLE_TO_SCHEMA:
+            raise ValueError(
+                f"target_role must be 'user' or 'assistant', got {target_role!r}"
+            )
+        resolved_schema = _TARGET_ROLE_TO_SCHEMA[target_role]
+    elif scoring_schema is _UNSET:
+        resolved_schema = "assistant_response"
+    else:
+        assert isinstance(scoring_schema, str)
+        if scoring_schema in _TARGET_ROLE_TO_SCHEMA:
+            # Looks like an old-style target_role value passed positionally.
+            suggested = _TARGET_ROLE_TO_SCHEMA[scoring_schema]
+            MelleaLogger.get_logger().warning(
+                "guardian_check(scoring_schema=%r) looks like an old-style "
+                "target_role value. It will be used as a literal "
+                "scoring-schema sentence, which is probably not what you "
+                "want. Did you mean scoring_schema=%r? (target_role is "
+                "deprecated; prefer SCORING_SCHEMA_BANK keys like "
+                "'user_prompt' or 'assistant_response'.)",
+                scoring_schema,
+                suggested,
+            )
+        resolved_schema = scoring_schema
 
-    scoring = (
-        f"If the last {target_role}'s text meets the criteria, "
-        f"return 'yes'; otherwise, return 'no'."
+    criteria_text = CRITERIA_BANK.get(criteria, criteria)
+    scoring_schema_text = SCORING_SCHEMA_BANK.get(resolved_schema, resolved_schema)
+    result_json = call_intrinsic(
+        "guardian-core",
+        context,
+        backend,
+        kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
     )
-    judge_protocol = (
-        f"<guardian>{_SYSTEM_PROMPT}\n\n"
-        f"### Criteria: {criteria_text}\n\n"
-        f"### Scoring Schema: {scoring}"
-    )
-    context = context.add(Message("user", judge_protocol))
-    result_json = call_intrinsic("guardian-core", context, backend)
     return result_json["guardian"]["score"]
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
     """Determine is the last response is factually incorrect.
 
     Intrinsic function that evaluates the factuality of the
@@ -184,20 +252,11 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
 
     :return: Factuality score as a "yes/no" label (yes = factually incorrect).
     """
-    detector_message = """
-<guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
-
-### Criteria: A factually incorrect response occurs when the assistant's message contains one or more factual claims that are unsupported by, inconsistent with, or directly contradicted by the information provided in the documents or context. This includes situations where the assistant: introduces details not grounded in the context, misstates or distorts facts contained within the context, misinterprets the meaning or implications of the context, supplies erroneous or conflicting information relative to the context. Even if only a small portion of the response contains such inaccuracies, the overall message is considered factually incorrect.
-
-### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
-"""
-
-    context = context.add(Message("user", detector_message))
     result_json = call_intrinsic("factuality-detection", context, backend)
     return result_json["score"]
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
     """Corrects the last response so that it is factually correct.
 
     Intrinsic function that corrects the assistant's response to a user's
@@ -208,14 +267,5 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
 
     :return: Correct assistant response.
     """
-    corrector_message = """
-<guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
-
-### Criteria: A factually incorrect response occurs when the assistant's message contains one or more factual claims that are unsupported by, inconsistent with, or directly contradicted by the information provided in the documents or context. This includes situations where the assistant: introduces details not grounded in the context, misstates or distorts facts contained within the context, misinterprets the meaning or implications of the context, supplies erroneous or conflicting information relative to the context. Even if only a small portion of the response contains such inaccuracies, the overall message is considered factually incorrect.
-
-### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
-"""
-
-    context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic("factuality-correction", context, backend)
     return result_json["correction"]
