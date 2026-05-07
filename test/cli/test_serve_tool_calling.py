@@ -66,7 +66,7 @@ def sample_tool_request():
                     name="get_weather",
                     description="Get the current weather in a location",
                     parameters=FunctionParameters(
-                        RootModel={
+                        {
                             "type": "object",
                             "properties": {
                                 "location": {
@@ -227,6 +227,66 @@ class TestToolCalling:
         # tool_choice should be passed through using ModelOption.TOOL_CHOICE
         assert ModelOption.TOOL_CHOICE in model_options
         assert model_options[ModelOption.TOOL_CHOICE] == "auto"
+
+    @pytest.mark.asyncio
+    async def test_standard_json_schema_tools_passed_to_model_options(
+        self, mock_module
+    ):
+        """Test that standard OpenAI function.parameters shape is preserved."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="What's the weather in Paris?")],
+            tools=[
+                ToolFunction(
+                    type="function",
+                    function=FunctionDefinition(
+                        name="get_weather",
+                        description="Get the current weather in a location",
+                        parameters=FunctionParameters(
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "location": {
+                                        "type": "string",
+                                        "description": "The city name",
+                                    },
+                                    "units": {
+                                        "type": "string",
+                                        "enum": ["celsius", "fahrenheit"],
+                                        "description": "Temperature units",
+                                    },
+                                },
+                                "required": ["location"],
+                            }
+                        ),
+                    ),
+                )
+            ],
+            tool_choice={"type": "function", "function": {"name": "get_weather"}},
+        )
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        await endpoint(request)
+
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+        assert ModelOption.TOOLS in model_options
+
+        tool_payload = model_options[ModelOption.TOOLS][0]
+        assert tool_payload["function"]["name"] == "get_weather"
+        assert tool_payload["function"]["parameters"]["type"] == "object"
+        assert (
+            tool_payload["function"]["parameters"]["properties"]["location"]["type"]
+            == "string"
+        )
+        assert tool_payload["function"]["parameters"]["required"] == ["location"]
+        assert model_options[ModelOption.TOOL_CHOICE] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
 
     @pytest.mark.asyncio
     async def test_tool_calls_with_complex_arguments(

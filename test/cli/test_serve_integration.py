@@ -64,7 +64,7 @@ class MockWeatherTool(AbstractMelleaTool):
                 name="get_weather",
                 description="Get the current weather in a location",
                 parameters=FunctionParameters(
-                    RootModel={
+                    {
                         "type": "object",
                         "properties": {
                             "location": {"type": "string", "description": "City name"},

@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, RootModel, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
@@ -13,9 +13,14 @@ class ChatMessage(BaseModel):
     function_call: dict[str, Any] | None = None  # For function/tool messages
 
 
-class FunctionParameters(BaseModel):
-    # Accept any structure for function parameters
-    RootModel: dict[str, Any]
+class FunctionParameters(RootModel[dict[str, Any]]):
+    """OpenAI-compatible function parameters as a bare JSON Schema object.
+
+    Accepts a standard JSON Schema dict directly without wrapping.
+    Example: {"type": "object", "properties": {...}, "required": [...]}
+    """
+
+    root: dict[str, Any]
 
 
 class FunctionDefinition(BaseModel):
@@ -73,8 +78,10 @@ class StreamOptions(BaseModel):
     """
 
 
-class LogitBias(BaseModel):
-    RootModel: dict[str, float]
+class LogitBias(RootModel[dict[str, float]]):
+    """OpenAI-compatible logit bias as a bare dict mapping token IDs to bias values."""
+
+    root: dict[str, float]
 
 
 class ChatCompletionRequest(BaseModel):

@@ -27,21 +27,19 @@ tools = [
             "name": "get_weather",
             "description": "Get the current weather in a given location",
             "parameters": {
-                "RootModel": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The city name, e.g. San Francisco",
-                        },
-                        "units": {
-                            "type": "string",
-                            "enum": ["celsius", "fahrenheit"],
-                            "description": "Temperature units",
-                        },
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city name, e.g. San Francisco",
                     },
-                    "required": ["location"],
-                }
+                    "units": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "Temperature units",
+                    },
+                },
+                "required": ["location"],
             },
         },
     },
@@ -51,16 +49,14 @@ tools = [
             "name": "get_stock_price",
             "description": "Get the current stock price for a given ticker symbol",
             "parameters": {
-                "RootModel": {
-                    "type": "object",
-                    "properties": {
-                        "symbol": {
-                            "type": "string",
-                            "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
-                        }
-                    },
-                    "required": ["symbol"],
-                }
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
+                    }
+                },
+                "required": ["symbol"],
             },
         },
     },
