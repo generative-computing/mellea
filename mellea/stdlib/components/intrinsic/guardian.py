@@ -7,6 +7,7 @@ differs from other intrinsics, which rely on the ``instruction`` field in
 """
 
 import collections.abc
+from typing import cast
 
 from ....backends import model_ids
 from ....backends.adapters import AdapterMixin
@@ -191,10 +192,68 @@ def guardian_check(
     return result_json["guardian"]["score"]
 
 
+def _reattach_documents(
+    context: ChatContext, documents: collections.abc.Iterable[str | Document]
+) -> ChatContext:
+    """Rewind context and re-add the last message with documents attached.
+
+    Extracts the assistant's response from the last turn (handling both generated
+    output and manually-added messages), then rewinds the context to before that
+    message and re-adds it with the provided documents.
+
+    Args:
+        context: Context containing the conversation.
+        documents: Documents to attach to the last assistant message.
+
+    Returns:
+        New context with documents attached to the last assistant message.
+
+    Raises:
+        ValueError: If context cannot be rewound or assistant content cannot be extracted.
+    """
+    last_turn = context.last_turn()
+    if last_turn is None:
+        raise ValueError("Cannot reattach documents: context has no last turn")
+
+    # Extract assistant content, preferring generated output over input
+    if last_turn.output is not None and last_turn.output.value is not None:
+        assistant_content = last_turn.output.value
+    elif last_turn.output is not None and last_turn.output.value is None:
+        # Uncomputed thunk — avoid silent fallthrough to model_input
+        raise ValueError(
+            "Cannot reattach documents: last turn output is uncomputed (thunk with no value)"
+        )
+    elif last_turn.model_input is not None and isinstance(
+        last_turn.model_input, Message
+    ):
+        assistant_content = last_turn.model_input.content
+    else:
+        raise ValueError(
+            "Cannot reattach documents: cannot extract assistant content from last turn"
+        )
+
+    # Rewind and re-add with documents
+    rewound = context.previous_node
+    if rewound is None:
+        raise ValueError("Cannot rewind context past the root node")
+
+    return cast(
+        ChatContext,
+        rewound.add(
+            Message(
+                "assistant",
+                assistant_content,
+                documents=_coerce_to_documents(documents),
+            )
+        ),
+    )
+
+
 def factuality_detection(
-    documents: collections.abc.Iterable[str | Document] | None,
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
     model_options: dict | None = None,
 ) -> str:
     """Determine if the last response is factually incorrect.
@@ -204,12 +263,12 @@ def factuality_detection(
     a user question followed by an assistant answer.
 
     Args:
+        context: Chat context containing user question and assistant answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Document snippets that provide factual context for evaluation.
             Each element may be a ``Document`` or a plain string (automatically
             wrapped in ``Document``). When ``None``, documents are extracted from
-            the last assistant message in ``context``.
-        context: Chat context containing user question and assistant answer.
-        backend: Backend instance that supports LoRA/aLoRA adapters.
+            the last assistant message in ``context``. Keyword-only.
         model_options: Optional model options to pass to the backend (e.g.,
             temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
@@ -224,41 +283,8 @@ def factuality_detection(
 ### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
 """
 
-    # If documents are provided, add them to the last assistant message
     if documents is not None:
-        # Get the last turn and add documents to it
-        last_turn = context.last_turn()
-        if last_turn is None:
-            raise ValueError(
-                "documents parameter provided but context has no last turn"
-            )
-
-        # Extract assistant content from either output (if generated) or model_input (if manually added)
-        if last_turn.output is not None and last_turn.output.value is not None:
-            assistant_content = last_turn.output.value
-        elif last_turn.model_input is not None:
-            # Handle Message directly added to context
-            if isinstance(last_turn.model_input, Message):
-                assistant_content = last_turn.model_input.content
-            else:
-                raise ValueError(
-                    "Cannot extract assistant content from last turn model_input"
-                )
-        else:
-            raise ValueError("Last turn has neither output nor model_input")
-
-        # Rewind context and re-add the last message with documents
-        rewound = context.previous_node
-        if rewound is None:
-            raise ValueError("Cannot rewind context past the root node")
-        # Type ignore because rewound is Context but we know it's ChatContext
-        context = rewound.add(  # type: ignore[assignment]
-            Message(
-                "assistant",
-                assistant_content,
-                documents=_coerce_to_documents(documents),
-            )
-        )
+        context = _reattach_documents(context, documents)
 
     context = context.add(Message("user", detector_message))
     result_json = call_intrinsic(
@@ -268,9 +294,10 @@ def factuality_detection(
 
 
 def factuality_correction(
-    documents: collections.abc.Iterable[str | Document] | None,
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
     model_options: dict | None = None,
 ) -> str:
     """Corrects the last response so that it is factually correct.
@@ -279,12 +306,12 @@ def factuality_correction(
     question relative to the given contextual information.
 
     Args:
+        context: Chat context containing user question and assistant answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Document snippets that provide factual context for correction.
             Each element may be a ``Document`` or a plain string (automatically
             wrapped in ``Document``). When ``None``, documents are extracted from
-            the last assistant message in ``context``.
-        context: Chat context containing user question and assistant answer.
-        backend: Backend instance that supports LoRA/aLoRA adapters.
+            the last assistant message in ``context``. Keyword-only.
         model_options: Optional model options to pass to the backend (e.g.,
             temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
@@ -299,41 +326,8 @@ def factuality_correction(
 ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
 """
 
-    # If documents are provided, add them to the last assistant message
     if documents is not None:
-        # Get the last turn and add documents to it
-        last_turn = context.last_turn()
-        if last_turn is None:
-            raise ValueError(
-                "documents parameter provided but context has no last turn"
-            )
-
-        # Extract assistant content from either output (if generated) or model_input (if manually added)
-        if last_turn.output is not None and last_turn.output.value is not None:
-            assistant_content = last_turn.output.value
-        elif last_turn.model_input is not None:
-            # Handle Message directly added to context
-            if isinstance(last_turn.model_input, Message):
-                assistant_content = last_turn.model_input.content
-            else:
-                raise ValueError(
-                    "Cannot extract assistant content from last turn model_input"
-                )
-        else:
-            raise ValueError("Last turn has neither output nor model_input")
-
-        # Rewind context and re-add the last message with documents
-        rewound = context.previous_node
-        if rewound is None:
-            raise ValueError("Cannot rewind context past the root node")
-        # Type ignore because rewound is Context but we know it's ChatContext
-        context = rewound.add(  # type: ignore[assignment]
-            Message(
-                "assistant",
-                assistant_content,
-                documents=_coerce_to_documents(documents),
-            )
-        )
+        context = _reattach_documents(context, documents)
 
     context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic(
