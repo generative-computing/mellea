@@ -2,7 +2,7 @@
 
 > Status: proposal for shape agreement.
 > Addresses Epic #929.
-> Structure: **Part I** is for agreeing the problem, goals, terminology, and end state. **Part II** contains the supporting detail — read after Part I lands, not before.
+> Structure: **Part I** is for agreeing the problem, goals, terminology, and end state. **Part II** contains the supporting detail — read after Part I is agreed, not before.
 
 ---
 
@@ -135,19 +135,19 @@ From this shape, the seven threads of #929 resolve cleanly. Full mapping is in P
 
 ## 5. Decisions needed now
 
-These gate decomposition; everything else can live in sub-issues once these land.
+These gate decomposition; everything else can live in sub-issues once these are agreed.
 
 1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
 2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base.
 3. **OpenAI Reality C — which concrete shape first?** vLLM-backed LoRA serving (client-known weight file, server-side load) or commercial fine-tunes (fully hosted)? The binding covers both; the first subclass sets the idiom.
-4. **Telemetry coupling with #1035.** Land intrinsic spans as part of this refactor, or as a follow-on to PR #1036's Gap 5? Coupling avoids designing content capture twice; decoupling keeps #1036 moving.
+4. **Telemetry coupling with #1035.** Include intrinsic spans as part of this refactor, or as a follow-on to PR #1036's Gap 5? Coupling avoids designing content capture twice; decoupling keeps #1036 moving.
 5. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
 
 ---
 
 # Part II — Supporting detail
 
-> For deeper review once Part I lands. Skim headings first.
+> For deeper review once Part I is agreed. Skim headings first.
 
 ## 6. Three realities of "where the weights live"
 
@@ -210,7 +210,7 @@ Three problems:
 
 ## 9. What users see — detailed
 
-**High-level helpers** keep their signatures. The `model_options=` parameter lands via PR #1003:
+**High-level helpers** keep their signatures. The `model_options=` parameter is added via PR #1003:
 
 ```python
 score = check_answerability(question, documents, context, backend)
@@ -280,12 +280,12 @@ First-class deliverables, not afterthoughts.
 
 ## 12. Migration (rough shape only)
 
-Detail deferred until Part I §5 decisions land, but the intended phasing is:
+Detail deferred until Part I §5 decisions are agreed, but the intended phasing is:
 
 1. **Phase 0 — parallel types.** Introduce `Adapter` / `WeightsBinding` / `IOContract` alongside existing classes. No call-site changes, tests unchanged.
 2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Old classes become deprecation shims.
 3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
-4. **Phase 3 — Reality C lands.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
+4. **Phase 3 — Reality C ships.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
 5. **Phase 4 — shim removal.** After one minor release with deprecation warnings.
 
 Observability and docs deliverables attach to the phase that first exercises them.
