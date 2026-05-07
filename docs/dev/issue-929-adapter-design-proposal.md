@@ -70,24 +70,21 @@ The **weights binding** is where the three realities live. It exposes a single v
 
 Visually, the three realities differ only in where the weights are and how the backend reaches them; the I/O contract is shared:
 
-```
-   Reality A: Local PEFT          Reality B: Embedded        Reality C: Server-mediated
-   ─────────────────────          ────────────────────       ──────────────────────────
-
-     ┌──────────┐                                                 ┌──────────┐
-     │ HF repo  │                    (weights baked                │  server  │
-     └────┬─────┘                     into base model)             └────┬─────┘
-          │ download                                                    │
-          ▼                                                             │
-     ┌──────────┐                                                       │
-     │  cache   │                                                       │
-     └────┬─────┘                                                       │
-          │ PEFT load                render `controls`                  │ adapter_id
-          ▼                          into chat template                 │ in request
-     ┌──────────┐                    ┌──────────┐                 ┌─────▼────┐
-     │base+LoRA │                    │base model│                 │base model│
-     │ (local)  │                    │ (Switch) │                 │ (remote) │
-     └──────────┘                    └──────────┘                 └──────────┘
+```mermaid
+flowchart LR
+    subgraph A["Reality A — Local PEFT"]
+        direction TB
+        A1["HF repo"] -->|"download"| A2["local cache"]
+        A2 -->|"PEFT load"| A3["base model<br/>+ LoRA"]
+    end
+    subgraph B["Reality B — Embedded (Granite Switch)"]
+        direction TB
+        B1["base model<br/>(weights baked in)"] -->|"render <i>controls</i><br/>in chat template"| B2["base model<br/>(activated)"]
+    end
+    subgraph C["Reality C — Server-mediated"]
+        direction TB
+        C1["remote server<br/>(holds weights)"] -->|"adapter_id<br/>in API request"| C2["base model<br/>(remote)"]
+    end
 ```
 
 `call_intrinsic` becomes one flow, no branches on backend type:
