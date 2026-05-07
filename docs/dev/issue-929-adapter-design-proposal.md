@@ -292,7 +292,14 @@ First-class deliverables, not afterthoughts.
 
 **Tests** — existing adapter tests stay green per phase. New tests cover: each binding × each verb (unit); integration matrix `{HF, OpenAI} × {applicable bindings} × {lora, alora where applicable} × {every existing adapter}`; per-version parse round-trips (with `requirement-check` v1 / v2 as the worked case); concurrency window correctness; span/metric emission assertions.
 
-**Qualitative effectiveness suite (optional, per-adapter).** The tests above verify plumbing. They do *not* answer "does the answerability adapter actually judge answerability correctly?" A per-adapter qualitative suite (`@pytest.mark.qualitative`, opt-in, kept out of the fast loop) takes a small canonical dataset per adapter and asserts an accuracy floor on its outputs — the same kind of eval a user would run before deploying. Kept cheap (tens of examples, not hundreds) so it fits in a reasonable CI budget. Without this, a refactor can pass every structural test while silently degrading the behaviour users care about.
+**Qualitative effectiveness suite (optional, per-adapter).** The tests above verify plumbing. They do *not* answer "does the answerability adapter actually judge answerability correctly?" A per-adapter qualitative suite (`@pytest.mark.qualitative`, opt-in, kept out of the fast loop) takes a small canonical dataset per adapter and asserts an accuracy floor on its outputs. Without this, a refactor can pass every structural test while silently degrading the behaviour users care about.
+
+Two existing tools fit naturally here and should be preferred over ad-hoc harnesses:
+
+- **`TestBasedEval`** (in-tree — `mellea/templates/prompts/default/TestBasedEval.jinja2`, documented at `docs.mellea.ai/how-to/unit-test-generative-code`) is Mellea's own LLM-as-judge component. Each adapter gets a JSON file of test cases (`{input, target, guidelines}`); a judge model returns `{"score": 0|1, "justification": "..."}`. Runnable from the CLI (`m eval run tests/eval_data/<adapter>.json --backend ollama --model granite4.1:3b`) so the same fixtures power both CI and interactive debugging. This is the default mechanism for per-adapter qualitative coverage.
+- **BenchDrift** (`github.com/IBM/BenchDrift`) addresses a second failure mode: an adapter that works on its canonical phrasing but breaks on semantically-equivalent rephrasings. BenchDrift generates syntactic variations of each test case while preserving meaning, then scores consistency across variations. Worth applying to the adapters where phrasing-invariance is a real concern — answerability, context-relevance, requirement-check, and the Guardian family all qualify. Optional extension rather than baseline coverage, but enabling it per-adapter is a one-config-file step once the `TestBasedEval` fixtures exist.
+
+Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fit in a reasonable nightly-CI budget.
 
 **Tutorials** — three worth writing alongside the refactor:
 - "Adding a custom intrinsic in 20 lines" — replaces the `CustomIntrinsicAdapter` monkey-patch story.
