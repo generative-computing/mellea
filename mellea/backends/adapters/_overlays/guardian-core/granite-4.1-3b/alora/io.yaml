@@ -1,0 +1,37 @@
+name: guardian-core
+# Model name string, or null to use whatever is provided in the chat completion request
+model: ~
+# JSON schema of the model's output
+response_format: |
+  {
+    "type": "object",
+    "properties": {
+      "score": {
+        "type": "string",
+        "enum": ["yes", "no"]
+      }
+    },
+    "required": ["score"],
+    "additionalProperties": false
+  }
+# Output transformation rules to apply
+transformations:
+  - type: likelihood
+    categories_to_values:
+      "yes": 1.0
+      "no": 0.0
+    input_path: ["score"]
+  # Convert scalar value to a record for consistency with other intrinsics
+  - type: nest
+    input_path: []
+    field_name: "guardian"
+instruction: |-
+  <guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
+
+  ### Criteria: {criteria}
+
+  ### Scoring Schema: If the last {target_role}'s text meets the criteria, return 'yes'; otherwise, return 'no'.
+parameters:
+  max_completion_tokens: 15
+  temperature: 0.0
+sentence_boundaries: ~

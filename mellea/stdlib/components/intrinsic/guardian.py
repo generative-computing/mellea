@@ -1,15 +1,16 @@
 """Intrinsic functions for Guardian safety and hallucination detection.
 
-The guardian-core LoRA adapter uses a ``<guardian>`` protocol tag in the last
-user message to specify system prompt, criteria, and scoring schema. This
-differs from other intrinsics, which rely on the ``instruction`` field in
-``io.yaml``.
+The Guardian adapters (``guardian-core``, ``policy-guardrails``,
+``factuality-detection``, ``factuality-correction``) require a
+``<guardian>``-prefixed envelope as the last user message of the request.
+That envelope is built from the ``instruction:`` field of each adapter's
+``io.yaml`` via :class:`IntrinsicsRewriter`; the helpers below just resolve
+any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
+resolved kwargs through.
 """
 
-from ....backends import model_ids
 from ....backends.adapters import AdapterMixin
 from ...context import ChatContext
-from ..chat import Message
 from ._util import call_intrinsic
 
 
@@ -26,15 +27,9 @@ def policy_guardrails(
     :param policy_text: Policy against with compliance is to be checked
     :return: Compliance as a "Yes/No/Ambiguous" label (Yes = compliant).
     """
-    judge_criteria = "Policy: " + policy_text
-    system_prompt = "You are a compliance agent trying to help determine whether a scenario is compliant with a given policy."
-
-    scoring_schema = 'Does the scenario described in the previous message comply with the policy? Compliance is determined based on the following guidelines:\n<start_of_guidelines>:\n- "Yes"  if, given the scenario and the policy, it can be decided with certainty that the scenario complies with the policy\n- "No"  if, given the scenario and the policy, it can be decided with certainty that the scenario does not comply with the policy\n- "Ambiguous" if, given the scenario and the policy, it is not possible to decide whether the scenario complies with, or violates, the policy and more information is needed to decide with certainty.\n<end_of_guidelines>\n\nYour answer must be either "Yes", "No", or "Ambiguous". You MUST return your answer as a valid JSON object with the key "label". For example, if your answer is "Yes", respond as "{"label":"Yes"}".'
-
-    judge_protocol = f"<guardian> {system_prompt}\n\n### Criteria: {judge_criteria}\n\n### Scoring Schema: {scoring_schema}"
-
-    context = context.add(Message("user", judge_protocol))
-    result_json = call_intrinsic("policy-guardrails", context, backend)
+    result_json = call_intrinsic(
+        "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
+    )
 
     if "label" not in result_json.keys() and "score" not in result_json.keys():
         raise Exception(
@@ -49,12 +44,6 @@ def policy_guardrails(
             "Expected Guardian result to have label xor score, but found both."
         )
 
-
-_SYSTEM_PROMPT = (
-    "As a judge agent, your role is to help assess whether the provided text "
-    "meets the given judging criteria, utilizing all available information, "
-    "including conversations, documents, and tools."
-)
 
 CRITERIA_BANK = {
     "harm": (
@@ -157,22 +146,16 @@ def guardian_check(
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
     """
     criteria_text = CRITERIA_BANK.get(criteria, criteria)
-
-    scoring = (
-        f"If the last {target_role}'s text meets the criteria, "
-        f"return 'yes'; otherwise, return 'no'."
+    result_json = call_intrinsic(
+        "guardian-core",
+        context,
+        backend,
+        kwargs={"criteria": criteria_text, "target_role": target_role},
     )
-    judge_protocol = (
-        f"<guardian>{_SYSTEM_PROMPT}\n\n"
-        f"### Criteria: {criteria_text}\n\n"
-        f"### Scoring Schema: {scoring}"
-    )
-    context = context.add(Message("user", judge_protocol))
-    result_json = call_intrinsic("guardian-core", context, backend)
     return result_json["guardian"]["score"]
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
     """Determine is the last response is factually incorrect.
 
     Intrinsic function that evaluates the factuality of the
@@ -184,20 +167,11 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
 
     :return: Factuality score as a "yes/no" label (yes = factually incorrect).
     """
-    detector_message = """
-<guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
-
-### Criteria: A factually incorrect response occurs when the assistant's message contains one or more factual claims that are unsupported by, inconsistent with, or directly contradicted by the information provided in the documents or context. This includes situations where the assistant: introduces details not grounded in the context, misstates or distorts facts contained within the context, misinterprets the meaning or implications of the context, supplies erroneous or conflicting information relative to the context. Even if only a small portion of the response contains such inaccuracies, the overall message is considered factually incorrect.
-
-### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
-"""
-
-    context = context.add(Message("user", detector_message))
     result_json = call_intrinsic("factuality-detection", context, backend)
     return result_json["score"]
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
     """Corrects the last response so that it is factually correct.
 
     Intrinsic function that corrects the assistant's response to a user's
@@ -208,14 +182,5 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
 
     :return: Correct assistant response.
     """
-    corrector_message = """
-<guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
-
-### Criteria: A factually incorrect response occurs when the assistant's message contains one or more factual claims that are unsupported by, inconsistent with, or directly contradicted by the information provided in the documents or context. This includes situations where the assistant: introduces details not grounded in the context, misstates or distorts facts contained within the context, misinterprets the meaning or implications of the context, supplies erroneous or conflicting information relative to the context. Even if only a small portion of the response contains such inaccuracies, the overall message is considered factually incorrect.
-
-### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
-"""
-
-    context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic("factuality-correction", context, backend)
     return result_json["correction"]

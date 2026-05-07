@@ -17,8 +17,48 @@ import yaml
 
 from ...core import Backend
 from ...formatters.granite import intrinsics as intrinsics
+from ...formatters.granite.intrinsics.constants import BASE_MODEL_TO_CANONICAL_NAME
 from ...helpers import _ServerType
 from .catalog import AdapterType, fetch_intrinsic_metadata
+
+_OVERLAY_ROOT = pathlib.Path(__file__).parent / "_overlays"
+
+# TODO(#1017): remove the ``_overlays/`` directory and this helper once the
+# Guardian intrinsics ship ``io.yaml`` upstream in the Granite Intrinsics
+# Library. The overlays are a temporary bridge so the generic ``Intrinsic``
+# path works for Guardian; once upstream ships the templates, the HF-cached
+# copies are authoritative and the overlays should go away.
+
+
+def _find_overlay_io_yaml(
+    intrinsic_name: str, base_model_name: str, alora: bool
+) -> pathlib.Path | None:
+    """Return the path of an in-repo overlay ``io.yaml`` for an intrinsic, if present.
+
+    Overlays live at
+    ``mellea/backends/adapters/_overlays/<intrinsic>/<canonical-model>/<lora|alora>/io.yaml``
+    and mirror the layout of the Granite Intrinsics Library on Hugging Face Hub.
+    They let Mellea ship ``io.yaml`` content ahead of an upstream release;
+    deleting an overlay causes the loader to fall back to the HF-cached version
+    transparently. Intended as a temporary bridge — see the TODO above for the
+    removal plan.
+
+    The ``base_model_name`` is normalized through :data:`BASE_MODEL_TO_CANONICAL_NAME`
+    so callers can pass either the fully-qualified HF id
+    (``"ibm-granite/granite-4.1-3b"``) or the short form (``"granite-4.1-3b"``).
+
+    Args:
+        intrinsic_name: Short name of the intrinsic (e.g. ``"guardian-core"``).
+        base_model_name: Base model name, either HF id or canonical short form.
+        alora: ``True`` for the aLoRA variant, ``False`` for LoRA.
+
+    Returns:
+        Path to the overlay ``io.yaml``, or ``None`` if no overlay exists.
+    """
+    canonical = BASE_MODEL_TO_CANONICAL_NAME.get(base_model_name, base_model_name)
+    adapter_subdir = "alora" if alora else "lora"
+    candidate = _OVERLAY_ROOT / intrinsic_name / canonical / adapter_subdir / "io.yaml"
+    return candidate if candidate.is_file() else None
 
 
 class Adapter(abc.ABC):
@@ -154,12 +194,20 @@ class IntrinsicAdapter(LocalHFAdapter):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
-            config_file = intrinsics.obtain_io_yaml(
-                self.intrinsic_name,
-                self.base_model_name,
-                self.intrinsic_metadata.repo_id,
-                alora=is_alora,
+            # Prefer an in-repo overlay when present; fall back to the HF cache
+            # otherwise. See ``_find_overlay_io_yaml`` for the lookup scheme.
+            overlay = _find_overlay_io_yaml(
+                self.intrinsic_name, self.base_model_name, is_alora
             )
+            if overlay is not None:
+                config_file = overlay
+            else:
+                config_file = intrinsics.obtain_io_yaml(
+                    self.intrinsic_name,
+                    self.base_model_name,
+                    self.intrinsic_metadata.repo_id,
+                    alora=is_alora,
+                )
         if config_file:
             with open(config_file, encoding="utf-8") as f:
                 config_dict = yaml.safe_load(f)
