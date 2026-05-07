@@ -6,25 +6,38 @@ differs from other intrinsics, which rely on the ``instruction`` field in
 ``io.yaml``.
 """
 
+import collections.abc
+from typing import cast
+
 from ....backends import model_ids
 from ....backends.adapters import AdapterMixin
+from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
+from ..docs.document import _coerce_to_documents
 from ._util import call_intrinsic
 
 
 def policy_guardrails(
-    context: ChatContext, backend: AdapterMixin, policy_text: str
+    context: ChatContext,
+    backend: AdapterMixin,
+    policy_text: str,
+    model_options: dict | None = None,
 ) -> str:
     """Checks whether text complied with specified policy.
 
     Uses the policy_guardrails LoRA adapter to judge whether the scenario
     described in the last message in ``context`` is compliant with the given ``policy_text``.
 
-    :param context: Chat context containing the conversation to evaluate.
-    :param backend: Backend instance that supports LoRA adapters.
-    :param policy_text: Policy against with compliance is to be checked
-    :return: Compliance as a "Yes/No/Ambiguous" label (Yes = compliant).
+    Args:
+        context: Chat context containing the conversation to evaluate.
+        backend: Backend instance that supports LoRA adapters.
+        policy_text: Policy against which compliance is to be checked.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
+
+    Returns:
+        Compliance as a "Yes/No/Ambiguous" label (Yes = compliant).
     """
     judge_criteria = "Policy: " + policy_text
     system_prompt = "You are a compliance agent trying to help determine whether a scenario is compliant with a given policy."
@@ -34,7 +47,9 @@ def policy_guardrails(
     judge_protocol = f"<guardian> {system_prompt}\n\n### Criteria: {judge_criteria}\n\n### Scoring Schema: {scoring_schema}"
 
     context = context.add(Message("user", judge_protocol))
-    result_json = call_intrinsic("policy-guardrails", context, backend)
+    result_json = call_intrinsic(
+        "policy-guardrails", context, backend, model_options=model_options
+    )
 
     if "label" not in result_json.keys() and "score" not in result_json.keys():
         raise Exception(
@@ -138,6 +153,7 @@ def guardian_check(
     backend: AdapterMixin,
     criteria: str,
     target_role: str = "assistant",
+    model_options: dict | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
 
@@ -152,6 +168,8 @@ def guardian_check(
             criteria string.
         target_role: Role whose last message is being evaluated
             (``"user"`` or ``"assistant"``).
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
@@ -168,21 +186,94 @@ def guardian_check(
         f"### Scoring Schema: {scoring}"
     )
     context = context.add(Message("user", judge_protocol))
-    result_json = call_intrinsic("guardian-core", context, backend)
+    result_json = call_intrinsic(
+        "guardian-core", context, backend, model_options=model_options
+    )
     return result_json["guardian"]["score"]
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
-    """Determine is the last response is factually incorrect.
+def _reattach_documents(
+    context: ChatContext, documents: collections.abc.Iterable[str | Document]
+) -> ChatContext:
+    """Rewind context and re-add the last message with documents attached.
+
+    Extracts the assistant's response from the last turn (handling both generated
+    output and manually-added messages), then rewinds the context to before that
+    message and re-adds it with the provided documents.
+
+    Args:
+        context: Context containing the conversation.
+        documents: Documents to attach to the last assistant message.
+
+    Returns:
+        New context with documents attached to the last assistant message.
+
+    Raises:
+        ValueError: If context cannot be rewound or assistant content cannot be extracted.
+    """
+    last_turn = context.last_turn()
+    if last_turn is None:
+        raise ValueError("Cannot reattach documents: context has no last turn")
+
+    # Extract assistant content, preferring generated output over input
+    if last_turn.output is not None and last_turn.output.value is not None:
+        assistant_content = last_turn.output.value
+    elif last_turn.output is not None and last_turn.output.value is None:
+        # Uncomputed thunk — avoid silent fallthrough to model_input
+        raise ValueError(
+            "Cannot reattach documents: last turn output is uncomputed (thunk with no value)"
+        )
+    elif last_turn.model_input is not None and isinstance(
+        last_turn.model_input, Message
+    ):
+        assistant_content = last_turn.model_input.content
+    else:
+        raise ValueError(
+            "Cannot reattach documents: cannot extract assistant content from last turn"
+        )
+
+    # Rewind and re-add with documents
+    rewound = context.previous_node
+    if rewound is None:
+        raise ValueError("Cannot rewind context past the root node")
+
+    return cast(
+        ChatContext,
+        rewound.add(
+            Message(
+                "assistant",
+                assistant_content,
+                documents=_coerce_to_documents(documents),
+            )
+        ),
+    )
+
+
+def factuality_detection(
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
+    model_options: dict | None = None,
+) -> str:
+    """Determine if the last response is factually incorrect.
 
     Intrinsic function that evaluates the factuality of the
     assistant's response to a user's question. The context should end with
     a user question followed by an assistant answer.
 
-    :param context: Chat context containing user question and assistant answer.
-    :param backend: Backend instance that supports LoRA/aLoRA adapters.
+    Args:
+        context: Chat context containing user question and assistant answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
+        documents: Document snippets that provide factual context for evaluation.
+            Each element may be a ``Document`` or a plain string (automatically
+            wrapped in ``Document``). When ``None``, documents are extracted from
+            the last assistant message in ``context``. Keyword-only.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
-    :return: Factuality score as a "yes/no" label (yes = factually incorrect).
+    Returns:
+        Factuality score as a "yes/no" label (yes = factually incorrect).
     """
     detector_message = """
 <guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
@@ -192,21 +283,40 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
 ### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
 """
 
+    if documents is not None:
+        context = _reattach_documents(context, documents)
+
     context = context.add(Message("user", detector_message))
-    result_json = call_intrinsic("factuality-detection", context, backend)
+    result_json = call_intrinsic(
+        "factuality-detection", context, backend, model_options=model_options
+    )
     return result_json["score"]
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
+def factuality_correction(
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
+    model_options: dict | None = None,
+) -> str:
     """Corrects the last response so that it is factually correct.
 
     Intrinsic function that corrects the assistant's response to a user's
     question relative to the given contextual information.
 
-    :param context: Chat context containing user question and assistant answer.
-    :param backend: Backend instance that supports LoRA/aLoRA adapters.
+    Args:
+        context: Chat context containing user question and assistant answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
+        documents: Document snippets that provide factual context for correction.
+            Each element may be a ``Document`` or a plain string (automatically
+            wrapped in ``Document``). When ``None``, documents are extracted from
+            the last assistant message in ``context``. Keyword-only.
+        model_options: Optional model options to pass to the backend (e.g.,
+            temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
-    :return: Correct assistant response.
+    Returns:
+        Corrected assistant response.
     """
     corrector_message = """
 <guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
@@ -216,6 +326,11 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
 ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
 """
 
+    if documents is not None:
+        context = _reattach_documents(context, documents)
+
     context = context.add(Message("user", corrector_message))
-    result_json = call_intrinsic("factuality-correction", context, backend)
+    result_json = call_intrinsic(
+        "factuality-correction", context, backend, model_options=model_options
+    )
     return result_json["correction"]

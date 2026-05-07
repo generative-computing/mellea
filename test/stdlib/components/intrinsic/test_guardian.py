@@ -43,21 +43,30 @@ def _backend():
     cleanup_gpu_backend(backend_, "test_guardian")
 
 
-def _read_guardian_input(file_name: str) -> ChatContext:
-    """Read test input and convert to a ChatContext."""
+def _read_guardian_input(file_name: str) -> tuple[ChatContext, list[Document]]:
+    """Read test input and convert to a ChatContext and documents list."""
     with open(DATA_ROOT / "input_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
 
     context = ChatContext()
     for m in json_data["messages"]:
         context = context.add(Message(m["role"], m["content"]))
-    return context
+
+    # Extract documents if present
+    documents = []
+    if "extra_body" in json_data and "documents" in json_data["extra_body"]:
+        for doc_data in json_data["extra_body"]["documents"]:
+            documents.append(
+                Document(text=doc_data["text"], doc_id=doc_data.get("doc_id"))
+            )
+
+    return context, documents
 
 
 @pytest.mark.qualitative
 def test_policy_guardrails(backend):
     """Verify that policy_guardrails checks scenaio compliance with policy."""
-    context = _read_guardian_input("policy_guardrails.json")
+    context, _ = _read_guardian_input("policy_guardrails.json")
 
     policy_text = 'hiring managers should steer away from any questions that directly seek information about protected classes—such as "how old are you," "where are you from," "what year did you graduate" or "what are your plans for having kids."'
 
@@ -70,7 +79,7 @@ def test_policy_guardrails(backend):
 @pytest.mark.qualitative
 def test_guardian_check_harm(backend):
     """Verify that guardian_check detects harmful prompts."""
-    context = _read_guardian_input("guardian_core.json")
+    context, _ = _read_guardian_input("guardian_core.json")
 
     # First call triggers adapter loading
     result = guardian.guardian_check(
@@ -164,18 +173,70 @@ def test_guardian_check_function_call(backend):
 @pytest.mark.qualitative
 def test_factuality_detection(backend):
     """Verify that the factuality detection intrinsic functions properly."""
-    context = _read_guardian_input("factuality_detection.json")
+    context, documents = _read_guardian_input("factuality_detection.json")
 
-    result = guardian.factuality_detection(context, backend)
+    # Test with documents passed as argument
+    result = guardian.factuality_detection(context, backend, documents=documents)
+    assert result == "yes" or result == "no"
+
+
+@pytest.mark.qualitative
+def test_factuality_detection_from_context(backend):
+    """Verify factuality detection works when documents are in the last message."""
+    context, documents = _read_guardian_input("factuality_detection.json")
+
+    # Extract assistant content using the same logic as _reattach_documents
+    last_turn = context.last_turn()
+    assert last_turn is not None
+    if last_turn.output is not None and last_turn.output.value is not None:
+        content = last_turn.output.value
+    else:
+        assert isinstance(last_turn.model_input, Message)
+        content = last_turn.model_input.content
+
+    rewound = context.previous_node
+    assert rewound is not None
+    context_with_docs: ChatContext = rewound.add(  # type: ignore[assignment]
+        Message("assistant", content, documents=documents)
+    )
+
+    # Test with documents=None (should extract from context)
+    result = guardian.factuality_detection(context_with_docs, backend)
     assert result == "yes" or result == "no"
 
 
 @pytest.mark.qualitative
 def test_factuality_correction(backend):
     """Verify that the factuality correction intrinsic functions properly."""
-    context = _read_guardian_input("factuality_correction.json")
+    context, documents = _read_guardian_input("factuality_correction.json")
 
-    result = guardian.factuality_correction(context, backend)
+    # Test with documents passed as argument
+    result = guardian.factuality_correction(context, backend, documents=documents)
+    assert isinstance(result, str)
+
+
+@pytest.mark.qualitative
+def test_factuality_correction_from_context(backend):
+    """Verify factuality correction works when documents are in the last message."""
+    context, documents = _read_guardian_input("factuality_correction.json")
+
+    # Extract assistant content using the same logic as _reattach_documents
+    last_turn = context.last_turn()
+    assert last_turn is not None
+    if last_turn.output is not None and last_turn.output.value is not None:
+        content = last_turn.output.value
+    else:
+        assert isinstance(last_turn.model_input, Message)
+        content = last_turn.model_input.content
+
+    rewound = context.previous_node
+    assert rewound is not None
+    context_with_docs: ChatContext = rewound.add(  # type: ignore[assignment]
+        Message("assistant", content, documents=documents)
+    )
+
+    # Test with documents=None (should extract from context)
+    result = guardian.factuality_correction(context_with_docs, backend)
     assert isinstance(result, str)
 
 

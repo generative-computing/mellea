@@ -86,11 +86,7 @@ ctx, backend = start_backend(
 )
 # NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
-ctx = (
-    ctx.add(document)
-    .add(Message("user", user_text))
-    .add(Message("assistant", response_text))
-)
+ctx = ctx.add(Message("user", user_text)).add(Message("assistant", response_text))
 
-result = guardian.factuality_correction(ctx, backend)
+result = guardian.factuality_correction(ctx, backend, documents=[document])
 print(f"Result of factuality correction: {result}")  # corrected response string

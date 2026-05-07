@@ -181,6 +181,8 @@ Intrinsics are specialized LoRA adapters that add task-specific capabilities (RA
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
 | `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
+| `guardian` | `factuality_detection(context, backend, *, documents=None, model_options=None)` | Determine if the last response is factually incorrect ("yes"/"no") |
+| `guardian` | `factuality_correction(context, backend, *, documents=None, model_options=None)` | Correct the last response to be factually accurate |
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
