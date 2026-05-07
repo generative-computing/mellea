@@ -4,7 +4,7 @@ import pytest
 import mellea.backends.model_ids
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_openai_backend
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
 from test.predicates import require_api_key
@@ -39,7 +39,7 @@ def test_model_ids_exist():
     for model in bedrock_models:
         print(f"Checking {model.bedrock_name}")
         m = MelleaSession(
-            backend=create_bedrock_mantle_backend(model_id=model), ctx=ChatContext()
+            backend=create_bedrock_openai_backend(model_id=model), ctx=ChatContext()
         )
         print(m.chat("What is 1+1?").content)
 

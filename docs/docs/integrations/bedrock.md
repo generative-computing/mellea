@@ -22,18 +22,18 @@ Export it before running Mellea:
 export AWS_BEARER_TOKEN_BEDROCK=your-bedrock-key
 ```
 
-## Connecting with `create_bedrock_mantle_backend`
+## Connecting with `create_bedrock_openai_backend`
 
 ```python
 # Requires: mellea
 # Returns: ModelOutputThunk
 from mellea import MelleaSession
 from mellea.backends import model_ids
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_openai_backend
 from mellea.stdlib.context import ChatContext
 
 m = MelleaSession(
-    backend=create_bedrock_mantle_backend(model_id=model_ids.OPENAI_GPT_OSS_120B),
+    backend=create_bedrock_openai_backend(model_id=model_ids.OPENAI_GPT_OSS_120B),
     ctx=ChatContext(),
 )
 
@@ -54,10 +54,10 @@ The default region is `us-east-1`. Pass `region` to target a different region:
 # Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_openai_backend
 
 m = MelleaSession(
-    backend=create_bedrock_mantle_backend(
+    backend=create_bedrock_openai_backend(
         model_id="amazon.nova-pro-v1:0",
         region="eu-west-1",
     )
@@ -73,10 +73,10 @@ model ID string directly:
 # Requires: mellea
 # Returns: MelleaSession
 from mellea import MelleaSession
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_litellm_backend
 
 m = MelleaSession(
-    backend=create_bedrock_mantle_backend(
+    backend=create_bedrock_openai_backend(
         model_id="anthropic.claude-3-haiku-20240307-v1:0"
     )
 )
@@ -144,7 +144,7 @@ Model X is not supported in region us-east-1.
 
 Either enable model access for the requested model in your AWS account at
 [Bedrock Model Access](https://us-east-1.console.aws.amazon.com/bedrock/home#/model-access),
-or pass a different `region` to `create_bedrock_mantle_backend`.
+or pass a different `region` to `create_bedrock_litellm_backend`.
 
 ## Vision support
 
