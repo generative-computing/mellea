@@ -91,9 +91,9 @@ class ImageBlock(CBlock):
         Raises:
             AssertionError: If ``value`` is not a valid base64-encoded PNG string.
         """
-        assert self.is_valid_base64_png(
-            value
-        ), "Invalid base64 string representation of image."
+        assert self.is_valid_base64_png(value), (
+            "Invalid base64 string representation of image."
+        )
         super().__init__(value, meta)
 
     @staticmethod
@@ -541,17 +541,17 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 case Component():
                     self.parsed_repr = self._action._parse(self)
                 case CBlock():
-                    assert (
-                        self.value is not None
-                    ), "value must be non-None since this thunk is computed"
+                    assert self.value is not None, (
+                        "value must be non-None since this thunk is computed"
+                    )
                     self.parsed_repr = self.value  # type: ignore
                 case _:
                     raise ValueError(
                         "attempted to astream from a model output thunk with no ._action set"
                     )
-            assert (
-                self.parsed_repr is not None
-            ), "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+            assert self.parsed_repr is not None, (
+                "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+            )
 
             # --- generation_post_call hook ---
             if has_plugins(HookType.GENERATION_POST_CALL):
@@ -781,9 +781,9 @@ class Context(abc.ABC):
         Returns:
             ContextT: A new context instance whose ``previous_node`` is ``previous``.
         """
-        assert isinstance(
-            previous, Context
-        ), "Cannot create a new context from a non-Context object."
+        assert isinstance(previous, Context), (
+            "Cannot create a new context from a non-Context object."
+        )
         assert data is not None, "Cannot create a new context from None data."
 
         x = cls()
@@ -853,16 +853,16 @@ class Context(abc.ABC):
         ):
             data = current_context.node_data
             assert data is not None, "Data cannot be None (except for root context)."
-            assert (
-                data not in context_list
-            ), "There might be a cycle in the context tree. That is not allowed."
+            assert data not in context_list, (
+                "There might be a cycle in the context tree. That is not allowed."
+            )
             context_list.append(data)
             last_n_count += 1
 
             current_context = current_context.previous_node  # type: ignore
-            assert (
-                current_context is not None
-            ), "Previous context cannot be None (except for root context)."
+            assert current_context is not None, (
+                "Previous context cannot be None (except for root context)."
+            )
 
         context_list.reverse()
         return context_list
@@ -1104,9 +1104,9 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         imgs = c.images  # type: ignore
         if imgs is not None:
             assert isinstance(imgs, list), "images field must be a list."
-            assert all(
-                isinstance(im, ImageBlock) for im in imgs
-            ), "all elements of images list must be ImageBlocks."
+            assert all(isinstance(im, ImageBlock) for im in imgs), (
+                "all elements of images list must be ImageBlocks."
+            )
             if len(imgs) == 0:
                 return None
             else:

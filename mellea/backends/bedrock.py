@@ -1,32 +1,30 @@
 """Helpers for creating bedrock backends from openai/litellm."""
 
-import os
-
 import logging
+import os
 
 import boto3
 import botocore.exceptions
-
-# botocore logs a credential-resolution message on every boto3.Session() call. Suppress it.
-logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 from openai import OpenAI
-from openai.pagination import SyncPage
 
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.openai import OpenAIBackend
 
+# botocore logs a credential-resolution message on every boto3.Session() call. Suppress it.
+logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 
-def _assert_region(region: str | None) -> str:
+
+def _assert_region(region: str | None) -> None:
     resolved_region = (
         region
         or os.environ.get("AWS_REGION_NAME")
         or os.environ.get("AWS_DEFAULT_REGION")
         or os.environ.get("AWS_REGION")
     )
-    assert (
-        resolved_region is not None
-    ), "you must specify a region: pass `region` explicitly or set AWS_REGION_NAME, AWS_DEFAULT_REGION, or AWS_REGION."
+    assert resolved_region is not None, (
+        "you must specify a region: pass `region` explicitly or set AWS_REGION_NAME, AWS_DEFAULT_REGION, or AWS_REGION."
+    )
 
 
 def _assert_bedrock_auth() -> None:
@@ -125,9 +123,9 @@ def create_bedrock_litellm_backend(
                 model_name = model_id.bedrock_litellm_name
         case str():
             model_name = model_id
-    assert (
-        model_name != ""
-    ), f"Model identifier {model_id} does not specify a bedrock_name."
+    assert model_name != "", (
+        f"Model identifier {model_id} does not specify a bedrock_name."
+    )
 
     backend = LiteLLMBackend(model_id=model_name, num_retries=num_retries)
 

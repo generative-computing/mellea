@@ -56,9 +56,7 @@ from .tools import (
     validate_tool_arguments,
 )
 
-format: None = (
-    None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
-)
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 class LiteLLMBackend(FormatterBackend):
@@ -267,9 +265,7 @@ class LiteLLMBackend(FormatterBackend):
         # We want to flag both for the end user.
         standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         unknown_keys = []  # Keys that are unknown to litellm.
-        unsupported_openai_params = (
-            []
-        )  # OpenAI params that are known to litellm but not supported for this model/provider.
+        unsupported_openai_params = []  # OpenAI params that are known to litellm but not supported for this model/provider.
         # Bedrock-specific pass-through params that LiteLLM accepts but doesn't list as supported OpenAI params.
         known_provider_passthrough = {
             "additional_model_request_fields",
@@ -315,9 +311,9 @@ class LiteLLMBackend(FormatterBackend):
 
         model_opts = self._simplify_and_merge(model_options)
         linearized_context = ctx.view_for_generation()
-        assert (
-            linearized_context is not None
-        ), "Cannot generate from a non-linear context in a FormatterBackend."
+        assert linearized_context is not None, (
+            "Cannot generate from a non-linear context in a FormatterBackend."
+        )
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
@@ -540,12 +536,12 @@ class LiteLLMBackend(FormatterBackend):
                 streamed_chunks, force_all_tool_calls_separate=separate_tools
             )
 
-        assert (
-            mot._action is not None
-        ), "ModelOutputThunks should have their action assigned during generation"
-        assert (
-            mot._model_options is not None
-        ), "ModelOutputThunks should have their model_opts assigned during generation"
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
+        )
 
         # OpenAI-like streamed responses potentially give you chunks of tool calls.
         # As a result, we have to store data between calls and only then

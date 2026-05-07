@@ -37,9 +37,7 @@ from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
 
-format: None = (
-    None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
-)
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 class OllamaModelBackend(FormatterBackend):
@@ -130,9 +128,9 @@ class OllamaModelBackend(FormatterBackend):
             if isinstance(self.model_id, ModelIdentifier)
             else self.model_id
         )
-        assert (
-            ollama_model_id is not None
-        ), "model_id is None. This can also happen if the ModelIdentifier has no ollama name set or this model is not available in ollama."
+        assert ollama_model_id is not None, (
+            "model_id is None. This can also happen if the ModelIdentifier has no ollama name set or this model is not available in ollama."
+        )
         return ollama_model_id
 
     def _check_ollama_server(self) -> bool:
@@ -349,9 +347,9 @@ class OllamaModelBackend(FormatterBackend):
         model_opts = self._simplify_and_merge(model_options)
 
         linearized_context = ctx.view_for_generation()
-        assert (
-            linearized_context is not None
-        ), "Cannot generate from a non-linear context in a FormatterBackend."
+        assert linearized_context is not None, (
+            "Cannot generate from a non-linear context in a FormatterBackend."
+        )
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
         # Add the final message.
@@ -676,12 +674,12 @@ class OllamaModelBackend(FormatterBackend):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             _format: The structured output format class used during generation, if any.
         """
-        assert (
-            mot._action is not None
-        ), "ModelOutputThunks should have their action assigned during generation"
-        assert (
-            mot._model_options is not None
-        ), "ModelOutputThunks should have their model_opts assigned during generation"
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
+        )
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
