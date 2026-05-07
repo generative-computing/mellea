@@ -462,7 +462,7 @@ class TestHTTPValidation:
                     function=FunctionDefinition(
                         name="test_func",
                         description="A test function",
-                        parameters=FunctionParameters(RootModel={"type": "object"}),
+                        parameters=FunctionParameters({"type": "object"}),
                     ),
                 )
             ],
@@ -471,7 +471,7 @@ class TestHTTPValidation:
                 FunctionDefinition(
                     name="legacy_func",
                     description="A legacy function",
-                    parameters=FunctionParameters(RootModel={"type": "object"}),
+                    parameters=FunctionParameters({"type": "object"}),
                 )
             ],
             function_call="auto",
