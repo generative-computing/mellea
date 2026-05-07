@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
@@ -29,8 +29,33 @@ class ToolFunction(BaseModel):
     function: FunctionDefinition
 
 
+class JsonSchemaFormat(BaseModel):
+    """JSON Schema definition for structured output."""
+
+    name: str
+    """Name of the schema."""
+
+    schema_: dict[str, Any] = Field(alias="schema")
+    """JSON Schema definition."""
+
+    strict: bool | None = None
+    """Accepted for OpenAI compatibility; currently ignored by ``m serve``."""
+
+    model_config = {"populate_by_name": True}
+
+
 class ResponseFormat(BaseModel):
-    type: Literal["text", "json_object"]
+    type: Literal["text", "json_object", "json_schema"]
+
+    json_schema: JsonSchemaFormat | None = None
+    """JSON Schema definition when type is 'json_schema'."""
+
+    @model_validator(mode="after")
+    def validate_json_schema_required(self) -> "ResponseFormat":
+        """Validate that json_schema is provided when type is 'json_schema'."""
+        if self.type == "json_schema" and self.json_schema is None:
+            raise ValueError("json_schema field is required when type is 'json_schema'")
+        return self
 
 
 class StreamOptions(BaseModel):

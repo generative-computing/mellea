@@ -19,6 +19,14 @@ A dedicated streaming example for `m serve` that supports both modes:
 - `stream=True` returns an uncomputed thunk so the server can emit
   incremental Server-Sent Events (SSE) chunks
 
+### m_serve_example_response_format.py
+Example demonstrating structured output with the `response_format` parameter.
+
+**Key Features:**
+- Supporting the `format` parameter in serve functions
+- Structured output validation with JSON schemas
+- Three format types: `text`, `json_object`, `json_schema`
+
 ### pii_serve.py
 Example of serving a PII (Personally Identifiable Information) detection service.
 
@@ -29,6 +37,9 @@ Client code for testing the served API endpoints with non-streaming requests.
 Client code demonstrating streaming responses using Server-Sent Events (SSE)
 against `m_serve_example_streaming.py`.
 
+### client_response_format.py
+Client code demonstrating all three `response_format` types with examples.
+
 ## Concepts Demonstrated
 
 - **API Deployment**: Exposing Mellea programs as REST APIs
@@ -37,6 +48,7 @@ against `m_serve_example_streaming.py`.
 - **Validation in Production**: Using requirements in deployed services
 - **Model Options**: Passing model configuration through API
 - **Streaming Responses**: Real-time token streaming via Server-Sent Events (SSE)
+- **Structured Output**: Using `response_format` for JSON schema validation
 
 ## Basic Pattern
 
@@ -82,6 +94,85 @@ m serve docs/examples/m_serve/m_serve_example_streaming.py
 
 # In another terminal, test with the streaming client
 python docs/examples/m_serve/client_streaming.py
+```
+
+### Response Format
+
+```bash
+# Start the response_format example server
+m serve docs/examples/m_serve/m_serve_example_response_format.py
+
+# In another terminal, test with the response_format client
+python docs/examples/m_serve/client_response_format.py
+```
+
+## Response Format Support
+
+The server supports structured output via the `response_format` parameter, which allows you to control the format of the model's response. This is compatible with OpenAI's response format API.
+
+**Three Format Types:**
+
+1. **`text`** (default): Plain text output
+2. **`json_object`**: Unstructured JSON output (model decides the schema)
+3. **`json_schema`**: Structured output validated against a JSON schema
+
+**Key Features:**
+- Automatic JSON schema to Pydantic model conversion
+- Schema validation for structured outputs
+- OpenAI-compatible API
+- Works with the `format` parameter in serve functions
+
+**Example - JSON Schema:**
+```python
+import openai
+
+client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+
+# Define a schema for structured output
+person_schema = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "integer"},
+        "email": {"type": "string"},
+    },
+    "required": ["name", "age", "email"],
+}
+
+response = client.chat.completions.create(
+    messages=[{"role": "user", "content": "Generate a person named Alice"}],
+    model="granite4:micro-h",
+    response_format={
+        "type": "json_schema",
+        "json_schema": {
+            "name": "Person",
+            "schema": person_schema,
+            "strict": True,
+        },
+    },
+)
+
+# Response will be valid JSON matching the schema
+print(response.choices[0].message.content)
+```
+
+**Server Implementation:**
+Your serve function must accept a `format` parameter to support `json_schema`:
+
+```python
+def serve(
+    input: list[ChatMessage],
+    requirements: list[str] | None = None,
+    model_options: dict | None = None,
+    format: type | None = None,  # Add this parameter
+) -> ModelOutputThunk:
+    result = session.instruct(
+        description=input[-1].content,
+        requirements=requirements,
+        model_options=model_options,
+        format=format,  # Pass to instruct()
+    )
+    return result
 ```
 
 ## Streaming Support

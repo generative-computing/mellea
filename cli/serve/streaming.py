@@ -19,6 +19,7 @@ from .models import (
     OpenAIErrorResponse,
     StreamOptions,
 )
+from .utils import extract_finish_reason
 
 
 async def stream_chat_completion_chunks(
@@ -30,6 +31,11 @@ async def stream_chat_completion_chunks(
     system_fingerprint: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate OpenAI-compatible SSE chat completion chunks from a model output.
+
+    This function acts as a pass-through streaming layer, forwarding chunks directly
+    from the backend to the client without buffering or validation. Format validation
+    for structured outputs happens at the module level (in the serve function) and
+    client side, not in this streaming layer.
 
     Args:
         output: The model output object to stream.
@@ -129,12 +135,6 @@ async def stream_chat_completion_chunks(
             )
             yield f"data: {tool_call_chunk.model_dump_json()}\n\n"
 
-        # Determine finish_reason based on tool calls
-        finish_reason: (
-            Literal["stop", "length", "content_filter", "tool_calls", "function_call"]
-            | None
-        ) = "tool_calls" if tool_calls_list else "stop"
-
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
         include_usage = stream_options is not None and stream_options.include_usage
@@ -149,7 +149,7 @@ async def stream_chat_completion_chunks(
                 ChatCompletionChunkChoice(
                     index=0,
                     delta=ChatCompletionChunkDelta(content=None),
-                    finish_reason=finish_reason,
+                    finish_reason=extract_finish_reason(output),
                 )
             ],
             object="chat.completion.chunk",
