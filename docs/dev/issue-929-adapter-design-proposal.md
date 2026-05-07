@@ -68,6 +68,28 @@ The **weights binding** is where the three realities live. It exposes a single v
 | `EmbeddedBinding` (Reality B) | No-op (weights baked in) | Render `controls` field into chat template | Drop the `controls` field |
 | `ServerMediatedBinding` (Reality C) | No-op (or push weights, depending on sub-case) | Set adapter identifier on API request | Unset identifier |
 
+Visually, the three realities differ only in where the weights are and how the backend reaches them; the I/O contract is shared:
+
+```
+   Reality A: Local PEFT          Reality B: Embedded        Reality C: Server-mediated
+   ─────────────────────          ────────────────────       ──────────────────────────
+
+     ┌──────────┐                                                 ┌──────────┐
+     │ HF repo  │                    (weights baked                │  server  │
+     └────┬─────┘                     into base model)             └────┬─────┘
+          │ download                                                    │
+          ▼                                                             │
+     ┌──────────┐                                                       │
+     │  cache   │                                                       │
+     └────┬─────┘                                                       │
+          │ PEFT load                render `controls`                  │ adapter_id
+          ▼                          into chat template                 │ in request
+     ┌──────────┐                    ┌──────────┐                 ┌─────▼────┐
+     │base+LoRA │                    │base model│                 │base model│
+     │ (local)  │                    │ (Switch) │                 │ (remote) │
+     └──────────┘                    └──────────┘                 └──────────┘
+```
+
 `call_intrinsic` becomes one flow, no branches on backend type:
 
 ```
@@ -75,6 +97,37 @@ adapter = backend.resolve_adapter(name)
 with backend.adapter_scope(adapter):
     raw = backend.generate(adapter.io_contract.build_prompt(...))
 return adapter.io_contract.parse(raw)
+```
+
+The lifecycle inside `adapter_scope` is the same for every binding — only the verbs do reality-specific work:
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant B as Backend
+    participant A as Adapter
+    participant W as WeightsBinding
+    participant M as Base Model
+
+    C->>B: check_answerability(...)
+    B->>A: resolve_adapter(name)
+
+    rect rgb(245, 245, 245)
+    Note over B,W: adapter_scope(adapter)
+    B->>W: prepare()
+    W-->>M: download / no-op
+    B->>W: activate()
+    W-->>M: load / render controls / set adapter_id
+    B->>A: io_contract.build_prompt(...)
+    B->>M: generate(prompt)
+    M-->>B: raw output
+    B->>A: io_contract.parse(raw)
+    A-->>B: normalised result
+    B->>W: deactivate()
+    W-->>M: unload / drop controls / unset
+    end
+
+    B-->>C: score
 ```
 
 From this shape, the seven threads of #929 resolve cleanly. Full mapping is in Part II §8.
@@ -192,7 +245,19 @@ adapter = Adapter(name="answerability",
 
 Intrinsic calls have no bespoke instrumentation today. Folding it into the redesign costs one span attribute per verb; retrofitting means re-editing every binding later.
 
-**Spans** — each `adapter_scope` wraps a child span tree rooted at `intrinsic.call`, with children `intrinsic.prepare`, `intrinsic.activate`, `intrinsic.generate`, `intrinsic.parse`, `intrinsic.deactivate`. Standard attributes: `intrinsic.name`, `intrinsic.version`, `intrinsic.role`, `intrinsic.adapter_type`, `intrinsic.binding_type`, `intrinsic.source`, `intrinsic.target`. Errors set OTel `ERROR` status (aligns with #1035 gap 4).
+**Spans** — each `adapter_scope` wraps a child span tree rooted at `intrinsic.call`:
+
+```mermaid
+graph TD
+    root["intrinsic.call<br/><i>name, version, role,<br/>binding_type, adapter_type</i>"]
+    root --> prep["intrinsic.prepare<br/><i>LocalFile: download ms</i>"]
+    root --> act["intrinsic.activate<br/><i>peft_name / controls / api_id</i>"]
+    root --> gen["intrinsic.generate<br/><i>(regular backend span:<br/>tokens, latency)</i>"]
+    root --> par["intrinsic.parse<br/><i>schema_version,<br/>parse_ok, raw_len</i>"]
+    root --> deact["intrinsic.deactivate"]
+```
+
+Standard attributes: `intrinsic.name`, `intrinsic.version`, `intrinsic.role`, `intrinsic.adapter_type`, `intrinsic.binding_type`, `intrinsic.source`, `intrinsic.target`. Errors set OTel `ERROR` status (aligns with #1035 gap 4).
 
 **Metrics** — an `IntrinsicMetricsPlugin` alongside the existing Token / Latency / Error plugins:
 - `mellea.intrinsic.invocations` — counter labelled by name, version, binding type, adapter type, outcome.
