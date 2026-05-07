@@ -4,6 +4,7 @@
 from ...core import Requirement, ValidationResult, default_output_to_bool
 from .md import as_markdown_list, is_markdown_list, is_markdown_table
 from .python_reqs import PythonExecutionReq
+from .python_tools import PythonToolRequirements
 from .requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -19,6 +20,7 @@ __all__ = [
     "ALoraRequirement",
     "LLMaJRequirement",
     "PythonExecutionReq",
+    "PythonToolRequirements",
     "Requirement",
     "ValidationResult",
     "as_markdown_list",
