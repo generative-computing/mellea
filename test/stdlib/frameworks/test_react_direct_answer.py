@@ -41,6 +41,7 @@ async def last_loop_completion_check(
 
 @pytest.mark.ollama
 @pytest.mark.e2e
+@pytest.mark.qualitative
 async def test_react_direct_answer_without_tools():
     """Test that ReACT handles direct answers when model doesn't call tools.
 
@@ -72,6 +73,7 @@ async def test_react_direct_answer_without_tools():
 
 @pytest.mark.ollama
 @pytest.mark.e2e
+@pytest.mark.qualitative
 async def test_react_direct_answer_with_unused_tools():
     """Test that ReACT handles direct answers even when tools are available.
 
