@@ -28,21 +28,19 @@ tools = [
             "name": "get_weather",
             "description": "Get the current weather in a given location",
             "parameters": {
-                "RootModel": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The city name, e.g. San Francisco",
-                        },
-                        "units": {
-                            "type": "string",
-                            "enum": ["celsius", "fahrenheit"],
-                            "description": "Temperature units",
-                        },
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city name, e.g. San Francisco",
                     },
-                    "required": ["location"],
-                }
+                    "units": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "Temperature units",
+                    },
+                },
+                "required": ["location"],
             },
         },
     },
@@ -52,16 +50,14 @@ tools = [
             "name": "get_stock_price",
             "description": "Get the current stock price for a given ticker symbol",
             "parameters": {
-                "RootModel": {
-                    "type": "object",
-                    "properties": {
-                        "symbol": {
-                            "type": "string",
-                            "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
-                        }
-                    },
-                    "required": ["symbol"],
-                }
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
+                    }
+                },
+                "required": ["symbol"],
             },
         },
     },
@@ -232,7 +228,9 @@ def main():
     # Example 4: Multi-turn conversation with tool use
     print("\n\n4. Multi-turn Conversation (Streaming)")
     print("-" * 60)
-    messages = [{"role": "user", "content": "What's the weather in Paris?"}]
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "What's the weather in Paris?"}
+    ]
 
     print(f"User: {messages[0]['content']}")
     print("\nAssistant: ", end="", flush=True)
