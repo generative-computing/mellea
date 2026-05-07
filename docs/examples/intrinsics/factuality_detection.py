@@ -31,5 +31,5 @@ ctx, backend = start_backend(
 
 ctx = ctx.add(Message("user", user_text)).add(Message("assistant", response_text))
 
-result = guardian.factuality_detection([document], ctx, backend)
+result = guardian.factuality_detection(ctx, backend, documents=[document])
 print(f"Result of factuality detection: {result}")  # string "yes" or "no"
