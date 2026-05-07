@@ -6,6 +6,10 @@ This directory contains examples demonstrating OpenTelemetry tracing and metrics
 
 - **`telemetry_example.py`** - Demonstrates distributed tracing (application and backend traces)
 - **`metrics_example.py`** - Demonstrates token usage metrics collection
+- **`otel_genai_semconv_example.py`** - Exercises the OTel GenAI semantic convention attributes
+  added in issue #1035 (`gen_ai.provider.name`, `gen_ai.conversation.id`,
+  `llm.prompt_template.*`, `error.type`, content capture). Designed for human
+  verification against [otelite](https://github.com/planetf1/otelite).
 
 ## Quick Start
 
