@@ -10,6 +10,9 @@ https://opentelemetry.io/docs/specs/semconv/gen-ai/
 Configuration via environment variables:
 - MELLEA_TRACE_APPLICATION: Enable/disable application tracing (default: false)
 - MELLEA_TRACE_BACKEND: Enable/disable backend tracing (default: false)
+- MELLEA_TRACE_CONTENT: Capture prompt/response content in spans (default: false).
+  Content may include PII — enable only in controlled environments.
+  Also recognised: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT (OTel standard).
 - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for trace export
 - OTEL_SERVICE_NAME: Service name for traces (default: mellea)
 """
@@ -42,6 +45,11 @@ _TRACE_APPLICATION_ENABLED = _OTEL_AVAILABLE and os.getenv(
 _TRACE_BACKEND_ENABLED = _OTEL_AVAILABLE and os.getenv(
     "MELLEA_TRACE_BACKEND", "false"
 ).lower() in ("true", "1", "yes")
+_TRACE_CONTENT_ENABLED = _OTEL_AVAILABLE and (
+    os.getenv("MELLEA_TRACE_CONTENT", "false").lower() in ("true", "1", "yes")
+    or os.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false").lower()
+    in ("true", "1", "yes")
+)
 _OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 _SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "mellea")
 _CONSOLE_EXPORT = os.getenv("MELLEA_TRACE_CONSOLE", "false").lower() in (
@@ -111,6 +119,33 @@ def is_backend_tracing_enabled() -> bool:
         ``MELLEA_TRACE_BACKEND`` environment variable.
     """
     return _TRACE_BACKEND_ENABLED
+
+
+def is_content_tracing_enabled() -> bool:
+    """Check if content capture is enabled.
+
+    Content capture records prompt and response text on spans and may contain PII.
+    Enable only in controlled environments.
+
+    Returns:
+        True if enabled via ``MELLEA_TRACE_CONTENT`` or
+        ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT``.
+    """
+    return _TRACE_CONTENT_ENABLED
+
+
+def add_span_event(
+    span: Any, name: str, attributes: dict[str, Any] | None = None
+) -> None:
+    """Add a named event to a span if the span is not None.
+
+    Args:
+        span: The span object (may be None if tracing is disabled).
+        name: Event name.
+        attributes: Optional event attributes.
+    """
+    if span is not None and _OTEL_AVAILABLE:
+        span.add_event(name, attributes=attributes or {})
 
 
 @contextmanager
@@ -246,9 +281,11 @@ def set_span_error(span: Any, exception: Exception) -> None:
 
 
 __all__ = [
+    "add_span_event",
     "end_backend_span",
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
+    "is_content_tracing_enabled",
     "set_span_attribute",
     "set_span_error",
     "start_backend_span",
