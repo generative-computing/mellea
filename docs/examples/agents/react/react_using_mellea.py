@@ -51,13 +51,13 @@ async def last_loop_completion_check(
     if loop_budget == -1 or turn_num < loop_budget:
         return False
 
-    content = mfuncs.chat(
+    message, _ = await mfuncs.achat(
         content=f"Do you know the answer to the user's original query ({goal})? If so, respond with True. If you need to take more actions, then respond False.",
         context=context,
         backend=backend,
         format=TrueOrFalse,
-    )[0].content
-    have_answer = TrueOrFalse.model_validate_json(content).answer
+    )
+    have_answer = TrueOrFalse.model_validate_json(message.content).answer
 
     return have_answer
 
