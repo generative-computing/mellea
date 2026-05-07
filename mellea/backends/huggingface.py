@@ -388,12 +388,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 and an updated context that includes ``action`` and the new output.
         """
         span = start_generate_span(
-            backend=self,
-            action=action,
-            ctx=ctx,
-            format=format,
-            tool_calls=tool_calls,
-            model_options=model_options,
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
 
         with with_context(
@@ -1254,15 +1249,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # Record tracing if span exists
         if span is not None:
-            from ..telemetry.backend_instrumentation import finalize_backend_span
-
-            finalize_backend_span(
-                span,
-                usage=mot.generation.usage if mot.generation.usage else None,
-                model_id=self._get_hf_model_id(),
-                conversation=conversation,
-                output_text=str(mot.value) if mot.value is not None else None,
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
             )
+
+            if isinstance(hf_output, GenerateDecoderOnlyOutput):
+                record_response_metadata(span, hf_output)
+                if mot.generation.usage:
+                    record_token_usage(span, mot.generation.usage)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
             del mot._meta["_telemetry_span"]
 
         # When caching is disabled, clear hf_output from meta to free GPU memory.

@@ -2,10 +2,6 @@
 
 Follows OpenTelemetry Gen-AI semantic conventions:
 https://opentelemetry.io/docs/specs/semconv/gen-ai/
-
-Content capture (``gen_ai.input.messages``, ``gen_ai.output.messages``,
-``gen_ai.system_instructions``) is opt-in and gated by ``is_content_tracing_enabled()``.
-These attributes may contain PII — enable only in controlled environments.
 """
 
 import json
@@ -13,7 +9,6 @@ from typing import Any
 
 from ..backends.utils import get_value
 from .tracing import (
-    add_span_event,
     end_backend_span,
     is_content_tracing_enabled,
     set_span_attribute,
@@ -345,64 +340,28 @@ def record_response_metadata(
         pass
 
 
-def finalize_backend_span(
-    span: Any,
-    *,
-    response: Any = None,
-    usage: Any = None,
-    model_id: str | None = None,
-    error: Exception | None = None,
-    conversation: list[dict] | None = None,
-    output_text: str | None = None,
-    finish_reason: str | None = None,
-) -> None:
-    """Close a backend span, recording telemetry on both success and error paths.
+def finalize_backend_span(span: Any, *, error: Exception | None = None) -> None:
+    """Close a backend span on the error path, setting error.type and ERROR status.
 
-    On the error path, records the exception, sets ``error.type``, and marks
-    the span with ERROR status before closing.  On the success path, records
-    token usage, response metadata, and (when content capture is enabled)
-    structured input/output message attributes.
-
-    This replaces the three-line ``record_token_usage`` + ``record_response_metadata``
-    + ``end_backend_span`` pattern used in each backend's ``post_processing``.
+    Used by the streaming error path in ``ModelOutputThunk.__aiter__`` where a
+    span may be left open after an exception.  Backends close spans on the
+    success path themselves via ``record_token_usage`` + ``record_response_metadata``
+    + ``end_backend_span``.
 
     Args:
         span: The span to finalise (no-op when ``None``).
-        response: Raw backend response (for model id, finish reason, response id).
-        usage: Token usage object or dict.
-        model_id: Explicit model id override.
-        error: Exception to record on the error path.
-        conversation: The prompt conversation (``list[dict]`` with ``role``/``content``
-            keys).  Used for ``gen_ai.input.messages`` and
-            ``gen_ai.system_instructions`` when content capture is enabled.
-        output_text: The assistant's reply text.  Used for
-            ``gen_ai.output.messages`` when content capture is enabled.
-        finish_reason: Finish reason string (defaults to ``"stop"`` when omitted).
+        error: Exception to record; sets ERROR status and ``error.type``.
     """
     if span is None:
         return
 
     try:
-        try:
-            if error is not None:
-                set_span_error(span, error)
-                # error.type is a Stable OTel cross-signal attribute
-                set_span_attribute(span, "error.type", type(error).__name__)
-            else:
-                record_token_usage(span, usage)
-                record_response_metadata(span, response, model_id=model_id)
-
-                if is_content_tracing_enabled() and conversation is not None:
-                    _emit_content_attributes(
-                        span,
-                        conversation=conversation,
-                        output_text=output_text,
-                        finish_reason=finish_reason,
-                        response=response,
-                    )
-        except Exception:
-            # Telemetry helpers must never break application code.
-            pass
+        if error is not None:
+            set_span_error(span, error)
+            # error.type is a Stable OTel cross-signal attribute
+            set_span_attribute(span, "error.type", type(error).__name__)
+    except Exception:
+        pass
     finally:
         end_backend_span(span)
 
@@ -424,84 +383,6 @@ _REQUEST_PARAM_MAP: dict[str, str] = {
 def _serialize_json(obj: Any) -> str:
     """Serialise *obj* to a JSON string, coercing non-serialisable values to str."""
     return json.dumps(obj, default=str, ensure_ascii=False)
-
-
-def _conversation_to_parts(conversation: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Split a conversation into system instructions and input messages.
-
-    Args:
-        conversation: List of ``{"role": ..., "content": ...}`` dicts.
-
-    Returns:
-        Tuple of ``(system_parts, input_messages)`` in the spec JSON shape.
-        ``system_parts`` is a list of ``{"type": "text", "content": ...}`` items.
-        ``input_messages`` is a list of
-        ``{"role": ..., "parts": [{"type": "text", "content": ...}]}`` items.
-    """
-    system_parts: list[dict] = []
-    input_messages: list[dict] = []
-    for msg in conversation:
-        role = msg.get("role", "")
-        content = msg.get("content", "")
-        if role == "system":
-            system_parts.append({"type": "text", "content": str(content)})
-        else:
-            input_messages.append(
-                {"role": role, "parts": [{"type": "text", "content": str(content)}]}
-            )
-    return system_parts, input_messages
-
-
-def _emit_content_attributes(
-    span: Any,
-    *,
-    conversation: list[dict],
-    output_text: str | None,
-    finish_reason: str | None,
-    response: Any = None,
-) -> None:
-    """Set structured content attributes on the span (content gate must be checked by caller)."""
-    try:
-        system_parts, input_messages = _conversation_to_parts(conversation)
-
-        if system_parts:
-            set_span_attribute(
-                span, "gen_ai.system_instructions", _serialize_json(system_parts)
-            )
-        if input_messages:
-            set_span_attribute(
-                span, "gen_ai.input.messages", _serialize_json(input_messages)
-            )
-
-        # Attempt to derive output text from an OpenAI-format response if not provided
-        if output_text is None and response is not None:
-            try:
-                choices = get_value(response, "choices")
-                if choices:
-                    first = choices[0] if isinstance(choices, list) else choices
-                    msg = get_value(first, "message")
-                    if msg is not None:
-                        output_text = str(get_value(msg, "content") or "")
-            except Exception:
-                pass
-
-        if output_text is not None:
-            output_msg = [
-                {
-                    "role": "assistant",
-                    "parts": [{"type": "text", "content": output_text}],
-                    "finish_reason": finish_reason or "stop",
-                }
-            ]
-            set_span_attribute(
-                span, "gen_ai.output.messages", _serialize_json(output_msg)
-            )
-
-        # Emit a span event so log-oriented receivers also see the content payload.
-        add_span_event(span, "gen_ai.client.inference.operation.details")
-    except Exception:
-        # Content capture is best-effort — never fail the span close
-        pass
 
 
 __all__ = [
