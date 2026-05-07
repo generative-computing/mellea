@@ -80,8 +80,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama_chat/"
-        + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
+        model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
         formatter: ChatFormatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
@@ -334,7 +333,9 @@ class LiteLLMBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([message_to_openai_message(m) for m in messages])
+        conversation.extend(
+            [message_to_openai_message(m, self.formatter) for m in messages]
+        )
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
@@ -398,8 +399,8 @@ class LiteLLMBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.model = str(self.model_id)
-        output.provider = "litellm"
+        output.generation.model = str(self.model_id)
+        output.generation.provider = "litellm"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -585,11 +586,11 @@ class LiteLLMBackend(FormatterBackend):
 
         # Populate standardized usage field (LiteLLM uses OpenAI format)
         if usage:
-            mot.usage = usage
+            mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.model = str(self.model_id)
-        mot.provider = "litellm"
+        mot.generation.model = str(self.model_id)
+        mot.generation.provider = "litellm"
 
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")

@@ -3,14 +3,16 @@
 Tests that backends correctly record token metrics through the telemetry system.
 """
 
-import asyncio
 import os
 
 import pytest
 
-from mellea.backends.model_ids import (
-    IBM_GRANITE_4_HYBRID_MICRO,
-    IBM_GRANITE_4_HYBRID_SMALL,
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_HYBRID_SMALL
+from mellea.plugins.manager import (
+    disable_background_collection,
+    discard_background_tasks,
+    drain_background_tasks,
+    enable_background_collection,
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
@@ -41,6 +43,8 @@ def metric_reader():
 @pytest.fixture
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
+    enable_background_collection()
+    discard_background_tasks()
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     # Force reload of metrics module to pick up env vars
     import importlib
@@ -52,6 +56,7 @@ def enable_metrics(monkeypatch):
     # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
     importlib.reload(mellea.telemetry.metrics)
+    disable_background_collection()
 
 
 @pytest.fixture(scope="module")
@@ -68,7 +73,7 @@ def hf_metrics_backend(gh_run):
     from mellea.backends.huggingface import LocalHFBackend
 
     backend = LocalHFBackend(
-        model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name,  # type: ignore
+        model_id=IBM_GRANITE_4_1_3B.hf_model_name,  # type: ignore
         cache=SimpleLRUCache(5),
     )
 
@@ -89,6 +94,13 @@ def _setup_metrics_provider(metrics_module, metric_reader):
     metrics_module._duration_histogram = None
     metrics_module._ttfb_histogram = None
     metrics_module._error_counter = None
+    metrics_module._sampling_attempts_counter = None
+    metrics_module._sampling_successes_counter = None
+    metrics_module._sampling_failures_counter = None
+    metrics_module._requirement_checks_counter = None
+    metrics_module._requirement_failures_counter = None
+    metrics_module._tool_calls_counter = None
+    metrics_module._cost_counter = None
     return provider
 
 
@@ -148,7 +160,7 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
 
     provider = _setup_metrics_provider(metrics_module, metric_reader)
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
@@ -163,8 +175,7 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     await mot.avalue()
 
     # Force metrics export and collection
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -212,7 +223,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Use Ollama's OpenAI-compatible endpoint
     backend = OpenAIBackend(
-        model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore
+        model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )
@@ -229,8 +240,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         await mot.astream()
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -284,8 +294,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     )
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -302,6 +311,13 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+    # Verify cost metric — litellm has pricing for ibm/granite-4-h-small on watsonx
+    cost = get_metric_value(
+        metrics_data, "mellea.llm.cost.usd", {"gen_ai.provider.name": "watsonx"}
+    )
+    assert cost is not None, "Cost should be recorded for a known watsonx model"
+    assert cost > 0, f"Cost should be > 0, got {cost}"
 
     # Verify latency metrics (watsonx is non-streaming only)
     duration_dp = _find_histogram_data_point(
@@ -332,9 +348,7 @@ async def test_litellm_token_metrics_integration(
 
     # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
     # This tests LiteLLM with a provider that properly returns token usage
-    backend = LiteLLMBackend(
-        model_id=f"openai/{IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
-    )  # type: ignore
+    backend = LiteLLMBackend(model_id=f"openai/{IBM_GRANITE_4_1_3B.ollama_name}")  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
@@ -348,8 +362,7 @@ async def test_litellm_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -407,8 +420,7 @@ async def test_huggingface_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -464,8 +476,7 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
     with pytest.raises(Exception):
         await mot.avalue()
 
-    # Yield to event loop so FIRE_AND_FORGET plugin task completes
-    await asyncio.sleep(0.05)
+    await drain_background_tasks()
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -480,3 +491,45 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
 
     assert error_count is not None, "Error counter should have been recorded"
     assert error_count == 1, f"Expected 1 error, got {error_count}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.ollama
+async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader):
+    """Test that sampling metrics are recorded through a full RejectionSamplingStrategy loop."""
+    from mellea.backends.ollama import OllamaModelBackend
+    from mellea.stdlib.components import Instruction
+    from mellea.stdlib.context import SimpleContext
+    from mellea.stdlib.sampling import RejectionSamplingStrategy
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
+
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    strategy = RejectionSamplingStrategy(loop_budget=1)
+    ctx = SimpleContext()
+
+    result = await strategy.sample(
+        action=Instruction("Say hello"), context=ctx, backend=backend, requirements=None
+    )
+
+    await drain_background_tasks()
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    attempts = get_metric_value(
+        metrics_data,
+        "mellea.sampling.attempts",
+        {"strategy": "RejectionSamplingStrategy"},
+    )
+    assert attempts is not None, "Sampling attempts should be recorded"
+    assert attempts >= 1, f"Expected at least 1 attempt, got {attempts}"
+
+    # With no requirements and loop_budget=1 the loop always succeeds
+    successes = get_metric_value(
+        metrics_data,
+        "mellea.sampling.successes",
+        {"strategy": "RejectionSamplingStrategy"},
+    )
+    assert result.success
+    assert successes == 1, f"Expected 1 success, got {successes}"

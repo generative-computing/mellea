@@ -31,6 +31,5 @@
       }
     }
   },
-  "logprobs": true,
-  "top_logprobs": 10
+  "temperature": 0.0
 }

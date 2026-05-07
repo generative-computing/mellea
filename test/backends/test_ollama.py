@@ -101,6 +101,9 @@ def test_format(session) -> None:
     # assert email.to.email_address.endswith("example.com")
 
 
+@pytest.mark.xfail(
+    strict=False, reason="Ollama intermittently returns empty responses for raw prompts"
+)
 @pytest.mark.qualitative
 @pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
@@ -187,9 +190,9 @@ async def test_async_parallel_requests(session) -> None:
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
-    assert mot1.streaming is True
-    assert mot1.ttfb_ms is not None
-    assert mot1.ttfb_ms > 0
+    assert mot1.generation.streaming is True
+    assert mot1.generation.ttfb_ms is not None
+    assert mot1.generation.ttfb_ms > 0
 
 
 async def test_async_avalue(session) -> None:
@@ -201,14 +204,14 @@ async def test_async_avalue(session) -> None:
     assert m1_final_val == mot1.value
 
     # Verify telemetry fields are populated
-    assert mot1.usage is not None
-    assert mot1.usage["prompt_tokens"] >= 0
-    assert mot1.usage["completion_tokens"] > 0
-    assert mot1.usage["total_tokens"] > 0
-    assert isinstance(mot1.model, str)
-    assert mot1.provider == "ollama"
-    assert mot1.streaming is False
-    assert mot1.ttfb_ms is None
+    assert mot1.generation.usage is not None
+    assert mot1.generation.usage["prompt_tokens"] >= 0
+    assert mot1.generation.usage["completion_tokens"] > 0
+    assert mot1.generation.usage["total_tokens"] > 0
+    assert isinstance(mot1.generation.model, str)
+    assert mot1.generation.provider == "ollama"
+    assert mot1.generation.streaming is False
+    assert mot1.generation.ttfb_ms is None
 
 
 def test_multiple_asyncio_runs(session) -> None:

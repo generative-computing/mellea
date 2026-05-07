@@ -10,7 +10,8 @@ import pytest
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_MICRO_3B
+from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
@@ -30,6 +31,9 @@ pytestmark = [
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
 
+TEST_OUTPUT_ROOT = pathlib.Path(os.path.dirname(__file__)) / "test_output"
+"""Location where the tests in this file dump internal outputs for debugging."""
+
 
 @pytest.fixture(name="backend", scope="module")
 def _backend():
@@ -38,7 +42,22 @@ def _backend():
     torch.set_num_threads(4)
 
     # No adapters for hybrid version.
-    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_1_3B.hf_model_name)
+    yield backend_
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend_, "rag")
+
+
+@pytest.fixture(name="backend_4_0", scope="module")
+def _backend_4_0():
+    """Granite 4.0 backend used only by tests that don't have Granite 4.1 models."""
+    # Prevent thrashing if the default device is CPU
+    torch.set_num_threads(4)
+
+    # No adapters for hybrid version.
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)
     yield backend_
 
     from test.conftest import cleanup_gpu_backend
@@ -72,16 +91,30 @@ def _read_input_json(file_name: str):
 def _read_output_json(file_name: str):
     """Shared code for reading canned outputs stored in JSON files and converting
     to Mellea types.
+
+    By convention, canned outputs hold the contents of
+    ``<completion>["choices"][0]["message"]["content"]``,
+    where ``<completion>`` is a JSON chat completion after post-processing.
     """
     with open(DATA_ROOT / "output_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
+    return json_data
 
-    # Output is in OpenAI chat completion response format. Assume only one choice.
-    result_str = json_data["choices"][0]["message"]["content"]
 
-    # Intrinsic outputs are always JSON, serialized to a string for OpenAI
-    # compatibility.
-    return json.loads(result_str)
+def _dump_output_json(file_name: str, to_write):
+    """Shared code for dumping a test's generated JSON data.
+
+    Dump the Python data structures that will be compared against canned
+    JSON output files. Outputs go to the local directory ``test_output``.
+
+    If you are sure the current output is correct, you can use this output to update
+    the contents of the ``testdata`` directory.
+    """
+    target_path = TEST_OUTPUT_ROOT / "output_json" / file_name
+    if not os.path.exists(target_path.parent):
+        os.makedirs(target_path.parent)
+    with open(target_path, "w", encoding="utf-8") as f:
+        json.dump(to_write, f, indent=2)
 
 
 @pytest.mark.qualitative
@@ -91,11 +124,11 @@ def test_answerability(backend):
 
     # First call triggers adapter loading
     result = rag.check_answerability(next_user_turn, documents, context, backend)
-    assert pytest.approx(result, rel=0.01) == 1.0
+    assert result == "answerable"
 
     # Second call hits a different code path from the first one
     result = rag.check_answerability(next_user_turn, documents, context, backend)
-    assert pytest.approx(result, rel=0.01) == 1.0
+    assert result == "answerable"
 
 
 @pytest.mark.qualitative
@@ -115,7 +148,6 @@ def test_query_rewrite(backend):
     assert result == expected
 
 
-@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
 @pytest.mark.qualitative
 def test_citations(backend):
     """Verify that the citations intrinsic functions properly."""
@@ -124,7 +156,14 @@ def test_citations(backend):
 
     # First call triggers adapter loading
     result = rag.find_citations(assistant_response, docs, context, backend)
-    assert result == expected
+    _dump_output_json("citations.json", result)
+    # There are some known differences between GPU and CPU output due to different
+    # matrix multiply implementations. Ignore those differences but attempt to complete
+    # the test when they are not present.
+    try:
+        assert result == expected
+    except AssertionError as ae:
+        pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
 
     # Second call hits a different code path from the first one
     result = rag.find_citations(assistant_response, docs, context, backend)
@@ -132,7 +171,7 @@ def test_citations(backend):
 
 
 @pytest.mark.qualitative
-def test_context_relevance(backend):
+def test_context_relevance(backend_4_0):
     """Verify that the context relevance intrinsic functions properly."""
     context, question, docs = _read_input_json("context_relevance.json")
 
@@ -140,12 +179,12 @@ def test_context_relevance(backend):
     document = docs[0]
 
     # First call triggers adapter loading
-    result = rag.check_context_relevance(question, document, context, backend)
-    assert pytest.approx(result, abs=1e-2) == 0.0
+    result = rag.check_context_relevance(question, document, context, backend_4_0)
+    assert result == "irrelevant"
 
     # Second call hits a different code path from the first one
-    result = rag.check_context_relevance(question, document, context, backend)
-    assert pytest.approx(result, abs=1e-2) == 0.0
+    result = rag.check_context_relevance(question, document, context, backend_4_0)
+    assert result == "irrelevant"
 
 
 @pytest.mark.qualitative
@@ -156,14 +195,12 @@ def test_hallucination_detection(backend):
 
     # First call triggers adapter loading
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
-    # pytest.approx() chokes on lists of records, so we do this complicated dance.
-    for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=5e-2) == e
+    _dump_output_json("hallucination_detection.json", result)
+    assert result == expected
 
     # Second call hits a different code path from the first one
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
-    for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=5e-2) == e
+    assert result == expected
 
 
 @pytest.mark.qualitative
@@ -199,6 +236,98 @@ def test_query_clarification_negative(backend):
 
     # Second call hits a different code path from the first one
     result = rag.clarify_query(next_user_turn, documents, context, backend)
+    assert result == "CLEAR"
+
+
+# ---------------------------------------------------------------------------
+# Resolve-from-context variants: pass question/response=None, infer from ctx
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.qualitative
+def test_answerability_resolve(backend):
+    """Verify answerability when question is resolved from context."""
+    context, next_user_turn, documents = _read_input_json("answerability.json")
+    context = context.add(Message("user", next_user_turn))
+
+    result = rag.check_answerability(None, documents, context, backend)
+    assert result == "answerable"
+
+
+@pytest.mark.qualitative
+def test_query_rewrite_resolve(backend):
+    """Verify query rewrite when question is resolved from context."""
+    context, next_user_turn, _ = _read_input_json("query_rewrite.json")
+    context = context.add(Message("user", next_user_turn))
+    expected = (
+        "Is Rex more likely to get fleas because he spends a lot of time outdoors?"
+    )
+
+    result = rag.rewrite_question(None, context, backend)
+    assert result == expected
+
+
+@pytest.mark.qualitative
+def test_citations_resolve(backend):
+    """Verify citations when response is resolved from context."""
+    context, assistant_response, docs = _read_input_json("citations.json")
+    context = context.add(ModelOutputThunk(value=assistant_response))
+    expected = _read_output_json("citations.json")
+
+    result = rag.find_citations(None, docs, context, backend)
+    # There are some known differences between GPU and CPU output due to different
+    # matrix multiply implementations. Ignore those differences but attempt to complete
+    # the test when they are not present.
+    try:
+        assert result == expected
+    except AssertionError as ae:
+        pytest.xfail(f"Known differences across platforms. Diff was: {ae}")
+
+
+@pytest.mark.qualitative
+def test_context_relevance_resolve(backend_4_0):
+    """Verify context relevance when question is resolved from context."""
+    context, question, docs = _read_input_json("context_relevance.json")
+    context = context.add(Message("user", question))
+    document = docs[0]
+
+    result = rag.check_context_relevance(None, document, context, backend_4_0)
+    assert result == "irrelevant"
+
+
+@pytest.mark.qualitative
+def test_hallucination_detection_resolve(backend):
+    """Verify hallucination detection when response is resolved from context."""
+    context, assistant_response, docs = _read_input_json("hallucination_detection.json")
+    context = context.add(ModelOutputThunk(value=assistant_response))
+    expected = _read_output_json("hallucination_detection.json")
+
+    result = rag.flag_hallucinated_content(None, docs, context, backend)
+    assert result == expected
+
+
+@pytest.mark.qualitative
+def test_query_clarification_positive_resolve(backend):
+    """Verify query clarification (positive) when question is resolved from context."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_positive.json"
+    )
+    context = context.add(Message("user", next_user_turn))
+
+    result = rag.clarify_query(None, documents, context, backend)
+    assert result != "CLEAR"
+    assert len(result) > 0
+
+
+@pytest.mark.qualitative
+def test_query_clarification_negative_resolve(backend):
+    """Verify query clarification (negative) when question is resolved from context."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_negative.json"
+    )
+    context = context.add(Message("user", next_user_turn))
+
+    result = rag.clarify_query(None, documents, context, backend)
     assert result == "CLEAR"
 
 

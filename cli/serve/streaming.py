@@ -1,15 +1,20 @@
 """Streaming utilities for OpenAI-compatible server responses."""
 
 from collections.abc import AsyncGenerator
+from typing import Literal
 
 from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
-from mellea.helpers.openai_compatible_helpers import build_completion_usage
+from mellea.helpers.openai_compatible_helpers import (
+    build_completion_usage,
+    build_tool_calls,
+)
 
 from .models import (
     ChatCompletionChunk,
     ChatCompletionChunkChoice,
     ChatCompletionChunkDelta,
+    ChatCompletionMessageToolCallDelta,
     OpenAIError,
     OpenAIErrorResponse,
     StreamOptions,
@@ -98,6 +103,38 @@ async def stream_chat_completion_chunks(
                     )
                     yield f"data: {chunk.model_dump_json()}\n\n"
 
+        tool_calls_list = build_tool_calls(output)
+
+        if tool_calls_list:
+            # Convert to ChatCompletionMessageToolCallDelta objects with required index
+            tool_calls = [
+                ChatCompletionMessageToolCallDelta.model_validate({**tc, "index": idx})
+                for idx, tc in enumerate(tool_calls_list)
+            ]
+
+            # Emit tool calls in a separate chunk before the final chunk
+            tool_call_chunk = ChatCompletionChunk(
+                id=completion_id,
+                model=model,
+                created=created,
+                choices=[
+                    ChatCompletionChunkChoice(
+                        index=0,
+                        delta=ChatCompletionChunkDelta(tool_calls=tool_calls),
+                        finish_reason=None,
+                    )
+                ],
+                object="chat.completion.chunk",
+                system_fingerprint=system_fingerprint,
+            )
+            yield f"data: {tool_call_chunk.model_dump_json()}\n\n"
+
+        # Determine finish_reason based on tool calls
+        finish_reason: (
+            Literal["stop", "length", "content_filter", "tool_calls", "function_call"]
+            | None
+        ) = "tool_calls" if tool_calls_list else "stop"
+
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
         include_usage = stream_options is not None and stream_options.include_usage
@@ -112,7 +149,7 @@ async def stream_chat_completion_chunks(
                 ChatCompletionChunkChoice(
                     index=0,
                     delta=ChatCompletionChunkDelta(content=None),
-                    finish_reason="stop",
+                    finish_reason=finish_reason,
                 )
             ],
             object="chat.completion.chunk",

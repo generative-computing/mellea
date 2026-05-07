@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/use-images-and-vision"
 title: "Use Images and Vision Models"
 description: "Pass images to instruct() and chat() calls, and configure vision-capable backends."
 # diataxis: how-to
@@ -10,7 +11,7 @@ Mellea supports multimodal input: pass images alongside your text prompt to any
 **Prerequisites:** `pip install mellea pillow`, a vision-capable model downloaded and
 running.
 
-> **Backend note:** The default Ollama model (`granite4:micro`) does not support image
+> **Backend note:** The default Ollama model (`granite4.1:3b`) does not support image
 > input. You must switch to a vision-capable model such as `granite3.2-vision` or
 > `llava`. Not all backends support vision — see backend notes below.
 
@@ -22,6 +23,8 @@ Start a session with a vision-capable model, then pass a [Pillow](https://python
 `Image` object in the `images` list:
 
 ```python
+# Requires: mellea, pillow
+# Returns: str
 import pathlib
 from PIL import Image
 from mellea import start_session
@@ -44,6 +47,8 @@ For the OpenAI backend (and compatible endpoints), convert the PIL image to an
 `ImageBlock` first:
 
 ```python
+# Requires: mellea, pillow
+# Returns: str
 import pathlib
 from PIL import Image
 from mellea import MelleaSession
@@ -80,11 +85,13 @@ the PIL image is not directly available.
 
 ## Multi-turn vision with ChatContext
 
-Images passed to `instruct()` or `chat()` are stored in the [`ChatContext`](../guide/glossary#context)
+Images passed to `instruct()` or `chat()` are stored in the [`ChatContext`](../reference/glossary#context)
 turn history. Subsequent calls in the same session can reference the image without
 passing it again:
 
 ```python
+# Requires: mellea, pillow
+# Returns: None
 from PIL import Image
 from mellea import start_session
 from mellea.stdlib.context import ChatContext
@@ -121,5 +128,5 @@ To remove images from context on the next turn, pass `images=[]` explicitly.
 
 ---
 
-**See also:** [Working with Data](../guide/working-with-data) |
+**See also:** [Working with Data](../how-to/working-with-data) |
 [The Instruction Model](../concepts/instruct-validate-repair)

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/enforce-structured-output"
 title: "Enforce Structured Output"
 description: "Get JSON, Pydantic models, and typed values from LLM calls using @generative and instruct(format=...)."
 # diataxis: how-to
@@ -23,6 +24,8 @@ where the backend supports it, and retry with the IVR loop if parsing fails.
 ### Classification with `Literal`
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 
@@ -42,6 +45,8 @@ The model is constrained to return exactly one of the four allowed values.
 ### Simple Pydantic extraction
 
 ```python
+# Requires: mellea, pydantic
+# Returns: PersonInfo
 from pydantic import BaseModel
 from mellea import generative, start_session
 
@@ -66,6 +71,8 @@ print(person.name, person.role)
 Return a list of typed values or Pydantic models:
 
 ```python
+# Requires: mellea
+# Returns: list[str]
 from mellea import generative, start_session
 
 @generative
@@ -87,6 +94,8 @@ print(names)
 Complex structured extraction works naturally with nested Pydantic models:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: Company
 from pydantic import BaseModel
 from mellea import generative, start_session
 
@@ -119,6 +128,8 @@ When you need structured output alongside dynamic prompts, grounding context, or
 user variables, use the `format` parameter on `instruct()`:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: str
 from pydantic import BaseModel
 from mellea import start_session
 from mellea.stdlib.requirements import check, simple_validate
@@ -157,6 +168,8 @@ matching your model. To enforce semantic constraints (e.g., "the list must conta
 least 2 names"), combine `format` with a custom validation function:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: str
 from collections.abc import Callable
 from pydantic import BaseModel, ValidationError
 from mellea import start_session
@@ -210,6 +223,8 @@ You can also apply requirements to `@generative` output. When the return type is
 Pydantic model, the requirements operate on the JSON string representation:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: Summary
 from pydantic import BaseModel
 from mellea import generative, start_session
 from mellea.stdlib.requirements import req
@@ -260,5 +275,5 @@ Both patterns support the full IVR loop, requirements, sampling strategies, and
 
 ---
 
-**See also:** [Generative Functions](../guide/generative-functions) |
+**See also:** [Generative Functions](../how-to/generative-functions) |
 [The Requirements System](../concepts/requirements-system)

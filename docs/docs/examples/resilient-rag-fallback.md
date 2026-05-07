@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/resilient-rag-fallback"
 title: "Resilient RAG with Fallback Filtering"
 description: "Build a retrieval-augmented generation pipeline that uses FAISS for vector search and a @generative relevance filter to remove noise before generation."
 # diataxis: reference
@@ -6,7 +7,7 @@ description: "Build a retrieval-augmented generation pipeline that uses FAISS fo
 
 This example builds a complete RAG pipeline in three stages: embed and index a
 document corpus, retrieve candidates by semantic similarity, then use a
-[`@generative`](../guide/glossary#generative) boolean function to discard irrelevant candidates before passing
+[`@generative`](../reference/glossary#generative) boolean function to discard irrelevant candidates before passing
 the survivors to a grounded `m.instruct()` call.
 
 **Source file:** `docs/examples/rag/simple_rag_with_filter.py`
@@ -15,7 +16,7 @@ the survivors to a grounded `m.instruct()` call.
 
 - Building a FAISS flat inner-product index from sentence-transformer embeddings
 - Using `@generative` returning `bool` as a per-document relevance gate
-- Passing filtered documents as [`grounding_context`](../guide/glossary#grounding_context) to `m.instruct()`
+- Passing filtered documents as [`grounding_context`](../reference/glossary#grounding_context) to `m.instruct()`
 - Running the example with `uv run` via an inline PEP 723 dependency block
 
 ## Prerequisites
@@ -23,7 +24,7 @@ the survivors to a grounded `m.instruct()` call.
 - [Quick Start](../getting-started/quickstart) complete
 - `faiss-cpu` and `sentence-transformers` installed, **or** run via `uv run`
   which installs them automatically from the inline script block
-- Ollama running locally with `granite4:micro` pulled (or a Mistral model — see
+- Ollama running locally with `granite4.1:3b` pulled (or a Mistral model — see
   the session setup section below)
 
 Install dependencies manually if you are not using `uv run`:
@@ -58,6 +59,8 @@ Final answer
 ### Inline script dependencies
 
 ```python
+# Requires: faiss-cpu, sentence-transformers, mellea
+# Returns: N/A
 # pytest: skip_always
 # /// script
 # requires-python = ">=3.12"
@@ -77,6 +80,8 @@ execution. No manual `pip install` is needed.
 ### Imports and document corpus
 
 ```python
+# Requires: faiss-cpu, sentence-transformers, mellea
+# Returns: list[str]
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 
@@ -110,6 +115,8 @@ are L2-normalised, as `sentence-transformers` produces by default.
 ### Index creation and querying
 
 ```python
+# Requires: faiss-cpu, sentence-transformers
+# Returns: IndexFlatIP
 def create_index(model, ds: list[str]) -> IndexFlatIP:
     print("running encoding... ")
     embeddings = model.encode(ds)
@@ -135,6 +142,8 @@ overwhelming the context window.
 ### The relevance filter
 
 ```python
+# Requires: mellea
+# Returns: bool
 @generative
 def is_answer_relevant_to_question(answer: str, question: str) -> bool:
     """For the given question, determine whether the answer is relevant or not."""
@@ -207,12 +216,14 @@ entries. The template variable `{{query}}` is supplied separately via
 prompt correctly and trace each component independently.
 
 **`answer.value`** retrieves the raw string from the
-[`ModelOutputThunk`](../guide/glossary#modeloutputthunk) returned by
+[`ModelOutputThunk`](../reference/glossary#modeloutputthunk) returned by
 `m.instruct()`.
 
 ### Full file
 
 ```python
+# Requires: faiss-cpu, sentence-transformers, mellea
+# Returns: N/A
 # pytest: skip_always
 # /// script
 # requires-python = ">=3.12"

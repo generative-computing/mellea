@@ -13,7 +13,7 @@ These changes are specified by the Adapter that corresponds to a given Intrinsic
 
 ## Parts of an Intrinsic
 Intrinsics specify:
-- an adapter name (ie requirement_check)
+- an adapter name (ie requirement-check)
 - types of adapters suitable to be used (ie alora)
 - any kwargs necessary (ie a requirement like "make sure the last user message is...")
 

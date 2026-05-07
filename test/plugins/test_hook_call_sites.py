@@ -264,6 +264,48 @@ class TestComponentHookCallSites:
         await aact(action, ctx, backend, strategy=None)
         assert observed[0].component_type == "Instruction"
 
+    async def test_component_pre_execute_payload_has_context_view(self) -> None:
+        """COMPONENT_PRE_EXECUTE payload.context_view mirrors view_for_generation()."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.functional import aact
+
+        observed: list[Any] = []
+
+        @hook("component_pre_execute")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext.from_previous(SimpleContext(), CBlock("prior turn"))
+        action = Instruction("Context view test")
+
+        await aact(action, ctx, backend, strategy=None)
+        assert observed[0].context_view is not None
+        assert observed[0].context_view == ctx.view_for_generation()
+
+    async def test_component_pre_execute_empty_context_gives_empty_list(self) -> None:
+        """COMPONENT_PRE_EXECUTE on a fresh context gives an empty list, not None."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.functional import aact
+
+        observed: list[Any] = []
+
+        @hook("component_pre_execute")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        action = Instruction("Fresh context")
+
+        await aact(action, ctx, backend, strategy=None)
+        assert observed[0].context_view is not None
+        assert observed[0].context_view == []
+
     async def test_component_post_success_fires_in_aact(self) -> None:
         """COMPONENT_POST_SUCCESS fires in aact() after successful generation."""
         from mellea.stdlib.components import Instruction

@@ -1,22 +1,23 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/03-using-generative-stubs"
 title: "Tutorial: Using Generative Stubs"
 description: "Replace ad-hoc instruct() calls with typed, composable @generative functions."
 # diataxis: tutorial
 ---
 
 This tutorial shows how to build composable LLM-backed functions using the
-[`@generative`](../guide/glossary#generative) decorator — functions with typed return values, docstring-driven
+[`@generative`](../reference/glossary#generative) decorator — functions with typed return values, docstring-driven
 prompts, and consistent behaviour that you can reuse across a codebase.
 
 By the end you will have covered:
 
 - Defining `@generative` functions with typed returns
 - Composing multiple generative functions into a pipeline
-- Controlling behaviour via [`ChatContext`](../guide/glossary#chatcontext) and context injection
+- Controlling behaviour via [`ChatContext`](../reference/glossary#chatcontext) and context injection
 - Precondition and postcondition validation patterns
 
 **Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 
@@ -26,6 +27,8 @@ A `@generative` function uses its name, type annotation, and docstring as the
 prompt. Call it by passing a `MelleaSession` as the first argument:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea import generative
 
@@ -36,8 +39,13 @@ def classify_sentiment(text: str) -> str:
 m = mellea.start_session()
 result = classify_sentiment(m, text="The product arrived damaged and support ignored me.")
 print(str(result))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+negative
+```
+
+> **Note:** Output may vary — LLM responses depend on model and temperature.
 
 The return type annotation shapes the output. With `-> str`, the model returns
 free text. For constrained output, use `Literal`:
@@ -58,6 +66,8 @@ Generative functions support any JSON-serialisable return type — `str`, `int`,
 `bool`, `list`, `dict`, and Pydantic models:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: FeedbackAnalysis
 from typing import Literal
 
 import mellea
@@ -79,8 +89,13 @@ result = analyse_feedback(
     text="The onboarding took two hours and nothing was explained clearly.",
 )
 print(result.sentiment, result.key_issue, result.actionable)
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+negative unclear onboarding process True
+```
+
+> **Note:** With a Pydantic return type, `result` is a validated `FeedbackAnalysis` instance. `result.sentiment` will always be one of `"positive"`, `"negative"`, or `"neutral"`.
 
 The return value is a validated `FeedbackAnalysis` instance. If the model output
 doesn't conform, Mellea retries.
@@ -91,10 +106,18 @@ Because each `@generative` function is just a Python function, you compose them
 the same way as any other code:
 
 ```python
+# Requires: mellea
+# Returns: str
+from typing import Literal
+
 import mellea
 from mellea import generative
+from pydantic import BaseModel
 
-# FeedbackAnalysis is the Pydantic model from Step 2 above.
+class FeedbackAnalysis(BaseModel):
+    sentiment: Literal["positive", "negative", "neutral"]
+    key_issue: str
+    actionable: bool
 
 @generative
 def analyse_feedback(text: str) -> FeedbackAnalysis:
@@ -119,8 +142,17 @@ def handle_ticket(m, feedback: str, language: str = "English") -> str:
 
 m = mellea.start_session()
 print(handle_ticket(m, "The app crashes on login every time.", "French"))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Cher(e) utilisateur valoré(e), nous sommes vraiment désolés de savoir
+que vous rencontrez des problèmes de crash. Notre équipe travaille
+activement à la résolution de ce problème et à l'amélioration de votre
+expérience avec notre service. Nous vous remercions pour votre
+compréhension et votre patience.
+```
+
+> **Note:** LLM output is non-deterministic. The response will be in French (or whichever target language you specify) and will vary in wording.
 
 Each function is an independent LLM call. The composition logic stays in
 ordinary Python.
@@ -133,6 +165,7 @@ A key advantage of `@generative` functions over direct `instruct()` calls: you c
 change the behaviour of every function in a session by injecting context once.
 
 ```python
+# Requires: mellea
 from mellea import generative, start_session
 from mellea.stdlib.context import ChatContext
 from mellea.core import CBlock
@@ -154,7 +187,6 @@ grade = grade_essay(m, essay=essay)
 feedback = give_feedback(m, essay=essay)
 print(f"Grade: {grade}")
 print(f"Feedback: {feedback}")
-# Output will vary — LLM responses depend on model and temperature.
 
 # Inject a persona — both functions now behave as this grader.
 m.ctx = m.ctx.add(CBlock(
@@ -167,7 +199,6 @@ grade = grade_essay(m, essay=essay)
 feedback = give_feedback(m, essay=essay)
 print(f"Grade with teacher context: {grade}")
 print(f"Feedback with teacher context: {feedback}")
-# Output will vary — LLM responses depend on model and temperature.
 
 # Reset and try a different persona.
 m.reset()
@@ -178,8 +209,22 @@ m.ctx = m.ctx.add(CBlock(
 
 grade = grade_essay(m, essay=essay)
 print(f"Grade with grammar context: {grade}")
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Grade: 85
+Feedback: ['Add more descriptive language to make your writing more vivid.',
+           'Include specific examples or details that support your point.',
+           'Consider adding a thesis statement to clarify the argument.']
+Grade with teacher context: 85
+Feedback with teacher context: [
+  'Add more descriptive language to make your writing more vivid.',
+  'Include specific examples or details that support your point.',
+  'Consider adding a thesis statement to clarify the argument.']
+Grade with grammar context: 95
+```
+
+> **Note:** LLM output is non-deterministic. Output will vary.
 
 `m.reset()` clears injected context while keeping the session and backend alive.
 
@@ -189,6 +234,8 @@ For production pipelines, validate inputs before the LLM call and outputs
 afterwards using plain Python:
 
 ```python
+# Requires: mellea
+# Returns: None
 from typing import Literal
 from mellea import generative, start_session, MelleaSession
 
@@ -235,8 +282,24 @@ try:
     print(render_advice(m, profile))
 except ValueError as e:
     print(f"Validation failed: {e}")
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Dear Client,
+
+Given your age of 62 and a conservative risk tolerance, it's crucial
+to maintain the stability of your investments while also ensuring you
+can access funds within three years. Here are some steps we recommend:
+
+1. **Diversification**: Spread your investments across different asset
+   classes such as stocks, bonds, real estate etc., to minimize risk.
+2. **Liquidity**: Ensure a portion of your portfolio is in liquid
+   assets or short-term bonds for easy access within the next 3 years.
+3. **Volatility**: Consider investing in low-volatility funds or ETFs
+   which can help mitigate the impact of market swings on your portfolio.
+```
+
+> **Note:** LLM output is non-deterministic. The letter will vary in wording but should be 50+ words and free of prohibited compliance language (`"guaranteed returns"`, `"no risk"`, etc.). If either check fails, you will see `Validation failed: ...` instead.
 
 The precondition check runs before the expensive letter generation. The
 postcondition check uses a second `@generative` call as a lightweight verifier.
@@ -258,4 +321,4 @@ context-steerable generative functions:
 
 ---
 
-**See also:** [Generative Functions](../guide/generative-functions) | [The Requirements System](../concepts/requirements-system) | [Write Custom Verifiers](../how-to/write-custom-verifiers)
+**See also:** [Generative Functions](../how-to/generative-functions) | [The Requirements System](../concepts/requirements-system) | [Write Custom Verifiers](../how-to/write-custom-verifiers)

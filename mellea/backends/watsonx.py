@@ -379,7 +379,12 @@ class WatsonxAIBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+        conversation.extend(
+            [{"role": m.role, "content": self.formatter.print(m)} for m in messages]
+        )
 
         if _format is not None:
             model_opts["response_format"] = {
@@ -457,8 +462,8 @@ class WatsonxAIBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.model = str(self._get_watsonx_model_id())
-        output.provider = "watsonx"
+        output.generation.model = str(self._get_watsonx_model_id())
+        output.generation.provider = "watsonx"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -592,11 +597,11 @@ class WatsonxAIBackend(FormatterBackend):
 
         # Populate standardized usage field (WatsonX uses OpenAI format)
         if usage:
-            mot.usage = usage
+            mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.model = str(self._get_watsonx_model_id())
-        mot.provider = "watsonx"
+        mot.generation.model = str(self._get_watsonx_model_id())
+        mot.generation.provider = "watsonx"
 
         # Record tracing if span exists
         span = mot._meta.get("_telemetry_span")

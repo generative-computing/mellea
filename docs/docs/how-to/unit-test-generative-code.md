@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/unit-test-generative-code"
 title: "Unit Test Generative Code"
 description: "Write reliable tests for @generative functions using pytest markers and output validation."
 # diataxis: how-to
@@ -18,13 +19,16 @@ fast and reliable.
 
 ## Three levels of assertion
 
-Every test for a `@generative` function falls into one of three levels:
+Every test for a `@generative` function falls into one of four levels:
 
 | Level | What you assert | Deterministic? |
 | ----- | --------------- | -------------- |
 | **Type check** | `isinstance(result, bool)` | Yes — constrained decoding always returns the declared type |
 | **Structural check** | `result in ["positive", "negative"]` or field names present | Yes — schema enforcement is deterministic |
 | **Qualitative check** | `assert result is True` | No — depends on the model and prompt |
+| **Semantic evaluation** | Judge model scores output against reference responses | No — run separately, not a pytest assertion |
+
+*For levels 1–3, use pytest with the patterns below. For semantic evaluation against reference examples — where you want a judge model to score your model's outputs in bulk — see [The `unit_test_eval` component for Generative Unit Tests](#the-unit_test_eval-component-for-generative-unit-tests) at the end of this page.*
 
 Type and structural checks run in CI. Qualitative checks carry
 `@pytest.mark.qualitative` and are skipped in CI when `CICD=1` is set.
@@ -35,12 +39,14 @@ Use a `backend` fixture to handle CI versus local configuration, and a
 function-scoped `session` fixture to give each test a clean slate:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 import os
 import pytest
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 
-_MODEL_ID = "granite4:micro"
+_MODEL_ID = "granite4.1:3b"
 
 
 @pytest.fixture(scope="module")
@@ -90,6 +96,8 @@ The return type of a `@generative` function is enforced by constrained decoding
 or output parsing. An `isinstance` check never depends on model behaviour:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from typing import Literal
 
 import pytest
@@ -114,6 +122,8 @@ For `Literal` return types, membership in the allowed values is enforced before
 your test sees the result. The assertion is still deterministic:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 def test_classify_sentiment_structure(session):
     result = classify_sentiment(session, text="I love this product!")
     assert result in ["positive", "negative"]
@@ -123,6 +133,8 @@ For Pydantic model return types, assert that the required fields are present and
 have the right types:
 
 ```python
+# Requires: mellea, pydantic, pytest
+# Returns: None
 from pydantic import BaseModel
 from mellea import generative
 
@@ -156,6 +168,8 @@ When you want to assert on the *content* of a response, add
 (`CICD=1`) and are intended to run locally or in a dedicated quality gate:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 import pytest
 from mellea import generative
 
@@ -189,6 +203,8 @@ def test_classify_sentiment_positive(session):
 Assert that the call returns a value and that the value has the right type:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
@@ -208,6 +224,8 @@ def test_instruct_returns_string(session):
 forwarded to the model. This is useful when testing custom model option handling:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.backends import ModelOption
 
 
@@ -236,6 +254,8 @@ inside the IVR loop, or directly in tests to verify that your validator logic
 behaves correctly:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.stdlib.requirements import Requirement, simple_validate
 
 
@@ -259,6 +279,8 @@ When you attach `simple_validate` to a `Requirement`, it checks the last model
 output as a string, regardless of how the output was parsed:
 
 ```python
+# Requires: mellea, pytest
+# Returns: None
 from mellea.stdlib.requirements import Requirement, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
@@ -280,12 +302,21 @@ def test_with_simple_validate_requirement(session):
     assert isinstance(res.value, str)
 ```
 
-## The `unit_test_eval` component
+## The `unit_test_eval` component for Generative Unit Tests
 
 `mellea.stdlib.components.unit_test_eval` provides `TestBasedEval`, a
-`Component` that formats an LLM-as-a-judge evaluation task. You load test cases
+`Component` that formats an LLM-as-a-judge evaluation task for generative unit testing. You load test cases
 from a JSON file and pass them to a judge session. This is useful for offline
-evaluation pipelines, not for individual pytest assertions.
+evaluation pipelines,
+not for individual pytest assertions.
+
+Given a task, you provide test cases that consist of evaluation instructions
+and a set of examples, along with associated metadata. Each example, in conversational format, consists of an input
+and (optional) target / reference response(s), which can be used to guide evaluation along with the evaluation instructions.
+They can either be instantiated inline or in JSON format, with a separate JSON file per task.
+
+There are no limitations on the number of test examples per task, and each input can have multiple reference responses.
+The evaluation instructions apply to all the test cases in your task.
 
 ### JSON file format
 
@@ -294,15 +325,23 @@ Each entry in the JSON array defines one test:
 ```json
 [
   {
-    "source": "email-classifier",
-    "name": "positive_case_001",
-    "instructions": "Evaluate whether the prediction correctly identifies the category.",
+    "source": "professional-email-writing",
+    "name": "case_001",
+    "instructions": "The email should follow the instructions in the input.",
     "id": "tc-001",
     "examples": [
       {
         "input_id": "ex-001",
-        "input": [{"role": "user", "content": "Is this email spam?"}],
-        "targets": [{"role": "assistant", "content": "no"}]
+        "input": [{"role": "user", "content": "Write a brief professional follow-up email after a job interview"}],
+        "targets": [
+            {"role": "assistant", "content": "Thank you for taking the time to speak with me yesterday. I look forward to hearing about next steps at your convenience."},
+            {"role": "assistant", "content": "I appreciate the opportunity to interview yesterday. Looking forward to hearing about next steps."}
+        ]
+      },
+      {
+        "input_id": "ex-002",
+        "input": [{"role": "user", "content": "I just finished a client demo can you create a formal thank-you email"}],
+        "targets": [{"role": "assistant", "content": "It was a pleasure sharing a product demo with you. Thank you for meeting with us."}]
       }
     ]
   }
@@ -312,34 +351,46 @@ Each entry in the JSON array defines one test:
 ### Loading and running evaluations
 
 ```python
-from mellea import MelleaSession, start_session
+# Requires: mellea
+# Returns: None
+from mellea import start_session
+from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
-# Load one TestBasedEval per test definition in the file.
-test_evals = TestBasedEval.from_json_file("tests/eval_data/email_classifier.json")
+test_evals = TestBasedEval.from_json_file("tests/eval_data/email_writer.json")
 
-judge_session = start_session()
+judge_session = start_session(backend_name="ollama", model_id="granite4.1:3b")
+generation_session = start_session(backend_name="ollama", model_id="granite4.1:3b")
 
 for eval_case in test_evals:
     for idx, input_text in enumerate(eval_case.inputs):
-        # Generate the prediction from the system under test.
-        prediction = "no"  # replace with your actual model call
+        prediction = generation_session.act(
+            SimpleComponent(instruction=input_text)
+        ).value
 
         targets = eval_case.targets[idx] if eval_case.targets else []
         eval_case.set_judge_context(input_text, prediction, targets)
 
-        verdict = judge_session.instruct(eval_case)
+        verdict = judge_session.act(eval_case)
+        # Note: verdict.value is the raw JSON string returned by the judge — {"score": 0|1, 
+        # "justification": "..."}. Score 0 means the guidelines were violated; score 1 means the 
+        # output is well aligned. Parse it to use the score programmatically:
         print(f"{eval_case.name}: {verdict.value}")
 ```
 
 > **Note:** `TestBasedEval` calls the judge model once per input. For large
 > evaluation sets, consider batching or running evaluations asynchronously.
+> **CLI alternative:** The same evaluation can be run without writing Python:
+> `m eval run tests/eval_data/email_writer.json --backend ollama --model granite4.1:3b`
+> See `m eval run --help` for full options.
 
 ## CI strategy
 
 A simple `conftest.py` that skips qualitative tests in CI:
 
 ```python
+# Requires: pytest
+# Returns: None
 # conftest.py
 import os
 import pytest
@@ -385,3 +436,5 @@ pytest -m qualitative
   `Requirement`, `simple_validate`, and `check` interact with the IVR loop
 - [Handling Exceptions](../how-to/handling-exceptions) —
   catch and diagnose errors that occur during generation
+- [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
+  the `Requirement`-based approach for inline judge evaluation

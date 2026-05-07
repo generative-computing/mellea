@@ -7,7 +7,7 @@ import time
 from collections.abc import Coroutine
 from copy import copy
 from typing import Annotated, Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pydantic
 import pytest
@@ -41,6 +41,9 @@ from mellea.core import (
     default_output_to_bool,
 )
 from mellea.formatters import TemplateFormatter
+from mellea.formatters.granite import AssistantMessage, ChatCompletionResponse
+from mellea.formatters.granite.base.types import ChatCompletionResponseChoice
+from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
@@ -51,17 +54,15 @@ def backend():
     """Shared HuggingFace backend for all tests in this module.
 
     Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    The "requirement_check" intrinsic only has adapters for Granite 3.3 models.
+    The "requirement-check" intrinsic only has adapters for Granite 3.3 models.
     Granite 4 adapters are not yet available.
     Other intrinsics are not affected by this issue.
     """
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
-        cache=SimpleLRUCache(5),
+        model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
     )
     backend.add_adapter(
-        IntrinsicAdapter("requirement_check", base_model_name=backend.base_model_name)
+        IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
     )
     backend.add_adapter(
         IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
@@ -85,7 +86,7 @@ def session(backend):
 def test_adapters(backend) -> None:
     assert len(backend._added_adapters.items()) > 0
 
-    expected_qualified_name = "requirement_check_alora"
+    expected_qualified_name = "requirement-check_alora"
     adapter = backend._added_adapters[expected_qualified_name]
     backend.load_adapter(adapter.qualified_name)
     assert adapter.qualified_name in backend._loaded_adapters
@@ -122,7 +123,7 @@ def test_constraint_lora_with_requirement(session, backend) -> None:
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert "requirement_likelihood" in str(val_result.reason)
+    assert "requirement_check" in str(val_result.reason)
 
 
 @pytest.mark.qualitative
@@ -155,7 +156,7 @@ def test_constraint_lora_override_does_not_override_alora(session, backend) -> N
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert "requirement_likelihood" in str(val_result.reason)
+    assert "requirement_check" in str(val_result.reason)
 
     # Ensure the ValidationResult has its thunk and context set. Ensure the context has
     # the correct actions / results in it.
@@ -324,9 +325,9 @@ async def test_async_parallel_requests(session) -> None:
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
-    assert mot1.streaming is True
-    assert mot1.ttfb_ms is not None
-    assert mot1.ttfb_ms > 0
+    assert mot1.generation.streaming is True
+    assert mot1.generation.ttfb_ms is not None
+    assert mot1.generation.ttfb_ms > 0
 
 
 @pytest.mark.qualitative
@@ -339,14 +340,14 @@ async def test_async_avalue(session) -> None:
     assert m1_final_val == mot1.value
 
     # Verify telemetry fields are populated
-    assert mot1.usage is not None
-    assert mot1.usage["prompt_tokens"] >= 0
-    assert mot1.usage["completion_tokens"] > 0
-    assert mot1.usage["total_tokens"] > 0
-    assert isinstance(mot1.model, str)
-    assert mot1.provider == "huggingface"
-    assert mot1.streaming is False
-    assert mot1.ttfb_ms is None
+    assert mot1.generation.usage is not None
+    assert mot1.generation.usage["prompt_tokens"] >= 0
+    assert mot1.generation.usage["completion_tokens"] > 0
+    assert mot1.generation.usage["total_tokens"] > 0
+    assert isinstance(mot1.generation.model, str)
+    assert mot1.generation.provider == "huggingface"
+    assert mot1.generation.streaming is False
+    assert mot1.generation.ttfb_ms is None
 
 
 @pytest.mark.qualitative
@@ -363,7 +364,7 @@ async def test_generate_with_lock(backend) -> None:
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement-check", base_model_name=b.base_model_name)
     )
     b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
 
@@ -394,7 +395,7 @@ async def test_generate_with_lock(backend) -> None:
     ctx = ChatContext().add(Message("user", "hello"))
     act = CBlock("hello")
     raw_act = CBlock("goodb")
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
     answerability_intrinsic = Intrinsic("answerability")
 
     def call_backend_generate():
@@ -459,7 +460,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))
     act = CBlock("hello")
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
     answerability_intrinsic = Intrinsic("answerability")
 
     # Create a few model output thunks:
@@ -513,7 +514,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
 @pytest.mark.qualitative
 async def test_streaming_error_with_intrinsics(backend) -> None:
     ctx = ChatContext().add(Message("user", "hello"))
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
 
     with pytest.raises(Exception, match="Intrinsics do not support streaming"):
         _, _ = await backend.generate_from_context(
@@ -537,7 +538,7 @@ async def test_error_during_generate_with_lock(backend) -> None:
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement-check", base_model_name=b.base_model_name)
     )
 
     regular_generate = b._model.generate
@@ -556,7 +557,7 @@ async def test_error_during_generate_with_lock(backend) -> None:
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))
     act = CBlock("hello")
-    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+    req_intrinsic = Intrinsic("requirement-check", {"requirement": "did nothing"})
 
     reg_mot, _ = await b.generate_from_context(act, ctx)
     req_mot, _ = await b.generate_from_context(req_intrinsic, ctx)
@@ -593,6 +594,228 @@ def test_assert_correct_adapters() -> None:
     )  # This will fail if peft ever changes the error message.
     with pytest.raises(AssertionError):
         _assert_correct_adapters("new", model)
+
+
+def _canned_hf_response(content: str = '"answerable"') -> ChatCompletionResponse:
+    """Build a minimal ChatCompletionResponse for mocked HF generation."""
+    return ChatCompletionResponse(
+        choices=[
+            ChatCompletionResponseChoice(
+                index=0, message=AssistantMessage(content=content)
+            )
+        ]
+    )
+
+
+async def test_intrinsic_temperature_forwarded(backend) -> None:
+    """User-provided temperature flows through to the HF generate call."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.TEMPERATURE: 0.7},
+        )
+        # Don't call avalue() — the canned response lacks logprobs for the
+        # answerability result processor.  We only need the generate call.
+        assert _mot._generate is not None
+        await _mot._generate
+
+    gi = captured["generate_input"]
+    assert gi["temperature"] == 0.7
+    assert gi["do_sample"] is True
+
+
+async def test_intrinsic_model_options_forwarded(backend) -> None:
+    """All applicable model options are forwarded to the HF generate call."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                ModelOption.TEMPERATURE: 0.7,
+                ModelOption.MAX_NEW_TOKENS: 999,
+                ModelOption.SYSTEM_PROMPT: "You are helpful",
+            },
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    gi = captured["generate_input"]
+    # Temperature is forwarded.
+    assert gi["temperature"] == 0.7
+    # MAX_NEW_TOKENS is remapped to max_new_tokens and overrides io.yaml's
+    # max_completion_tokens: 6.
+    assert gi.get("max_new_tokens") == 999
+    # Sentinel keys must not leak into generate_input.
+    assert ModelOption.SYSTEM_PROMPT not in gi
+    assert ModelOption.MAX_NEW_TOKENS not in gi
+
+
+async def test_intrinsic_temperature_overrides_io_yaml(backend) -> None:
+    """User temperature wins over io.yaml default without duplicates."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    # The answerability io.yaml sets temperature via the rewriter; user value
+    # must override it without causing a conflict.
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.TEMPERATURE: 0.3},
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    gi = captured["generate_input"]
+    # User value (0.3) must override any io.yaml default.
+    assert gi["temperature"] == 0.3
+    assert gi["do_sample"] is True
+
+
+async def test_intrinsic_tools_in_generate_input(backend) -> None:
+    """Tools passed via tool_calls=True appear in the tokenized generate input."""
+    from mellea.backends.tools import MelleaTool
+
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    def get_temperature(location: str) -> int:
+        """Returns the temperature of a city.
+
+        Args:
+            location: A city name.
+        """
+        return 21
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            tool_calls=True,
+            model_options={
+                ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]
+            },
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    # Decode the input tokens and verify the tool name and tool markers are present.
+    input_tokens = captured["generate_input"]["input_tokens"]
+    decoded = backend._tokenizer.decode(input_tokens[0])
+    print(decoded)
+    assert "get_temperature" in decoded
+    assert "access to the following tools" in decoded, (
+        "expected string from system prompt with tool calls not found; if you changed the model, that might have caused this issue"
+    )
+
+
+async def test_intrinsic_streaming_raises(backend) -> None:
+    """Intrinsics do not support streaming — raises NotImplementedError."""
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with pytest.raises(NotImplementedError, match="do not support streaming"):
+        await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.STREAM: True},
+        )
+
+
+async def test_unknown_intrinsic_no_adapter_raises(backend) -> None:
+    """Calling an unknown intrinsic with no registered adapter raises ValueError."""
+    ctx = ChatContext().add(Message("user", "test"))
+
+    with pytest.raises(ValueError, match="Unknown intrinsic name"):
+        await mfuncs.aact(
+            Intrinsic("nonexistent_intrinsic"), ctx, backend, strategy=None
+        )
+
+
+async def test_known_intrinsic_no_adapter_raises(backend) -> None:
+    """Calling an intrinsic with no registered adapter raises ValueError."""
+    ctx = ChatContext().add(Message("user", "test"))
+
+    with pytest.raises(ValueError, match="has no adapter"):
+        await mfuncs.aact(
+            # Explicitly pass in a known Intrinsic that isn't loaded.
+            Intrinsic("uncertainty"),
+            ctx,
+            backend,
+            strategy=None,
+        )
+
+
+async def test_intrinsic_no_system_prompt(backend) -> None:
+    """No system message prepended when SYSTEM_PROMPT is absent."""
+    captured: dict = {}
+
+    def mock_generate_with_transformers(tokenizer, model, generate_input, other_input):
+        captured["generate_input"] = generate_input.copy()
+        return _canned_hf_response()
+
+    ctx = ChatContext().add(Message("user", "Is the sky blue?"))
+
+    with patch(
+        "mellea.formatters.granite.base.util.generate_with_transformers",
+        side_effect=mock_generate_with_transformers,
+    ):
+        _mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        assert _mot._generate is not None
+        await _mot._generate
+
+    # Verify generation completed without error.
+    assert "generate_input" in captured
 
 
 if __name__ == "__main__":

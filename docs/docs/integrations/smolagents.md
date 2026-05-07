@@ -1,11 +1,12 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/smolagents"
 title: "smolagents"
 description: "Use HuggingFace smolagents tools inside a Mellea session."
 # diataxis: how-to
 ---
 
 `MelleaTool.from_smolagents()` wraps any [smolagents](https://huggingface.co/docs/smolagents)
-`Tool` instance so it can be passed to any [`MelleaSession`](../guide/glossary#melleasession)
+`Tool` instance so it can be passed to any [`MelleaSession`](../reference/glossary#melleasession)
 call. The HuggingFace ecosystem provides many pre-built tools — `PythonInterpreterTool`,
 `DuckDuckGoSearchTool`, `WikipediaSearchTool`, and others.
 
@@ -14,6 +15,8 @@ call. The HuggingFace ecosystem provides many pre-built tools — `PythonInterpr
 ## Using smolagents tools
 
 ```python
+# Requires: mellea[smolagents], mellea[ollama]
+# Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
@@ -44,7 +47,7 @@ if result.tool_calls:
 description and parameter types are preserved exactly.
 
 > **Backend note:** Tool calling requires a backend and model that support function
-> calling (e.g., Ollama with `granite4:micro`, OpenAI with `gpt-4o`). The default
+> calling (e.g., Ollama with `granite4.1:3b`, OpenAI with `gpt-4o`). The default
 > Ollama setup supports this.
 >
 > **Full example:** [`docs/examples/tools/smolagents_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tools/smolagents_example.py)
@@ -55,11 +58,11 @@ description and parameter types are preserved exactly.
 | -------- | --- |
 | Your tool exists as a LangChain `BaseTool` | [`MelleaTool.from_langchain(tool)`](./langchain) |
 | Your tool exists as a smolagents `Tool` | `MelleaTool.from_smolagents(tool)` |
-| You have a plain Python function to expose | [`@tool` decorator](../guide/tools-and-agents) |
+| You have a plain Python function to expose | [`@tool` decorator](../how-to/tools-and-agents) |
 | You have LangChain message history to continue | [`convert_to_openai_messages` → `ChatContext`](./langchain.md#seeding-a-session-with-langchain-message-history) |
 | You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve) |
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) |
+**See also:** [Tools and Agents](../how-to/tools-and-agents) |
 [Context and Sessions](../concepts/context-and-sessions)

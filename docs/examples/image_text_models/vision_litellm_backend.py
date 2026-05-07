@@ -14,7 +14,10 @@ from mellea.backends.openai import OpenAIBackend
 from mellea.core import ImageBlock
 
 # use LiteLLM to talk to Ollama or anthropic or.....
-m = MelleaSession(LiteLLMBackend("ollama/granite3.2-vision"))
+_ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
+if not _ollama_host.startswith("http"):
+    _ollama_host = f"http://{_ollama_host}"
+m = MelleaSession(LiteLLMBackend("ollama/granite3.2-vision", base_url=_ollama_host))
 # m = MelleaSession(LiteLLMBackend("ollama/llava"))
 # m = MelleaSession(LiteLLMBackend("anthropic/claude-3-haiku-20240307"))
 

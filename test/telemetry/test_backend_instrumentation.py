@@ -39,9 +39,9 @@ def test_get_model_id_str_plain_string():
 
 def test_get_model_id_str_hf_model_name():
     backend = _BackendWithHFModelId(
-        model_id=_HFModelId(hf_model_name="ibm-granite/granite-4.0-micro")
+        model_id=_HFModelId(hf_model_name="ibm-granite/granite-4.1-3b")
     )
-    assert get_model_id_str(backend) == "ibm-granite/granite-4.0-micro"
+    assert get_model_id_str(backend) == "ibm-granite/granite-4.1-3b"
 
 
 def test_get_model_id_str_no_model_id_returns_class_name():

@@ -62,6 +62,18 @@ def test_reorder_circular_raises():
         reorder_subtasks(subtasks)
 
 
+def test_reorder_duplicate_tag_raises():
+    subtasks = [_subtask("a", "1. Task A"), _subtask("a", "2. Also A")]
+    with pytest.raises(ValueError, match="Duplicate subtask tag"):
+        reorder_subtasks(subtasks)
+
+
+def test_reorder_duplicate_tag_case_insensitive_raises():
+    subtasks = [_subtask("Step_A", "1. Task A"), _subtask("step_a", "2. Also A")]
+    with pytest.raises(ValueError, match="Duplicate subtask tag"):
+        reorder_subtasks(subtasks)
+
+
 def test_reorder_renumbers_subtasks():
     subtasks = [
         _subtask("b", "2. Task B", depends_on=["a"]),

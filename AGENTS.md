@@ -89,7 +89,7 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 - Prefer primitives over classes
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
 - **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`. Test the generator: `uv run pytest tooling/docs-autogen/test_cli_reference.py -v`. Full pipeline docs: [`tooling/docs-autogen/README.md`](tooling/docs-autogen/README.md).
-- **Backend telemetry fields**: All backends must populate `mot.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.model` (str), and `mot.provider` (str) in their `post_processing()` method. `mot.streaming` (bool) and `mot.ttfb_ms` (float | None) are set automatically in `astream()` — backends do not need to set them. Metrics are automatically recorded by `TokenMetricsPlugin`, `LatencyMetricsPlugin`, and `ErrorMetricsPlugin` — don't add manual `record_token_usage_metrics()`, `record_request_duration()`, or `record_error()` calls.
+- **Backend telemetry fields**: All backends must populate `mot.generation.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.generation.model` (str), and `mot.generation.provider` (str) in their `post_processing()` method. These fields live on `mot.generation`, a `GenerationMetadata` dataclass. `mot.generation.streaming` (bool) and `mot.generation.ttfb_ms` (float | None) are set automatically in `astream()` — backends do not need to set them. Metrics are automatically recorded by `TokenMetricsPlugin`, `LatencyMetricsPlugin`, and `ErrorMetricsPlugin` — don't add manual `record_token_usage_metrics()`, `record_request_duration()`, or `record_error()` calls.
 
 ## 6. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
@@ -134,6 +134,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 - Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
+- **Static type checks** live in `test/typing/` as `check_*.py` files (not `test_*.py`, so pytest skips them). They use `typing.assert_type` inside function bodies to verify overload resolution and generic parameterization — e.g., that `session.aact(..., await_result=True)` narrows to `ComputedModelOutputThunk[str]`. Verification happens via `uv run mypy .`; the functions are never executed. Add a new `check_*.py` here when introducing or modifying `@overload` signatures or generic type parameters on public APIs.
 
 ## 12. Writing Docs
 
@@ -178,7 +179,7 @@ Intrinsics are specialized LoRA adapters that add task-specific capabilities (RA
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1) |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
@@ -187,7 +188,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = (
     ChatContext()
     .add(Message("user", "What is the square root of 4?"))
@@ -223,5 +224,5 @@ https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name
 
 Core and Guardian intrinsics (include model subfolder):
 ```
-https://huggingface.co/ibm-granite/granitelib-{core,guardian}-r1.0/blob/main/{intrinsic_name}/granite-4.0-micro/README.md
+https://huggingface.co/ibm-granite/granitelib-{core,guardian,rag}-r1.0/blob/main/{intrinsic_name}/granite-4.1-{3b,8b,30b}/{lora,alora}/README.md
 ```

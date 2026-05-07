@@ -4,6 +4,8 @@ A ``Requirement`` pairs a human-readable description with a validation function 
 inspects a ``Context`` (and optionally a backend) to determine whether a model output
 meets a constraint. ``ValidationResult`` carries the pass/fail verdict along with an
 optional reason, score, and the ``ModelOutputThunk`` produced during validation.
+``PartialValidationResult`` provides a tri-state variant (``"pass"``, ``"fail"``,
+``"unknown"``) for per-chunk streaming validation.
 Helper factories such as ``default_output_to_bool`` make it easy to build requirements
 without boilerplate.
 """
@@ -11,6 +13,7 @@ without boilerplate.
 import re
 from collections.abc import Callable
 from copy import copy
+from typing import Literal
 
 from .backend import Backend, BaseModelSubclass
 from .base import CBlock, Component, Context, ModelOutputThunk, TemplateRepresentation
@@ -75,6 +78,97 @@ class ValidationResult:
     def __bool__(self) -> bool:
         """Return a boolean value based on the result."""
         return self.as_bool()
+
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the validation result."""
+        return f"ValidationResult({self._result!r}, reason={self._reason!r}, score={self._score!r})"
+
+
+class PartialValidationResult:
+    """Tri-state result from per-chunk streaming validation.
+
+    Unlike :class:`ValidationResult`, which stores its verdict as a private
+    ``_result: bool``, this class exposes ``success`` as a public property.
+    The asymmetry is intentional: the tri-state value cannot be recovered from
+    a ``bool``, so a public property is the only way to distinguish ``"fail"``
+    from ``"unknown"`` after construction.
+
+    Args:
+        success: Validation state — ``"pass"`` (constraint satisfied so far),
+            ``"fail"`` (constraint violated, stop streaming), or
+            ``"unknown"`` (insufficient data yet, continue streaming).
+        reason: Optional human-readable explanation.
+        score: Optional numeric confidence score.
+        thunk: Optional ModelOutputThunk from the validation call.
+        context: Optional context associated with the validation call.
+
+    """
+
+    def __init__(
+        self,
+        success: Literal["pass", "fail", "unknown"],
+        *,
+        reason: str | None = None,
+        score: float | None = None,
+        thunk: ModelOutputThunk | None = None,
+        context: Context | None = None,
+    ):
+        """Initialize PartialValidationResult with a tri-state success value."""
+        if success not in ("pass", "fail", "unknown"):
+            raise ValueError(
+                f"success must be 'pass', 'fail', or 'unknown', got {success!r}"
+            )
+        self._success: Literal["pass", "fail", "unknown"] = success
+        self._reason = reason
+        self._score = score
+        self._thunk = thunk
+        self._context = context
+
+    @property
+    def success(self) -> Literal["pass", "fail", "unknown"]:
+        """The tri-state validation result."""
+        return self._success
+
+    @property
+    def reason(self) -> str | None:
+        """Reason for the validation result."""
+        return self._reason
+
+    @property
+    def score(self) -> float | None:
+        """An optional score for the validation result."""
+        return self._score
+
+    @property
+    def thunk(self) -> ModelOutputThunk | None:
+        """The ModelOutputThunk associated with the validation call, if any."""
+        return self._thunk
+
+    @property
+    def context(self) -> Context | None:
+        """The context associated with the validation call, if any."""
+        return self._context
+
+    def as_bool(self) -> bool:
+        """Return True for ``"pass"``, False for ``"fail"`` or ``"unknown"``.
+
+        ``"unknown"`` maps to ``False`` intentionally. In streaming contexts,
+        check ``pvr.success == "unknown"`` before treating ``False`` as a definitive
+        failure — ``"unknown"`` means insufficient data so far, not a constraint
+        violation.
+
+        Returns:
+            bool: ``True`` if the partial result is ``"pass"``, ``False`` otherwise.
+        """
+        return self._success == "pass"
+
+    def __bool__(self) -> bool:
+        """Return a boolean value based on the success state."""
+        return self.as_bool()
+
+    def __repr__(self) -> str:
+        """Return a developer-readable representation showing the tri-state value."""
+        return f"PartialValidationResult({self._success!r}, reason={self._reason!r}, score={self._score!r})"
 
 
 def default_output_to_bool(x: CBlock | str) -> bool:
@@ -188,6 +282,51 @@ class Requirement(Component[str]):
                 thunk=llm_as_a_judge_result,
                 context=val_ctx,
             )
+
+    async def stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        """Hook for per-chunk streaming validation.
+
+        The default implementation returns ``PartialValidationResult("unknown")``
+        — meaning insufficient data to decide yet. Subclasses override this method
+        to inspect the current chunk and return ``"pass"`` or ``"fail"`` early.
+
+        Implementations may accumulate state on ``self`` across calls within a
+        single attempt. The orchestrator clones the requirement (``copy(req)``)
+        before each attempt, so state does not bleed across retries.
+
+        Shallow-copy caveat: mutable container fields (e.g. ``self._buffer = []``)
+        are shared by reference under ``copy()``. Reassign rather than mutate in
+        place (``self._buffer = self._buffer + [chunk]``, not
+        ``self._buffer.append(chunk)``), or override ``__copy__`` for proper
+        isolation.
+
+        Implementations must not call ``mot.astream()`` or otherwise read the
+        underlying stream; the orchestrator is the single consumer of the MOT
+        stream (see ``ModelOutputThunk.astream``). Requirements that need access
+        to the text seen so far should accumulate it themselves from the
+        ``chunk`` values they receive.
+
+        Args:
+            chunk: A single complete semantic chunk produced by the chunking
+                strategy (e.g. one sentence for ``SentenceChunker``). This is
+                the delta since the previous ``stream_validate`` call for this
+                attempt, not the accumulated output. Requirements that need
+                earlier context should retain it on ``self`` across calls.
+            backend: The inference backend, available for backend-assisted checks.
+            ctx: The current generation context. During streaming the MOT is
+                not yet computed, so ``ctx`` does not contain the generated
+                output; use ``chunk`` (and any state accumulated on ``self``)
+                instead.
+
+        Returns:
+            PartialValidationResult: ``"unknown"`` by default. Subclasses may return
+            ``"pass"`` (constraint satisfied so far) or ``"fail"`` (constraint violated,
+            streaming should be aborted). ``"pass"`` does not short-circuit the final
+            ``validate()`` call; the orchestrator decides whether to skip it.
+        """
+        return PartialValidationResult("unknown")
 
     def parts(self) -> list[Component | CBlock]:
         """Returns all of the constituent parts of a Requirement.

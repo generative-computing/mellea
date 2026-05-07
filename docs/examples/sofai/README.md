@@ -51,7 +51,7 @@ from mellea.stdlib.sampling import SOFAISamplingStrategy
 from mellea.stdlib.requirements import req
 
 # Create fast and slow backends
-s1_backend = OllamaModelBackend(model_id="granite4:micro")
+s1_backend = OllamaModelBackend(model_id="granite4.1:3b")
 s2_backend = OllamaModelBackend(model_id="granite4:latest")
 
 # Create SOFAI strategy
@@ -100,7 +100,7 @@ SOFAISamplingStrategy(
 
 ### Fast Models (S1)
 
-- granite4:micro
+- granite4.1:3b
 - llama3.2:3b
 - mistral:7b
 

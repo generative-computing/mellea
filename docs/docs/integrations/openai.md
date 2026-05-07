@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/openai"
 title: "OpenAI and OpenAI-Compatible APIs"
 description: "Use Mellea with OpenAI's API and any OpenAI-compatible endpoint — LM Studio, vLLM, Anthropic, and more."
 # diataxis: how-to
@@ -22,6 +23,8 @@ export OPENAI_API_KEY=sk-...
 Then create a session:
 
 ```python
+# Requires: mellea
+# Returns: ModelOutputThunk
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
@@ -38,6 +41,8 @@ print(str(reply))
 Pass the key directly if you prefer not to use an environment variable:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
@@ -57,6 +62,8 @@ API key is needed for local servers — pass any non-empty string:
 ### LM Studio
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
@@ -71,6 +78,8 @@ m = MelleaSession(
 ### Ollama's OpenAI endpoint
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
@@ -88,6 +97,8 @@ m = MelleaSession(
 ### vLLM
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
@@ -110,6 +121,8 @@ export OPENAI_API_KEY=ollama
 ```
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
@@ -126,6 +139,8 @@ variables if both are set.
 or a Mellea `ImageBlock`:
 
 ```python
+# Requires: mellea
+# Returns: ModelOutputThunk
 from PIL import Image
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -154,6 +169,8 @@ print(str(response))
 You can also pass PIL `Image` objects directly without wrapping them:
 
 ```python
+# Requires: mellea, pillow
+# Returns: ModelOutputThunk
 chat_response = m.chat(
     "How many people are in this image?",
     images=[pil_image],
@@ -168,6 +185,8 @@ chat_response = m.chat(
 Use the `format` parameter to constrain generation to a Pydantic schema:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: str
 from pydantic import BaseModel
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
@@ -192,6 +211,8 @@ print(parsed.title)
 Set generation parameters with `ModelOption`:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends import ModelOption
 from mellea.backends.openai import OpenAIBackend
@@ -218,6 +239,8 @@ Anthropic's API is not OpenAI-compatible natively, but if you access it through 
 proxy that exposes an OpenAI-compatible interface, you can use `OpenAIBackend`:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
@@ -234,7 +257,74 @@ m = MelleaSession(
 > **Note (review needed):** Direct Anthropic API compatibility via this path has not
 > been verified against the current Mellea version. If you are using Anthropic,
 > LiteLLM provides a verified integration — see
-> [Backends and Configuration](../guide/backends-and-configuration).
+> [Backends and Configuration](../how-to/backends-and-configuration).
+
+## Intrinsics with Granite Switch
+
+Granite Switch models embed LoRA/aLoRA adapters directly in the model weights.
+When served via vLLM, these adapters enable intrinsic functions (RAG quality
+checks, safety evaluation, requirement validation) through the OpenAI-compatible
+API without loading adapter weights at runtime.
+
+Start a vLLM server with the Granite Switch model:
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+    --model <granite-switch-model-id> \
+    --dtype bfloat16 \
+    --enable-prefix-caching
+```
+
+Then create a backend with `load_embedded_adapters=True`:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
+```
+
+The high-level intrinsic wrappers (`rag.check_answerability`,
+`core.check_certainty`, etc.) work identically with this backend. See
+[Intrinsics](../advanced/intrinsics) for the full list of available intrinsics.
+
+> **Note:** `load_embedded_adapters=True` downloads adapter I/O configurations
+> from the model's HuggingFace repository on first use. No adapter weights are
+> transferred — the adapters are already part of the model. Only intrinsics
+> embedded in the model are available — check the model's `adapter_index.json`
+> for the list.
+
+For more control, load adapters manually with `load_embedded_adapters=False`:
+
+```python
+from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
+    base_url="http://localhost:8000/v1",
+    api_key="EMPTY",
+    load_embedded_adapters=False,
+)
+
+# Load a single adapter from the model's HuggingFace repo
+adapters = EmbeddedIntrinsicAdapter.from_hub(
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    intrinsic_name="answerability",
+)
+for adapter in adapters:
+    backend.add_adapter(adapter)
+```
 
 ## Troubleshooting
 
@@ -256,5 +346,6 @@ local servers, list available models from the server's API or UI.
 
 ---
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration) |
-[Enforce Structured Output](../how-to/enforce-structured-output)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
+[Enforce Structured Output](../how-to/enforce-structured-output) |
+[Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)

@@ -164,6 +164,9 @@ def chat_completion_request_to_transformers_inputs(
         "add_generation_prompt": True,
     }
 
+    if request.get("tools") is not None:
+        tokenizer_input["tools"] = request["tools"]
+
     # pylint: disable=unsupported-membership-test
     if (
         request.get("extra_body") is not None

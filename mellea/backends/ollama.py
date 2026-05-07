@@ -62,7 +62,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_1_3B,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -368,9 +368,11 @@ class OllamaModelBackend(FormatterBackend):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
         conversation.extend(
             [
-                {"role": m.role, "content": m.content, "images": m.images}
+                {"role": m.role, "content": self.formatter.print(m), "images": m.images}
                 for m in messages
             ]
         )
@@ -426,8 +428,8 @@ class OllamaModelBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.model = self._get_ollama_model_id()
-        output.provider = "ollama"
+        output.generation.model = self._get_ollama_model_id()
+        output.generation.provider = "ollama"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -711,15 +713,15 @@ class OllamaModelBackend(FormatterBackend):
 
         # Populate standardized usage field (convert to OpenAI format)
         if prompt_tokens is not None and completion_tokens is not None:
-            mot.usage = {
+            mot.generation.usage = {
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
             }
 
         # Populate model and provider metadata
-        mot.model = str(self._get_ollama_model_id())
-        mot.provider = "ollama"
+        mot.generation.model = str(self._get_ollama_model_id())
+        mot.generation.provider = "ollama"
 
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")
@@ -731,8 +733,8 @@ class OllamaModelBackend(FormatterBackend):
             )
 
             if response:
-                if mot.usage:
-                    record_token_usage(span, mot.usage)
+                if mot.generation.usage:
+                    record_token_usage(span, mot.generation.usage)
                 record_response_metadata(span, response)
 
             # Close the span now that telemetry is recorded

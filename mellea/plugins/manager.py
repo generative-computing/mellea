@@ -26,9 +26,49 @@ logger = logging.getLogger(__name__)
 _plugin_manager: Any | None = None
 _plugins_enabled: bool = False
 _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
+_pending_background_results: list[Any] = []
+_collect_background_results: bool = False  # opt-in; only tests enable this
+
+# Framework control-flow tool names (e.g. loop terminators).
+# These are flagged on the payload so plugins can decide per-tool policy.
+_INTERNAL_TOOL_NAMES: frozenset[str] = frozenset({"final_answer"})
 
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
 DEFAULT_HOOK_POLICY: Literal["allow"] | Literal["deny"] = "deny"
+
+
+def enable_background_collection() -> None:
+    """Enable fire-and-forget result collection. Call in test fixtures before each test."""
+    global _collect_background_results
+    _collect_background_results = True
+
+
+def disable_background_collection() -> None:
+    """Disable fire-and-forget result collection and clear any accumulated results."""
+    global _collect_background_results, _pending_background_results
+    _collect_background_results = False
+    _pending_background_results = []
+
+
+async def drain_background_tasks() -> None:
+    """Await all accumulated FIRE_AND_FORGET tasks and clear the pending list.
+
+    Call this in tests after any operation that may have triggered fire-and-forget plugins,
+    to ensure side effects (metrics recording, etc.) complete before assertions.
+    """
+    global _pending_background_results
+    pending, _pending_background_results = _pending_background_results, []
+    for result in pending:
+        await result.wait_for_background_tasks()
+
+
+def discard_background_tasks() -> None:
+    """Discard all accumulated FIRE_AND_FORGET tasks without awaiting them.
+
+    Call this in test fixtures to clear stale results from a previous event
+    loop before running the next test.
+    """
+    _pending_background_results.clear()
 
 
 def has_plugins(hook_type: HookType | None = None) -> bool:
@@ -50,6 +90,18 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
     if hook_type is not None:
         return _plugin_manager.has_hooks_for(hook_type.value)
     return True
+
+
+def is_internal_tool(tool_name: str) -> bool:
+    """Return whether the given tool name is a framework-internal tool.
+
+    Args:
+        tool_name: Name of the tool to check.
+
+    Returns:
+        ``True`` if the tool is in the internal tools registry.
+    """
+    return tool_name in _INTERNAL_TOOL_NAMES
 
 
 def get_plugin_manager() -> Any | None:
@@ -143,6 +195,7 @@ async def shutdown_plugins() -> None:
     _plugin_manager = None
     _plugins_enabled = False
     _session_tags.clear()
+    _pending_background_results.clear()
 
 
 def track_session_plugin(session_id: str, plugin_name: str) -> None:
@@ -228,6 +281,9 @@ async def invoke_hook(
         global_context=global_ctx,
         violations_as_exceptions=False,
     )
+
+    if _collect_background_results and result and result.background_tasks:
+        _pending_background_results.append(result)
 
     if result and not result.continue_processing and result.violation:
         v = result.violation

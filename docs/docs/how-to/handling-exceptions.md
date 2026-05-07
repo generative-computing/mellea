@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/handling-exceptions"
 title: "Handling Exceptions and Failures"
 description: "Handle SamplingResult failures, PreconditionException, and parse errors gracefully in Mellea programs."
 # diataxis: how-to
@@ -22,6 +23,8 @@ exhausts its budget without satisfying all requirements, `SamplingResult.success
 should handle.
 
 ```python
+# Requires: mellea
+# Returns: SamplingResult
 from mellea import start_session
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -67,6 +70,8 @@ Common fallback patterns when `success` is `False`:
 to understand which requirements are failing and why:
 
 ```python
+# Requires: None
+# Returns: None
 if not result.success:
     for attempt_idx, validations in enumerate(result.sample_validations):
         print(f"Attempt {attempt_idx + 1}:")
@@ -89,6 +94,8 @@ validates the inputs before calling the model. If any precondition fails,
 `PreconditionException` is raised immediately — no model call is made:
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 from mellea.core import Requirement
@@ -142,6 +149,8 @@ If Ollama is not running, or a cloud API key is invalid, the backend raises an
 exception on the first model call:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 try:
@@ -158,6 +167,8 @@ except Exception as e:
 For production code, wrap session creation and the first call together:
 
 ```python
+# Requires: mellea
+# Returns: MelleaSession | None
 import mellea
 
 def create_session_or_none():
@@ -182,6 +193,8 @@ The IVR loop retries on parse failure automatically — `ComponentParseError` su
 only if all retries are exhausted.
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 from mellea.core.base import ComponentParseError
@@ -212,6 +225,8 @@ If `ComponentParseError` occurs in practice, check:
 If a structured call fails, fall back to a plain `instruct()`:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: None
 from pydantic import BaseModel
 from mellea import generative, start_session
 from mellea.core.base import ComponentParseError
@@ -240,13 +255,15 @@ except ComponentParseError:
 For calls that require higher capability, escalate to a stronger model on failure:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import model_ids
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 def instruct_with_fallback(text: str) -> str:
-    m_fast = MelleaSession(OllamaModelBackend(model_ids.IBM_GRANITE_4_MICRO_3B))
+    m_fast = MelleaSession(OllamaModelBackend(model_ids.IBM_GRANITE_4_1_3B))
     result = m_fast.instruct(
         text,
         strategy=RejectionSamplingStrategy(loop_budget=3),
@@ -270,6 +287,8 @@ Use Python's standard `logging` module to record failures alongside generation
 details:
 
 ```python
+# Requires: mellea
+# Returns: None
 import logging
 from mellea import start_session
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -296,7 +315,7 @@ if not result.success:
 ```
 
 For structured telemetry across all calls, see
-[Telemetry](../evaluation-and-observability/telemetry).
+[Telemetry](../observability/telemetry).
 
 ---
 

@@ -29,7 +29,6 @@ from mellea.formatters.granite import (
 )
 from mellea.formatters.granite.base import util as base_util
 from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
-from test.predicates import require_gpu
 
 
 def _read_file(name):
@@ -38,15 +37,71 @@ def _read_file(name):
 
 
 _TEST_DATA_DIR = pathlib.Path(os.path.dirname(__file__)) / "testdata"
+_TEST_OUTPUT_DIR = pathlib.Path(os.path.dirname(__file__)) / "test_output"
+"""Directory string we substitute for _TEST_DATA_DIR when writing debug outputs."""
 
 # Location from which our tests download adapters and YAML files
 _RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
 
+_DEFAULT_BASE_MODEL = "ibm-granite/granite-4.1-3b"
+
 
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
 _INPUT_YAML_DIR = _TEST_DATA_DIR / "input_yaml"
 _INPUT_ARGS_DIR = _TEST_DATA_DIR / "input_args"
+
+
+def _substitute_root(
+    child_path: pathlib.Path, old_root: pathlib.Path, new_root: pathlib.Path
+):
+    """Change a path rooted in one root directory to the same path rooted in another.
+
+    Handles common corner cases such as when a given path has multiple equivalent
+    string representations.
+
+    Args:
+        child_path: A path that is a descendant of a known root.
+        old_root: Root directory that is an ancestor of ``child_path``.
+        new_root: Root directory to substitute for ``old_root``.
+
+    Returns:
+        A version of ``child_path`` in which the prefix corresponding to
+        ``old_root`` has been replaced with ``new_root``.
+    """
+    # Resolve paths to handle symlinks, relative components, and other corner cases
+    child_path = child_path.resolve()
+    old_root = old_root.resolve()
+    new_root = new_root.resolve()
+
+    # Get the relative path from old_root to child_path
+    try:
+        relative_path = child_path.relative_to(old_root)
+    except ValueError:
+        raise ValueError(f"{child_path} is not a descendant of {old_root}")
+
+    # Construct new path with the new root
+    return new_root / relative_path
+
+
+def _dump_output(expected_file: pathlib.Path, actual_string: str):
+    """Dump outputs to disk to aid debugging.
+
+    Given the string representation of something that the current test is about to
+    compare against a canned output and the location of said canned output, write
+    the string to a controlled place on the filesystem to aid debugging.
+
+    Args:
+        expected_file: Location of the file we're going to compare against.
+        actual_string: String that the current test case produced.
+    """
+    actual_file = _substitute_root(expected_file, _TEST_DATA_DIR, _TEST_OUTPUT_DIR)
+
+    if not os.path.exists(actual_file.parent):
+        os.makedirs(actual_file.parent)
+
+    with open(actual_file, "w", encoding="utf-8") as f:
+        f.write(actual_string)
 
 
 class YamlJsonCombo(pydantic.BaseModel):
@@ -72,7 +127,7 @@ class YamlJsonCombo(pydantic.BaseModel):
     loaded."""
     revision: str = "main"
     """Revision or branch of the Hugging Face `repo_id`."""
-    base_model_id: str = "ibm-granite/granite-4.0-micro"
+    base_model_id: str = _DEFAULT_BASE_MODEL
     """Base model on which the target adapter was trained. Should be small enough to
     run on the CI server."""
 
@@ -132,13 +187,6 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
         task="hallucination_detection",
     ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="hallucination_detection_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
-    #     task="hallucination_detection",
-    #     is_alora=True
-    # ),
     YamlJsonCombo(
         short_name="query_clarification",
         inputs_file=_INPUT_JSON_DIR / "query_clarification.json",
@@ -149,49 +197,13 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
     ),
-    # NOTE for the following two entries:
-    # The "requirement_check" intrinsic has not yet been ported to the latest format
-    # or to Granite 4.0.
-    YamlJsonCombo(
-        short_name="requirement_check",
-        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
-        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
-        task="requirement_check",
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
-    YamlJsonCombo(
-        short_name="requirement_check_alora",
-        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
-        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
-        task="requirement_check",
-        is_alora=True,
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
-    YamlJsonCombo(
-        short_name="uncertainty",
-        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-        task="uncertainty",
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/granitelib-core-r1.0",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="uncertainty_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-    #     task="uncertainty",
-    #     is_alora=True,
-    #     # Granite 4.0 adapters not currently available
-    #     repo_id="ibm-granite/granitelib-core-r1.0",
-    # ),
     YamlJsonCombo(
         short_name="context_relevance",
         inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
         arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
         task="context_relevance",
+        # No Granite 4.1 version of this adapter
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     YamlJsonCombo(
         short_name="context_relevance_alora",
@@ -199,24 +211,22 @@ _YAML_JSON_COMBOS_LIST = [
         arguments_file=_INPUT_ARGS_DIR / "context_relevance.json",
         task="context_relevance",
         is_alora=True,
+        # No Granite 4.1 version of this adapter
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
     ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="citations_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "citations.json",
-    #     task="citations",
-    #     is_alora=True,
-    # ),
     YamlJsonCombo(
         short_name="context-attribution",
         inputs_file=_INPUT_JSON_DIR / "context-attribution.json",
         task="context-attribution",
         repo_id="ibm-granite/granitelib-core-r1.0",
+        revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
+        # No Granite 4.1 version of this adapter at the selected Git commit
+        base_model_id="ibm-granite/granite-4.0-micro",
     ),
     # gpt-oss-20b intrinsics (canned output tests only, no inference)
     YamlJsonCombo(
@@ -253,6 +263,7 @@ _YAML_JSON_COMBOS = {c.short_name: c for c in _YAML_JSON_COMBOS_LIST}
 
 # Base models that are small enough to run locally with transformers
 _LOCAL_BASE_MODELS = {
+    "ibm-granite/granite-4.1-3b",
     "ibm-granite/granite-4.0-micro",
     "ibm-granite/granite-3.3-2b-instruct",
 }
@@ -404,6 +415,66 @@ def test_read_yaml():
     IntrinsicsRewriter(config_file=local_path)
 
 
+def test_name_field_accepted_by_make_config_dict():
+    """make_config_dict accepts 'name' as an optional field without error."""
+    config_with_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+        "name": "my_intrinsic_display_name",
+    }
+    result = intrinsics_util.make_config_dict(config_dict=config_with_name)
+    assert result is not None
+    assert result["name"] == "my_intrinsic_display_name"
+    # Other optional fields are filled with None
+    assert result["parameters"] is None
+    assert result["sentence_boundaries"] is None
+    assert result["instruction"] is None
+
+    # Without name, it defaults to None
+    config_without_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+    }
+    result2 = intrinsics_util.make_config_dict(config_dict=config_without_name)
+    assert result2 is not None
+    assert result2["name"] is None
+
+
+def test_rewriter_transform_with_name_field():
+    """IntrinsicsRewriter.transform() produces identical output with or without 'name'."""
+    config_with_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+        "name": "answerability_v2",
+        "parameters": {"max_completion_tokens": 64},
+        "sentence_boundaries": None,
+        "instruction": None,
+    }
+    config_without_name = {
+        "model": None,
+        "response_format": None,
+        "transformations": None,
+        "parameters": {"max_completion_tokens": 64},
+        "sentence_boundaries": None,
+        "instruction": None,
+    }
+
+    rewriter_with = IntrinsicsRewriter(config_dict=config_with_name)
+    rewriter_without = IntrinsicsRewriter(config_dict=config_without_name)
+
+    json_data = _read_file(_INPUT_JSON_DIR / "simple.json")
+    before = ChatCompletion.model_validate_json(json_data)
+
+    after_with = rewriter_with.transform(before)
+    after_without = rewriter_without.transform(before)
+
+    # Both should produce identical output (name is metadata-only)
+    assert after_with.model_dump_json() == after_without.model_dump_json()
+
+
 _CANNED_INPUT_EXPECTED_DIR = _TEST_DATA_DIR / "test_canned_input"
 
 
@@ -427,6 +498,7 @@ def test_canned_input(yaml_json_combo_no_alora):
     after_json = after.model_dump_json(indent=2)
 
     expected_file = _CANNED_INPUT_EXPECTED_DIR / f"{cfg.short_name}.json"
+    _dump_output(expected_file, after_json)
     with open(expected_file, encoding="utf-8") as f:
         expected_json = f.read()
 
@@ -434,6 +506,9 @@ def test_canned_input(yaml_json_combo_no_alora):
     assert after_json == expected_json
 
 
+# PLEASE DO NOT REMOVE THIS DECORATOR.
+# This decorator activates the network blocking features of the pytest-recording plugin.
+@pytest.mark.block_network
 def test_openai_compat(yaml_json_combo_no_alora):
     """
     Verify that the dataclasses for intrinsics chat completions can be directly passed
@@ -573,12 +648,12 @@ def _round_floats(json_data, num_digits: int = 2):
     return result
 
 
+# THIS TEST DOES NOT REQUIRE A GPU.
+# Please do not mark it with @require_gpu.
+# THIS TEST USES gh_run TO SKIP EXPENSIVE WORK WHEN RUNNING ON CI.
+# Please do not mark this test with @pytest.mark.skipif(os.environ.get("CICD"))
 @pytest.mark.huggingface
 @pytest.mark.e2e
-@require_gpu(min_vram_gb=12)
-@pytest.mark.skipif(
-    int(os.environ.get("CICD", 0)) == 1, reason="Skipping HuggingFace tests in CI"
-)
 def test_run_transformers(yaml_json_combo_with_model, gh_run):
     """
     Run the target model end-to-end on transformers.
@@ -610,23 +685,20 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
         pytest.xfail("Downloads fail on CI server because repo is private")
 
     # Load IO config YAML for this model
-    io_yaml_path = lora_dir / "io.yaml"
-    if not os.path.exists(io_yaml_path):
-        # Use local files until proper configs are up on Hugging Face
-        io_yaml_path = cfg.yaml_file
+    io_yaml_path = cfg.yaml_file if cfg.yaml_file else lora_dir / "io.yaml"
     rewriter = IntrinsicsRewriter(config_file=io_yaml_path)
     result_processor = IntrinsicsResultProcessor(config_file=io_yaml_path)
 
     # Prepare inputs for inference
     transformed_input = rewriter.transform(model_input, **transform_kwargs)
 
-    if gh_run:
+    if gh_run == 1:
         pytest.xfail(
             "Skipping end-to-end model evaluation for this test case because it takes "
             "more than 5 seconds. "
-            "Mellea's CI fails the entire run without an error message if all 500+ "
+            "Mellea's CI fails the entire run without an error message if all 1900+ "
             "tests combined take more than 15 minutes to complete. "
-            "That works out to 1.8 seconds per test. "
+            "That works out to 0.5 seconds per test. "
             "Any test that takes more than 5 seconds needs to disable or shortcut "
             "itself during CI, or all of Mellea's development infrastructure will "
             "grind to a halt."
@@ -634,6 +706,9 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
     # Run the model using Hugging Face APIs
     model, tokenizer = base_util.load_transformers_lora(lora_dir)
+    if torch.cuda.is_available():  # Use GPU if available
+        model.cuda()
+
     generate_input, other_input = (
         base_util.chat_completion_request_to_transformers_inputs(
             transformed_input.model_dump(), tokenizer, model
@@ -649,15 +724,13 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
     # Output processing
     transformed_responses = result_processor.transform(responses, transformed_input)
-
-    # Pull this string out of the debugger to create a fresh expected file.
     transformed_str = transformed_responses.model_dump_json(indent=4)
-    print(transformed_str)
 
-    with open(
-        _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json",
-        encoding="utf-8",
-    ) as f:
+    # If you are certain that the output is correct, you can use the file written here
+    # to create a fresh expected file.
+    expected_file = _TEST_DATA_DIR / f"test_run_transformers/{cfg.short_name}.json"
+    _dump_output(expected_file, transformed_str)
+    with open(expected_file, encoding="utf-8") as f:
         expected = ChatCompletionResponse.model_validate_json(f.read())
     # expected_str = expected.model_dump_json(indent=4)
 
@@ -684,7 +757,7 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
                 assert t_json == pytest.approx(e_json, abs=0.1)
     except AssertionError as e:
-        # Known intermittent failure under Transformers 5.0
+        # Known intermittent failure under Transformers 5.0.
         if cfg.short_name == "hallucination_detection":
             pytest.xfail("Known failure due to Transformers 5.0")
         raise e

@@ -40,7 +40,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("fancy_logger").setLevel(logging.ERROR)
+logging.getLogger("mellea").setLevel(logging.ERROR)
 log = logging.getLogger("tool_hooks")
 
 
@@ -150,6 +150,8 @@ ALLOWED_TOOLS: frozenset[str] = frozenset({"get_weather", "calculator"})
 @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
 async def enforce_tool_allowlist(payload, _):
     """Block any tool not on the explicit allow list."""
+    if payload.is_control_flow:
+        return  # framework control-flow tools (e.g. final_answer) are exempt
     tool_name = payload.model_tool_call.name
     if tool_name not in ALLOWED_TOOLS:
         log.warning(

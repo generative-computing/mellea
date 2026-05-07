@@ -1,14 +1,30 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
 import json
-from typing import Any
+import uuid
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
 from ..backends.tools import validate_tool_arguments
-from ..core import MelleaLogger, ModelToolCall
-from ..core.base import AbstractMelleaTool
+from ..core import Formatter, MelleaLogger, ModelToolCall
+from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..stdlib.components import Document, Message
+
+
+class ToolCallFunction(TypedDict):
+    """Function details in a tool call."""
+
+    name: str
+    arguments: str
+
+
+class ToolCallDict(TypedDict):
+    """OpenAI-compatible tool call dictionary with ID and function."""
+
+    id: str
+    type: Literal["function"]
+    function: ToolCallFunction
 
 
 class CompletionUsage(BaseModel):
@@ -154,17 +170,23 @@ def chat_completion_delta_merge(
     return merged
 
 
-def message_to_openai_message(msg: Message) -> dict:
+def message_to_openai_message(msg: Message, formatter: Formatter | None = None) -> dict:
     """Serialise a Mellea ``Message`` to the format required by OpenAI-compatible API providers.
 
     Args:
         msg: The ``Message`` object to serialise.
+        formatter: Optional formatter used to render the message content (including
+            documents) through the template system. When ``None``, uses the raw
+            ``msg.content`` string without document rendering.
 
     Returns:
         A dict with ``"role"`` and ``"content"`` fields. When the message carries
         images, ``"content"`` is a list of text and image-URL dicts; otherwise it
         is a plain string.
     """
+    # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+    # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+    content = formatter.print(msg) if formatter else msg.content
     if msg.images is not None:
         img_list = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
@@ -173,10 +195,10 @@ def message_to_openai_message(msg: Message) -> dict:
 
         return {
             "role": msg.role,
-            "content": [{"type": "text", "text": msg.content}, *img_list],
+            "content": [{"type": "text", "text": content}, *img_list],
         }
     else:
-        return {"role": msg.role, "content": msg.content}
+        return {"role": msg.role, "content": content}
         # Target format:
         # {
         #     "role": "user",
@@ -221,25 +243,63 @@ def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
     return json_docs
 
 
-def build_completion_usage(output: Any) -> CompletionUsage | None:
+def build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None:
     """Build a normalized usage object from a model output, if available.
 
     Args:
-        output: Model output object that may expose a ``usage`` mapping with
+        output: Model output object whose ``generation.usage`` mapping contains
             token counts.
 
     Returns:
         A ``CompletionUsage`` object when usage metadata is present on the
         output, otherwise ``None``.
     """
-    if not hasattr(output, "usage") or output.usage is None:
+    if output.generation.usage is None:
         return None
 
-    prompt_tokens = output.usage.get("prompt_tokens", 0)
-    completion_tokens = output.usage.get("completion_tokens", 0)
-    total_tokens = output.usage.get("total_tokens", prompt_tokens + completion_tokens)
+    prompt_tokens = output.generation.usage.get("prompt_tokens", 0)
+    completion_tokens = output.generation.usage.get("completion_tokens", 0)
+    total_tokens = output.generation.usage.get(
+        "total_tokens", prompt_tokens + completion_tokens
+    )
     return CompletionUsage(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
     )
+
+
+def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
+    """Build OpenAI-compatible tool calls from a model output, if available.
+
+    Args:
+        output: Model output thunk that may expose a ``tool_calls`` mapping.
+
+    Returns:
+        List of ``ToolCallDict`` objects when tool calls are present,
+        otherwise ``None``.
+    """
+    # Check for tool calls - ModelOutputThunk always has tool_calls attribute
+    if (
+        output.tool_calls is None
+        or not isinstance(output.tool_calls, dict)
+        or not output.tool_calls
+    ):
+        return None
+
+    tool_calls: list[ToolCallDict] = []
+    for model_tool_call in output.tool_calls.values():
+        # Generate a unique ID for this tool call
+        tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+
+        # Serialize arguments to JSON with str fallback for non-serializable types
+        args_json = json.dumps(model_tool_call.args, default=str)
+
+        tool_call: ToolCallDict = {
+            "id": tool_call_id,
+            "type": "function",
+            "function": {"name": model_tool_call.name, "arguments": args_json},
+        }
+        tool_calls.append(tool_call)
+
+    return tool_calls

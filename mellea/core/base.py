@@ -21,7 +21,15 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Generic, Literal, Protocol, TypeVar, runtime_checkable
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    ParamSpec,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -251,6 +259,49 @@ class GenerateType(enum.Enum):
     SYNC = 2
 
 
+@dataclass
+class GenerationMetadata:
+    """Backend execution metadata attached to every ModelOutputThunk.
+
+    Fields are populated as generation progresses; see individual field docstrings for timing.
+
+    Args:
+        usage: Token usage dict with 'prompt_tokens', 'completion_tokens', 'total_tokens'.
+        model: Model identifier that generated the output.
+        provider: Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx').
+        ttfb_ms: Time to first token in milliseconds; None for non-streaming.
+        streaming: Whether this generation used streaming mode.
+    """
+
+    usage: dict[str, Any] | None = None
+    """Token usage following OpenAI API standard.
+
+    Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
+    May include optional breakdown fields like 'completion_tokens_details'
+    and 'prompt_tokens_details' (nested dicts with per-category token counts
+    for reasoning, audio, caching, etc.).
+    """
+
+    model: str | None = None
+    """Model identifier that generated the output (e.g. 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf')."""
+
+    provider: str | None = None
+    """Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx')."""
+
+    ttfb_ms: float | None = None
+    """Time to first token in milliseconds.
+
+    Set when the first chunk is received from the backend.
+    None for non-streaming requests or when not measured.
+    """
+
+    streaming: bool = False
+    """Whether this generation used streaming mode.
+
+    Set from model options at the start of astream().
+    """
+
+
 class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
 
@@ -281,43 +332,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
         self._thinking: str | None = None
-        self.usage: dict[str, Any] | None = None
-        """Usage information following OpenAI API standard.
-
-        Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
-        Populated by backends during post_processing. None if unavailable.
-
-        May include optional breakdown fields like 'completion_tokens_details'
-        and 'prompt_tokens_details' (nested dicts with per-category token counts
-        for reasoning, audio, caching, etc.).
-        """
-
-        self.model: str | None = None
-        """Model identifier that generated this output.
-
-        Examples: 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf'.
-        Populated by backends. None if unavailable.
-        """
-
-        self.provider: str | None = None
-        """Provider that generated this output.
-
-        Examples: 'openai', 'ollama', 'huggingface', 'watsonx'.
-        Populated by backends. None if unavailable.
-        """
-
-        self.ttfb_ms: float | None = None
-        """Time to first token in milliseconds (streaming only).
-
-        Set when the first chunk is received from the backend.
-        None for non-streaming requests or when not measured.
-        """
-
-        self.streaming: bool = False
-        """Whether this generation used streaming mode.
-
-        Set from model options at the start of astream().
-        """
+        self.generation: GenerationMetadata = GenerationMetadata()
+        """Backend execution metadata populated during generation."""
 
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
@@ -347,11 +363,11 @@ class ModelOutputThunk(CBlock, Generic[S]):
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
         if (
-            self.streaming
+            self.generation.streaming
             and not self._first_chunk_received
             and self._start is not None
         ):
-            self.ttfb_ms = (
+            self.generation.ttfb_ms = (
                 datetime.datetime.now() - self._start
             ).total_seconds() * 1000
             self._first_chunk_received = True
@@ -368,11 +384,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
         self._thinking = other._thinking
-        self.usage = other.usage
-        self.model = other.model
-        self.provider = other.provider
-        self.ttfb_ms = other.ttfb_ms
-        self.streaming = other.streaming
+        self.generation = other.generation
         self._generate_log = other._generate_log
 
     def is_computed(self) -> bool:
@@ -452,7 +464,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         do_set_computed = False
         # Use string directly to avoid importing ModelOption from backends into core (circular import).
         # ModelOption.STREAM is defined in mellea/backends/model_options.py.
-        self.streaming = bool((self._model_options or {}).get("@@@stream@@@", False))
+        self.generation.streaming = bool(
+            (self._model_options or {}).get("@@@stream@@@", False)
+        )
 
         if not self._generate_type == GenerateType.ASYNC:
             raise RuntimeError(
@@ -605,11 +619,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._context = self._context
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
-        copied.usage = self.usage
-        copied.model = self.model
-        copied.provider = self.provider
-        copied.ttfb_ms = self.ttfb_ms
-        copied.streaming = self.streaming
+        copied.generation = copy(self.generation)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -639,11 +649,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         )  # The items in a context should be immutable.
         deepcopied._generate_log = copy(self._generate_log)
         deepcopied._model_options = copy(self._model_options)
-        deepcopied.usage = deepcopy(self.usage) if self.usage else None
-        deepcopied.model = self.model
-        deepcopied.provider = self.provider
-        deepcopied.ttfb_ms = self.ttfb_ms
-        deepcopied.streaming = self.streaming
+        deepcopied.generation = deepcopy(self.generation)
         return deepcopied
 
 
@@ -949,8 +955,16 @@ class Context(abc.ABC):
         ...
 
 
-class AbstractMelleaTool(abc.ABC):
-    """Abstract base class for Mellea Tool.
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class AbstractMelleaTool(abc.ABC, Generic[P, R]):
+    """Abstract base class for Mellea Tool with parameter and return type support.
+
+    Type parameters:
+        P: Parameter specification for the tool's callable (via ParamSpec)
+        R: Return type of the tool
 
     Attributes:
         name (str): The unique name used to identify the tool in JSON descriptions and tool-call dispatch.
@@ -962,7 +976,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args: Any, **kwargs: Any) -> Any:
+    def run(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Executes the tool with the provided arguments and returns the result.
 
         Args:
@@ -970,7 +984,7 @@ class AbstractMelleaTool(abc.ABC):
             **kwargs: Keyword arguments forwarded to the tool implementation.
 
         Returns:
-            Any: The result produced by the tool; the concrete type depends on the implementation.
+            R: The result produced by the tool; the concrete type depends on the implementation.
         """
 
     @property

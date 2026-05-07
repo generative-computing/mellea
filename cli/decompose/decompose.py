@@ -62,8 +62,18 @@ def reorder_subtasks(
         come before dependents, with numbering prefixes updated.
 
     Raises:
+        ValueError: If duplicate subtask tags are detected (case-insensitive).
         ValueError: If a circular dependency is detected.
     """
+    seen: set[str] = set()
+    for subtask in subtasks:
+        tag = subtask["tag"].lower()
+        if tag in seen:
+            raise ValueError(
+                f'Duplicate subtask tag "{tag}". Tags must be unique (case-insensitive).'
+            )
+        seen.add(tag)
+
     subtask_map = {subtask["tag"].lower(): subtask for subtask in subtasks}
 
     graph = {}

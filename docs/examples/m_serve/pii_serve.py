@@ -5,7 +5,7 @@ import spacy
 
 import mellea
 from cli.serve.models import ChatMessage
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.core import ModelOutputThunk, SamplingResult
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -71,7 +71,7 @@ def pii_remove_validate(
         return "The Validation Failed"
 
 
-session = mellea.start_session(model_id=IBM_GRANITE_4_MICRO_3B)
+session = mellea.start_session(model_id=IBM_GRANITE_4_1_3B)
 
 
 def serve(

@@ -17,7 +17,7 @@ m = start_session()
 # Simple tool for searching. Requires the langchain-community package.
 # Mellea allows you to interop with langchain defined tools.
 lc_ddg_search = DuckDuckGoSearchResults(output_format="list")
-search_tool = MelleaTool.from_langchain(lc_ddg_search)
+search_tool: MelleaTool = MelleaTool.from_langchain(lc_ddg_search)
 
 
 class Email(pydantic.BaseModel):
@@ -46,7 +46,8 @@ async def main():
     #     context=ChatContext(),
     #     backend=m.backend,
     #     tools=[search_tool],
-    #     format=Email
+    #     format=Email,
+    #     loop_budget=20,
     # )
     # print(out)
 

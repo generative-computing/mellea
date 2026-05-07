@@ -2,6 +2,7 @@ import gc
 import os
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 import pytest
 import requests
@@ -33,7 +34,7 @@ def _check_ollama_available():
     """Check if Ollama is available by checking if port 11434 is listening.
 
     Note: This only checks if Ollama is running, not which models are loaded.
-    Tests may still fail if required models (e.g., granite4:micro) are not pulled.
+    Tests may still fail if required models (e.g., granite4.1:3b) are not pulled.
     """
     import socket
 
@@ -209,6 +210,12 @@ def pytest_addoption(parser):
         default=False,
         help="Group tests by backend and run them together (reduces GPU memory fragmentation)",
     )
+    add_option_safe(
+        "--skip-resource-checks",
+        action="store_true",
+        default=False,
+        help="Skip hardware capability gates (VRAM/RAM). API credential and Ollama checks are unaffected.",
+    )
 
 
 BACKEND_MARKERS: dict[str, str] = {
@@ -253,6 +260,16 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "llm: Tests that make LLM calls (deprecated — use e2e instead)"
     )
+
+    # Propagate --skip-resource-checks as env var so predicates.py can read it
+    # at module-import time (before test collection begins).
+    if config.getoption("skip_resource_checks", default=False):
+        os.environ["_MELLEA_SKIP_RESOURCE_CHECKS"] = "1"
+
+
+def pytest_unconfigure():
+    """Clean up env var so repeated programmatic pytest invocations are unaffected."""
+    os.environ.pop("_MELLEA_SKIP_RESOURCE_CHECKS", None)
 
 
 # ============================================================================
@@ -529,15 +546,26 @@ def pytest_runtest_setup(item):
         # Warm up Ollama models when entering Ollama group
         if current_group == "ollama" and prev_group != "ollama":
             logger = MelleaLogger.get_logger()
-            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
-            port = os.environ.get("OLLAMA_PORT", "11434")
+            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
+            parsed_host_str = urlsplit(host_str)
+            if parsed_host_str.port:
+                ollama_base = (
+                    f"http://{host_str}" if not parsed_host_str.scheme else host_str
+                )
+            else:
+                port = os.environ.get("OLLAMA_PORT", "11434")
+                ollama_base = (
+                    f"http://{host_str}:{port}"
+                    if not parsed_host_str.scheme
+                    else host_str
+                )
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
-            for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
+            for model in ["granite4.1:3b", "granite3.2-vision"]:
                 try:
                     requests.post(
-                        f"http://{host_str}:{port}/api/generate",
+                        f"{ollama_base}/api/generate",
                         json={
                             "model": model,
                             "prompt": "hi",
@@ -553,13 +581,17 @@ def pytest_runtest_setup(item):
         # Evict Ollama models when leaving Ollama group
         if prev_group == "ollama" and current_group != "ollama":
             logger = MelleaLogger.get_logger()
-            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
-            port = os.environ.get("OLLAMA_PORT", "11434")
+            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
+            if ":" in host_str:
+                ollama_base = f"http://{host_str}"
+            else:
+                port = os.environ.get("OLLAMA_PORT", "11434")
+                ollama_base = f"http://{host_str}:{port}"
             logger.info("Evicting ollama models from VRAM after ollama group...")
-            for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
+            for model in ["granite4.1:3b", "granite3.2-vision"]:
                 try:
                     requests.post(
-                        f"http://{host_str}:{port}/api/generate",
+                        f"{ollama_base}/api/generate",
                         json={"model": model, "keep_alive": 0},
                         timeout=10,
                     )

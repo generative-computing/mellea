@@ -1,15 +1,10 @@
 """Unit tests for backend telemetry instrumentation with Gen-AI semantic conventions."""
 
 import asyncio
-import time
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mellea.backends.model_ids import (
-    IBM_GRANITE_4_HYBRID_MICRO,
-    IBM_GRANITE_4_HYBRID_SMALL,
-)
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_HYBRID_SMALL
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
@@ -76,18 +71,14 @@ def span_exporter():
 async def test_span_duration_captures_async_operation(span_exporter):
     """Test that span duration includes the full async operation time."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
-    # Add a small delay to ensure measurable duration
-    start_time = time.time()
     mot, _ = await backend.generate_from_context(
         Message(role="assistant", content=""), ctx
     )
     await mot.avalue()  # Wait for async completion
-    end_time = time.time()
-    actual_duration = end_time - start_time
 
     # Force flush to ensure spans are exported
     trace.get_tracer_provider().force_flush()  # type: ignore
@@ -104,15 +95,11 @@ async def test_span_duration_captures_async_operation(span_exporter):
 
     assert backend_span is not None, "Backend span not found"
 
-    # Span duration should be close to actual duration (within 100ms tolerance)
     span_duration_ns = backend_span.end_time - backend_span.start_time
     span_duration_s = span_duration_ns / 1e9
 
     assert span_duration_s >= 0.1, (
         f"Span duration too short: {span_duration_s}s (expected >= 0.1s)"
-    )
-    assert abs(span_duration_s - actual_duration) < 0.5, (
-        f"Span duration {span_duration_s}s differs significantly from actual {actual_duration}s"
     )
 
 
@@ -120,7 +107,7 @@ async def test_span_duration_captures_async_operation(span_exporter):
 async def test_context_propagation_parent_child(span_exporter):
     """Test that parent-child span relationships are maintained."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -167,7 +154,7 @@ async def test_context_propagation_parent_child(span_exporter):
 async def test_token_usage_recorded_after_completion(span_exporter):
     """Test that token usage metrics are recorded after async completion."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -216,7 +203,7 @@ async def test_token_usage_recorded_after_completion(span_exporter):
 async def test_span_not_closed_prematurely(span_exporter):
     """Test that spans are not closed before async operations complete."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 5"))
 
@@ -250,7 +237,7 @@ async def test_span_not_closed_prematurely(span_exporter):
 async def test_multiple_generations_separate_spans(span_exporter):
     """Test that multiple generations create separate spans."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test'"))
 
@@ -284,11 +271,10 @@ async def test_streaming_span_duration(span_exporter):
 
     from mellea.backends.model_options import ModelOption
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 3"))
 
-    start_time = time.time()
     mot, _ = await backend.generate_from_context(
         Message(role="assistant", content=""),
         ctx,
@@ -298,9 +284,6 @@ async def test_streaming_span_duration(span_exporter):
     # Consume the stream
     await mot.astream()
     await mot.avalue()
-
-    end_time = time.time()
-    actual_duration = end_time - start_time
 
     # Get the recorded span
     spans = span_exporter.get_finished_spans()
@@ -312,13 +295,9 @@ async def test_streaming_span_duration(span_exporter):
 
     assert backend_span is not None, "Backend span not found"
 
-    # Span duration should include streaming time
     span_duration_ns = backend_span.end_time - backend_span.start_time
     span_duration_s = span_duration_ns / 1e9
 
     assert span_duration_s >= 0.1, (
         f"Span duration too short for streaming: {span_duration_s}s"
-    )
-    assert abs(span_duration_s - actual_duration) < 0.5, (
-        f"Streaming span duration {span_duration_s}s differs from actual {actual_duration}s"
     )

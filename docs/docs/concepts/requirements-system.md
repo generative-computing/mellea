@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/requirements-system"
 title: "The Requirements System"
 description: "How Requirement, ValidationResult, and the IVR loop work together to enforce constraints on generative output."
 # diataxis: explanation
@@ -16,8 +17,8 @@ see [The Instruction Model](./instruct-validate-repair).
 
 ## What a requirement is
 
-A [`Requirement`](../guide/glossary#requirement) is a [`Component`](../guide/glossary#component) that wraps a natural-language description and an
-optional validation function. During the [instruct–validate–repair (IVR)](../guide/glossary#ivr-instruct-validate-repair) loop:
+A [`Requirement`](../reference/glossary#requirement) is a [`Component`](../reference/glossary#component) that wraps a natural-language description and an
+optional validation function. During the [instruct–validate–repair (IVR)](../reference/glossary#ivr-instruct-validate-repair) loop:
 
 1. Mellea renders the requirement descriptions into the prompt alongside the instruction.
 2. After the model generates output, each requirement is validated against that output.
@@ -26,6 +27,8 @@ optional validation function. During the [instruct–validate–repair (IVR)](..
 4. The loop retries up to `loop_budget` times (default: 2).
 
 ```python
+# Requires: mellea
+# Returns: Requirement
 from mellea.core import Requirement
 
 # Simplest form: natural-language string.
@@ -37,6 +40,8 @@ Passing plain strings directly to `instruct()` is equivalent — they are
 converted to `Requirement` objects internally:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -51,6 +56,8 @@ email = m.instruct(
 `req()` and `check()` are concise constructors from `mellea.stdlib.requirements`:
 
 ```python
+# Requires: mellea
+# Returns: Requirement
 from mellea.stdlib.requirements import check, req
 
 # req() creates a standard Requirement (description included in the prompt)
@@ -75,6 +82,8 @@ For deterministic checks, attach a `validation_fn`. Mellea skips LLM-as-a-judge 
 runs your function directly:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.core import Requirement
 from mellea.stdlib.requirements import simple_validate
@@ -100,6 +109,8 @@ most recent model output as a string and returns either:
   repair request
 
 ```python
+# Requires: mellea
+# Returns: ValidationResult
 from mellea.stdlib.requirements import simple_validate
 
 # Boolean return
@@ -117,6 +128,8 @@ within_limit = simple_validate(
 a full validation function directly, you construct `ValidationResult` yourself:
 
 ```python
+# Requires: mellea
+# Returns: ValidationResult
 from mellea.core import Context, ValidationResult
 
 
@@ -152,9 +165,9 @@ model make a targeted repair rather than regenerating blindly.
 
 ## Preconditions in generative functions
 
-The [`@generative`](../guide/glossary#generative) decorator supports `precondition_requirements` alongside the
+The [`@generative`](../reference/glossary#generative) decorator supports `precondition_requirements` alongside the
 standard `requirements`. Preconditions are validated against the *inputs* to the
-function before generation starts. If they fail, Mellea raises [`PreconditionException`](../guide/glossary#preconditionexception)
+function before generation starts. If they fail, Mellea raises [`PreconditionException`](../reference/glossary#preconditionexception)
 immediately — no generation attempt is made and no IVR loop runs.
 
 ```python
@@ -204,8 +217,8 @@ requirement that failed, giving you a complete picture of what went wrong.
 
 ## Inspecting validation results
 
-When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult)
-instead of a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). This exposes per-attempt validation results:
+When you use `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult)
+instead of a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). This exposes per-attempt validation results:
 
 ```python
 from mellea import start_session
@@ -259,6 +272,8 @@ reserve LLM-based requirements for subjective criteria that cannot be coded dire
 > **Advanced:** `ALoraRequirement` (from `mellea.stdlib.requirements`) uses a fine-tuned
 > LoRA adapter for validation instead of LLM-as-a-judge. It falls back to LLM-as-a-judge
 > if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters).
+
+For a full walkthrough of using LLM-as-a-judge for output quality evaluation, see [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge).
 
 ## Composing requirements
 

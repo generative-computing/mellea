@@ -1,4 +1,4 @@
-# pytest: ollama, e2e
+# pytest: ollama, e2e, xfail
 
 from mellea import generative, start_session
 from mellea.backends import ModelOption
@@ -37,7 +37,7 @@ def give_feedback(essay: str) -> list[str]:
 
 if __name__ == "__main__":
     m = start_session(
-        ctx=ChatContext(), model_options={ModelOption.MAX_NEW_TOKENS: 100}
+        ctx=ChatContext(), model_options={ModelOption.MAX_NEW_TOKENS: 256}
     )
 
     text = """

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/data-extraction-pipeline"
 title: "Data Extraction Pipeline"
 description: "Use the @generative decorator with a typed return value to extract structured data from unstructured text in a single declarative function."
 # diataxis: reference
@@ -20,7 +21,7 @@ runtime exactly what shape the result must have.
 ## Prerequisites
 
 - [Quick Start](../getting-started/quickstart) complete
-- Ollama running locally with `granite4:micro` pulled
+- Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
 
@@ -35,7 +36,7 @@ m = start_session()
 
 `start_session()` with no arguments creates a session backed by the default
 local model. The `model_ids` import is available if you want to switch to a
-specific model later (see [Backends and configuration](../guide/backends-and-configuration)).
+specific model later (see [Backends and configuration](../how-to/backends-and-configuration)).
 
 ### Declaring the extraction function
 

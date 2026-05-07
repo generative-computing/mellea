@@ -14,15 +14,17 @@ uv run python docs/examples/intrinsics/context_attribution.py
 
 import json
 
-from mellea.backends.huggingface import LocalHFBackend
+from mellea import model_ids, start_backend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
-from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = (
-    ChatContext()
-    .add(
+ctx, backend = start_backend(
+    "hf", model_id=model_ids.IBM_GRANITE_4_1_3B, context_type="chat"
+)
+# NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
+
+ctx = (
+    ctx.add(
         Message(
             "user",
             "Who were the members of The Metal Ono Band, which was formed by Yoko Ono "
@@ -41,6 +43,7 @@ context = (
         )
     )
 )
+
 assistant_response = (
     "The Plastic Ono Band was formed by John Lennon and Yoko Ono in 1969 as a "
     "collaborative vehicle for their artistic and personal projects. They decided to "
@@ -174,5 +177,5 @@ documents = [
     ),
 ]
 
-result = core.find_context_attributions(assistant_response, documents, context, backend)
+result = core.find_context_attributions(assistant_response, documents, ctx, backend)
 print(f"Result of context attribution intrinsic:\n{json.dumps(result, indent=2)}")

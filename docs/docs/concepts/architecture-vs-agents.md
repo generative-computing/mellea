@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/architecture-vs-agents"
 title: "Mellea vs Orchestration Frameworks"
 description: "What makes Mellea different from LangChain, smolagents, and other agent frameworks — and how they work together."
 # diataxis: explanation
@@ -132,14 +133,14 @@ Mellea also supports building agentic programs directly, without an external
 orchestrator:
 
 - **ReACT loops** — implement thought/action/observation cycles using `m.chat()`
-  with [`ChatContext`](../guide/glossary#chatcontext) and the `@tool` decorator. See
-  [Tools and Agents](../guide/tools-and-agents).
+  with [`ChatContext`](../reference/glossary#chatcontext) and the `@tool` decorator. See
+  [Tools and Agents](../how-to/tools-and-agents).
 - **Guarded agents** — combine the ReACT pattern with `requirements` and
   `GuardianCheck` to enforce safety constraints at every step. See
   [Security and Taint Tracking](../advanced/security-and-taint-tracking).
 - **Structured outputs** — use `@generative` with Pydantic models or `Literal` types
   to enforce type-safe structured output at each step. See
-  [Generative Functions](../guide/generative-functions).
+  [Generative Functions](../how-to/generative-functions).
 
 For programs where the control flow is fixed in Python — a pipeline, an extraction
 workflow, a classification step — there is no need for a separate orchestrator.
@@ -211,5 +212,5 @@ tools or steps.
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) |
+**See also:** [Tools and Agents](../how-to/tools-and-agents) |
 [Security and Taint Tracking](../advanced/security-and-taint-tracking)

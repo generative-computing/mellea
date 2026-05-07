@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/01-your-first-generative-program"
 title: "Tutorial: Your First Generative Program"
 description: "Build a document analysis pipeline step by step — from a single instruct() call to a composed, typed, validated generative program."
 # diataxis: tutorial
@@ -20,7 +21,7 @@ By the end you will have covered:
 > see [Tutorial 03: Using Generative Stubs](../tutorials/03-using-generative-stubs).
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
-Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro` downloaded.
+Mellea installed (`uv add mellea`), Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 
@@ -29,6 +30,8 @@ Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro`
 Start with the smallest possible program: a single call to `instruct()`.
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -38,11 +41,16 @@ summary = m.instruct(
     "Support was helpful once I got through."
 )
 print(str(summary))
-# Example output (will vary by model and temperature):
-#   "The customer found onboarding confusing and slow, but appreciated the helpful support."
 ```
 
-`instruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). Calling `str()` on it (or accessing
+```text Sample output
+The initial experience with the product's onboarding process was
+challenging but support staff provided valuable assistance later.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording.
+
+`instruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). Calling `str()` on it (or accessing
 `.value`) gives you the string. This is already a generative program: it calls an
 LLM and returns structured text.
 
@@ -57,6 +65,8 @@ Hardcoding the text in the instruction string makes the function impossible to r
 Use `user_variables` and `{{double_braces}}` template syntax:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 def summarize_feedback(m: mellea.MelleaSession, text: str) -> str:
@@ -73,8 +83,14 @@ feedback = (
     "Support was helpful once I got through."
 )
 print(summarize_feedback(m, feedback))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+The onboarding process was complicated and time-consuming, but the
+support team proved to be highly beneficial upon successful connection.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence.
 
 The description is now a [Jinja2](https://jinja.palletsprojects.com/) template. Variables are rendered at generation time,
 not embedded in the source code.
@@ -87,6 +103,8 @@ Pass a list of plain-English requirements to constrain the output. Mellea checks
 each requirement after generation and retries if any fail:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 def summarize_feedback(m: mellea.MelleaSession, text: str) -> str:
@@ -107,8 +125,15 @@ feedback = (
     "Support was helpful once I got through."
 )
 print(summarize_feedback(m, feedback))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+The onboarding process was confusing and time-consuming, but the
+support team proved to be very helpful upon successful completion
+of the initial steps.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence capturing both the negative and positive aspects.
 
 Requirements are validated by LLM-as-a-judge by default. If a requirement fails,
 Mellea sends the model the failure reason and asks it to repair the output.
@@ -121,6 +146,8 @@ For facts you can check in code — word counts, format, length — use
 `simple_validate`:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.requirements import req, simple_validate
 
@@ -152,8 +179,14 @@ feedback = (
     "Support was helpful once I got through."
 )
 print(summarize_feedback(m, feedback))
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Onboarding was confusing and lengthy, but support was helpful after
+issues were resolved.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence capturing fewer than 30 words.
 
 The word-count check is deterministic: it runs in microseconds. The "single
 sentence" check is left for LLM-as-a-judge since counting sentences is harder
@@ -164,9 +197,11 @@ to code reliably.
 ## Step 5: Rejection sampling and inspecting results
 
 By default, `instruct()` retries up to twice if any requirement fails. Use
-[`RejectionSamplingStrategy`](../guide/glossary#sampling-strategy) to control the budget and inspect results:
+[`RejectionSamplingStrategy`](../reference/glossary#sampling-strategy) to control the budget and inspect results:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -202,7 +237,13 @@ m = mellea.start_session()
 print(summarize_feedback(m, "The onboarding was confusing and took far too long."))
 ```
 
-With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult) with
+```text Sample output
+Onboarding process was found confusing and overly prolonged by customers.
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording, but should be a single sentence fewer than 30 words.
+
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult) with
 `.success`, `.result`, and `.sample_generations`. This gives you programmatic
 control over what to do when the model can not satisfy your requirements.
 
@@ -213,6 +254,8 @@ control over what to do when the model can not satisfy your requirements.
 Assemble all the pieces into a complete pipeline:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: None
 from typing import Literal
 from pydantic import BaseModel
 
@@ -278,8 +321,18 @@ analyze_feedback(
     "The onboarding was confusing and took far too long. "
     "Support was helpful once I got through."
 )
-# Output will vary — LLM responses depend on model and temperature.
 ```
+
+```text Sample output
+Summary:   Onboarding was confusing and lengthy, but support was
+           helpful after contact.
+Sentiment: mixed
+Complaint: onboarding was confusing and took far too long
+Positive:  Support was helpful once I got through
+Urgency:   not mentioned
+```
+
+> **Note:** LLM output is non-deterministic. Wording will vary, but `Sentiment` will be one of `positive`, `negative`, or `mixed`, and `FeedbackIssues` fields will be populated strings.
 
 Each step in the pipeline is an independent LLM call with a typed interface. The
 output of `summarize_feedback` feeds `classify_sentiment`; the original feedback

@@ -6,6 +6,7 @@ differs from other intrinsics, which rely on the ``instruction`` field in
 ``io.yaml``.
 """
 
+from ....backends import model_ids
 from ....backends.adapters import AdapterMixin
 from ...context import ChatContext
 from ..chat import Message
@@ -34,7 +35,19 @@ def policy_guardrails(
 
     context = context.add(Message("user", judge_protocol))
     result_json = call_intrinsic("policy-guardrails", context, backend)
-    return result_json["label"]
+
+    if "label" not in result_json.keys() and "score" not in result_json.keys():
+        raise Exception(
+            "Expected Guardian result to have label xor score, but found neither."
+        )
+    elif "label" not in result_json.keys() and "score" in result_json.keys():
+        return result_json["score"]
+    elif "label" in result_json.keys() and "score" not in result_json.keys():
+        return result_json["label"]
+    else:
+        raise Exception(
+            "Expected Guardian result to have label xor score, but found both."
+        )
 
 
 _SYSTEM_PROMPT = (

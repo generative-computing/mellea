@@ -90,6 +90,7 @@ async def react(
             model_options=model_options,
             tool_calls=True,
             await_result=True,
+            silence_context_type_warning=True,
         )
 
         # Have to assert this due to type hints.
@@ -119,6 +120,7 @@ async def react(
                     model_options=model_options,
                     format=format,
                     await_result=True,
+                    silence_context_type_warning=True,
                 )
                 assert isinstance(next_context, ChatContext)
                 context = next_context

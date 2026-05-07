@@ -61,7 +61,7 @@ class ReactTool(pydantic.BaseModel):
 
 
 class ReactToolbox(pydantic.BaseModel):
-    """A convienance wrapper around ReactTool."""
+    """A convenience wrapper around ReactTool."""
 
     tools: list[ReactTool]
 

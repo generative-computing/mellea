@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/security-and-taint-tracking"
 title: "Security and Taint Tracking"
 description: "Use GuardianCheck with IBM Granite Guardian to validate LLM outputs for safety risks."
 # diataxis: how-to
@@ -40,7 +41,7 @@ print(f"Content is safe: {results[0]._result}")
 ```
 
 `thinking=True` enables extended reasoning mode in the Guardian model for more
-accurate results. `results` is a list of [`ValidationResult`](../guide/glossary#validationresult) objects — one per
+accurate results. `results` is a list of [`ValidationResult`](../reference/glossary#validationresult) objects — one per
 requirement passed to `validate()`.
 
 ## Risk types

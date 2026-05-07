@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/mcp"
 title: "MCP Integration"
 description: "Expose Mellea functions as Model Context Protocol tools, callable from Claude Desktop, Cursor, and any MCP-compatible client."
 # diataxis: how-to
@@ -17,6 +18,8 @@ Decorate any function with `@mcp.tool()`. The docstring becomes the tool descrip
 visible to the AI client.
 
 ```python
+# Requires: mcp[cli], mellea[ollama]
+# Returns: str
 from mcp.server.fastmcp import FastMCP
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
@@ -62,6 +65,8 @@ wraps the result.
 A single `FastMCP` server can expose multiple tools, resources, and prompts:
 
 ```python
+# Requires: mcp[cli], mellea[ollama]
+# Returns: str
 from mcp.server.fastmcp import FastMCP
 from mellea import MelleaSession, generative, start_session
 from mellea.backends.ollama import OllamaModelBackend
@@ -115,4 +120,4 @@ uv run your_server.py
 
 ---
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration)
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration)

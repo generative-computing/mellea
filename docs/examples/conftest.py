@@ -187,6 +187,12 @@ def pytest_addoption(parser):
         default=False,
         help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
     )
+    add_option_safe(
+        "--skip-resource-checks",
+        action="store_true",
+        default=False,
+        help="Skip hardware capability gates (VRAM/RAM). API credential and Ollama checks are unaffected.",
+    )
 
 
 def _collect_vllm_example_files(session) -> list[str]:
@@ -564,7 +570,12 @@ def pytest_runtest_setup(item):
     # Get config options from CLI (matching test/conftest.py behavior)
     config = item.config
     ignore_all = config.getoption("--ignore-all-checks", default=False)
-    ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
+    skip_resource = config.getoption("skip_resource_checks", default=False)
+    ignore_gpu = (
+        config.getoption("--ignore-gpu-check", default=False)
+        or ignore_all
+        or skip_resource
+    )
     ignore_ollama = (
         config.getoption("--ignore-ollama-check", default=False) or ignore_all
     )
