@@ -355,6 +355,7 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         self._function = Function(func)
         self._arguments: Arguments | None = None
+        self._template_variables: dict = {}
         functools.update_wrapper(self, func)
 
         self._response_model = create_response_format(self._function._func)
@@ -520,6 +521,18 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         return function_response.result
 
+    def prompt_template_metadata(self) -> tuple[str, dict, None] | None:
+        """Return prompt template metadata for telemetry.
+
+        Returns:
+            Tuple of ``(docstring, variables, version)`` when the function has
+            a docstring, otherwise ``None``.
+        """
+        docstring = self._function._function_dict.get("docstring")
+        if not docstring:
+            return None
+        return str(docstring), dict(self._template_variables), None
+
 
 class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
     """A synchronous generative stub that blocks until the LLM response is ready.
@@ -587,6 +600,7 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 for r in extracted.precondition_requirements
             ]
 
+        stub_copy._template_variables = dict(extracted.f_kwargs)
         arguments = bind_function_arguments(self._function._func, **extracted.f_kwargs)
         if arguments:
             stub_args: list[Argument] = []
@@ -720,6 +734,7 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 for r in extracted.precondition_requirements
             ]
 
+        stub_copy._template_variables = dict(extracted.f_kwargs)
         arguments = bind_function_arguments(self._function._func, **extracted.f_kwargs)
         if arguments:
             stub_args: list[Argument] = []

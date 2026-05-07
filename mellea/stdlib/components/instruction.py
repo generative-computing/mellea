@@ -63,6 +63,15 @@ class Instruction(Component[str]):
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
 
+        # Retain raw template before Jinja substitution for telemetry.
+        # Template text is the static prompt structure; variables may contain user data.
+        self._template_description: str | None = (
+            description if isinstance(description, str) else None
+        )
+        self._user_variables: dict[str, str] | None = (
+            dict(user_variables) if user_variables else None
+        )
+
         # Apply templates. All inputs must be strings if provided.
         if user_variables is not None:
             if description is not None:
@@ -188,6 +197,20 @@ class Instruction(Component[str]):
             images=self._images,
             template_order=["*", "Instruction"],
         )
+
+    def prompt_template_metadata(self) -> tuple[str, dict[str, str], None] | None:
+        """Return prompt template metadata for telemetry.
+
+        The raw template text is emitted unconditionally.  Variables are only
+        emitted when content capture is enabled (they may contain user data).
+
+        Returns:
+            Tuple of ``(template_text, variables, version)`` when a string
+            description was provided, otherwise ``None``.
+        """
+        if self._template_description is None:
+            return None
+        return self._template_description, dict(self._user_variables or {}), None
 
     @staticmethod
     def apply_user_dict_from_jinja(user_dict: dict[str, str], s: str) -> str:
