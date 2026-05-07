@@ -134,6 +134,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 - Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
+- **Static type checks** live in `test/typing/` as `check_*.py` files (not `test_*.py`, so pytest skips them). They use `typing.assert_type` inside function bodies to verify overload resolution and generic parameterization — e.g., that `session.aact(..., await_result=True)` narrows to `ComputedModelOutputThunk[str]`. Verification happens via `uv run mypy .`; the functions are never executed. Add a new `check_*.py` here when introducing or modifying `@overload` signatures or generic type parameters on public APIs.
 
 ## 12. Writing Docs
 
