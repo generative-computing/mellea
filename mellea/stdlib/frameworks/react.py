@@ -8,6 +8,7 @@ history tracking. Raises ``RuntimeError`` if the loop ends without a final answe
 """
 
 from collections.abc import Awaitable, Callable
+from typing import Protocol
 
 # from PIL import Image as PILImage
 from mellea.backends.model_options import ModelOption
@@ -26,6 +27,42 @@ from mellea.stdlib.components.react import (
 from mellea.stdlib.context import ChatContext
 
 
+class AnswerCheckCallable(Protocol):
+    """Protocol for answer validation callbacks in the ReACT loop.
+
+    Called each iteration when no tool calls are made and the model output is non-empty.
+    Allows custom logic to determine if the current output should be accepted as the
+    final answer.
+    """
+
+    async def __call__(
+        self,
+        goal: str,
+        context: ChatContext,
+        backend: Backend,
+        step: ComputedModelOutputThunk[str],
+        model_options: dict | None,
+        turn_num: int,
+        loop_budget: int,
+    ) -> bool:
+        """Validate whether the current step should be accepted as the final answer.
+
+        Args:
+            goal: The original goal or question to accomplish.
+            context: The current conversation context.
+            backend: The backend being used for generation.
+            step: The current model output thunk containing the potential answer.
+            model_options: Model options in effect for this generation.
+            turn_num: Current iteration number (0-indexed).
+            loop_budget: Maximum allowed iterations.
+
+        Returns:
+            True to accept step.value as the final answer and exit the loop;
+            False to continue iterating.
+        """
+        ...
+
+
 async def react(
     goal: str,
     context: ChatContext,
@@ -38,19 +75,7 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
-    answer_check: Callable[
-        [
-            str,
-            ComputedModelOutputThunk[str],
-            ChatContext,
-            Backend,
-            dict | None,
-            int,
-            int,
-        ],
-        Awaitable[bool],
-    ]
-    | None = None,
+    answer_check: AnswerCheckCallable | None = None,
 ) -> tuple[ComputedModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
@@ -133,7 +158,7 @@ async def react(
         # The answer_check function can decide when to actually check based on turn_num and loop_budget
         elif not is_final and answer_check and step.value:
             have_answer = await answer_check(
-                goal, step, context, backend, model_options, turn_num, loop_budget
+                goal, context, backend, step, model_options, turn_num, loop_budget
             )
 
             if have_answer:

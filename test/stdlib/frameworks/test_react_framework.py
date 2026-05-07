@@ -236,7 +236,9 @@ async def test_react_answer_check_terminates_on_direct_response():
     """answer_check returning True on a no-tool-call turn exits the loop."""
     backend = ScriptedBackend([_ScriptedTurn(value="42")])
 
-    async def always_done(goal, step, ctx, backend, opts, turn, budget):
+    async def always_done(
+        goal, context, backend, step, model_options, turn_num, loop_budget
+    ):
         return True
 
     result, _ = await react(
@@ -264,7 +266,9 @@ async def test_react_answer_check_continues_when_false():
 
     call_count = 0
 
-    async def check_on_second_call(goal, step, ctx, backend, opts, turn, budget):
+    async def check_on_second_call(
+        goal, context, backend, step, model_options, turn_num, loop_budget
+    ):
         nonlocal call_count
         call_count += 1
         # Return False on first call to test the continue branch

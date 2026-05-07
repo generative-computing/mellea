@@ -19,7 +19,7 @@ class TrueOrFalse(pydantic.BaseModel):
 
 
 async def last_loop_completion_check(
-    goal, step, context, backend, model_options, turn_num, loop_budget
+    goal, context, backend, step, model_options, turn_num, loop_budget
 ):
     """Completion check that asks the model if it has the answer on the last iteration.
 

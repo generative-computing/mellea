@@ -38,7 +38,7 @@ class TrueOrFalse(pydantic.BaseModel):
 
 
 async def last_loop_completion_check(
-    goal, step, context, backend, model_options, turn_num, loop_budget
+    goal, context, backend, step, model_options, turn_num, loop_budget
 ):
     """Completion check that asks the model if it has the answer on the last iteration.
 
@@ -63,7 +63,7 @@ async def last_loop_completion_check(
 
 
 async def custom_completion_check(
-    goal, step, context, backend, model_options, turn_num, loop_budget
+    goal, context, backend, step, model_options, turn_num, loop_budget
 ):
     """Custom completion check combining keyword detection and fallback to last-loop check.
 
@@ -80,7 +80,7 @@ async def custom_completion_check(
     # On last iteration, fall back to asking the model if it has the answer
     if loop_budget != -1 and turn_num >= loop_budget:
         return await last_loop_completion_check(
-            goal, step, context, backend, model_options, turn_num, loop_budget
+            goal, context, backend, step, model_options, turn_num, loop_budget
         )
 
     return False
