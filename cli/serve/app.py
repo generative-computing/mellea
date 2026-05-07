@@ -7,7 +7,7 @@ import os
 import sys
 import time
 import uuid
-from typing import Any, cast, Literal
+from typing import Any, Literal, cast
 
 try:
     import typer
