@@ -56,17 +56,24 @@ _COMPLIANCE_SYSTEM_PROMPT = (
 )
 
 
-def _expected_guardian_core_envelope(criteria: str, target_role: str) -> str:
-    """Exactly what the pre-refactor ``guardian_check`` helper emitted."""
-    scoring = (
-        f"If the last {target_role}'s text meets the criteria, "
-        f"return 'yes'; otherwise, return 'no'."
-    )
+def _expected_guardian_core_envelope(criteria: str, scoring_schema: str) -> str:
+    """Envelope the overlay renders given the new scoring_schema kwarg.
+
+    Matches the pre-refactor helper's output byte-for-byte when
+    ``scoring_schema`` is the full "If the last {role}'s text ..."
+    sentence.
+    """
     return (
         f"<guardian>{_JUDGE_SYSTEM_PROMPT}\n\n"
         f"### Criteria: {criteria}\n\n"
-        f"### Scoring Schema: {scoring}"
+        f"### Scoring Schema: {scoring_schema}"
     )
+
+
+_DEFAULT_SCORING_SCHEMA = (
+    "If the last assistant's text meets the criteria, "
+    "return 'yes'; otherwise, return 'no'."
+)
 
 
 def _expected_policy_guardrails_envelope(policy_text: str) -> str:
@@ -145,9 +152,9 @@ def test_guardian_core_template_matches_old_helper():
     template = _load_overlay_instruction("guardian-core")
     # Kwargs the new helper passes to call_intrinsic
     criteria = "example criteria text"
-    target_role = "assistant"
-    produced = template.format(criteria=criteria, target_role=target_role)
-    assert produced == _expected_guardian_core_envelope(criteria, target_role)
+    scoring_schema = _DEFAULT_SCORING_SCHEMA
+    produced = template.format(criteria=criteria, scoring_schema=scoring_schema)
+    assert produced == _expected_guardian_core_envelope(criteria, scoring_schema)
 
 
 def test_policy_guardrails_template_matches_old_helper():
@@ -184,11 +191,11 @@ def _rewriter_last_message(intrinsic_name: str, **kwargs: str) -> str:
 
 def test_rewriter_guardian_core_appends_expected_message():
     criteria = "example criteria text"
-    target_role = "assistant"
+    scoring_schema = _DEFAULT_SCORING_SCHEMA
     content = _rewriter_last_message(
-        "guardian-core", criteria=criteria, target_role=target_role
+        "guardian-core", criteria=criteria, scoring_schema=scoring_schema
     )
-    assert content == _expected_guardian_core_envelope(criteria, target_role)
+    assert content == _expected_guardian_core_envelope(criteria, scoring_schema)
 
 
 def test_rewriter_policy_guardrails_appends_expected_message():
@@ -215,7 +222,9 @@ def test_rewriter_preserves_preexisting_conversation():
     yaml_path = _overlay_path("guardian-core")
     rewriter = IntrinsicsRewriter(config_file=yaml_path)
     before = _base_context()
-    after = rewriter.transform(before, criteria="c", target_role="assistant")
+    after = rewriter.transform(
+        before, criteria="c", scoring_schema=_DEFAULT_SCORING_SCHEMA
+    )
     assert len(after.messages) == len(before.messages) + 1
     for i in range(len(before.messages)):
         assert after.messages[i].content == before.messages[i].content
@@ -275,11 +284,11 @@ def _generic_path_last_message(intrinsic_name: str, **intrinsic_kwargs: str) -> 
 def test_generic_path_guardian_core_matches_old_helper_envelope():
     """``Intrinsic("guardian-core", intrinsic_kwargs=...)`` produces the pre-refactor envelope."""
     criteria = "example criteria text"
-    target_role = "assistant"
+    scoring_schema = _DEFAULT_SCORING_SCHEMA
     content = _generic_path_last_message(
-        "guardian-core", criteria=criteria, target_role=target_role
+        "guardian-core", criteria=criteria, scoring_schema=scoring_schema
     )
-    assert content == _expected_guardian_core_envelope(criteria, target_role)
+    assert content == _expected_guardian_core_envelope(criteria, scoring_schema)
 
 
 def test_generic_path_policy_guardrails_matches_old_helper_envelope():

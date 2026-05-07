@@ -9,9 +9,20 @@ any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
 resolved kwargs through.
 """
 
+import warnings
+
 from ....backends.adapters import AdapterMixin
+from ....core.utils import MelleaLogger
 from ...context import ChatContext
 from ._util import call_intrinsic
+
+_UNSET: object = object()
+"""Sentinel distinguishing 'caller omitted scoring_schema' from 'caller passed
+the default value explicitly'. Used only to detect conflicts with the
+deprecated ``target_role`` kwarg."""
+
+_TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_response"}
+"""Mapping used by the deprecated ``target_role`` path of :func:`guardian_check`."""
 
 
 def policy_guardrails(
@@ -43,6 +54,33 @@ def policy_guardrails(
         raise Exception(
             "Expected Guardian result to have label xor score, but found both."
         )
+
+
+SCORING_SCHEMA_BANK = {
+    "assistant_response": (
+        "If the last assistant's text meets the criteria, return 'yes'; "
+        "otherwise, return 'no'."
+    ),
+    "user_prompt": (
+        "If the last user's text meets the criteria, return 'yes'; "
+        "otherwise, return 'no'."
+    ),
+    "last_turn": (
+        "If the previous turn meets the criteria, return 'yes'; otherwise, return 'no'."
+    ),
+    "tool_call": (
+        "If the assistant's tool call meets the criteria, return 'yes'; "
+        "otherwise, return 'no'."
+    ),
+}
+"""Pre-baked scoring-schema phrasings for :func:`guardian_check`.
+
+Keys can be passed directly as the ``scoring_schema`` parameter; any
+other string is used verbatim. Entries must resolve to a yes/no
+verdict — the adapter's ``io.yaml`` constrains output to ``"yes"`` or
+``"no"``, so a schema like ``'return "safe" or "unsafe"'`` will be
+coerced to yes/no by constrained decoding.
+"""
 
 
 CRITERIA_BANK = {
@@ -126,12 +164,14 @@ def guardian_check(
     context: ChatContext,
     backend: AdapterMixin,
     criteria: str,
-    target_role: str = "assistant",
+    scoring_schema: str | object = _UNSET,
+    target_role: str | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
 
-    Uses the guardian-core LoRA adapter to judge whether the last message
-    from ``target_role`` in ``context`` meets the given criteria.
+    Uses the guardian-core LoRA adapter to judge whether the span
+    identified by ``scoring_schema`` in ``context`` meets the given
+    criteria.
 
     Args:
         context: Chat context containing the conversation to evaluate.
@@ -139,18 +179,63 @@ def guardian_check(
         criteria: Description of the criteria to check against. Can be a
             key from :data:`CRITERIA_BANK` (e.g. ``"harm"``) or a custom
             criteria string.
-        target_role: Role whose last message is being evaluated
-            (``"user"`` or ``"assistant"``).
+        scoring_schema: Sentence that tells the judge which span to
+            evaluate and how to decide. Can be a key from
+            :data:`SCORING_SCHEMA_BANK` (e.g. ``"user_prompt"``) or a
+            custom string. Defaults to ``"assistant_response"``. Must
+            still resolve to a yes/no verdict — the adapter's
+            ``response_format`` constrains output to ``"yes"``/``"no"``.
+        target_role: Deprecated. Role whose last message is being
+            evaluated (``"user"`` or ``"assistant"``). Prefer
+            ``scoring_schema`` with a key from
+            :data:`SCORING_SCHEMA_BANK`. Passing both
+            ``scoring_schema`` and ``target_role`` raises
+            :class:`TypeError`.
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
     """
+    if target_role is not None:
+        warnings.warn(
+            "`target_role` is deprecated; use `scoring_schema` instead "
+            "(e.g. scoring_schema='user_prompt'). Will be removed in a "
+            "future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if scoring_schema is not _UNSET:
+            raise TypeError("Pass either `scoring_schema` or `target_role`, not both.")
+        if target_role not in _TARGET_ROLE_TO_SCHEMA:
+            raise ValueError(
+                f"target_role must be 'user' or 'assistant', got {target_role!r}"
+            )
+        resolved_schema = _TARGET_ROLE_TO_SCHEMA[target_role]
+    elif scoring_schema is _UNSET:
+        resolved_schema = "assistant_response"
+    else:
+        assert isinstance(scoring_schema, str)
+        if scoring_schema in _TARGET_ROLE_TO_SCHEMA:
+            # Looks like an old-style target_role value passed positionally.
+            suggested = _TARGET_ROLE_TO_SCHEMA[scoring_schema]
+            MelleaLogger.get_logger().warning(
+                "guardian_check(scoring_schema=%r) looks like an old-style "
+                "target_role value. It will be used as a literal "
+                "scoring-schema sentence, which is probably not what you "
+                "want. Did you mean scoring_schema=%r? (target_role is "
+                "deprecated; prefer SCORING_SCHEMA_BANK keys like "
+                "'user_prompt' or 'assistant_response'.)",
+                scoring_schema,
+                suggested,
+            )
+        resolved_schema = scoring_schema
+
     criteria_text = CRITERIA_BANK.get(criteria, criteria)
+    scoring_schema_text = SCORING_SCHEMA_BANK.get(resolved_schema, resolved_schema)
     result_json = call_intrinsic(
         "guardian-core",
         context,
         backend,
-        kwargs={"criteria": criteria_text, "target_role": target_role},
+        kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
     )
     return result_json["guardian"]["score"]
 

@@ -460,7 +460,7 @@ def test_call_intrinsic_guardian_check_harm(call_intrinsic_backend):
     context = _read_guardian_input("guardian_core.json")
 
     result = guardian.guardian_check(
-        context, call_intrinsic_backend, criteria="harm", target_role="user"
+        context, call_intrinsic_backend, criteria="harm", scoring_schema="user_prompt"
     )
     assert isinstance(result, float)
     assert 0.0 <= result <= 1.0

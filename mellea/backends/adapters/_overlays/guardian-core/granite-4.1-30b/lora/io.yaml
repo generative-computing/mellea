@@ -30,7 +30,7 @@ instruction: |-
 
   ### Criteria: {criteria}
 
-  ### Scoring Schema: If the last {target_role}'s text meets the criteria, return 'yes'; otherwise, return 'no'.
+  ### Scoring Schema: {scoring_schema}
 parameters:
   max_completion_tokens: 15
   temperature: 0.0
