@@ -1,8 +1,9 @@
-# Intrinsic Adapter Lifecycle — Design Proposal
+# Adapter Lifecycle — Design Proposal
 
 > Status: proposal for shape agreement.
 > Addresses Epic #929.
 > Structure: **Part I** is for agreeing the problem, goals, terminology, and end state. **Part II** contains the supporting detail — read after Part I is agreed, not before.
+> Terminology note: this proposal uses **"adapter"** as the primary term for the thing users add to a backend to gain a specialised capability. "Intrinsic" appears as the legacy name where it still refers to existing Mellea classes (e.g. the `Intrinsic` AST component). The rename strategy is called out in §5.
 
 ---
 
@@ -22,12 +23,12 @@ Every thread in #929 is a symptom of not having separated the kinds of adapter a
 
 ## 2. What we are trying to achieve
 
-- **One coherent mental model** of what an adapter is, so users and contributors can reason about intrinsic behaviour without reading the implementation.
-- **One code path** through `call_intrinsic` that works regardless of whether the adapter's weights are local, baked into the base model, or hosted on a server.
+- **One coherent mental model** of what an adapter is, so users and contributors can reason about behaviour without reading the implementation.
+- **One code path** through adapter invocation that works regardless of whether the adapter's weights are local, shipped with the base model, or served by a remote server.
 - **Correct, documented model-option precedence** that does not silently overwrite caller intent.
 - **Schema-version safety** so adapters can evolve their output format without breaking callers, and so an adapter whose schema drifts is visible rather than silent.
-- **First-class custom adapters** — users can ship their own without monkey-patching a global registry.
-- **Observable intrinsic calls** so failures during download, activation, or parsing are diagnosable on first run, not after ad-hoc `print` debugging.
+- **First-class customer adapters** — customers can build and ship their own adapters against the same API as first-party ones, without monkey-patching a global registry and without privileged access to internal APIs.
+- **Observable adapter calls** — every phase (download, activation, generation, parse, deactivation) is a distinct span with standard attributes; a per-adapter metrics plugin makes failures visible in dashboards without bespoke instrumentation.
 - **Parity, not breakage** — high-level helpers (`check_answerability` etc.) keep their shape; manual adapter construction becomes simpler, not harder.
 
 ## 3. Terminology
@@ -37,16 +38,16 @@ Names matter in this design because they appear in user-facing error messages, d
 | Term | Meaning |
 | --- | --- |
 | **Base model** | The general-purpose LLM (e.g. `ibm-granite/granite-4.1-3b`) that everything runs on top of. |
-| **Intrinsic** | A specialised capability — answerability, citations, requirement-check, and so on — invoked via a high-level helper or the `Intrinsic` AST component. |
-| **Adapter** | The artefact that implements an intrinsic on top of a base model. In the redesign, `Adapter` is one class composed of three parts (identity, I/O contract, weights binding). |
+| **Adapter** | The user-facing term for a specialised capability added to a base model — answerability, citations, requirement-check, etc. In the redesign, `Adapter` is one class composed of three parts (identity, I/O contract, weights binding). This is the primary noun users and docs should reach for. |
+| **Intrinsic** | Legacy Mellea term for the same concept. Still appears in the current class names (`Intrinsic` AST component, `IntrinsicAdapter`, `mellea.stdlib.components.intrinsic` module). The direction of travel is to fold "intrinsic" language into "adapter" — the rename scope is a decision in §5. |
 | **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
 | **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. |
-| **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality (see below). Exposes `prepare`, `activate`, `deactivate`, `release`. |
-| **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = baked into the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
-| **LoRA / aLoRA** | Two PEFT technologies. LoRA weights always participate; aLoRA only participates after an activation token is seen. Both are adapter types that a given intrinsic may ship as. |
+| **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality. Exposes `prepare`, `activate`, `deactivate`, `release`. |
+| **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = shipped with the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
+| **LoRA / aLoRA** | Two PEFT technologies. LoRA weights always participate; aLoRA only participates after an activation token is seen. A single adapter ships as one or the other (some intrinsics as either); both are supported across all three realities (including embedded — Granite Switch has LoRA and aLoRA adapters in the same repo, `technology` field on each). |
 | **Role** | A *semantic* label on an adapter distinct from its name — e.g. `requirement_check`, `context_attribution`. Used by callers (the `Requirement` rerouting path) to find "the adapter that plays this role" without hardcoding a name string. |
 | **Qualified name** | Today's disambiguator: `<name>_<adapter_type>`. In the redesign, derived on demand from `identity` rather than stored as a field. |
-| **Catalog** | The registry of known intrinsics at `mellea/backends/adapters/catalog.py`. Becomes optional and advisory rather than mandatory and monkey-patched. |
+| **Catalog** | The registry of known adapters at `mellea/backends/adapters/catalog.py`. Becomes optional and advisory rather than mandatory and monkey-patched. |
 | **`io.yaml`** | The YAML file that declares an adapter's input template, output schema, and generation parameters. Lives in the adapter's HuggingFace repo. |
 
 ## 4. Rough end result
@@ -142,6 +143,11 @@ These gate decomposition; everything else can live in sub-issues once these are 
 3. **OpenAI Reality C — which concrete shape first?** vLLM-backed LoRA serving (client-known weight file, server-side load) or commercial fine-tunes (fully hosted)? The binding covers both; the first subclass sets the idiom.
 4. **Telemetry coupling with #1035.** Include intrinsic spans as part of this refactor, or as a follow-on to PR #1036's Gap 5? Coupling avoids designing content capture twice; decoupling keeps #1036 moving.
 5. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
+6. **Terminology rename scope.** Three levels of commitment to the "adapter over intrinsic" shift:
+   a. **Prose only** (docs, error messages, help text). Zero breakage. Recommended unconditionally.
+   b. **Module rename**: `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for anyone importing from the submodule path.
+   c. **AST class rename**: `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias for one release. Breaking for advanced users calling `mfuncs.act(Intrinsic(...))` directly.
+   Confirm how deep to go.
 
 ---
 
@@ -160,19 +166,23 @@ These gate decomposition; everything else can live in sub-issues once these are 
 
 ### 6.2 Reality B — Embedded adapter (today's `EmbeddedIntrinsicAdapter`, used by Granite Switch)
 
-- Weights were **baked into the base model during training**. No separate file to download.
-- Activation is done by rendering a `controls` field (structured JSON) into the chat template. The Jinja template places it either at the beginning of the sequence (LoRA technology) or before the generation prompt (aLoRA technology). The model itself routes the request to the right baked-in weights.
-- You still need the `io.yaml` for input/output formatting — that's the only artefact the client needs.
-- **Pre-installed weights, prompt-level activation, no download lifecycle.**
+- Adapter weights **ship in the same HuggingFace repo as the base model**. They come down with the base-model snapshot and are not fetched separately — confirmed by the fact that `EmbeddedIntrinsicAdapter.from_hub` downloads only `adapter_index.json` + `io_configs/**`, not weight files. The phrase "baked into the base model" is a useful shorthand but imprecise: the weights are still distinct PEFT modules, just co-located and pre-loaded by the inference runtime.
+- **Both LoRA and aLoRA are supported.** `adapter_index.json` lists each embedded adapter with a `technology` field (`"lora"` or `"alora"`). The chat template uses that field to place the `controls` JSON at the correct position — beginning of sequence for LoRA, before the generation prompt for aLoRA — so the right adapter is active for the right span of tokens. Granite Switch therefore genuinely carries both technologies; it is not a LoRA-only reality.
+- On the client side, only `io.yaml` is needed to format inputs and parse outputs.
+- **Pre-installed weights, prompt-level activation, no separate download lifecycle.**
 
-### 6.3 Reality C — Server-mediated adapter (today's gap, #929 point 5)
+### 6.3 Reality C — Server-mediated adapter (partially gap today, #929 point 5)
 
-Two plausible sub-cases; design must accommodate both.
+The OpenAI-compatible backend **already supports adapters** — but only embedded ones (Granite Switch via Reality B, added in PR #881). The gap this reality addresses is *non-embedded* server-side adapters: the path that PR #543 removed when vLLM dropped aLoRA support and that #929 point 5 describes as "requires discussion."
 
-- **C1 — Client-pulled, server-activated**: weights exist as a file on the client side (or somewhere pullable), but activation happens on a remote inference server (e.g. vLLM loads them and exposes them via a LoRA ID or per-request model alias). The client sends either `model=<adapter-id>` or a dedicated LoRA field in the API request. PR #543 removed this path because vLLM dropped aLoRA support; #929 point 5 anticipates its return as "a much different implementation." This is the likely near-term shape.
+Whether we actively re-enable this path in 0.6.0 is a design decision (see §5 Q3). The shape is worth naming now so the binding abstraction accommodates it rather than having to be re-opened later. Two plausible sub-cases:
+
+- **C1 — Client-pulled, server-activated**: weights exist as a file on the client side (or somewhere pullable), but activation happens on a remote inference server (e.g. vLLM loads them and exposes them via a LoRA ID or per-request model alias). The client sends either `model=<adapter-id>` or a dedicated LoRA field in the API request.
 - **C2 — Provider-hosted**: weights live entirely on the provider's infrastructure. The client only ever passes an identifier. Applies to commercial fine-tunes behind OpenAI, Azure, etc.
 
-Both share: **no local weight loading, API-parameter activation, `io.yaml` still required client-side.**
+Both share: **no local weight loading, API-parameter activation, `io.yaml` still required client-side.** The first concrete `ServerMediatedBinding` subclass sets the idiom for the API shape.
+
+**Intent summary for OpenAI-compatible support:** keep and extend. Embedded support stays. The design leaves a clean slot for non-embedded when we decide to re-add it.
 
 ## 7. Why the current code is tangled (concrete example)
 
@@ -240,7 +250,18 @@ adapter = Adapter(name="answerability",
 
 ## 10. Observability
 
-Intrinsic calls have no bespoke instrumentation today. Folding it into the redesign costs one span attribute per verb; retrofitting means re-editing every binding later.
+### 10.1 Why adapters need bespoke observability
+
+Adapter calls hide the complexity that matters most when something goes wrong (weight fetching, activation side-effects, schema contracts). Without per-phase instrumentation, four failure modes are hard or impossible to diagnose — and Mellea has already hit the first two in production:
+
+1. **Masked errors.** The `obtain_lora`-always-called bug (#929 point 1b) showed users a misleading download error while the real cause (adapter-type mismatch) stayed invisible. A span at the `prepare` boundary recording the exception would have surfaced the actual cause on first run.
+2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. A `parse_failures` counter labelled by `(name, version)` would have climbed immediately; a parse-status span attribute would have shown every call as "parsed with warnings."
+3. **Latency attribution.** "`check_answerability` is slow" is unanswerable today — download, PEFT load, generation, and JSON parse collapse into one backend span. Phase-level spans make the culprit obvious in any trace viewer.
+4. **Alerting and cost attribution.** OTel `ERROR` status on failed download/activation makes generic dashboards and alerts work. Token counts labelled by adapter answer "which capability is 30% of our spend?" Both impossible today.
+
+Adding instrumentation now costs one span attribute per verb. Retrofitting after the refactor means re-editing every binding. And during a refactor this wide, the fastest way to spot a regression in a specific reality is a dashboard, not a bug report.
+
+### 10.2 Spans and metrics
 
 **Spans** — each `adapter_scope` wraps a child span tree rooted at `intrinsic.call`:
 
@@ -269,7 +290,9 @@ First-class deliverables, not afterthoughts.
 
 **Docs** — rewrite (not edit) for `docs/dev/intrinsics_and_adapters.md` (39 lines describing classes that get renamed). Update `docs/dev/requirement_aLoRA_rerouting.md` to describe role-based lookup instead of hardcoded strings. User-facing `docs/docs/advanced/intrinsics.md` and examples under `docs/examples/intrinsics/` are breaking-API touched. New dev doc for adapter observability. Update AGENTS.md §13 once normalised post-parse shapes are stable.
 
-**Tests** — existing intrinsic tests stay green per phase. New tests cover: each binding × each verb (unit); integration matrix `{HF, OpenAI} × {applicable bindings} × {lora, alora where applicable} × {every existing intrinsic}`; per-version parse round-trips (with `requirement-check` v1 / v2 as the worked case); concurrency window correctness; span/metric emission assertions.
+**Tests** — existing adapter tests stay green per phase. New tests cover: each binding × each verb (unit); integration matrix `{HF, OpenAI} × {applicable bindings} × {lora, alora where applicable} × {every existing adapter}`; per-version parse round-trips (with `requirement-check` v1 / v2 as the worked case); concurrency window correctness; span/metric emission assertions.
+
+**Qualitative effectiveness suite (optional, per-adapter).** The tests above verify plumbing. They do *not* answer "does the answerability adapter actually judge answerability correctly?" A per-adapter qualitative suite (`@pytest.mark.qualitative`, opt-in, kept out of the fast loop) takes a small canonical dataset per adapter and asserts an accuracy floor on its outputs — the same kind of eval a user would run before deploying. Kept cheap (tens of examples, not hundreds) so it fits in a reasonable CI budget. Without this, a refactor can pass every structural test while silently degrading the behaviour users care about.
 
 **Tutorials** — three worth writing alongside the refactor:
 - "Adding a custom intrinsic in 20 lines" — replaces the `CustomIntrinsicAdapter` monkey-patch story.
