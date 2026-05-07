@@ -1,10 +1,16 @@
+import logging
+
 import pytest
 
 from mellea.core import CBlock, ModelOutputThunk, TemplateRepresentation
 from mellea.formatters.template_formatter import TemplateFormatter
 from mellea.helpers import message_to_openai_message, messages_to_docs
 from mellea.stdlib.components import Document, Message
-from mellea.stdlib.components.chat import ToolMessage, as_chat_history
+from mellea.stdlib.components.chat import (
+    ToolMessage,
+    as_chat_history,
+    as_generic_chat_history,
+)
 from mellea.stdlib.context import ChatContext
 
 
@@ -248,6 +254,130 @@ def test_as_chat_history_with_parsed_mot():
     history = as_chat_history(ctx)
     assert len(history) == 2
     assert history[1].content == "reply"
+
+
+# --- as_generic_chat_history ---
+
+
+def test_as_generic_chat_history_messages_only():
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(Message("assistant", "hi"))
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[0].role == "user"
+    assert history[0].content == "hello"
+    assert history[1].role == "assistant"
+    assert history[1].content == "hi"
+
+
+def test_as_generic_chat_history_empty():
+    ctx = ChatContext()
+    history = as_generic_chat_history(ctx)
+    assert history == []
+
+
+def test_as_generic_chat_history_with_parsed_mot():
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    mot = ModelOutputThunk(value="reply")
+    mot.parsed_repr = Message("assistant", "reply")
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert history[1].content == "reply"
+
+
+def test_as_generic_chat_history_with_unparsed_mot():
+    """Unresolved ModelOutputThunk gets converted to string."""
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    mot = ModelOutputThunk(value="raw output")
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert "raw output" in history[1].content
+
+
+def test_as_generic_chat_history_with_string_parsed_repr():
+    """ModelOutputThunk with string parsed_repr (e.g., from CBlock action)."""
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    # Simulate a ModelOutputThunk with a string parsed_repr,
+    # as would result from a CBlock action completing
+    mot = ModelOutputThunk(value="reply text", parsed_repr="reply text")
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert history[1].content == "reply text"
+
+
+def test_as_generic_chat_history_with_non_message_parsed_repr():
+    """ModelOutputThunk with non-Message, non-string parsed_repr uses formatter."""
+
+    def custom_formatter(obj: object) -> str:
+        if isinstance(obj, dict):
+            return f"dict:{obj}"
+        return str(obj)
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    # parsed_repr is a dict (could be structured data from a model)
+    mot = ModelOutputThunk(value="raw", parsed_repr={"key": "value"})
+    ctx = ctx.add(mot)
+    history = as_generic_chat_history(ctx, formatter=custom_formatter)
+    assert len(history) == 2
+    assert history[1].role == "assistant"
+    assert "dict:" in history[1].content
+
+
+def test_as_generic_chat_history_with_cblock():
+    """CBlocks are converted to Messages with 'user' role."""
+    ctx = ChatContext()
+    ctx = ctx.add(CBlock("inline content"))
+    ctx = ctx.add(Message("assistant", "response"))
+    history = as_generic_chat_history(ctx)
+    assert len(history) == 2
+    assert history[0].role == "user"
+    assert history[0].content == "inline content"
+
+
+def test_as_generic_chat_history_custom_formatter():
+    """Custom formatter handles unknown types."""
+
+    def custom_formatter(obj: object) -> str:
+        return f"<custom:{type(obj).__name__}>"
+
+    class CustomComponent:
+        def __str__(self):
+            return "original"
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(CustomComponent())
+    history = as_generic_chat_history(ctx, formatter=custom_formatter)
+    assert len(history) == 2
+    assert "<custom:CustomComponent>" in history[1].content
+
+
+def test_as_generic_chat_history_default_formatter_logs_warning(caplog):
+    """Default formatter logs a warning for unknown types."""
+
+    class UnknownComponent:
+        pass
+
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(UnknownComponent())
+
+    with caplog.at_level(logging.WARNING):
+        history = as_generic_chat_history(ctx)
+
+    assert len(history) == 2
+    assert any("Unknown component type" in record.message for record in caplog.records)
 
 
 # --- Formatter rendering of Message documents ---
