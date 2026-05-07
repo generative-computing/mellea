@@ -9,8 +9,6 @@ history tracking. Raises ``RuntimeError`` if the loop ends without a final answe
 
 from collections.abc import Awaitable, Callable
 
-import pydantic
-
 # from PIL import Image as PILImage
 from mellea.backends.model_options import ModelOption
 from mellea.core.backend import Backend, BaseModelSubclass
@@ -26,14 +24,6 @@ from mellea.stdlib.components.react import (
     ReactThought,
 )
 from mellea.stdlib.context import ChatContext
-
-
-class TrueOrFalse(pydantic.BaseModel):
-    """Response indicating whether the ReACT agent has completed its task."""
-
-    answer: bool = pydantic.Field(
-        description="True if you have enough information to answer the user's question, False if you need more tool calls"
-    )
 
 
 async def react(
