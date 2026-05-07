@@ -1,0 +1,75 @@
+---
+title: "mellea.stdlib.components.docs.document"
+sidebarTitle: "mellea.stdlib.components.docs.document"
+description: "`Document` component for grounding model inputs with text passages."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`Document` component for grounding model inputs with text passages.
+
+
+
+
+
+`Document` wraps a text passage with an optional `title` and `doc_id`, and
+renders them inline as a formatted citation string for the model. Documents are
+typically attached to a `Message` via its `documents` parameter, enabling
+retrieval-augmented generation (RAG) workflows.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Document` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/docs/document.py#L15" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A text passage with optional metadata for grounding model inputs.
+
+Documents are typically attached to a `Message` via its `documents`
+parameter to enable retrieval-augmented generation (RAG) workflows.
+
+**Args:**
+- `text`: The text content of the document.
+- `title`: An optional human-readable title for the document.
+- `doc_id`: An optional unique identifier for the document.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/docs/document.py#L34" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Returns the constituent parts of this document.
+
+**Returns:**
+- list\[Component | CBlock]: An empty list by default since the base
+- `Document` class has no constituent parts. Subclasses may override
+- this method to return meaningful parts.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/docs/document.py#L44" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Formats the `Document` as a [`TemplateRepresentation`](../../../core/base#class-templaterepresentation).
+
+Returns: a TemplateRepresentation with text, title, and doc_id args.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

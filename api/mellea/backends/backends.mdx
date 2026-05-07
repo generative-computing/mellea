@@ -1,0 +1,23 @@
+---
+title: "mellea.backends"
+sidebarTitle: "mellea.backends"
+description: "Backend implementations for the mellea inference layer."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Backend implementations for the mellea inference layer.
+
+
+
+
+
+This package exposes the concrete machinery for connecting mellea to language model
+servers. It bundles [`FormatterBackend`](backend#class-formatterbackend) (a prompt-engineering base class for legacy
+models), [`ModelIdentifier`](model_ids#class-modelidentifier) (portable cross-platform model names), [`ModelOption`](model_options#class-modeloption)
+(generation parameters such as token limits), [`SimpleLRUCache`](cache#class-simplelrucache) (KV-cache
+management), and [`MelleaTool`](tools#class-melleatool) / `tool` (LLM tool definitions). Reach for this
+package when configuring a backend, declaring tools, or tuning inference options.

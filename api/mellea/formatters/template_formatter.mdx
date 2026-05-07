@@ -1,0 +1,77 @@
+---
+title: "mellea.formatters.template_formatter"
+sidebarTitle: "mellea.formatters.template_formatter"
+description: "`TemplateFormatter`: Jinja2-template-based formatter for legacy backends."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`TemplateFormatter`: Jinja2-template-based formatter for legacy backends.
+
+
+
+
+
+`TemplateFormatter` extends [`ChatFormatter`](chat_formatter#class-chatformatter) to look up a per-component Jinja2
+template at rendering time, allowing each [`Component`](../core/base#class-component) type to control its own
+prompt representation. Template discovery walks a configurable `template_path` and
+the built-in templates directory; results are cached in a [`SimpleLRUCache`](../backends/cache#class-simplelrucache) for
+performance. Use this formatter when your backend requires hand-crafted prompts
+rather than a generic chat-message rendering.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `TemplateFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/template_formatter.py#L27" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Formatter that uses Jinja2 templates to render components into prompt strings.
+
+Template discovery walks a configurable `template_path` and the built-in
+templates directory. Results are optionally cached in a [`SimpleLRUCache`](../backends/cache#class-simplelrucache)
+for performance. Use this formatter when your backend requires hand-crafted
+prompts rather than generic chat-message rendering.
+
+**Args:**
+- `model_id`: Describes the model for which templates will be looked up.
+Should match the template directory structure.
+- `template_path`: An alternate location where templates can be found.
+Will be preferred over all other template directories even if a less exact match is found.
+Defaults to `""`.
+- `use_template_cache`: When `True`, caches template lookup results. Set to `False`
+if you plan to change `model_id` or `template_path` after construction.
+Defaults to `True`.
+
+Example::
+
+    formatter = TemplateFormatter(model_id="my-model", template_path="/path/to/templates")
+    text = formatter.print(my_component)
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `print` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/template_formatter.py#L155" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+print(self, c: Component | CBlock) -> str
+```
+
+Render a component or code block to a string using a Jinja2 template.
+
+**Args:**
+- `c`: The component or code block to render.
+
+**Returns:**
+- The rendered string representation of the component.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

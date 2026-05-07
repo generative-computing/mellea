@@ -1,0 +1,108 @@
+---
+title: "mellea.stdlib.components.simple"
+sidebarTitle: "mellea.stdlib.components.simple"
+description: "`SimpleComponent`: a lightweight named-span component."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`SimpleComponent`: a lightweight named-span component.
+
+
+
+
+
+`SimpleComponent` accepts arbitrary keyword arguments (strings, [`CBlock`](../../core/base#class-cblock)s, or
+[`Component`](../../core/base#class-component)s) and renders them as a JSON object keyed by the argument names. It is
+the go-to component type for ad-hoc prompts that do not require a dedicated
+[`Component`](../../core/base#class-component) subclass or a Jinja2 template.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SimpleComponent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/simple.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A Component that is make up of named spans.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/simple.py#L25" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Returns the values of the kwargs.
+
+**Returns:**
+- List of component values passed as keyword arguments.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `make_simple_string` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/simple.py#L43" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+make_simple_string(kwargs: dict[str, Any]) -> str
+```
+
+Render keyword arguments as `<|key|>value</|key|>` tagged strings.
+
+**Args:**
+- `kwargs`: Mapping of span names to their [`CBlock`](../../core/base#class-cblock) or
+[`Component`](../../core/base#class-component) values.
+
+**Returns:**
+- Newline-joined tagged representation of all keyword arguments.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `make_json_string` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/simple.py#L58" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+make_json_string(kwargs: dict[str, Any]) -> str
+```
+
+Serialize keyword arguments to a JSON string.
+
+Each value is converted to its string representation: [`CBlock`](../../core/base#class-cblock) and
+[`ModelOutputThunk`](../../core/base#class-modeloutputthunk) values use their `.value` attribute, while
+[`Component`](../../core/base#class-component) values use `format_for_llm()`.
+
+**Args:**
+- `kwargs`: Mapping of span names to [`CBlock`](../../core/base#class-cblock), [`Component`](../../core/base#class-component),
+or [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) values.
+
+**Returns:**
+- JSON-encoded representation of the keyword arguments.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/simple.py#L83" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> str
+```
+
+Format this component as a JSON string representation for the language model.
+
+Delegates to `make_json_string` using the stored keyword arguments.
+
+**Returns:**
+- JSON-encoded string of all named spans in this component.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

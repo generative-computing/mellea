@@ -1,0 +1,247 @@
+---
+title: "mellea.plugins.manager"
+sidebarTitle: "mellea.plugins.manager"
+description: "Singleton plugin manager wrapper with session-tag filtering."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Singleton plugin manager wrapper with session-tag filtering.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `enable_background_collection` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+enable_background_collection() -> None
+```
+
+
+Enable fire-and-forget result collection. Call in test fixtures before each test.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `disable_background_collection` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L46" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+disable_background_collection() -> None
+```
+
+
+Disable fire-and-forget result collection and clear any accumulated results.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `drain_background_tasks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L53" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+drain_background_tasks() -> None
+```
+
+
+Await all accumulated FIRE_AND_FORGET tasks and clear the pending list.
+
+Call this in tests after any operation that may have triggered fire-and-forget plugins,
+to ensure side effects (metrics recording, etc.) complete before assertions.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `discard_background_tasks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L65" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+discard_background_tasks() -> None
+```
+
+
+Discard all accumulated FIRE_AND_FORGET tasks without awaiting them.
+
+Call this in test fixtures to clear stale results from a previous event
+loop before running the next test.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `has_plugins` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L74" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+has_plugins(hook_type: HookType | None = None) -> bool
+```
+
+
+Fast check: are plugins configured and available for the given hook type.
+
+When `hook_type` is provided, also checks whether any plugin has
+registered a handler for that specific hook, enabling callers to skip
+payload construction entirely when no plugin subscribes.
+
+**Args:**
+- `hook_type`: Optional hook type to check for registered handlers.
+
+**Returns:**
+- `True` if plugins are enabled and (when `hook_type` is given)
+- at least one plugin subscribes to that hook.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_internal_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L95" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_internal_tool(tool_name: str) -> bool
+```
+
+
+Return whether the given tool name is a framework-internal tool.
+
+**Args:**
+- `tool_name`: Name of the tool to check.
+
+**Returns:**
+- `True` if the tool is in the internal tools registry.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_plugin_manager` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_plugin_manager() -> Any | None
+```
+
+
+Return the initialized PluginManager, or `None` if plugins are not configured.
+
+**Returns:**
+- The singleton `PluginManager` instance, or `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `ensure_plugin_manager` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L116" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ensure_plugin_manager() -> Any
+```
+
+
+Lazily initialize the PluginManager if not already created.
+
+**Returns:**
+- The singleton `PluginManager` instance.
+
+**Raises:**
+- `ImportError`: If the ContextForge plugin framework is not installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `initialize_plugins` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L150" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+initialize_plugins(config_path: str | None = None) -> Any
+```
+
+
+Initialize the PluginManager with Mellea hook registrations and optional YAML config.
+
+**Args:**
+- `config_path`: Optional path to a YAML plugin configuration file.
+- `timeout`: Maximum execution time per plugin in seconds.
+
+**Returns:**
+- The initialized `PluginManager` instance.
+
+**Raises:**
+- `ImportError`: If the ContextForge plugin framework is not installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `shutdown_plugins` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L189" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+shutdown_plugins() -> None
+```
+
+
+Shut down the PluginManager and reset all state.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `track_session_plugin` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L201" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+track_session_plugin(session_id: str, plugin_name: str) -> None
+```
+
+
+Track a plugin as belonging to a session for later deregistration.
+
+**Args:**
+- `session_id`: Identifier for the session that owns the plugin.
+- `plugin_name`: Registered name of the plugin.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `deregister_session_plugins` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L211" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+deregister_session_plugins(session_id: str) -> None
+```
+
+
+Deregister all plugins scoped to the given session.
+
+**Args:**
+- `session_id`: Identifier for the session whose plugins should be removed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `invoke_hook` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/manager.py#L235" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+invoke_hook(hook_type: HookType, payload: _MelleaBasePayload, **context_fields: Any) -> tuple[Any | None, _MelleaBasePayload]
+```
+
+
+Invoke a hook if plugins are configured.
+
+Returns `(result, possibly-modified-payload)`.
+If plugins are not configured, returns `(None, original_payload)` immediately.
+
+Three layers of no-op guards ensure zero overhead when plugins are not configured:
+1. `_plugins_enabled` boolean — single pointer dereference
+2. `has_hooks_for(hook_type)` — skips when no plugin subscribes
+3. Returns immediately when either guard fails
+
+**Args:**
+- `hook_type`: The hook point to invoke.
+- `payload`: The immutable payload to pass to plugin handlers.
+- `backend`: Optional backend for building the global context.
+- `**context_fields`: Additional fields passed to `build_global_context`.
+
+**Returns:**
+- A `(result, payload)` tuple where *result* is the [`PluginResult`](base#class-pluginresult)
+- (or `None` when no plugins ran) and *payload* is the
+- possibly-modified payload.
+
+**Raises:**
+- [`PluginViolationError`](base#class-pluginviolationerror): If a plugin blocks execution.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,166 @@
+---
+title: "mellea.formatters.granite.granite3.types"
+sidebarTitle: "mellea.formatters.granite.granite3.types"
+description: "Type definitions that are shared within the Granite 3 family of models."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Type definitions that are shared within the Granite 3 family of models.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Hallucination` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L22" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Hallucination data as returned by the model output parser.
+
+**Attributes:**
+- `hallucination_id`: Unique identifier for the hallucination entry.
+- `risk`: Risk level of the hallucination, e.g. `"low"` or `"high"`.
+- `reasoning`: Optional model-provided reasoning for why this
+sentence was flagged.
+- `response_text`: The portion of the response text that is flagged.
+- `response_begin`: Start character offset of `response_text` within
+the full response string.
+- `response_end`: End character offset (exclusive) of `response_text`
+within the full response string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Citation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L45" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Citation data as returned by the model output parser.
+
+**Attributes:**
+- `citation_id`: Unique identifier assigned to this citation.
+- `doc_id`: Identifier of the source document being cited.
+- `context_text`: Verbatim text from the source document that is cited.
+- `context_begin`: Start character offset of `context_text` within
+the source document.
+- `context_end`: End character offset (exclusive) of `context_text`
+within the source document.
+- `response_text`: The portion of the response text that makes this
+citation.
+- `response_begin`: Start character offset of `response_text` within
+the response string.
+- `response_end`: End character offset (exclusive) of `response_text`
+within the response string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3Controls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L74" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Control flags for Granite 3.x model output behaviour.
+
+Specifies which optional output features the model should produce, such as
+inline citations, hallucination risk annotations, response length constraints,
+and originality style.
+
+**Attributes:**
+- `citations`: When `True`, instructs the model to annotate
+factual claims with inline citation markers.
+- `hallucinations`: When `True`, instructs the model to
+append a list of sentences that may be hallucinated.
+- `length`: Requested response length; must be `"short"`,
+`"long"`, or `None` for no constraint.
+- `originality`: Requested response originality style; must be
+`"extractive"`, `"abstractive"`, or `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3Kwargs` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L120" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Chat template keyword arguments specific to IBM Granite 3.x models.
+
+Extends :class:`ChatTemplateKwargs` with Granite 3-specific options for
+output control flags and chain-of-thought (thinking) mode.
+
+**Attributes:**
+- `controls`: Optional output control flags that
+enable or configure citations, hallucination detection, response
+length, and originality style.
+- `thinking`: When `True`, enables chain-of-thought reasoning mode.
+Defaults to `False`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3ChatCompletion` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L138" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Class that represents the inputs common to IBM Granite 3.x models.
+
+Class that represents the inputs that are common to models of the IBM Granite 3.x
+family.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `controls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L145" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+controls(self) -> Granite3Controls
+```
+
+Return the Granite 3 controls record for this chat completion request.
+
+**Returns:**
+- The controls record from the chat template kwargs,
+or an empty :class:`Granite3Controls` if none were specified.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `thinking` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L157" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+thinking(self) -> bool
+```
+
+Return whether chain-of-thought thinking mode is enabled.
+
+**Returns:**
+- `True` if the `thinking` flag is set in the chat template
+kwargs; `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3AssistantMessage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/formatters/granite/granite3/types.py#L234" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+An assistant message with Granite 3 specific fields.
+
+**Attributes:**
+- `reasoning_content`: Optional chain-of-thought reasoning text
+produced before the final response.
+- `citations`: Optional list of citations parsed from
+the model output.
+- `documents`: Optional list of documents referenced
+in the model output.
+- `hallucinations`: Optional list of hallucination
+annotations parsed from the model output.
+- `stop_reason`: Optional reason the model stopped generating.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

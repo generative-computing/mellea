@@ -1,0 +1,146 @@
+---
+title: "mellea.core.sampling"
+sidebarTitle: "mellea.core.sampling"
+description: "Abstract interfaces for sampling strategies and their results."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Abstract interfaces for sampling strategies and their results.
+
+
+
+
+
+`SamplingStrategy` defines the contract for all sampling algorithms: an async
+`sample` method that takes an action, context, backend, and requirements, and
+returns a `SamplingResult`. `SamplingResult` records the chosen generation
+alongside the full history of intermediate samples, their validation outcomes,
+and associated contexts — enabling detailed post-hoc inspection of the sampling
+process.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L26" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Stores the results from a sampling operation. This includes successful and failed samplings.
+
+**Args:**
+- `result_index`: Index into `sample_generations` identifying the chosen final output.
+- `success`: Whether the sampling operation produced a passing result.
+- `sample_generations`: All output thunks generated during sampling.
+- `sample_validations`: Per-generation validation
+results; each inner list contains one tuple per requirement evaluated.
+- `sample_actions`: The actions used to produce each generation.
+- `sample_contexts`: The contexts associated with each generation.
+
+**Attributes:**
+- `result_index`: Index into `sample_generations` identifying the chosen final output.
+- `success`: Whether the sampling operation produced a passing result.
+- `sample_generations`: All output thunks generated during
+sampling; always a list (`None` input is normalised to `[]`).
+- `sample_validations`: Per-generation
+validation results; always a list (`None` input is normalised to `[]`).
+- `sample_actions`: The actions used to produce each generation;
+always a list (`None` input is normalised to `[]`).
+- `sample_contexts`: The contexts associated with each generation;
+always a list (`None` input is normalised to `[]`).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L88" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result(self) -> ComputedModelOutputThunk[S]
+```
+
+The final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result_ctx` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L93" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result_ctx(self) -> Context
+```
+
+The context of the final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result_action` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L98" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result_action(self) -> Component[S]
+```
+
+The action that generated the final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result_validations` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L103" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result_validations(self) -> list[tuple[Requirement, ValidationResult]]
+```
+
+The validation results associated with the final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L108" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A SamplingStrategy class defines an abstract base class for implementing various sampling strategies.
+
+This class provides a template for creating concrete sampling strategies that can be used to generate model outputs based on given instructions.
+It allows setting custom validation and generation functions through properties.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sample` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/sampling.py#L116" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sample(self, action: Component[S], context: Context, backend: Backend, requirements: list[Requirement] | None) -> SamplingResult[S]
+```
+
+This method is the abstract method for sampling a given component.
+
+It must be implemented by any concrete subclasses to provide specific sampling logic.
+
+**Args:**
+- `action `: The action object to be sampled.
+- `context`: The context to be passed to the sampling strategy.
+- `backend`: The backend used for generating samples.
+- `requirements`: List of requirements to test against (merged with global requirements).
+- `validation_ctx`: Optional context to use for validation. If None, validation_ctx = ctx.
+- `format`: output format for structured outputs.
+- `model_options`: model options to pass to the backend during generation / validation.
+- `tool_calls`: True if tool calls should be used during this sampling strategy.
+
+**Returns:**
+- SamplingResult[S]: A result object indicating the success or failure of the sampling process.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

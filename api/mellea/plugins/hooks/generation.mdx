@@ -1,0 +1,72 @@
+---
+title: "mellea.plugins.hooks.generation"
+sidebarTitle: "mellea.plugins.hooks.generation"
+description: "Generation pipeline hook payloads."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Generation pipeline hook payloads.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GenerationPreCallPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/hooks/generation.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `generation_pre_call` — before LLM backend call.
+
+**Attributes:**
+- `action`: The [`Component`](../../core/base#class-component) or [`CBlock`](../../core/base#class-cblock) about to be sent to the backend.
+- `context`: The [`Context`](../../core/base#class-context) being used for this generation call.
+- `model_options`: Dict of model options (writable — plugins may adjust temperature, etc.).
+- `format`: Optional `BaseModel` subclass for constrained decoding (writable).
+- `tool_calls`: Whether tool calls are enabled for this generation (writable).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GenerationPostCallPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/hooks/generation.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `generation_post_call` — fires once the model output is fully computed.
+
+For lazy [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) objects this hook fires inside
+`ModelOutputThunk.astream` after `post_process` completes, so
+`model_output.value` is guaranteed to be available. For already-computed
+thunks (e.g. cached responses) it fires before `generate_from_context`
+returns.
+
+**Attributes:**
+- `prompt`: The formatted prompt sent to the backend (str or list of message dicts).
+- `model_output`: The fully-computed [`ModelOutputThunk`](../../core/base#class-modeloutputthunk).
+- `latency_ms`: Elapsed milliseconds from the `generate_from_context` call
+to when the value was fully materialized.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GenerationErrorPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/plugins/hooks/generation.py#L51" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for `generation_error` — fires when the LLM backend raises an exception.
+
+This hook fires inside `ModelOutputThunk.astream` just before the exception
+is re-raised, giving plugins a chance to observe (but not suppress) the error.
+
+**Attributes:**
+- `exception`: The exception raised by the backend.
+- `model_output`: The [`ModelOutputThunk`](../../core/base#class-modeloutputthunk) at the time of the error. `model`
+and `provider` are set when the backend set them early (before the
+async task); otherwise they are `None`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

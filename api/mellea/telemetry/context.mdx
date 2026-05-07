@@ -1,0 +1,221 @@
+---
+title: "mellea.telemetry.context"
+sidebarTitle: "mellea.telemetry.context"
+description: "Async-safe context propagation for Mellea telemetry."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Async-safe context propagation for Mellea telemetry.
+
+
+
+
+
+Carries `session_id`, `request_id`, `model_id`, and `sampling_iteration`
+through async call chains via :mod:`contextvars`.  Values automatically appear
+in log records (via :class:`MelleaContextFilter`) and can be attached to
+OpenTelemetry spans.
+
+Example::
+
+    from mellea.telemetry.context import with_context, async_with_context, get_current_context
+
+    # Synchronous (also works inside async functions):
+    with with_context(session_id="s-1", model_id="granite"):
+        result = backend.generate(...)
+
+    # Async-with syntax:
+    async with async_with_context(session_id="s-1", model_id="granite"):
+        result = await backend.generate(...)
+        # logs emitted here carry session_id and model_id automatically
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_session_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L60" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_session_id() -> str | None
+```
+
+
+Return the session_id for the current async context, or `None`.
+
+**Returns:**
+- The active session ID string, or `None` if not set.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_request_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L69" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_request_id() -> str | None
+```
+
+
+Return the request_id for the current async context, or `None`.
+
+**Returns:**
+- The active request ID string, or `None` if not set.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_model_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L78" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_model_id() -> str | None
+```
+
+
+Return the model_id for the current async context, or `None`.
+
+**Returns:**
+- The active model ID string, or `None` if not set.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_sampling_iteration` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_sampling_iteration() -> int | None
+```
+
+
+Return the sampling_iteration for the current async context, or `None`.
+
+**Returns:**
+- The current sampling iteration integer, or `None` if not set.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_current_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L96" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_current_context() -> dict[str, Any]
+```
+
+
+Return a snapshot of all non-`None` context values.
+
+**Returns:**
+- Mapping of field names to their current values, omitting keys whose
+- value is `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_request_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L106" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_request_id() -> str
+```
+
+
+Generate a new unique request ID (UUID4 hex string).
+
+**Returns:**
+- A short hex string suitable for use as a `request_id`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `with_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L148" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+with_context(**kwargs: Any) -> Generator[None, None, None]
+```
+
+
+Synchronous context manager that sets telemetry context for the block duration.
+
+On exit the previous values are restored, making this safe for nested
+usage and concurrent asyncio tasks (each `asyncio.Task` owns an isolated
+copy of its `ContextVar` state).
+
+Accepted keyword arguments: `session_id`, `request_id`, `model_id`,
+`sampling_iteration`.  Unknown keys raise :exc:`ValueError`.
+
+**Args:**
+- `**kwargs`: Context fields to set within the block.
+
+**Raises:**
+- `ValueError`: If an unknown context field name is passed.
+
+Example::
+
+    with with_context(session_id="s-1", model_id="granite-4.0"):
+        logger.info("generating")   # log record includes both fields
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `async_with_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L180" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+async_with_context(**kwargs: Any) -> AsyncGenerator[None, None]
+```
+
+
+Async-with variant of :func:`with_context`.
+
+Identical semantics but usable with `async with` syntax.  Note that
+:func:`with_context` also works inside `async` functions — use this
+only when you specifically need `async with` syntax.
+
+**Args:**
+- `**kwargs`: Context fields to set within the block.
+
+**Raises:**
+- `ValueError`: If an unknown context field name is passed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MelleaContextFilter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L208" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Logging filter that injects telemetry context fields into every log record.
+
+Fields from :func:`get_current_context` (`session_id`, `request_id`,
+`model_id`, `sampling_iteration`) are copied onto each
+:class:`logging.LogRecord` so they appear automatically in structured
+JSON output produced by :class:`~mellea.core.utils.JsonFormatter`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `filter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/context.py#L217" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+filter(self, record: logging.LogRecord) -> bool
+```
+
+Attach telemetry context fields to *record*.
+
+**Args:**
+- `record`: The log record being processed.
+
+**Returns:**
+- Always `True` — the record is never suppressed.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

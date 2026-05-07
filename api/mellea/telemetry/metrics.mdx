@@ -1,0 +1,400 @@
+---
+title: "mellea.telemetry.metrics"
+sidebarTitle: "mellea.telemetry.metrics"
+description: "OpenTelemetry metrics instrumentation for Mellea."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+OpenTelemetry metrics instrumentation for Mellea.
+
+
+
+
+
+Provides metrics collection using OpenTelemetry Metrics API with support for:
+- Counters: Monotonically increasing values (e.g., request counts, token usage)
+- Histograms: Value distributions (e.g., latency, token counts)
+- UpDownCounters: Values that can increase or decrease (e.g., active sessions)
+
+Metrics Exporters:
+- Console: Print metrics to console for debugging
+- OTLP: Export to OpenTelemetry Protocol collectors (Jaeger, Grafana, etc.)
+- Prometheus: Register metrics with prometheus_client registry for scraping
+
+Configuration via environment variables:
+
+General:
+- MELLEA_METRICS_ENABLED: Enable/disable metrics collection (default: false)
+- OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
+
+Console Exporter (debugging):
+- MELLEA_METRICS_CONSOLE: Print metrics to console (default: false)
+
+OTLP Exporter (production observability):
+- MELLEA_METRICS_OTLP: Enable OTLP metrics exporter (default: false)
+- OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for all signals (optional)
+- OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Metrics-specific endpoint (optional, overrides general)
+- OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
+
+Prometheus Exporter:
+- MELLEA_METRICS_PROMETHEUS: Enable Prometheus metric reader (default: false)
+
+Pricing (for cost counter):
+- MELLEA_PRICING_FILE: Path to a JSON file with custom model pricing overrides (optional)
+
+Multiple exporters can be enabled simultaneously.
+
+Example - Console debugging:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_CONSOLE=true
+
+Example - OTLP production:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_OTLP=true
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+Example - Prometheus monitoring:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_PROMETHEUS=true
+
+Example - Multiple exporters:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_CONSOLE=true
+    export MELLEA_METRICS_OTLP=true
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+    export MELLEA_METRICS_PROMETHEUS=true
+
+Built-in metrics (auto-recorded via plugins when metrics are enabled):
+- Token counters: mellea.llm.tokens.input, mellea.llm.tokens.output (unit: tokens)
+- Latency histograms: mellea.llm.request.duration (unit: s), mellea.llm.ttfb (unit: s, streaming only)
+- Error counter: mellea.llm.errors (unit: \{error\}), categorized by semantic error type
+- Cost counter: mellea.llm.cost.usd (unit: USD), estimated cost when pricing data is available
+- Sampling counters: mellea.sampling.attempts, mellea.sampling.successes, mellea.sampling.failures (unit: \{attempt\}/\{sample\}/\{failure\})
+- Requirement counters: mellea.requirement.checks (unit: \{check\}), mellea.requirement.failures (unit: \{failure\})
+- Tool counter: mellea.tool.calls (unit: \{call\}), tagged by tool name and status
+
+Programmatic usage:
+    from mellea.telemetry.metrics import create_counter, create_histogram
+
+    request_counter = create_counter(
+        "mellea.requests",
+        description="Total number of LLM requests",
+        unit="1"
+    )
+    request_counter.add(1, \{"backend": "ollama", "model": "llama2"\})
+
+    latency_histogram = create_histogram(
+        "mellea.request.duration",
+        description="Request latency distribution",
+        unit="s"
+    )
+    latency_histogram.record(1.5, \{"backend": "ollama"\})
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `create_counter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L308" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+create_counter(name: str, description: str = '', unit: str = '1') -> Any
+```
+
+
+Create a counter instrument for monotonically increasing values.
+
+Counters are used for values that only increase, such as:
+- Total number of requests
+- Total tokens processed
+- Total errors encountered
+
+**Args:**
+- `name`: Metric name (e.g., "mellea.requests.total")
+- `description`: Human-readable description of what this metric measures
+- `unit`: Unit of measurement (e.g., "1" for count, "ms" for milliseconds)
+
+**Returns:**
+- Counter instrument (or no-op if metrics disabled)
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `create_histogram` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L338" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+create_histogram(name: str, description: str = '', unit: str = '1') -> Any
+```
+
+
+Create a histogram instrument for recording value distributions.
+
+Histograms are used for values that vary and need statistical analysis:
+- Request latency
+- Token counts per request
+- Response sizes
+
+**Args:**
+- `name`: Metric name (e.g., "mellea.request.duration")
+- `description`: Human-readable description
+- `unit`: Unit of measurement (e.g., "ms", "tokens", "bytes")
+
+**Returns:**
+- Histogram instrument (or no-op if metrics disabled)
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `create_up_down_counter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L368" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+create_up_down_counter(name: str, description: str = '', unit: str = '1') -> Any
+```
+
+
+Create an up-down counter for values that can increase or decrease.
+
+UpDownCounters are used for values that go up and down:
+- Active sessions
+- Items in a queue
+- Memory usage
+
+**Args:**
+- `name`: Metric name (e.g., "mellea.sessions.active")
+- `description`: Human-readable description
+- `unit`: Unit of measurement
+
+**Returns:**
+- UpDownCounter instrument (or no-op if metrics disabled)
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_metrics_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L399" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_metrics_enabled() -> bool
+```
+
+
+Check if metrics collection is enabled.
+
+**Returns:**
+- True if metrics are enabled, False otherwise
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_token_usage_metrics` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L439" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_token_usage_metrics(input_tokens: int | None, output_tokens: int | None, model: str, provider: str) -> None
+```
+
+
+Record token usage metrics following OpenTelemetry Gen-AI semantic conventions.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `input_tokens`: Number of input tokens (prompt tokens), or None if unavailable
+- `output_tokens`: Number of output tokens (completion tokens), or None if unavailable
+- `model`: Model identifier (e.g., "gpt-4", "llama2\:7b")
+- `provider`: Provider name (e.g., "openai", "ollama", "watsonx")
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_request_duration` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L510" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_request_duration(duration_s: float, model: str, provider: str, streaming: bool = False) -> None
+```
+
+
+Record total LLM request duration.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `duration_s`: Request duration in seconds
+- `model`: Model identifier (e.g., "gpt-4", "llama2\:7b")
+- `provider`: Provider name (e.g., "openai", "ollama", "watsonx")
+- `streaming`: Whether the request used streaming mode
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_ttfb` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L543" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_ttfb(ttfb_s: float, model: str, provider: str) -> None
+```
+
+
+Record time-to-first-token for streaming LLM requests.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+Should only be called for streaming requests.
+
+**Args:**
+- `ttfb_s`: Time to first token in seconds
+- `model`: Model identifier (e.g., "gpt-4", "llama2\:7b")
+- `provider`: Provider name (e.g., "openai", "ollama", "watsonx")
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `classify_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L610" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+classify_error(exc: BaseException) -> str
+```
+
+
+Map an exception to a semantic error type string.
+
+Checks OpenAI SDK exception types first (when openai is installed), then
+falls back to stdlib exceptions and name-based heuristics.
+
+**Args:**
+- `exc`: The exception to classify.
+
+**Returns:**
+- One of the `ERROR_TYPE_*` constants.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L693" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_error(error_type: str, model: str, provider: str, exception_class: str) -> None
+```
+
+
+Record an LLM error metric.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `error_type`: Semantic error category (use `ERROR_TYPE_*` constants).
+- `model`: Model identifier (e.g. "gpt-4", "llama2\:7b").
+- `provider`: Provider name (e.g. "openai", "ollama").
+- `exception_class`: Python exception class name (e.g. "RateLimitError").
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_cost` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L754" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_cost(cost: float, model: str, provider: str) -> None
+```
+
+
+Record estimated LLM request cost in USD.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+Only call this when pricing data is available (i.e., `compute_cost` returned
+a non-None value).
+
+**Args:**
+- `cost`: Estimated request cost in US dollars.
+- `model`: Model identifier (e.g. `"gpt-4o"`, `"claude-sonnet-4-6"`).
+- `provider`: Provider name (e.g. `"openai"`, `"ollama"`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_sampling_attempt` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L824" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_sampling_attempt(strategy: str) -> None
+```
+
+
+Record one sampling attempt for the given strategy.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `strategy`: Sampling strategy class name (e.g. `"RejectionSamplingStrategy"`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_sampling_outcome` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L838" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_sampling_outcome(strategy: str, success: bool) -> None
+```
+
+
+Record the final outcome (success or failure) of a sampling loop.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `strategy`: Sampling strategy class name (e.g. `"RejectionSamplingStrategy"`).
+- `success`: `True` if at least one attempt passed all requirements.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_requirement_check` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L886" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_requirement_check(requirement: str) -> None
+```
+
+
+Record one requirement validation check.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `requirement`: Requirement class name (e.g. `"LLMaJRequirement"`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_requirement_failure` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L900" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_requirement_failure(requirement: str, reason: str) -> None
+```
+
+
+Record one requirement validation failure.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `requirement`: Requirement class name (e.g. `"LLMaJRequirement"`).
+- `reason`: Human-readable failure reason from `ValidationResult.reason`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_tool_call` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/telemetry/metrics.py#L933" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_tool_call(tool: str, status: str) -> None
+```
+
+
+Record one tool invocation.
+
+This is a no-op when metrics are disabled, ensuring zero overhead.
+
+**Args:**
+- `tool`: Name of the tool that was invoked.
+- `status`: `"success"` if the tool executed without error, `"failure"` otherwise.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

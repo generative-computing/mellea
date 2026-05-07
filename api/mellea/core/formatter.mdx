@@ -1,0 +1,56 @@
+---
+title: "mellea.core.formatter"
+sidebarTitle: "mellea.core.formatter"
+description: "Abstract `Formatter` interface for rendering components to strings."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Abstract `Formatter` interface for rendering components to strings.
+
+
+
+
+
+A `Formatter` converts [`Component`](base#class-component) and [`CBlock`](base#class-cblock) objects into the text strings
+fed to language model prompts. The single abstract method `print` encapsulates this
+rendering contract; concrete subclasses such as [`ChatFormatter`](../formatters/chat_formatter#class-chatformatter) and
+[`TemplateFormatter`](../formatters/template_formatter#class-templateformatter) extend it with chat-message and Jinja2-template rendering
+respectively.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Formatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/formatter.py#L15" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A Formatter converts [`Component`](base#class-component)s into strings and parses [`ModelOutputThunk`](base#class-modeloutputthunk)s into [`Component`](base#class-component)s (or [`CBlock`](base#class-cblock)s).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `print` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/core/formatter.py#L19" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+print(self, c: Component | CBlock) -> str
+```
+
+Renders a [`Component`](base#class-component) or [`CBlock`](base#class-cblock) into a string suitable for use as model input.
+
+**Args:**
+- `c`: The component or content block to render.
+
+**Returns:**
+- The rendered string representation of `c`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

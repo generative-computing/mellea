@@ -1,0 +1,635 @@
+{
+  "$schema": "https://leaves.mintlify.com/schema/docs.json",
+  "theme": "maple",
+  "name": "Mellea",
+  "colors": {
+    "primary": "#000000",
+    "light": "#c5c5c5",
+    "dark": "#000000"
+  },
+  "fonts": {
+    "heading": {
+      "family": "IBM Plex Sans"
+    },
+    "body": {
+      "family": "IBM Plex Sans"
+    }
+  },
+  "favicon": "/images/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/installation",
+              "getting-started/quickstart"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "tutorials/01-your-first-generative-program",
+              "tutorials/02-streaming-and-async",
+              "tutorials/03-using-generative-stubs",
+              "tutorials/04-making-agents-reliable",
+              "tutorials/05-mifying-legacy-code"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/generative-programming",
+              "concepts/generative-functions",
+              "concepts/instruct-validate-repair",
+              "concepts/requirements-system",
+              "concepts/architecture-vs-agents",
+              "concepts/context-and-sessions",
+              "concepts/mobjects-and-mify",
+              "concepts/plugins"
+            ]
+          },
+          {
+            "group": "How-To",
+            "pages": [
+              "how-to/generative-functions",
+              "how-to/tools-and-agents",
+              "how-to/working-with-data",
+              "how-to/backends-and-configuration",
+              "how-to/act-and-aact",
+              "how-to/m-decompose",
+              "how-to/use-async-and-streaming",
+              "how-to/use-context-and-sessions",
+              "how-to/enforce-structured-output",
+              "how-to/write-custom-verifiers",
+              "how-to/evaluate-with-llm-as-a-judge",
+              "how-to/configure-model-options",
+              "how-to/use-images-and-vision",
+              "how-to/build-a-rag-pipeline",
+              "how-to/refactor-prompts-with-cli",
+              "how-to/unit-test-generative-code",
+              "how-to/handling-exceptions"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/index",
+              "examples/data-extraction-pipeline",
+              "examples/legacy-code-integration",
+              "examples/resilient-rag-fallback",
+              "examples/traced-generation-loop"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/ollama",
+              "integrations/huggingface",
+              "integrations/openai",
+              "integrations/vertex-ai",
+              "integrations/bedrock",
+              "integrations/watsonx",
+              "integrations/mcp",
+              "integrations/langchain",
+              "integrations/smolagents",
+              "integrations/m-serve"
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "observability/telemetry",
+              "observability/tracing",
+              "observability/metrics",
+              "observability/logging"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/intrinsics",
+              "advanced/lora-and-alora-adapters",
+              "advanced/prefix-caching-and-kv-blocks",
+              "advanced/inference-time-scaling",
+              "advanced/security-and-taint-tracking",
+              "advanced/mellea-core-internals",
+              "advanced/template-formatting",
+              "advanced/custom-components"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "community/contributing-guide",
+              "community/building-extensions",
+              "community/code-of-conduct"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/glossary",
+              "reference/cli"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-errors",
+              "troubleshooting/faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "pages": [
+          "api-reference",
+          {
+            "group": "mellea",
+            "pages": [
+              {
+                "group": "backends",
+                "pages": [
+                  "api/mellea/backends/backend",
+                  "api/mellea/backends/backends",
+                  "api/mellea/backends/cache",
+                  "api/mellea/backends/model_ids",
+                  "api/mellea/backends/model_options",
+                  "api/mellea/backends/tools",
+                  {
+                    "group": "adapters",
+                    "pages": [
+                      "api/mellea/backends/adapters/adapter"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "core",
+                "pages": [
+                  "api/mellea/core/backend",
+                  "api/mellea/core/base",
+                  "api/mellea/core/core",
+                  "api/mellea/core/formatter",
+                  "api/mellea/core/requirement",
+                  "api/mellea/core/sampling",
+                  "api/mellea/core/utils"
+                ]
+              },
+              {
+                "group": "formatters",
+                "pages": [
+                  "api/mellea/formatters/chat_formatter",
+                  "api/mellea/formatters/formatters",
+                  "api/mellea/formatters/template_formatter",
+                  {
+                    "group": "granite",
+                    "pages": [
+                      {
+                        "group": "base",
+                        "pages": [
+                          "api/mellea/formatters/granite/base/base",
+                          "api/mellea/formatters/granite/base/io",
+                          "api/mellea/formatters/granite/base/optional",
+                          "api/mellea/formatters/granite/base/types",
+                          "api/mellea/formatters/granite/base/util"
+                        ]
+                      },
+                      {
+                        "group": "granite3",
+                        "pages": [
+                          "api/mellea/formatters/granite/granite3/types",
+                          {
+                            "group": "granite32",
+                            "pages": [
+                              "api/mellea/formatters/granite/granite3/granite32/input",
+                              "api/mellea/formatters/granite/granite3/granite32/output",
+                              "api/mellea/formatters/granite/granite3/granite32/types"
+                            ]
+                          },
+                          {
+                            "group": "granite33",
+                            "pages": [
+                              "api/mellea/formatters/granite/granite3/granite33/input",
+                              "api/mellea/formatters/granite/granite3/granite33/output",
+                              "api/mellea/formatters/granite/granite3/granite33/types"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "group": "intrinsics",
+                        "pages": [
+                          "api/mellea/formatters/granite/intrinsics/input",
+                          "api/mellea/formatters/granite/intrinsics/output",
+                          "api/mellea/formatters/granite/intrinsics/util"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "helpers",
+                "pages": [
+                  "api/mellea/helpers/async_helpers",
+                  "api/mellea/helpers/helpers",
+                  "api/mellea/helpers/openai_compatible_helpers",
+                  "api/mellea/helpers/server_type"
+                ]
+              },
+              {
+                "group": "plugins",
+                "pages": [
+                  "api/mellea/plugins/base",
+                  "api/mellea/plugins/decorators",
+                  "api/mellea/plugins/manager",
+                  "api/mellea/plugins/plugins",
+                  "api/mellea/plugins/pluginset",
+                  "api/mellea/plugins/registry",
+                  "api/mellea/plugins/types",
+                  {
+                    "group": "hooks",
+                    "pages": [
+                      "api/mellea/plugins/hooks/component",
+                      "api/mellea/plugins/hooks/generation",
+                      "api/mellea/plugins/hooks/sampling",
+                      "api/mellea/plugins/hooks/session",
+                      "api/mellea/plugins/hooks/tool",
+                      "api/mellea/plugins/hooks/validation"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "stdlib",
+                "pages": [
+                  "api/mellea/stdlib/chunking",
+                  "api/mellea/stdlib/stdlib",
+                  {
+                    "group": "components",
+                    "pages": [
+                      "api/mellea/stdlib/components/chat",
+                      "api/mellea/stdlib/components/instruction",
+                      "api/mellea/stdlib/components/mify",
+                      "api/mellea/stdlib/components/mobject",
+                      "api/mellea/stdlib/components/simple",
+                      {
+                        "group": "docs",
+                        "pages": [
+                          "api/mellea/stdlib/components/docs/document"
+                        ]
+                      },
+                      {
+                        "group": "intrinsic",
+                        "pages": [
+                          "api/mellea/stdlib/components/intrinsic/intrinsic"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "group": "frameworks",
+                    "pages": [
+                      "api/mellea/stdlib/frameworks/react"
+                    ]
+                  },
+                  {
+                    "group": "requirements",
+                    "pages": [
+                      "api/mellea/stdlib/requirements/md",
+                      "api/mellea/stdlib/requirements/python_reqs",
+                      "api/mellea/stdlib/requirements/requirement",
+                      "api/mellea/stdlib/requirements/tool_reqs",
+                      {
+                        "group": "safety",
+                        "pages": [
+                          "api/mellea/stdlib/requirements/safety/guardian"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "group": "sampling",
+                    "pages": [
+                      "api/mellea/stdlib/sampling/base",
+                      "api/mellea/stdlib/sampling/sofai",
+                      {
+                        "group": "sampling_algos",
+                        "pages": [
+                          "api/mellea/stdlib/sampling/sampling_algos/budget_forcing_alg"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "group": "tools",
+                    "pages": [
+                      "api/mellea/stdlib/tools/interpreter"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "telemetry",
+                "pages": [
+                  "api/mellea/telemetry/context",
+                  "api/mellea/telemetry/logging",
+                  "api/mellea/telemetry/metrics",
+                  "api/mellea/telemetry/pricing",
+                  "api/mellea/telemetry/telemetry",
+                  "api/mellea/telemetry/tracing"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/logo-light.svg",
+    "dark": "/logo/logo-dark.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "GitHub",
+      "href": "https://github.com/generative-computing/mellea"
+    },
+    "links": [
+      {
+        "label": "Blog",
+        "href": "https://generative-computing.github.io/blog/"
+      },
+      {
+        "label": "Community",
+        "href": "https://github.com/generative-computing/mellea/discussions"
+      },
+      {
+        "label": "Contribution Guide",
+        "href": "https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md"
+      },
+      {
+        "label": "Support",
+        "href": "https://github.com/generative-computing/mellea/issues"
+      }
+    ]
+  },
+  "search": {
+    "prompt": "Search documentation..."
+  },
+  "feedback": {
+    "thumbsRating": true
+  },
+  "redirects": [
+    {
+      "source": "/guide/glossary",
+      "destination": "/reference/glossary"
+    },
+    {
+      "source": "/overview/overview",
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/overview/mellea-welcome",
+      "destination": "/"
+    },
+    {
+      "source": "/overview/quick-start",
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/overview/project-mellea",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/overview/generative-programming",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/overview/architecture",
+      "destination": "/how-to/backends-and-configuration"
+    },
+    {
+      "source": "/core-concept/instruct-validate-repair",
+      "destination": "/concepts/instruct-validate-repair"
+    },
+    {
+      "source": "/core-concept/requirements",
+      "destination": "/concepts/requirements-system"
+    },
+    {
+      "source": "/core-concept/generative-slots",
+      "destination": "/how-to/generative-functions"
+    },
+    {
+      "source": "/core-concept/mobjects",
+      "destination": "/concepts/mobjects-and-mify"
+    },
+    {
+      "source": "/core-concept/agents",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/core-concept/context-management",
+      "destination": "/how-to/use-context-and-sessions"
+    },
+    {
+      "source": "/core-concept/alora",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/core-concept/tuning",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/core-concept/modeloptions",
+      "destination": "/how-to/configure-model-options"
+    },
+    {
+      "source": "/core-concept/interoperability",
+      "destination": "/integrations/mcp"
+    },
+    {
+      "source": "/integrations/mcp-and-m-serve",
+      "destination": "/integrations/mcp"
+    },
+    {
+      "source": "/core-concept/adapters",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/core-concept/contribution-guide",
+      "destination": "/guide/CONTRIBUTING"
+    },
+    {
+      "source": "/core-concept/prompt-engineering",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/integrations/bedrock-and-watsonx",
+      "destination": "/integrations/bedrock"
+    },
+    {
+      "source": "/integrations/huggingface-and-vllm",
+      "destination": "/integrations/huggingface"
+    },
+    {
+      "source": "/integrations/langchain-and-smolagents",
+      "destination": "/integrations/langchain"
+    },
+    {
+      "source": "/how-to/safety-guardrails",
+      "destination": "/advanced/security-and-taint-tracking"
+    },
+    {
+      "source": "/dev/constrained-decoding",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/generate-ctx-signature",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/intrinsics-and-adapters",
+      "destination": "/advanced/intrinsics"
+    },
+    {
+      "source": "/dev/mellea-library",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/dev/mify",
+      "destination": "/concepts/mobjects-and-mify"
+    },
+    {
+      "source": "/dev/requirement-alora-rerouting",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/dev/spans",
+      "destination": "/observability/tracing"
+    },
+    {
+      "source": "/dev/tool-calling",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/api/cli/m",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/intrinsic_uploader",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/readme_generator",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/train",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/upload",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/decompose",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/pipeline",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/utils",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/eval",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/runner",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/app",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/models",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/async_fixer",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/genstub_fixer",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/guide/generative-functions",
+      "destination": "/how-to/generative-functions"
+    },
+    {
+      "source": "/guide/tools-and-agents",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/guide/working-with-data",
+      "destination": "/how-to/working-with-data"
+    },
+    {
+      "source": "/guide/backends-and-configuration",
+      "destination": "/how-to/backends-and-configuration"
+    },
+    {
+      "source": "/evaluation-and-observability/evaluate-with-llm-as-a-judge",
+      "destination": "/how-to/evaluate-with-llm-as-a-judge"
+    },
+    {
+      "source": "/evaluation-and-observability/telemetry",
+      "destination": "/observability/telemetry"
+    },
+    {
+      "source": "/evaluation-and-observability/tracing",
+      "destination": "/observability/tracing"
+    },
+    {
+      "source": "/evaluation-and-observability/metrics",
+      "destination": "/observability/metrics"
+    },
+    {
+      "source": "/evaluation-and-observability/logging",
+      "destination": "/observability/logging"
+    },
+    {
+      "source": "/guide/act-and-aact",
+      "destination": "/how-to/act-and-aact"
+    },
+    {
+      "source": "/guide/m-decompose",
+      "destination": "/how-to/m-decompose"
+    }
+  ]
+}

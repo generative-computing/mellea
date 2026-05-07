@@ -1,0 +1,144 @@
+---
+title: "mellea.stdlib.components.chat"
+sidebarTitle: "mellea.stdlib.components.chat"
+description: "Chat primitives: the `Message` and `ToolMessage` components."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Chat primitives: the `Message` and `ToolMessage` components.
+
+
+
+
+
+Defines `Message`, the [`Component`](../../core/base#class-component) subtype used to represent a single turn in a
+chat history with a `role` (`user`, `assistant`, `system`, or `tool`),
+text `content`, and optional `images` and `documents` attachments. Also provides
+`ToolMessage` (a `Message` subclass that carries the tool name and arguments) and
+the `as_chat_history` utility for converting a [`Context`](../../core/base#class-context) into a flat list of
+`Message` objects.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_chat_history` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/chat.py#L222" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+as_chat_history(ctx: Context) -> list[Message]
+```
+
+
+Returns a list of Messages corresponding to a Context.
+
+**Args:**
+- `ctx`: A linear [`Context`](../../core/base#class-context) whose entries are `Message` or [`ModelOutputThunk`](../../core/base#class-modeloutputthunk)
+objects with `Message` parsed representations.
+
+**Returns:**
+- List of `Message` objects in conversation order.
+
+**Raises:**
+- `Exception`: If the context history is non-linear and cannot be cast to a
+flat list.
+- `AssertionError`: If any entry in the context cannot be converted to a
+`Message`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Message` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/chat.py#L26" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A single Message in a Chat history.
+
+**Args:**
+- `role`: The role that this message came from (e.g., `"user"`,
+`"assistant"`).
+- `content`: The content of the message.
+- `images`: Optional images associated with the
+message.
+- `documents`: Optional documents associated with
+the message.
+
+**Attributes:**
+- `Role`: Type alias for the allowed role literals\: `"system"`,
+`"user"`, `"assistant"`, or `"tool"`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `images` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/chat.py#L61" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+images(self) -> None | list[str]
+```
+
+Returns the images associated with this message as list of base 64 strings.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/chat.py#L67" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Return the constituent parts of this message, including content, documents, and images.
+
+**Returns:**
+- list\[Component | CBlock]: A list beginning with the content block,
+- followed by any attached documents and image blocks.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/chat.py#L81" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Formats the content for a Language Model.
+
+**Returns:**
+- The formatted output suitable for language models.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ToolMessage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/components/chat.py#L184" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Adds the name field for function name.
+
+**Args:**
+- `role`: The role of this message; most backends use `"tool"`.
+- `content`: The content of the message; should be a stringified
+version of `tool_output`.
+- `tool_output`: The output of the tool or function call.
+- `name`: The name of the tool or function that was called.
+- `args`: The arguments passed to the tool.
+- `tool`: The [`ModelToolCall`](../../core/base#class-modeltoolcall) representation.
+
+**Attributes:**
+- `arguments`: The arguments that were passed to the
+tool; stored from the `args` constructor parameter.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

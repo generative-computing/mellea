@@ -1,0 +1,153 @@
+---
+title: "mellea.stdlib.requirements.safety.guardian"
+sidebarTitle: "mellea.stdlib.requirements.safety.guardian"
+description: "Risk checking with Granite Guardian models via existing backends."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Risk checking with Granite Guardian models via existing backends.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GuardianRisk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/requirements/safety/guardian.py#L20" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Risk definitions for Granite Guardian models.
+
+Based on https://github.com/ibm-granite/granite-guardian but updated for 3.3 8B support.
+
+**Attributes:**
+- `HARM`: General harmful content risk.
+- `GROUNDEDNESS`: Factual groundedness / attribution risk.
+- `PROFANITY`: Profane language risk.
+- `ANSWER_RELEVANCE`: Answer relevance to the question risk.
+- `JAILBREAK`: Jailbreak attempt risk.
+- `FUNCTION_CALL`: Unsafe or invalid function-call risk.
+- `SOCIAL_BIAS`: Social bias risk.
+- `VIOLENCE`: Violent content risk.
+- `SEXUAL_CONTENT`: Explicit sexual content risk.
+- `UNETHICAL_BEHAVIOR`: Unethical behaviour risk.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_available_risks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/requirements/safety/guardian.py#L50" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_available_risks(cls) -> list[str]
+```
+
+Return a list of all available risk type identifiers.
+
+**Returns:**
+- list\[str]: String values of all `GuardianRisk` enum members.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GuardianCheck` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/requirements/safety/guardian.py#L86" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Enhanced risk checking using Granite Guardian 3.3 8B with multiple backend support.
+
+[DEPRECATED as of V 0.4 -- Use Intrinsics instead]
+
+**Args:**
+- `risk`: The type of risk to check for.  Required
+unless `custom_criteria` is provided.
+- `backend_type`: Backend type to use -- `"ollama"` or
+`"huggingface"`.
+- `model_version`: Specific Guardian model version.  Defaults to
+the appropriate 8B model for the chosen backend.
+- `device`: Device string for HuggingFace inference (e.g.
+`"cuda"`).
+- `ollama_url`: Base URL for the Ollama server.  When
+`None`, reads `OLLAMA_HOST` from the environment (falling back
+to `http\://localhost\:11434`).
+- `thinking`: Enable chain-of-thought reasoning mode in the Guardian model.
+- `custom_criteria`: Free-text criteria string used in place of a
+standard `GuardianRisk` value.
+- `context_text`: Context document for groundedness checks.
+- `tools`: Tool schemas for function-call validation.
+- `backend`: Pre-initialised backend instance to reuse; avoids
+loading the model multiple times.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_effective_risk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/requirements/safety/guardian.py#L204" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_effective_risk(self) -> str
+```
+
+Return the effective risk criteria to use for validation.
+
+Returns the `custom_criteria` string when one was provided, otherwise
+returns the `risk` identifier set during initialisation.
+
+**Returns:**
+- The active risk/criteria string forwarded to the Guardian model.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_available_risks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/requirements/safety/guardian.py#L216" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_available_risks(cls) -> list[str]
+```
+
+Return a list of all available standard risk type identifiers.
+
+**Returns:**
+- list\[str]: String values of all `GuardianRisk` enum members.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `validate` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/requirements/safety/guardian.py#L244" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+validate(self, backend: Backend, ctx: Context) -> ValidationResult
+```
+
+Validate a conversation using Granite Guardian via the selected backend.
+
+Builds a minimal chat context from the current session context, invokes the
+Guardian model, and parses its `<score>yes/no</score>` output.  A `"No"`
+label (risk not detected) is treated as a passing validation result.
+
+**Args:**
+- `backend`: The session backend (used as a fallback context
+source; the Guardian's own backend is used for generation).
+- `ctx`: The current conversation context to validate.
+- `format`: Unused; present for interface
+compatibility.
+- `model_options`: Additional model options merged into the
+Guardian backend call.
+
+**Returns:**
+- `result=True` when the content is considered safe
+- (Guardian returns `"No"`), `result=False` otherwise.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

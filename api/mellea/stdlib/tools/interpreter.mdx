@@ -1,0 +1,258 @@
+---
+title: "mellea.stdlib.tools.interpreter"
+sidebarTitle: "mellea.stdlib.tools.interpreter"
+description: "Code interpreter tool and execution environments for agentic workflows."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Code interpreter tool and execution environments for agentic workflows.
+
+
+
+
+
+Provides `ExecutionResult` (capturing stdout, stderr, success, and optional static
+analysis output) and three concrete `ExecutionEnvironment` implementations:
+`StaticAnalysisEnvironment` (parse and import-check only, no execution),
+`UnsafeEnvironment` (subprocess execution in the current Python environment), and
+`LLMSandboxEnvironment` (Docker-isolated execution via `llm-sandbox`). All
+environments support an optional `allowed_imports` allowlist. The top-level
+`code_interpreter` and `local_code_interpreter` functions are ready to be wrapped
+as [`MelleaTool`](../../backends/tools#class-melleatool) instances for ReACT or other agentic loops.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `code_interpreter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L337" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+code_interpreter(code: str) -> ExecutionResult
+```
+
+
+Executes python code.
+
+**Args:**
+- `code`: The Python code to execute.
+
+**Returns:**
+- An `ExecutionResult` with stdout, stderr, and a success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `local_code_interpreter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L350" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+local_code_interpreter(code: str) -> ExecutionResult
+```
+
+
+Executes python code in the cwd.
+
+**Args:**
+- `code`: The Python code to execute.
+
+**Returns:**
+- An `ExecutionResult` with stdout, stderr, and a success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ExecutionResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L28" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Result of code execution.
+
+Code execution can be aborted prior to spinning up an interpreter (e.g., if prohibited imports are used).
+In these cases, the `success` flag is set to False and the `skipped` flag is set to True.
+
+If code is executed, then `success` is set to true iff the exit code is 0, and the `stdout` and `stderr` outputs
+are set to non-None values.
+
+We also use the `ExecutionResult` object to communicate the result of static and dynamic analyses. Those are passed back
+using the `analysis_result` field.
+
+TODO\: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?
+
+**Args:**
+- `success`: `True` if execution succeeded (exit code 0 or
+static-analysis passed); `False` otherwise.
+- `stdout`: Captured standard output, or `None` if
+execution was skipped.
+- `stderr`: Captured standard error, or `None` if
+execution was skipped.
+- `skipped`: `True` when execution was not attempted.
+- `skip_message`: Explanation of why execution was skipped.
+- `analysis_result`: Optional payload from static-analysis
+environments.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_validationresult_reason` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L71" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_validationresult_reason(self) -> str
+```
+
+Maps an ExecutionResult to a ValidationResult reason.
+
+**Returns:**
+- The skip message if the execution was skipped, stdout on success,
+- or stderr on failure.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ExecutionEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L95" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Abstract environment for executing Python code.
+
+**Args:**
+- `allowed_imports`: Allowlist of top-level module names
+that generated code may import. `None` disables the import check.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L109" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Execute the given code and return the result.
+
+**Args:**
+- `code`: The Python source code to execute.
+- `timeout`: Maximum number of seconds to allow the code to run.
+
+**Returns:**
+- Execution outcome including stdout, stderr, and
+- success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `StaticAnalysisEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L122" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Safe environment that validates but does not execute code.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L125" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Validate code syntax and imports without executing.
+
+**Args:**
+- `code`: The Python source code to validate.
+- `timeout`: Ignored for static analysis; present for interface
+compatibility.
+
+**Returns:**
+- Result with `skipped=True` and the parsed AST in
+- `analysis_result` on success, or a syntax-error description on
+- failure.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `UnsafeEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L171" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Unsafe environment that executes code directly with subprocess.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L174" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Execute code with subprocess after checking imports.
+
+**Args:**
+- `code`: The Python source code to execute.
+- `timeout`: Maximum number of seconds before the subprocess is
+killed and a timeout result is returned.
+
+**Returns:**
+- Execution outcome with captured stdout/stderr and
+- success flag, or a skipped result if imports are unauthorized or an
+- unexpected error occurs.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LLMSandboxEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L242" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Environment using llm-sandbox for secure Docker-based execution.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/tools/interpreter.py#L245" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Execute code using llm-sandbox in an isolated Docker container.
+
+Checks the import allowlist first, then delegates to a `SandboxSession`
+from the `llm-sandbox` package. Returns a skipped result if
+`llm-sandbox` is not installed.
+
+**Args:**
+- `code`: The Python source code to execute.
+- `timeout`: Maximum number of seconds to allow the sandboxed
+process to run.
+
+**Returns:**
+- Execution outcome with stdout/stderr and success
+- flag, or a skipped result on import violation or sandbox error.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

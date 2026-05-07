@@ -1,0 +1,172 @@
+---
+title: "mellea.stdlib.chunking"
+sidebarTitle: "mellea.stdlib.chunking"
+description: "ChunkingStrategy ABC and built-in implementations for streaming validation."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+ChunkingStrategy ABC and built-in implementations for streaming validation.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChunkingStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L9" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Abstract base class for text chunking strategies used in streaming validation.
+
+A chunking strategy receives the full accumulated text so far and returns a
+list of complete chunks ready for downstream validation. Any trailing fragment
+that has not yet reached a chunk boundary is withheld — it is not included in
+the returned list. Each call is stateless and idempotent given the same input.
+
+End-of-stream contract: `split()` always withholds the trailing fragment.
+When the stream terminates, callers are responsible for processing any remainder:
+take the full accumulated text, identify everything after the last returned
+chunk boundary, and handle it appropriately (e.g. pass to a final validator
+or discard).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `split` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L25" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+split(self, accumulated_text: str) -> list[str]
+```
+
+Return complete chunks from accumulated_text, excluding any trailing fragment.
+
+**Args:**
+- `accumulated_text`: The full text accumulated so far, including all
+previously seen tokens and the latest delta.
+
+**Returns:**
+- A list of complete chunks. If no chunk boundary has been reached yet,
+- returns an empty list. Never includes the trailing incomplete fragment.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SentenceChunker` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L53" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Splits accumulated text on sentence boundaries.
+
+Sentence boundaries are detected by `.`, `!`, or `?`, optionally
+followed by a closing quote (straight or curly) or parenthesis, then
+whitespace. The final sentence is only returned once it is followed by
+whitespace or another sentence — a trailing fragment with no following
+whitespace is withheld. Abbreviations are a known edge case: they will
+be split on (simple regex, not NLP). Inter-sentence whitespace (including
+double-space or tab) is discarded and does not appear as leading whitespace
+in subsequent chunks.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `split` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L66" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+split(self, accumulated_text: str) -> list[str]
+```
+
+Return complete sentences from accumulated_text.
+
+**Args:**
+- `accumulated_text`: The full text accumulated so far.
+
+**Returns:**
+- Complete sentences detected so far. The trailing fragment (if any)
+- is withheld.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `WordChunker` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L98" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Splits accumulated text on whitespace boundaries.
+
+Each word is a chunk. Trailing text not yet followed by whitespace is
+withheld.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `split` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L105" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+split(self, accumulated_text: str) -> list[str]
+```
+
+Return complete words from accumulated_text.
+
+**Args:**
+- `accumulated_text`: The full text accumulated so far.
+
+**Returns:**
+- All whitespace-delimited words except the trailing fragment (if any).
+- An empty list is returned when no whitespace boundary has been seen.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ParagraphChunker` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L138" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Splits accumulated text on double-newline paragraph boundaries.
+
+Two or more consecutive newline characters are treated as a paragraph
+separator. The trailing paragraph fragment (text not yet followed by `\n\n`)
+is withheld.
+
+Note: only Unix-style `\n\n` separators are recognised. CRLF
+(`\r\n\r\n`) paragraph separators are not supported.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `split` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.5.0/mellea/stdlib/chunking.py#L149" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+split(self, accumulated_text: str) -> list[str]
+```
+
+Return complete paragraphs from accumulated_text.
+
+**Args:**
+- `accumulated_text`: The full text accumulated so far.
+
+**Returns:**
+- Complete paragraphs (separated by two or more newlines). The
+- trailing incomplete paragraph is withheld. Returns an empty list
+- if no paragraph boundary has been reached.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
