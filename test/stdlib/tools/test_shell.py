@@ -322,9 +322,9 @@ class TestBashExecutorFunctions:
         result = bash_executor("echo test")
 
         # Either succeeds with output, or skips due to missing llm-sandbox or language support
-        if (
-            result.skip_message is not None
-            and ("not installed" in result.skip_message or "not a valid" in result.skip_message)
+        if result.skip_message is not None and (
+            "not installed" in result.skip_message
+            or "not a valid" in result.skip_message
         ):
             assert result.skipped is True
         else:
