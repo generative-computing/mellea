@@ -24,7 +24,7 @@ Three sources of friction have accumulated:
 2. **Adapter lifecycle is not modelled.** `call_intrinsic` constructs an `IntrinsicAdapter` as a side effect of invoking one, which triggers an unconditional weight download even when no download is needed. The user sees a misleading download error; the real error is masked. There is no concept of "prepare," "activate," "deactivate" as distinct steps.
 3. **Small, visible follow-on issues cluster around these two roots** — a five-place model-options hierarchy with a silent-overwrite bug; JSON output keys hardcoded in helpers (`result_json["answerability"]`) that break when an adapter ships a new output schema; the `"requirement-check"` string duplicated across four files; a `CustomIntrinsicAdapter` whose constructor monkey-patches the global catalog with a self-confessed "temporary hack."
 
-Every thread in #929 is a symptom of not having separated the kinds of adapter and their lifecycles cleanly. This is not a theoretical concern: **seven fix-up commits have landed in the adapter area in recent history** (full list in the appendix), alongside the `obtain_lora`-always-called masked error and the hardcoded `"requirement-check"` strings flagged by #929 point 7 / PR #1008 — the picture is of a subsystem that receives repeated small-scope fixes rather than a stable abstraction.
+Every thread in #929 is a symptom of not having separated the kinds of adapter and their lifecycles cleanly. This is not a theoretical concern: **seven fix-up commits have been merged in the adapter area in recent history** (full list in the appendix), alongside the `obtain_lora`-always-called masked error and the hardcoded `"requirement-check"` strings flagged by #929 point 7 / PR #1008 — the picture is of a subsystem that receives repeated small-scope fixes rather than a stable abstraction.
 
 ## 2. What we are trying to achieve
 
@@ -117,7 +117,7 @@ Scope of this refactor in concrete terms so reviewers can weigh the cost.
 
 ### API surface
 
-- **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) lands on top, not instead.
+- **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) arrives on top, not instead.
 - **Deprecated but shimmed for one release** — `IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter` public classes. Direct users get `DeprecationWarning` pointing to the new constructor.
 - **Optional, was mandatory** — the adapter catalogue. Stays as a convenience resolver, stops being a gate.
 - **Possibly moved/renamed** — depends on §5 Q5 (terminology rename scope).
@@ -138,8 +138,8 @@ Files and modules touched, approximate: `mellea/backends/adapters/{adapter,catal
 
 ### Release planning
 
-- **0.6.0 target**: §5 agreement plus Phases 0–2 of the migration (new `Adapter` / `WeightsBinding` / `IOContract` types, call-site adoption, backend narrowing, deprecation shims for old classes, unified model-option precedence, observability per §14, tests per §15).
-- **0.6.x follow-on**: [#1018](https://github.com/generative-computing/mellea/issues/1018) (embedded adapters on `LocalHFBackend`), Phase 4 shim removal.
+- **Target release (minor, exact number TBD)**: §5 agreement plus Phases 0–2 of the migration (new `Adapter` / `WeightsBinding` / `IOContract` types, call-site adoption, backend narrowing, deprecation shims for old classes, unified model-option precedence, observability per §14, tests per §15).
+- **Follow-on minor release**: [#1018](https://github.com/generative-computing/mellea/issues/1018) (embedded adapters on `LocalHFBackend`), Phase 4 shim removal.
 - **Deferred until upstream moves**: Reality C / [#27](https://github.com/generative-computing/mellea/issues/27).
 
 ### Blocking and unblocking
@@ -427,7 +427,7 @@ Observability and docs deliverables attach to the phase that first exercises the
 1. **Naming.** `WeightsBinding` vs `ResourceStrategy` vs `AdapterProvider`. Pick one; the term leaks into error messages.
 2. **Lifecycle default** — session-scoped or request-scoped (also in Part I §5).
 3. **Role vs name.** Free-form `role` string, or a small enum so users can't invent roles backends don't honour?
-4. **Reality C idiom.** vLLM LoRA serving first or commercial fine-tunes first (also in Part I §5).
+4. **Reality C idiom.** Back-reference to Part I §5 Q3 — no separate question here; the sub-case framing (C1 = vLLM-backed, C2 = commercial fine-tunes) is in §8.3.
 5. **Rewind interaction (PR #1028).** `factuality_detection` / `factuality_correction` mutate context via `context.previous_node`. Belongs on `io_contract.build_prompt` (cleaner) or stay in the helper (smaller migration blast radius)?
 6. **Telemetry coupling with #1035** (also in Part I §5).
 7. **Deprecation window** (also in Part I §5).
@@ -489,7 +489,7 @@ Seven recent fix-up commits in the adapter area, all symptomatic of the design g
 **Why [#1018](https://github.com/generative-computing/mellea/issues/1018) waits for this proposal:**
 
 - #1018's own body states: *"May require sorting out some of the issues in #929 first. Or at least creating a comprehensive plan."*
-- Once Part I is agreed and Phase 0–2 of the migration have landed, #1018 reduces to *"add the `EmbeddedBinding` path to `LocalHFBackend`"* following the pattern already used for `OpenAIBackend`.
+- Once Part I is agreed and Phase 0–2 of the migration have merged, #1018 reduces to *"add the `EmbeddedBinding` path to `LocalHFBackend`"* following the pattern already used for `OpenAIBackend`.
 - Attempting #1018 without this refactor re-creates the same branching problem on a second backend.
 
 ### Verification trail
