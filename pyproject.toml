@@ -170,17 +170,11 @@ dev = [
     "poethepoet>=0.42.1",
 ]
 
-# Documentation and notebooks
+# Notebooks
 notebook = [
     "ipykernel>=6.29.5",
     "ipython>=8.36.0",
     "jupyter>=1.1.1",
-]
-
-docs = [
-    "sphinx_rtd_theme",
-    "sphinx-autodoc-typehints",
-    "sphinx_mdinclude",
 ]
 
 # -----------------------------
