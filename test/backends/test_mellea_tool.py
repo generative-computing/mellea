@@ -13,6 +13,11 @@ def callable(input: int) -> str:
     return str(input)
 
 
+async def async_callable(input: int) -> str:
+    """Common async callable to test tool functionality."""
+    return str(input)
+
+
 @tool
 def langchain_tool(input: int) -> str:
     """Common langchain tool to test functionality."""
@@ -256,6 +261,55 @@ def test_from_smolagents_invalid_tool():
 
     error_msg = str(exc_info.value)
     assert "smolagents Tool type" in error_msg
+
+
+def test_from_callable_async():
+    """Async function produces a MelleaTool whose .run() returns the awaited value."""
+    t = MelleaTool.from_callable(async_callable)
+    assert isinstance(t, MelleaTool)
+    assert t.name == async_callable.__name__
+
+    # .run() from sync code returns the awaited value, not a coroutine.
+    result = t.run(1)
+    assert result == "1"
+    assert t.run(input=2) == "2"
+
+
+def test_from_callable_async_schema_matches_sync():
+    """Schema introspection produces the same parameter schema for sync and async."""
+
+    def sync_fn(x: int, y: str = "default") -> str:
+        """A sync function.
+
+        Args:
+            x: An integer.
+            y: A string with a default.
+        """
+        return y * x
+
+    async def async_fn(x: int, y: str = "default") -> str:
+        """A sync function.
+
+        Args:
+            x: An integer.
+            y: A string with a default.
+        """
+        return y * x
+
+    sync_t = MelleaTool.from_callable(sync_fn, "same_name")
+    async_t = MelleaTool.from_callable(async_fn, "same_name")
+    assert async_t.as_json_tool == sync_t.as_json_tool
+
+
+def test_from_callable_async_propagates_exceptions():
+    """Exceptions from async functions propagate through .run() (not wrapped in a coroutine)."""
+
+    async def raiser() -> str:
+        raise RuntimeError("boom")
+
+    t = MelleaTool.from_callable(raiser)
+    with pytest.raises(RuntimeError, match="boom"):
+        t.run()
 
 
 if __name__ == "__main__":
