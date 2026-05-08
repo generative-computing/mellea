@@ -18,6 +18,7 @@ from .interpreter import (
     local_code_interpreter,
     make_execution_environment,
 )
+from .shell import bash_executor, local_bash_executor
 
 __all__ = [
     "COMPATIBILITY_MATRIX",
@@ -31,7 +32,9 @@ __all__ = [
     "LLMSandboxEnvironment",
     "StaticAnalysisEnvironment",
     "UnsafeEnvironment",
+    "bash_executor",
     "code_interpreter",
+    "local_bash_executor",
     "local_code_interpreter",
     "make_execution_environment",
 ]
