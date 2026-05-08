@@ -275,6 +275,46 @@ gets generated (see examples above).
 > **Warning:** `local_code_interpreter` executes Python code in the current process.
 > Do not use it in production contexts without sandboxing.
 
+## MCP tools
+
+Mellea can consume tools from any [MCP](https://modelcontextprotocol.io/) server
+and drop them into an agent loop. Install with `pip install 'mellea[tools]'`.
+
+The workflow is two steps: discover what the server offers, then instantiate the
+tools you want.
+
+```python
+# Requires: mellea[tools]
+# Returns: list[MelleaTool]
+from mellea.stdlib.tools.mcp import discover_mcp_tools, http_connection
+
+connection = http_connection("https://api.example.com/mcp/", api_key="...")
+
+specs = await discover_mcp_tools(connection)
+tools = [s.as_mellea_tool() for s in specs if s.name in {"search", "fetch"}]
+```
+
+`http_connection`, `sse_connection`, and `stdio_connection` build the transport
+config. Each tool invocation opens a short-lived session, so callers do not need
+to manage the connection lifetime.
+
+Once built, MCP tools work like any other `MelleaTool`: pass them via
+`ModelOption.TOOLS` to `instruct()` or to `react()`:
+
+```python
+# Requires: mellea[tools]
+# Returns: str
+result, _ = await react(
+    goal="Find recent pull requests I authored.",
+    context=ChatContext(),
+    backend=m.backend,
+    tools=tools,
+)
+```
+
+See [`docs/examples/mcp/github_activity_summary.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mcp/github_activity_summary.py)
+for a complete example against the hosted GitHub MCP server.
+
 ---
 
 **See also:** [Tutorial 04: Making Agents Reliable](../tutorials/04-making-agents-reliable) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
