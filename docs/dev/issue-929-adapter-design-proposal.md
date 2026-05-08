@@ -1,33 +1,14 @@
 # Adapter Lifecycle — Design Proposal
 
-> **Addresses:** [Epic #929 — Fix Intrinsic Adapter Lifecycle & Consistency in Mellea](https://github.com/generative-computing/mellea/issues/929). Read the epic first if you haven't — it catalogues the specific threads this proposal tries to resolve coherently rather than individually.
-> **Status:** proposal for shape agreement; not a PR candidate. Preserved on a branch for review; once agreed, the content moves into `docs/dev/intrinsics_and_adapters.md` as the current-state doc and this file is deleted.
-> **Structure:** **Part I** covers problem, goals, terminology, end state, and the decisions that gate decomposition. **Part II** contains supporting detail — read after Part I is agreed, not before.
-> **Terminology:** this proposal uses **"adapter"** as the primary user-facing term; "intrinsic" appears only as the legacy name where it still refers to existing Mellea classes (e.g. the `Intrinsic` AST component). Rename strategy is in §5 Q6.
-
-## Referenced issues and PRs
-
-| Ref | Title | Why cited |
-| --- | --- | --- |
-| [Epic #929](https://github.com/generative-computing/mellea/issues/929) | Fix Intrinsic Adapter Lifecycle & Consistency in Mellea | *the epic this proposal addresses* |
-| [#27](https://github.com/generative-computing/mellea/issues/27) | Add support for aloras to remote vllm when vllm supports it | live tracking item for Reality C |
-| [#423](https://github.com/generative-computing/mellea/issues/423) | Adapter code is undocumented and over-specialized to Intrinsics | Priority-labelled; overlaps this refactor |
-| [#424](https://github.com/generative-computing/mellea/issues/424) | Cannot use intrinsics without uploading them | customer-adapter friction |
-| [#543](https://github.com/generative-computing/mellea/pull/543) | revert: remove adapters/intrinsics/alora/lora from openai code | why OpenAI backend lost adapter support |
-| [#881](https://github.com/generative-computing/mellea/pull/881) | feat: add embedded adapters (granite switch) to openai backend | why OpenAI backend got Reality B back |
-| [#946](https://github.com/generative-computing/mellea/pull/946) | feat: simplify intrinsics | rework evidence |
-| [#972](https://github.com/generative-computing/mellea/pull/972) | fix: model options with intrinsics | rework evidence for #929 point 2 |
-| [#979](https://github.com/generative-computing/mellea/pull/979) | fix: key in json returned by policy_guardrails intrinsic | rework evidence for output parsing |
-| [#986](https://github.com/generative-computing/mellea/pull/986) | fix: issues introduced by intrinsic changes | rework evidence |
-| [#994](https://github.com/generative-computing/mellea/pull/994) | fix: default intrinsic adapter types; granite-switch tests | rework evidence |
-| [#1003](https://github.com/generative-computing/mellea/issues/1003) | fix: intrinsic function signatures (model_options on helpers) | high-level helper signature evolution |
-| [#1008](https://github.com/generative-computing/mellea/pull/1008) | fix: rewrite requirement_check_to_bool for new schema | worked example for schema-version story |
-| [#1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | introduces factuality rewind path |
-| [#1035](https://github.com/generative-computing/mellea/issues/1035) | OTel emission gaps | parent for telemetry coordination |
-| [#1036](https://github.com/generative-computing/mellea/pull/1036) | feat(telemetry): close five OTel GenAI semconv gaps | in-flight telemetry work to coordinate with |
-| [#1018](https://github.com/generative-computing/mellea/issues/1018) | add support for granite-switch / embedded adapters on HF backend | depends on this refactor; explicit sequencing note in issue body |
-
-**Sequencing note:** #1018's issue body states "May require sorting out some of the issues in #929 first. Or at least creating a comprehensive plan." That makes this proposal the gating item: resolve the decisions here, land Phase 0–2 of the migration, then #1018 reduces to a straightforward "add the EmbeddedBinding path to `LocalHFBackend`" change following the established pattern. Attempting #1018 without the refactor re-creates the branching problem on a second backend.
+> **Addresses:** [Epic #929 — Fix Intrinsic Adapter Lifecycle & Consistency in Mellea](https://github.com/generative-computing/mellea/issues/929). Read the epic first if you haven't; it catalogues the specific threads this proposal tries to resolve coherently rather than individually.
+>
+> **Status:** proposal for shape agreement; not a PR candidate. Preserved on a branch for review. Once agreed, the content moves into `docs/dev/intrinsics_and_adapters.md` as the current-state doc and this file is deleted.
+>
+> **Structure:** **Part I** covers the problem, goals, terminology, end state, and the decisions that gate decomposition. **Part II** contains supporting detail — read after Part I is agreed, not before.
+>
+> **Terminology:** this proposal uses **"adapter"** as the primary user-facing term. "Intrinsic" appears only as the legacy name where it still refers to existing Mellea classes (e.g. the `Intrinsic` AST component). Rename strategy is in §5 Q5.
+>
+> **Related issues and prior work:** see the appendix at the end of this document for a linked index with annotations.
 
 ---
 
@@ -176,16 +157,24 @@ From this shape, the seven threads of #929 resolve cleanly. Full mapping is in P
 
 ### 4.1 Backend × reality matrix
 
-Which realities does each backend support today, and where this design takes them:
+Mellea currently exposes five backends. Adapter support varies — and is not a goal for every backend.
 
-| Backend             | Reality A (Local PEFT) | Reality B (Embedded) | Reality C (Server-mediated) |
-| ------------------- | :--------------------: | :------------------: | :-------------------------: |
-| `LocalHFBackend`    | ✅ today                | ⏳ [#1018](https://github.com/generative-computing/mellea/issues/1018) | — |
-| `OpenAIBackend`     | —                      | ✅ today ([#881](https://github.com/generative-computing/mellea/pull/881)) | ⏳ [#27](https://github.com/generative-computing/mellea/issues/27) |
+| Backend             | Reality A (Local PEFT) | Reality B (Embedded) | Reality C (Server-mediated) | Notes |
+| ------------------- | :--------------------: | :------------------: | :-------------------------: | --- |
+| `LocalHFBackend`    | ✅ today                | ⏳ [#1018](https://github.com/generative-computing/mellea/issues/1018) | — | Primary local backend; only one with aLoRA support today. |
+| `OpenAIBackend`     | —                      | ✅ today ([#881](https://github.com/generative-computing/mellea/pull/881)) | ⏳ [#27](https://github.com/generative-computing/mellea/issues/27) | OpenAI-compatible endpoint, including vLLM servers. |
+| `OllamaBackend`     | —                      | —                    | —                           | Ollama's LoRA/PEFT story is GGUF-based and immature; not a current target. |
+| `WatsonxBackend`    | —                      | —                    | —                           | Would require watsonx-side adapter support; no current plan. |
+| `LiteLLMBackend`    | —                      | —                    | —                           | Multi-provider shim; adapter support would depend on the underlying provider and is not a coherent single-backend target. Could opportunistically inherit C2 if any wrapped provider exposes fine-tuned identifiers. |
 
-- ✅ = supported; ⏳ = in-scope future work tracked by the linked issue; — = not applicable / not planned.
+Legend: ✅ supported today, ⏳ planned future work tracked by the linked issue, — not applicable or not planned.
+
+**What this says about intent:**
+
+- The two **primary adapter backends are `LocalHFBackend` and `OpenAIBackend`.** The refactor targets these first.
 - Granite Switch (embedded) is the newest addition but is **not** "the premier option": local PEFT via `LocalHFBackend` remains the development/on-prem path and is the only reality that ships with both LoRA and aLoRA today.
-- The design keeps every cell that is ✅ working, adds clean paths for the ⏳ cells without ad-hoc branching, and does not preclude new rows (backends) or columns (realities) later.
+- The remaining three backends (`OllamaBackend`, `WatsonxBackend`, `LiteLLMBackend`) are **out of scope for adapter support under this design**. The new `WeightsBinding` abstraction does not preclude adding them later, but no issue currently tracks the intent and the underlying providers do not support the mechanisms Mellea's adapters need.
+- The design keeps every ✅ cell working, adds clean paths for the ⏳ cells without ad-hoc branching, and leaves empty cells empty rather than stubbing them speculatively.
 
 ## 5. Decisions needed now
 
@@ -439,4 +428,50 @@ Observability and docs deliverables attach to the phase that first exercises the
 
 ---
 
-_Verified against: `mellea/backends/adapters/{adapter,catalog,__init__}.py`, `mellea/stdlib/components/intrinsic/{_util,intrinsic,core,rag,guardian}.py`, `mellea/backends/{openai,huggingface}.py`, `mellea/formatters/granite/intrinsics/input.py`, `mellea/stdlib/requirements/requirement.py`, `docs/dev/{intrinsics_and_adapters,requirement_aLoRA_rerouting}.md`, PRs #543 / #881 / #986 / #994 / #1003 / #1008 / #1028 / #1036, commits `666d646a`, `8b6b8d55`, `c57aba1d`, `8577d092`._
+# Appendix — Referenced issues and PRs
+
+Linked index of every issue, PR, and commit cited in this document. Use this to jump to primary sources.
+
+### Tracking items (open, design-relevant)
+
+| Ref | Title | Relevance |
+| --- | --- | --- |
+| [Epic #929](https://github.com/generative-computing/mellea/issues/929) | Fix Intrinsic Adapter Lifecycle & Consistency in Mellea | *the epic this proposal addresses* |
+| [#27](https://github.com/generative-computing/mellea/issues/27) | Add support for aloras to remote vllm when vllm supports it | live tracking item for Reality C |
+| [#423](https://github.com/generative-computing/mellea/issues/423) | Adapter code is undocumented and over-specialized to Intrinsics | Priority-labelled; overlaps this refactor |
+| [#424](https://github.com/generative-computing/mellea/issues/424) | Cannot use intrinsics without uploading them | customer-adapter friction |
+| [#1018](https://github.com/generative-computing/mellea/issues/1018) | add support for granite-switch / embedded adapters on HF backend | explicitly sequenced after this refactor |
+
+### History and rework evidence
+
+| Ref | Title | Role in this doc |
+| --- | --- | --- |
+| [#543](https://github.com/generative-computing/mellea/pull/543) | revert: remove adapters/intrinsics/alora/lora from openai code | why OpenAI backend lost adapter support (upstream vLLM declined aLoRA PR) |
+| [#881](https://github.com/generative-computing/mellea/pull/881) | feat: add embedded adapters (granite switch) to openai backend | why OpenAI backend got Reality B back |
+| [#946](https://github.com/generative-computing/mellea/pull/946) | feat: simplify intrinsics | rework evidence |
+| [#972](https://github.com/generative-computing/mellea/pull/972) | fix: model options with intrinsics | rework evidence for #929 point 2 |
+| [#979](https://github.com/generative-computing/mellea/pull/979) | fix: key in json returned by policy_guardrails intrinsic | rework evidence for output parsing |
+| [#986](https://github.com/generative-computing/mellea/pull/986) | fix: issues introduced by intrinsic changes | rework evidence |
+| [#994](https://github.com/generative-computing/mellea/pull/994) | fix: default intrinsic adapter types; granite-switch tests | rework evidence |
+| [#1008](https://github.com/generative-computing/mellea/pull/1008) | fix: rewrite requirement_check_to_bool for new schema | worked example for the schema-version story |
+| [#1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | introduces the factuality rewind path |
+
+### Related in-flight and planned work
+
+| Ref | Title | Role in this doc |
+| --- | --- | --- |
+| [#1003](https://github.com/generative-computing/mellea/issues/1003) | fix: intrinsic function signatures (model_options on helpers) | high-level helper signature evolution |
+| [#1035](https://github.com/generative-computing/mellea/issues/1035) | OTel emission gaps | parent for telemetry coordination |
+| [PR #1036](https://github.com/generative-computing/mellea/pull/1036) | feat(telemetry): close five OTel GenAI semconv gaps | in-flight telemetry work to coordinate with |
+
+### Sequencing
+
+**Why [#1018](https://github.com/generative-computing/mellea/issues/1018) waits for this proposal:**
+
+- #1018's own body states: *"May require sorting out some of the issues in #929 first. Or at least creating a comprehensive plan."*
+- Once Part I is agreed and Phase 0–2 of the migration have landed, #1018 reduces to *"add the `EmbeddedBinding` path to `LocalHFBackend`"* following the pattern already used for `OpenAIBackend`.
+- Attempting #1018 without this refactor re-creates the same branching problem on a second backend.
+
+### Verification trail
+
+Verified against: `mellea/backends/adapters/{adapter,catalog,__init__}.py`, `mellea/stdlib/components/intrinsic/{_util,intrinsic,core,rag,guardian}.py`, `mellea/backends/{openai,huggingface}.py`, `mellea/formatters/granite/intrinsics/input.py`, `mellea/stdlib/requirements/requirement.py`, `docs/dev/{intrinsics_and_adapters,requirement_aLoRA_rerouting}.md`; commits `666d646a`, `8b6b8d55`, `c57aba1d`, `8577d092`, `c6a3e643` (aLoRA → PEFT 0.18.1 migration).
