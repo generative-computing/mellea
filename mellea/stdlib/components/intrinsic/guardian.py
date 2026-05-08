@@ -7,7 +7,6 @@ differs from other intrinsics, which rely on the ``instruction`` field in
 """
 
 import collections.abc
-from typing import cast
 
 from ....backends import model_ids
 from ....backends.adapters import AdapterMixin
@@ -15,7 +14,7 @@ from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
 from ..docs.document import _coerce_to_documents
-from ._util import call_intrinsic
+from ._util import _resolve_response, call_intrinsic
 
 
 def policy_guardrails(
@@ -153,6 +152,8 @@ def guardian_check(
     backend: AdapterMixin,
     criteria: str,
     target_role: str = "assistant",
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
     model_options: dict | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
@@ -168,12 +169,20 @@ def guardian_check(
             criteria string.
         target_role: Role whose last message is being evaluated
             (``"user"`` or ``"assistant"``).
+        documents: Optional document snippets to attach to the target message.
+            Primarily used for the ``"groundedness"`` criterion, to provide
+            reference context for grounding checks. Each element may be a
+            ``Document`` or a plain string (automatically wrapped in ``Document``).
+            Keyword-only.
         model_options: Optional model options to pass to the backend (e.g.,
             temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
     """
+    if documents is not None and target_role == "assistant":
+        context = _reattach_documents(context, documents)
+
     criteria_text = CRITERIA_BANK.get(criteria, criteria)
 
     scoring = (
@@ -209,61 +218,57 @@ def _reattach_documents(
         New context with documents attached to the last assistant message.
 
     Raises:
-        ValueError: If context cannot be rewound or assistant content cannot be extracted.
+        ValueError: If context cannot be rewound or content cannot be extracted.
     """
-    last_turn = context.last_turn()
-    if last_turn is None:
-        raise ValueError("Cannot reattach documents: context has no last turn")
+    turn = context.last_turn()
+    if turn is None:
+        raise ValueError("Cannot extract response from empty context")
 
-    # Extract assistant content, preferring generated output over input
-    if last_turn.output is not None and last_turn.output.value is not None:
-        assistant_content = last_turn.output.value
-    elif last_turn.output is not None and last_turn.output.value is None:
-        # Uncomputed thunk — avoid silent fallthrough to model_input
-        raise ValueError(
-            "Cannot reattach documents: last turn output is uncomputed (thunk with no value)"
-        )
-    elif last_turn.model_input is not None and isinstance(
-        last_turn.model_input, Message
+    # Try to get response from output first (generated), then from message content (manual)
+    response_text = None
+    rewound = context.previous_node
+
+    if turn.output is not None and turn.output.value is not None:
+        # Response is from a generated output
+        response_text = turn.output.value
+    elif (
+        turn.model_input is not None
+        and isinstance(turn.model_input, Message)
+        and turn.model_input.role == "assistant"
     ):
-        assistant_content = last_turn.model_input.content
+        # Response is from a manually added assistant Message
+        response_text = turn.model_input.content
     else:
         raise ValueError(
-            "Cannot reattach documents: cannot extract assistant content from last turn"
+            "Cannot extract response: turn has neither output nor assistant message"
         )
 
-    # Rewind and re-add with documents
-    rewound = context.previous_node
     if rewound is None:
         raise ValueError("Cannot rewind context past the root node")
 
-    return cast(
-        ChatContext,
-        rewound.add(
-            Message(
-                "assistant",
-                assistant_content,
-                documents=_coerce_to_documents(documents),
-            )
-        ),
+    return rewound.add(  # type: ignore[return-value]
+        Message("assistant", response_text, documents=_coerce_to_documents(documents))
     )
 
 
 def factuality_detection(
+    response: str | None,
     context: ChatContext,
     backend: AdapterMixin,
     *,
     documents: collections.abc.Iterable[str | Document] | None = None,
     model_options: dict | None = None,
 ) -> str:
-    """Determine if the last response is factually incorrect.
+    """Determine if a response is factually incorrect.
 
-    Intrinsic function that evaluates the factuality of the
-    assistant's response to a user's question. The context should end with
-    a user question followed by an assistant answer.
+    Intrinsic function that evaluates the factuality of an assistant's response
+    to a user's question. The context should typically end with a user question
+    followed by an assistant answer.
 
     Args:
-        context: Chat context containing user question and assistant answer.
+        response: The assistant's response text to evaluate. When ``None``, the
+            response is extracted from the last assistant output in ``context``.
+        context: Chat context containing user question and conversation history.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Document snippets that provide factual context for evaluation.
             Each element may be a ``Document`` or a plain string (automatically
@@ -283,8 +288,24 @@ def factuality_detection(
 ### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
 """
 
+    if response is None:
+        response, context = _resolve_response(None, context)
+
     if documents is not None:
-        context = _reattach_documents(context, documents)
+        if response is not None:
+            # Response was explicitly provided, add it with documents
+            context = context.add(
+                Message(
+                    "assistant", response, documents=_coerce_to_documents(documents)
+                )
+            )
+        else:
+            # Response came from context output, reattach documents
+            context = _reattach_documents(context, documents)
+    else:
+        # No documents provided, add response to context if it was explicitly provided
+        if response is not None:
+            context = context.add(Message("assistant", response))
 
     context = context.add(Message("user", detector_message))
     result_json = call_intrinsic(
@@ -294,19 +315,22 @@ def factuality_detection(
 
 
 def factuality_correction(
+    response: str | None,
     context: ChatContext,
     backend: AdapterMixin,
     *,
     documents: collections.abc.Iterable[str | Document] | None = None,
     model_options: dict | None = None,
 ) -> str:
-    """Corrects the last response so that it is factually correct.
+    """Correct a response to be factually accurate.
 
     Intrinsic function that corrects the assistant's response to a user's
     question relative to the given contextual information.
 
     Args:
-        context: Chat context containing user question and assistant answer.
+        response: The assistant's response text to correct. When ``None``, the
+            response is extracted from the last assistant output in ``context``.
+        context: Chat context containing user question and conversation history.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Document snippets that provide factual context for correction.
             Each element may be a ``Document`` or a plain string (automatically
@@ -326,8 +350,24 @@ def factuality_correction(
 ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
 """
 
+    if response is None:
+        response, context = _resolve_response(None, context)
+
     if documents is not None:
-        context = _reattach_documents(context, documents)
+        if response is not None:
+            # Response was explicitly provided, add it with documents
+            context = context.add(
+                Message(
+                    "assistant", response, documents=_coerce_to_documents(documents)
+                )
+            )
+        else:
+            # Response came from context output, reattach documents
+            context = _reattach_documents(context, documents)
+    else:
+        # No documents provided, add response to context if it was explicitly provided
+        if response is not None:
+            context = context.add(Message("assistant", response))
 
     context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic(

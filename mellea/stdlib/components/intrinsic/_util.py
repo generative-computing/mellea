@@ -13,6 +13,7 @@ from ....core import Backend
 from ....stdlib import functional as mfuncs
 from ...components import Document
 from ...context import ChatContext
+from ..chat import Message
 from .intrinsic import Intrinsic
 
 
@@ -74,20 +75,37 @@ def _resolve_response(
     """Return ``(response_text, context_to_use)``.
 
     When *response* is not ``None``, returns it with *context* unchanged.
-    When ``None``, extracts from the last turn's ``output.value`` and rewinds
-    *context* to before that output.
+    When ``None``, extracts from the last turn's ``output.value`` (generated) or
+    ``model_input.content`` (manually-added Message), then rewinds *context*
+    to before that turn.
     """
     if response is not None:
         return response, context
     turn = context.last_turn()
-    if turn is None or turn.output is None:
+    if turn is None:
         raise ValueError("response is None and context has no last turn with output")
-    if turn.output.value is None:
-        raise ValueError("response is None and last turn output has no value")
+
+    # Try generated output first
+    if turn.output is not None:
+        if turn.output.value is None:
+            raise ValueError("response is None and last turn output has no value")
+        response_text = turn.output.value
+    # Fall back to manually-added assistant Message
+    elif (
+        turn.model_input is not None
+        and isinstance(turn.model_input, Message)
+        and turn.model_input.role == "assistant"
+    ):
+        response_text = turn.model_input.content
+    else:
+        raise ValueError(
+            "response is None and context has no last turn with output or assistant message"
+        )
+
     rewound = context.previous_node
     if rewound is None:
         raise ValueError("Cannot rewind context past the root node")
-    return turn.output.value, rewound  # type: ignore[return-value]
+    return response_text, rewound  # type: ignore[return-value]
 
 
 def call_intrinsic(

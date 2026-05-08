@@ -176,7 +176,7 @@ def test_factuality_detection(backend):
     context, documents = _read_guardian_input("factuality_detection.json")
 
     # Test with documents passed as argument
-    result = guardian.factuality_detection(context, backend, documents=documents)
+    result = guardian.factuality_detection(None, context, backend, documents=documents)
     assert result == "yes" or result == "no"
 
 
@@ -185,23 +185,11 @@ def test_factuality_detection_from_context(backend):
     """Verify factuality detection works when documents are in the last message."""
     context, documents = _read_guardian_input("factuality_detection.json")
 
-    # Extract assistant content using the same logic as _reattach_documents
-    last_turn = context.last_turn()
-    assert last_turn is not None
-    if last_turn.output is not None and last_turn.output.value is not None:
-        content = last_turn.output.value
-    else:
-        assert isinstance(last_turn.model_input, Message)
-        content = last_turn.model_input.content
+    # Extract response and rewind, then add back with documents
+    context_with_docs = guardian._reattach_documents(context, documents)
 
-    rewound = context.previous_node
-    assert rewound is not None
-    context_with_docs: ChatContext = rewound.add(  # type: ignore[assignment]
-        Message("assistant", content, documents=documents)
-    )
-
-    # Test with documents=None (should extract from context)
-    result = guardian.factuality_detection(context_with_docs, backend)
+    # Test with response=None (should extract from context)
+    result = guardian.factuality_detection(None, context_with_docs, backend)
     assert result == "yes" or result == "no"
 
 
@@ -211,7 +199,7 @@ def test_factuality_correction(backend):
     context, documents = _read_guardian_input("factuality_correction.json")
 
     # Test with documents passed as argument
-    result = guardian.factuality_correction(context, backend, documents=documents)
+    result = guardian.factuality_correction(None, context, backend, documents=documents)
     assert isinstance(result, str)
 
 
@@ -220,23 +208,11 @@ def test_factuality_correction_from_context(backend):
     """Verify factuality correction works when documents are in the last message."""
     context, documents = _read_guardian_input("factuality_correction.json")
 
-    # Extract assistant content using the same logic as _reattach_documents
-    last_turn = context.last_turn()
-    assert last_turn is not None
-    if last_turn.output is not None and last_turn.output.value is not None:
-        content = last_turn.output.value
-    else:
-        assert isinstance(last_turn.model_input, Message)
-        content = last_turn.model_input.content
+    # Extract response and rewind, then add back with documents
+    context_with_docs = guardian._reattach_documents(context, documents)
 
-    rewound = context.previous_node
-    assert rewound is not None
-    context_with_docs: ChatContext = rewound.add(  # type: ignore[assignment]
-        Message("assistant", content, documents=documents)
-    )
-
-    # Test with documents=None (should extract from context)
-    result = guardian.factuality_correction(context_with_docs, backend)
+    # Test with response=None (should extract from context)
+    result = guardian.factuality_correction(None, context_with_docs, backend)
     assert isinstance(result, str)
 
 
