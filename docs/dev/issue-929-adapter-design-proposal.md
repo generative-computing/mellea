@@ -76,16 +76,7 @@ flowchart LR
     end
 ```
 
-Adapter invocation becomes one flow, no branches on backend type:
-
-```
-adapter = backend.resolve_adapter(name)
-with backend.adapter_scope(adapter):
-    raw = backend.generate(adapter.io_contract.build_prompt(...))
-return adapter.io_contract.parse(raw)
-```
-
-From this shape, the seven threads of #929 resolve cleanly. Full verb semantics per binding, the lifecycle sequence diagram, and the thread-by-thread mapping are in Part II (§9 and §12).
+Adapter invocation becomes one flow, with no branches on backend type. From this shape, the seven threads of #929 resolve cleanly. The simplified invocation pseudocode, the per-binding verb semantics, the lifecycle sequence diagram, and the thread-by-thread mapping are in Part II (§9 and §12).
 
 **What users see:** high-level helpers (`check_answerability` etc.) keep their current shape, with the `model_options=` addition that PR #1003 is introducing. Manual adapter construction collapses from four classes to one, with the binding as the pluggable part. Custom intrinsics no longer require monkey-patching the catalog. Detail in Part II §13.
 
@@ -103,11 +94,10 @@ These gate decomposition; everything else can live in sub-issues once these are 
 2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base.
 3. **Reality C target shape.** The active work item is [#27](https://github.com/generative-computing/mellea/issues/27) (aLoRA on remote vLLM), paced by upstream vLLM's position. Do we leave the `ServerMediatedBinding` slot empty in 0.6.0 and populate it when #27 unblocks, or invest in a no-op/stub subclass now? Recommendation: leave empty, design the slot, revisit when upstream moves.
 4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
-5. **Terminology rename scope.** Three levels of commitment to the "adapter over intrinsic" shift:
-   a. **Prose only** (docs, error messages, help text). Zero breakage. Recommended unconditionally.
-   b. **Module rename**: `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for anyone importing from the submodule path.
-   c. **AST class rename**: `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias for one release. Breaking for advanced users calling `mfuncs.act(Intrinsic(...))` directly.
-   Confirm how deep to go.
+5. **Terminology rename scope.** Three independent yes/no decisions for the "adapter over intrinsic" shift — each can be taken or declined on its own merits:
+   - **Q5a. Prose rename** — shift docs, error messages, help text, and dev-doc vocabulary to "adapter." Zero breakage. Recommended unconditionally.
+   - **Q5b. Module rename** — rename `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for anyone importing from the submodule path.
+   - **Q5c. AST class rename** — rename `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias for one release. Breaking for advanced users calling `mfuncs.act(Intrinsic(...))` directly.
 
 > **Implementation note, not a reviewer question:** intrinsic-level observability (§14) should coordinate with the in-flight [#1035](https://github.com/generative-computing/mellea/issues/1035) / [PR #1036](https://github.com/generative-computing/mellea/pull/1036) work so content capture uses the same `MELLEA_TRACE_CONTENT` flag and doesn't get designed twice. Flagged here for awareness; sequenced during implementation.
 
@@ -119,7 +109,7 @@ Scope of this refactor in concrete terms so reviewers can weigh the cost.
 
 - **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) arrives on top, not instead.
 - **Deprecated but shimmed for one release** — `IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter` public classes. Direct users get `DeprecationWarning` pointing to the new constructor.
-- **Optional, was mandatory** — the adapter catalogue. Stays as a convenience resolver, stops being a gate.
+- **Optional, was mandatory** — the adapter catalogue. Callers no longer have to register custom adapters in `catalog.py` before use; the catalogue stays as a convenience resolver for first-party names, not a precondition.
 - **Possibly moved/renamed** — depends on §5 Q5 (terminology rename scope).
 
 ### User-archetype impact
@@ -220,7 +210,20 @@ Both share: **no local weight loading, API-parameter activation, `io.yaml` still
 
 ## 9. End-state design detail
 
-### 9.1 Weights binding verbs per reality
+### 9.1 Simplified invocation
+
+Adapter invocation collapses to a single flow with no branching on backend type:
+
+```
+adapter = backend.resolve_adapter(name)
+with backend.adapter_scope(adapter):
+    raw = backend.generate(adapter.io_contract.build_prompt(...))
+return adapter.io_contract.parse(raw)
+```
+
+Every verb that varies per reality lives inside `adapter_scope` (see §9.3); the outer flow is the same whether the adapter is a local PEFT file, an embedded Granite Switch adapter, or a server-mediated one.
+
+### 9.2 Weights binding verbs per reality
 
 Each concrete binding implements the four-verb set from Part I §4. The column meanings do not change between realities — only what happens inside the verb does.
 
@@ -232,7 +235,7 @@ Each concrete binding implements the four-verb set from Part I §4. The column m
 
 `release()` is implemented per-binding as needed (cache eviction for LocalFile; no-op for the others).
 
-### 9.2 Lifecycle sequence
+### 9.3 Lifecycle sequence
 
 The lifecycle inside `adapter_scope` is the same for every binding — only the verbs do reality-specific work:
 
@@ -271,13 +274,13 @@ Mellea currently exposes five backends. Adapter support varies — and is not a 
 
 | Backend             | Reality A (Local PEFT) | Reality B (Embedded) | Reality C (Server-mediated) | Notes |
 | ------------------- | :--------------------: | :------------------: | :-------------------------: | --- |
-| `LocalHFBackend`    | ✅ today                | ⏳ [#1018](https://github.com/generative-computing/mellea/issues/1018) | — | Primary local backend; only one with aLoRA support today. |
-| `OpenAIBackend`     | —                      | ✅ today ([#881](https://github.com/generative-computing/mellea/pull/881)) | ⏳ [#27](https://github.com/generative-computing/mellea/issues/27) | OpenAI-compatible endpoint, including vLLM servers. |
+| `LocalHFBackend`    | ✅ today                | ⏳🔽 [#1018](https://github.com/generative-computing/mellea/issues/1018) | — | Primary local backend; only one with aLoRA support today. |
+| `OpenAIBackend`     | —                      | ✅ today ([#881](https://github.com/generative-computing/mellea/pull/881)) | ⏳🔼 [#27](https://github.com/generative-computing/mellea/issues/27) | OpenAI-compatible endpoint, including vLLM servers. |
 | `OllamaBackend`     | —                      | —                    | —                           | Ollama's LoRA/PEFT story is GGUF-based and immature; not a current target. |
 | `WatsonxBackend`    | —                      | —                    | —                           | Would require watsonx-side adapter support; no current plan. |
 | `LiteLLMBackend`    | —                      | —                    | —                           | Multi-provider shim; adapter support would depend on the underlying provider and is not a coherent single-backend target. Could opportunistically inherit C2 if any wrapped provider exposes fine-tuned identifiers. |
 
-Legend: ✅ supported today, ⏳ planned future work tracked by the linked issue, — not applicable or not planned.
+Legend: ✅ supported today; ⏳🔽 planned, blocked by this proposal (downstream); ⏳🔼 planned, blocked by an upstream dependency outside Mellea; — not applicable or not planned.
 
 **What this says about intent:**
 
@@ -288,7 +291,7 @@ Legend: ✅ supported today, ⏳ planned future work tracked by the linked issue
 
 ## 11. Why the current code is tangled (concrete example)
 
-Inside `_util.call_intrinsic`:
+Part I §1 listed the symptoms; this section names the *structural* cause. The single piece of code that most clearly shows it is the branch in `_util.call_intrinsic`:
 
 ```python
 if getattr(backend, "_uses_embedded_adapters", False):
@@ -297,11 +300,8 @@ else:
     intrinsic_adapter = IntrinsicAdapter(...)  # Reality A path
 ```
 
-Three problems:
+This is a **backend-keyed dispatch** where the branching key (`_uses_embedded_adapters`) is a property of the backend rather than of the adapter. Every new reality forces a new branch, and the `else` path is not a generic fallback — it is the Reality A path, so it unconditionally calls `obtain_lora` whether or not the adapter needs downloading. The three symptoms in §1 (misleading download errors, rigid output parsing, hardcoded role strings) are *all* consequences of this same shape: "the adapter doesn't know what kind it is, so the call site guesses." The new design flips this: the **binding** says what kind it is, and the backend simply executes its verbs.
 
-1. **`_uses_embedded_adapters` is a backend flag, not an adapter property.** It hard-codes "this backend type → always this adapter type." Reality C needs a third branch, then a fourth if a backend supports both.
-2. **The `else` branch calls `obtain_lora` unconditionally** via `IntrinsicAdapter.__init__` → `download_and_get_path`. If the adapter was meant to be a different type, the user sees a misleading download-path error instead of the real cause.
-3. **Output parsing assumes one schema.** `result_json["answerability"]` is hardcoded in helpers. When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, the parsing helper had to be rewritten and the catalog gained a second entry (`requirement_check` for Granite 3.x, `requirement-check` for Granite 4.x) to support both.
 
 ## 12. Full #929 thread mapping
 
@@ -428,7 +428,7 @@ Observability and docs deliverables attach to the phase that first exercises the
 2. **Lifecycle default** — session-scoped or request-scoped (also in Part I §5).
 3. **Role vs name.** Free-form `role` string, or a small enum so users can't invent roles backends don't honour?
 4. **Reality C idiom.** Back-reference to Part I §5 Q3 — no separate question here; the sub-case framing (C1 = vLLM-backed, C2 = commercial fine-tunes) is in §8.3.
-5. **Rewind interaction (PR #1028).** `factuality_detection` / `factuality_correction` mutate context via `context.previous_node`. Belongs on `io_contract.build_prompt` (cleaner) or stay in the helper (smaller migration blast radius)?
+5. **Rewind interaction (PR #1028).** Some helpers — specifically `factuality_detection` and `factuality_correction` — need to re-format the conversation so that documents are attached to the *last assistant message* rather than earlier in the history. They currently do this by walking back through `context.previous_node`. Question: does that rewind logic belong on `io_contract.build_prompt` (cleaner separation of concerns) or stay in the helper functions (smaller migration blast radius)?
 6. **Telemetry coupling with #1035** (also in Part I §5).
 7. **Deprecation window** (also in Part I §5).
 
