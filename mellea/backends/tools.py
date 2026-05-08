@@ -12,12 +12,13 @@ import inspect
 import json
 import re
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Generator, Iterable, Mapping, Sequence
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from mellea.core.utils import MelleaLogger
+from mellea.helpers.event_loop_helper import _run_async_in_thread
 
 from ..core import CBlock, Component, TemplateRepresentation
 from ..core.base import AbstractMelleaTool
@@ -179,17 +180,33 @@ class MelleaTool(AbstractMelleaTool[P, R]):
                 "Please install mellea with tools support: pip install 'mellea[tools]'"
             ) from e
 
+    @overload
+    @classmethod
+    def from_callable(
+        cls, func: Callable[P, Awaitable[R]], name: str | None = None
+    ) -> "MelleaTool[P, R]": ...
+
+    @overload
     @classmethod
     def from_callable(
         cls, func: Callable[P, R], name: str | None = None
+    ) -> "MelleaTool[P, R]": ...
+
+    @classmethod
+    def from_callable(
+        cls, func: Callable[P, R] | Callable[P, Awaitable[R]], name: str | None = None
     ) -> "MelleaTool[P, R]":
         """Create a MelleaTool from a plain Python callable.
 
         Introspects the callable's signature and docstring to build an
-        OpenAI-compatible JSON schema automatically.
+        OpenAI-compatible JSON schema automatically. Async functions (defined
+        with ``async def``) are supported transparently: the coroutine is
+        awaited on mellea's shared event loop so sync callers of ``.run()``
+        receive the resolved value rather than an un-awaited coroutine.
 
         Args:
-            func (Callable[P, R]): The Python callable to wrap as a tool.
+            func (Callable[P, R] | Callable[P, Awaitable[R]]): The Python
+                callable (sync or async) to wrap as a tool.
             name (str | None): Optional name override; defaults to ``func.__name__``.
 
         Returns:
@@ -200,8 +217,20 @@ class MelleaTool(AbstractMelleaTool[P, R]):
         as_json = convert_function_to_ollama_tool(func, tool_name).model_dump(
             exclude_none=True
         )
-        tool_call = func
+        if inspect.iscoroutinefunction(func):
+            async_func = func
+
+            def tool_call(*args: P.args, **kwargs: P.kwargs) -> R:
+                return _run_async_in_thread(async_func(*args, **kwargs))
+        else:
+            tool_call = func  # type: ignore[assignment]
         return MelleaTool(tool_name, tool_call, as_json)
+
+
+@overload
+def tool(
+    func: Callable[P, Awaitable[R]], *, name: str | None = None
+) -> MelleaTool[P, R]: ...
 
 
 @overload
@@ -215,7 +244,8 @@ def tool(
 
 
 def tool(
-    func: Callable[P, R] | None = None, name: str | None = None
+    func: Callable[P, R] | Callable[P, Awaitable[R]] | None = None,
+    name: str | None = None,
 ) -> MelleaTool[P, R] | Callable[[Callable[P, R]], MelleaTool[P, R]]:
     """Decorator to mark a function as a Mellea tool with type-safe parameter and return types.
 
@@ -278,7 +308,7 @@ def tool(
         return decorator
     else:
         # Called without arguments: @tool
-        return decorator(func)
+        return decorator(func)  # type: ignore[arg-type]
 
 
 def add_tools_from_model_options(

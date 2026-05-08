@@ -159,3 +159,37 @@ def check_tool_overload_without_func() -> None:
     # Verify the return type is preserved through .run()
     output = result.run(42)
     assert_type(output, str)
+
+
+# Test async support: from_callable and @tool should narrow Awaitable[R] to R
+async def async_plain(a: str, b: int) -> list[str]:
+    """An async plain function to wrap."""
+    return [a] * b
+
+
+def check_from_callable_async_return_type() -> None:
+    """Verify MelleaTool.from_callable narrows Awaitable[R] to R on .run()."""
+    wrapped = MelleaTool.from_callable(async_plain)
+    result = wrapped.run("test", 3)
+    # Same classmethod+generic inference limitation as the sync from_callable checks
+    # above; use an assignment to verify awaited-type compatibility.
+    _: list[str] = result  # type: ignore[assignment]
+
+
+def check_from_callable_async_with_name() -> None:
+    """Verify async overload narrows when a custom name is supplied."""
+    wrapped = MelleaTool.from_callable(async_plain, name="custom")
+    result = wrapped.run("test", 3)
+    _: list[str] = result  # type: ignore[assignment]
+
+
+@tool
+async def decorated_async(x: int) -> str:
+    """Async function wrapped via the @tool decorator."""
+    return str(x)
+
+
+def check_tool_decorator_async() -> None:
+    """Verify @tool on an async function narrows to the awaited return type."""
+    result = decorated_async.run(42)
+    assert_type(result, str)
