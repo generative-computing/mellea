@@ -1,9 +1,33 @@
 # Adapter Lifecycle — Design Proposal
 
-> Status: proposal for shape agreement.
-> Addresses Epic #929.
-> Structure: **Part I** is for agreeing the problem, goals, terminology, and end state. **Part II** contains the supporting detail — read after Part I is agreed, not before.
-> Terminology note: this proposal uses **"adapter"** as the primary term for the thing users add to a backend to gain a specialised capability. "Intrinsic" appears as the legacy name where it still refers to existing Mellea classes (e.g. the `Intrinsic` AST component). The rename strategy is called out in §5.
+> **Addresses:** [Epic #929 — Fix Intrinsic Adapter Lifecycle & Consistency in Mellea](https://github.com/generative-computing/mellea/issues/929). Read the epic first if you haven't — it catalogues the specific threads this proposal tries to resolve coherently rather than individually.
+> **Status:** proposal for shape agreement; not a PR candidate. Preserved on a branch for review; once agreed, the content moves into `docs/dev/intrinsics_and_adapters.md` as the current-state doc and this file is deleted.
+> **Structure:** **Part I** covers problem, goals, terminology, end state, and the decisions that gate decomposition. **Part II** contains supporting detail — read after Part I is agreed, not before.
+> **Terminology:** this proposal uses **"adapter"** as the primary user-facing term; "intrinsic" appears only as the legacy name where it still refers to existing Mellea classes (e.g. the `Intrinsic` AST component). Rename strategy is in §5 Q6.
+
+## Referenced issues and PRs
+
+| Ref | Title | Why cited |
+| --- | --- | --- |
+| [Epic #929](https://github.com/generative-computing/mellea/issues/929) | Fix Intrinsic Adapter Lifecycle & Consistency in Mellea | *the epic this proposal addresses* |
+| [#27](https://github.com/generative-computing/mellea/issues/27) | Add support for aloras to remote vllm when vllm supports it | live tracking item for Reality C |
+| [#423](https://github.com/generative-computing/mellea/issues/423) | Adapter code is undocumented and over-specialized to Intrinsics | Priority-labelled; overlaps this refactor |
+| [#424](https://github.com/generative-computing/mellea/issues/424) | Cannot use intrinsics without uploading them | customer-adapter friction |
+| [#543](https://github.com/generative-computing/mellea/pull/543) | revert: remove adapters/intrinsics/alora/lora from openai code | why OpenAI backend lost adapter support |
+| [#881](https://github.com/generative-computing/mellea/pull/881) | feat: add embedded adapters (granite switch) to openai backend | why OpenAI backend got Reality B back |
+| [#946](https://github.com/generative-computing/mellea/pull/946) | feat: simplify intrinsics | rework evidence |
+| [#972](https://github.com/generative-computing/mellea/pull/972) | fix: model options with intrinsics | rework evidence for #929 point 2 |
+| [#979](https://github.com/generative-computing/mellea/pull/979) | fix: key in json returned by policy_guardrails intrinsic | rework evidence for output parsing |
+| [#986](https://github.com/generative-computing/mellea/pull/986) | fix: issues introduced by intrinsic changes | rework evidence |
+| [#994](https://github.com/generative-computing/mellea/pull/994) | fix: default intrinsic adapter types; granite-switch tests | rework evidence |
+| [#1003](https://github.com/generative-computing/mellea/issues/1003) | fix: intrinsic function signatures (model_options on helpers) | high-level helper signature evolution |
+| [#1008](https://github.com/generative-computing/mellea/pull/1008) | fix: rewrite requirement_check_to_bool for new schema | worked example for schema-version story |
+| [#1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | introduces factuality rewind path |
+| [#1035](https://github.com/generative-computing/mellea/issues/1035) | OTel emission gaps | parent for telemetry coordination |
+| [#1036](https://github.com/generative-computing/mellea/pull/1036) | feat(telemetry): close five OTel GenAI semconv gaps | in-flight telemetry work to coordinate with |
+| [#1018](https://github.com/generative-computing/mellea/issues/1018) | add support for granite-switch / embedded adapters on HF backend | depends on this refactor; explicit sequencing note in issue body |
+
+**Sequencing note:** #1018's issue body states "May require sorting out some of the issues in #929 first. Or at least creating a comprehensive plan." That makes this proposal the gating item: resolve the decisions here, land Phase 0–2 of the migration, then #1018 reduces to a straightforward "add the EmbeddedBinding path to `LocalHFBackend`" change following the established pattern. Attempting #1018 without the refactor re-creates the branching problem on a second backend.
 
 ---
 
@@ -21,13 +45,29 @@ Three sources of friction have accumulated:
 
 Every thread in #929 is a symptom of not having separated the kinds of adapter and their lifecycles cleanly.
 
+### Evidence that this is friction, not theory
+
+Seven fix-up commits in the adapter area in recent history, all symptomatic of the design gaps above rather than straightforward feature work:
+
+| Commit / PR | What it fixed |
+| --- | --- |
+| `1734900d` | Remove `answer_relevance*` intrinsics and unrelated intrinsic issues. |
+| `8b6b8d55` (#972) | Model options with intrinsics (precedence bug surfaced). |
+| `c57aba1d` (#986) | Issues introduced by preceding intrinsic changes. |
+| `8577d092` (#994) | Default intrinsic adapter types; canned I/O with temperature. |
+| `4d372b0e` (#979) | Key in JSON returned by `policy_guardrails` intrinsic. |
+| `0617bd96` (#1008) | Rewrote `requirement_check_to_bool` for a changed output schema; flipped `"requirement_check"` → `"requirement-check"` in four files. |
+| `75465d29` (#946) | "Simplify intrinsics" — reacting to accumulated complexity. |
+
+Add the `obtain_lora`-always-called masked error (#929 1b) and the hardcoded `"requirement-check"` references called out in #929 point 7 and PR #1008, and the picture is of a subsystem that receives repeated small-scope fixes rather than a stable abstraction.
+
 ## 2. What we are trying to achieve
 
 - **One coherent mental model** of what an adapter is, so users and contributors can reason about behaviour without reading the implementation.
 - **One code path** through adapter invocation that works regardless of whether the adapter's weights are local, shipped with the base model, or served by a remote server.
 - **Correct, documented model-option precedence** that does not silently overwrite caller intent.
 - **Schema-version safety** so adapters can evolve their output format without breaking callers, and so an adapter whose schema drifts is visible rather than silent.
-- **First-class customer adapters** — customers can build and ship their own adapters against the same API as first-party ones, without monkey-patching a global registry and without privileged access to internal APIs.
+- **First-class customer adapters** — customers can build and ship their own adapters against the same API as first-party ones, without monkey-patching a global registry and without privileged access to internal APIs. *Current state is partial:* training infrastructure exists (`m alora train` / `m alora upload`), but consuming a custom adapter today requires either patching the catalog, subclassing `CustomIntrinsicAdapter` (self-confessed "temporary hack"), or uploading to HuggingFace first ([#424](https://github.com/generative-computing/mellea/issues/424)). The refactor closes this to a single declarative path: construct an `Adapter` with a `LocalFileBinding` pointing at any HF repo (or a local path) plus a local or remote `io.yaml`.
 - **Observable adapter calls** — every phase (download, activation, generation, parse, deactivation) is a distinct span with standard attributes; a per-adapter metrics plugin makes failures visible in dashboards without bespoke instrumentation.
 - **Parity, not breakage** — high-level helpers (`check_answerability` etc.) keep their shape; manual adapter construction becomes simpler, not harder.
 
@@ -134,20 +174,83 @@ From this shape, the seven threads of #929 resolve cleanly. Full mapping is in P
 
 **What cross-cutting concerns look like:** observability (spans + a schema-drift metric), docs rewrite (`intrinsics_and_adapters.md` is 39 lines describing classes this renames), and a test-parity commitment travel **with** the refactor, not after it. Detail in Part II §10–§11.
 
+### 4.1 Backend × reality matrix
+
+Which realities does each backend support today, and where this design takes them:
+
+| Backend             | Reality A (Local PEFT) | Reality B (Embedded) | Reality C (Server-mediated) |
+| ------------------- | :--------------------: | :------------------: | :-------------------------: |
+| `LocalHFBackend`    | ✅ today                | ⏳ [#1018](https://github.com/generative-computing/mellea/issues/1018) | — |
+| `OpenAIBackend`     | —                      | ✅ today ([#881](https://github.com/generative-computing/mellea/pull/881)) | ⏳ [#27](https://github.com/generative-computing/mellea/issues/27) |
+
+- ✅ = supported; ⏳ = in-scope future work tracked by the linked issue; — = not applicable / not planned.
+- Granite Switch (embedded) is the newest addition but is **not** "the premier option": local PEFT via `LocalHFBackend` remains the development/on-prem path and is the only reality that ships with both LoRA and aLoRA today.
+- The design keeps every cell that is ✅ working, adds clean paths for the ⏳ cells without ad-hoc branching, and does not preclude new rows (backends) or columns (realities) later.
+
 ## 5. Decisions needed now
 
 These gate decomposition; everything else can live in sub-issues once these are agreed.
 
 1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
 2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base.
-3. **OpenAI Reality C — which concrete shape first?** vLLM-backed LoRA serving (client-known weight file, server-side load) or commercial fine-tunes (fully hosted)? The binding covers both; the first subclass sets the idiom.
-4. **Telemetry coupling with #1035.** Include intrinsic spans as part of this refactor, or as a follow-on to PR #1036's Gap 5? Coupling avoids designing content capture twice; decoupling keeps #1036 moving.
-5. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
-6. **Terminology rename scope.** Three levels of commitment to the "adapter over intrinsic" shift:
+3. **Reality C target shape.** The active work item is [#27](https://github.com/generative-computing/mellea/issues/27) (aLoRA on remote vLLM), paced by upstream vLLM's position. Do we leave the `ServerMediatedBinding` slot empty in 0.6.0 and populate it when #27 unblocks, or invest in a no-op/stub subclass now? Recommendation: leave empty, design the slot, revisit when upstream moves.
+4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
+5. **Terminology rename scope.** Three levels of commitment to the "adapter over intrinsic" shift:
    a. **Prose only** (docs, error messages, help text). Zero breakage. Recommended unconditionally.
    b. **Module rename**: `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for anyone importing from the submodule path.
    c. **AST class rename**: `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias for one release. Breaking for advanced users calling `mfuncs.act(Intrinsic(...))` directly.
    Confirm how deep to go.
+
+> **Implementation note, not a reviewer question:** intrinsic-level observability (§10) should coordinate with the in-flight [#1035](https://github.com/generative-computing/mellea/issues/1035) / [PR #1036](https://github.com/generative-computing/mellea/pull/1036) work so content capture uses the same `MELLEA_TRACE_CONTENT` flag and doesn't get designed twice. Flagged here for awareness; sequenced during implementation.
+
+## 6. Impact and blast radius
+
+Scope of this refactor in concrete terms so reviewers can weigh the cost.
+
+### API surface
+
+- **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) lands on top, not instead.
+- **Deprecated but shimmed for one release** — `IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter` public classes. Direct users get `DeprecationWarning` pointing to the new constructor.
+- **Optional, was mandatory** — the adapter catalogue. Stays as a convenience resolver, stops being a gate.
+- **Possibly moved/renamed** — depends on §5 Q5 (terminology rename scope).
+
+### User-archetype impact
+
+| Audience | Impact |
+| --- | --- |
+| Helper user (`check_answerability`-style calls) | None beyond the `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) and clearer error messages. |
+| Advanced user constructing adapters directly | One release of deprecation warnings, then adopt the new `Adapter(name=…, weights=…)` constructor. |
+| Customer writing their own adapter | First-class path; no more `CustomIntrinsicAdapter` monkey-patching; no forced catalogue upload. Resolves [#424](https://github.com/generative-computing/mellea/issues/424). |
+| Backend author | `AdapterMixin` verb set narrows to the natural operations each backend can perform; existing implementations update or use shim methods. |
+| Operator / SRE | New spans and metrics per §10; easier diagnosis of adapter failures and cost attribution. |
+
+### Code reach
+
+Files and modules touched, approximate: `mellea/backends/adapters/{adapter,catalog,__init__}.py`, `mellea/backends/{huggingface,openai}.py`, `mellea/stdlib/components/intrinsic/*`, `mellea/formatters/granite/intrinsics/*`, `mellea/stdlib/requirements/requirement.py`, `docs/examples/intrinsics/*`, `docs/dev/{intrinsics_and_adapters,requirement_aLoRA_rerouting}.md`. Larger than a typical feature PR; phased per §13 so individual PRs stay reviewable.
+
+### Release planning
+
+- **0.6.0 target**: §5 agreement plus Phases 0–2 of the migration (new `Adapter` / `WeightsBinding` / `IOContract` types, call-site adoption, backend narrowing, deprecation shims for old classes, unified model-option precedence, observability per §10, tests per §11).
+- **0.6.x follow-on**: [#1018](https://github.com/generative-computing/mellea/issues/1018) (embedded adapters on `LocalHFBackend`), Phase 4 shim removal.
+- **Deferred until upstream moves**: Reality C / [#27](https://github.com/generative-computing/mellea/issues/27).
+
+### Blocking and unblocking
+
+- **Blocks** [#1018](https://github.com/generative-computing/mellea/issues/1018) (explicitly stated in its issue body).
+- **Substantially addresses** [#423](https://github.com/generative-computing/mellea/issues/423) (adapter code undocumented and over-specialised), [#424](https://github.com/generative-computing/mellea/issues/424) (cannot use intrinsics without uploading), all seven threads of [#929](https://github.com/generative-computing/mellea/issues/929).
+- **Coordinates with** [PR #1036](https://github.com/generative-computing/mellea/pull/1036) on content-capture semantics.
+- **Blocked by** upstream vLLM position on aLoRA ([#27](https://github.com/generative-computing/mellea/issues/27)) — and only for Reality C. Parts I–II of this design are not gated on upstream.
+
+### Performance
+
+- **Likely neutral or improved.** Session-scoped lifecycle is the proposed default (matches current `LocalHFBackend` behaviour); no additional load/unload cost per call. Unified parsing avoids the double-parse that the current output-normalisation sometimes does.
+- **Regression watch**: if §5 Q2 chooses request-scoped, per-call PEFT load/unload becomes a visible cost. Measure before adoption.
+
+### Risk
+
+- **Biggest unknown**: whether the unified `resolve_model_options` handles every combination currently in use. Mitigation: keep the five-layer precedence explicit, add per-adapter override documentation, and assert resolved values in tests.
+- **Second biggest**: schema-version dispatch (§5.4 in Part II). Worked example is the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change — verifying v1 and v2 both pass through cleanly gates the parsing refactor.
+- **Mitigated by**: per-phase test-parity commitment (nothing merges if existing tests regress); observability introduced alongside the refactor so production regressions surface as dashboard signals rather than silent behavioural drift.
 
 ---
 
@@ -171,18 +274,22 @@ These gate decomposition; everything else can live in sub-issues once these are 
 - On the client side, only `io.yaml` is needed to format inputs and parse outputs.
 - **Pre-installed weights, prompt-level activation, no separate download lifecycle.**
 
-### 6.3 Reality C — Server-mediated adapter (partially gap today, #929 point 5)
+### 6.3 Reality C — Server-mediated adapter (partially gap today)
 
-The OpenAI-compatible backend **already supports adapters** — but only embedded ones (Granite Switch via Reality B, added in PR #881). The gap this reality addresses is *non-embedded* server-side adapters: the path that PR #543 removed when vLLM dropped aLoRA support and that #929 point 5 describes as "requires discussion."
+The OpenAI-compatible backend **already supports adapters** — but only embedded ones (Granite Switch via Reality B, added in [PR #881](https://github.com/generative-computing/mellea/pull/881)). What's missing is *non-embedded* server-side adapters.
 
-Whether we actively re-enable this path in 0.6.0 is a design decision (see §5 Q3). The shape is worth naming now so the binding abstraction accommodates it rather than having to be re-opened later. Two plausible sub-cases:
+**The history (corrected):** Mellea previously ran aLoRA adapters through the OpenAI backend against a **custom vLLM build** that carried an aLoRA patch. The upstream vLLM project declined to merge that patch (confirmed in [PR #543](https://github.com/generative-computing/mellea/pull/543)'s review: "the vLLM aLoRA PR will not [be] accepted, so the alora/intrinsics code for openai is now all dead code"), so PR #543 removed the dead path. Upstream vLLM has therefore **never carried** aLoRA support — the right framing is "declined upstream," not "dropped."
 
-- **C1 — Client-pulled, server-activated**: weights exist as a file on the client side (or somewhere pullable), but activation happens on a remote inference server (e.g. vLLM loads them and exposes them via a LoRA ID or per-request model alias). The client sends either `model=<adapter-id>` or a dedicated LoRA field in the API request.
-- **C2 — Provider-hosted**: weights live entirely on the provider's infrastructure. The client only ever passes an identifier. Applies to commercial fine-tunes behind OpenAI, Azure, etc.
+**Live tracking item:** [Issue #27 "Add support for aloras to remote vllm when vllm supports it"](https://github.com/generative-computing/mellea/issues/27) is the open work item for this reality. It remains open because the upstream situation has not changed.
+
+**Scope of this reality:** whatever the eventual technology path, the design slot is the same. Two sub-cases the binding must accommodate when the path becomes viable:
+
+- **C1 — Client-pulled, server-activated**: weights exist as a file client-side (or somewhere pullable), but activation happens on a remote inference server which loads them and exposes them via a LoRA ID or per-request model alias. This is the vLLM-shaped path, paced by #27 being unblocked.
+- **C2 — Provider-hosted**: weights live entirely on the provider's infrastructure. The client only ever passes an identifier. Applies to commercial fine-tunes behind OpenAI, Azure, etc. Not currently a known target in Mellea.
 
 Both share: **no local weight loading, API-parameter activation, `io.yaml` still required client-side.** The first concrete `ServerMediatedBinding` subclass sets the idiom for the API shape.
 
-**Intent summary for OpenAI-compatible support:** keep and extend. Embedded support stays. The design leaves a clean slot for non-embedded when we decide to re-add it.
+**Intent summary for OpenAI-compatible support:** keep and extend. Embedded support stays. The design leaves a clean slot for C1 to be populated when #27 is unblocked upstream; C2 is noted for completeness but not a near-term target.
 
 ## 7. Why the current code is tangled (concrete example)
 
@@ -294,7 +401,7 @@ First-class deliverables, not afterthoughts.
 
 **Qualitative effectiveness suite (optional, per-adapter).** The tests above verify plumbing. They do *not* answer "does the answerability adapter actually judge answerability correctly?" A per-adapter qualitative suite (`@pytest.mark.qualitative`, opt-in, kept out of the fast loop) takes a small canonical dataset per adapter and asserts an accuracy floor on its outputs. Without this, a refactor can pass every structural test while silently degrading the behaviour users care about.
 
-Two existing tools fit naturally here and should be preferred over ad-hoc harnesses:
+Two existing tools — already part of Mellea's broader LLM-unit-testing conversation rather than bespoke to this refactor — fit naturally here and should be preferred over ad-hoc harnesses:
 
 - **`TestBasedEval`** (in-tree — `mellea/templates/prompts/default/TestBasedEval.jinja2`, documented at `docs.mellea.ai/how-to/unit-test-generative-code`) is Mellea's own LLM-as-judge component. Each adapter gets a JSON file of test cases (`{input, target, guidelines}`); a judge model returns `{"score": 0|1, "justification": "..."}`. Runnable from the CLI (`m eval run tests/eval_data/<adapter>.json --backend ollama --model granite4.1:3b`) so the same fixtures power both CI and interactive debugging. This is the default mechanism for per-adapter qualitative coverage.
 - **BenchDrift** (`github.com/IBM/BenchDrift`) addresses a second failure mode: an adapter that works on its canonical phrasing but breaks on semantically-equivalent rephrasings. BenchDrift generates syntactic variations of each test case while preserving meaning, then scores consistency across variations. Worth applying to the adapters where phrasing-invariance is a real concern — answerability, context-relevance, requirement-check, and the Guardian family all qualify. Optional extension rather than baseline coverage, but enabling it per-adapter is a one-config-file step once the `TestBasedEval` fixtures exist.
