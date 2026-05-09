@@ -365,6 +365,23 @@ def test_as_generic_chat_history_with_cblock():
     assert history[0].content == "inline content"
 
 
+def test_as_generic_chat_history_with_cblock_subclass():
+    """CBlock subclasses use the formatter."""
+
+    def custom_formatter(obj: object) -> str:
+        return f"[formatted {type(obj).__name__}]"
+
+    class CustomCBlock(CBlock):
+        pass
+
+    ctx = ChatContext()
+    ctx = ctx.add(CustomCBlock("custom content"))
+    history = as_generic_chat_history(ctx, formatter=custom_formatter)
+    assert len(history) == 1
+    assert history[0].role == "user"
+    assert "[formatted CustomCBlock]" in history[0].content
+
+
 def test_as_generic_chat_history_custom_formatter():
     """Custom formatter handles unknown types."""
 

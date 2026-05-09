@@ -254,7 +254,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
         List of ``Message`` objects in conversation order.
 
     Raises:
-        Exception: If the context history is non-linear and cannot be cast to a
+        ValueError: If the context history is non-linear and cannot be cast to a
             flat list.
         AssertionError: If any entry in the context cannot be converted to a
             ``Message``.
@@ -275,7 +275,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
 
     all_ctx_events = ctx.as_list()
     if all_ctx_events is None:
-        raise Exception("Trying to cast a non-linear history into a chat history.")
+        raise ValueError("Trying to cast a non-linear history into a chat history.")
     else:
         history = [_to_msg(c) for c in all_ctx_events]
         assert None not in history, "Could not render this context as a chat history."
@@ -304,6 +304,14 @@ def as_generic_chat_history(
     formatter, making it suitable for general-purpose use where context composition
     may be heterogeneous.
 
+    The formatter is applied to:
+    - ``ModelOutputThunk`` with non-Message ``parsed_repr``
+    - ``CBlock`` subclasses (subclasses only; plain ``CBlock`` is stringified)
+    - Other unknown component types
+
+    Existing ``Message`` objects are preserved as-is; their content is not formatted.
+    This design preserves Message fidelity while providing an escape hatch for unknown types.
+
     Args:
         ctx: A linear ``Context`` that may contain ``Message``, ``ModelOutputThunk``,
             or other ``Component`` types.
@@ -314,7 +322,7 @@ def as_generic_chat_history(
         List of ``Message`` objects in conversation order.
 
     Raises:
-        Exception: If the context history is non-linear and cannot be cast to a
+        ValueError: If the context history is non-linear and cannot be cast to a
             flat list.
     """
     if formatter is None:
@@ -355,5 +363,5 @@ def as_generic_chat_history(
 
     all_ctx_events = ctx.as_list()
     if all_ctx_events is None:
-        raise Exception("Trying to cast a non-linear history into a chat history.")
+        raise ValueError("Trying to cast a non-linear history into a chat history.")
     return [_to_msg(c) for c in all_ctx_events]
