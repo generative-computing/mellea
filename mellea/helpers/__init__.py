@@ -16,6 +16,7 @@ from .async_helpers import (
     wait_for_all_mots,
 )
 from .event_loop_helper import _run_async_in_thread
+from .imports import get_unauthorized_imports
 from .openai_compatible_helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
@@ -36,6 +37,7 @@ __all__ = [
     "chat_completion_delta_merge",
     "extract_model_tool_requests",
     "get_current_event_loop",
+    "get_unauthorized_imports",
     "is_vllm_server_with_structured_output",
     "message_to_openai_message",
     "messages_to_docs",

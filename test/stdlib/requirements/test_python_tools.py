@@ -4,12 +4,12 @@ import tempfile
 from pathlib import Path
 
 from mellea.core import Context, ModelOutputThunk
+from mellea.helpers import get_unauthorized_imports
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.python_tools import (
     PythonToolRequirements,
     _calls_savefig,
     _code_parses,
-    _get_unauthorized_imports,
     _sets_headless_backend,
     _uses_pyplot_plot,
     _uses_pyplot_show,
@@ -53,48 +53,48 @@ class TestCodeParses:
 
 
 class TestUnauthorizedImports:
-    """Tests for _get_unauthorized_imports helper."""
+    """Tests for get_unauthorized_imports helper."""
 
     def test_no_imports_allowed_always(self):
         """Code with no imports should always pass."""
         code = "x = 1"
-        unauthorized = _get_unauthorized_imports(code, ["numpy"])
+        unauthorized = get_unauthorized_imports(code, ["numpy"])
         assert unauthorized == []
 
     def test_allowed_imports(self):
         """Allowed imports should not be flagged."""
         code = "import numpy\nimport pandas"
-        unauthorized = _get_unauthorized_imports(code, ["numpy", "pandas"])
+        unauthorized = get_unauthorized_imports(code, ["numpy", "pandas"])
         assert unauthorized == []
 
     def test_unauthorized_import_detected(self):
         """Unauthorized imports should be detected."""
         code = "import subprocess"
-        unauthorized = _get_unauthorized_imports(code, ["numpy", "pandas"])
+        unauthorized = get_unauthorized_imports(code, ["numpy", "pandas"])
         assert "subprocess" in unauthorized
 
     def test_none_allows_all(self):
         """allowed_imports=None should allow any import."""
         code = "import subprocess\nimport socket\nimport os"
-        unauthorized = _get_unauthorized_imports(code, None)
+        unauthorized = get_unauthorized_imports(code, None)
         assert unauthorized == []
 
     def test_nested_imports(self):
         """Only top-level module checked for nested imports."""
         code = "import numpy.random"
-        unauthorized = _get_unauthorized_imports(code, ["numpy"])
+        unauthorized = get_unauthorized_imports(code, ["numpy"])
         assert unauthorized == []
 
     def test_from_import(self):
         """from ... import should be checked."""
         code = "from matplotlib import pyplot"
-        unauthorized = _get_unauthorized_imports(code, ["numpy"])
+        unauthorized = get_unauthorized_imports(code, ["numpy"])
         assert "matplotlib" in unauthorized
 
     def test_multiple_unauthorized(self):
         """Multiple unauthorized imports should be detected."""
         code = "import subprocess\nimport socket"
-        unauthorized = _get_unauthorized_imports(code, ["numpy"])
+        unauthorized = get_unauthorized_imports(code, ["numpy"])
         assert len(unauthorized) == 2
         assert "subprocess" in unauthorized
         assert "socket" in unauthorized
@@ -570,6 +570,140 @@ class TestOutputArtifactsRequirement:
             r for r in bundle.requirements if "output file" in r.description.lower()
         ]
         assert len(artifact_reqs) == 0
+
+
+class TestOutputLimitValidator:
+    """Tests for _make_output_limit_validator."""
+
+    def test_empty_output_passes(self):
+        """No stdout/stderr should pass."""
+        ctx = ChatContext().add(ModelOutputThunk(value="response"))
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        assert len(limit_reqs) > 0
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is True
+
+    def test_output_within_limit_passes(self):
+        """Output under limit should pass."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = "x" * 500
+        output.stderr = ""
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is True
+
+    def test_stdout_exceeds_limit_fails(self):
+        """Stdout exceeding limit should fail."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = "x" * 1500
+        output.stderr = ""
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is False
+        assert "exceeding" in result.reason.lower()
+        assert "1500" in result.reason
+
+    def test_stderr_exceeds_limit_fails(self):
+        """Stderr exceeding limit should fail."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = ""
+        output.stderr = "e" * 1500
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is False
+        assert "exceeding" in result.reason.lower()
+
+    def test_combined_output_exceeds_limit_fails(self):
+        """Combined stdout+stderr exceeding limit should fail."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = "x" * 600
+        output.stderr = "e" * 600  # Combined: 1200 bytes
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is False
+        assert "1200" in result.reason
+
+    def test_utf8_multibyte_characters_counted_correctly(self):
+        """Multibyte UTF-8 characters should be counted in bytes, not chars."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = "🎉" * 100  # 4 bytes per emoji = 400 bytes
+        output.stderr = ""
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=300)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is False  # 400 > 300
+        assert "exceeding" in result.reason.lower()
+
+    def test_limit_at_boundary(self):
+        """Output exactly at limit should pass."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = "x" * 1000  # Exactly 1000 bytes
+        output.stderr = ""
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is True
+
+    def test_limit_one_byte_over_boundary_fails(self):
+        """Output one byte over limit should fail."""
+        output = ModelOutputThunk(value="response")
+        output.stdout = "x" * 1001  # 1001 bytes
+        output.stderr = ""
+        ctx = ChatContext().add(output)
+
+        bundle = PythonToolRequirements(output_limit_bytes=1000)
+        limit_reqs = [
+            r for r in bundle.requirements if "exceed" in r.description.lower()
+        ]
+        limit_req = limit_reqs[0]
+
+        result = limit_req.validation_fn(ctx)
+        assert result.as_bool() is False
 
 
 # endregion

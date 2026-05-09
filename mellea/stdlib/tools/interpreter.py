@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core import MelleaLogger
+from ...helpers import get_unauthorized_imports
 
 logger = MelleaLogger.get_logger()
 
@@ -148,7 +149,7 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
             )
 
         if self.allowed_imports:
-            unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
+            unauthorized = get_unauthorized_imports(code, self.allowed_imports)
             if unauthorized:
                 return ExecutionResult(
                     success=False,
@@ -185,7 +186,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
             unexpected error occurs.
         """
         if self.allowed_imports:
-            unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
+            unauthorized = get_unauthorized_imports(code, self.allowed_imports)
             if unauthorized:
                 return ExecutionResult(
                     success=False,
@@ -259,7 +260,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             flag, or a skipped result on import violation or sandbox error.
         """
         if self.allowed_imports:
-            unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
+            unauthorized = get_unauthorized_imports(code, self.allowed_imports)
             if unauthorized:
                 return ExecutionResult(
                     success=False,
@@ -301,37 +302,9 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             )
 
 
-def _get_unauthorized_imports(code: str, allowed_imports: list[str]) -> list[str]:
-    """Get list of unauthorized imports used in code."""
-    unauthorized: list[str] = []
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return unauthorized
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                base_module = alias.name.split(".")[0]
-                if (
-                    base_module not in allowed_imports
-                    and base_module not in unauthorized
-                ):
-                    unauthorized.append(base_module)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                base_module = node.module.split(".")[0]
-                if (
-                    base_module not in allowed_imports
-                    and base_module not in unauthorized
-                ):
-                    unauthorized.append(base_module)
-    return unauthorized
-
-
 def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
     """Check if code only uses allowed imports."""
-    return len(_get_unauthorized_imports(code, allowed_imports)) == 0
+    return len(get_unauthorized_imports(code, allowed_imports)) == 0
 
 
 def code_interpreter(code: str) -> ExecutionResult:

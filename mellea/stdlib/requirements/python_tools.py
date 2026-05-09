@@ -56,6 +56,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...core import Context, Requirement, ValidationResult
+from ...helpers import get_unauthorized_imports
 from .python_reqs import _has_python_code_listing
 
 
@@ -79,41 +80,6 @@ def _extract_code(ctx: Context) -> str | None:
     if result.as_bool() and result.reason:
         return result.reason
     return None
-
-
-def _get_unauthorized_imports(
-    code: str, allowed_imports: list[str] | None
-) -> list[str]:
-    """Return list of imports in code that are not in allowed_imports.
-
-    Args:
-        code: Python code to analyze
-        allowed_imports: Allowlist of permitted top-level modules (None = allow all)
-
-    Returns:
-        List of unauthorized import module names, or empty list if all allowed.
-    """
-    if allowed_imports is None:
-        return []
-
-    unauthorized = []
-    try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    module_name = alias.name.split(".")[0]
-                    if module_name not in allowed_imports:
-                        unauthorized.append(module_name)
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    module_name = node.module.split(".")[0]
-                    if module_name not in allowed_imports:
-                        unauthorized.append(module_name)
-    except (SyntaxError, ValueError):
-        pass
-
-    return list(set(unauthorized))
 
 
 def _code_parses(code: str) -> tuple[bool, str | None]:
@@ -261,7 +227,7 @@ def _make_imports_allowed_validator(
                 result=False, reason="Could not extract Python code"
             )
 
-        unauthorized = _get_unauthorized_imports(code, allowed_imports)
+        unauthorized = get_unauthorized_imports(code, allowed_imports)
         if unauthorized:
             allowed_str = ", ".join(sorted(set(allowed_imports)))
             return ValidationResult(
