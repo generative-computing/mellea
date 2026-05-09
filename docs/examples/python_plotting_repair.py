@@ -17,6 +17,11 @@ The requirements bundle provides actionable failure messages that guide the mode
 through each repair iteration without explicit instruction.
 """
 
+import asyncio
+import tempfile
+import traceback
+from pathlib import Path
+
 import mellea
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
@@ -42,9 +47,6 @@ def python(code: str) -> ExecutionResult:
 
 async def main():
     """Run the canonical plotting repair example."""
-    import tempfile
-    from pathlib import Path
-
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = str(Path(tmpdir) / "plot.png")
 
@@ -52,7 +54,10 @@ async def main():
         m = mellea.start_session()
 
         # Create requirements bundle for plotting validation
-        # Allows matplotlib import (no output_path = skip file creation check)
+        # Note: We don't pass output_path, so the bundle doesn't enforce artifact validation.
+        # This example tests code generation and repair logic, not actual code execution.
+        # The model generates syntactically correct plotting code, but doesn't execute it,
+        # so the output file is never created.
         bundle = PythonToolRequirements(allowed_imports=["numpy", "matplotlib", "math"])
 
         # Define SOFAI strategy for repair: S1 (fast) up to 3 times, then S2 (slow)
@@ -65,7 +70,10 @@ async def main():
         )
 
         # Create the plotting task instruction
-        description = f"""Create a plot of sin(x) for x in 0..2π and save it to {output_path}.
+        task_summary = (
+            f"Create a plot of sin(x) for x in 0..2π and save it to {output_path}"
+        )
+        description = f"""{task_summary}
 
 Requirements:
 - Use the python tool to execute your code
@@ -83,7 +91,7 @@ Use the python tool with your complete code."""
         print("=" * 70)
         print("Testing Granite 4.1's ability to repair plotting failures")
         print("=" * 70)
-        print(f"Task: Create a plot of sin(x) and save to {output_path}\n")
+        print(f"Task: {task_summary}\n")
 
         try:
             # Run the sampling strategy with requirements
@@ -106,8 +114,6 @@ Use the python tool with your complete code."""
                 print("-" * 70)
 
                 # Verify output file exists
-                from pathlib import Path
-
                 if Path(output_path).exists():  # noqa: ASYNC240
                     file_size = Path(output_path).stat().st_size  # noqa: ASYNC240
                     print(f"\n✓ Output file created: {output_path}")
@@ -157,8 +163,6 @@ Use the python tool with your complete code."""
 
         except Exception as e:
             print(f"✗ Exception during sampling: {e}")
-            import traceback
-
             traceback.print_exc()
 
         print("\n" + "=" * 70)
@@ -167,6 +171,4 @@ Use the python tool with your complete code."""
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())

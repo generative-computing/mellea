@@ -101,19 +101,47 @@ def _code_parses(code: str) -> tuple[bool, str | None]:
         return False, error_msg
 
 
+def _strip_comments(code: str) -> str:
+    """Remove Python comments from code while preserving strings.
+
+    Splits code by lines and removes comments (text after # that's not in a string).
+    Handles both single and double quoted strings.
+    """
+    lines = code.split("\n")
+    result = []
+    for line in lines:
+        in_string = False
+        string_char = None
+        for i, char in enumerate(line):
+            if char in ('"', "'") and (i == 0 or line[i - 1] != "\\"):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+            elif char == "#" and not in_string:
+                result.append(line[:i])
+                break
+        else:
+            result.append(line)
+    return "\n".join(result)
+
+
 def _uses_pyplot_show(code: str) -> bool:
     """Check if code calls plt.show() or matplotlib.pyplot.show()."""
-    # Simple string checks work for most cases
-    return "plt.show" in code or ".show()" in code
+    clean_code = _strip_comments(code)
+    return "plt.show" in clean_code or ".show()" in clean_code
 
 
 def _sets_headless_backend(code: str) -> bool:
     """Check if code sets matplotlib to use a headless backend."""
+    clean_code = _strip_comments(code)
     headless_backends = ("Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg")
     for backend in headless_backends:
         if (
-            f"matplotlib.use('{backend}')" in code
-            or f'matplotlib.use("{backend}")' in code
+            f"matplotlib.use('{backend}')" in clean_code
+            or f'matplotlib.use("{backend}")' in clean_code
         ):
             return True
     return False

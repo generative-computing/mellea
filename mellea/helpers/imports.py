@@ -32,6 +32,9 @@ def get_unauthorized_imports(
     try:
         tree = ast.parse(code)
     except (SyntaxError, ValueError):
+        # Syntax errors are validated separately (e.g., in python_tools.py with
+        # _code_parses()). Returning empty here allows those dedicated validators
+        # to provide better error messages without double-reporting parse failures.
         return []
 
     for node in ast.walk(tree):
