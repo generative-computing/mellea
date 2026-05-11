@@ -5,18 +5,16 @@ implementations: ``StaticBashEnvironment`` (parse and safety-check only, no exec
 ``UnsafeBashEnvironment`` (subprocess execution in the current shell), and
 ``LLMSandboxBashEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
 environments enforce a conservative safety denylist (sudo, rm -rf, git push --force,
-system paths, interactive shells). The top-level ``bash_executor`` and
+system paths, interactive shells). Write operations may also be constrained by
+``working_dir`` and ``allowed_paths``. The top-level ``bash_executor`` and
 ``local_bash_executor`` functions are ready to be wrapped as ``MelleaTool`` instances
 for ReACT or other agentic loops.
 """
 
 import shlex
 import subprocess
-import tempfile
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from ...core import MelleaLogger
 from .interpreter import ExecutionResult
@@ -86,6 +84,31 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
 
     cmd = argv[0].split("/")[-1]  # Get basename of command
 
+    # Check for shell metacharacters that would need shell interpretation
+    # After shlex.split(), these characters in argv indicate shell operators (not quoted strings)
+    # These are only dangerous if they're standalone tokens or at token boundaries
+    shell_operators = {"<", ">", "|", ";", "&", "&&", "||"}
+    shell_operator_sequences = (">>", ">&", "<<", "|&", "&&", "||")
+
+    for arg in argv:
+        # Check for redirect/pipe/logic operators (these are shell operators)
+        if arg in shell_operators:
+            return True, f"Shell operator '{arg}' is not allowed"
+        # Check for combined operators or operators within tokens
+        if any(op in arg for op in shell_operator_sequences):
+            return True, "Shell operator is not allowed"
+        # Check for semicolon (command separator) within or as token
+        if ";" in arg:
+            return True, "Command chaining (;) is not allowed"
+
+    # Check for command substitution (backticks, $(...))
+    for arg in argv:
+        if "`" in arg or "$(" in arg:
+            return True, "Command substitution is not allowed"
+        # Check for variable expansion patterns
+        if "${" in arg:
+            return True, "Variable expansion is not allowed"
+
     # Check for dangerous commands
     if cmd in DANGEROUS_COMMANDS:
         if cmd in ("bash", "sh", "zsh", "ksh", "tcsh"):
@@ -124,11 +147,48 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
     return False, ""
 
 
-def _check_dangerous_paths(argv: list[str]) -> tuple[bool, str]:
-    """Check if command targets dangerous filesystem paths.
+def _is_path_within(path_str: str, allowed_root: str) -> bool:
+    """Return whether a resolved path is equal to or nested under an allowed root."""
+    if path_str == allowed_root:
+        return True
+    allowed_root_prefix = (
+        allowed_root if allowed_root.endswith("/") else allowed_root + "/"
+    )
+    return path_str.startswith(allowed_root_prefix)
+
+
+def _normalize_allowed_path(allowed_path: str) -> str:
+    """Normalize an allowlisted path for string-prefix containment checks."""
+    return str(Path(allowed_path).expanduser())
+
+
+def _resolve_allowed_paths(allowed_paths: list[str]) -> list[str]:
+    """Normalize allowed path roots for prefix-based containment checks."""
+    normalized_paths: list[str] = []
+    for allowed_path in allowed_paths:
+        try:
+            normalized_paths.append(_normalize_allowed_path(allowed_path))
+        except Exception:
+            logger.warning("Skipping invalid allowed path: %s", allowed_path)
+    return normalized_paths
+
+
+def _is_default_safe_write_path(path_str: str) -> bool:
+    """Return whether a path is in a default safe write location."""
+    home_dir = str(Path.home())
+    return path_str.startswith(("/tmp", "/private/tmp")) or _is_path_within(
+        path_str, home_dir
+    )
+
+
+def _check_dangerous_paths(
+    argv: list[str], allowed_paths: list[str] | None = None
+) -> tuple[bool, str]:
+    """Check if command targets dangerous or disallowed filesystem paths.
 
     Args:
         argv: Tokenized command arguments.
+        allowed_paths: Optional additional resolved path roots where writes are allowed.
 
     Returns:
         A tuple of (has_dangerous_paths, reason_message).
@@ -137,34 +197,36 @@ def _check_dangerous_paths(argv: list[str]) -> tuple[bool, str]:
     if not argv or argv[0].split("/")[-1] not in write_commands:
         return False, ""
 
-    # Scan all arguments for path-like strings
+    resolved_allowed_paths = _resolve_allowed_paths(allowed_paths or [])
+
     for arg in argv[1:]:
-        # Skip flags and values for flags
         if arg.startswith("-"):
             continue
 
-        # Check for absolute paths pointing to dangerous locations
-        if arg.startswith("/"):
-            # For absolute paths, check directly without resolving (non-existent paths)
-            for danger_path in DANGEROUS_PATHS:
-                if arg == danger_path or arg.startswith(danger_path + "/"):
-                    return True, f"Writing to '{arg}' is not allowed"
-        else:
-            # For relative paths, try to resolve
-            try:
-                path = Path(arg).expanduser()
-                # If it starts with ~, expand and check
-                if "~" in arg:
-                    expanded = path.expanduser()
-                    path_str = str(expanded)
-                    for danger_path in DANGEROUS_PATHS:
-                        if path_str == danger_path or path_str.startswith(
-                            danger_path + "/"
-                        ):
-                            return True, f"Writing to '{path_str}' is not allowed"
-            except Exception:
-                # If we can't resolve, skip
-                pass
+        expanded_arg = str(Path(arg).expanduser())
+        allowlist_candidate_path: str | None = None
+        if arg.startswith(("/", "~")):
+            allowlist_candidate_path = expanded_arg
+
+        for danger_path in DANGEROUS_PATHS:
+            if expanded_arg == danger_path or expanded_arg.startswith(
+                danger_path + "/"
+            ):
+                return True, f"Writing to '{expanded_arg}' is not allowed"
+
+        if resolved_allowed_paths:
+            candidate_for_allowlist = allowlist_candidate_path
+            if candidate_for_allowlist is None:
+                candidate_for_allowlist = str(Path(arg).resolve(strict=False))
+
+            if not any(
+                _is_path_within(candidate_for_allowlist, allowed_root)
+                for allowed_root in resolved_allowed_paths
+            ):
+                return (
+                    True,
+                    f"Path '{arg}' is outside explicitly allowed paths: {', '.join(allowed_paths or [])}",
+                )
 
     return False, ""
 
@@ -242,11 +304,12 @@ class BashEnvironment(ABC):
     """Abstract environment for executing bash commands.
 
     Args:
-        allowed_paths (list[str] | None): Additional paths to allow writing to
-            (beyond default safe paths: current dir, /tmp, home). ``None`` uses
-            default safety checks only.
-        working_dir (str | None): If specified, restrict file operations to this
-            directory and /tmp. Useful for sandboxing agent tasks.
+        allowed_paths (list[str] | None): Optional explicit write allowlist. When
+            provided, write-target paths must fall under one of these roots in
+            addition to passing the default dangerous-path checks.
+        working_dir (str | None): Optional directory restriction for write
+            operations. When specified, writes must remain within this directory
+            or ``/tmp``.
         timeout (int): Maximum number of seconds to allow command execution.
 
     """
@@ -261,6 +324,74 @@ class BashEnvironment(ABC):
         self.allowed_paths = allowed_paths or []
         self.working_dir = working_dir
         self.timeout = timeout
+
+    def _validate_command(self, command: str) -> ExecutionResult | list[str]:
+        """Parse and validate a command before execution.
+
+        The shared validation step performs argv parsing, rejects dangerous shell
+        constructs, applies path safety checks, and enforces ``allowed_paths`` and
+        ``working_dir`` restrictions for write operations.
+
+        Args:
+            command: The bash command string to validate.
+
+        Returns:
+            Either the validated argv list or a skipped ``ExecutionResult``
+            describing why validation failed.
+        """
+        try:
+            argv = shlex.split(command)
+        except ValueError as e:
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message=f"Failed to parse command: {e!s}",
+            )
+
+        if not argv:
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message="Empty command",
+            )
+
+        is_dangerous, reason = _is_dangerous_command(argv)
+        if is_dangerous:
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message=reason,
+            )
+
+        has_dangerous, reason = _check_dangerous_paths(argv, self.allowed_paths)
+        if has_dangerous:
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message=reason,
+            )
+
+        violates_restriction, reason = _check_working_dir_restriction(
+            argv, self.working_dir
+        )
+        if violates_restriction:
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message=reason,
+            )
+
+        return argv
 
     @abstractmethod
     def execute(self, command: str) -> ExecutionResult:
@@ -288,61 +419,11 @@ class StaticBashEnvironment(BashEnvironment):
             ExecutionResult: Result with ``skipped=True`` and parsed argv in
             ``analysis_result`` on success, or a safety-check failure on rejection.
         """
-        # Parse command into argv
-        try:
-            argv = shlex.split(command)
-        except ValueError as e:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=f"Failed to parse command: {e!s}",
-            )
+        validated = self._validate_command(command)
+        if isinstance(validated, ExecutionResult):
+            return validated
 
-        if not argv:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message="Empty command",
-            )
-
-        # Check for dangerous commands
-        is_dangerous, reason = _is_dangerous_command(argv)
-        if is_dangerous:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Check for dangerous paths
-        has_dangerous, reason = _check_dangerous_paths(argv)
-        if has_dangerous:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Check working directory restriction
-        violates_restriction, reason = _check_working_dir_restriction(
-            argv, self.working_dir
-        )
-        if violates_restriction:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
+        argv = validated
 
         return ExecutionResult(
             success=True,
@@ -367,67 +448,17 @@ class UnsafeBashEnvironment(BashEnvironment):
             ExecutionResult: Execution outcome with captured stdout/stderr and
             success flag, or a skipped result if safety checks fail.
         """
-        # Parse and validate
-        try:
-            argv = shlex.split(command)
-        except ValueError as e:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=f"Failed to parse command: {e!s}",
-            )
+        validated = self._validate_command(command)
+        if isinstance(validated, ExecutionResult):
+            return validated
 
-        if not argv:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message="Empty command",
-            )
+        argv = validated
 
-        # Check for dangerous commands
-        is_dangerous, reason = _is_dangerous_command(argv)
-        if is_dangerous:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Check for dangerous paths
-        has_dangerous, reason = _check_dangerous_paths(argv)
-        if has_dangerous:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Check working directory restriction
-        violates_restriction, reason = _check_working_dir_restriction(
-            argv, self.working_dir
-        )
-        if violates_restriction:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Execute command
+        # Execute command with shell=False to prevent shell metacharacter bypass
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                argv,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
@@ -470,75 +501,29 @@ class LLMSandboxBashEnvironment(BashEnvironment):
     def execute(self, command: str) -> ExecutionResult:
         """Execute bash command using llm-sandbox in an isolated Docker container.
 
-        Validates command safety first, then delegates to ``SandboxSession``
-        from the ``llm-sandbox`` package. Returns a skipped result if
-        ``llm-sandbox`` is not installed.
+        Validates command safety first, then runs the command inside a Python-based
+        sandbox session. The validated shell command is executed via
+        ``subprocess.run(..., cwd=working_dir)`` inside the container so that
+        sandbox execution honors ``self.working_dir`` when provided. Returns a
+        skipped result if ``llm-sandbox`` is not installed.
 
         Args:
             command (str): The bash command to execute.
 
         Returns:
             ExecutionResult: Execution outcome with stdout/stderr and success
-            flag, or a skipped result on safety check failure or sandbox error.
+            flag, or a skipped result on safety check failure, timeout, or
+            sandbox error.
         """
-        # Parse and validate
-        try:
-            argv = shlex.split(command)
-        except ValueError as e:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=f"Failed to parse command: {e!s}",
-            )
+        validated = self._validate_command(command)
+        if isinstance(validated, ExecutionResult):
+            return validated
 
-        if not argv:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message="Empty command",
-            )
-
-        # Check for dangerous commands
-        is_dangerous, reason = _is_dangerous_command(argv)
-        if is_dangerous:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Check for dangerous paths
-        has_dangerous, reason = _check_dangerous_paths(argv)
-        if has_dangerous:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
-
-        # Check working directory restriction (note: may not apply in sandbox, but check anyway)
-        violates_restriction, reason = _check_working_dir_restriction(
-            argv, self.working_dir
-        )
-        if violates_restriction:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=reason,
-            )
+        argv = validated
 
         try:
             from llm_sandbox import SandboxSession
+            from llm_sandbox.exceptions import SandboxTimeoutError
         except ImportError:
             return ExecutionResult(
                 success=False,
@@ -548,11 +533,27 @@ class LLMSandboxBashEnvironment(BashEnvironment):
                 skip_message="llm-sandbox not installed. Install with: pip install 'mellea[sandbox]'",
             )
 
+        sandbox_workdir = self.working_dir or "/sandbox"
+        shell_command = " ".join(shlex.quote(arg) for arg in argv)
+        python_wrapper = (
+            "import subprocess\n"
+            "import sys\n"
+            f"result = subprocess.run({shell_command!r}, shell=True, cwd={sandbox_workdir!r}, "
+            "capture_output=True, text=True)\n"
+            "sys.stdout.write(result.stdout)\n"
+            "sys.stderr.write(result.stderr)\n"
+            "raise SystemExit(result.returncode)\n"
+        )
+
         try:
             with SandboxSession(
-                lang="sh", verbose=False, keep_template=False
+                lang="python",
+                verbose=False,
+                keep_template=False,
+                workdir=sandbox_workdir,
+                execution_timeout=self.timeout,
             ) as session:
-                result = session.run(command, timeout=self.timeout)
+                result = session.run(python_wrapper, timeout=self.timeout)
 
                 stdout, stdout_truncated = _truncate_output(result.stdout.strip())
                 stderr, stderr_truncated = _truncate_output(result.stderr.strip())
@@ -566,7 +567,7 @@ class LLMSandboxBashEnvironment(BashEnvironment):
                 return ExecutionResult(
                     success=result.exit_code == 0, stdout=stdout, stderr=stderr
                 )
-        except subprocess.TimeoutExpired:
+        except SandboxTimeoutError:
             return ExecutionResult(
                 success=False,
                 stdout=None,
@@ -596,8 +597,9 @@ def bash_executor(command: str, working_dir: str | None = None) -> ExecutionResu
 
     Args:
         command: The bash command to execute.
-        working_dir: Optional directory to restrict file operations to. If specified,
-            all file writes are sandboxed to this directory and /tmp.
+        working_dir: Optional sandbox working directory. When specified, sandboxed
+            command execution uses this directory as its cwd, and write-path
+            validation also restricts writes to this directory and ``/tmp``.
 
     Returns:
         An ``ExecutionResult`` with stdout, stderr, and a success flag. If the command

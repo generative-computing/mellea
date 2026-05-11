@@ -1,4 +1,4 @@
-# pytest: unit, qualitative, ollama, e2e
+# pytest: e2e, qualitative
 """Example usage patterns for bash_executor and local_bash_executor tools.
 
 Demonstrates multiple ways to use Mellea's bash execution capabilities:
@@ -10,7 +10,8 @@ Demonstrates multiple ways to use Mellea's bash execution capabilities:
 Safety note: bash_executor uses Docker isolation via llm-sandbox (recommended
 for production). local_bash_executor runs commands directly (for dev/testing only).
 Both enforce a conservative safety denylist: no sudo, no rm -rf, no destructive
-git operations, no writes to /etc, /sys, /proc, etc.
+git operations, no writes to /etc, /sys, /proc, etc. Write operations can also
+be constrained with ``working_dir`` and explicit ``allowed_paths``.
 """
 
 from mellea import MelleaSession, start_session
@@ -100,7 +101,7 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
 
 
 def example_3_with_working_dir() -> None:
-    """Example 3: Restrict command execution to a specific directory."""
+    """Example 3: Restrict write validation and execution cwd to a directory."""
     print("=== Example 3: Working Directory Restriction ===")
 
     import tempfile
@@ -122,7 +123,7 @@ def example_3_with_working_dir() -> None:
         print(f"Output: {result.stdout}")
         print()
 
-        # Attempt to write outside working directory (will be rejected)
+        # Attempt to write outside the restricted working directory (will be rejected)
         result = local_bash_executor(
             "echo 'bad' > /tmp/outside.txt", working_dir=tmpdir
         )
