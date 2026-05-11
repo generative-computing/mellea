@@ -11,28 +11,35 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...core import Context, Requirement, ValidationResult
+from ..tools.interpreter import StaticAnalysisEnvironment
 from .imports import get_unauthorized_imports
 from .python_reqs import extract_python_code
 from .tool_reqs import tool_arg_validator, uses_tool
 
 
 def _code_parses(code: str) -> tuple[bool, str | None]:
-    """Check if code parses as valid Python.
+    """Check if code parses as valid Python using StaticAnalysisEnvironment.
+
+    Validates syntax without executing code. Reuses StaticAnalysisEnvironment
+    to avoid duplicating AST parsing logic.
 
     Returns:
         (True, None) if code parses
         (False, error_message) if syntax error
     """
-    try:
-        ast.parse(code)
-        return True, None
-    except SyntaxError as e:
+    env = StaticAnalysisEnvironment(allowed_imports=None)
+    result = env.execute(code, timeout=0)
+
+    if not result.success and isinstance(result.analysis_result, SyntaxError):
+        e = result.analysis_result
         error_msg = f"Syntax error at line {e.lineno}: {e.msg}"
         if e.text:
             error_msg += f"\n  {e.text.rstrip()}"
             if e.offset:
                 error_msg += "\n  " + " " * (e.offset - 1) + "^"
         return False, error_msg
+
+    return True, None
 
 
 def _strip_comments(code: str) -> str:
@@ -62,46 +69,209 @@ def _strip_comments(code: str) -> str:
     return "\n".join(result)
 
 
+def _find_attribute_calls(code: str, method_names: list[str]) -> bool:
+    """Check if code calls any of the specified methods using AST.
+
+    Handles import aliases (e.g., `import matplotlib.pyplot as plt`) and
+    validates that methods are actually called, not just referenced.
+
+    Args:
+        code: Python source code to analyze
+        method_names: Method names to look for (e.g., ["show", "savefig"])
+
+    Returns:
+        True if any of the methods are called, False otherwise
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return False
+
+    class CallFinder(ast.NodeVisitor):
+        def __init__(self, method_names: list[str]):
+            self.method_names = set(method_names)
+            self.found = False
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr in self.method_names:
+                    self.found = True
+            self.generic_visit(node)
+
+    finder = CallFinder(method_names)
+    finder.visit(tree)
+    return finder.found
+
+
+def _find_function_calls(code: str, func_names: list[str]) -> bool:
+    """Check if code calls any of the specified functions using AST.
+
+    Handles qualified names (e.g., `matplotlib.use()`) and detects actual
+    function calls, not just references.
+
+    Args:
+        code: Python source code to analyze
+        func_names: Function names to look for (e.g., ["matplotlib.use"])
+
+    Returns:
+        True if any of the functions are called, False otherwise
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return False
+
+    class FunctionCallFinder(ast.NodeVisitor):
+        def __init__(self, func_names: list[str]):
+            self.func_names = set(func_names)
+            self.found = False
+
+        def visit_Call(self, node: ast.Call) -> None:
+            func_name = self._get_full_name(node.func)
+            if func_name in self.func_names:
+                self.found = True
+            self.generic_visit(node)
+
+        def _get_full_name(self, node: ast.expr) -> str:
+            """Extract full qualified name from an AST node."""
+            if isinstance(node, ast.Name):
+                return node.id
+            elif isinstance(node, ast.Attribute):
+                value_name = self._get_full_name(node.value)
+                if value_name:
+                    return f"{value_name}.{node.attr}"
+                return node.attr
+            return ""
+
+    finder = FunctionCallFinder(func_names)
+    finder.visit(tree)
+    return finder.found
+
+
+def _code_contains_strings(code: str, patterns: list[str]) -> bool:
+    """Check if code contains any of the given string patterns.
+
+    Args:
+        code: Python source code to search
+        patterns: List of string patterns to look for
+
+    Returns:
+        True if any pattern is found in the code, False otherwise
+    """
+    clean_code = _strip_comments(code)
+    return any(pattern in clean_code for pattern in patterns)
+
+
+def _code_contains_all_strings(code: str, patterns: list[str]) -> bool:
+    """Check if code contains all of the given string patterns.
+
+    Args:
+        code: Python source code to search
+        patterns: List of string patterns that must all be present
+
+    Returns:
+        True if all patterns are found in the code, False otherwise
+    """
+    clean_code = _strip_comments(code)
+    return all(pattern in clean_code for pattern in patterns)
+
+
 def _uses_pyplot_show(code: str) -> bool:
-    """Check if code calls plt.show() or matplotlib.pyplot.show()."""
-    clean_code = _strip_comments(code)
-    return "plt.show" in clean_code or ".show()" in clean_code
+    """Check if code calls plt.show() or similar show() methods.
 
-
-def _sets_headless_backend(code: str) -> bool:
-    """Check if code sets matplotlib to use a headless backend."""
-    clean_code = _strip_comments(code)
-    headless_backends = ("Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg")
-    for backend in headless_backends:
-        if (
-            f"matplotlib.use('{backend}')" in clean_code
-            or f'matplotlib.use("{backend}")' in clean_code
-        ):
-            return True
+    Uses AST analysis to robustly detect show() calls regardless of import
+    aliases (e.g., `import matplotlib.pyplot as mpl`). AST approach detects
+    actual method calls, avoiding false positives from string literals.
+    Falls back to string matching only if code doesn't parse.
+    """
+    if _find_attribute_calls(code, ["show"]):
+        return True
+    try:
+        ast.parse(code)
+    except (SyntaxError, ValueError):
+        return _code_contains_strings(code, ["plt.show", ".show()"])
     return False
 
 
-def _uses_pyplot_plot(code: str) -> bool:
-    """Check if code calls pyplot plotting functions."""
-    plot_functions = (
-        "plt.plot",
-        "plt.bar",
-        "plt.scatter",
-        "plt.hist",
-        "plt.imshow",
-        "plt.figure",
-        "plt.subplot",
-        ".plot(",
-        ".bar(",
-        ".scatter(",
-        ".hist(",
+def _sets_headless_backend(code: str) -> bool:
+    """Check if code sets matplotlib to use a headless backend.
+
+    Uses AST analysis to detect matplotlib.use() calls with headless backends.
+    Handles various matplotlib import styles and fallback to string matching.
+    """
+    if _find_function_calls(code, ["matplotlib.use"]):
+        headless_backends = {"Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg"}
+
+        try:
+            tree = ast.parse(code)
+        except (SyntaxError, ValueError):
+            return _code_contains_strings(
+                code, [f"matplotlib.use('{b}')" for b in headless_backends]
+            )
+
+        class BackendFinder(ast.NodeVisitor):
+            def __init__(self):
+                self.has_headless = False
+
+            def visit_Call(self, node: ast.Call) -> None:
+                if isinstance(node.func, ast.Attribute):
+                    if node.func.attr == "use":
+                        if isinstance(node.func.value, ast.Name):
+                            if node.func.value.id == "matplotlib":
+                                if node.args and isinstance(node.args[0], ast.Constant):
+                                    if node.args[0].value in headless_backends:
+                                        self.has_headless = True
+                self.generic_visit(node)
+
+        finder = BackendFinder()
+        finder.visit(tree)
+        if finder.has_headless:
+            return True
+
+    return _code_contains_strings(
+        code,
+        [
+            f"matplotlib.use('{b}')"
+            for b in ["Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg"]
+        ],
     )
-    return any(func in code for func in plot_functions)
+
+
+def _uses_pyplot_plot(code: str) -> bool:
+    """Check if code calls pyplot plotting functions.
+
+    Uses AST analysis to detect plot-related method calls. Handles import
+    aliases and detects actual method calls, avoiding false positives from
+    string literals or method references. Falls back to string matching
+    only if code doesn't parse.
+    """
+    plot_methods = {"plot", "bar", "scatter", "hist", "imshow", "figure", "subplot"}
+    if _find_attribute_calls(code, list(plot_methods)):
+        return True
+    try:
+        ast.parse(code)
+    except (SyntaxError, ValueError):
+        return _code_contains_strings(
+            code, [f".{m}(" for m in plot_methods] + [f"plt.{m}" for m in plot_methods]
+        )
+    return False
 
 
 def _calls_savefig(code: str) -> bool:
-    """Check if code calls plt.savefig() or fig.savefig()."""
-    return "savefig" in code
+    """Check if code calls plt.savefig() or fig.savefig().
+
+    Uses AST analysis to robustly detect savefig() calls regardless of
+    how matplotlib was imported. Detects actual method calls, avoiding
+    false positives from string literals. Falls back to string matching
+    only if code doesn't parse.
+    """
+    if _find_attribute_calls(code, ["savefig"]):
+        return True
+    try:
+        ast.parse(code)
+    except (SyntaxError, ValueError):
+        return _code_contains_strings(code, ["savefig"])
+    return False
 
 
 # region Individual Requirement Validators
@@ -176,8 +346,35 @@ def _make_imports_allowed_validator(
 
 def _make_matplotlib_headless_validator(
     output_path: str | None = None,
+    show_patterns: list[str] | None = None,
+    backend_patterns: list[str] | None = None,
 ) -> Callable[[Context], ValidationResult]:
-    """Create a validator that checks matplotlib uses headless backend."""
+    r"""Create a validator that checks matplotlib uses headless backend.
+
+    Args:
+        output_path: Path where plots should be saved
+        show_patterns: Patterns indicating plt.show() calls (e.g., ["plt.show", ".show()"])
+        backend_patterns: Patterns indicating headless backend setup (e.g., ["matplotlib.use('Agg')", "matplotlib.use(\"Agg\")"])
+    """
+    if show_patterns is None:
+        show_patterns = ["plt.show", ".show()"]
+    if backend_patterns is None:
+        backend_patterns = [
+            "matplotlib.use('Agg')",
+            'matplotlib.use("Agg")',
+            "matplotlib.use('Svg')",
+            'matplotlib.use("Svg")',
+            "matplotlib.use('Cairo')",
+            'matplotlib.use("Cairo")',
+            "matplotlib.use('PDF')",
+            'matplotlib.use("PDF")',
+            "matplotlib.use('PS')",
+            'matplotlib.use("PS")',
+            "matplotlib.use('WebAgg')",
+            'matplotlib.use("WebAgg")',
+            "matplotlib.use('nbAgg')",
+            'matplotlib.use("nbAgg")',
+        ]
 
     def validate(ctx: Context) -> ValidationResult:
         extraction_result = extract_python_code(ctx)
@@ -185,7 +382,10 @@ def _make_matplotlib_headless_validator(
             return ValidationResult(result=True)
 
         code = extraction_result.reason
-        if _uses_pyplot_show(code) and not _sets_headless_backend(code):
+        has_show = _code_contains_strings(code, show_patterns)
+        has_backend = _code_contains_strings(code, backend_patterns)
+
+        if has_show and not has_backend:
             savefig_instruction = (
                 f"plt.savefig('{output_path}'); plt.close()"
                 if output_path
@@ -208,8 +408,32 @@ def _make_matplotlib_headless_validator(
 
 def _make_plots_saved_validator(
     output_path: str | None = None,
+    plot_patterns: list[str] | None = None,
+    save_patterns: list[str] | None = None,
 ) -> Callable[[Context], ValidationResult]:
-    """Create a validator that checks if code saves plots to a file."""
+    """Create a validator that checks if code saves plots to a file.
+
+    Args:
+        output_path: Path where plots should be saved
+        plot_patterns: Patterns indicating plot creation (e.g., ["plt.plot", "plt.scatter"])
+        save_patterns: Patterns indicating plot saving (e.g., ["savefig"])
+    """
+    if plot_patterns is None:
+        plot_patterns = [
+            "plt.plot",
+            "plt.bar",
+            "plt.scatter",
+            "plt.hist",
+            "plt.imshow",
+            "plt.figure",
+            "plt.subplot",
+            ".plot(",
+            ".bar(",
+            ".scatter(",
+            ".hist(",
+        ]
+    if save_patterns is None:
+        save_patterns = ["savefig"]
 
     def validate(ctx: Context) -> ValidationResult:
         extraction_result = extract_python_code(ctx)
@@ -217,7 +441,10 @@ def _make_plots_saved_validator(
             return ValidationResult(result=True)
 
         code = extraction_result.reason
-        if _uses_pyplot_plot(code) and not _calls_savefig(code):
+        has_plot = _code_contains_strings(code, plot_patterns)
+        has_save = _code_contains_strings(code, save_patterns)
+
+        if has_plot and not has_save:
             savefig_instruction = (
                 f"plt.savefig('{output_path}')\n  plt.close()"
                 if output_path
@@ -236,15 +463,34 @@ def _make_plots_saved_validator(
 
 
 def python_plotting_requirements(
-    output_path: str | None = None, *, check_output_artifacts: bool | None = None
+    output_path: str | None = None,
+    *,
+    check_output_artifacts: bool | None = None,
+    show_patterns: list[str] | None = None,
+    backend_patterns: list[str] | None = None,
+    plot_patterns: list[str] | None = None,
+    save_patterns: list[str] | None = None,
 ) -> list[Requirement]:
-    """Build plotting-specific requirements for Python tool responses."""
+    """Build plotting-specific requirements for Python tool responses.
+
+    Args:
+        output_path: Path where plots should be saved
+        check_output_artifacts: Whether to verify the output file exists
+        show_patterns: Patterns indicating plt.show() calls
+        backend_patterns: Patterns indicating headless backend setup
+        plot_patterns: Patterns indicating plot creation
+        save_patterns: Patterns indicating plot saving (e.g., savefig)
+    """
     reqs: list[Requirement] = []
 
     reqs.append(
         Requirement(
             description="If using pyplot, must set headless backend and use savefig.",
-            validation_fn=_make_matplotlib_headless_validator(output_path),
+            validation_fn=_make_matplotlib_headless_validator(
+                output_path,
+                show_patterns=show_patterns,
+                backend_patterns=backend_patterns,
+            ),
             check_only=False,
         )
     )
@@ -252,7 +498,9 @@ def python_plotting_requirements(
     reqs.append(
         Requirement(
             description="If creating plots, must call savefig to save them.",
-            validation_fn=_make_plots_saved_validator(output_path),
+            validation_fn=_make_plots_saved_validator(
+                output_path, plot_patterns=plot_patterns, save_patterns=save_patterns
+            ),
             check_only=False,
         )
     )
