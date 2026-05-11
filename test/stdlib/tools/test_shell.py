@@ -1,5 +1,7 @@
 """Tests for bash shell execution environments."""
 
+from unittest.mock import patch
+
 import pytest
 
 from mellea.stdlib.tools.shell import (
@@ -160,6 +162,38 @@ class TestDestructivePatternDetection:
         assert result.skipped is True
 
 
+class TestShellMetacharacterDetection:
+    """Tests for detection of shell metacharacters that bypass argv parsing."""
+
+    @pytest.mark.parametrize(
+        "metacharacter_cmd",
+        [
+            "echo error >&2",  # stderr redirection
+            "echo hello > /tmp/file",  # stdout redirection
+            "cat file | grep pattern",  # pipe
+            "echo a; rm -rf /",  # command chaining
+            "echo $(whoami)",  # command substitution
+            "echo `date`",  # backtick substitution
+            "echo ${HOME}",  # variable expansion with braces
+            "ls &",  # background execution
+            "find . -name '*.py' && echo done",  # logical AND
+            "ls || echo failed",  # logical OR
+        ],
+    )
+    def test_shell_metacharacters_rejected(self, metacharacter_cmd: str) -> None:
+        """Shell metacharacters should be rejected to prevent bypass attacks."""
+        env = StaticBashEnvironment()
+        result = env.execute(metacharacter_cmd)
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "metacharacter" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+
 class TestSystemPathDetection:
     """Tests for detection of system path access."""
 
@@ -187,8 +221,7 @@ class TestSystemPathDetection:
         [
             "cat /etc/passwd",  # Reading is OK
             "ls /sys",  # Reading is OK
-            "echo content > file.txt",  # Writing to current dir is OK
-            "touch ~/.bashrc",  # Writing to home is OK
+            "touch ~/file.txt",  # Writing to home is OK
             "mkdir /tmp/tmpdir",  # Writing to /tmp is OK
         ],
     )
@@ -235,6 +268,38 @@ class TestWorkingDirRestriction:
         assert result.success is True
 
 
+class TestAllowedPaths:
+    """Tests for explicit allowed path enforcement."""
+
+    def test_allowed_paths_allows_write_inside_explicit_path(self) -> None:
+        """Writing inside an explicit allowed path should be permitted."""
+        env = StaticBashEnvironment(allowed_paths=["/home/user/project"])
+        result = env.execute("touch /home/user/project/output.txt")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_allowed_paths_blocks_write_outside_explicit_path(self) -> None:
+        """Writing outside explicit allowed paths should be rejected."""
+        env = StaticBashEnvironment(allowed_paths=["/home/user/project"])
+        result = env.execute("touch /home/user/other/output.txt")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "outside explicitly allowed paths" in result.skip_message.lower()
+
+    def test_allowed_paths_does_not_override_dangerous_paths(self) -> None:
+        """Explicit allowed paths must not permit writes to dangerous system paths."""
+        env = StaticBashEnvironment(allowed_paths=["/etc"])
+        result = env.execute("touch /etc/config.conf")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+
 class TestUnsafeBashEnvironment:
     """Tests for unsafe bash environment execution."""
 
@@ -256,14 +321,18 @@ class TestUnsafeBashEnvironment:
         assert result.skipped is False
         assert result.success is False
 
-    def test_stderr_capture(self) -> None:
-        """stderr should be captured."""
+    def test_shell_metacharacters_rejected(self) -> None:
+        """Shell redirections and pipes should be rejected for security."""
         env = UnsafeBashEnvironment()
         result = env.execute("echo error >&2")
 
-        assert result.skipped is False
-        assert result.stderr is not None
-        assert "error" in result.stderr
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "metacharacter" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
 
     def test_dangerous_command_rejected(self) -> None:
         """Dangerous commands should be rejected even before execution."""
@@ -313,6 +382,44 @@ class TestUnsafeBashEnvironment:
             assert tmpdir in result.stdout
 
 
+class TestLLMSandboxBashEnvironment:
+    """Tests for sandbox-specific error handling."""
+
+    def test_timeout_maps_to_skip_message(self) -> None:
+        """Sandbox timeout exceptions should produce a timeout skip message."""
+        env = LLMSandboxBashEnvironment(timeout=3)
+
+        from llm_sandbox.exceptions import SandboxTimeoutError
+
+        with patch("llm_sandbox.SandboxSession") as mock_session_factory:
+            session = mock_session_factory.return_value.__enter__.return_value
+            session.run.side_effect = SandboxTimeoutError(
+                "timed out", timeout_duration=3
+            )
+
+            result = env.execute("echo hello")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "timed out" in result.skip_message.lower()
+
+    def test_generic_exception_maps_to_sandbox_error(self) -> None:
+        """Unexpected sandbox exceptions should map to generic sandbox errors."""
+        env = LLMSandboxBashEnvironment(timeout=3)
+
+        with patch("llm_sandbox.SandboxSession") as mock_session_factory:
+            session = mock_session_factory.return_value.__enter__.return_value
+            session.run.side_effect = RuntimeError("boom")
+
+            result = env.execute("echo hello")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "sandbox execution error" in result.skip_message.lower()
+
+
 class TestBashExecutorFunctions:
     """Tests for public bash_executor and local_bash_executor functions."""
 
@@ -341,16 +448,21 @@ class TestBashExecutorFunctions:
         assert "test" in result.stdout
 
     def test_bash_executor_with_working_dir(self) -> None:
-        """bash_executor should accept working_dir parameter."""
+        """bash_executor should pass working_dir through to sandbox execution."""
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # This may skip if llm-sandbox not available or doesn't support lang
             result = bash_executor("pwd", working_dir=tmpdir)
 
-            # Just verify the function accepts the parameter without error
-            # It will skip if sandbox not available
-            assert result is not None
+            if result.skip_message is not None and (
+                "not installed" in result.skip_message
+                or "sandbox execution error" in result.skip_message.lower()
+            ):
+                assert result.skipped is True
+            else:
+                assert result.success is True
+                assert result.stdout is not None
+                assert tmpdir in result.stdout
 
     def test_local_bash_executor_with_working_dir(self) -> None:
         """local_bash_executor should accept working_dir parameter."""
