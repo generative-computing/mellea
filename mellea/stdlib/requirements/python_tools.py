@@ -273,7 +273,9 @@ def _make_imports_allowed_validator(
     return validate
 
 
-def _make_matplotlib_headless_validator() -> Callable[[Context], ValidationResult]:
+def _make_matplotlib_headless_validator(
+    output_path: str | None = None,
+) -> Callable[[Context], ValidationResult]:
     """Create a validator that checks matplotlib uses headless backend."""
 
     def validate(ctx: Context) -> ValidationResult:
@@ -282,14 +284,19 @@ def _make_matplotlib_headless_validator() -> Callable[[Context], ValidationResul
             return ValidationResult(result=True)
 
         if _uses_pyplot_show(code) and not _sets_headless_backend(code):
+            savefig_instruction = (
+                f"plt.savefig('{output_path}'); plt.close()"
+                if output_path
+                else "plt.savefig('{output_path}'); plt.close()"
+            )
             return ValidationResult(
                 result=False,
-                reason="Your code calls `plt.show()` but doesn't set a headless backend.\n"
-                "This will fail in a headless environment (no display).\n\n"
-                "Fix this by adding to the top of your code:\n"
-                "  import matplotlib\n"
-                "  matplotlib.use('Agg')\n\n"
-                "Then replace `plt.show()` with `plt.savefig('{output_path}'); plt.close()`",
+                reason=f"Your code calls `plt.show()` but doesn't set a headless backend.\n"
+                f"This will fail in a headless environment (no display).\n\n"
+                f"Fix this by adding to the top of your code:\n"
+                f"  import matplotlib\n"
+                f"  matplotlib.use('Agg')\n\n"
+                f"Then replace `plt.show()` with `{savefig_instruction}`",
             )
 
         return ValidationResult(result=True)
@@ -297,7 +304,9 @@ def _make_matplotlib_headless_validator() -> Callable[[Context], ValidationResul
     return validate
 
 
-def _make_plots_saved_validator() -> Callable[[Context], ValidationResult]:
+def _make_plots_saved_validator(
+    output_path: str | None = None,
+) -> Callable[[Context], ValidationResult]:
     """Create a validator that checks if code saves plots to a file."""
 
     def validate(ctx: Context) -> ValidationResult:
@@ -306,12 +315,16 @@ def _make_plots_saved_validator() -> Callable[[Context], ValidationResult]:
             return ValidationResult(result=True)
 
         if _uses_pyplot_plot(code) and not _calls_savefig(code):
+            savefig_instruction = (
+                f"plt.savefig('{output_path}')\n  plt.close()"
+                if output_path
+                else "plt.savefig('{output_path}')\n  plt.close()"
+            )
             return ValidationResult(
                 result=False,
-                reason="Your code creates plots with pyplot but never calls `plt.savefig()` to save them.\n\n"
-                "Add this before your plotting code or at the end:\n"
-                "  plt.savefig('{output_path}')\n"
-                "  plt.close()",
+                reason=f"Your code creates plots with pyplot but never calls `plt.savefig()` to save them.\n\n"
+                f"Add this before your plotting code or at the end:\n"
+                f"  {savefig_instruction}",
             )
 
         return ValidationResult(result=True)
@@ -471,7 +484,7 @@ class PythonToolRequirements:
                 description=(
                     "If using pyplot, must set headless backend and use savefig."
                 ),
-                validation_fn=_make_matplotlib_headless_validator(),
+                validation_fn=_make_matplotlib_headless_validator(self.output_path),
                 check_only=False,
             )
         )
@@ -479,7 +492,7 @@ class PythonToolRequirements:
         reqs.append(
             Requirement(
                 description="If creating plots, must call savefig to save them.",
-                validation_fn=_make_plots_saved_validator(),
+                validation_fn=_make_plots_saved_validator(self.output_path),
                 check_only=False,
             )
         )
