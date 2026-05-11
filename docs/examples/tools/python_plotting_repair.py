@@ -1,7 +1,6 @@
 # pytest: ollama, e2e, qualitative
 """Repair plotting code with Python-tool and plotting-specific requirements."""
 
-import asyncio
 import tempfile
 import traceback
 from pathlib import Path
@@ -9,8 +8,6 @@ from pathlib import Path
 import mellea
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
-from mellea.stdlib.components import Instruction
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import (
     python_plotting_requirements,
     python_tool_requirements,
@@ -32,12 +29,12 @@ def python(code: str) -> ExecutionResult:
     return local_code_interpreter(code)
 
 
-async def main():
+def main():
     """Run the plotting repair example."""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = str(Path(tmpdir) / "plot.png")
 
-        m = mellea.start_session()
+        m = mellea.start_session(context_type="chat")
 
         requirements = [
             *python_tool_requirements(allowed_imports=["numpy", "matplotlib", "math"]),
@@ -55,19 +52,6 @@ async def main():
         task_summary = (
             f"Create a plot of sin(x) for x in 0..2π and save it to {output_path}"
         )
-        description = f"""{task_summary}
-
-Requirements:
-- Use the python tool to execute your code
-- Import numpy and matplotlib
-- Generate x values from 0 to 2π
-- Plot sin(x) against x
-- Save the plot to the specified file path
-
-Use the python tool with your complete code."""
-        instruction = Instruction(description=description)
-
-        ctx = ChatContext()
 
         print("=" * 70)
         print("Testing plotting-code repair with Python tool requirements")
@@ -75,11 +59,11 @@ Use the python tool with your complete code."""
         print(f"Task: {task_summary}\n")
 
         try:
-            result = await sampling_strategy.sample(
-                action=instruction,
-                context=ctx,
-                backend=m.backend,
+            result = m.instruct(
+                task_summary,
                 requirements=requirements,
+                strategy=sampling_strategy,
+                return_sampling_results=True,
                 tool_calls=True,
                 model_options={ModelOption.TOOLS: [MelleaTool.from_callable(python)]},
             )
@@ -93,8 +77,8 @@ Use the python tool with your complete code."""
                 print(result.result.value)
                 print("-" * 70)
 
-                if Path(output_path).exists():  # noqa: ASYNC240
-                    file_size = Path(output_path).stat().st_size  # noqa: ASYNC240
+                if Path(output_path).exists():
+                    file_size = Path(output_path).stat().st_size
                     print(f"\n✓ Output file created: {output_path}")
                     print(f"  File size: {file_size} bytes")
                 else:
@@ -147,6 +131,6 @@ Use the python tool with your complete code."""
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
 
 # Made with Bob
