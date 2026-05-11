@@ -66,6 +66,13 @@ class StreamChunkingResult:
         # consumer never iterates astream(). Cleared once consumed by
         # whichever of the two reads it first.
         self._orchestration_exception: BaseException | None = None
+        # Tracks whether the exception has already been surfaced to the caller
+        # (by astream OR acomplete). A separate flag rather than reusing the
+        # stash slot avoids the race where acomplete() clears the stash, a
+        # subsequent astream() dequeues the exception item, sees the stash is
+        # None, and silently skips it — leaving the caller with zero chunks
+        # and no error.
+        self._exception_surfaced: bool = False
 
         self.completed: bool = True
         self.full_text: str = ""
@@ -100,9 +107,10 @@ class StreamChunkingResult:
             if item is None:
                 return
             if isinstance(item, Exception):
-                if self._orchestration_exception is None:
+                if self._exception_surfaced:
                     # Already surfaced by acomplete(); don't raise twice.
                     continue
+                self._exception_surfaced = True
                 self._orchestration_exception = None
                 raise item
             yield item
@@ -119,10 +127,10 @@ class StreamChunkingResult:
             Exception: Propagates any error from the orchestration task.
         """
         await self._done.wait()
-        # Raise-once: if astream() already consumed the exception, the stash
-        # is already None and this is a no-op.
+        # Raise-once: if astream() already surfaced the exception, skip.
         exc = self._orchestration_exception
-        if exc is not None:
+        if exc is not None and not self._exception_surfaced:
+            self._exception_surfaced = True
             self._orchestration_exception = None
             raise exc
         if self._orchestration_task is not None and self._orchestration_task.done():
@@ -173,6 +181,7 @@ async def _orchestrate_streaming(
     val_backend: Backend,
 ) -> None:
     accumulated = ""
+    emitted_text = ""
     prev_chunk_count = 0
     failed_indices: set[int] = set()
     early_exit = False
@@ -230,9 +239,10 @@ async def _orchestrate_streaming(
                     result.completed = False
                     await mot.cancel_generation()
                     break
+                emitted_text += c
 
             if early_exit:
-                break
+                break  # break the while loop; cancel_generation() already set _computed=True
 
         # Stream ended naturally: flush any withheld trailing fragment and
         # run stream_validate on it. Skipped on early exit — the generation
@@ -244,8 +254,14 @@ async def _orchestrate_streaming(
                     early_exit = True
                     result.completed = False
                     break
+                emitted_text += c
 
-        result.full_text = accumulated
+        # On early exit, full_text reflects only validated-and-emitted chunks
+        # so it matches exactly what the consumer received via astream().
+        # On natural completion emitted_text == accumulated (every character
+        # ends up in some chunk or flushed fragment), so either value is
+        # equivalent; accumulated is used to preserve the original raw text.
+        result.full_text = emitted_text if early_exit else accumulated
 
         non_failed = [
             req for i, req in enumerate(cloned_reqs) if i not in failed_indices

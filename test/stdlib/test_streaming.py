@@ -938,3 +938,145 @@ async def test_external_task_cancellation_releases_consumers() -> None:
     # not hang.
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(result.acomplete(), timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_raise_once_acomplete_then_astream() -> None:
+    """Regression for the raise-once stash bug: acomplete() first, astream() second.
+
+    Prior to the fix, acomplete() cleared _orchestration_exception, so a
+    subsequent astream() call dequeued the exception item, saw the stash was
+    None, silently skipped it, and returned zero chunks with no error.
+    """
+
+    class RaisingReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "raises"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            raise ValueError("raise-once-regression")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    response = "word " * 10
+    backend = StreamingMockBackend(response, token_size=3)
+    result = await stream_with_chunking(
+        _action(),
+        backend,
+        _ctx(),
+        quick_check_requirements=[RaisingReq()],
+        chunking="word",
+    )
+
+    # acomplete() sees the exception first and raises it.
+    with pytest.raises(ValueError, match="raise-once-regression"):
+        await asyncio.wait_for(result.acomplete(), timeout=5.0)
+
+    # astream() must NOT re-raise (raise-once semantics).  Because the
+    # exception fired before any chunk was emitted, the queue contains
+    # [exc, None].  With the separate _exception_surfaced flag, astream()
+    # correctly skips the exception item and terminates cleanly.  Without
+    # the flag the behaviour is the same, but the guard conflates
+    # "already surfaced" with "stash was never set" — the flag makes the
+    # intent unambiguous.
+    chunks: list[str] = []
+    async for chunk in result.astream():
+        chunks.append(chunk)
+    assert chunks == []  # no partial chunks before the exception
+
+
+@pytest.mark.asyncio
+async def test_full_text_contains_only_validated_chunks_on_early_exit() -> None:
+    """full_text must equal exactly what was emitted to the consumer on early exit.
+
+    When one astream() delta produces N chunks and chunk K fails, full_text
+    must contain chunks 0..K-1 only — not the failed chunk or any unvalidated
+    chunks after it in the same delta.
+    """
+
+    class FailOnNthChunkText(Requirement):
+        def __init__(self, n: int) -> None:
+            self._n = n
+            self._calls = 0
+
+        def __copy__(self) -> "FailOnNthChunkText":
+            return FailOnNthChunkText(self._n)
+
+        def format_for_llm(self) -> str:
+            return f"fail on chunk {self._n}"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            self._calls += 1
+            if self._calls == self._n:
+                return PartialValidationResult("fail")
+            return PartialValidationResult("unknown")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    # token_size > full response → single delta with 4 sentences; fail on chunk 2.
+    response = "One. Two. Three. Four. "
+    backend = StreamingMockBackend(response, token_size=100)
+    req = FailOnNthChunkText(n=2)
+
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+    )
+    yielded: list[str] = []
+    async for chunk in result.astream():
+        yielded.append(chunk)
+    await result.acomplete()
+
+    assert result.completed is False
+    # Consumer received only chunk 1.
+    assert yielded == ["One."]
+    # full_text must match what the consumer received — not the raw delta.
+    assert result.full_text == "One."
+    # as_thunk.value must agree with full_text.
+    assert result.as_thunk.value == result.full_text
+
+
+@pytest.mark.asyncio
+async def test_cancelled_flag_propagates_through_copy_methods() -> None:
+    """_cancelled must survive __copy__, __deepcopy__, and _copy_from."""
+    from copy import deepcopy
+
+    mot = ModelOutputThunk(value="result")
+    mot._cancelled = True
+
+    # __copy__
+    shallow = mot.__copy__()
+    assert shallow._cancelled is True, "__copy__ must propagate _cancelled"
+
+    # __deepcopy__
+    deep = deepcopy(mot)
+    assert deep._cancelled is True, "__deepcopy__ must propagate _cancelled"
+
+    # _copy_from
+    target = ModelOutputThunk(value="original")
+    assert target._cancelled is False
+    target._copy_from(mot)
+    assert target._cancelled is True, "_copy_from must propagate _cancelled"
+
+    # Sanity: default-constructed MOT has _cancelled=False.
+    fresh = ModelOutputThunk(value="x")
+    assert fresh._cancelled is False

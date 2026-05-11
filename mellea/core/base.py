@@ -459,6 +459,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._thinking = other._thinking
         self.generation = other.generation
         self._generate_log = other._generate_log
+        self._cancelled = other._cancelled
 
     def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled.
@@ -687,6 +688,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             copied.parsed_repr = copied  # type: ignore
 
         copied._computed = self._computed
+        copied._cancelled = self._cancelled
         copied._thinking = self._thinking
         copied._action = self._action
         copied._context = self._context
@@ -715,6 +717,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._meta = deepcopy(self._meta)
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
+        deepcopied._cancelled = self._cancelled
         deepcopied._thinking = self._thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
