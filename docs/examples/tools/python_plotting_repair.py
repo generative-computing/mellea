@@ -1,21 +1,5 @@
 # pytest: ollama, e2e, qualitative
-"""Granite 4.1 repairs the three canonical plotting failures with Python tool.
-
-This example demonstrates:
-1. Creating a PythonToolRequirements bundle for plotting validation
-2. Using SOFAI sampling strategy with repair feedback loop
-3. Granite 4.1 repairing through: syntax → imports → headless backend → savefig
-
-Canonical task: "Create a plot of sin(x) for x in 0..2π and save to /tmp/plot.png"
-
-The model will encounter and repair:
-- Attempt 1: Missing matplotlib.use('Agg') (non-headless backend)
-- Attempt 2: Missing plt.savefig() call
-- Attempt 3: Success with both fixes applied
-
-The requirements bundle provides actionable failure messages that guide the model
-through each repair iteration without explicit instruction.
-"""
+"""Repair plotting code with Python-tool and plotting-specific requirements."""
 
 import asyncio
 import tempfile
@@ -27,7 +11,10 @@ from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements import PythonToolRequirements
+from mellea.stdlib.requirements import (
+    python_plotting_requirements,
+    python_tool_requirements,
+)
 from mellea.stdlib.sampling import SOFAISamplingStrategy
 from mellea.stdlib.tools import local_code_interpreter
 from mellea.stdlib.tools.interpreter import ExecutionResult
@@ -46,21 +33,17 @@ def python(code: str) -> ExecutionResult:
 
 
 async def main():
-    """Run the canonical plotting repair example."""
+    """Run the plotting repair example."""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = str(Path(tmpdir) / "plot.png")
 
-        # Initialize session with local backend
         m = mellea.start_session()
 
-        # Create requirements bundle for plotting validation
-        # Note: We don't pass output_path, so the bundle doesn't enforce artifact validation.
-        # This example tests code generation and repair logic, not actual code execution.
-        # The model generates syntactically correct plotting code, but doesn't execute it,
-        # so the output file is never created.
-        bundle = PythonToolRequirements(allowed_imports=["numpy", "matplotlib", "math"])
+        requirements = [
+            *python_tool_requirements(allowed_imports=["numpy", "matplotlib", "math"]),
+            *python_plotting_requirements(output_path=output_path),
+        ]
 
-        # Define SOFAI strategy for repair: S1 (fast) up to 3 times, then S2 (slow)
         sampling_strategy = SOFAISamplingStrategy(
             s1_solver_backend=m.backend,
             s2_solver_backend=m.backend,
@@ -69,7 +52,6 @@ async def main():
             feedback_strategy="first_error",
         )
 
-        # Create the plotting task instruction
         task_summary = (
             f"Create a plot of sin(x) for x in 0..2π and save it to {output_path}"
         )
@@ -85,21 +67,19 @@ Requirements:
 Use the python tool with your complete code."""
         instruction = Instruction(description=description)
 
-        # Create a chat context for multi-turn repair
         ctx = ChatContext()
 
         print("=" * 70)
-        print("Testing Granite 4.1's ability to repair plotting failures")
+        print("Testing plotting-code repair with Python tool requirements")
         print("=" * 70)
         print(f"Task: {task_summary}\n")
 
         try:
-            # Run the sampling strategy with requirements
             result = await sampling_strategy.sample(
                 action=instruction,
                 context=ctx,
                 backend=m.backend,
-                requirements=bundle.requirements,
+                requirements=requirements,
                 tool_calls=True,
                 model_options={ModelOption.TOOLS: [MelleaTool.from_callable(python)]},
             )
@@ -107,13 +87,12 @@ Use the python tool with your complete code."""
             print(f"\nResult: {'SUCCESS' if result.success else 'FAILED'}\n")
 
             if result.success:
-                print("✓ Granite 4.1 successfully generated and executed plotting code")
+                print("✓ Model successfully generated and executed plotting code")
                 print("\nFinal generated code:")
                 print("-" * 70)
                 print(result.result.value)
                 print("-" * 70)
 
-                # Verify output file exists
                 if Path(output_path).exists():  # noqa: ASYNC240
                     file_size = Path(output_path).stat().st_size  # noqa: ASYNC240
                     print(f"\n✓ Output file created: {output_path}")
@@ -121,7 +100,6 @@ Use the python tool with your complete code."""
                 else:
                     print(f"\n✗ Output file not found: {output_path}")
 
-                # Print repair history
                 print(f"\nRepair iterations: {len(result.sample_validations)}")
                 for attempt_idx, validations in enumerate(result.sample_validations, 1):
                     passed = sum(1 for _, val in validations if val.as_bool())
@@ -132,7 +110,6 @@ Use the python tool with your complete code."""
                         f"requirements passed"
                     )
 
-                    # Show which requirements failed
                     for req, val in validations:
                         if not val.as_bool():
                             print(f"     - {req.description}")
@@ -147,7 +124,6 @@ Use the python tool with your complete code."""
                 print(result.result.value)
                 print("-" * 70)
 
-                # Print failure history
                 print(f"\nFailure history ({len(result.sample_validations)} attempts):")
                 for attempt_idx, validations in enumerate(result.sample_validations, 1):
                     failed_count = sum(1 for _, val in validations if not val.as_bool())
@@ -172,3 +148,5 @@ Use the python tool with your complete code."""
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# Made with Bob

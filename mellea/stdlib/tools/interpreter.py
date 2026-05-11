@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core import MelleaLogger
-from ...helpers import get_unauthorized_imports
+from ..requirements.imports import get_unauthorized_imports
 
 logger = MelleaLogger.get_logger()
 

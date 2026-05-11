@@ -1,54 +1,9 @@
-"""Pre-composed requirement bundles for Python tool invocation and execution.
+"""Requirement factories for Python tool invocation and code validation.
 
-This module provides bundled requirements for validating Python code generated
-via the Python tool, with focus on reactive failure detection and repair:
-
-- Tool invocation validation (must call Python tool with code argument)
-- Syntax validation (code must parse correctly)
-- Import validation (code imports must be in allowlist)
-- Matplotlib headless backend detection (plt.show() without backend)
-- Plot artifact validation (savefig must be called, output files must exist)
-- Output limiting (stdout/stderr must not exceed configured limits)
-
-Failure messages are written as feedback to the model, not to developers.
-They state the failure, include relevant code/stderr, and explain the
-correction well enough for the model to act on it.
-
-FAILURE MATRIX — How each requirement catches the canonical plotting failures:
-
-Scenario: Model generates plotting code with matplotlib
-
-Attempt 1: No tool call
-  → MustInvokePythonTool fails
-  → Repair: "Call the `python` tool with your code"
-
-Attempt 2: Tool called but no 'code' arg
-  → PythonToolHasCodeArg fails
-  → Repair: "The python tool requires a 'code' argument"
-
-Attempt 3: Code has syntax error
-  → PythonCodeParses fails
-  → Repair: "Your code has a syntax error at line X: {error}"
-
-Attempt 4: Code imports matplotlib (not in allowed_imports)
-  → PythonImportsAllowed fails
-  → Repair: "matplotlib is not allowed. Use only: {allowed_list}"
-
-Attempt 5: Code uses plt.show() without headless backend
-  → MatplotlibHeadless fails
-  → Repair: "Add matplotlib.use('Agg') and replace plt.show() with plt.savefig(...)"
-
-Attempt 6: Code has plt.plot() but no plt.savefig()
-  → PlotsAreSaved fails
-  → Repair: "Add plt.savefig('{output_path}') to save the plot"
-
-Attempt 7: Code runs, but output file not created
-  → OutputArtifactsExist fails
-  → Repair: "File '{output_path}' was not created. Check plt.savefig() call"
-
-Attempt 8: Success
-  → All requirements pass
-  → Result: plot file exists and is non-empty
+This module provides generic requirements for Python-tool usage and code
+correctness. Plotting-specific checks are exposed separately through
+``python_plotting_requirements(...)`` so they are not implied to be universal
+Python-tool requirements.
 """
 
 import ast
@@ -56,30 +11,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...core import Context, Requirement, ValidationResult
-from ...helpers import get_unauthorized_imports
-from .python_reqs import _has_python_code_listing
-
-
-def _extract_code(ctx: Context) -> str | None:
-    """Extract Python code from either tool calls or markdown blocks.
-
-    Checks tool_calls dict first (for tool calling), then falls back to
-    markdown code blocks in response text.
-
-    Returns the code string, or None if no code found.
-    """
-    # Try tool_calls first (tool calling format)
-    output = ctx.last_output()
-    if output and output.tool_calls and "python" in output.tool_calls:
-        tool_call = output.tool_calls["python"]
-        if hasattr(tool_call, "args") and "code" in tool_call.args:
-            return tool_call.args["code"]
-
-    # Fall back to markdown code blocks in response text
-    result = _has_python_code_listing(ctx)
-    if result.as_bool() and result.reason:
-        return result.reason
-    return None
+from .imports import get_unauthorized_imports
+from .python_reqs import extract_python_code
+from .tool_reqs import tool_arg_validator, uses_tool
 
 
 def _code_parses(code: str) -> tuple[bool, str | None]:
@@ -173,62 +107,27 @@ def _calls_savefig(code: str) -> bool:
 # region Individual Requirement Validators
 
 
-def _validate_python_tool_invoked(ctx: Context) -> ValidationResult:
-    """Requirement: Model must invoke the Python tool."""
-    output = ctx.last_output()
-    if output is None or output.tool_calls is None:
-        return ValidationResult(
-            result=False,
-            reason=(
-                "You did not invoke any tools. To execute Python code, "
-                "call the `python` tool with your code."
-            ),
-        )
-    if "python" not in output.tool_calls:
-        return ValidationResult(
-            result=False,
-            reason=(
-                "You did not call the `python` tool. Call it with your "
-                "code to execute it."
-            ),
-        )
-    return ValidationResult(result=True)
-
-
-def _validate_python_tool_has_code_arg(ctx: Context) -> ValidationResult:
-    """Requirement: Python tool call must include a 'code' argument."""
-    output = ctx.last_output()
-    if output is None or output.tool_calls is None:
-        return ValidationResult(result=False, reason="No tool calls found")
-
-    if "python" not in output.tool_calls:
-        return ValidationResult(result=False, reason="Python tool not called")
-
-    python_call = output.tool_calls["python"]
-    if "code" not in python_call.args:
-        return ValidationResult(
-            result=False,
-            reason="The `python` tool call must include a `code` argument with your Python code.",
-        )
-
-    return ValidationResult(result=True)
+def _python_code_arg_present(arg_value: object) -> bool:
+    """Return True when the python tool code argument is present and non-empty."""
+    return isinstance(arg_value, str) and bool(arg_value.strip())
 
 
 def _make_code_parses_validator() -> Callable[[Context], ValidationResult]:
     """Create a validator that checks if extracted code parses."""
 
     def validate(ctx: Context) -> ValidationResult:
-        code = _extract_code(ctx)
-        if not code:
+        extraction_result = extract_python_code(ctx)
+        if not extraction_result.as_bool() or extraction_result.reason is None:
             return ValidationResult(
                 result=False,
                 reason=(
                     "Could not extract Python code from your response. "
-                    "Make sure to include code in ```python ... ``` blocks."
+                    "Make sure to include code in the python tool call or "
+                    "in ```python ... ``` blocks."
                 ),
             )
 
-        parses, error = _code_parses(code)
+        parses, error = _code_parses(extraction_result.reason)
         if not parses:
             return ValidationResult(
                 result=False,
@@ -249,13 +148,15 @@ def _make_imports_allowed_validator(
         if allowed_imports is None:
             return ValidationResult(result=True)
 
-        code = _extract_code(ctx)
-        if not code:
+        extraction_result = extract_python_code(ctx)
+        if not extraction_result.as_bool() or extraction_result.reason is None:
             return ValidationResult(
                 result=False, reason="Could not extract Python code"
             )
 
-        unauthorized = get_unauthorized_imports(code, allowed_imports)
+        unauthorized = get_unauthorized_imports(
+            extraction_result.reason, allowed_imports
+        )
         if unauthorized:
             allowed_str = ", ".join(sorted(set(allowed_imports)))
             return ValidationResult(
@@ -279,10 +180,11 @@ def _make_matplotlib_headless_validator(
     """Create a validator that checks matplotlib uses headless backend."""
 
     def validate(ctx: Context) -> ValidationResult:
-        code = _extract_code(ctx)
-        if not code:
+        extraction_result = extract_python_code(ctx)
+        if not extraction_result.as_bool() or extraction_result.reason is None:
             return ValidationResult(result=True)
 
+        code = extraction_result.reason
         if _uses_pyplot_show(code) and not _sets_headless_backend(code):
             savefig_instruction = (
                 f"plt.savefig('{output_path}'); plt.close()"
@@ -310,10 +212,11 @@ def _make_plots_saved_validator(
     """Create a validator that checks if code saves plots to a file."""
 
     def validate(ctx: Context) -> ValidationResult:
-        code = _extract_code(ctx)
-        if not code:
+        extraction_result = extract_python_code(ctx)
+        if not extraction_result.as_bool() or extraction_result.reason is None:
             return ValidationResult(result=True)
 
+        code = extraction_result.reason
         if _uses_pyplot_plot(code) and not _calls_savefig(code):
             savefig_instruction = (
                 f"plt.savefig('{output_path}')\n  plt.close()"
@@ -330,6 +233,40 @@ def _make_plots_saved_validator(
         return ValidationResult(result=True)
 
     return validate
+
+
+def python_plotting_requirements(
+    output_path: str | None = None, *, check_output_artifacts: bool | None = None
+) -> list[Requirement]:
+    """Build plotting-specific requirements for Python tool responses."""
+    reqs: list[Requirement] = []
+
+    reqs.append(
+        Requirement(
+            description="If using pyplot, must set headless backend and use savefig.",
+            validation_fn=_make_matplotlib_headless_validator(output_path),
+            check_only=False,
+        )
+    )
+
+    reqs.append(
+        Requirement(
+            description="If creating plots, must call savefig to save them.",
+            validation_fn=_make_plots_saved_validator(output_path),
+            check_only=False,
+        )
+    )
+
+    if check_output_artifacts and output_path:
+        reqs.append(
+            Requirement(
+                description=f"Output file must be created at {output_path}",
+                validation_fn=_make_output_artifacts_validator(output_path),
+                check_only=False,
+            )
+        )
+
+    return reqs
 
 
 def _make_output_artifacts_validator(
@@ -369,11 +306,13 @@ def _make_output_limit_validator(
         if output is None:
             return ValidationResult(result=True)
 
+        stdout = getattr(output, "stdout", "")
+        stderr = getattr(output, "stderr", "")
         total_output = ""
-        if hasattr(output, "stdout") and output.stdout:
-            total_output += output.stdout
-        if hasattr(output, "stderr") and output.stderr:
-            total_output += output.stderr
+        if isinstance(stdout, str):
+            total_output += stdout
+        if isinstance(stderr, str):
+            total_output += stderr
 
         size = len(total_output.encode("utf-8"))
         if size > limit_bytes:
@@ -391,140 +330,58 @@ def _make_output_limit_validator(
 # endregion
 
 
-class PythonToolRequirements:
-    """Pre-composed bundle of requirements for Python code generation via the tool.
+def python_tool_requirements(
+    output_path: str | None = None,
+    allowed_imports: list[str] | None = None,
+    output_limit_bytes: int = 50_000,
+    check_output_artifacts: bool | None = None,
+) -> list[Requirement]:
+    """Build requirements for Python code generation via the python tool."""
+    reqs: list[Requirement] = []
 
-    This bundle validates the complete Python code generation flow: tool invocation,
-    syntax, imports, execution, and output. It's designed to work with repair loops
-    (SOFAI, MultiTurnStrategy) to iteratively fix common plotting failures.
+    if check_output_artifacts is None:
+        check_output_artifacts = output_path is not None
 
-    Markers:
-    - **Deterministic** (unit-testable): tool invocation, syntax, imports, headless backend,
-      savefig presence, file existence, output limits
-    - **Qualitative** (needs model to evaluate): execution without error (captured via stderr)
+    reqs.append(uses_tool("python"))
 
-    Args:
-        output_path (str | None): Path where plots should be saved. If specified, enables
-            output artifact validation. Defaults to None.
-        allowed_imports (list[str] | None): Allowlist of importable top-level modules.
-            None (default) allows any import. Set to list like ["numpy", "matplotlib"]
-            to restrict imports.
-        output_limit_bytes (int): Maximum bytes of stdout/stderr allowed. Defaults to 50000.
-        check_output_artifacts (bool): If True, validate that output file exists and is
-            non-empty after execution. Defaults to True if output_path is specified.
+    reqs.append(
+        tool_arg_validator(
+            description="The python tool call must include a code argument.",
+            tool_name="python",
+            arg_name="code",
+            validation_fn=_python_code_arg_present,
+        )
+    )
 
-    Attributes:
-        requirements (list[Requirement]): The composed list of requirements, suitable
-            for use with sampling strategies.
-    """
+    reqs.append(
+        Requirement(
+            description="The Python code must parse correctly.",
+            validation_fn=_make_code_parses_validator(),
+            check_only=False,
+        )
+    )
 
-    def __init__(
-        self,
-        output_path: str | None = None,
-        allowed_imports: list[str] | None = None,
-        output_limit_bytes: int = 50_000,
-        check_output_artifacts: bool | None = None,
-    ):
-        """Initialize the Python tool requirements bundle."""
-        self.output_path = output_path
-        self.allowed_imports = allowed_imports
-        self.output_limit_bytes = output_limit_bytes
-
-        # Auto-enable output artifact checking if output_path is specified
-        if check_output_artifacts is None:
-            check_output_artifacts = output_path is not None
-
-        self._check_output_artifacts = check_output_artifacts
-
-        self.requirements = self._build_requirements()
-
-    def _build_requirements(self) -> list[Requirement]:
-        """Build the list of requirements for this bundle."""
-        reqs: list[Requirement] = []
-
-        # Tool invocation requirements (deterministic)
+    if allowed_imports is not None:
         reqs.append(
             Requirement(
-                description="Use the python tool to execute code.",
-                validation_fn=_validate_python_tool_invoked,
+                description=f"Imports must be from allowed list: {', '.join(allowed_imports)}",
+                validation_fn=_make_imports_allowed_validator(allowed_imports),
                 check_only=False,
             )
         )
 
-        reqs.append(
-            Requirement(
-                description="The python tool call must include a code argument.",
-                validation_fn=_validate_python_tool_has_code_arg,
-                check_only=False,
-            )
+    reqs.extend(
+        python_plotting_requirements(
+            output_path=output_path, check_output_artifacts=check_output_artifacts
         )
+    )
 
-        # Code quality requirements (deterministic)
-        reqs.append(
-            Requirement(
-                description="The Python code must parse correctly.",
-                validation_fn=_make_code_parses_validator(),
-                check_only=False,
-            )
+    reqs.append(
+        Requirement(
+            description=f"Output must not exceed {output_limit_bytes} bytes.",
+            validation_fn=_make_output_limit_validator(output_limit_bytes),
+            check_only=False,
         )
+    )
 
-        # Import validation (deterministic)
-        if self.allowed_imports is not None:
-            reqs.append(
-                Requirement(
-                    description=f"Imports must be from allowed list: {', '.join(self.allowed_imports)}",
-                    validation_fn=_make_imports_allowed_validator(self.allowed_imports),
-                    check_only=False,
-                )
-            )
-
-        # Matplotlib-specific requirements (deterministic)
-        reqs.append(
-            Requirement(
-                description=(
-                    "If using pyplot, must set headless backend and use savefig."
-                ),
-                validation_fn=_make_matplotlib_headless_validator(self.output_path),
-                check_only=False,
-            )
-        )
-
-        reqs.append(
-            Requirement(
-                description="If creating plots, must call savefig to save them.",
-                validation_fn=_make_plots_saved_validator(self.output_path),
-                check_only=False,
-            )
-        )
-
-        # Output artifact validation (deterministic, post-execution)
-        if self._check_output_artifacts and self.output_path:
-            reqs.append(
-                Requirement(
-                    description=f"Output file must be created at {self.output_path}",
-                    validation_fn=_make_output_artifacts_validator(self.output_path),
-                    check_only=False,
-                )
-            )
-
-        # Output limiting (deterministic)
-        reqs.append(
-            Requirement(
-                description=f"Output must not exceed {self.output_limit_bytes} bytes.",
-                validation_fn=_make_output_limit_validator(self.output_limit_bytes),
-                check_only=False,
-            )
-        )
-
-        return reqs
-
-    def __repr__(self) -> str:
-        """Return a developer-readable representation."""
-        return (
-            f"PythonToolRequirements("
-            f"output_path={self.output_path!r}, "
-            f"allowed_imports={self.allowed_imports!r}, "
-            f"output_limit_bytes={self.output_limit_bytes}, "
-            f"requirements={len(self.requirements)} items"
-            f")"
-        )
+    return reqs

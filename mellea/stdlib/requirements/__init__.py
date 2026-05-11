@@ -4,7 +4,7 @@
 from ...core import Requirement, ValidationResult, default_output_to_bool
 from .md import as_markdown_list, is_markdown_list, is_markdown_table
 from .python_reqs import PythonExecutionReq
-from .python_tools import PythonToolRequirements
+from .python_tools import python_plotting_requirements, python_tool_requirements
 from .requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -20,7 +20,6 @@ __all__ = [
     "ALoraRequirement",
     "LLMaJRequirement",
     "PythonExecutionReq",
-    "PythonToolRequirements",
     "Requirement",
     "ValidationResult",
     "as_markdown_list",
@@ -28,6 +27,8 @@ __all__ = [
     "default_output_to_bool",
     "is_markdown_list",
     "is_markdown_table",
+    "python_plotting_requirements",
+    "python_tool_requirements",
     "req",
     "reqify",
     "requirement_check_to_bool",

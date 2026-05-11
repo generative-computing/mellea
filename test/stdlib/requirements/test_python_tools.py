@@ -1,18 +1,26 @@
 """Tests for Python tool requirements bundle."""
 
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
-from mellea.core import Context, ModelOutputThunk
-from mellea.helpers import get_unauthorized_imports
+from mellea.core import (
+    Context,
+    ModelOutputThunk,
+    ModelToolCall,
+    Requirement,
+    ValidationResult,
+)
 from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements.imports import get_unauthorized_imports
 from mellea.stdlib.requirements.python_tools import (
-    PythonToolRequirements,
     _calls_savefig,
     _code_parses,
     _sets_headless_backend,
     _uses_pyplot_plot,
     _uses_pyplot_show,
+    python_tool_requirements,
 )
 
 
@@ -21,6 +29,60 @@ def from_model(content: str) -> Context:
     ctx = ChatContext()
     ctx = ctx.add(ModelOutputThunk(value=content))
     return ctx
+
+
+def requirement_description(requirement: Requirement) -> str:
+    """Return a non-optional description for test filtering."""
+    assert requirement.description is not None
+    return requirement.description
+
+
+def validation_fn(requirement: Requirement) -> Callable[[Context], ValidationResult]:
+    """Return a requirement validation function for tests."""
+    assert requirement.validation_fn is not None
+    return requirement.validation_fn
+
+
+def validation_reason(result: ValidationResult) -> str:
+    """Return a non-optional validation reason for assertions."""
+    assert result.reason is not None
+    return result.reason
+
+
+class _DummyTool:
+    """Minimal tool stub for constructing ModelToolCall in tests."""
+
+    def run(self, **kwargs: Any) -> None:
+        return None
+
+
+def python_tool_call(code: str | None = None, **extra_args: str) -> ModelToolCall:
+    """Create a typed python tool call for tests."""
+    args: dict[str, str] = dict(extra_args)
+    if code is not None:
+        args["code"] = code
+    return ModelToolCall(name="python", func=cast(Any, _DummyTool()), args=args)
+
+
+def requirements_matching(
+    substring: str,
+    *,
+    output_path: str | None = None,
+    allowed_imports: list[str] | None = None,
+    output_limit_bytes: int = 50_000,
+    check_output_artifacts: bool | None = None,
+) -> list[Requirement]:
+    """Return requirements whose description contains the substring."""
+    return [
+        requirement
+        for requirement in python_tool_requirements(
+            output_path=output_path,
+            allowed_imports=allowed_imports,
+            output_limit_bytes=output_limit_bytes,
+            check_output_artifacts=check_output_artifacts,
+        )
+        if substring in requirement_description(requirement).lower()
+    ]
 
 
 # region: Helper function tests
@@ -149,45 +211,45 @@ class TestMatplotlibDetection:
 # endregion
 
 
-# region: PythonToolRequirements tests
+# region: python_tool_requirements tests
 
 
 class TestPythonToolRequirementsBasic:
-    """Basic tests for PythonToolRequirements bundle."""
+    """Basic tests for python_tool_requirements."""
 
     def test_initialization(self):
-        """Bundle should initialize with default settings."""
-        bundle = PythonToolRequirements()
-        assert bundle.requirements is not None
-        assert len(bundle.requirements) > 0
+        """Factory should return requirements with default settings."""
+        requirements = python_tool_requirements()
+        assert requirements
+        assert len(requirements) > 0
 
-    def test_with_output_path(self):
-        """Bundle should accept output_path parameter."""
-        bundle = PythonToolRequirements(output_path="/tmp/plot.png")
-        assert bundle.output_path == "/tmp/plot.png"
+    def test_with_output_path_enables_artifact_requirement(self):
+        """Output path should enable artifact validation by default."""
+        requirements = python_tool_requirements(output_path="/tmp/plot.png")
+        artifact_reqs = [
+            r
+            for r in requirements
+            if "output file" in requirement_description(r).lower()
+        ]
+        assert len(artifact_reqs) == 1
 
-    def test_with_allowed_imports(self):
-        """Bundle should accept allowed_imports parameter."""
-        allowed = ["numpy", "matplotlib"]
-        bundle = PythonToolRequirements(allowed_imports=allowed)
-        assert bundle.allowed_imports == allowed
+    def test_without_output_path_disables_artifact_requirement(self):
+        """Artifact validation should be absent without output_path."""
+        requirements = python_tool_requirements()
+        artifact_reqs = [
+            r
+            for r in requirements
+            if "output file" in requirement_description(r).lower()
+        ]
+        assert len(artifact_reqs) == 0
 
-    def test_output_artifact_checking_enabled_by_default(self):
-        """Output artifact checking should be enabled if output_path is set."""
-        bundle = PythonToolRequirements(output_path="/tmp/plot.png")
-        assert bundle._check_output_artifacts is True
-
-    def test_output_artifact_checking_disabled_by_default(self):
-        """Output artifact checking should be disabled if no output_path."""
-        bundle = PythonToolRequirements()
-        assert bundle._check_output_artifacts is False
-
-    def test_repr(self):
-        """Bundle should have a readable repr."""
-        bundle = PythonToolRequirements(output_path="/tmp/plot.png")
-        repr_str = repr(bundle)
-        assert "PythonToolRequirements" in repr_str
-        assert "/tmp/plot.png" in repr_str
+    def test_with_allowed_imports_adds_import_requirement(self):
+        """Allowed imports should add an import validation requirement."""
+        requirements = python_tool_requirements(allowed_imports=["numpy", "matplotlib"])
+        import_reqs = [
+            r for r in requirements if "import" in requirement_description(r).lower()
+        ]
+        assert len(import_reqs) > 0
 
 
 # endregion
@@ -201,29 +263,27 @@ class TestMustInvokePythonTool:
 
     def test_tool_not_called(self):
         """Should fail if python tool not called."""
-        bundle = PythonToolRequirements()
-        req = bundle.requirements[0]
+        req = python_tool_requirements()[0]
 
         ctx = from_model("Here is the code:\n```python\nprint('hello')\n```")
-        result = req.validation_fn(ctx)
+        result = validation_fn(req)(ctx)
 
         assert result.as_bool() is False
-        reason_lower = result.reason.lower()
-        assert "did not invoke" in reason_lower or "did not call" in reason_lower
+        reason_lower = validation_reason(result).lower()
+        assert "no tool calls" in reason_lower or "did not call" in reason_lower
 
     def test_python_tool_called(self):
         """Should pass if python tool is called."""
-        bundle = PythonToolRequirements()
-        req = bundle.requirements[0]
+        req = python_tool_requirements()[0]
 
         ctx = ChatContext()
-        call_obj = type("Call", (), {"args": {"code": "print('hi')"}})()
         output = ModelOutputThunk(
-            value="I'll execute this code", tool_calls={"python": call_obj}
+            value="I'll execute this code",
+            tool_calls={"python": python_tool_call("print('hi')")},
         )
         ctx = ctx.add(output)
 
-        result = req.validation_fn(ctx)
+        result = validation_fn(req)(ctx)
         assert result.as_bool() is True
 
 
@@ -232,33 +292,31 @@ class TestPythonToolHasCodeArg:
 
     def test_missing_code_argument(self):
         """Should fail if python tool call has no code argument."""
-        bundle = PythonToolRequirements()
-        req = bundle.requirements[1]
+        req = python_tool_requirements()[1]
 
         ctx = ChatContext()
-        call_obj = type("Call", (), {"args": {"other": "value"}})()
         output = ModelOutputThunk(
-            value="I'll execute this", tool_calls={"python": call_obj}
+            value="I'll execute this",
+            tool_calls={"python": python_tool_call(other="value")},
         )
         ctx = ctx.add(output)
 
-        result = req.validation_fn(ctx)
+        result = validation_fn(req)(ctx)
         assert result.as_bool() is False
-        assert "code" in result.reason.lower()
+        assert "code" in validation_reason(result).lower()
 
     def test_has_code_argument(self):
         """Should pass if python tool call has code argument."""
-        bundle = PythonToolRequirements()
-        req = bundle.requirements[1]
+        req = python_tool_requirements()[1]
 
         ctx = ChatContext()
-        call_obj = type("Call", (), {"args": {"code": "print('hi')"}})()
         output = ModelOutputThunk(
-            value="I'll execute this", tool_calls={"python": call_obj}
+            value="I'll execute this",
+            tool_calls={"python": python_tool_call("print('hi')")},
         )
         ctx = ctx.add(output)
 
-        result = req.validation_fn(ctx)
+        result = validation_fn(req)(ctx)
         assert result.as_bool() is True
 
 
@@ -267,67 +325,57 @@ class TestCodeParsesRequirement:
 
     def test_valid_code(self):
         """Valid code should pass."""
-        bundle = PythonToolRequirements()
-        parse_reqs = [
-            r for r in bundle.requirements if "parse" in r.description.lower()
-        ]
+        parse_reqs = requirements_matching("parse")
         parse_req = parse_reqs[0]
 
         ctx = from_model("```python\nx = 1\nprint(x)\n```")
-        result = parse_req.validation_fn(ctx)
+        result = validation_fn(parse_req)(ctx)
 
         assert result.as_bool() is True
 
     def test_syntax_error(self):
         """Syntax errors should be caught."""
-        bundle = PythonToolRequirements()
-        parse_reqs = [
-            r for r in bundle.requirements if "parse" in r.description.lower()
-        ]
+        parse_reqs = requirements_matching("parse")
         parse_req = parse_reqs[0]
 
         ctx = from_model("```python\ndef foo(\n    return 42\n```")
-        result = parse_req.validation_fn(ctx)
+        result = validation_fn(parse_req)(ctx)
 
         assert result.as_bool() is False
-        assert "syntax" in result.reason.lower()
+        assert "syntax" in validation_reason(result).lower()
 
     def test_valid_code_from_tool_calls(self):
         """Valid code in tool_calls should parse."""
-        bundle = PythonToolRequirements()
-        parse_reqs = [
-            r for r in bundle.requirements if "parse" in r.description.lower()
-        ]
+        parse_reqs = requirements_matching("parse")
         parse_req = parse_reqs[0]
 
         # Create context with tool_calls instead of markdown
         ctx = ChatContext()
-        tool_call = type("Call", (), {"args": {"code": "x = 1\nprint(x)"}})()
-        output = ModelOutputThunk(value="", tool_calls={"python": tool_call})
+        output = ModelOutputThunk(
+            value="", tool_calls={"python": python_tool_call("x = 1\nprint(x)")}
+        )
         ctx = ctx.add(output)
 
-        result = parse_req.validation_fn(ctx)
+        result = validation_fn(parse_req)(ctx)
 
         assert result.as_bool() is True
 
     def test_syntax_error_from_tool_calls(self):
         """Syntax errors in tool_calls should be caught."""
-        bundle = PythonToolRequirements()
-        parse_reqs = [
-            r for r in bundle.requirements if "parse" in r.description.lower()
-        ]
+        parse_reqs = requirements_matching("parse")
         parse_req = parse_reqs[0]
 
         # Create context with tool_calls containing syntax error
         ctx = ChatContext()
-        tool_call = type("Call", (), {"args": {"code": "def foo(\n    return 42"}})()
-        output = ModelOutputThunk(value="", tool_calls={"python": tool_call})
+        output = ModelOutputThunk(
+            value="", tool_calls={"python": python_tool_call("def foo(\n    return 42")}
+        )
         ctx = ctx.add(output)
 
-        result = parse_req.validation_fn(ctx)
+        result = validation_fn(parse_req)(ctx)
 
         assert result.as_bool() is False
-        assert "syntax" in result.reason.lower()
+        assert "syntax" in validation_reason(result).lower()
 
 
 class TestImportAllowlistRequirement:
@@ -336,10 +384,10 @@ class TestImportAllowlistRequirement:
     def test_allowed_imports(self):
         """Allowed imports should pass."""
         allowed = ["numpy", "matplotlib"]
-        bundle = PythonToolRequirements(allowed_imports=allowed)
-
         import_reqs = [
-            r for r in bundle.requirements if "import" in r.description.lower()
+            r
+            for r in python_tool_requirements(allowed_imports=allowed)
+            if "import" in requirement_description(r).lower()
         ]
         assert len(import_reqs) > 0
         import_req = import_reqs[0]
@@ -347,67 +395,69 @@ class TestImportAllowlistRequirement:
         ctx = from_model(
             "```python\nimport numpy\nimport matplotlib.pyplot as plt\n```"
         )
-        result = import_req.validation_fn(ctx)
+        result = validation_fn(import_req)(ctx)
 
         assert result.as_bool() is True
 
     def test_unauthorized_imports(self):
         """Unauthorized imports should fail."""
         allowed = ["numpy"]
-        bundle = PythonToolRequirements(allowed_imports=allowed)
-
         import_reqs = [
-            r for r in bundle.requirements if "import" in r.description.lower()
+            r
+            for r in python_tool_requirements(allowed_imports=allowed)
+            if "import" in requirement_description(r).lower()
         ]
         import_req = import_reqs[0]
 
         ctx = from_model("```python\nimport subprocess\n```")
-        result = import_req.validation_fn(ctx)
+        result = validation_fn(import_req)(ctx)
 
         assert result.as_bool() is False
-        assert "subprocess" in result.reason
+        assert "subprocess" in validation_reason(result)
 
     def test_allowed_imports_from_tool_calls(self):
         """Allowed imports in tool_calls should pass."""
         allowed = ["numpy", "matplotlib"]
-        bundle = PythonToolRequirements(allowed_imports=allowed)
-
         import_reqs = [
-            r for r in bundle.requirements if "import" in r.description.lower()
+            r
+            for r in python_tool_requirements(allowed_imports=allowed)
+            if "import" in requirement_description(r).lower()
         ]
         import_req = import_reqs[0]
 
         # Create context with tool_calls
         ctx = ChatContext()
         code = "import numpy\nimport matplotlib.pyplot as plt\nprint(numpy.pi)"
-        tool_call = type("Call", (), {"args": {"code": code}})()
-        output = ModelOutputThunk(value="", tool_calls={"python": tool_call})
+        output = ModelOutputThunk(
+            value="", tool_calls={"python": python_tool_call(code)}
+        )
         ctx = ctx.add(output)
 
-        result = import_req.validation_fn(ctx)
+        result = validation_fn(import_req)(ctx)
 
         assert result.as_bool() is True
 
     def test_unauthorized_imports_from_tool_calls(self):
         """Unauthorized imports in tool_calls should fail."""
         allowed = ["numpy"]
-        bundle = PythonToolRequirements(allowed_imports=allowed)
-
         import_reqs = [
-            r for r in bundle.requirements if "import" in r.description.lower()
+            r
+            for r in python_tool_requirements(allowed_imports=allowed)
+            if "import" in requirement_description(r).lower()
         ]
         import_req = import_reqs[0]
 
         # Create context with tool_calls
         ctx = ChatContext()
-        tool_call = type("Call", (), {"args": {"code": "import subprocess\n"}})()
-        output = ModelOutputThunk(value="", tool_calls={"python": tool_call})
+        output = ModelOutputThunk(
+            value="", tool_calls={"python": python_tool_call("import subprocess\n")}
+        )
         ctx = ctx.add(output)
 
-        result = import_req.validation_fn(ctx)
+        result = validation_fn(import_req)(ctx)
 
         assert result.as_bool() is False
-        assert "subprocess" in result.reason
+        assert "subprocess" in validation_reason(result)
 
 
 class TestMatplotlibHeadlessRequirement:
@@ -415,25 +465,21 @@ class TestMatplotlibHeadlessRequirement:
 
     def test_plt_show_without_backend(self):
         """plt.show() without headless backend should fail."""
-        bundle = PythonToolRequirements()
-        matplotlib_reqs = [
-            r for r in bundle.requirements if "headless" in r.description.lower()
-        ]
+        matplotlib_reqs = requirements_matching("headless")
         assert len(matplotlib_reqs) > 0
         matplotlib_req = matplotlib_reqs[0]
 
         ctx = from_model("```python\nplt.plot([1, 2, 3])\nplt.show()\n```")
-        result = matplotlib_req.validation_fn(ctx)
+        result = validation_fn(matplotlib_req)(ctx)
 
         assert result.as_bool() is False
-        assert "headless" in result.reason.lower() or "Agg" in result.reason
+        assert "headless" in validation_reason(
+            result
+        ).lower() or "Agg" in validation_reason(result)
 
     def test_plt_show_with_backend(self):
         """plt.show() with headless backend should pass."""
-        bundle = PythonToolRequirements()
-        matplotlib_reqs = [
-            r for r in bundle.requirements if "headless" in r.description.lower()
-        ]
+        matplotlib_reqs = requirements_matching("headless")
         matplotlib_req = matplotlib_reqs[0]
 
         ctx = from_model(
@@ -444,20 +490,17 @@ class TestMatplotlibHeadlessRequirement:
             "plt.show()\n"
             "```"
         )
-        result = matplotlib_req.validation_fn(ctx)
+        result = validation_fn(matplotlib_req)(ctx)
 
         assert result.as_bool() is True
 
     def test_no_plt_show(self):
         """Code without plt.show() should pass."""
-        bundle = PythonToolRequirements()
-        matplotlib_reqs = [
-            r for r in bundle.requirements if "headless" in r.description.lower()
-        ]
+        matplotlib_reqs = requirements_matching("headless")
         matplotlib_req = matplotlib_reqs[0]
 
         ctx = from_model("```python\nplt.plot([1, 2, 3])\nplt.savefig('plot.png')\n```")
-        result = matplotlib_req.validation_fn(ctx)
+        result = validation_fn(matplotlib_req)(ctx)
 
         assert result.as_bool() is True
 
@@ -467,42 +510,33 @@ class TestPlotsAreSavedRequirement:
 
     def test_plot_without_savefig(self):
         """Plotting without savefig should fail."""
-        bundle = PythonToolRequirements()
-        plot_reqs = [
-            r for r in bundle.requirements if "savefig" in r.description.lower()
-        ]
+        plot_reqs = requirements_matching("savefig")
         assert len(plot_reqs) > 0
         plot_req = plot_reqs[0]
 
         ctx = from_model("```python\nplt.plot([1, 2, 3])\nplt.show()\n```")
-        result = plot_req.validation_fn(ctx)
+        result = validation_fn(plot_req)(ctx)
 
         assert result.as_bool() is False
-        assert "savefig" in result.reason.lower()
+        assert "savefig" in validation_reason(result).lower()
 
     def test_plot_with_savefig(self):
         """Plotting with savefig should pass."""
-        bundle = PythonToolRequirements()
-        plot_reqs = [
-            r for r in bundle.requirements if "savefig" in r.description.lower()
-        ]
+        plot_reqs = requirements_matching("savefig")
         plot_req = plot_reqs[0]
 
         ctx = from_model("```python\nplt.plot([1, 2, 3])\nplt.savefig('plot.png')\n```")
-        result = plot_req.validation_fn(ctx)
+        result = validation_fn(plot_req)(ctx)
 
         assert result.as_bool() is True
 
     def test_no_plotting(self):
         """Code without plotting should pass."""
-        bundle = PythonToolRequirements()
-        plot_reqs = [
-            r for r in bundle.requirements if "savefig" in r.description.lower()
-        ]
+        plot_reqs = requirements_matching("savefig")
         plot_req = plot_reqs[0]
 
         ctx = from_model("```python\nx = 1\nprint(x)\n```")
-        result = plot_req.validation_fn(ctx)
+        result = validation_fn(plot_req)(ctx)
 
         assert result.as_bool() is True
 
@@ -515,18 +549,17 @@ class TestOutputArtifactsRequirement:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = str(Path(tmpdir) / "plot.png")
 
-            bundle = PythonToolRequirements(output_path=output_path)
-            artifact_reqs = [
-                r for r in bundle.requirements if "output file" in r.description.lower()
-            ]
+            artifact_reqs = requirements_matching(
+                "output file", output_path=output_path
+            )
             assert len(artifact_reqs) > 0
             artifact_req = artifact_reqs[0]
 
             ctx = from_model("Code ran successfully")
-            result = artifact_req.validation_fn(ctx)
+            result = validation_fn(artifact_req)(ctx)
 
             assert result.as_bool() is False
-            assert output_path in result.reason
+            assert output_path in validation_reason(result)
 
     def test_output_file_exists_and_nonempty(self):
         """Should pass if output file exists and is non-empty."""
@@ -534,14 +567,13 @@ class TestOutputArtifactsRequirement:
             output_path = str(Path(tmpdir) / "plot.png")
             Path(output_path).write_bytes(b"fake png data")
 
-            bundle = PythonToolRequirements(output_path=output_path)
-            artifact_reqs = [
-                r for r in bundle.requirements if "output file" in r.description.lower()
-            ]
+            artifact_reqs = requirements_matching(
+                "output file", output_path=output_path
+            )
             artifact_req = artifact_reqs[0]
 
             ctx = from_model("Code ran successfully")
-            result = artifact_req.validation_fn(ctx)
+            result = validation_fn(artifact_req)(ctx)
 
             assert result.as_bool() is True
 
@@ -551,24 +583,20 @@ class TestOutputArtifactsRequirement:
             output_path = str(Path(tmpdir) / "plot.png")
             Path(output_path).write_bytes(b"")
 
-            bundle = PythonToolRequirements(output_path=output_path)
-            artifact_reqs = [
-                r for r in bundle.requirements if "output file" in r.description.lower()
-            ]
+            artifact_reqs = requirements_matching(
+                "output file", output_path=output_path
+            )
             artifact_req = artifact_reqs[0]
 
             ctx = from_model("Code ran successfully")
-            result = artifact_req.validation_fn(ctx)
+            result = validation_fn(artifact_req)(ctx)
 
             assert result.as_bool() is False
-            assert "empty" in result.reason.lower()
+            assert "empty" in validation_reason(result).lower()
 
     def test_output_artifact_disabled_without_output_path(self):
         """Output artifact requirement should not be present without output_path."""
-        bundle = PythonToolRequirements()
-        artifact_reqs = [
-            r for r in bundle.requirements if "output file" in r.description.lower()
-        ]
+        artifact_reqs = requirements_matching("output file")
         assert len(artifact_reqs) == 0
 
 
@@ -578,131 +606,107 @@ class TestOutputLimitValidator:
     def test_empty_output_passes(self):
         """No stdout/stderr should pass."""
         ctx = ChatContext().add(ModelOutputThunk(value="response"))
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         assert len(limit_reqs) > 0
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is True
 
     def test_output_within_limit_passes(self):
         """Output under limit should pass."""
         output = ModelOutputThunk(value="response")
-        output.stdout = "x" * 500
-        output.stderr = ""
+        setattr(output, "stdout", "x" * 500)
+        setattr(output, "stderr", "")
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is True
 
     def test_stdout_exceeds_limit_fails(self):
         """Stdout exceeding limit should fail."""
         output = ModelOutputThunk(value="response")
-        output.stdout = "x" * 1500
-        output.stderr = ""
+        setattr(output, "stdout", "x" * 1500)
+        setattr(output, "stderr", "")
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is False
-        assert "exceeding" in result.reason.lower()
-        assert "1500" in result.reason
+        assert "exceeding" in validation_reason(result).lower()
+        assert "1500" in validation_reason(result)
 
     def test_stderr_exceeds_limit_fails(self):
         """Stderr exceeding limit should fail."""
         output = ModelOutputThunk(value="response")
-        output.stdout = ""
-        output.stderr = "e" * 1500
+        setattr(output, "stdout", "")
+        setattr(output, "stderr", "e" * 1500)
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is False
-        assert "exceeding" in result.reason.lower()
+        assert "exceeding" in validation_reason(result).lower()
 
     def test_combined_output_exceeds_limit_fails(self):
         """Combined stdout+stderr exceeding limit should fail."""
         output = ModelOutputThunk(value="response")
-        output.stdout = "x" * 600
-        output.stderr = "e" * 600  # Combined: 1200 bytes
+        setattr(output, "stdout", "x" * 600)
+        setattr(output, "stderr", "e" * 600)  # Combined: 1200 bytes
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is False
-        assert "1200" in result.reason
+        assert "1200" in validation_reason(result)
 
     def test_utf8_multibyte_characters_counted_correctly(self):
         """Multibyte UTF-8 characters should be counted in bytes, not chars."""
         output = ModelOutputThunk(value="response")
-        output.stdout = "🎉" * 100  # 4 bytes per emoji = 400 bytes
-        output.stderr = ""
+        setattr(output, "stdout", "🎉" * 100)  # 4 bytes per emoji = 400 bytes
+        setattr(output, "stderr", "")
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=300)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=300)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is False  # 400 > 300
-        assert "exceeding" in result.reason.lower()
+        assert "exceeding" in validation_reason(result).lower()
 
     def test_limit_at_boundary(self):
         """Output exactly at limit should pass."""
         output = ModelOutputThunk(value="response")
-        output.stdout = "x" * 1000  # Exactly 1000 bytes
-        output.stderr = ""
+        setattr(output, "stdout", "x" * 1000)  # Exactly 1000 bytes
+        setattr(output, "stderr", "")
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is True
 
     def test_limit_one_byte_over_boundary_fails(self):
         """Output one byte over limit should fail."""
         output = ModelOutputThunk(value="response")
-        output.stdout = "x" * 1001  # 1001 bytes
-        output.stderr = ""
+        setattr(output, "stdout", "x" * 1001)  # 1001 bytes
+        setattr(output, "stderr", "")
         ctx = ChatContext().add(output)
 
-        bundle = PythonToolRequirements(output_limit_bytes=1000)
-        limit_reqs = [
-            r for r in bundle.requirements if "exceed" in r.description.lower()
-        ]
+        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
         limit_req = limit_reqs[0]
 
-        result = limit_req.validation_fn(ctx)
+        result = validation_fn(limit_req)(ctx)
         assert result.as_bool() is False
 
 

@@ -58,8 +58,57 @@ def _score_code_block(code: str) -> int:
     return score
 
 
+def extract_python_code(ctx: Context) -> ValidationResult:
+    """Extract Python code from tool calls or markdown code blocks."""
+    last_output = ctx.last_output()
+    if last_output is None:
+        return ValidationResult(result=False, reason="No output found in context")
+
+    if last_output.tool_calls and "python" in last_output.tool_calls:
+        tool_call = last_output.tool_calls["python"]
+        code = tool_call.args.get("code")
+        if isinstance(code, str) and code.strip():
+            return ValidationResult(result=True, reason=code)
+
+    if last_output.value is None:
+        return ValidationResult(result=False, reason="No output found in context")
+
+    content = last_output.value
+
+    # Look for code blocks with python specifier
+    import re
+
+    # Pattern for ```python ... ``` blocks
+    python_blocks = re.findall(r"```python\s*\n(.*?)\n```", content, re.DOTALL)
+
+    # Pattern for generic ``` blocks
+    generic_blocks = re.findall(r"```\s*\n(.*?)\n```", content, re.DOTALL)
+
+    all_blocks = []
+
+    # Add python blocks with high priority
+    for block in python_blocks:
+        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
+
+    # Add generic blocks if they look like Python
+    for block in generic_blocks:
+        block = block.strip()
+        if block and any(
+            keyword in block
+            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
+        ):
+            all_blocks.append((block, _score_code_block(block)))
+
+    if not all_blocks:
+        return ValidationResult(result=False, reason="No Python code blocks found")
+
+    # Return the highest scoring block
+    best_block = max(all_blocks, key=lambda x: x[1])
+    return ValidationResult(result=True, reason=best_block[0])
+
+
 def _has_python_code_listing(ctx: Context) -> ValidationResult:
-    """Extract Python code from context."""
+    """Extract Python code from markdown code blocks in context."""
     last_output = ctx.last_output()
     if last_output is None or last_output.value is None:
         return ValidationResult(result=False, reason="No output found in context")
