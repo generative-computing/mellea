@@ -3,6 +3,7 @@
 import asyncio
 import importlib.util
 import inspect
+import logging
 import os
 import sys
 import time
@@ -41,6 +42,8 @@ from .models import (
 from .schema_converter import json_schema_to_pydantic
 from .streaming import stream_chat_completion_chunks
 from .utils import extract_finish_reason
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
@@ -265,11 +268,16 @@ def make_chat_endpoint(module):
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
             )
-        except Exception as e:
-            # Catch-all for any unexpected errors (including AttributeError)
+        except Exception:
+            # Catch-all for any unexpected errors. Log the full traceback
+            # server-side (operators must be able to diagnose the 500), and
+            # return a generic message to the client — the raw `str(e)` can
+            # leak file paths / internal state across the API boundary
+            # (#991).
+            logger.exception("Unhandled error in chat-completion handler")
             return create_openai_error_response(
                 status_code=500,
-                message=f"Internal server error: {e!s}",
+                message="Internal server error",
                 error_type="server_error",
             )
 
