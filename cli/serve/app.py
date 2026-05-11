@@ -3,7 +3,6 @@
 import asyncio
 import importlib.util
 import inspect
-import logging
 import os
 import sys
 import time
@@ -24,6 +23,7 @@ except ImportError as e:
     ) from e
 
 from mellea.backends.model_options import ModelOption
+from mellea.core import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import (
     build_completion_usage,
     build_tool_calls,
@@ -43,7 +43,7 @@ from .schema_converter import json_schema_to_pydantic
 from .streaming import stream_chat_completion_chunks
 from .utils import extract_finish_reason
 
-logger = logging.getLogger(__name__)
+logger = MelleaLogger.get_logger()
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
