@@ -3,8 +3,9 @@
 # Import from core for ergonomics.
 from ...core import Requirement, ValidationResult, default_output_to_bool
 from .md import as_markdown_list, is_markdown_list, is_markdown_table
+from .plotting import python_plotting_requirements
 from .python_reqs import PythonExecutionReq
-from .python_tools import python_plotting_requirements, python_tool_requirements
+from .python_tools import python_tool_requirements
 from .requirement import (
     ALoraRequirement,
     LLMaJRequirement,

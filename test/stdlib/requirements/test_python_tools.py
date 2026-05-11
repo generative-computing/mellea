@@ -14,12 +14,14 @@ from mellea.core import (
 )
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.imports import get_unauthorized_imports
-from mellea.stdlib.requirements.python_tools import (
+from mellea.stdlib.requirements.plotting.matplotlib import (
     _calls_savefig,
-    _code_parses,
     _sets_headless_backend,
     _uses_pyplot_plot,
     _uses_pyplot_show,
+)
+from mellea.stdlib.requirements.python_tools import (
+    _code_parses,
     python_tool_requirements,
 )
 
