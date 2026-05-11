@@ -19,18 +19,19 @@ from .intrinsic import Intrinsic
 
 def _resolve_question(
     question: str | None, context: ChatContext, backend: Backend | None = None
-) -> tuple[str, ChatContext]:
-    """Return ``(question_text, context_to_use)``.
+) -> tuple[str, ChatContext, list[Document] | None]:
+    """Return ``(question_text, context_to_use, documents)``.
 
-    When *question* is not ``None``, returns it with *context* unchanged.
+    When *question* is not ``None``, returns it with *context* unchanged and no documents.
     When ``None``, extracts the text from the last turn's ``model_input``
-    and rewinds *context* to before that element.
+    and rewinds *context* to before that element. Also extracts documents if the
+    last input is a Message.
 
     Supports ``Message`` (via ``.content``), ``CBlock`` (via ``.value``),
     and generic ``Component`` types (via ``TemplateFormatter.print()``).
     """
     if question is not None:
-        return question, context
+        return question, context, None
     from ....core import CBlock, Component
     from ..chat import Message
 
@@ -41,8 +42,10 @@ def _resolve_question(
         )
 
     model_input = turn.model_input
+    documents: list[Document] | None = None
     if isinstance(model_input, Message):
         text = model_input.content
+        documents = model_input._docs
     elif isinstance(model_input, CBlock):
         if model_input.value is None:
             raise ValueError(
@@ -66,25 +69,26 @@ def _resolve_question(
     rewound = context.previous_node
     if rewound is None:
         raise ValueError("Cannot rewind context past the root node")
-    return text, rewound  # type: ignore[return-value]
+    return text, rewound, documents  # type: ignore[return-value]
 
 
 def _resolve_response(
     response: str | None, context: ChatContext
-) -> tuple[str, ChatContext]:
-    """Return ``(response_text, context_to_use)``.
+) -> tuple[str, ChatContext, list[Document] | None]:
+    """Return ``(response_text, context_to_use, documents)``.
 
-    When *response* is not ``None``, returns it with *context* unchanged.
+    When *response* is not ``None``, returns it with *context* unchanged and no documents.
     When ``None``, extracts from the last turn's ``output.value`` (generated) or
     ``model_input.content`` (manually-added Message), then rewinds *context*
-    to before that turn.
+    to before that turn. Also extracts documents if the last message is a Message.
     """
     if response is not None:
-        return response, context
+        return response, context, None
     turn = context.last_turn()
     if turn is None:
         raise ValueError("response is None and context has no last turn with output")
 
+    documents: list[Document] | None = None
     # Try generated output first
     if turn.output is not None:
         if turn.output.value is None:
@@ -97,6 +101,7 @@ def _resolve_response(
         and turn.model_input.role == "assistant"
     ):
         response_text = turn.model_input.content
+        documents = turn.model_input._docs
     else:
         raise ValueError(
             "response is None and context has no last turn with output or assistant message"
@@ -105,7 +110,7 @@ def _resolve_response(
     rewound = context.previous_node
     if rewound is None:
         raise ValueError("Cannot rewind context past the root node")
-    return response_text, rewound  # type: ignore[return-value]
+    return response_text, rewound, documents  # type: ignore[return-value]
 
 
 def call_intrinsic(

@@ -181,7 +181,23 @@ def guardian_check(
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
     """
     if documents is not None and target_role == "assistant":
-        context = _reattach_documents(context, documents)
+        response, context, resolved_docs = _resolve_response(None, context)
+        explicit_docs = _coerce_to_documents(documents)
+        if explicit_docs is not None and resolved_docs is not None:
+            explicit_docs.extend(resolved_docs)
+            context = context.add(
+                Message("assistant", response, documents=explicit_docs)
+            )
+        elif explicit_docs is not None:
+            context = context.add(
+                Message("assistant", response, documents=explicit_docs)
+            )
+        elif resolved_docs is not None:
+            context = context.add(
+                Message("assistant", response, documents=resolved_docs)
+            )
+        else:
+            context = context.add(Message("assistant", response))
 
     criteria_text = CRITERIA_BANK.get(criteria, criteria)
 
@@ -199,56 +215,6 @@ def guardian_check(
         "guardian-core", context, backend, model_options=model_options
     )
     return result_json["guardian"]["score"]
-
-
-def _reattach_documents(
-    context: ChatContext, documents: collections.abc.Iterable[str | Document]
-) -> ChatContext:
-    """Rewind context and re-add the last message with documents attached.
-
-    Extracts the assistant's response from the last turn (handling both generated
-    output and manually-added messages), then rewinds the context to before that
-    message and re-adds it with the provided documents.
-
-    Args:
-        context: Context containing the conversation.
-        documents: Documents to attach to the last assistant message.
-
-    Returns:
-        New context with documents attached to the last assistant message.
-
-    Raises:
-        ValueError: If context cannot be rewound or content cannot be extracted.
-    """
-    turn = context.last_turn()
-    if turn is None:
-        raise ValueError("Cannot extract response from empty context")
-
-    # Try to get response from output first (generated), then from message content (manual)
-    response_text = None
-    rewound = context.previous_node
-
-    if turn.output is not None and turn.output.value is not None:
-        # Response is from a generated output
-        response_text = turn.output.value
-    elif (
-        turn.model_input is not None
-        and isinstance(turn.model_input, Message)
-        and turn.model_input.role == "assistant"
-    ):
-        # Response is from a manually added assistant Message
-        response_text = turn.model_input.content
-    else:
-        raise ValueError(
-            "Cannot extract response: turn has neither output nor assistant message"
-        )
-
-    if rewound is None:
-        raise ValueError("Cannot rewind context past the root node")
-
-    return rewound.add(  # type: ignore[return-value]
-        Message("assistant", response_text, documents=_coerce_to_documents(documents))
-    )
 
 
 def factuality_detection(
@@ -288,24 +254,19 @@ def factuality_detection(
 ### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
 """
 
-    if response is None:
-        response, context = _resolve_response(None, context)
+    response, context, resolved_docs = _resolve_response(response, context)
 
     if documents is not None:
-        if response is not None:
-            # Response was explicitly provided, add it with documents
-            context = context.add(
-                Message(
-                    "assistant", response, documents=_coerce_to_documents(documents)
-                )
-            )
-        else:
-            # Response came from context output, reattach documents
-            context = _reattach_documents(context, documents)
+        # Explicit documents take precedence
+        context = context.add(
+            Message("assistant", response, documents=_coerce_to_documents(documents))
+        )
+    elif resolved_docs is not None:
+        # Use documents from the last message if available
+        context = context.add(Message("assistant", response, documents=resolved_docs))
     else:
-        # No documents provided, add response to context if it was explicitly provided
-        if response is not None:
-            context = context.add(Message("assistant", response))
+        # No documents available
+        context = context.add(Message("assistant", response))
 
     context = context.add(Message("user", detector_message))
     result_json = call_intrinsic(
@@ -350,24 +311,19 @@ def factuality_correction(
 ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
 """
 
-    if response is None:
-        response, context = _resolve_response(None, context)
+    response, context, resolved_docs = _resolve_response(response, context)
 
     if documents is not None:
-        if response is not None:
-            # Response was explicitly provided, add it with documents
-            context = context.add(
-                Message(
-                    "assistant", response, documents=_coerce_to_documents(documents)
-                )
-            )
-        else:
-            # Response came from context output, reattach documents
-            context = _reattach_documents(context, documents)
+        # Explicit documents take precedence
+        context = context.add(
+            Message("assistant", response, documents=_coerce_to_documents(documents))
+        )
+    elif resolved_docs is not None:
+        # Use documents from the last message if available
+        context = context.add(Message("assistant", response, documents=resolved_docs))
     else:
-        # No documents provided, add response to context if it was explicitly provided
-        if response is not None:
-            context = context.add(Message("assistant", response))
+        # No documents available
+        context = context.add(Message("assistant", response))
 
     context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic(

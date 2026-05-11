@@ -185,11 +185,9 @@ def test_factuality_detection_from_context(backend):
     """Verify factuality detection works when documents are in the last message."""
     context, documents = _read_guardian_input("factuality_detection.json")
 
-    # Extract response and rewind, then add back with documents
-    context_with_docs = guardian._reattach_documents(context, documents)
-
-    # Test with response=None (should extract from context)
-    result = guardian.factuality_detection(None, context_with_docs, backend)
+    # Test with documents passed as argument to factuality_detection
+    # The function should handle extracting the response and attaching documents
+    result = guardian.factuality_detection(None, context, backend, documents=documents)
     assert result == "yes" or result == "no"
 
 
@@ -208,11 +206,9 @@ def test_factuality_correction_from_context(backend):
     """Verify factuality correction works when documents are in the last message."""
     context, documents = _read_guardian_input("factuality_correction.json")
 
-    # Extract response and rewind, then add back with documents
-    context_with_docs = guardian._reattach_documents(context, documents)
-
-    # Test with response=None (should extract from context)
-    result = guardian.factuality_correction(None, context_with_docs, backend)
+    # Test with documents passed as argument to factuality_correction
+    # The function should handle extracting the response and attaching documents
+    result = guardian.factuality_correction(None, context, backend, documents=documents)
     assert isinstance(result, str)
 
 

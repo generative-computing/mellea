@@ -38,7 +38,7 @@ def check_answerability(
     Returns:
         A string value of either "answerable" or "unanswerable"
     """
-    question, context = _resolve_question(question, context, backend)
+    question, context, _ = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "answerability",
         context.add(
@@ -73,7 +73,7 @@ def rewrite_question(
     Returns:
         Rewritten version of ``question``.
     """
-    question, context = _resolve_question(question, context, backend)
+    question, context, _ = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_rewrite",
         context.add(Message("user", question)),
@@ -112,7 +112,7 @@ def clarify_query(
         Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed.
     """
-    question, context = _resolve_question(question, context, backend)
+    question, context, _ = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_clarification",
         context.add(
@@ -158,7 +158,7 @@ def find_citations(
         ``citation_end``, ``citation_text``. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
-    response, context = _resolve_response(response, context)
+    response, context, _ = _resolve_response(response, context)
     result_json = call_intrinsic(
         "citations",
         context.add(
@@ -204,7 +204,7 @@ def check_context_relevance(
         - "irrelevant"
         - "partially relevant"
     """
-    question, context = _resolve_question(question, context, backend)
+    question, context, _ = _resolve_question(question, context, backend)
     document = _coerce_to_document(document)
     result_json = call_intrinsic(
         "context_relevance",
@@ -248,7 +248,7 @@ def flag_hallucinated_content(
         ``response_end``, ``response_text``, ``faithfulness``,
         ``explanation``.
     """
-    response, context = _resolve_response(response, context)
+    response, context, _ = _resolve_response(response, context)
     result_json = call_intrinsic(
         "hallucination_detection",
         context.add(

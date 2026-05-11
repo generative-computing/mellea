@@ -107,7 +107,7 @@ def find_context_attributions(
         ``attribution_text``. Begin and end offsets are character offsets into
         their respective UTF-8 strings.
     """
-    response, context = _resolve_response(response, context)
+    response, context, _ = _resolve_response(response, context)
     result_json = call_intrinsic(
         "context-attribution",
         context.add(
