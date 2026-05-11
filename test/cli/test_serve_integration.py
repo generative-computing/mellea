@@ -569,4 +569,6 @@ class TestHTTPErrorHandling:
         data = response.json()
         assert "error" in data
         assert data["error"]["type"] == "server_error"
-        assert "Internal error" in data["error"]["message"]
+        # The raw exception message must not leak to the client.
+        assert "Internal error" not in data["error"]["message"]
+        assert "Internal server error" in data["error"]["message"]
