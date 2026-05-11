@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from cli.serve.models import FunctionParameters, StreamOptions
+from cli.serve.models import FunctionParameters, JsonSchemaFormat, StreamOptions
 
 
 class TestStreamOptions:
@@ -127,3 +127,30 @@ class TestFunctionParameters:
         """Test that an empty dict is accepted (though not a useful schema)."""
         params = FunctionParameters(root={})
         assert params.root == {}
+
+
+class TestJsonSchemaFormat:
+    """Test JsonSchemaFormat serialization uses 'schema' alias, not 'schema_'."""
+
+    def test_serialization_uses_schema_alias(self):
+        """Verify schema_ serializes as 'schema' in dict and JSON output."""
+        schema_def = {"type": "object", "properties": {"foo": {"type": "string"}}}
+        json_schema = JsonSchemaFormat(name="TestSchema", schema=schema_def)
+
+        # Dict serialization
+        dumped = json_schema.model_dump()
+        assert "schema" in dumped and "schema_" not in dumped
+        assert dumped["schema"] == schema_def
+
+        # JSON serialization
+        json_str = json_schema.model_dump_json()
+        assert '"schema":' in json_str and '"schema_":' not in json_str
+
+        # Input accepts both 'schema' (alias) and 'schema_' (field name)
+        from_alias = JsonSchemaFormat(name="Test1", schema={"type": "string"})
+        # Use model_validate to test runtime populate_by_name behavior (bypasses type checker)
+        from_field = JsonSchemaFormat.model_validate(
+            {"name": "Test2", "schema_": {"type": "number"}}
+        )
+        assert from_alias.schema_ == {"type": "string"}
+        assert from_field.schema_ == {"type": "number"}

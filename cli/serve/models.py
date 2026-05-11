@@ -60,7 +60,7 @@ class JsonSchemaFormat(BaseModel):
     strict: bool | None = None
     """Accepted for OpenAI compatibility; currently ignored by ``m serve``."""
 
-    model_config = {"populate_by_name": True}
+    model_config = {"populate_by_name": True, "serialize_by_alias": True}
 
 
 class ResponseFormat(BaseModel):
