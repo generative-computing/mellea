@@ -78,12 +78,6 @@ class StreamOptions(BaseModel):
     """
 
 
-class LogitBias(RootModel[dict[str, float]]):
-    """OpenAI-compatible logit bias as a bare dict mapping token IDs to bias values."""
-
-    root: dict[str, float]
-
-
 class ChatCompletionRequest(BaseModel):
     model_config = {"extra": "allow"}
 
