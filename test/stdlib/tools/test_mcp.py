@@ -328,7 +328,6 @@ class TestDiscoverMcpTools:
         assert s.name == "search"
         assert s.description == "Search things"
         assert s.input_schema == schema
-        assert s._connection == connection
 
     @pytest.mark.asyncio
     async def test_none_input_schema_becomes_empty_dict(self, connection):

@@ -18,7 +18,8 @@ Mellea's shared background event loop via ``_run_async_in_thread``.
 """
 
 import asyncio
-from collections.abc import Callable
+import logging
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -43,6 +44,8 @@ except ImportError as e:
 
 from mellea.backends.tools import MelleaTool
 from mellea.helpers.event_loop_helper import _run_async_in_thread
+
+logger = logging.getLogger(__name__)
 
 
 class MCPToolSpec:
@@ -230,7 +233,9 @@ def stdio_connection(
 
 
 @asynccontextmanager
-async def _open_session(connection: dict[str, Any]):
+async def _open_session(
+    connection: dict[str, Any],
+) -> AsyncGenerator[ClientSession, None]:
     """Open a fresh MCP ClientSession for the given connection config."""
     transport = connection.get("transport", "streamable_http")
 
@@ -314,6 +319,9 @@ async def _execute_tool(
                                 mime = item.mimeType or "unknown"
                                 parts.append(f"[binary: {mime}]")
                     except Exception:
+                        logger.debug(
+                            "Failed to read MCP resource %s", block.uri, exc_info=True
+                        )
                         parts.append(f"[resource: {block.uri}]")
                 elif isinstance(block, EmbeddedResource):
                     # BlobResourceContents
