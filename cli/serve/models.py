@@ -22,6 +22,20 @@ class FunctionParameters(RootModel[dict[str, Any]]):
 
     root: dict[str, Any]
 
+    @model_validator(mode="after")
+    def _reject_legacy_envelope(self) -> "FunctionParameters":
+        """Reject legacy RootModel envelope pattern.
+
+        Ensures parameters are sent as a bare JSON Schema object, not wrapped
+        in a {"RootModel": {...}} envelope which would be invalid.
+        """
+        if set(self.root.keys()) == {"RootModel"}:
+            raise ValueError(
+                "Legacy {'RootModel': {...}} envelope is no longer accepted. "
+                "Send parameters as a bare JSON Schema object."
+            )
+        return self
+
 
 class FunctionDefinition(BaseModel):
     name: str

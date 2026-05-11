@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from cli.serve.models import StreamOptions
+from cli.serve.models import FunctionParameters, StreamOptions
 
 
 class TestStreamOptions:
@@ -79,3 +79,51 @@ class TestStreamOptions:
         json_str = options.model_dump_json()
         assert "include_usage" in json_str
         assert "true" in json_str.lower()
+
+
+class TestFunctionParameters:
+    """Tests for the FunctionParameters RootModel validator."""
+
+    def test_valid_json_schema_accepted(self):
+        """Test that a valid JSON Schema dict is accepted."""
+        schema = {
+            "type": "object",
+            "properties": {"location": {"type": "string"}},
+            "required": ["location"],
+        }
+        params = FunctionParameters(root=schema)
+        assert params.root == schema
+
+    def test_legacy_root_model_envelope_rejected(self):
+        """Test that legacy {'RootModel': {...}} envelope is rejected."""
+        legacy_envelope = {
+            "RootModel": {
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+            }
+        }
+        with pytest.raises(ValidationError) as exc_info:
+            FunctionParameters(root=legacy_envelope)
+
+        errors = exc_info.value.errors()
+        assert len(errors) == 1
+        error_msg = str(exc_info.value)
+        assert "Legacy {'RootModel': {...}} envelope is no longer accepted" in error_msg
+
+    def test_root_model_with_additional_keys_accepted(self):
+        """Test that a dict with 'RootModel' plus other keys is accepted."""
+        # This is a valid schema that happens to have a property named "RootModel"
+        schema = {
+            "type": "object",
+            "properties": {
+                "RootModel": {"type": "string"},
+                "other_field": {"type": "number"},
+            },
+        }
+        params = FunctionParameters(root=schema)
+        assert params.root == schema
+
+    def test_empty_dict_accepted(self):
+        """Test that an empty dict is accepted (though not a useful schema)."""
+        params = FunctionParameters(root={})
+        assert params.root == {}

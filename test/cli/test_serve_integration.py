@@ -571,3 +571,43 @@ class TestHTTPErrorHandling:
         assert data["error"]["type"] == "server_error"
         assert "Internal error" not in data["error"]["message"]
         assert "Internal server error" in data["error"]["message"]
+
+    def test_legacy_root_model_envelope_rejected_via_http(self, client, mock_module):
+        """Test that legacy {'RootModel': {...}} envelope is rejected at HTTP layer.
+
+        Verifies that the FunctionParameters validator catches the legacy envelope
+        pattern and returns a proper 400 error via the HTTP API.
+        """
+        # Send request with legacy envelope in function parameters
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "What's the weather?"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "description": "Get weather",
+                            "parameters": {
+                                "RootModel": {
+                                    "type": "object",
+                                    "properties": {"location": {"type": "string"}},
+                                }
+                            },
+                        },
+                    }
+                ],
+            },
+        )
+
+        # Should return 400 with validation error
+        assert response.status_code == 400
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["type"] == "invalid_request_error"
+        assert (
+            "Legacy {'RootModel': {...}} envelope is no longer accepted"
+            in data["error"]["message"]
+        )
