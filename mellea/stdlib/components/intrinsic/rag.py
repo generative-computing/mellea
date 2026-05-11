@@ -38,12 +38,17 @@ def check_answerability(
     Returns:
         A string value of either "answerable" or "unanswerable"
     """
-    question, context, _ = _resolve_question(question, context, backend)
+    question, context, resolved_docs = _resolve_question(question, context, backend)
+    explicit_docs = _coerce_to_documents(documents)
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
     result_json = call_intrinsic(
         "answerability",
-        context.add(
-            Message("user", question, documents=_coerce_to_documents(documents))
-        ),
+        context.add(Message("user", question, documents=docs_to_use)),
         backend,
         model_options=model_options,
     )
@@ -73,10 +78,10 @@ def rewrite_question(
     Returns:
         Rewritten version of ``question``.
     """
-    question, context, _ = _resolve_question(question, context, backend)
+    question, context, resolved_docs = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_rewrite",
-        context.add(Message("user", question)),
+        context.add(Message("user", question, documents=resolved_docs)),
         backend,
         model_options=model_options,
     )
@@ -112,12 +117,17 @@ def clarify_query(
         Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed.
     """
-    question, context, _ = _resolve_question(question, context, backend)
+    question, context, resolved_docs = _resolve_question(question, context, backend)
+    explicit_docs = _coerce_to_documents(documents)
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
     result_json = call_intrinsic(
         "query_clarification",
-        context.add(
-            Message("user", question, documents=_coerce_to_documents(documents))
-        ),
+        context.add(Message("user", question, documents=docs_to_use)),
         backend,
         model_options=model_options,
     )
@@ -158,16 +168,17 @@ def find_citations(
         ``citation_end``, ``citation_text``. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
-    response, context, _ = _resolve_response(response, context)
+    response, context, resolved_docs = _resolve_response(response, context)
+    explicit_docs = _coerce_to_documents(documents, auto_doc_id=False)
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
     result_json = call_intrinsic(
         "citations",
-        context.add(
-            Message(
-                "assistant",
-                response,
-                documents=_coerce_to_documents(documents, auto_doc_id=False),
-            )
-        ),
+        context.add(Message("assistant", response, documents=docs_to_use)),
         backend,
         model_options=model_options,
     )
@@ -204,11 +215,11 @@ def check_context_relevance(
         - "irrelevant"
         - "partially relevant"
     """
-    question, context, _ = _resolve_question(question, context, backend)
+    question, context, resolved_docs = _resolve_question(question, context, backend)
     document = _coerce_to_document(document)
     result_json = call_intrinsic(
         "context_relevance",
-        context.add(Message("user", question)),
+        context.add(Message("user", question, documents=resolved_docs)),
         backend,
         # Target document is passed as an argument
         kwargs={"document_content": document.text},
@@ -248,12 +259,17 @@ def flag_hallucinated_content(
         ``response_end``, ``response_text``, ``faithfulness``,
         ``explanation``.
     """
-    response, context, _ = _resolve_response(response, context)
+    response, context, resolved_docs = _resolve_response(response, context)
+    explicit_docs = _coerce_to_documents(documents)
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
     result_json = call_intrinsic(
         "hallucination_detection",
-        context.add(
-            Message("assistant", response, documents=_coerce_to_documents(documents))
-        ),
+        context.add(Message("assistant", response, documents=docs_to_use)),
         backend,
         model_options=model_options,
     )

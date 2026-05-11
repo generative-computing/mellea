@@ -183,21 +183,13 @@ def guardian_check(
     if documents is not None and target_role == "assistant":
         response, context, resolved_docs = _resolve_response(None, context)
         explicit_docs = _coerce_to_documents(documents)
-        if explicit_docs is not None and resolved_docs is not None:
-            explicit_docs.extend(resolved_docs)
-            context = context.add(
-                Message("assistant", response, documents=explicit_docs)
-            )
-        elif explicit_docs is not None:
-            context = context.add(
-                Message("assistant", response, documents=explicit_docs)
-            )
-        elif resolved_docs is not None:
-            context = context.add(
-                Message("assistant", response, documents=resolved_docs)
-            )
-        else:
-            context = context.add(Message("assistant", response))
+        docs_to_use = explicit_docs
+        if resolved_docs is not None:
+            if docs_to_use is not None:
+                docs_to_use.extend(resolved_docs)
+            else:
+                docs_to_use = resolved_docs
+        context = context.add(Message("assistant", response, documents=docs_to_use))
 
     criteria_text = CRITERIA_BANK.get(criteria, criteria)
 
@@ -256,17 +248,14 @@ def factuality_detection(
 
     response, context, resolved_docs = _resolve_response(response, context)
 
-    if documents is not None:
-        # Explicit documents take precedence
-        context = context.add(
-            Message("assistant", response, documents=_coerce_to_documents(documents))
-        )
-    elif resolved_docs is not None:
-        # Use documents from the last message if available
-        context = context.add(Message("assistant", response, documents=resolved_docs))
-    else:
-        # No documents available
-        context = context.add(Message("assistant", response))
+    explicit_docs = _coerce_to_documents(documents) if documents is not None else None
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
+    context = context.add(Message("assistant", response, documents=docs_to_use))
 
     context = context.add(Message("user", detector_message))
     result_json = call_intrinsic(
@@ -313,17 +302,14 @@ def factuality_correction(
 
     response, context, resolved_docs = _resolve_response(response, context)
 
-    if documents is not None:
-        # Explicit documents take precedence
-        context = context.add(
-            Message("assistant", response, documents=_coerce_to_documents(documents))
-        )
-    elif resolved_docs is not None:
-        # Use documents from the last message if available
-        context = context.add(Message("assistant", response, documents=resolved_docs))
-    else:
-        # No documents available
-        context = context.add(Message("assistant", response))
+    explicit_docs = _coerce_to_documents(documents) if documents is not None else None
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
+    context = context.add(Message("assistant", response, documents=docs_to_use))
 
     context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic(

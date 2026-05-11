@@ -107,16 +107,17 @@ def find_context_attributions(
         ``attribution_text``. Begin and end offsets are character offsets into
         their respective UTF-8 strings.
     """
-    response, context, _ = _resolve_response(response, context)
+    response, context, resolved_docs = _resolve_response(response, context)
+    explicit_docs = _coerce_to_documents(documents, auto_doc_id=False)
+    docs_to_use = explicit_docs
+    if resolved_docs is not None:
+        if docs_to_use is not None:
+            docs_to_use.extend(resolved_docs)
+        else:
+            docs_to_use = resolved_docs
     result_json = call_intrinsic(
         "context-attribution",
-        context.add(
-            Message(
-                "assistant",
-                response,
-                documents=_coerce_to_documents(documents, auto_doc_id=False),
-            )
-        ),
+        context.add(Message("assistant", response, documents=docs_to_use)),
         backend,
         model_options=model_options,
     )
