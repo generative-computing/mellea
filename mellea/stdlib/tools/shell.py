@@ -514,6 +514,10 @@ class LLMSandboxBashEnvironment(BashEnvironment):
             ExecutionResult: Execution outcome with stdout/stderr and success
             flag, or a skipped result on safety check failure, timeout, or
             sandbox error.
+
+        Raises:
+            No exceptions are raised; all errors are caught and returned as
+            skipped results in the ExecutionResult.
         """
         validated = self._validate_command(command)
         if isinstance(validated, ExecutionResult):
