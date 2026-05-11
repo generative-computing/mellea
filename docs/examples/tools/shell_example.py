@@ -1,10 +1,11 @@
-# pytest: unit, qualitative
+# pytest: unit, qualitative, ollama, e2e
 """Example usage patterns for bash_executor and local_bash_executor tools.
 
-Demonstrates three ways to use Mellea's bash execution capabilities:
+Demonstrates multiple ways to use Mellea's bash execution capabilities:
 1. Direct execution for non-LLM tasks
 2. Wrapping as a MelleaTool for agent use
-3. Integration with requirements framework for rejection sampling
+3. LLM-based tool calling with forced tool use
+4. Integration with error handling
 
 Safety note: bash_executor uses Docker isolation via llm-sandbox (recommended
 for production). local_bash_executor runs commands directly (for dev/testing only).
@@ -12,7 +13,10 @@ Both enforce a conservative safety denylist: no sudo, no rm -rf, no destructive
 git operations, no writes to /etc, /sys, /proc, etc.
 """
 
+from mellea import MelleaSession, start_session
+from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
+from mellea.stdlib.requirements import uses_tool
 from mellea.stdlib.tools.shell import bash_executor, local_bash_executor
 
 
@@ -57,6 +61,41 @@ def example_2_wrapped_as_tool() -> None:
     print("Tool invocation result:")
     print(f"  Success: {result.success}")
     print(f"  Output: {result.stdout}")
+    print()
+
+
+def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
+    """Example 3: LLM generates bash commands with forced tool use (requires Ollama).
+
+    This mirrors the Python interpreter pattern: ask the LLM to generate
+    a bash command, force it to use the tool, then execute the command.
+    """
+    print("=== Example 3: LLM-Generated Bash Commands with Forced Tool Use ===")
+
+    result = m.instruct(
+        description="Use bash to count how many Python files are in the current directory.",
+        requirements=[uses_tool(local_bash_executor)],
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_bash_executor)]
+        },
+        tool_calls=True,
+    )
+
+    if result.tool_calls is None:
+        raise ValueError("Expected tool_calls but got None")
+
+    # Extract the bash command the LLM generated
+    command = result.tool_calls["local_bash_executor"].args["command"]
+    print(f"LLM generated bash command:\n  {command}\n")
+
+    # Execute the command
+    exec_result = result.tool_calls["local_bash_executor"].call_func()
+
+    print("Execution result:")
+    print(f"  Success: {exec_result.success}")
+    print(f"  Output: {exec_result.stdout}")
+    if exec_result.stderr:
+        print(f"  Error: {exec_result.stderr}")
     print()
 
 
@@ -136,6 +175,12 @@ def example_5_error_handling() -> None:
 if __name__ == "__main__":
     example_1_direct_execution()
     example_2_wrapped_as_tool()
+
+    # Example 3 requires a running Mellea session with LLM (Ollama recommended)
+    # Uncomment to run with LLM:
+    # m = start_session()
+    # example_3_llm_with_forced_tool_use(m)
+
     example_3_with_working_dir()
     example_4_safety_features()
     example_5_error_handling()
