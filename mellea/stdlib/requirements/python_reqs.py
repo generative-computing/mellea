@@ -59,7 +59,15 @@ def _score_code_block(code: str) -> int:
 
 
 def extract_python_code(ctx: Context) -> ValidationResult:
-    """Extract Python code from tool calls or markdown code blocks."""
+    """Extract Python code from tool calls or markdown code blocks.
+
+    Args:
+        ctx: Context object containing the LLM output to extract code from.
+
+    Returns:
+        ValidationResult with result=True and the code as reason if extraction succeeds,
+        or result=False with an error message if no code is found.
+    """
     last_output = ctx.last_output()
     if last_output is None:
         return ValidationResult(result=False, reason="No output found in context")

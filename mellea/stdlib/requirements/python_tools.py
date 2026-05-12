@@ -151,7 +151,17 @@ def python_tool_requirements(
     output_limit_bytes: int = 50_000,
     check_output_artifacts: bool | None = None,
 ) -> list[Requirement]:
-    """Build requirements for Python code generation via the python tool."""
+    """Build requirements for Python code generation via the python tool.
+
+    Args:
+        output_path: Path where plotting output should be saved; enables plot-related checks.
+        allowed_imports: List of allowed import module names; if provided, code must only import these.
+        output_limit_bytes: Maximum bytes for stdout/stderr combined; defaults to 50KB.
+        check_output_artifacts: Whether to verify output file exists after execution; auto-enabled if output_path is set.
+
+    Returns:
+        List of Requirement objects that validate python tool usage and code correctness.
+    """
     reqs: list[Requirement] = []
 
     if check_output_artifacts is None:

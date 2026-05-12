@@ -394,6 +394,9 @@ def python_plotting_requirements(
         backend_patterns: Patterns indicating headless backend setup
         plot_patterns: Patterns indicating plot creation
         save_patterns: Patterns indicating plot saving (e.g., savefig)
+
+    Returns:
+        List of Requirement objects that validate matplotlib usage and plot output.
     """
     reqs: list[Requirement] = []
 
