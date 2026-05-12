@@ -147,9 +147,22 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
     # Only check positional arguments that are not paths or flag values.
     # Known value-taking flags that consume the next argument (space-separated only):
     flag_value_flags = {
-        "-c", "--config", "-f", "--file", "-o", "--output",
-        "-i", "--input", "-d", "--dir", "-p", "--path",
-        "-t", "--timeout", "-w", "--wait",
+        "-c",
+        "--config",
+        "-f",
+        "--file",
+        "-o",
+        "--output",
+        "-i",
+        "--input",
+        "-d",
+        "--dir",
+        "-p",
+        "--path",
+        "-t",
+        "--timeout",
+        "-w",
+        "--wait",
     }
     for i, arg in enumerate(argv[1:], start=1):
         # Skip if this argument is the value for a preceding flag (space-separated)
