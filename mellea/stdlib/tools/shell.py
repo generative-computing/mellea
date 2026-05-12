@@ -2,13 +2,13 @@
 
 Provides ``BashEnvironment`` (abstract base for bash execution) and three concrete
 implementations: ``StaticBashEnvironment`` (parse and safety-check only, no execution),
-``UnsafeBashEnvironment`` (subprocess execution in the current shell), and
+``_LocalBashEnvironment`` (private; subprocess execution in the current shell), and
 ``LLMSandboxBashEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
 environments enforce a conservative safety denylist (sudo, rm -rf, git push --force,
 system paths, interactive shells). Write operations may also be constrained by
-``working_dir`` and ``allowed_paths``. The top-level ``bash_executor`` and
-``local_bash_executor`` functions are ready to be wrapped as ``MelleaTool`` instances
-for ReACT or other agentic loops.
+``working_dir`` and ``allowed_paths``. The top-level ``bash_executor`` (recommended
+for production) and ``unsafe_local_bash_executor`` (development-only) functions are
+ready to be wrapped as ``MelleaTool`` instances for ReACT or other agentic loops.
 """
 
 import shlex
@@ -47,6 +47,8 @@ DANGEROUS_COMMANDS = {
 }
 
 # System paths that are dangerous to write to
+# Includes both standard Linux paths and macOS /private equivalents
+# (on macOS, many system paths are symlinks to /private/*)
 DANGEROUS_PATHS = {
     "/",
     "/bin",
@@ -61,6 +63,9 @@ DANGEROUS_PATHS = {
     "/root",
     "/var/log",
     "/var/www",
+    # macOS /private equivalents
+    "/private/etc",
+    "/private/var",
 }
 
 # Dangerous flags that make commands unsafe
@@ -108,6 +113,54 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         # Check for variable expansion patterns
         if "${" in arg:
             return True, "Variable expansion is not allowed"
+
+    # Check for interpreter indirection (code execution via -c, -e, etc.)
+    # These allow arbitrary code execution and bypass argv parsing
+    code_execution_interpreters = {
+        "python": ("-c", "-m"),
+        "python3": ("-c", "-m"),
+        "python2": ("-c", "-m"),
+        "perl": ("-e", "-E"),
+        "ruby": ("-e", "-E"),
+        "node": ("-e", "--eval"),
+        "bash": ("-c",),
+        "sh": ("-c",),
+        "zsh": ("-c",),
+        "ksh": ("-c",),
+        "tcsh": ("-c",),
+    }
+    if cmd in code_execution_interpreters:
+        dangerous_flags = code_execution_interpreters[cmd]
+        if any(arg in dangerous_flags for arg in argv):
+            return (
+                True,
+                f"Interpreter code execution ('{cmd} {' '.join(dangerous_flags)}') is not allowed",
+            )
+
+    # Check if any argument is a dangerous command (e.g., env sudo, timeout sudo)
+    # Only check arguments that are not paths (don't contain / or are not flag values)
+    for i, arg in enumerate(argv[1:], start=1):
+        # Skip if this looks like a flag value (argument to a preceding flag)
+        if i > 1 and argv[i - 1].startswith("-"):
+            continue
+        # Skip if argument contains / (it's a path, not a command name)
+        if "/" in arg:
+            continue
+        # Skip if argument starts with - (it's a flag)
+        if arg.startswith("-"):
+            continue
+
+        arg_cmd = arg.split("/")[-1]
+        if arg_cmd in DANGEROUS_COMMANDS and arg_cmd not in (
+            "bash",
+            "sh",
+            "zsh",
+            "ksh",
+            "tcsh",
+        ):
+            # Allow shells as arguments (e.g., timeout bash script.sh)
+            # but reject sudo/su/etc as nested commands
+            return True, f"Command '{arg_cmd}' is not allowed as an argument"
 
     # Check for dangerous commands
     if cmd in DANGEROUS_COMMANDS:
@@ -159,7 +212,7 @@ def _is_path_within(path_str: str, allowed_root: str) -> bool:
 
 def _normalize_allowed_path(allowed_path: str) -> str:
     """Normalize an allowlisted path for string-prefix containment checks."""
-    return str(Path(allowed_path).expanduser())
+    return str(Path(allowed_path).expanduser().resolve(strict=False))
 
 
 def _resolve_allowed_paths(allowed_paths: list[str]) -> list[str]:
@@ -203,24 +256,22 @@ def _check_dangerous_paths(
         if arg.startswith("-"):
             continue
 
-        expanded_arg = str(Path(arg).expanduser())
-        allowlist_candidate_path: str | None = None
+        # Resolve all paths consistently to catch symlink bypasses
         if arg.startswith(("/", "~")):
-            allowlist_candidate_path = expanded_arg
+            resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
+        else:
+            # For relative paths, resolve against current directory
+            resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
 
         for danger_path in DANGEROUS_PATHS:
-            if expanded_arg == danger_path or expanded_arg.startswith(
+            if resolved_arg == danger_path or resolved_arg.startswith(
                 danger_path + "/"
             ):
-                return True, f"Writing to '{expanded_arg}' is not allowed"
+                return True, f"Writing to '{resolved_arg}' is not allowed"
 
         if resolved_allowed_paths:
-            candidate_for_allowlist = allowlist_candidate_path
-            if candidate_for_allowlist is None:
-                candidate_for_allowlist = str(Path(arg).resolve(strict=False))
-
             if not any(
-                _is_path_within(candidate_for_allowlist, allowed_root)
+                _is_path_within(resolved_arg, allowed_root)
                 for allowed_root in resolved_allowed_paths
             ):
                 return (
@@ -264,7 +315,13 @@ def _check_working_dir_restriction(
 
             # Try to resolve all paths (both absolute and relative)
             try:
-                resolved_path = str(Path(arg).expanduser().resolve())
+                # For relative paths, resolve them relative to working_dir, not caller's cwd
+                if arg.startswith(("/", "~")):
+                    resolved_path = str(Path(arg).expanduser().resolve())
+                else:
+                    resolved_path = str(
+                        Path(working_dir, arg).expanduser().resolve(strict=False)
+                    )
                 # Check if path is allowed: in working_dir, /tmp, or /private/tmp (macOS)
                 is_in_tmp = resolved_path.startswith(("/tmp", "/private/tmp"))
                 is_in_working_dir = (
@@ -308,9 +365,19 @@ class BashEnvironment(ABC):
             provided, write-target paths must fall under one of these roots in
             addition to passing the default dangerous-path checks.
         working_dir (str | None): Optional directory restriction for write
-            operations. When specified, writes must remain within this directory
+            operations. For ``_LocalBashEnvironment``, this is a host path where
+            the command executes. For ``LLMSandboxBashEnvironment``, this is a
+            container-internal path; validation is best-effort since it checks
+            against the host filesystem, but actual execution uses the container
+            filesystem. When specified, writes must remain within this directory
             or ``/tmp``.
         timeout (int): Maximum number of seconds to allow command execution.
+
+    Note:
+        Subclass ``StaticBashEnvironment`` returns ``success=True, skipped=True``
+        to indicate that validation passed but the command was intentionally not
+        executed (analysis-only mode). Consumers that branch on ``success`` should
+        check ``skipped`` first to handle this state correctly.
 
     """
 
@@ -407,7 +474,14 @@ class BashEnvironment(ABC):
 
 
 class StaticBashEnvironment(BashEnvironment):
-    """Safe environment that validates but does not execute bash commands."""
+    """Safe environment that validates but does not execute bash commands.
+
+    Returns ``success=True, skipped=True`` when validation passes (command is
+    syntactically valid and passes all safety checks), indicating the command
+    would be safe to execute but this environment intentionally does not run it.
+    Returns ``success=False, skipped=True`` when validation fails (safety check
+    rejection or parse error).
+    """
 
     def execute(self, command: str) -> ExecutionResult:
         """Parse and validate command without executing.
@@ -430,13 +504,19 @@ class StaticBashEnvironment(BashEnvironment):
             stdout=None,
             stderr=None,
             skipped=True,
-            skip_message="Command passes safety checks; static analysis environment does not execute commands. To execute, use UnsafeBashEnvironment or LLMSandboxBashEnvironment.",
+            skip_message="Command passes safety checks; static analysis environment does not execute commands. To execute, use bash_executor (recommended) or unsafe_local_bash_executor (development-only).",
             analysis_result=argv,
         )
 
 
-class UnsafeBashEnvironment(BashEnvironment):
-    """Unsafe environment that executes bash commands directly with subprocess."""
+class _LocalBashEnvironment(BashEnvironment):
+    """Private environment that executes bash commands directly with subprocess.
+
+    ⚠️ WARNING: This environment has no isolation. Use only for trusted,
+    developer-controlled code in local development/testing. For any code from
+    untrusted sources (including LLM-generated code), use LLMSandboxBashEnvironment
+    with docker isolation instead.
+    """
 
     def execute(self, command: str) -> ExecutionResult:
         """Execute bash command after safety checks.
@@ -496,16 +576,23 @@ class UnsafeBashEnvironment(BashEnvironment):
 
 
 class LLMSandboxBashEnvironment(BashEnvironment):
-    """Environment using llm-sandbox for secure Docker-based bash execution."""
+    """Environment using llm-sandbox for secure Docker-based bash execution.
+
+    Note:
+        The ``working_dir`` parameter is interpreted as a container-internal path.
+        Path validation during command checking is performed against the host
+        filesystem and is best-effort; the actual command execution happens inside
+        an isolated Docker container with its own filesystem namespace.
+    """
 
     def execute(self, command: str) -> ExecutionResult:
         """Execute bash command using llm-sandbox in an isolated Docker container.
 
-        Validates command safety first, then runs the command inside a Python-based
-        sandbox session. The validated shell command is executed via
-        ``subprocess.run(..., cwd=working_dir)`` inside the container so that
-        sandbox execution honors ``self.working_dir`` when provided. Returns a
-        skipped result if ``llm-sandbox`` is not installed.
+        Validates command safety first (against host filesystem for best-effort
+        path checking), then runs the command inside a Python-based sandbox session.
+        The validated shell command is executed via ``subprocess.run(..., cwd=working_dir)``
+        inside the container so that sandbox execution honors ``self.working_dir``
+        when provided. Returns a skipped result if ``llm-sandbox`` is not installed.
 
         Args:
             command (str): The bash command to execute.
@@ -589,7 +676,9 @@ class LLMSandboxBashEnvironment(BashEnvironment):
             )
 
 
-def bash_executor(command: str, working_dir: str | None = None) -> ExecutionResult:
+def bash_executor(
+    command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None
+) -> ExecutionResult:
     """Execute a bash command in a Docker-isolated sandbox.
 
     This is the recommended entry point for production use. Commands are validated
@@ -601,27 +690,44 @@ def bash_executor(command: str, working_dir: str | None = None) -> ExecutionResu
 
     Args:
         command: The bash command to execute.
-        working_dir: Optional sandbox working directory. When specified, sandboxed
-            command execution uses this directory as its cwd, and write-path
-            validation also restricts writes to this directory and ``/tmp``.
+        working_dir: Optional container working directory (container-internal path).
+            Path validation during safety checks is best-effort (performed against
+            the host filesystem) but does not restrict container execution, which uses
+            its own isolated filesystem. When specified, sandboxed command execution
+            uses this directory as its cwd.
+        allowed_paths: Optional explicit write allowlist. When provided, write-target
+            paths must fall under one of these roots (in addition to passing the
+            default dangerous-path checks). Same best-effort caveat applies for
+            sandboxed execution.
 
     Returns:
         An ``ExecutionResult`` with stdout, stderr, and a success flag. If the command
         was rejected for safety reasons, ``skipped=True`` and ``skip_message`` contains
         the reason.
     """
-    env = LLMSandboxBashEnvironment(working_dir=working_dir)
+    env = LLMSandboxBashEnvironment(
+        allowed_paths=allowed_paths, working_dir=working_dir
+    )
     return env.execute(command)
 
 
-def local_bash_executor(
-    command: str, working_dir: str | None = None
+def unsafe_local_bash_executor(
+    command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None
 ) -> ExecutionResult:
-    """Execute a bash command in the current shell (unsafe for LLM-generated code).
+    """Execute a bash command in the current shell with no isolation.
 
-    This is for local development and testing only. Commands are validated against
-    a conservative safety denylist, but execution happens directly in the current
-    shell with no isolation.
+    ⚠️ SECURITY WARNING: This executor has no isolation. Use **ONLY** for:
+    - Local development and testing
+    - Trusted, developer-controlled code
+    - Non-sensitive operations
+
+    **DO NOT** use this for:
+    - LLM-generated code (use ``bash_executor()`` instead)
+    - Untrusted or user-supplied commands
+    - Production environments
+
+    Commands are validated against a conservative safety denylist, but validation
+    is not a substitute for isolation. Container isolation is the real boundary.
 
     Safety defaults: Refuses sudo, interactive shells, destructive operations
     (rm -rf, git push --force), and writes to system paths (/etc, /sys, /proc, etc.).
@@ -630,11 +736,20 @@ def local_bash_executor(
         command: The bash command to execute.
         working_dir: Optional directory to restrict file operations to. If specified,
             the command is executed with this directory as the working directory.
+        allowed_paths: Optional explicit write allowlist. When provided, write-target
+            paths must fall under one of these roots (in addition to passing the
+            default dangerous-path checks).
 
     Returns:
         An ``ExecutionResult`` with stdout, stderr, and a success flag. If the command
         was rejected for safety reasons, ``skipped=True`` and ``skip_message`` contains
         the reason.
+
+    See Also:
+        ``bash_executor()``: Recommended for production use with LLM-generated code.
     """
-    env = UnsafeBashEnvironment(working_dir=working_dir)
+    logger.warning(
+        "Using unsafe_local_bash_executor: no isolation. Use bash_executor() for LLM-generated code."
+    )
+    env = _LocalBashEnvironment(allowed_paths=allowed_paths, working_dir=working_dir)
     return env.execute(command)

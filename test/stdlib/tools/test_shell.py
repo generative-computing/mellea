@@ -7,9 +7,9 @@ import pytest
 from mellea.stdlib.tools.shell import (
     LLMSandboxBashEnvironment,
     StaticBashEnvironment,
-    UnsafeBashEnvironment,
+    _LocalBashEnvironment,
     bash_executor,
-    local_bash_executor,
+    unsafe_local_bash_executor,
 )
 
 
@@ -96,6 +96,110 @@ class TestDangerousCommandDetection:
         result = env.execute("bash script.sh")
         assert result.success is True
         assert result.skipped is True
+
+
+class TestInterpreterIndirectionBypassAttempts:
+    """Tests for interpreter-indirection bypass attempts.
+
+    Interpreter indirection occurs when a program (bash, python, env, timeout, etc.)
+    is used to run arbitrary code. These are separate from simple command execution
+    and need explicit testing to ensure the safety checks cover them.
+    """
+
+    def test_bash_c_string_rejected(self) -> None:
+        """bash -c with arbitrary code should be rejected."""
+        env = StaticBashEnvironment()
+        # bash -c runs a command string, can bypass argv parsing
+        result = env.execute("bash -c 'rm -rf /'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        # Should reject either the -c flag or command substitution
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_sh_c_string_rejected(self) -> None:
+        """sh -c with arbitrary code should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("sh -c 'sudo echo'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_env_with_sudo_rejected(self) -> None:
+        """env with sudo should be rejected (privilege escalation)."""
+        env = StaticBashEnvironment()
+        # env is sometimes used to set environment vars for sudo
+        result = env.execute("env sudo bash")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        # Should reject sudo
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_timeout_with_sudo_rejected(self) -> None:
+        """timeout with sudo should be rejected (privilege escalation)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 sudo whoami")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_python_c_arbitrary_code_rejected(self) -> None:
+        """python -c with arbitrary code should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("python3 -c 'import os; os.system(\"rm -rf /\")'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        # Should reject the -c flag or command substitution
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_python_multiline_code_rejected(self) -> None:
+        """python with multiline code (using \\n) should be rejected."""
+        env = StaticBashEnvironment()
+        # Even with \\n instead of ; to bypass semicolon check
+        result = env.execute("python3 -c 'import os\\nos.system(\"bad\")'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_bash_script_file_allowed(self) -> None:
+        """bash with a script file (not -c) should be allowed for scripts."""
+        env = StaticBashEnvironment()
+        result = env.execute("bash /path/to/script.sh")
+
+        # Should be allowed (script execution is legitimate)
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_perl_e_code_rejected(self) -> None:
+        """perl -e with inline code should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("perl -e 'system(\"sudo whoami\")'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_ruby_e_code_rejected(self) -> None:
+        """ruby -e with inline code should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("ruby -e 'system(\"rm -rf /\")'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
 
     @pytest.mark.parametrize(
         "safe_cmd",
@@ -188,10 +292,7 @@ class TestShellMetacharacterDetection:
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert (
-            "metacharacter" in result.skip_message.lower()
-            or "not allowed" in result.skip_message.lower()
-        )
+        assert "not allowed" in result.skip_message.lower()
 
 
 class TestSystemPathDetection:
@@ -233,6 +334,30 @@ class TestSystemPathDetection:
         assert result.skipped is True
         assert result.success is True
 
+    def test_symlink_to_dangerous_path_rejected(self) -> None:
+        """Symlinks pointing to dangerous paths should be rejected."""
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a symlink in /tmp pointing to /etc
+            symlink_path = os.path.join(tmpdir, "link_to_etc")
+            try:
+                os.symlink("/etc", symlink_path)
+            except OSError:
+                # Skip if symlink creation fails (e.g., on some filesystems)
+                pytest.skip("Cannot create symlinks on this system")
+
+            # Try to write through the symlink
+            env = StaticBashEnvironment()
+            result = env.execute(f"touch {symlink_path}/config")
+
+            # Should be rejected because symlink resolves to /etc
+            assert result.skipped is True
+            assert result.success is False
+            assert result.skip_message is not None
+            assert "not allowed" in result.skip_message.lower()
+
 
 class TestWorkingDirRestriction:
     """Tests for working directory restrictions."""
@@ -267,6 +392,34 @@ class TestWorkingDirRestriction:
         assert result.skipped is True
         assert result.success is True
 
+    def test_working_dir_relative_path_resolved_within_working_dir(self) -> None:
+        """Relative paths should be resolved relative to working_dir, not caller's cwd."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a file relative to working_dir (not caller's cwd)
+            env = StaticBashEnvironment(working_dir=tmpdir)
+            result = env.execute("touch myfile.txt")
+
+            # Should be allowed: relative path resolves to tmpdir/myfile.txt
+            assert result.skipped is True
+            assert result.success is True
+
+    def test_working_dir_relative_path_blocks_outside(self) -> None:
+        """Relative paths that escape working_dir should be rejected."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Try to write outside working_dir using relative path
+            env = StaticBashEnvironment(working_dir=tmpdir)
+            result = env.execute("touch ../outside.txt")
+
+            # Should be rejected: ../outside.txt escapes working_dir
+            assert result.skipped is True
+            assert result.success is False
+            assert result.skip_message is not None
+            assert "outside" in result.skip_message.lower()
+
 
 class TestAllowedPaths:
     """Tests for explicit allowed path enforcement."""
@@ -300,12 +453,12 @@ class TestAllowedPaths:
         assert "not allowed" in result.skip_message.lower()
 
 
-class TestUnsafeBashEnvironment:
-    """Tests for unsafe bash environment execution."""
+class TestLocalBashEnvironment:
+    """Tests for local bash environment execution (no isolation)."""
 
     def test_safe_command_execution(self) -> None:
         """Safe commands should execute successfully."""
-        env = UnsafeBashEnvironment()
+        env = _LocalBashEnvironment()
         result = env.execute("echo hello")
 
         assert result.skipped is False
@@ -315,7 +468,7 @@ class TestUnsafeBashEnvironment:
 
     def test_command_with_failing_exit_code(self) -> None:
         """Commands with non-zero exit should fail."""
-        env = UnsafeBashEnvironment()
+        env = _LocalBashEnvironment()
         result = env.execute("false")
 
         assert result.skipped is False
@@ -323,20 +476,17 @@ class TestUnsafeBashEnvironment:
 
     def test_shell_metacharacters_rejected(self) -> None:
         """Shell redirections and pipes should be rejected for security."""
-        env = UnsafeBashEnvironment()
+        env = _LocalBashEnvironment()
         result = env.execute("echo error >&2")
 
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert (
-            "metacharacter" in result.skip_message.lower()
-            or "not allowed" in result.skip_message.lower()
-        )
+        assert "not allowed" in result.skip_message.lower()
 
     def test_dangerous_command_rejected(self) -> None:
         """Dangerous commands should be rejected even before execution."""
-        env = UnsafeBashEnvironment()
+        env = _LocalBashEnvironment()
         result = env.execute("sudo echo test")
 
         assert result.skipped is True
@@ -346,27 +496,35 @@ class TestUnsafeBashEnvironment:
 
     def test_timeout_enforcement(self) -> None:
         """Command exceeding timeout should be interrupted."""
-        env = UnsafeBashEnvironment(timeout=1)
+        env = _LocalBashEnvironment(timeout=1)
         result = env.execute("sleep 5")
 
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert (
-            "timed out" in result.skip_message.lower()
-            or "timeout" in result.skip_message.lower()
-        )
+        assert "timed out" in result.skip_message.lower()
 
     def test_output_truncation(self) -> None:
         """Very large output should be truncated."""
-        env = UnsafeBashEnvironment()
-        # Generate output larger than 10KB
-        result = env.execute("python3 -c \"print('x' * 20000)\"")
+        env = _LocalBashEnvironment()
+        # Generate output larger than 10KB using a safe command
+        # Create a file with many repeated lines and cat it
+        import os
+        import tempfile
 
-        assert result.success is True
-        # Check that output was truncated
-        assert result.stdout is not None
-        assert "[OUTPUT TRUNCATED]" in result.stdout or len(result.stdout) < 30000
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a large file to cat
+            large_file = os.path.join(tmpdir, "large.txt")
+            with open(large_file, "w") as f:
+                for _ in range(500):
+                    f.write("x" * 50 + "\n")
+
+            result = env.execute(f"cat {large_file}")
+
+            assert result.success is True
+            # Check that output was truncated
+            assert result.stdout is not None
+            assert "[OUTPUT TRUNCATED]" in result.stdout or len(result.stdout) < 30000
 
     def test_working_dir_parameter(self) -> None:
         """working_dir should be passed to subprocess."""
@@ -374,7 +532,7 @@ class TestUnsafeBashEnvironment:
         from pathlib import Path
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = UnsafeBashEnvironment(working_dir=tmpdir)
+            env = _LocalBashEnvironment(working_dir=tmpdir)
             result = env.execute("pwd")
 
             assert result.success is True
@@ -419,9 +577,25 @@ class TestLLMSandboxBashEnvironment:
         assert result.skip_message is not None
         assert "sandbox execution error" in result.skip_message.lower()
 
+    def test_sandbox_working_dir_is_container_path(self) -> None:
+        """Sandbox working_dir should be interpreted as a container-internal path."""
+        env = LLMSandboxBashEnvironment(working_dir="/container/workdir")
+
+        # Verify that working_dir is stored (actual validation is best-effort)
+        assert env.working_dir == "/container/workdir"
+
+        # Validation happens (but is best-effort for sandbox)
+        result = env.execute("pwd")
+
+        # Command should pass validation (pwd is safe), though execution may skip
+        # if llm-sandbox is not installed
+        if result.skip_message is None or "not installed" not in result.skip_message:
+            # If sandbox runs, working_dir was used as container path
+            assert result.success is True or result.skipped is False
+
 
 class TestBashExecutorFunctions:
-    """Tests for public bash_executor and local_bash_executor functions."""
+    """Tests for public bash_executor and unsafe_local_bash_executor functions."""
 
     def test_bash_executor_creates_sandbox_environment(self) -> None:
         """bash_executor should use LLMSandboxBashEnvironment by default."""
@@ -438,9 +612,9 @@ class TestBashExecutorFunctions:
             # If sandbox is available, command should execute
             assert result.success is True
 
-    def test_local_bash_executor_creates_unsafe_environment(self) -> None:
-        """local_bash_executor should use UnsafeBashEnvironment."""
-        result = local_bash_executor("echo test")
+    def test_unsafe_local_bash_executor_creates_local_environment(self) -> None:
+        """unsafe_local_bash_executor should use _LocalBashEnvironment."""
+        result = unsafe_local_bash_executor("echo test")
 
         assert result.skipped is False
         assert result.success is True
@@ -464,16 +638,52 @@ class TestBashExecutorFunctions:
                 assert result.stdout is not None
                 assert tmpdir in result.stdout
 
-    def test_local_bash_executor_with_working_dir(self) -> None:
-        """local_bash_executor should accept working_dir parameter."""
+    def test_unsafe_local_bash_executor_with_working_dir(self) -> None:
+        """unsafe_local_bash_executor should accept working_dir parameter."""
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = local_bash_executor("pwd", working_dir=tmpdir)
+            result = unsafe_local_bash_executor("pwd", working_dir=tmpdir)
 
             assert result.success is True
             assert result.stdout is not None
             assert tmpdir in result.stdout
+
+    def test_bash_executor_with_allowed_paths(self) -> None:
+        """bash_executor should accept allowed_paths parameter."""
+        # Just verify the parameter is accepted (actual execution may skip on sandbox)
+        result = bash_executor(
+            "echo test", allowed_paths=["/tmp", "/home/user/project"]
+        )
+
+        # Either executes or skips due to sandbox setup
+        if result.skip_message is not None and (
+            "not installed" in result.skip_message
+            or "not a valid" in result.skip_message
+        ):
+            assert result.skipped is True
+        else:
+            assert result.success is True
+
+    def test_unsafe_local_bash_executor_with_allowed_paths(self) -> None:
+        """unsafe_local_bash_executor should accept allowed_paths parameter."""
+        result = unsafe_local_bash_executor(
+            "echo test", allowed_paths=["/tmp", "/home/user/project"]
+        )
+
+        assert result.success is True
+        assert result.stdout is not None
+
+    def test_unsafe_local_bash_executor_allowed_paths_restriction(self) -> None:
+        """Writes outside allowed_paths should be rejected."""
+        result = unsafe_local_bash_executor(
+            "touch /home/user/other/file.txt", allowed_paths=["/home/user/project"]
+        )
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "outside explicitly allowed paths" in result.skip_message.lower()
 
 
 class TestCommandParsing:
@@ -542,9 +752,9 @@ def test_tool_wrapping() -> None:
     try:
         from mellea.backends.tools import MelleaTool
 
-        tool = MelleaTool.from_callable(local_bash_executor)
+        tool = MelleaTool.from_callable(unsafe_local_bash_executor)
 
-        assert tool.name == "local_bash_executor"
+        assert tool.name == "unsafe_local_bash_executor"
         # Check that the tool schema is generated correctly
         schema = tool.as_json_tool
         assert "parameters" in schema or "function" in schema  # Schema format may vary
