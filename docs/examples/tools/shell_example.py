@@ -84,6 +84,10 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
 
     This mirrors the Python interpreter pattern: ask the LLM to generate
     a bash command, force it to use the tool, then execute the command.
+
+    Requirements:
+        - Ollama running locally (or compatible LLM configured)
+        - Run: ollama serve
     """
     print("=== Example 3: LLM-Generated Bash Commands with Forced Tool Use ===")
 
@@ -99,15 +103,32 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
     if result.tool_calls is None:
         raise ValueError("Expected tool_calls but got None")
 
+    if "unsafe_local_bash_executor" not in result.tool_calls:
+        available_tools = list(result.tool_calls.keys())
+        raise ValueError(
+            f"Expected tool 'unsafe_local_bash_executor' in tool_calls, "
+            f"but got: {available_tools}"
+        )
+
     # Extract the bash command the LLM generated
-    command = result.tool_calls["unsafe_local_bash_executor"].args["command"]
+    tool_call = result.tool_calls["unsafe_local_bash_executor"]
+    if "command" not in tool_call.args:
+        raise ValueError(
+            f"Expected 'command' argument in tool call args, "
+            f"but got: {list(tool_call.args.keys())}"
+        )
+
+    command = tool_call.args["command"]
     print(f"LLM generated bash command:\n  {command}\n")
 
     # Execute the command
-    exec_result = result.tool_calls["unsafe_local_bash_executor"].call_func()
+    exec_result = tool_call.call_func()
 
     print("Execution result:")
     print(f"  Success: {exec_result.success}")
+    print(f"  Skipped: {exec_result.skipped}")
+    if exec_result.skip_message:
+        print(f"  Skip reason: {exec_result.skip_message}")
     print(f"  Output: {exec_result.stdout}")
     if exec_result.stderr:
         print(f"  Error: {exec_result.stderr}")
@@ -202,10 +223,15 @@ if __name__ == "__main__":
     example_1_direct_execution()
     example_2_wrapped_as_tool()
 
-    # Example 3 requires a running Mellea session with LLM (Ollama recommended)
-    # Uncomment to run with LLM:
-    # m = start_session()
-    # example_3_llm_with_forced_tool_use(m)
+    # Example 3: Run with LLM-based tool calling (requires Ollama or compatible LLM)
+    # Uncomment these lines to test LLM-generated commands:
+    # try:
+    #     m = start_session()
+    #     example_3_llm_with_forced_tool_use(m)
+    # except Exception as e:
+    #     print(f"Example 3 skipped: {e!s}")
+    #     print("  Requires: Ollama running locally or compatible LLM configured")
+    #     print("  See: https://docs.ollama.ai/")
 
     example_3_with_working_dir()
     example_4_safety_features()

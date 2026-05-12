@@ -9,6 +9,12 @@ system paths, interactive shells). Write operations may also be constrained by
 ``working_dir`` and ``allowed_paths``. The top-level ``bash_executor`` (recommended
 for production) and ``unsafe_local_bash_executor`` (development-only) functions are
 ready to be wrapped as ``MelleaTool`` instances for ReACT or other agentic loops.
+
+Security note: The denylist covers inline code execution (e.g., bash -c, python -e) and
+dangerous commands in argv. However, it does not prevent execution of pre-existing
+script files (e.g., bash script.sh, python script.py), which can execute arbitrary
+code from the file. For untrusted inputs, ensure that script files are either absent
+or come from a trusted source.
 """
 
 import shlex
@@ -138,10 +144,18 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
             )
 
     # Check if any argument is a dangerous command (e.g., env sudo, timeout sudo)
-    # Only check arguments that are not paths (don't contain / or are not flag values)
+    # Only check positional arguments that are not paths or flag values.
+    # Known value-taking flags that consume the next argument (space-separated only):
+    flag_value_flags = {
+        "-c", "--config", "-f", "--file", "-o", "--output",
+        "-i", "--input", "-d", "--dir", "-p", "--path",
+        "-t", "--timeout", "-w", "--wait",
+    }
     for i, arg in enumerate(argv[1:], start=1):
-        # Skip if this looks like a flag value (argument to a preceding flag)
-        if i > 1 and argv[i - 1].startswith("-"):
+        # Skip if this argument is the value for a preceding flag (space-separated)
+        # E.g., in "timeout -t 10 sudo", skip "10" (it's the value for -t)
+        # But don't skip "sudo" when the flag uses = notation (e.g., --kill-after=1)
+        if i > 1 and argv[i - 1] in flag_value_flags:
             continue
         # Skip if argument contains / (it's a path, not a command name)
         if "/" in arg:
@@ -640,11 +654,11 @@ class LLMSandboxBashEnvironment(BashEnvironment):
             )
 
         sandbox_workdir = self.working_dir or "/sandbox"
-        shell_command = " ".join(shlex.quote(arg) for arg in argv)
+        # Pass argv as a list (not shell string) to avoid re-parse and unnecessary quoting
         python_wrapper = (
             "import subprocess\n"
             "import sys\n"
-            f"result = subprocess.run({shell_command!r}, shell=True, cwd={sandbox_workdir!r}, "
+            f"result = subprocess.run({argv!r}, shell=False, cwd={sandbox_workdir!r}, "
             "capture_output=True, text=True)\n"
             "sys.stdout.write(result.stdout)\n"
             "sys.stderr.write(result.stderr)\n"
