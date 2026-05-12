@@ -12,6 +12,12 @@ from pathlib import Path
 from ....core import Context, Requirement, ValidationResult
 from ..python_reqs import extract_python_code
 
+# Headless matplotlib backends that don't require a display server
+HEADLESS_BACKENDS = {"Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg"}
+
+# Pyplot plot creation methods
+PYPLOT_PLOT_METHODS = {"plot", "bar", "scatter", "hist", "imshow", "figure", "subplot"}
+
 
 def _strip_comments(code: str) -> str:
     """Remove Python comments from code while preserving strings.
@@ -140,6 +146,8 @@ def _uses_pyplot_show(code: str) -> bool:
     aliases (e.g., `import matplotlib.pyplot as mpl`). AST approach detects
     actual method calls, avoiding false positives from string literals.
     Falls back to string matching only if code doesn't parse.
+
+    Note: May have false positives if code calls .show() on non-matplotlib objects.
     """
     if _find_attribute_calls(code, ["show"]):
         return True
@@ -156,42 +164,34 @@ def _sets_headless_backend(code: str) -> bool:
     Uses AST analysis to detect matplotlib.use() calls with headless backends.
     Handles various matplotlib import styles and fallback to string matching.
     """
-    if _find_function_calls(code, ["matplotlib.use"]):
-        headless_backends = {"Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg"}
+    if not _find_function_calls(code, ["matplotlib.use"]):
+        return False
 
-        try:
-            tree = ast.parse(code)
-        except (SyntaxError, ValueError):
-            return _code_contains_strings(
-                code, [f"matplotlib.use('{b}')" for b in headless_backends]
-            )
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        backend_patterns = [f"matplotlib.use('{b}')" for b in HEADLESS_BACKENDS] + [
+            f'matplotlib.use("{b}")' for b in HEADLESS_BACKENDS
+        ]
+        return _code_contains_strings(code, backend_patterns)
 
-        class BackendFinder(ast.NodeVisitor):
-            def __init__(self):
-                self.has_headless = False
+    class BackendFinder(ast.NodeVisitor):
+        def __init__(self):
+            self.has_headless = False
 
-            def visit_Call(self, node: ast.Call) -> None:
-                if isinstance(node.func, ast.Attribute):
-                    if node.func.attr == "use":
-                        if isinstance(node.func.value, ast.Name):
-                            if node.func.value.id == "matplotlib":
-                                if node.args and isinstance(node.args[0], ast.Constant):
-                                    if node.args[0].value in headless_backends:
-                                        self.has_headless = True
-                self.generic_visit(node)
+        def visit_Call(self, node: ast.Call) -> None:
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr == "use":
+                    if isinstance(node.func.value, ast.Name):
+                        if node.func.value.id == "matplotlib":
+                            if node.args and isinstance(node.args[0], ast.Constant):
+                                if node.args[0].value in HEADLESS_BACKENDS:
+                                    self.has_headless = True
+            self.generic_visit(node)
 
-        finder = BackendFinder()
-        finder.visit(tree)
-        if finder.has_headless:
-            return True
-
-    return _code_contains_strings(
-        code,
-        [
-            f"matplotlib.use('{b}')"
-            for b in ["Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg"]
-        ],
-    )
+    finder = BackendFinder()
+    finder.visit(tree)
+    return finder.has_headless
 
 
 def _uses_pyplot_plot(code: str) -> bool:
@@ -201,15 +201,19 @@ def _uses_pyplot_plot(code: str) -> bool:
     aliases and detects actual method calls, avoiding false positives from
     string literals or method references. Falls back to string matching
     only if code doesn't parse.
+
+    Note: May have false positives if code calls these methods on non-pyplot objects.
+    For accuracy, combine with matplotlib import checks.
     """
-    plot_methods = {"plot", "bar", "scatter", "hist", "imshow", "figure", "subplot"}
-    if _find_attribute_calls(code, list(plot_methods)):
+    if _find_attribute_calls(code, list(PYPLOT_PLOT_METHODS)):
         return True
     try:
         ast.parse(code)
     except (SyntaxError, ValueError):
         return _code_contains_strings(
-            code, [f".{m}(" for m in plot_methods] + [f"plt.{m}" for m in plot_methods]
+            code,
+            [f".{m}(" for m in PYPLOT_PLOT_METHODS]
+            + [f"plt.{m}" for m in PYPLOT_PLOT_METHODS],
         )
     return False
 
@@ -221,6 +225,8 @@ def _calls_savefig(code: str) -> bool:
     how matplotlib was imported. Detects actual method calls, avoiding
     false positives from string literals. Falls back to string matching
     only if code doesn't parse.
+
+    Note: May have false positives if code calls savefig() on non-matplotlib objects.
     """
     if _find_attribute_calls(code, ["savefig"]):
         return True
@@ -236,31 +242,23 @@ def _make_matplotlib_headless_validator(
     show_patterns: list[str] | None = None,
     backend_patterns: list[str] | None = None,
 ) -> Callable[[Context], ValidationResult]:
-    r"""Create a validator that checks matplotlib uses headless backend.
+    """Create a validator that checks matplotlib uses headless backend.
+
+    This validator checks if code calls plt.show() without setting a headless
+    backend. It differs from _sets_headless_backend in that it combines both
+    checks into a single validation that flags the specific error condition.
 
     Args:
         output_path: Path where plots should be saved
-        show_patterns: Patterns indicating plt.show() calls (e.g., ["plt.show", ".show()"])
-        backend_patterns: Patterns indicating headless backend setup (e.g., ["matplotlib.use('Agg')", "matplotlib.use(\"Agg\")"])
+        show_patterns: Patterns indicating plt.show() calls; defaults to ["plt.show", ".show()"]
+        backend_patterns: Patterns indicating headless backend setup; defaults to all
+            matplotlib.use() calls with HEADLESS_BACKENDS
     """
     if show_patterns is None:
         show_patterns = ["plt.show", ".show()"]
     if backend_patterns is None:
-        backend_patterns = [
-            "matplotlib.use('Agg')",
-            'matplotlib.use("Agg")',
-            "matplotlib.use('Svg')",
-            'matplotlib.use("Svg")',
-            "matplotlib.use('Cairo')",
-            'matplotlib.use("Cairo")',
-            "matplotlib.use('PDF')",
-            'matplotlib.use("PDF")',
-            "matplotlib.use('PS')",
-            'matplotlib.use("PS")',
-            "matplotlib.use('WebAgg')",
-            'matplotlib.use("WebAgg")',
-            "matplotlib.use('nbAgg')",
-            'matplotlib.use("nbAgg")',
+        backend_patterns = [f"matplotlib.use('{b}')" for b in HEADLESS_BACKENDS] + [
+            f'matplotlib.use("{b}")' for b in HEADLESS_BACKENDS
         ]
 
     def validate(ctx: Context) -> ValidationResult:
@@ -302,22 +300,13 @@ def _make_plots_saved_validator(
 
     Args:
         output_path: Path where plots should be saved
-        plot_patterns: Patterns indicating plot creation (e.g., ["plt.plot", "plt.scatter"])
-        save_patterns: Patterns indicating plot saving (e.g., ["savefig"])
+        plot_patterns: Patterns indicating plot creation; defaults to all PYPLOT_PLOT_METHODS
+            prefixed with "plt." and "."
+        save_patterns: Patterns indicating plot saving; defaults to ["savefig"]
     """
     if plot_patterns is None:
-        plot_patterns = [
-            "plt.plot",
-            "plt.bar",
-            "plt.scatter",
-            "plt.hist",
-            "plt.imshow",
-            "plt.figure",
-            "plt.subplot",
-            ".plot(",
-            ".bar(",
-            ".scatter(",
-            ".hist(",
+        plot_patterns = [f"plt.{m}" for m in PYPLOT_PLOT_METHODS] + [
+            f".{m}(" for m in PYPLOT_PLOT_METHODS
         ]
     if save_patterns is None:
         save_patterns = ["savefig"]
@@ -389,11 +378,13 @@ def python_plotting_requirements(
 
     Args:
         output_path: Path where plots should be saved
-        check_output_artifacts: Whether to verify the output file exists
-        show_patterns: Patterns indicating plt.show() calls
-        backend_patterns: Patterns indicating headless backend setup
-        plot_patterns: Patterns indicating plot creation
-        save_patterns: Patterns indicating plot saving (e.g., savefig)
+        check_output_artifacts: Whether to verify the output file exists; defaults to False
+        show_patterns: Patterns indicating plt.show() calls; defaults to ["plt.show", ".show()"]
+        backend_patterns: Patterns indicating headless backend setup; defaults to all
+            matplotlib.use() calls with HEADLESS_BACKENDS
+        plot_patterns: Patterns indicating plot creation; defaults to all PYPLOT_PLOT_METHODS
+            prefixed with "plt." and "."
+        save_patterns: Patterns indicating plot saving; defaults to ["savefig"]
 
     Returns:
         List of Requirement objects that validate matplotlib usage and plot output.

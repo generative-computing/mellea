@@ -1,16 +1,14 @@
 """Requirement factories for Python tool invocation and code validation.
 
-This module provides generic requirements for Python-tool usage and code
-correctness. Plotting-specific checks are exposed separately through
-``plotting.python_plotting_requirements(...)`` so they are not implied to be
-universal Python-tool requirements.
+This module provides requirements for validating Python code, including syntax,
+imports, and plotting. The python_tool_requirements() function bundles these
+together, while specialized validators can be used independently.
 """
 
 from collections.abc import Callable
 
 from ...core import Context, Requirement, ValidationResult
-from ..tools.interpreter import StaticAnalysisEnvironment
-from .imports import get_unauthorized_imports
+from ..tools.interpreter import StaticAnalysisEnvironment, get_unauthorized_imports
 from .plotting import python_plotting_requirements
 from .python_reqs import extract_python_code
 from .tool_reqs import tool_arg_validator, uses_tool
@@ -50,7 +48,13 @@ def _python_code_arg_present(arg_value: object) -> bool:
 
 
 def _make_code_parses_validator() -> Callable[[Context], ValidationResult]:
-    """Create a validator that checks if extracted code parses."""
+    """Create a validator that checks if extracted code parses.
+
+    This validator searches for Python code in the context, checking both
+    direct python tool calls and markdown code blocks. The python tool is
+    invoked synchronously as part of the LLM's response generation, so code
+    is available in the context for validation at check time.
+    """
 
     def validate(ctx: Context) -> ValidationResult:
         extraction_result = extract_python_code(ctx)
@@ -79,7 +83,11 @@ def _make_code_parses_validator() -> Callable[[Context], ValidationResult]:
 def _make_imports_allowed_validator(
     allowed_imports: list[str] | None,
 ) -> Callable[[Context], ValidationResult]:
-    """Create a validator that checks if code imports are in allowlist."""
+    """Create a validator that checks if code imports are in allowlist.
+
+    This validator extracts Python code from the context (tool calls or markdown
+    blocks) and checks that all imports are in the allowed list.
+    """
 
     def validate(ctx: Context) -> ValidationResult:
         if allowed_imports is None:

@@ -13,7 +13,6 @@ from mellea.core import (
     ValidationResult,
 )
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.imports import get_unauthorized_imports
 from mellea.stdlib.requirements.plotting.matplotlib import (
     _calls_savefig,
     _sets_headless_backend,
@@ -24,6 +23,7 @@ from mellea.stdlib.requirements.python_tools import (
     _code_parses,
     python_tool_requirements,
 )
+from mellea.stdlib.tools.interpreter import get_unauthorized_imports
 
 
 def from_model(content: str) -> Context:

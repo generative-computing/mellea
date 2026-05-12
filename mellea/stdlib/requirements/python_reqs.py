@@ -58,8 +58,59 @@ def _score_code_block(code: str) -> int:
     return score
 
 
+def _extract_markdown_python_code(content: str) -> ValidationResult:
+    """Extract best Python code block from markdown content.
+
+    Searches for both ```python ... ``` and generic ``` ... ``` blocks,
+    scores them by code quality, and returns the highest-scoring block.
+
+    Args:
+        content: Text content to search for code blocks.
+
+    Returns:
+        ValidationResult with result=True and the code as reason if blocks found,
+        or result=False if no code blocks found.
+    """
+    import re
+
+    # Pattern for ```python ... ``` blocks
+    python_blocks = re.findall(r"```python\s*\n(.*?)\n```", content, re.DOTALL)
+
+    # Pattern for generic ``` blocks
+    generic_blocks = re.findall(r"```\s*\n(.*?)\n```", content, re.DOTALL)
+
+    all_blocks = []
+
+    # Add python blocks with high priority
+    for block in python_blocks:
+        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
+
+    # Add generic blocks if they look like Python
+    for block in generic_blocks:
+        block = block.strip()
+        if block and any(
+            keyword in block
+            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
+        ):
+            all_blocks.append((block, _score_code_block(block)))
+
+    if not all_blocks:
+        return ValidationResult(result=False, reason="No Python code blocks found")
+
+    # Return the highest scoring block
+    best_block = max(all_blocks, key=lambda x: x[1])
+    return ValidationResult(result=True, reason=best_block[0])
+
+
 def extract_python_code(ctx: Context) -> ValidationResult:
     """Extract Python code from tool calls or markdown code blocks.
+
+    Checks for code in two places (in order of priority):
+    1. Direct python tool calls (used by python interpreter tool)
+    2. Markdown ```python or ``` code blocks in text responses
+
+    This function is used by requirements validators that may be called before
+    or after tool invocation, so it checks both sources.
 
     Args:
         ctx: Context object containing the LLM output to extract code from.
@@ -81,78 +132,20 @@ def extract_python_code(ctx: Context) -> ValidationResult:
     if last_output.value is None:
         return ValidationResult(result=False, reason="No output found in context")
 
-    content = last_output.value
-
-    # Look for code blocks with python specifier
-    import re
-
-    # Pattern for ```python ... ``` blocks
-    python_blocks = re.findall(r"```python\s*\n(.*?)\n```", content, re.DOTALL)
-
-    # Pattern for generic ``` blocks
-    generic_blocks = re.findall(r"```\s*\n(.*?)\n```", content, re.DOTALL)
-
-    all_blocks = []
-
-    # Add python blocks with high priority
-    for block in python_blocks:
-        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
-
-    # Add generic blocks if they look like Python
-    for block in generic_blocks:
-        block = block.strip()
-        if block and any(
-            keyword in block
-            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
-        ):
-            all_blocks.append((block, _score_code_block(block)))
-
-    if not all_blocks:
-        return ValidationResult(result=False, reason="No Python code blocks found")
-
-    # Return the highest scoring block
-    best_block = max(all_blocks, key=lambda x: x[1])
-    return ValidationResult(result=True, reason=best_block[0])
+    return _extract_markdown_python_code(last_output.value)
 
 
 def _has_python_code_listing(ctx: Context) -> ValidationResult:
-    """Extract Python code from markdown code blocks in context."""
+    """Extract Python code from markdown code blocks in context only.
+
+    Similar to extract_python_code but does not check tool calls. Used internally
+    by execution validators that always work with markdown code blocks.
+    """
     last_output = ctx.last_output()
     if last_output is None or last_output.value is None:
         return ValidationResult(result=False, reason="No output found in context")
 
-    content = last_output.value
-
-    # Look for code blocks with python specifier
-    import re
-
-    # Pattern for ```python ... ``` blocks
-    python_blocks = re.findall(r"```python\s*\n(.*?)\n```", content, re.DOTALL)
-
-    # Pattern for generic ``` blocks
-    generic_blocks = re.findall(r"```\s*\n(.*?)\n```", content, re.DOTALL)
-
-    all_blocks = []
-
-    # Add python blocks with high priority
-    for block in python_blocks:
-        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
-
-    # Add generic blocks if they look like Python
-    for block in generic_blocks:
-        block = block.strip()
-        if block and any(
-            keyword in block
-            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
-        ):
-            all_blocks.append((block, _score_code_block(block)))
-
-    if not all_blocks:
-        return ValidationResult(result=False, reason="No Python code blocks found")
-
-    # Return the highest scoring block
-    best_block = max(all_blocks, key=lambda x: x[1])
-    return ValidationResult(result=True, reason=best_block[0])
+    return _extract_markdown_python_code(last_output.value)
 
 
 # endregion

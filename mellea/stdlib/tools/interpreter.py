@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 from ...core import MelleaLogger
-from ..requirements.imports import get_unauthorized_imports
 
 logger = MelleaLogger.get_logger()
 
@@ -300,6 +299,48 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 skipped=True,
                 skip_message=f"Sandbox execution error: {e!s}",
             )
+
+
+def get_unauthorized_imports(code: str, allowed_imports: list[str] | None) -> list[str]:
+    """Get list of unauthorized imports used in code.
+
+    Analyzes Python code to extract imports and checks them against an allowlist.
+    Handles both `import X` and `from X import Y` style imports.
+
+    Args:
+        code: Python source code to analyze
+        allowed_imports: List of allowed top-level module names; if None, allows any import
+
+    Returns:
+        Sorted list of unauthorized top-level modules, or empty list if all imports allowed
+    """
+    if allowed_imports is None:
+        return []
+
+    unauthorized: list[str] = []
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return unauthorized
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                base_module = alias.name.split(".")[0]
+                if (
+                    base_module not in allowed_imports
+                    and base_module not in unauthorized
+                ):
+                    unauthorized.append(base_module)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                base_module = node.module.split(".")[0]
+                if (
+                    base_module not in allowed_imports
+                    and base_module not in unauthorized
+                ):
+                    unauthorized.append(base_module)
+    return sorted(unauthorized)
 
 
 def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
