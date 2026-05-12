@@ -109,12 +109,7 @@ def find_context_attributions(
     """
     response, context, resolved_docs = _resolve_response(response, context)
     explicit_docs = _coerce_to_documents(documents, auto_doc_id=False)
-    docs_to_use = explicit_docs
-    if resolved_docs is not None:
-        if docs_to_use is not None:
-            docs_to_use.extend(resolved_docs)
-        else:
-            docs_to_use = resolved_docs
+    docs_to_use = [*(explicit_docs or []), *(resolved_docs or [])] or None
     result_json = call_intrinsic(
         "context-attribution",
         context.add(Message("assistant", response, documents=docs_to_use)),
