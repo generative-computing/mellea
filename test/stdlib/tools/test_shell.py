@@ -150,6 +150,17 @@ class TestInterpreterIndirectionBypassAttempts:
         assert result.skip_message is not None
         assert "not allowed" in result.skip_message.lower()
 
+    def test_timeout_with_flag_value_and_sudo_rejected(self) -> None:
+        """timeout with --kill-after=value and sudo should be rejected (checks value-taking flags)."""
+        env = StaticBashEnvironment()
+        # Regression test: ensure sudo is detected despite --kill-after=1 consuming the value
+        result = env.execute("timeout --kill-after=1 sudo whoami")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
     def test_python_c_arbitrary_code_rejected(self) -> None:
         """python -c with arbitrary code should be rejected."""
         env = StaticBashEnvironment()
@@ -363,18 +374,16 @@ class TestWorkingDirRestriction:
     """Tests for working directory restrictions."""
 
     def test_working_dir_restriction_blocks_outside_writes(self) -> None:
-        """Writing outside working_dir should be rejected."""
+        """Writing outside working_dir should be rejected by working_dir check."""
         env = StaticBashEnvironment(working_dir="/home/user/project")
-        result = env.execute("touch /var/log/test.log")
+        # Use a safe path that is not in DANGEROUS_PATHS (so working_dir check fires first)
+        result = env.execute("touch /home/other/file.txt")
 
         assert result.skipped is True
         assert result.success is False
-        # Could be blocked by either path restriction or working dir restriction
         assert result.skip_message is not None
-        assert (
-            "not allowed" in result.skip_message.lower()
-            or "outside" in result.skip_message.lower()
-        )
+        # Must be rejected by working_dir check, not dangerous-path check
+        assert "outside" in result.skip_message.lower()
 
     def test_working_dir_allows_inside_writes(self) -> None:
         """Writing inside working_dir should be allowed."""
