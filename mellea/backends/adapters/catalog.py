@@ -83,7 +83,11 @@ _INTRINSICS_CATALOG_ENTRIES = [
     # Core Intrinsics
     ############################################
     IntriniscsCatalogEntry(name="context-attribution", repo_id=_CORE_R1_REPO),
-    IntriniscsCatalogEntry(name="requirement-check", repo_id=_CORE_R1_REPO),
+    IntriniscsCatalogEntry(
+        name="requirement-check",
+        repo_id=_CORE_R1_REPO,
+        io_yaml_overlay_dir=_OVERLAY_ROOT / "requirement-check",
+    ),
     IntriniscsCatalogEntry(
         name="requirement_check", repo_id=_CORE_REPO
     ),  # Necessary to support granite 3.2 and 3.3.
