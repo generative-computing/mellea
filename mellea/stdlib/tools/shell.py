@@ -318,21 +318,36 @@ def _check_working_dir_restriction(
                 # For relative paths, resolve them relative to working_dir, not caller's cwd
                 if arg.startswith(("/", "~")):
                     resolved_path = str(Path(arg).expanduser().resolve())
+                    is_relative = False
                 else:
                     resolved_path = str(
                         Path(working_dir, arg).expanduser().resolve(strict=False)
                     )
+                    is_relative = True
+
                 # Check if path is allowed: in working_dir, /tmp, or /private/tmp (macOS)
                 is_in_tmp = resolved_path.startswith(("/tmp", "/private/tmp"))
                 is_in_working_dir = (
                     resolved_path == allowed_path_str
                     or resolved_path.startswith(allowed_path_str_prefix)
                 )
-                if not (is_in_tmp or is_in_working_dir):
-                    return (
-                        True,
-                        f"Path '{arg}' is outside allowed directory '{working_dir}'",
-                    )
+
+                # For relative paths: must be within working_dir (not just /tmp)
+                # For absolute paths: can be in working_dir OR /tmp
+                if is_relative:
+                    # Relative paths must stay within working_dir
+                    if not is_in_working_dir:
+                        return (
+                            True,
+                            f"Path '{arg}' is outside allowed directory '{working_dir}'",
+                        )
+                else:
+                    # Absolute paths can be in working_dir or /tmp
+                    if not (is_in_tmp or is_in_working_dir):
+                        return (
+                            True,
+                            f"Path '{arg}' is outside allowed directory '{working_dir}'",
+                        )
             except Exception:
                 # If we can't resolve, skip (might be a flag value)
                 pass
