@@ -128,7 +128,6 @@ def test_generic_error_handling(mock_module_generic_error, sample_request):
     assert "error" in data
     assert data["error"]["type"] == "server_error"
     assert "Internal server error" in data["error"]["message"]
-    # The raw exception message must not leak to the client.
     assert "Unexpected error" not in data["error"]["message"]
 
 

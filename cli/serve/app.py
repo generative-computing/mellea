@@ -269,11 +269,6 @@ def make_chat_endpoint(module):
                 error_type="invalid_request_error",
             )
         except Exception:
-            # Catch-all for any unexpected errors. Log the full traceback
-            # server-side (operators must be able to diagnose the 500), and
-            # return a generic message to the client, the raw `str(e)` can
-            # leak file paths / internal state across the API boundary
-            # (#991).
             logger.exception("Unhandled error in chat-completion handler")
             return create_openai_error_response(
                 status_code=500,
