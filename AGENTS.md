@@ -126,6 +126,11 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
+6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), run the docstring quality gate before pushing:
+   ```bash
+   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100 --orphans
+   ```
+   Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
 
 ## 11. Writing Tests
 
