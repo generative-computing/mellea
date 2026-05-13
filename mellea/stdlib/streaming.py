@@ -196,14 +196,12 @@ async def _orchestrate_streaming(
             (i, req) for i, req in enumerate(cloned_reqs) if i not in failed_indices
         ]
         if active:
-            pvrs: list[PartialValidationResult] = list(
-                await asyncio.gather(
-                    *[
-                        req.stream_validate(c, backend=val_backend, ctx=ctx)
-                        for _, req in active
-                    ]
-                )
-            )
+            async with asyncio.TaskGroup() as tg:
+                _tasks = [
+                    tg.create_task(req.stream_validate(c, backend=val_backend, ctx=ctx))
+                    for _, req in active
+                ]
+            pvrs: list[PartialValidationResult] = [t.result() for t in _tasks]
             for (idx, req), pvr in zip(active, pvrs):
                 if pvr.success == "fail":
                     failed_indices.add(idx)
@@ -267,11 +265,11 @@ async def _orchestrate_streaming(
             req for i, req in enumerate(cloned_reqs) if i not in failed_indices
         ]
         if non_failed and not early_exit:
-            result.final_validations = list(
-                await asyncio.gather(
-                    *[req.validate(val_backend, ctx) for req in non_failed]
-                )
-            )
+            async with asyncio.TaskGroup() as tg:
+                _final_tasks = [
+                    tg.create_task(req.validate(val_backend, ctx)) for req in non_failed
+                ]
+            result.final_validations = [t.result() for t in _final_tasks]
 
     except Exception as exc:
         # Orchestrator is leaving — we must stop the backend producer too,
@@ -280,8 +278,22 @@ async def _orchestrate_streaming(
         # "fail" path; the same reasoning applies to any unplanned exit.
         # Pass `exc` so the backend telemetry span records the real cause
         # rather than a generic "Generation cancelled".
+        # TaskGroup wraps failures in ExceptionGroup; unwrap so telemetry and
+        # the chunk queue see the original exception, not the wrapper.
+        # ExceptionGroup (not BaseExceptionGroup) guarantees Exception elements.
+        if isinstance(exc, ExceptionGroup) and exc.exceptions:
+            reported_exc: Exception = exc.exceptions[0]
+            if len(exc.exceptions) > 1:
+                MelleaLogger.get_logger().warning(
+                    "stream_with_chunking: %d validator(s) failed simultaneously; "
+                    "reporting first, suppressing rest: %r",
+                    len(exc.exceptions) - 1,
+                    exc.exceptions[1:],
+                )
+        else:
+            reported_exc = exc
         try:
-            await mot.cancel_generation(error=exc)
+            await mot.cancel_generation(error=reported_exc)
         except Exception as cleanup_exc:
             # Never let cleanup mask the original exception: log loudly and
             # continue to surface `exc` to the consumer.
@@ -289,12 +301,12 @@ async def _orchestrate_streaming(
             MelleaLogger.get_logger().warning(
                 "stream_with_chunking: cancel_generation() raised during "
                 "exception cleanup (original: %r, cleanup: %r)",
-                exc,
+                reported_exc,
                 cleanup_exc,
             )
         result.completed = False
-        result._orchestration_exception = exc
-        await result._chunk_queue.put(exc)
+        result._orchestration_exception = reported_exc
+        await result._chunk_queue.put(reported_exc)
     finally:
         # CancelledError (BaseException, not Exception) bypasses the except
         # block above, so cancel_generation() may not have been called.
@@ -358,8 +370,9 @@ async def stream_with_chunking(
     requirement that did not return ``"fail"`` — both ``"pass"`` and
     ``"unknown"`` trigger final validation.  On early exit, no ``validate()``
     call is made; :attr:`StreamChunkingResult.final_validations` remains
-    empty.  Requirements are cloned (``copy(req)``) before use so originals
-    are never mutated.
+    empty.  Requirements are cloned (``copy(req)``) before backend generation
+    begins, so the originals are never mutated and a raising ``__copy__``
+    cannot leak an in-flight backend task.
 
     Requirements that need context beyond the current chunk should
     accumulate it themselves across ``stream_validate`` calls (e.g.
@@ -406,6 +419,12 @@ async def stream_with_chunking(
     Raises:
         ValueError: If *chunking* is a string that does not match any known
             alias (``"sentence"``, ``"word"``, ``"paragraph"``).
+
+    Note:
+        Any exception raised by ``copy(req)`` on a ``quick_check_requirements``
+        entry propagates to the caller; no backend generation is started in
+        that case.  See :class:`~mellea.core.Requirement` for the ``__copy__``
+        override contract.
     """
     if isinstance(chunking, str):
         cls = _CHUNKING_ALIASES.get(chunking)
@@ -416,15 +435,33 @@ async def stream_with_chunking(
         chunking = cls()
 
     opts: dict[str, Any] = {ModelOption.STREAM: True}
-    mot, gen_ctx = await backend.generate_from_context(action, ctx, model_options=opts)
 
-    result = StreamChunkingResult(mot, gen_ctx)
-
+    # Clone requirements before starting backend generation so that a raising
+    # __copy__ (an advertised extension point on Requirement) cannot leave the
+    # backend feeder task wedged against a full _async_queue with no consumer.
     cloned_reqs = [copy(req) for req in (quick_check_requirements or [])]
     val_backend = quick_check_backend if quick_check_backend is not None else backend
 
-    result._orchestration_task = asyncio.create_task(
-        _orchestrate_streaming(result, mot, gen_ctx, cloned_reqs, chunking, val_backend)
-    )
+    mot, gen_ctx = await backend.generate_from_context(action, ctx, model_options=opts)
+    try:
+        result = StreamChunkingResult(mot, gen_ctx)
+        coro = _orchestrate_streaming(
+            result, mot, gen_ctx, cloned_reqs, chunking, val_backend
+        )
+        try:
+            result._orchestration_task = asyncio.create_task(coro)
+        except BaseException:
+            coro.close()  # prevent "coroutine was never awaited" RuntimeWarning
+            raise
+    except BaseException:
+        try:
+            await mot.cancel_generation()
+        except Exception as cleanup_exc:
+            MelleaLogger.get_logger().warning(
+                "stream_with_chunking: cancel_generation() raised during "
+                "setup-path cleanup (cleanup: %r)",
+                cleanup_exc,
+            )
+        raise
 
     return result

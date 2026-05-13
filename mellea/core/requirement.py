@@ -300,7 +300,12 @@ class Requirement(Component[str]):
         are shared by reference under ``copy()``. Reassign rather than mutate in
         place (``self._buffer = self._buffer + [chunk]``, not
         ``self._buffer.append(chunk)``), or override ``__copy__`` for proper
-        isolation.
+        isolation.  If an override raises, the enclosing
+        :func:`~mellea.stdlib.streaming.stream_with_chunking` call aborts before
+        any backend generation starts and the exception propagates unchanged.
+        Overrides with externally visible side effects (file writes, network
+        calls) should perform them only after any logic that could raise, since
+        the framework cannot roll them back.
 
         Implementations must not call ``mot.astream()`` or otherwise read the
         underlying stream; the orchestrator is the single consumer of the MOT

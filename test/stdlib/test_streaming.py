@@ -1080,3 +1080,177 @@ async def test_cancelled_flag_propagates_through_copy_methods() -> None:
     # Sanity: default-constructed MOT has _cancelled=False.
     fresh = ModelOutputThunk(value="x")
     assert fresh._cancelled is False
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 — setup-path backend leak: copy(req) before generate_from_context
+# ---------------------------------------------------------------------------
+
+
+class _PlainReq(Requirement):
+    """Default shallow copy — cannot raise."""
+
+    def format_for_llm(self) -> str:
+        return "plain"
+
+    async def stream_validate(
+        self, chunk: str, *, backend: Any, ctx: Any
+    ) -> PartialValidationResult:
+        return PartialValidationResult("unknown")
+
+    async def validate(
+        self, backend: Any, ctx: Any, *, format: Any = None, model_options: Any = None
+    ) -> ValidationResult:
+        return ValidationResult(result=True)
+
+
+class _RaisingCopyReq(Requirement):
+    """__copy__ raises — simulates a user-defined Requirement with a faulty override."""
+
+    def __copy__(self) -> "_RaisingCopyReq":
+        raise ValueError("copy boom")
+
+    def format_for_llm(self) -> str:
+        return "raising copy"
+
+    async def stream_validate(
+        self, chunk: str, *, backend: Any, ctx: Any
+    ) -> PartialValidationResult:
+        return PartialValidationResult("unknown")
+
+    async def validate(
+        self, backend: Any, ctx: Any, *, format: Any = None, model_options: Any = None
+    ) -> ValidationResult:
+        return ValidationResult(result=True)
+
+
+class _InstrumentedBackend(StreamingMockBackend):
+    """Counts generate_from_context calls and exposes the last MOT produced."""
+
+    def __init__(self, response: str, token_size: int = 1) -> None:
+        super().__init__(response, token_size)
+        self.generate_from_context_call_count = 0
+        self.last_mot: ModelOutputThunk | None = None
+
+    async def _generate_from_context(
+        self,
+        action: Any,
+        ctx: Any,
+        *,
+        format: Any = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk, Any]:
+        self.generate_from_context_call_count += 1
+        mot, new_ctx = await super()._generate_from_context(
+            action,
+            ctx,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+        self.last_mot = mot
+        return mot, new_ctx
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "req_cls,expect_raise", [(_PlainReq, False), (_RaisingCopyReq, True)]
+)
+async def test_stream_with_chunking_requirement_copy_contract(
+    req_cls: type, expect_raise: bool
+) -> None:
+    """Fix 1: copy(req) runs before generate_from_context.
+
+    On __copy__ failure the backend is never started (call_count == 0).
+    On success the backend is called exactly once.
+    """
+    backend = _InstrumentedBackend("Hello world. ", token_size=2)
+    req = req_cls()
+    if expect_raise:
+        with pytest.raises(ValueError, match="copy boom"):
+            await stream_with_chunking(
+                _action(), backend, _ctx(), quick_check_requirements=[req]
+            )
+        # Hard invariant: reorder ensures backend never starts on copy failure.
+        assert backend.generate_from_context_call_count == 0
+        assert backend.last_mot is None
+    else:
+        result = await stream_with_chunking(
+            _action(), backend, _ctx(), quick_check_requirements=[req]
+        )
+        await result.acomplete()
+        assert backend.generate_from_context_call_count == 1
+        assert backend.last_mot is not None
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 — TaskGroup cancels peer validators on first failure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_with_chunking_cancels_peer_validators() -> None:
+    """Fix 3: a failing stream_validate causes TaskGroup to cancel peer validators.
+
+    One requirement raises immediately in stream_validate; the second sleeps
+    for 5 s and sets a flag on completion. Without TaskGroup the slow sibling
+    runs detached; with it the cancellation is observed.
+    """
+    reached_final_stage = asyncio.Event()
+
+    class _RaisingReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "raiser"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            raise RuntimeError("validator failed")
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=False)
+
+    class _SlowReq(Requirement):
+        def format_for_llm(self) -> str:
+            return "slow"
+
+        async def stream_validate(
+            self, chunk: str, *, backend: Any, ctx: Any
+        ) -> PartialValidationResult:
+            try:
+                await asyncio.sleep(5.0)
+                reached_final_stage.set()
+                return PartialValidationResult("pass")
+            except asyncio.CancelledError:
+                raise  # propagate so TaskGroup knows we were cancelled
+
+        async def validate(
+            self,
+            backend: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: Any = None,
+        ) -> ValidationResult:
+            return ValidationResult(result=True)
+
+    backend = StreamingMockBackend("Hello world. ", token_size=2)
+    result = await stream_with_chunking(
+        _action(), backend, _ctx(), quick_check_requirements=[_RaisingReq(), _SlowReq()]
+    )
+    with pytest.raises(RuntimeError, match="validator failed"):
+        await result.acomplete()
+
+    # Give the loop a tick; the slow sibling must NOT have run to completion.
+    await asyncio.sleep(0.05)
+    assert not reached_final_stage.is_set(), (
+        "slow sibling was not cancelled by TaskGroup"
+    )
