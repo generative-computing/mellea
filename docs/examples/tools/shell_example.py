@@ -92,11 +92,11 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
     print("=== Example 3: LLM-Generated Bash Commands with Forced Tool Use ===")
 
     result = m.instruct(
-        description="Use bash to list all Python files in the current directory. "
+        description="Use bash to find Python files in the current directory. "
         "Generate a single command using find or ls (no pipes, redirects, or shell operators allowed).",
-        requirements=[uses_tool(unsafe_local_bash_executor)],
+        requirements=[uses_tool(bash_executor)],
         model_options={
-            ModelOption.TOOLS: [MelleaTool.from_callable(unsafe_local_bash_executor)]
+            ModelOption.TOOLS: [MelleaTool.from_callable(bash_executor)]
         },
         tool_calls=True,
     )
@@ -104,15 +104,15 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
     if result.tool_calls is None:
         raise ValueError("Expected tool_calls but got None")
 
-    if "unsafe_local_bash_executor" not in result.tool_calls:
+    if "bash_executor" not in result.tool_calls:
         available_tools = list(result.tool_calls.keys())
         raise ValueError(
-            f"Expected tool 'unsafe_local_bash_executor' in tool_calls, "
+            f"Expected tool 'bash_executor' in tool_calls, "
             f"but got: {available_tools}"
         )
 
     # Extract the bash command the LLM generated
-    tool_call = result.tool_calls["unsafe_local_bash_executor"]
+    tool_call = result.tool_calls["bash_executor"]
     if "command" not in tool_call.args:
         raise ValueError(
             f"Expected 'command' argument in tool call args, "
