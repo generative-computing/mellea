@@ -1,14 +1,14 @@
 # pytest: ollama, e2e
 
-"""Example demonstrating OTel GenAI semantic convention attributes (issue #1035).
+"""Mellea backend spans carrying OTel GenAI semantic convention attributes.
 
-Exercises gaps 1-4 so they can be verified in otelite or any OTel-compatible backend.
-Gap 5 (content capture) is deferred — see cs/issue-1035-full for that implementation.
+Each backend generation call emits a ``chat`` span with the following attributes
+drawn from the OTel GenAI semconv (https://opentelemetry.io/docs/specs/semconv/gen-ai/):
 
-  gen_ai.provider.name      — provider identity (alongside legacy gen_ai.system)
-  gen_ai.conversation.id    — mapped from session_id ContextVar
-  llm.prompt_template.*     — template text (always) and variables (opt-in)
-  error.type                — set on the error path alongside ERROR status
+  gen_ai.provider.name   — provider identity (current semconv)
+  gen_ai.system          — same value, retained for back-compat with existing dashboards
+  gen_ai.conversation.id — correlated to the active session via ``with_context``
+  error.type             — set on the error path alongside ERROR span status
 
 Run against otelite for human verification:
 
@@ -18,22 +18,21 @@ Run against otelite for human verification:
   # Terminal 2
   export MELLEA_TRACE_BACKEND=1
   export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-  export OTel_SERVICE_NAME=mellea-semconv-demo
+  export OTEL_SERVICE_NAME=mellea-semconv-demo
   python otel_genai_semconv_example.py
 
-  Then open http://localhost:8080 → select mellea-semconv-demo service.
+  Then open http://localhost:8080 and select the mellea-semconv-demo service.
 
-What to verify per span in otelite
------------------------------------
-  Span "chat"
-    gen_ai.system              = "ollama"     (back-compat)
-    gen_ai.provider.name       = "ollama"     (new, semconv v1.37.0)
+Expected span attributes
+------------------------
+  Span "chat" (normal path)
+    gen_ai.system              = "ollama"
+    gen_ai.provider.name       = "ollama"
     gen_ai.conversation.id     = "demo-session-1"
-    mellea.session_id          = "demo-session-1"  (preserved)
-    llm.prompt_template.template = "Summarise {{topic}} in one sentence."
+    mellea.session_id          = "demo-session-1"
 
   Span "chat" (error path)
-    error.type  = "OllamaRequestError" (or similar)
+    error.type  = <exception class name>
     status      = ERROR
 """
 
@@ -46,33 +45,29 @@ def _section(title: str) -> None:
 
 
 def main() -> None:
-    _section("Mellea OTel GenAI Semantic Convention Demo (gaps 1-4)")
+    _section("Mellea OTel GenAI Semantic Convention Demo")
     print(f"Backend tracing: {is_backend_tracing_enabled()}")
     if not is_backend_tracing_enabled():
         print("Set MELLEA_TRACE_BACKEND=1 to enable backend spans.")
 
     # -----------------------------------------------------------------------
-    # Gaps 1-3: provider name, conversation id, prompt template attrs
+    # Normal path: provider name + conversation id
     # -----------------------------------------------------------------------
-    _section("Gaps 1-3: provider name / conversation id / template")
+    _section("Normal path — provider name and conversation id")
     print("Expected span attrs:")
     print("  gen_ai.system              = 'ollama'")
     print("  gen_ai.provider.name       = 'ollama'")
     print("  gen_ai.conversation.id     = 'demo-session-1'")
-    print("  llm.prompt_template.template = 'Summarise {{topic}} in one sentence.'")
 
     with with_context(session_id="demo-session-1"):
         with start_session() as m:
-            result = m.instruct(
-                "Summarise {{topic}} in one sentence.",
-                user_variables={"topic": "quantum tunnelling"},
-            )
+            result = m.instruct("Summarise quantum tunnelling in one sentence.")
     print(f"\nOutput: {str(result)[:120]}")
 
     # -----------------------------------------------------------------------
-    # Gap 4: error.type + ERROR status
+    # Error path: error.type + ERROR status
     # -----------------------------------------------------------------------
-    _section("Gap 4: error.type on span")
+    _section("Error path — error.type on span")
     print("Expected span attrs:")
     print("  status     = ERROR")
     print("  error.type = <exception class name>")

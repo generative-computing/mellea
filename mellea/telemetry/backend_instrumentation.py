@@ -4,17 +4,10 @@ Follows OpenTelemetry Gen-AI semantic conventions:
 https://opentelemetry.io/docs/specs/semconv/gen-ai/
 """
 
-import json
 from typing import Any
 
 from ..backends.utils import get_value
-from .tracing import (
-    end_backend_span,
-    is_content_tracing_enabled,
-    set_span_attribute,
-    set_span_error,
-    trace_backend,
-)
+from .tracing import end_backend_span, set_span_attribute, set_span_error, trace_backend
 
 
 def get_model_id_str(backend: Any) -> str:
@@ -135,13 +128,7 @@ def instrument_generate_from_context(
 
 
 def start_generate_span(
-    backend: Any,
-    action: Any,
-    ctx: Any,
-    format: Any = None,
-    tool_calls: bool = False,
-    *,
-    model_options: dict | None = None,
+    backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False
 ):
     """Start a backend trace span for generate_from_context (without auto-closing).
 
@@ -154,7 +141,6 @@ def start_generate_span(
         ctx: Context
         format: Response format (BaseModel subclass or None)
         tool_calls: Whether tool calling is enabled
-        model_options: Raw model options dict for request-parameter attributes
 
     Returns:
         Span object or None if tracing is disabled
@@ -190,29 +176,6 @@ def start_generate_span(
     session_id = telemetry_ctx.get("session_id")
     if session_id is not None:
         span_attrs["gen_ai.conversation.id"] = session_id
-
-    # Request parameters from model_options (plain-string keys only)
-    if model_options:
-        for mellea_key, otel_key in _REQUEST_PARAM_MAP.items():
-            val = model_options.get(mellea_key)
-            if val is not None:
-                span_attrs[otel_key] = val
-
-    # Prompt template attributes (duck-typed; works for Instruction and GenerativeStub)
-    tmpl = getattr(action, "prompt_template_metadata", None)
-    if callable(tmpl):
-        metadata: Any = tmpl()
-        if metadata is not None:
-            template_text, template_vars, template_version = metadata
-            if template_text:
-                span_attrs["llm.prompt_template.template"] = template_text
-            if template_version:
-                span_attrs["llm.prompt_template.version"] = template_version
-            # Variables contain user-provided values — only emit with content gate
-            if template_vars and is_content_tracing_enabled():
-                span_attrs["llm.prompt_template.variables"] = _serialize_json(
-                    template_vars
-                )
 
     return start_backend_span("chat", **span_attrs)
 
@@ -364,25 +327,6 @@ def finalize_backend_span(span: Any, *, error: Exception | None = None) -> None:
         pass
     finally:
         end_backend_span(span)
-
-
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
-
-# Mapping from Mellea/OpenAI plain-string model_options keys to OTel request attrs.
-_REQUEST_PARAM_MAP: dict[str, str] = {
-    "temperature": "gen_ai.request.temperature",
-    "top_p": "gen_ai.request.top_p",
-    "top_k": "gen_ai.request.top_k",
-    "frequency_penalty": "gen_ai.request.frequency_penalty",
-    "presence_penalty": "gen_ai.request.presence_penalty",
-}
-
-
-def _serialize_json(obj: Any) -> str:
-    """Serialise *obj* to a JSON string, coercing non-serialisable values to str."""
-    return json.dumps(obj, default=str, ensure_ascii=False)
 
 
 __all__ = [

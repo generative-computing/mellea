@@ -1,13 +1,11 @@
-"""Unit tests for OTel GenAI semantic convention emission gaps (issue #1035).
+"""Unit tests for OTel GenAI semantic convention attribute emission.
 
-Covers gaps 1-4. Gap 5 (content capture) is deferred; see cs/issue-1035-full
-for the full implementation.
+Covers: gen_ai.provider.name (gap 1), gen_ai.conversation.id (gap 2),
+error.type + ERROR status (gap 4), and the MELLEA_TRACE_CONTENT flag.
 
-All tests use a fake span object and do not require a live backend or
-OpenTelemetry SDK installation.
+All tests use a fake span and do not require a live backend or OTel SDK.
 """
 
-import json
 from unittest.mock import MagicMock, patch
 
 from mellea.telemetry.backend_instrumentation import (
@@ -52,7 +50,6 @@ def test_provider_name_emitted_in_start_generate_span():
     backend = _fake_backend("OpenAIBackend")
     backend.model_id = "gpt-4"  # type: ignore[attr-defined]
     action = MagicMock()
-    action.prompt_template_metadata = None
 
     with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
         mock_start.return_value = _mock_span()
@@ -88,7 +85,6 @@ def test_conversation_id_absent_when_no_session():
     backend = _fake_backend("OpenAIBackend")
     backend.model_id = "gpt-4"  # type: ignore[attr-defined]
     action = MagicMock()
-    action.prompt_template_metadata = None
 
     with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
         mock_start.return_value = _mock_span()
@@ -96,90 +92,6 @@ def test_conversation_id_absent_when_no_session():
 
     call_kwargs = mock_start.call_args[1]
     assert "gen_ai.conversation.id" not in call_kwargs
-
-
-# ---------------------------------------------------------------------------
-# Gap 3: llm.prompt_template.* from Instruction
-# ---------------------------------------------------------------------------
-
-
-def test_prompt_template_attrs_from_instruction():
-    from mellea.stdlib.components.instruction import Instruction
-
-    instr = Instruction(
-        description="Summarise {{topic}} in one sentence.",
-        user_variables={"topic": "quantum tunnelling"},
-    )
-
-    backend = _fake_backend("OpenAIBackend")
-    backend.model_id = "gpt-4"  # type: ignore[attr-defined]
-
-    with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
-        mock_start.return_value = _mock_span()
-        start_generate_span(backend, instr, ctx=[], format=None, tool_calls=False)
-
-    call_kwargs = mock_start.call_args[1]
-    assert call_kwargs.get("llm.prompt_template.template") == (
-        "Summarise {{topic}} in one sentence."
-    )
-    # Variables are NOT emitted when content capture is off (default)
-    assert "llm.prompt_template.variables" not in call_kwargs
-
-
-def test_prompt_template_variables_emitted_when_content_enabled(monkeypatch):
-    from mellea.stdlib.components.instruction import Instruction
-
-    instr = Instruction(description="Hello {{name}}", user_variables={"name": "World"})
-
-    backend = _fake_backend("OpenAIBackend")
-    backend.model_id = "gpt-4"  # type: ignore[attr-defined]
-
-    monkeypatch.setattr(
-        "mellea.telemetry.backend_instrumentation.is_content_tracing_enabled",
-        lambda: True,
-    )
-
-    with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
-        mock_start.return_value = _mock_span()
-        start_generate_span(backend, instr, ctx=[], format=None, tool_calls=False)
-
-    call_kwargs = mock_start.call_args[1]
-    variables_json = call_kwargs.get("llm.prompt_template.variables")
-    assert variables_json is not None
-    assert json.loads(variables_json) == {"name": "World"}
-
-
-def test_instruction_without_user_variables_emits_template():
-    from mellea.stdlib.components.instruction import Instruction
-
-    instr = Instruction(description="Tell me about {{topic}}")
-
-    backend = _fake_backend("OpenAIBackend")
-    backend.model_id = "gpt-4"  # type: ignore[attr-defined]
-
-    with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
-        mock_start.return_value = _mock_span()
-        start_generate_span(backend, instr, ctx=[], format=None, tool_calls=False)
-
-    assert (
-        mock_start.call_args[1].get("llm.prompt_template.template")
-        == "Tell me about {{topic}}"
-    )
-
-
-def test_instruction_with_no_description_emits_no_template():
-    from mellea.stdlib.components.instruction import Instruction
-
-    instr = Instruction()
-
-    backend = _fake_backend("OpenAIBackend")
-    backend.model_id = "gpt-4"  # type: ignore[attr-defined]
-
-    with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
-        mock_start.return_value = _mock_span()
-        start_generate_span(backend, instr, ctx=[], format=None, tool_calls=False)
-
-    assert "llm.prompt_template.template" not in mock_start.call_args[1]
 
 
 # ---------------------------------------------------------------------------
