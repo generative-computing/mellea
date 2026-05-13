@@ -73,14 +73,12 @@ def main() -> None:
     print("  error.type = <exception class name>")
 
     try:
-        with start_session(model_id="mellea-semconv-nonexistent-xyz") as m2:
+        with start_session(base_url="http://localhost:19999") as m2:
             m2.instruct("Hello")
     except Exception as exc:
         print(f"\nGot expected error: {exc.__class__.__name__}")
     else:
-        print(
-            "\n(No error — check the span for error.type if the model unexpectedly exists)"
-        )
+        print("\n(No error — nothing is listening on port 19999)")
 
     _section("Done")
     print("If OTEL_EXPORTER_OTLP_ENDPOINT is set, check your trace backend.")

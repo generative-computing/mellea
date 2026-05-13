@@ -45,7 +45,6 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
     start_generate_span,
 )

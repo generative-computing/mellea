@@ -28,7 +28,6 @@ from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
     start_generate_span,
 )

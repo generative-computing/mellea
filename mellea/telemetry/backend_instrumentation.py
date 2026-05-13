@@ -88,46 +88,6 @@ def get_context_size(ctx: Any) -> int:
     return 0
 
 
-def instrument_generate_from_context(
-    backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False
-):
-    """Create a backend trace span for generate_from_context.
-
-    Follows Gen-AI semantic conventions for chat operations.
-
-    Args:
-        backend: Backend instance
-        action: Action component
-        ctx: Context
-        format: Response format (BaseModel subclass or None)
-        tool_calls: Whether tool calling is enabled
-
-    Returns:
-        Context manager for the trace span
-    """
-    model_id = get_model_id_str(backend)
-    system_name = get_system_name(backend)
-    provider_name = get_provider_name(backend)
-
-    return trace_backend(
-        "chat",  # Gen-AI convention: use 'chat' for chat completions
-        **{
-            # Gen-AI semantic convention attributes
-            "gen_ai.system": system_name,
-            "gen_ai.provider.name": provider_name,
-            "gen_ai.request.model": model_id,
-            "gen_ai.operation.name": "chat",
-            # Mellea-specific attributes
-            "mellea.backend": backend.__class__.__name__,
-            "mellea.action_type": action.__class__.__name__,
-            "mellea.context_size": get_context_size(ctx),
-            "mellea.has_format": format is not None,
-            "mellea.format_type": format.__name__ if format else None,
-            "mellea.tool_calls_enabled": tool_calls,
-        },
-    )
-
-
 def start_generate_span(
     backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False
 ):
@@ -340,7 +300,6 @@ __all__ = [
     "get_model_id_str",
     "get_provider_name",
     "get_system_name",
-    "instrument_generate_from_context",
     "instrument_generate_from_raw",
     "record_response_metadata",
     "record_token_usage",
