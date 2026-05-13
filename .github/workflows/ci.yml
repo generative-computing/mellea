@@ -4,6 +4,16 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
   merge_group:
+  push:
+    branches: ['release/**']
+  # Dispatchable by cherry-pick-to-release.yml to run CI on direct-pushed
+  # cherry-picks.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or ref to run CI against'
+        type: string
+        required: false
 
 permissions: {}
 

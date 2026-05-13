@@ -1,0 +1,77 @@
+name: "Cherry-pick to release branch"
+
+# Cherry-picks one or more commits from main onto a release branch via direct
+# push. `github-actions[bot]` needs bypass rights on the release/** ruleset
+# to push cherry-picked commits directly.
+#
+# Pushes authored by GITHUB_TOKEN don't fire downstream `push:` triggers
+# (GitHub anti-loop rule), so CI on the release branch won't auto-run after
+# a cherry-pick. The final step explicitly dispatches ci.yml against the
+# target branch to work around this.
+#
+# On conflict the workflow fails with a clear playbook for local resolution.
+# See RELEASE.md for the full patch-release flow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Release branch to cherry-pick onto (e.g. release/v0.6)'
+        type: string
+        required: true
+      shas:
+        description: 'Space- or comma-separated list of commit SHAs from main'
+        type: string
+        required: true
+
+permissions: {}
+
+env:
+  UV_FROZEN: "1"
+  CICD: 1
+
+jobs:
+  cherry-pick:
+    environment: auto-release
+    permissions:
+      contents: write    # push cherry-picks to release branch
+      actions: write     # dispatch ci.yml after push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate target branch
+        env:
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          if ! [[ "${TARGET_BRANCH}" =~ ^release/v ]]; then
+            echo "error: target_branch ${TARGET_BRANCH} must match release/v*"
+            exit 2
+          fi
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.target_branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Configure git user
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      - name: Cherry-pick and push
+        env:
+          AUTO_PUSH: "1"
+          INPUT_SHAS: ${{ inputs.shas }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          # Split commas or whitespace into an array of SHAs.
+          IFS=' ,' read -ra SHAS <<< "${INPUT_SHAS}"
+          if [ "${#SHAS[@]}" -eq 0 ]; then
+            echo "error: no SHAs provided"
+            exit 2
+          fi
+          ./.github/scripts/cherry_pick_to_release.sh "${TARGET_BRANCH}" "${SHAS[@]}"
+        shell: bash
+      - name: Trigger CI on release branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: gh workflow run ci.yml --ref "${TARGET_BRANCH}"

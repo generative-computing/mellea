@@ -1,0 +1,57 @@
+name: "Cut release branch"
+
+# Creates a release/vX.Y branch from main and bumps main to the next minor's
+# .dev0. See RELEASE.md for the full workflow.
+#
+# Must be dispatched from the GitHub Actions UI. `github-actions[bot]` needs
+# bypass rights on main's branch-protection ruleset to push the main-side
+# dev bump.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_minor:
+        description: >-
+          Optional safety check: if set, must match the minor derived from
+          pyproject.toml on main (e.g. "0.6"). Leave blank to trust pyproject.
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+env:
+  UV_FROZEN: "1"
+  CICD: 1
+
+jobs:
+  cut:
+    environment: auto-release
+    permissions:
+      contents: write        # push main + new release branch
+      pull-requests: write   # release.sh may open changelog sync PR if rc0 is published (flag on)
+      actions: write         # release.sh dispatches pypi.yml after tagging rc0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --only-dev
+      - name: Cut release branch
+        env:
+          CONFIRM_MINOR: ${{ inputs.confirm_minor }}
+          # Env vars for the inline rc0 release-publish step:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CHGLOG_FILE: CHANGELOG.md
+          PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
+        run: ./.github/scripts/cut_release_branch.sh
+        shell: bash

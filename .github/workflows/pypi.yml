@@ -1,8 +1,13 @@
 name: "Build and publish package"
-# Test comment for a build
+
+# Fires on v* tag push, or via explicit dispatch (release.sh uses this when
+# GITHUB_TOKEN-authored pushes can't auto-trigger). Prereleases are gated on
+# the PUBLISH_PRERELEASES repo variable; finals always publish.
+
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
 
 env:
   UV_FROZEN: "1"
@@ -22,19 +27,39 @@ jobs:
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
     steps:
+      - name: Decide whether to publish
+        id: gate
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
+        run: |
+          VERSION="${REF_NAME#v}"
+          if [[ "${VERSION}" == *rc* ]] || [[ "${VERSION}" == *.dev* ]]; then
+            if [ "${PUBLISH_PRERELEASES}" != "true" ]; then
+              echo "Prerelease ${REF_NAME} with PUBLISH_PRERELEASES=false — skipping PyPI upload"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: steps.gate.outputs.skip != 'true'
         with:
           persist-credentials: false
       - name: Install uv and set the python version
+        if: steps.gate.outputs.skip != 'true'
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: false
       - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
         run: uv sync --all-extras
       - name: Build package
+        if: steps.gate.outputs.skip != 'true'
         run: uv build
       - name: Publish distribution 📦 to PyPI
+        if: steps.gate.outputs.skip != 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           attestations: true
