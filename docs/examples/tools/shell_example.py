@@ -1,4 +1,4 @@
-# pytest: e2e, qualitative
+# pytest: e2e, ollama, qualitative
 """Example usage patterns for bash_executor and unsafe_local_bash_executor tools.
 
 Demonstrates multiple ways to use Mellea's bash execution capabilities:
@@ -92,7 +92,8 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
     print("=== Example 3: LLM-Generated Bash Commands with Forced Tool Use ===")
 
     result = m.instruct(
-        description="Use bash to count how many Python files are in the current directory.",
+        description="Use bash to list all Python files in the current directory. "
+        "Generate a single command using find or ls (no pipes, redirects, or shell operators allowed).",
         requirements=[uses_tool(unsafe_local_bash_executor)],
         model_options={
             ModelOption.TOOLS: [MelleaTool.from_callable(unsafe_local_bash_executor)]
@@ -224,14 +225,13 @@ if __name__ == "__main__":
     example_2_wrapped_as_tool()
 
     # Example 3: Run with LLM-based tool calling (requires Ollama or compatible LLM)
-    # Uncomment these lines to test LLM-generated commands:
-    # try:
-    #     m = start_session()
-    #     example_3_llm_with_forced_tool_use(m)
-    # except Exception as e:
-    #     print(f"Example 3 skipped: {e!s}")
-    #     print("  Requires: Ollama running locally or compatible LLM configured")
-    #     print("  See: https://docs.ollama.ai/")
+    try:
+        m = start_session()
+        example_3_llm_with_forced_tool_use(m)
+    except Exception as e:
+        print(f"Example 3 skipped: {e!s}")
+        print("  Requires: Ollama running locally or compatible LLM configured")
+        print("  See: https://docs.ollama.ai/")
 
     example_3_with_working_dir()
     example_4_safety_features()
