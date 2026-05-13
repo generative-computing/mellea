@@ -14,6 +14,32 @@
 
 # Part I — Summary for agreement
 
+## Proposal at a glance
+
+**What changes:** three separate adapter classes (`IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter`) collapse into one `Adapter`:
+
+```
+Adapter = identity + io_contract + weights_binding
+```
+
+The `weights_binding` is pluggable — `LocalFileBinding`, `EmbeddedBinding`, or `ServerMediatedBinding` — each exposing the same four verbs (`prepare`, `activate`, `deactivate`, `release`). The backend calls these uniformly; it does not branch on adapter type.
+
+**What stays the same:** all high-level helpers (`check_answerability`, `requirement_check`, etc.) keep their current signatures. Deprecated classes are shimmed for one release.
+
+**Five decisions gate decomposition:**
+
+| # | Question | Status |
+| --- | --- | --- |
+| Q1 | Does the `Adapter = identity + io_contract + weights` shape hold? | Open |
+| Q2 | Lifecycle default: session-scoped (no auto-unload) or request-scoped? | Lean: session-scoped, no auto-unload |
+| Q3 | Reality C (server-mediated): design slot now, fill later — or leave fully empty? | Lean: design slot, leave empty |
+| Q4 | Deprecation window for old classes? | Lean: 1 minor release (~4–6 weeks) |
+| Q5 | Terminology: replace "intrinsic" with "adapter", or keep both with distinct meanings? | Open — competing positions received |
+
+Detail on each in §5.
+
+---
+
 ## 1. The problem we are solving
 
 Mellea intrinsics — `check_answerability`, `requirement_check`, `find_citations`, the Guardian helpers — let users add specialised capabilities to a base model. Under the hood each one is an **adapter**: a small artefact that specialises the base model for that one task.
@@ -91,13 +117,18 @@ Of Mellea's five backends (`LocalHFBackend`, `OpenAIBackend`, `OllamaBackend`, `
 These gate decomposition; everything else can live in sub-issues once these are agreed.
 
 1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
-2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base.
-3. **Reality C target shape.** The active work item is [#27](https://github.com/generative-computing/mellea/issues/27) (aLoRA on remote vLLM), paced by upstream vLLM's position. Do we leave the `ServerMediatedBinding` slot empty in 0.6.0 and populate it when #27 unblocks, or invest in a no-op/stub subclass now? Recommendation: leave empty, design the slot, revisit when upstream moves.
+2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base. **Position received (Jacob):** auto-load yes, auto-unload no — once activated, leave the adapter loaded; let the caller or session teardown trigger explicit `release()`. The multi-tenancy concern is reduced for `LocalHFBackend`, which is primarily a single-user/local backend (see §10).
+3. **Reality C target shape.** The aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked: vLLM has declined to upstream aLoRA support (see §8.3 for history). **Position received (Paul):** leave non-switch vLLM adapters alone; no near-term path there. Recommendation: design the `ServerMediatedBinding` slot so the interface is clean when/if the upstream situation changes, but leave it empty and do not invest in stubs.
 4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
-5. **Terminology rename scope.** Three independent yes/no decisions for the "adapter over intrinsic" shift — each can be taken or declined on its own merits:
-   - **Q5a. Prose rename** — shift docs, error messages, help text, and dev-doc vocabulary to "adapter." Zero breakage. Recommended unconditionally.
-   - **Q5b. Module rename** — rename `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for anyone importing from the submodule path.
-   - **Q5c. AST class rename** — rename `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias for one release. Breaking for advanced users calling `mfuncs.act(Intrinsic(...))` directly.
+5. **Terminology rename scope.** Feedback received challenges the framing in this proposal. Three competing positions:
+   - **This proposal's model:** "adapter" replaces "intrinsic" as the primary user-facing term; `Intrinsic` AST class and module path are renamed with shims.
+   - **Jacob's model:** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
+   - **Paul's preference:** create a new `Adapter` API alongside the existing intrinsic API and deprecate the old — implement new, don't rename.
+
+   These three models need alignment before §5 Q1 can be finalised. The three original sub-questions remain relevant once the higher-level question is resolved:
+   - **Q5a. Prose rename** — shift docs, error messages, help text to "adapter." Zero breakage. Likely agreed regardless of model chosen.
+   - **Q5b. Module rename** — rename `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for submodule importers.
+   - **Q5c. AST class rename** — rename `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias. If Jacob's model is adopted, Q5c answer is "no rename" — `Intrinsic` stays as the AST component name and receives a precise definition alongside the new `Adapter` class.
 
 > **Implementation note, not a reviewer question:** intrinsic-level observability (§14) should coordinate with the in-flight [#1035](https://github.com/generative-computing/mellea/issues/1035) / [PR #1036](https://github.com/generative-computing/mellea/pull/1036) work so content capture uses the same `MELLEA_TRACE_CONTENT` flag and doesn't get designed twice. Flagged here for awareness; sequenced during implementation.
 
@@ -166,7 +197,7 @@ Names matter because they appear in user-facing error messages, docs, and teleme
 | **Adapter** | The user-facing term for a specialised capability added to a base model — answerability, citations, requirement-check, etc. In the redesign, `Adapter` is one class composed of three parts (identity, I/O contract, weights binding). This is the primary noun users and docs should reach for. |
 | **Intrinsic** | Legacy Mellea term for the same concept. Still appears in the current class names (`Intrinsic` AST component, `IntrinsicAdapter`, `mellea.stdlib.components.intrinsic` module). The direction of travel is to fold "intrinsic" language into "adapter" — the rename scope is a decision in Part I §5. |
 | **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
-| **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. |
+| **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. *Name under discussion: Jacob prefers `io_config`; `io_contract` is used throughout this proposal but is not final.* |
 | **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality. Exposes `prepare`, `activate`, `deactivate`, `release`. |
 | **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = shipped with the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
 | **LoRA / aLoRA** | Two PEFT technologies. LoRA weights always participate; aLoRA only participates after an activation token is seen. A single adapter ships as one or the other (some intrinsics as either); both are supported across all three realities (including embedded — Granite Switch has LoRA and aLoRA adapters in the same repo, `technology` field on each). |
@@ -197,7 +228,7 @@ The OpenAI-compatible backend **already supports adapters** — but only embedde
 
 **The history (corrected):** Mellea previously ran aLoRA adapters through the OpenAI backend against a **custom vLLM build** that carried an aLoRA patch. The upstream vLLM project declined to merge that patch (confirmed in [PR #543](https://github.com/generative-computing/mellea/pull/543)'s review: "the vLLM aLoRA PR will not [be] accepted, so the alora/intrinsics code for openai is now all dead code"), so PR #543 removed the dead path. Upstream vLLM has therefore **never carried** aLoRA support — the right framing is "declined upstream," not "dropped."
 
-**Live tracking item:** [Issue #27 "Add support for aloras to remote vllm when vllm supports it"](https://github.com/generative-computing/mellea/issues/27) is the open work item for this reality. It remains open because the upstream situation has not changed.
+**Current status (confirmed by Paul):** The aLoRA-on-vLLM path is blocked. vLLM has declined the upstream aLoRA patch, and there is no known path to change this. [Issue #27](https://github.com/generative-computing/mellea/issues/27) remains open to track any change in upstream position, but it is not a near-term delivery target. The design slot in this proposal exists as an interface commitment — if the upstream situation ever changes, here is the clean implementation path — not as an active work item.
 
 **Scope of this reality:** whatever the eventual technology path, the design slot is the same. Two sub-cases the binding must accommodate when the path becomes viable:
 
@@ -223,6 +254,8 @@ return adapter.io_contract.parse(raw)
 
 Every verb that varies per reality lives inside `adapter_scope` (see §9.3); the outer flow is the same whether the adapter is a local PEFT file, an embedded Granite Switch adapter, or a server-mediated one.
 
+> **Boundary constraint:** `io_contract.build_prompt()` and `io_contract.parse()` must delegate to `granite-common` / `granite-formatters` for all `io.yaml` handling and parsing. The `IOContract` class in Mellea wraps these libraries; it does not re-implement their logic. (Jacob's requirement — keep `io.yaml` parsing in the granite-common / granite-formatters boundary.)
+
 ### 9.2 Weights binding verbs per reality
 
 Each concrete binding implements the four-verb set from Part I §4. The column meanings do not change between realities — only what happens inside the verb does.
@@ -234,6 +267,8 @@ Each concrete binding implements the four-verb set from Part I §4. The column m
 | `ServerMediatedBinding` (Reality C) | No-op (or push weights, depending on sub-case) | Set adapter identifier on API request | Unset identifier |
 
 `release()` is implemented per-binding as needed (cache eviction for LocalFile; no-op for the others).
+
+> **Which class knows an adapter doesn't need PEFT activation? The binding does — not the backend.** `EmbeddedBinding.activate()` renders `controls` JSON into the chat template; `LocalFileBinding.activate()` calls PEFT `load_adapter`. The backend calls `binding.activate()` uniformly and has no conditional on binding type. This is the mechanism that eliminates the `if getattr(backend, "_uses_embedded_adapters", False):` branch (§11). When embedded-adapter support is later added to `LocalHFBackend` ([#1018](https://github.com/generative-computing/mellea/issues/1018)), the backend does not need to learn about embedding — it calls the same verbs, and `EmbeddedBinding` handles the difference. The backend only needs the verb interface. (Addressing Jacob's review question on backend consumption.)
 
 ### 9.3 Lifecycle sequence
 
@@ -274,7 +309,7 @@ Mellea currently exposes five backends. Adapter support varies — and is not a 
 
 | Backend             | Reality A (Local PEFT) | Reality B (Embedded) | Reality C (Server-mediated) | Notes |
 | ------------------- | :--------------------: | :------------------: | :-------------------------: | --- |
-| `LocalHFBackend`    | ✅ today                | ⏳🔽 [#1018](https://github.com/generative-computing/mellea/issues/1018) | — | Primary local backend; only one with aLoRA support today. |
+| `LocalHFBackend`    | ✅ today                | ⏳🔽 [#1018](https://github.com/generative-computing/mellea/issues/1018) | — | Primary local backend; only one with aLoRA support today. Primarily used for individual/local deployments rather than multi-tenant environments (Paul). |
 | `OpenAIBackend`     | —                      | ✅ today ([#881](https://github.com/generative-computing/mellea/pull/881)) | ⏳🔼 [#27](https://github.com/generative-computing/mellea/issues/27) | OpenAI-compatible endpoint, including vLLM servers. |
 | `OllamaBackend`     | —                      | —                    | —                           | Ollama's LoRA/PEFT story is GGUF-based and immature; not a current target. |
 | `WatsonxBackend`    | —                      | —                    | —                           | Would require watsonx-side adapter support; no current plan. |
