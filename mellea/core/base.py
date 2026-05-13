@@ -393,6 +393,13 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 requirement failure or an unhandled exception from a streaming
                 validator).  When ``None``, a generic
                 ``RuntimeError("Generation cancelled")`` is recorded.
+
+        Raises:
+            asyncio.CancelledError: Re-raised when the *calling* task itself is
+                being cancelled (``asyncio.current_task().cancelling() > 0``).
+                This prevents external cancellation (e.g. ``asyncio.wait_for``
+                timeout) from being silently absorbed while awaiting the inner
+                generation task.
         """
         if self._computed:
             return
