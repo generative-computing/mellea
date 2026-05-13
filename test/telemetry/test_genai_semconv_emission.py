@@ -15,7 +15,7 @@ from mellea.telemetry.backend_instrumentation import (
     start_generate_span,
 )
 from mellea.telemetry.context import with_context
-from mellea.telemetry.tracing import is_content_tracing_enabled
+from mellea.telemetry.tracing import add_span_event, is_content_tracing_enabled
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,7 +69,6 @@ def test_conversation_id_emitted_from_session_id():
     backend = _fake_backend("OpenAIBackend")
     backend.model_id = "gpt-4"  # type: ignore[attr-defined]
     action = MagicMock()
-    action.prompt_template_metadata = None
 
     with with_context(session_id="sess-abc"):
         with patch("mellea.telemetry.tracing.start_backend_span") as mock_start:
@@ -147,3 +146,29 @@ def test_finalize_none_span_is_noop():
 
 def test_content_tracing_disabled_by_default():
     assert not is_content_tracing_enabled()
+
+
+# ---------------------------------------------------------------------------
+# add_span_event helper
+# ---------------------------------------------------------------------------
+
+
+def test_add_span_event_calls_span_add_event():
+    span = _mock_span()
+    with patch("mellea.telemetry.tracing._OTEL_AVAILABLE", True):
+        add_span_event(span, "gen_ai.content.prompt", {"gen_ai.prompt": "hello"})
+    span.add_event.assert_called_once_with(
+        "gen_ai.content.prompt", attributes={"gen_ai.prompt": "hello"}
+    )
+
+
+def test_add_span_event_none_span_is_noop():
+    with patch("mellea.telemetry.tracing._OTEL_AVAILABLE", True):
+        add_span_event(None, "gen_ai.content.prompt")
+
+
+def test_add_span_event_defaults_to_empty_attributes():
+    span = _mock_span()
+    with patch("mellea.telemetry.tracing._OTEL_AVAILABLE", True):
+        add_span_event(span, "gen_ai.content.completion")
+    span.add_event.assert_called_once_with("gen_ai.content.completion", attributes={})
