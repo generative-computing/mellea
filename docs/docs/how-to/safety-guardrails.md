@@ -5,8 +5,9 @@ description: "Use Guardian Intrinsics to detect harmful, biased, ungrounded, or 
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install "mellea[hf]"`, Apple Silicon or CUDA GPU recommended.
-All Guardian Intrinsics require a `LocalHFBackend` with an IBM Granite model.
+**Prerequisites:** `pip install "mellea[hf]"` for local inference; Apple Silicon or CUDA GPU recommended.
+Guardian Intrinsics work via `LocalHFBackend` (local HuggingFace inference) or `OpenAIBackend`
+pointed at a Granite Switch endpoint (no local GPU required).
 
 Guardian Intrinsics evaluate LLM outputs for safety and quality using LoRA adapters
 loaded directly into a HuggingFace backend — purpose-built for evaluation tasks, not
