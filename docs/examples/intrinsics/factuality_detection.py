@@ -30,8 +30,7 @@ ctx, backend = start_backend(
 # NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
 ctx = ctx.add(Message("user", user_text))
+ctx = ctx.add(Message("assistant", response_text))
 
-result = guardian.factuality_detection(
-    response_text, ctx, backend, documents=[document]
-)
+result = guardian.factuality_detection(ctx, backend, documents=[document])
 print(f"Result of factuality detection: {result}")  # string "yes" or "no"

@@ -176,7 +176,7 @@ def test_factuality_detection(backend):
     context, documents = _read_guardian_input("factuality_detection.json")
 
     # Test with documents passed as argument
-    result = guardian.factuality_detection(None, context, backend, documents=documents)
+    result = guardian.factuality_detection(context, backend, documents=documents)
     assert result == "yes" or result == "no"
 
 
@@ -187,7 +187,7 @@ def test_factuality_detection_from_context(backend):
 
     # Test with documents passed as argument to factuality_detection
     # The function should handle extracting the response and attaching documents
-    result = guardian.factuality_detection(None, context, backend, documents=documents)
+    result = guardian.factuality_detection(context, backend, documents=documents)
     assert result == "yes" or result == "no"
 
 
@@ -197,7 +197,7 @@ def test_factuality_correction(backend):
     context, documents = _read_guardian_input("factuality_correction.json")
 
     # Test with documents passed as argument
-    result = guardian.factuality_correction(None, context, backend, documents=documents)
+    result = guardian.factuality_correction(context, backend, documents=documents)
     assert isinstance(result, str)
 
 
@@ -208,7 +208,7 @@ def test_factuality_correction_from_context(backend):
 
     # Test with documents passed as argument to factuality_correction
     # The function should handle extracting the response and attaching documents
-    result = guardian.factuality_correction(None, context, backend, documents=documents)
+    result = guardian.factuality_correction(context, backend, documents=documents)
     assert isinstance(result, str)
 
 

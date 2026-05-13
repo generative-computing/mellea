@@ -210,7 +210,6 @@ def guardian_check(
 
 
 def factuality_detection(
-    response: str | None,
     context: ChatContext,
     backend: AdapterMixin,
     *,
@@ -224,14 +223,12 @@ def factuality_detection(
     followed by an assistant answer.
 
     Args:
-        response: The assistant's response text to evaluate. When ``None``, the
-            response is extracted from the last assistant output in ``context``.
-        context: Chat context containing user question and conversation history.
+        context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Document snippets that provide factual context for evaluation.
             Each element may be a ``Document`` or a plain string (automatically
-            wrapped in ``Document``). When ``None``, documents are extracted from
-            the last assistant message in ``context``. Keyword-only.
+            wrapped in ``Document``). When provided, replaces any documents
+            on the last assistant message. Keyword-only.
         model_options: Optional model options to pass to the backend (e.g.,
             temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
@@ -246,16 +243,28 @@ def factuality_detection(
 ### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
 """
 
-    response, context, resolved_docs = _resolve_response(response, context)
+    if documents is not None:
+        turn = context.last_turn()
+        if turn is not None:
+            if turn.output is not None and turn.output.value is not None:
+                response_text = turn.output.value
+            elif (
+                turn.model_input is not None
+                and isinstance(turn.model_input, Message)
+                and turn.model_input.role == "assistant"
+            ):
+                response_text = turn.model_input.content
+            else:
+                response_text = None
 
-    explicit_docs = _coerce_to_documents(documents) if documents is not None else None
-    docs_to_use = explicit_docs
-    if resolved_docs is not None:
-        if docs_to_use is not None:
-            docs_to_use.extend(resolved_docs)
-        else:
-            docs_to_use = resolved_docs
-    context = context.add(Message("assistant", response, documents=docs_to_use))
+            if response_text is not None:
+                context = context.add(
+                    Message(
+                        "assistant",
+                        response_text,
+                        documents=_coerce_to_documents(documents),
+                    )
+                )
 
     context = context.add(Message("user", detector_message))
     result_json = call_intrinsic(
@@ -265,7 +274,6 @@ def factuality_detection(
 
 
 def factuality_correction(
-    response: str | None,
     context: ChatContext,
     backend: AdapterMixin,
     *,
@@ -278,14 +286,12 @@ def factuality_correction(
     question relative to the given contextual information.
 
     Args:
-        response: The assistant's response text to correct. When ``None``, the
-            response is extracted from the last assistant output in ``context``.
-        context: Chat context containing user question and conversation history.
+        context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Document snippets that provide factual context for correction.
             Each element may be a ``Document`` or a plain string (automatically
-            wrapped in ``Document``). When ``None``, documents are extracted from
-            the last assistant message in ``context``. Keyword-only.
+            wrapped in ``Document``). When provided, replaces any documents
+            on the last assistant message. Keyword-only.
         model_options: Optional model options to pass to the backend (e.g.,
             temperature, max_tokens). Defaults to ``{ModelOption.TEMPERATURE: 0.0}``.
 
@@ -300,16 +306,28 @@ def factuality_correction(
 ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
 """
 
-    response, context, resolved_docs = _resolve_response(response, context)
+    if documents is not None:
+        turn = context.last_turn()
+        if turn is not None:
+            if turn.output is not None and turn.output.value is not None:
+                response_text = turn.output.value
+            elif (
+                turn.model_input is not None
+                and isinstance(turn.model_input, Message)
+                and turn.model_input.role == "assistant"
+            ):
+                response_text = turn.model_input.content
+            else:
+                response_text = None
 
-    explicit_docs = _coerce_to_documents(documents) if documents is not None else None
-    docs_to_use = explicit_docs
-    if resolved_docs is not None:
-        if docs_to_use is not None:
-            docs_to_use.extend(resolved_docs)
-        else:
-            docs_to_use = resolved_docs
-    context = context.add(Message("assistant", response, documents=docs_to_use))
+            if response_text is not None:
+                context = context.add(
+                    Message(
+                        "assistant",
+                        response_text,
+                        documents=_coerce_to_documents(documents),
+                    )
+                )
 
     context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic(

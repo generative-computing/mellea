@@ -560,7 +560,7 @@ def test_call_intrinsic_factuality_detection(call_intrinsic_backend):
         context = context.add(Message(m["role"], m["content"]))
 
     result = guardian.factuality_detection(
-        None, context, call_intrinsic_backend, documents=docs
+        context, call_intrinsic_backend, documents=docs
     )
     assert result in ("yes", "no")
 
@@ -583,6 +583,6 @@ def test_call_intrinsic_factuality_correction(call_intrinsic_backend):
         context = context.add(Message(m["role"], m["content"]))
 
     result = guardian.factuality_correction(
-        None, context, call_intrinsic_backend, documents=docs
+        context, call_intrinsic_backend, documents=docs
     )
     assert isinstance(result, str)
