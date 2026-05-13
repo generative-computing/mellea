@@ -287,5 +287,29 @@ async def test_processing_reasoning_content_still_used(backend):
     assert mot._underlying_value == "answer"
 
 
+async def test_processing_reasoning_content_takes_precedence_over_reasoning(backend):
+    """reasoning_content attribute wins when both it and raw ``reasoning`` are present."""
+    message = ChatCompletionMessage.model_validate(
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning_content": "attr-trace",
+            "reasoning": "raw-trace",
+        }
+    )
+    chunk = ChatCompletion(
+        id="prec-test",
+        created=0,
+        model="fake",
+        object="chat.completion",
+        choices=[Choice(index=0, finish_reason="stop", message=message)],
+    )
+    mot: ModelOutputThunk = ModelOutputThunk(value=None)
+    await backend.processing(mot, chunk)
+
+    assert mot._thinking == "attr-trace"
+    assert mot._underlying_value == "answer"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

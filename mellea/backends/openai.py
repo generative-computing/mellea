@@ -991,16 +991,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if isinstance(chunk, ChatCompletion):
             message = chunk.choices[0].message
 
-            if hasattr(message, "reasoning_content"):
-                thinking_chunk = message.reasoning_content  # type: ignore
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
-            else:
-                # vLLM uses "reasoning" in the raw dict rather than a reasoning_content attribute.
-                raw_message = message.model_dump()
-                thinking_chunk = raw_message.get("reasoning")
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            # reasoning_content (Anthropic/DeepSeek attribute path) takes priority;
+            # fall back to the "reasoning" extra field used by vLLM and compatible servers.
+            thinking_chunk = getattr(message, "reasoning_content", None)
+            if thinking_chunk is None:
+                thinking_chunk = (message.model_extra or {}).get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
@@ -1021,16 +1018,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 return
 
             message_delta = chunk.choices[0].delta
-            if hasattr(message_delta, "reasoning_content"):
-                thinking_chunk = message_delta.reasoning_content  # type: ignore
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
-            else:
-                # vLLM streaming: same "reasoning" fallback for delta chunks.
-                raw_delta = message_delta.model_dump()
-                thinking_chunk = raw_delta.get("reasoning")
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            thinking_chunk = getattr(message_delta, "reasoning_content", None)
+            if thinking_chunk is None:
+                thinking_chunk = (message_delta.model_extra or {}).get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:
