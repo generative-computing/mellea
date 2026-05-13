@@ -1,4 +1,4 @@
-# pytest: ollama, e2e
+# pytest: ollama, e2e, qualitative
 
 """Mellea backend spans carrying OTel GenAI semantic convention attributes.
 
@@ -73,8 +73,7 @@ def main() -> None:
     print("  error.type = <exception class name>")
 
     try:
-        with start_session() as m2:
-            m2._backend.model_id = "mellea-semconv-nonexistent-xyz"  # type: ignore[attr-defined]
+        with start_session(model_id="mellea-semconv-nonexistent-xyz") as m2:
             m2.instruct("Hello")
     except Exception as exc:
         print(f"\nGot expected error: {exc.__class__.__name__}")

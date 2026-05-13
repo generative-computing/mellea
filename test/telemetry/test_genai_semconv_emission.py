@@ -135,6 +135,17 @@ def test_finalize_never_raises_on_span_error():
             finalize_backend_span(span, error=ValueError("test"))
 
 
+def test_finalize_never_raises_if_end_span_raises():
+    """end_backend_span exceptions must not propagate on the error path."""
+    span = _mock_span()
+    with patch(
+        "mellea.telemetry.backend_instrumentation.end_backend_span",
+        side_effect=RuntimeError("sdk shutdown"),
+    ):
+        with patch("mellea.telemetry.backend_instrumentation.set_span_error"):
+            finalize_backend_span(span, error=ValueError("original error"))
+
+
 def test_finalize_none_span_is_noop():
     finalize_backend_span(None, error=RuntimeError("x"))
 

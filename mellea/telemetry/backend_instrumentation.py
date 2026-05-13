@@ -107,13 +107,14 @@ def instrument_generate_from_context(
     """
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)
+    provider_name = get_provider_name(backend)
 
     return trace_backend(
         "chat",  # Gen-AI convention: use 'chat' for chat completions
         **{
             # Gen-AI semantic convention attributes
             "gen_ai.system": system_name,
-            "gen_ai.provider.name": system_name,
+            "gen_ai.provider.name": provider_name,
             "gen_ai.request.model": model_id,
             "gen_ai.operation.name": "chat",
             # Mellea-specific attributes
@@ -149,14 +150,15 @@ def start_generate_span(
 
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)
+    provider_name = get_provider_name(backend)
 
     from .context import get_current_context
 
     telemetry_ctx = get_current_context()
-    span_attrs: dict = {
+    span_attrs: dict[str, Any] = {
         # Gen-AI semantic convention attributes
         "gen_ai.system": system_name,
-        "gen_ai.provider.name": system_name,
+        "gen_ai.provider.name": provider_name,
         "gen_ai.request.model": model_id,
         "gen_ai.operation.name": "chat",
         # Mellea-specific attributes
@@ -198,13 +200,14 @@ def instrument_generate_from_raw(
     """
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)
+    provider_name = get_provider_name(backend)
 
     return trace_backend(
         "text_completion",  # Gen-AI convention: use 'text_completion' for completions
         **{
             # Gen-AI semantic convention attributes
             "gen_ai.system": system_name,
-            "gen_ai.provider.name": system_name,
+            "gen_ai.provider.name": provider_name,
             "gen_ai.request.model": model_id,
             "gen_ai.operation.name": "text_completion",
             # Mellea-specific attributes
@@ -325,8 +328,10 @@ def finalize_backend_span(span: Any, *, error: Exception | None = None) -> None:
             set_span_attribute(span, "error.type", type(error).__name__)
     except Exception:
         pass
-    finally:
+    try:
         end_backend_span(span)
+    except Exception:
+        pass
 
 
 __all__ = [
