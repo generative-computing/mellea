@@ -17,6 +17,7 @@ import base64
 import binascii
 import datetime
 import enum
+import logging
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -345,6 +346,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._generate_extra: asyncio.Task[Any] | None = (
             None  # Currently only used by hf.
         )
+        # Optional cooperative-cancel hook called before asyncio task cancellation.
+        # Backends that run generation in a thread (e.g. HuggingFace via
+        # asyncio.to_thread) set this to a non-blocking callable (e.g.
+        # threading.Event.set) so the thread receives a stop signal before the
+        # task wrapper is cancelled. Must be non-blocking; exceptions are logged
+        # and suppressed. Copied MOTs reset this to None — each computation owns
+        # its own thread signal.
+        self._cancel_hook: Callable[[], None] | None = None
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
@@ -394,6 +403,16 @@ class ModelOutputThunk(CBlock, Generic[S]):
                     self._async_queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
+
+        # Signal any backend thread before cancelling the asyncio task wrapper
+        # so the thread can stop cooperatively instead of running to completion.
+        if self._cancel_hook is not None:
+            try:
+                self._cancel_hook()
+            except Exception as hook_exc:
+                logging.getLogger(__name__).warning(
+                    "cancel_generation: _cancel_hook raised (suppressed): %r", hook_exc
+                )
 
         if self._generate is not None and not self._generate.done():
             self._generate.cancel()
@@ -460,6 +479,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.generation = other.generation
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
+        # _cancel_hook is deliberately not copied: _copy_from swaps output state,
+        # not backend-thread plumbing, which is tied to the original computation.
+        self._cancel_hook = None
 
     def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled.
@@ -689,6 +711,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         copied._computed = self._computed
         copied._cancelled = self._cancelled
+        # _cancel_hook is not forwarded: a copied MOT is a distinct computation
+        # and must not share the original's backend thread signal.
+        copied._cancel_hook = None
         copied._thinking = self._thinking
         copied._action = self._action
         copied._context = self._context
@@ -718,6 +743,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
         deepcopied._cancelled = self._cancelled
+        # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
+        # and must not share the original's backend thread signal.
+        deepcopied._cancel_hook = None
         deepcopied._thinking = self._thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
