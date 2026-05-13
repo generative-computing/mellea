@@ -443,6 +443,11 @@ async def stream_with_chunking(
     val_backend = quick_check_backend if quick_check_backend is not None else backend
 
     mot, gen_ctx = await backend.generate_from_context(action, ctx, model_options=opts)
+    if mot.is_computed():
+        raise RuntimeError(
+            "stream_with_chunking() requires a streaming backend; the backend returned "
+            "an already-computed MOT. Ensure the backend honours ModelOption.STREAM."
+        )
     try:
         result = StreamChunkingResult(mot, gen_ctx)
         coro = _orchestrate_streaming(

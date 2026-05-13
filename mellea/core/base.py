@@ -426,13 +426,25 @@ class ModelOutputThunk(CBlock, Generic[S]):
         if self._generate is not None:
             try:
                 await self._generate
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
+                # Re-raise if the *outer* task is being cancelled (Python 3.12+
+                # task.cancelling() > 0) so we don't silently absorb external
+                # cancellation. For the inner task's own CancelledError (the
+                # expected result of .cancel() above), cancelling() is 0.
+                cur = asyncio.current_task()
+                if cur is not None and cur.cancelling() > 0:
+                    raise
+            except Exception:
                 pass
 
         if self._generate_extra is not None:
             try:
                 await self._generate_extra
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
+                cur = asyncio.current_task()
+                if cur is not None and cur.cancelling() > 0:
+                    raise
+            except Exception:
                 pass
 
         # Drain again for any final item the task put before terminating.

@@ -1254,3 +1254,33 @@ async def test_stream_with_chunking_cancels_peer_validators() -> None:
     assert not reached_final_stage.is_set(), (
         "slow sibling was not cancelled by TaskGroup"
     )
+
+
+@pytest.mark.asyncio
+async def test_stream_with_chunking_rejects_precomputed_mot() -> None:
+    """Backend returning an already-computed MOT raises RuntimeError immediately.
+
+    stream_with_chunking() requires streaming; a pre-computed MOT would cause
+    the orchestrator loop to skip entirely, producing empty output and silently
+    passing all final validators against an empty string.
+    """
+
+    class PrecomputedBackend(Backend):
+        async def _generate_from_context(
+            self,
+            action: Any,
+            ctx: Any,
+            *,
+            format: Any = None,
+            model_options: dict | None = None,
+            tool_calls: bool = False,
+        ) -> tuple[ModelOutputThunk, Any]:
+            return ModelOutputThunk(value="already done"), ctx
+
+        async def generate_from_raw(
+            self, actions: Any, ctx: Any, **kwargs: Any
+        ) -> list[ModelOutputThunk]:
+            raise NotImplementedError
+
+    with pytest.raises(RuntimeError, match="already-computed MOT"):
+        await stream_with_chunking(_action(), PrecomputedBackend(), _ctx())
