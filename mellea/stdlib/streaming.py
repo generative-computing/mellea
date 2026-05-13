@@ -419,6 +419,10 @@ async def stream_with_chunking(
     Raises:
         ValueError: If *chunking* is a string that does not match any known
             alias (``"sentence"``, ``"word"``, ``"paragraph"``).
+        RuntimeError: If the backend returns an already-computed
+            :class:`~mellea.core.base.ModelOutputThunk` instead of a streaming
+            one.  This indicates the backend is not honouring
+            ``ModelOption.STREAM``.
 
     Note:
         Any exception raised by ``copy(req)`` on a ``quick_check_requirements``

@@ -921,7 +921,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             output = ModelOutputThunk(None)
             # Arm the cancel hook before creating tasks so a cancel racing
             # task creation still finds the hook set.
-            output._cancel_hook = _cancel_event.set if stream else None
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -1082,7 +1083,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             output = ModelOutputThunk(None)
             # Arm the cancel hook before creating tasks so a cancel racing
             # task creation still finds the hook set.
-            output._cancel_hook = _cancel_event.set if stream else None
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action

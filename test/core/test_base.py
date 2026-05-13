@@ -272,3 +272,48 @@ async def test_cancel_generation_hook_exception_is_suppressed() -> None:
     # The hook raises, but cancel_generation must complete without propagating.
     await mot.cancel_generation()  # type: ignore[attr-defined]
     assert mot._cancelled is True  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_propagates_outer_cancellation() -> None:
+    """Outer cancellation of the cancel_generation() task must re-raise CancelledError.
+
+    When cancel_generation() is awaiting self._generate and the *cancel_generation*
+    task is itself cancelled from outside, cur.cancelling() > 0 and the
+    CancelledError must propagate — not be swallowed by the bare ``pass`` path.
+    """
+    import asyncio
+
+    inner_cancelled = asyncio.Event()
+
+    async def _absorbs_first_cancel() -> None:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # Signal that cancel_generation() has called .cancel() and is
+            # now blocked at ``await self._generate``.
+            inner_cancelled.set()
+            # Absorb this cancel so cancel_generation() stays at the await.
+            await asyncio.sleep(60)
+
+    mot = ModelOutputThunk(value=None)
+    mot._generate = asyncio.create_task(_absorbs_first_cancel())  # type: ignore[attr-defined]
+    await asyncio.sleep(0)
+
+    cg_task = asyncio.create_task(mot.cancel_generation())  # type: ignore[attr-defined]
+    # Wait until _generate has absorbed cancel_generation()'s .cancel() call —
+    # at that point cg_task is blocked at ``await self._generate``.
+    await asyncio.wait_for(inner_cancelled.wait(), timeout=2.0)
+
+    # Cancel cancel_generation() from outside (simulates asyncio.wait_for timeout
+    # or an outer TaskGroup cancelling this coroutine).
+    cg_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(cg_task, timeout=2.0)
+
+    # Cleanup: stop the still-running _generate task.
+    mot._generate.cancel()  # type: ignore[attr-defined]
+    try:
+        await asyncio.wait_for(mot._generate, timeout=1.0)  # type: ignore[attr-defined]
+    except (TimeoutError, asyncio.CancelledError):
+        pass

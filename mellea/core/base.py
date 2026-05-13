@@ -427,7 +427,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             try:
                 await self._generate
             except asyncio.CancelledError:
-                # Re-raise if the *outer* task is being cancelled (Python 3.12+
+                # Re-raise if the *outer* task is being cancelled (Python 3.11+
                 # task.cancelling() > 0) so we don't silently absorb external
                 # cancellation. For the inner task's own CancelledError (the
                 # expected result of .cancel() above), cancelling() is 0.
