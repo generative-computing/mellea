@@ -22,6 +22,7 @@ writing or committing.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -204,7 +205,14 @@ def main() -> int:
         return 0
 
     write_pyproject(next_version)
-    run(["uv", "lock", "--upgrade-package", "mellea"])
+    # Override UV_FROZEN inherited from the workflow env: frozen mode rejects
+    # lockfile updates, but every bump changes the package entry.
+    subprocess.run(
+        ["uv", "lock", "--upgrade-package", "mellea"],
+        cwd=REPO_ROOT,
+        check=True,
+        env={**os.environ, "UV_FROZEN": "0"},
+    )
     run(["git", "add", "pyproject.toml", "uv.lock"])
     run(["git", "commit", "-m", f"release: bump version to {next_version} [skip ci]"])
 

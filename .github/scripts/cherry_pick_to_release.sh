@@ -20,7 +20,7 @@
 #   6. On success, either pushes to origin (when AUTO_PUSH=1, set by the
 #      CI workflow) or prints the push command for the operator to run.
 
-set -eu
+set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
     >&2 echo "usage: $0 <release-branch> <sha> [<sha> ...]"

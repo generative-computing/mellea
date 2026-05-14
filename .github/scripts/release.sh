@@ -17,7 +17,7 @@
 # append to the changelog on the release branch, and open a sync PR to main
 # with the changelog delta.
 
-set -e
+set -euo pipefail
 set -x
 
 if [ -z "${RELEASE_BRANCH:-}" ]; then
@@ -99,7 +99,15 @@ git push origin "${RELEASE_BRANCH}"
 # pushed to directly from this script; branch protection applies normally.
 SYNC_BRANCH="chore/changelog-sync-${TARGET_VERSION}"
 git fetch origin main
-git checkout -B "${SYNC_BRANCH}" origin/main
+# If the sync branch already exists on origin (e.g. a previous run got past
+# the push but failed before opening the PR), reuse it so we don't silently
+# discard prior commits. Otherwise branch fresh from origin/main.
+if git rev-parse --verify "refs/remotes/origin/${SYNC_BRANCH}" >/dev/null 2>&1; then
+    git checkout "${SYNC_BRANCH}"
+    git reset --hard "origin/${SYNC_BRANCH}"
+else
+    git checkout -b "${SYNC_BRANCH}" origin/main
+fi
 # Pick just the changelog change from the commit we just made on the release branch.
 git checkout "${RELEASE_BRANCH}" -- "${CHGLOG_FILE}"
 git add "${CHGLOG_FILE}"
