@@ -179,7 +179,15 @@ def guardian_check(
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
+
+    Raises:
+        ValueError: If documents are provided but target_role is not "assistant".
     """
+    if documents is not None and target_role != "assistant":
+        raise ValueError(
+            "documents parameter is only supported when target_role='assistant'"
+        )
+
     if documents is not None and target_role == "assistant":
         response, context, resolved_docs = _resolve_response(None, context)
         explicit_docs = _coerce_to_documents(documents)

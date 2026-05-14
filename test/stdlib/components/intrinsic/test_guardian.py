@@ -182,12 +182,24 @@ def test_factuality_detection(backend):
 
 @pytest.mark.qualitative
 def test_factuality_detection_from_context(backend):
-    """Verify factuality detection works when documents are in the last message."""
+    """Verify factuality detection works when documents are already in the last message."""
     context, documents = _read_guardian_input("factuality_detection.json")
 
-    # Test with documents passed as argument to factuality_detection
-    # The function should handle extracting the response and attaching documents
-    result = guardian.factuality_detection(context, backend, documents=documents)
+    # Rebuild context with documents attached to the last assistant message
+    last_turn = context.last_turn()
+    if last_turn and last_turn.model_input:
+        context = ChatContext().add(Message("user", "What is the question?"))
+        if isinstance(last_turn.model_input, Message):
+            context = context.add(
+                Message(
+                    last_turn.model_input.role,
+                    last_turn.model_input.content,
+                    documents=documents,
+                )
+            )
+
+    # Call without documents= argument; documents should be picked up from context
+    result = guardian.factuality_detection(context, backend)
     assert result == "yes" or result == "no"
 
 
@@ -203,12 +215,24 @@ def test_factuality_correction(backend):
 
 @pytest.mark.qualitative
 def test_factuality_correction_from_context(backend):
-    """Verify factuality correction works when documents are in the last message."""
+    """Verify factuality correction works when documents are already in the last message."""
     context, documents = _read_guardian_input("factuality_correction.json")
 
-    # Test with documents passed as argument to factuality_correction
-    # The function should handle extracting the response and attaching documents
-    result = guardian.factuality_correction(context, backend, documents=documents)
+    # Rebuild context with documents attached to the last assistant message
+    last_turn = context.last_turn()
+    if last_turn and last_turn.model_input:
+        context = ChatContext().add(Message("user", "What is the question?"))
+        if isinstance(last_turn.model_input, Message):
+            context = context.add(
+                Message(
+                    last_turn.model_input.role,
+                    last_turn.model_input.content,
+                    documents=documents,
+                )
+            )
+
+    # Call without documents= argument; documents should be picked up from context
+    result = guardian.factuality_correction(context, backend)
     assert isinstance(result, str)
 
 
