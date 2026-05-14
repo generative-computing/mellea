@@ -52,9 +52,25 @@ DANGEROUS_COMMANDS = {
     "groupmod",
 }
 
+# Safe wrapper commands that can invoke nested commands (e.g., env, timeout).
+# Only commands in this set are allowed to have dangerous commands as nested arguments.
+# For all other commands, dangerous commands are rejected regardless of nesting.
+SAFE_WRAPPER_COMMANDS = {
+    "env",  # set environment vars
+    "timeout",  # limit execution time
+    "nice",  # set process priority
+    "nohup",  # ignore SIGHUP
+    "stdbuf",  # modify buffering
+    "unbuffer",  # alias for stdbuf
+    "ionice",  # set I/O priority
+}
+
 # System paths that are dangerous to write to
 # Includes both standard Linux paths and macOS /private equivalents
 # (on macOS, many system paths are symlinks to /private/*)
+# NOTE: On macOS, /var/folders/* resolves to /private/var/folders/* (user temp dirs).
+# We don't block the entire /private/var tree because that would block legitimate
+# writes to temp directories. Instead, we block specific dangerous subdirectories.
 DANGEROUS_PATHS = {
     "/",
     "/bin",
@@ -69,9 +85,12 @@ DANGEROUS_PATHS = {
     "/root",
     "/var/log",
     "/var/www",
-    # macOS /private equivalents
+    # macOS /private equivalents (specific paths, not entire /private/var)
     "/private/etc",
-    "/private/var",
+    "/private/var/log",
+    "/private/var/www",
+    "/private/var/db",
+    "/private/var/root",
 }
 
 # Dangerous flags that make commands unsafe
@@ -97,18 +116,32 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
 
     # Check for shell metacharacters that would need shell interpretation
     # After shlex.split(), these characters in argv indicate shell operators (not quoted strings)
-    # These are only dangerous if they're standalone tokens or at token boundaries
-    shell_operators = {"<", ">", "|", ";", "&", "&&", "||"}
-    shell_operator_sequences = (">>", ">&", "<<", "|&", "&&", "||")
+    # These are only dangerous if they're standalone tokens (e.g., argv[i] == ">>").
+    # Substring matches would cause false positives for legitimate patterns like "a&&b".
+    shell_operators = {"<", ">", "|", ";", "&", "&&", "||", ">>", ">&", "<<", "|&"}
 
     for arg in argv:
-        # Check for redirect/pipe/logic operators (these are shell operators)
+        # Check for redirect/pipe/logic operators (these are shell operators).
+        # Operators can appear as:
+        # 1. Standalone tokens: arg == "&&" (caught by exact match)
+        # 2. Operator with argument: arg == ">&2" or arg == ">file" (start with operator)
+        # We don't check for substring matches (e.g., "a&&b") to avoid false positives
+        # for legitimate patterns like regex or AWK/sed code.
+
+        # Exact match first (standalone operators like "&&", "|", etc.)
         if arg in shell_operators:
             return True, f"Shell operator '{arg}' is not allowed"
-        # Check for combined operators or operators within tokens
-        if any(op in arg for op in shell_operator_sequences):
-            return True, "Shell operator is not allowed"
-        # Check for semicolon (command separator) within or as token
+
+        # Check if argument starts with a shell operator (e.g., ">&2", ">file", "2>&1")
+        for op in shell_operators:
+            if arg.startswith(op) and len(arg) > len(op):
+                # Token starts with operator and has additional content (e.g., ">&2", ">file")
+                # This is a shell redirection/operator usage
+                return True, f"Shell operator '{op}' is not allowed"
+
+        # Note: semicolon is already in shell_operators, but we check for it separately
+        # as a substring because semicolon can be dangerous even in patterns.
+        # Unlike && or ||, semicolon rarely appears legitimately in arguments.
         if ";" in arg:
             return True, "Command chaining (;) is not allowed"
 
@@ -145,7 +178,9 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
 
     # Check if any argument is a dangerous command (e.g., env sudo, timeout sudo)
     # Only check positional arguments that are not paths or flag values.
-    # Known value-taking flags that consume the next argument (space-separated only):
+    # Known value-taking flags that consume the next argument (space-separated only).
+    # NOTE: -i / --input are intentionally not included. env(1)'s -i takes NO value;
+    # other commands' -i/--input (if present) should not mask dangerous commands.
     flag_value_flags = {
         "-c",
         "--config",
@@ -153,8 +188,6 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         "--file",
         "-o",
         "--output",
-        "-i",
-        "--input",
         "-d",
         "--dir",
         "-p",
@@ -178,16 +211,33 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
             continue
 
         arg_cmd = arg.split("/")[-1]
-        if arg_cmd in DANGEROUS_COMMANDS and arg_cmd not in (
-            "bash",
-            "sh",
-            "zsh",
-            "ksh",
-            "tcsh",
-        ):
-            # Allow shells as arguments (e.g., timeout bash script.sh)
-            # but reject sudo/su/etc as nested commands
-            return True, f"Command '{arg_cmd}' is not allowed as an argument"
+
+        # Only allow dangerous commands as nested arguments if the top-level
+        # command is in SAFE_WRAPPER_COMMANDS. This prevents bypasses like
+        # "env -i sudo" or "timeout -t 10 sudo". Without the wrapper allowlist,
+        # these would pass validation despite being dangerous.
+        if arg_cmd in DANGEROUS_COMMANDS:
+            if cmd not in SAFE_WRAPPER_COMMANDS or arg_cmd not in (
+                "bash",
+                "sh",
+                "zsh",
+                "ksh",
+                "tcsh",
+            ):
+                # Allow shells as arguments in safe wrappers (e.g., timeout bash script.sh)
+                # but reject sudo/su/etc as nested commands
+                return True, f"Command '{arg_cmd}' is not allowed as an argument"
+
+        # Check for dangerous nested commands that aren't in DANGEROUS_COMMANDS but
+        # have dangerous flags (e.g., "env rm -rf" or "timeout rm -rf").
+        # Only apply this check if the wrapper is in SAFE_WRAPPER_COMMANDS.
+        if cmd in SAFE_WRAPPER_COMMANDS and arg_cmd == "rm":
+            # Check if rm has dangerous flags anywhere in argv after this command
+            if any(flag in argv for flag in ["-r", "-rf", "--recursive"]):
+                return (
+                    True,
+                    "Command 'rm' with dangerous flags is not allowed as an argument",
+                )
 
     # Check for dangerous commands
     if cmd in DANGEROUS_COMMANDS:
@@ -199,17 +249,33 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
 
     # Check for dangerous git operations
     if cmd == "git":
-        # Check for --force flag on any git operation
-        if any("--force" in arg or arg == "-f" for arg in argv):
-            return True, "git commands with --force or -f flag are not allowed"
-        # Check for destructive git operations: push, reset --hard, clean
+        # Check for destructive git operations: push --force, reset --hard, clean -f/-d
         has_destructive_op = False
-        if "push" in argv and any("--force" in arg or arg == "-f" for arg in argv):
+
+        # git push --force: check for exact tokens (not substrings)
+        if "push" in argv and any(arg == "--force" or arg == "-f" for arg in argv):
             has_destructive_op = True
+
+        # git reset --hard: both must be exact tokens
         if "reset" in argv and "--hard" in argv:
             has_destructive_op = True
-        if "clean" in argv and any(("-f" in arg or "-d" in arg) for arg in argv):
-            has_destructive_op = True
+
+        # git clean -f/-d: check for these dangerous flags (exact match or combined like -fd)
+        # Avoid false positives: --dry-run should not match -d (use exact or combined check)
+        if "clean" in argv:
+            for arg in argv:
+                # Exact matches: -f, -d, -fd, -df, etc.
+                if arg in ("-f", "-d", "-fd", "-df"):
+                    has_destructive_op = True
+                    break
+                # Also check arg startswith for combined flags containing d or f
+                # but NOT for things like --dry-run (those start with --)
+                if arg.startswith("-") and not arg.startswith("--"):
+                    # Short flags: -f, -d, or combinations like -fd, -ddf, etc.
+                    if "f" in arg or "d" in arg:
+                        has_destructive_op = True
+                        break
+
         if has_destructive_op:
             return True, "Destructive git operation is not allowed"
 
@@ -218,10 +284,18 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         if "-r" in argv or "-rf" in argv or "--recursive" in argv:
             return True, "rm with -r or -rf flag is not allowed"
 
-    # Check for dangerous flags in other commands
+    # Check for dangerous flags in specific commands where they are truly dangerous.
+    # Note: We don't check cp/mv/make here because:
+    # - cp -r: standard way to copy directories recursively
+    # - mv -r: standard way to move directories recursively
+    # - make -f: standard way to specify a makefile
+    # These are not "dangerous" operations in themselves.
+    # The real danger is rm -rf (covered above) and git --force (covered above).
     for flag in DANGEROUS_FLAGS:
         if flag in argv:
-            if cmd in ("cp", "mv", "rm", "git", "make", "apt", "yum"):
+            # Only apply DANGEROUS_FLAGS check to apt/yum (package managers)
+            # These with -f or -r can indeed be risky
+            if cmd in ("apt", "yum"):
                 return True, f"Command '{cmd}' with '{flag}' flag is not allowed"
 
     return False, ""
@@ -283,12 +357,21 @@ def _check_dangerous_paths(
         if arg.startswith("-"):
             continue
 
-        # Resolve all paths consistently to catch symlink bypasses
-        if arg.startswith(("/", "~")):
-            resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
-        else:
-            # For relative paths, resolve against current directory
-            resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
+        try:
+            # Resolve all paths consistently to catch symlink bypasses
+            if arg.startswith(("/", "~")):
+                resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
+            else:
+                # For relative paths, resolve against current directory
+                resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
+        except Exception as e:
+            # Fail closed: if we can't resolve a path, deny it.
+            # This prevents attackers from bypassing checks via crafted paths that fail to resolve.
+            logger.warning(f"Cannot resolve path '{arg}' in dangerous paths check: {e}")
+            return (
+                True,
+                f"Cannot validate path '{arg}': path resolution failed ({type(e).__name__})",
+            )
 
         for danger_path in DANGEROUS_PATHS:
             if resolved_arg == danger_path or resolved_arg.startswith(
@@ -330,56 +413,69 @@ def _check_working_dir_restriction(
 
     try:
         allowed_path_str = str(Path(working_dir).expanduser().resolve())
-        # Ensure the allowed path ends with / for prefix matching
-        if not allowed_path_str.endswith("/"):
-            allowed_path_str_prefix = allowed_path_str + "/"
-        else:
-            allowed_path_str_prefix = allowed_path_str
+    except Exception as e:
+        # Fail closed: if we can't resolve working_dir, deny all writes in this directory.
+        logger.warning(f"Cannot resolve working_dir '{working_dir}': {e}")
+        return (
+            True,
+            f"Cannot validate working directory: working_dir '{working_dir}' is not resolvable ({type(e).__name__})",
+        )
 
-        for arg in argv[1:]:
-            if arg.startswith("-"):
-                continue
+    # Ensure the allowed path ends with / for prefix matching
+    if not allowed_path_str.endswith("/"):
+        allowed_path_str_prefix = allowed_path_str + "/"
+    else:
+        allowed_path_str_prefix = allowed_path_str
 
-            # Try to resolve all paths (both absolute and relative)
-            try:
-                # For relative paths, resolve them relative to working_dir, not caller's cwd
-                if arg.startswith(("/", "~")):
-                    resolved_path = str(Path(arg).expanduser().resolve())
-                    is_relative = False
-                else:
-                    resolved_path = str(
-                        Path(working_dir, arg).expanduser().resolve(strict=False)
-                    )
-                    is_relative = True
+    for arg in argv[1:]:
+        if arg.startswith("-"):
+            continue
 
-                # Check if path is allowed: in working_dir, /tmp, or /private/tmp (macOS)
-                is_in_tmp = resolved_path.startswith(("/tmp", "/private/tmp"))
-                is_in_working_dir = (
-                    resolved_path == allowed_path_str
-                    or resolved_path.startswith(allowed_path_str_prefix)
+        # Try to resolve all paths (both absolute and relative)
+        try:
+            # For relative paths, resolve them relative to working_dir, not caller's cwd
+            if arg.startswith(("/", "~")):
+                resolved_path = str(Path(arg).expanduser().resolve())
+                is_relative = False
+            else:
+                resolved_path = str(
+                    Path(working_dir, arg).expanduser().resolve(strict=False)
                 )
+                is_relative = True
 
-                # For relative paths: must be within working_dir (not just /tmp)
-                # For absolute paths: can be in working_dir OR /tmp
-                if is_relative:
-                    # Relative paths must stay within working_dir
-                    if not is_in_working_dir:
-                        return (
-                            True,
-                            f"Path '{arg}' is outside allowed directory '{working_dir}'",
-                        )
-                else:
-                    # Absolute paths can be in working_dir or /tmp
-                    if not (is_in_tmp or is_in_working_dir):
-                        return (
-                            True,
-                            f"Path '{arg}' is outside allowed directory '{working_dir}'",
-                        )
-            except Exception:
-                # If we can't resolve, skip (might be a flag value)
-                pass
-    except Exception:
-        pass
+            # Check if path is allowed: in working_dir, /tmp, or /private/tmp (macOS)
+            is_in_tmp = resolved_path.startswith(("/tmp", "/private/tmp"))
+            is_in_working_dir = (
+                resolved_path == allowed_path_str
+                or resolved_path.startswith(allowed_path_str_prefix)
+            )
+
+            # For relative paths: must be within working_dir (not just /tmp)
+            # For absolute paths: can be in working_dir OR /tmp
+            if is_relative:
+                # Relative paths must stay within working_dir
+                if not is_in_working_dir:
+                    return (
+                        True,
+                        f"Path '{arg}' is outside allowed directory '{working_dir}'",
+                    )
+            else:
+                # Absolute paths can be in working_dir or /tmp
+                if not (is_in_tmp or is_in_working_dir):
+                    return (
+                        True,
+                        f"Path '{arg}' is outside allowed directory '{working_dir}'",
+                    )
+        except Exception as e:
+            # Fail closed: if we can't resolve an argument path, deny it.
+            # This prevents attackers from bypassing checks via crafted paths that fail to resolve.
+            logger.warning(
+                f"Cannot resolve argument path '{arg}' in working_dir check: {e}"
+            )
+            return (
+                True,
+                f"Cannot validate path '{arg}': path resolution failed ({type(e).__name__})",
+            )
 
     return False, ""
 
@@ -392,10 +488,12 @@ def _truncate_output(output: str, max_size: int = MAX_OUTPUT_SIZE) -> tuple[str,
         max_size: Maximum allowed size in bytes.
 
     Returns:
-        A tuple of (truncated_output, was_truncated).
+        A tuple of (truncated_output, was_truncated). The output string is clean
+        (no truncation message). The caller is responsible for appending any
+        truncation message.
     """
     if len(output) > max_size:
-        return output[:max_size] + "\n[OUTPUT TRUNCATED]", True
+        return output[:max_size], True
     return output, False
 
 
@@ -667,11 +765,14 @@ class LLMSandboxBashEnvironment(BashEnvironment):
             )
 
         sandbox_workdir = self.working_dir or "/sandbox"
+        # Coerce argv to strings to avoid repr() generating PosixPath/etc. that won't
+        # be defined in the sandbox namespace (e.g., if caller passes Path objects).
+        argv_strs = [str(a) for a in argv]
         # Pass argv as a list (not shell string) to avoid re-parse and unnecessary quoting
         python_wrapper = (
             "import subprocess\n"
             "import sys\n"
-            f"result = subprocess.run({argv!r}, shell=False, cwd={sandbox_workdir!r}, "
+            f"result = subprocess.run({argv_strs!r}, shell=False, cwd={sandbox_workdir!r}, "
             "capture_output=True, text=True)\n"
             "sys.stdout.write(result.stdout)\n"
             "sys.stderr.write(result.stderr)\n"
