@@ -274,7 +274,7 @@ def _make_matplotlib_headless_validator(
             savefig_instruction = (
                 f"plt.savefig('{output_path}'); plt.close()"
                 if output_path
-                else "plt.savefig('{output_path}'); plt.close()"
+                else "plt.savefig('<output_path>'); plt.close()"
             )
             return ValidationResult(
                 result=False,
@@ -324,7 +324,7 @@ def _make_plots_saved_validator(
             savefig_instruction = (
                 f"plt.savefig('{output_path}')\n  plt.close()"
                 if output_path
-                else "plt.savefig('{output_path}')\n  plt.close()"
+                else "plt.savefig('<output_path>')\n  plt.close()"
             )
             return ValidationResult(
                 result=False,
