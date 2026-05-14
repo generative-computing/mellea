@@ -210,11 +210,7 @@ def _uses_pyplot_plot(code: str) -> bool:
     try:
         ast.parse(code)
     except (SyntaxError, ValueError):
-        return _code_contains_strings(
-            code,
-            [f".{m}(" for m in PYPLOT_PLOT_METHODS]
-            + [f"plt.{m}" for m in PYPLOT_PLOT_METHODS],
-        )
+        return _code_contains_strings(code, [f".{m}(" for m in PYPLOT_PLOT_METHODS])
     return False
 
 
@@ -230,11 +226,7 @@ def _calls_savefig(code: str) -> bool:
     """
     if _find_attribute_calls(code, ["savefig"]):
         return True
-    try:
-        ast.parse(code)
-    except (SyntaxError, ValueError):
-        return _code_contains_strings(code, ["savefig"])
-    return False
+    return _code_contains_strings(code, ["savefig"])
 
 
 def _make_matplotlib_headless_validator(

@@ -1,5 +1,20 @@
 # pytest: ollama, e2e, qualitative
-"""Repair plotting code with Python-tool and plotting-specific requirements."""
+"""Repair plotting code with Python-tool and plotting-specific requirements.
+
+This example demonstrates the full tool lifecycle:
+1. Model generates code and creates tool calls
+2. Sampling validation checks code quality without execution
+3. Tool is explicitly invoked after sampling succeeds (via _call_tools)
+4. Results are returned to caller for inspection/handling
+
+Key insight: Tool execution is explicit and controlled by the caller,
+not automatic within the sampling pipeline. This allows fine-grained control
+over when/if tools are invoked, and enables safety checks (see tool_hooks.py).
+
+Prerequisites:
+    matplotlib must be installed for code execution to succeed:
+    $ uv pip install matplotlib
+"""
 
 import tempfile
 import traceback
@@ -8,6 +23,7 @@ from pathlib import Path
 import mellea
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
+from mellea.stdlib.functional import _call_tools
 from mellea.stdlib.requirements import (
     python_plotting_requirements,
     python_tool_requirements,
@@ -71,18 +87,34 @@ def main():
             print(f"\nResult: {'SUCCESS' if result.success else 'FAILED'}\n")
 
             if result.success:
-                print("✓ Model successfully generated and executed plotting code")
-                print("\nFinal generated code:")
-                print("-" * 70)
-                print(result.result.value)
-                print("-" * 70)
+                print("✓ Model successfully generated plotting code")
 
-                if Path(output_path).exists():
-                    file_size = Path(output_path).stat().st_size
-                    print(f"\n✓ Output file created: {output_path}")
-                    print(f"  File size: {file_size} bytes")
+                # Invoke the generated tools from the final result
+                if (
+                    result.result
+                    and hasattr(result.result, "tool_calls")
+                    and result.result.tool_calls
+                ):
+                    # Print the generated code
+                    for tool_name, tool_call in result.result.tool_calls.items():
+                        if tool_call.args and "code" in tool_call.args:
+                            code = tool_call.args["code"]
+                            print(f"\n{'=' * 70}")
+                            print(f"Generated Python code for tool '{tool_name}':")
+                            print(f"{'=' * 70}")
+                            print(code)
+                            print(f"{'=' * 70}\n")
+
+                    tool_outputs = _call_tools(result.result, m.backend)
+
+                    if tool_outputs:
+                        print("✓ Tool executed successfully")
+                        for i, output in enumerate(tool_outputs, 1):
+                            print(f"  Output {i}: {output.content}")
                 else:
-                    print(f"\n✗ Output file not found: {output_path}")
+                    print("ℹ No tool calls in final result")
+
+                print(f"\nCode saved to: {output_path}")
 
                 print(f"\nRepair iterations: {len(result.sample_validations)}")
                 for attempt_idx, validations in enumerate(result.sample_validations, 1):
