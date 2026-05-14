@@ -435,6 +435,13 @@ def _adapter_subpath(cfg: YamlJsonCombo) -> str:
     return f"{cfg.task}/{model_name}/{lora_str}"
 
 
+# The ``functools.cache`` lives on the original function object, so its memoized
+# entries persist for the whole test session. Tests that want to override this
+# function (see ``test_xfail_if_drifted``) monkeypatch the *module attribute*,
+# which rebinds the name to a stub — calls from ``_xfail_if_drifted`` then resolve
+# to the stub regardless of any cached entries on the original. This works in
+# practice but the interaction is subtle; don't rely on cache invalidation, rely
+# on rebinding.
 @functools.cache
 def _last_commit_for_subpath(repo_id: str, subpath: str, revision: str) -> str | None:
     """Return the SHA of the most recent commit on ``revision`` of ``repo_id`` that
@@ -474,6 +481,9 @@ def _xfail_if_drifted(cfg: YamlJsonCombo) -> None:
     will move the SHA and trip this guard even though no test would actually
     fail. A drifted test that still passes will surface as XPASS.
     """
+    # ``cfg.task is None`` covers fake configs that don't correspond to a real
+    # adapter on Hugging Face (e.g. the ``instruction`` combo) — there's nothing
+    # to check drift against, so skip rather than error.
     if cfg.last_validated_commit is None or cfg.task is None:
         return
 
@@ -896,8 +906,14 @@ def test_run_ollama(yaml_json_combo_for_ollama):
     """
     Run the target model end-to-end with a mock Ollama backend.
     """
-    cfg = yaml_json_combo_for_ollama
-    _xfail_if_drifted(cfg)
+    # The combos in _YAML_JSON_COMBOS_LIST are module-scoped singletons reused
+    # across tests, so we copy before doing the Ollama-specific base-model-id
+    # swap below.
+    cfg = yaml_json_combo_for_ollama.model_copy()
+
+    # Explicitly don't check drift here. Ollama models don't have their own yaml combo
+    # that we can track.
+    # _xfail_if_drifted(cfg)
 
     # Change base model id to Ollama's version
     if cfg.base_model_id == "ibm-granite/granite-4.0-micro":
@@ -1054,8 +1070,8 @@ def test_adapter_versions_unchanged():
             "\nDetection is path-level, so a drift may be nonfunctional (README "
             "edit, new image asset, etc.). If the canned-output tests still pass "
             "against the new adapter, you should ensure it was a meaningful change "
-            "(ie in the adapter or the io.yaml). If it is, regenerate the canned outputs "
-            "and update the ``last_validated_commit``."
+            "(ie in the adapter or the io.yaml). If the change is meaningful, "
+            "regenerate the canned outputs and update the ``last_validated_commit``."
         )
         pytest.fail("\n".join(msg_lines))
 
@@ -1105,7 +1121,11 @@ def test_xfail_if_drifted(monkeypatch, recorded, upstream, expect_xfail):
         with pytest.raises(pytest.xfail.Exception) as exc_info:
             _xfail_if_drifted(cfg)
         msg = str(exc_info.value)
-        assert recorded[:8] in msg
-        assert upstream[:8] in msg
+        # Reaching xfail requires both SHAs to be resolved, but guard explicitly
+        # so that future parametrize cases with ``None`` don't crash here.
+        if recorded is not None:
+            assert recorded[:8] in msg
+        if upstream is not None:
+            assert upstream[:8] in msg
     else:
         _xfail_if_drifted(cfg)  # must not raise
