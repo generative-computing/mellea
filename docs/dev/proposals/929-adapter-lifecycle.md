@@ -460,9 +460,9 @@ Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fi
 
 Detail deferred until Part I §5 decisions are agreed, but the intended phasing is:
 
-1. **Phase 0 — parallel types.** Introduce `Adapter` / `WeightsBinding` / `IOContract` alongside existing classes. No call-site changes, tests unchanged.
-2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Old classes become deprecation shims.
-3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
+1. **Phase 0 — parallel types.** Introduce the new types (`Adapter`, `WeightsBinding`, `IOContract`, plus a user-facing `Intrinsic` class if Q5 is settled on Jake's split) alongside existing classes. Catalogue entries gain pinned HF revision SHAs (Jake req 5; Q10). No call-site changes, tests unchanged.
+2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4). Old classes become deprecation shims.
+3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Bindings implement `prepare` / `activate` / `deactivate` / `release` per reality; `LocalFileBinding.prepare` resolves the configured HF revision (Q9 weight-refresh policy). Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
 4. **Phase 3 — Reality C ships.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
 5. **Phase 4 — shim removal.** After one minor release with deprecation warnings.
 
