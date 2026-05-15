@@ -34,7 +34,7 @@ The `weights_binding` is pluggable — `LocalFileBinding`, `EmbeddedBinding`, or
 | Q2 | Lifecycle default | **Resolved**: session-scoped, no auto-unload (Jake) |
 | Q3 | Reality C (server-mediated): design slot or leave empty? | **Resolved**: design slot, leave empty (Paul; vLLM blocked) |
 | Q4 | Deprecation window for old classes | **Resolved**: 1 minor release ≈ 4–6 weeks; longer if user impact warrants (Paul, Jake) |
-| Q5 | Terminology: replace "intrinsic" with "adapter", or keep both with distinct meanings? | **Open** — three competing positions |
+| Q5 | Terminology: replace "intrinsic" with "adapter", or keep both with distinct meanings? | **Open** — two endpoints; mechanism sub-decision |
 
 Detail on each in §5.
 
@@ -123,15 +123,16 @@ These gate decomposition; everything else can live in sub-issues once these are 
 2. **Adapter lifecycle — session-scoped, no auto-unload.** **Resolved (Jake):** auto-load yes, auto-unload no. Once activated, the adapter stays loaded; the caller or session teardown triggers explicit `release()`. The multi-tenancy concern is reduced because `LocalHFBackend` is primarily a single-user/local backend (see §10). Request-scoped lifecycle remains an opt-in for deployments that need per-call isolation.
 3. **Reality C target shape — design slot, leave empty.** **Resolved (Paul):** the aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked — vLLM has declined to upstream aLoRA support (see §8.3 for history). The `ServerMediatedBinding` slot is designed so the interface is clean if the upstream situation ever changes, but the implementation stays empty and we don't invest in stubs.
 4. **Deprecation window — at least 1 minor release; longer if user impact warrants.** **Resolved (Paul, Jake):** Paul confirms 1 minor release ≈ 4–6 weeks is sufficient, extendable if needed; Jake notes the final length depends on how many users are impacted. **Sub-question (open):** can this ship without breakage at all? Under Q5's current lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
-5. **Terminology rename scope.** Feedback received challenges the framing in this proposal. Three competing positions:
-   - **Original proposal model:** "adapter" replaces "intrinsic" as the primary user-facing term; `Intrinsic` AST class and module path are renamed with shims.
+5. **Terminology — "Adapter" alone, or both names with split meaning?** Two competing endpoints:
+   - **"Adapter" as the user-facing term going forward.** "Adapter" replaces "Intrinsic" in user-facing code. *Transition mechanism is a sub-decision:*
+     - *Rename with shims* (original proposal): rename `Intrinsic` AST class and module path to `Adapter` (or similar); old names aliased as deprecation shims for one release.
+     - *Create new alongside* (Paul's preference): stand up a new `Adapter` API beside the existing intrinsic API; old API gradually deprecated. Don't rename.
    - **Current lean (Jacob's framing):** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
-   - **Paul's preference:** create a new `Adapter` API alongside the existing intrinsic API and deprecate the old — implement new, don't rename.
 
-   These three models need alignment before §5 Q1 can be finalised. The three original sub-questions remain relevant once the higher-level question is resolved:
-   - **Q5a. Prose rename** — shift docs, error messages, help text to "adapter." Zero breakage. Likely agreed regardless of model chosen.
+   These two endpoints need alignment before §5 Q1 can be finalised. The three original sub-questions remain relevant if the first endpoint is chosen:
+   - **Q5a. Prose rename** — shift docs, error messages, help text to "adapter." Zero breakage. Likely agreed regardless of endpoint chosen.
    - **Q5b. Module rename** — rename `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for submodule importers.
-   - **Q5c. AST class rename** — rename `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias. If Jacob's model is adopted, Q5c answer is "no rename" — `Intrinsic` stays as the AST component name and receives a precise definition alongside the new `Adapter` class.
+   - **Q5c. AST class rename** — rename `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias. If Jacob's split is adopted, Q5c answer is "no rename" — `Intrinsic` stays as the AST component name and receives a precise definition alongside the new `Adapter` class.
 
 > **Implementation note, not a reviewer question:** intrinsic-level observability (§14) should coordinate with the in-flight [#1035](https://github.com/generative-computing/mellea/issues/1035) / [PR #1036](https://github.com/generative-computing/mellea/pull/1036) work so content capture uses the same `MELLEA_TRACE_CONTENT` flag and doesn't get designed twice. Flagged here for awareness; sequenced during implementation.
 
