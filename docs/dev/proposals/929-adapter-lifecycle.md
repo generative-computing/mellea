@@ -2,11 +2,11 @@
 
 > **Addresses:** [Epic #929 — Fix Intrinsic Adapter Lifecycle & Consistency in Mellea](https://github.com/generative-computing/mellea/issues/929). Read the epic first if you haven't; it catalogues the specific threads this proposal tries to resolve coherently rather than individually.
 >
-> **Status:** proposal for shape agreement; not a PR candidate. Preserved on a branch for review. Once agreed, the content moves into `docs/dev/intrinsics_and_adapters.md` as the current-state doc and this file is deleted.
+> **Status:** proposal. Design docs produced during implementation will live under `docs/dev/`.
 >
 > **Structure:** **Part I** covers the problem, goals, terminology, end state, and the decisions that gate decomposition. **Part II** contains supporting detail — read after Part I is agreed, not before.
 >
-> **Terminology:** this proposal uses **"adapter"** as the primary user-facing term. "Intrinsic" appears only as the legacy name where it still refers to existing Mellea classes (e.g. the `Intrinsic` AST component). Rename strategy is in §5 Q5.
+> **Terminology:** **"Intrinsic"** is the user-facing term: helpers, input/output parsing, the `Intrinsic` AST component (matching IBM's terminology). **"Adapter"** is the backend artefact: the weights loaded by a backend.
 >
 > **Related issues and prior work:** see the appendix at the end of this document for a linked index with annotations.
 
@@ -65,7 +65,8 @@ Four outcomes, in order of importance. Detail on each lives in Part II; this lis
 
 Only the few terms needed to read Part I:
 
-- **Adapter** — the user-facing term for a specialised capability added to a base model (answerability, requirement-check, etc.). The "adapter" replaces Mellea's legacy term "intrinsic" in prose; legacy class names (`Intrinsic`, `IntrinsicAdapter`) are a migration question, not a meaning question.
+- **Intrinsic** — the user-facing capability: helper functions like `check_answerability`, the `Intrinsic` AST component, and input/output parsing. Implemented by an adapter.
+- **Adapter** — the backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity and I/O contract.
 - **Base model** — the general-purpose LLM everything runs on top of (e.g. `ibm-granite/granite-4.1-3b`).
 - **LoRA / aLoRA** — the two PEFT technologies adapters use. Both are supported.
 - **Reality A / B / C** — shorthand introduced in §4 for the three "where the weights live" stories.
@@ -119,10 +120,10 @@ These gate decomposition; everything else can live in sub-issues once these are 
 1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
 2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base. **Position received (Jacob):** auto-load yes, auto-unload no — once activated, leave the adapter loaded; let the caller or session teardown trigger explicit `release()`. The multi-tenancy concern is reduced for `LocalHFBackend`, which is primarily a single-user/local backend (see §10).
 3. **Reality C target shape.** The aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked: vLLM has declined to upstream aLoRA support (see §8.3 for history). **Position received (Paul):** leave non-switch vLLM adapters alone; no near-term path there. Recommendation: design the `ServerMediatedBinding` slot so the interface is clean when/if the upstream situation changes, but leave it empty and do not invest in stubs.
-4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? One minor release is the default; confirm.
+4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? **Working position:** at least one minor release; longer if user impact warrants (Jake's framing). One minor release ≈ 4–6 weeks (Paul). **Sub-question:** can this land without breakage at all? Under the current Q5 lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
 5. **Terminology rename scope.** Feedback received challenges the framing in this proposal. Three competing positions:
-   - **This proposal's model:** "adapter" replaces "intrinsic" as the primary user-facing term; `Intrinsic` AST class and module path are renamed with shims.
-   - **Jacob's model:** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
+   - **Original proposal model:** "adapter" replaces "intrinsic" as the primary user-facing term; `Intrinsic` AST class and module path are renamed with shims.
+   - **Current lean (Jacob's framing):** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
    - **Paul's preference:** create a new `Adapter` API alongside the existing intrinsic API and deprecate the old — implement new, don't rename.
 
    These three models need alignment before §5 Q1 can be finalised. The three original sub-questions remain relevant once the higher-level question is resolved:
@@ -368,17 +369,17 @@ score = check_answerability(question, documents, context, backend,
 **Manual adapter construction** collapses from four classes (`IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter`, abstract base) to one `Adapter` + a binding:
 
 ```python
-# Stock intrinsic from the catalogue:
+# Adapter for the answerability intrinsic (from catalogue):
 adapter = Adapter(name="answerability",
                   weights=LocalFileBinding.from_catalog("answerability"))
 
-# Custom intrinsic — no catalog monkey-patching:
+# Adapter for a custom intrinsic — no catalog monkey-patching:
 adapter = Adapter(name="my-thing",
                   weights=LocalFileBinding(source="myuser/my-adapter",
                                            base_model_name="granite-4.1-3b"),
                   io_contract=IOContract.from_yaml("./io.yaml"))
 
-# Granite Switch embedded:
+# Adapter for the Granite Switch embedded variant:
 adapter = Adapter(name="answerability",
                   weights=EmbeddedBinding.from_base_model(backend))
 ```
