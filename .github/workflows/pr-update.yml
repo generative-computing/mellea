@@ -59,11 +59,7 @@ jobs:
           TEMPLATE_CONTENT=$(cat "$TEMPLATE_FILE")
 
           # Preserve the user's body verbatim; append the checklist below a divider.
-          NEW_BODY="${PR_BODY}
-
----
-
-${TEMPLATE_CONTENT}"
+          NEW_BODY=$(printf '%s\n\n---\n\n%s\n' "$PR_BODY" "$TEMPLATE_CONTENT")
 
           gh pr edit "$PR_NUMBER" --body "$NEW_BODY"
           echo "Appended ${PR_TYPE} checklist to PR body"
