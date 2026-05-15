@@ -15,6 +15,12 @@ on:
 jobs:
   manage-checklist-comment:
     runs-on: ubuntu-latest
+    # Serialize per-PR runs so rapid edited/opened events can't race —
+    # without this, two runs could both fetch comments before either
+    # posts, both see no marker, and both POST → duplicate comments.
+    concurrency:
+      group: pr-bot-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     permissions:
       pull-requests: write
       contents: read
@@ -34,23 +40,49 @@ jobs:
           set -euo pipefail
 
           # 1. Detect the first checked type box. Empty string if none.
-          #    Case-sensitive [x] — GitHub renders [X] as checked too, but
-          #    keeping it strict avoids false positives from prose.
+          #    -iF treats brackets literally (no regex false positives) and
+          #    matches both [x] and [X], which GitHub renders identically.
+          #    First-match-wins on multiple checked boxes — the template
+          #    asks users to split such PRs, but we warn below if it happens.
           CURRENT_TYPE=""
-          if   printf '%s' "$PR_BODY" | grep -qF '[x] Component';         then CURRENT_TYPE="component"
-          elif printf '%s' "$PR_BODY" | grep -qF '[x] Requirement';       then CURRENT_TYPE="requirement"
-          elif printf '%s' "$PR_BODY" | grep -qF '[x] Sampling Strategy'; then CURRENT_TYPE="sampling"
-          elif printf '%s' "$PR_BODY" | grep -qF '[x] Tool';              then CURRENT_TYPE="tool"
+          if   printf '%s' "$PR_BODY" | grep -qiF '[x] Component';         then CURRENT_TYPE="component"
+          elif printf '%s' "$PR_BODY" | grep -qiF '[x] Requirement';       then CURRENT_TYPE="requirement"
+          elif printf '%s' "$PR_BODY" | grep -qiF '[x] Sampling Strategy'; then CURRENT_TYPE="sampling"
+          elif printf '%s' "$PR_BODY" | grep -qiF '[x] Tool';              then CURRENT_TYPE="tool"
           fi
 
-          # 2. Find any prior bot comment by its embedded marker.
+          # Warn (but don't fail) if more than one type box is checked, so
+          # maintainers can spot the misconfiguration in the workflow log.
+          MATCH_COUNT=0
+          for label in '[x] Component' '[x] Requirement' '[x] Sampling Strategy' '[x] Tool'; do
+            if printf '%s' "$PR_BODY" | grep -qiF "$label"; then
+              MATCH_COUNT=$((MATCH_COUNT + 1))
+            fi
+          done
+          if [ "$MATCH_COUNT" -gt 1 ]; then
+            echo "::warning::Multiple type boxes checked (${MATCH_COUNT}); using first match '${CURRENT_TYPE}'. Consider splitting into separate PRs."
+          fi
+
+          # 2. Find any prior bot comments by their embedded marker.
           #    Marker shape: <!-- mellea-pr-checklist-comment: TYPE -->
+          #    Keep the first marker comment as the canonical one; delete
+          #    any extras (a prior bug or manual action could leak duplicates).
           COMMENTS_JSON=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --paginate)
-          EXISTING_ID=$(printf '%s' "$COMMENTS_JSON" \
-            | jq -r '[.[] | select(.body | test("<!-- mellea-pr-checklist-comment:"))] | .[0].id // empty')
+          MARKER_IDS=$(printf '%s' "$COMMENTS_JSON" \
+            | jq -r '.[] | select(.body | test("<!-- mellea-pr-checklist-comment:")) | .id')
+          EXISTING_ID=$(printf '%s\n' "$MARKER_IDS" | head -n1)
+          EXTRA_IDS=$(printf '%s\n' "$MARKER_IDS" | tail -n +2)
           EXISTING_TYPE=$(printf '%s' "$COMMENTS_JSON" \
             | jq -r '[.[] | select(.body | test("<!-- mellea-pr-checklist-comment:"))] | .[0].body // empty' \
             | sed -n 's/.*<!-- mellea-pr-checklist-comment: \([a-z]*\) -->.*/\1/p' | head -n1)
+
+          if [ -n "$EXTRA_IDS" ]; then
+            while IFS= read -r extra_id; do
+              [ -z "$extra_id" ] && continue
+              echo "Deleting duplicate marker comment ${extra_id}."
+              gh api -X DELETE "repos/${GH_REPO}/issues/comments/${extra_id}"
+            done <<< "$EXTRA_IDS"
+          fi
 
           echo "current_type='${CURRENT_TYPE}' existing_type='${EXISTING_TYPE}' existing_id='${EXISTING_ID}'"
 
