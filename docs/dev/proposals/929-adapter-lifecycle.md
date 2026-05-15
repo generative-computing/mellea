@@ -79,7 +79,7 @@ An **Adapter** is a small object composed of three parts:
 
 ```
 Adapter
-├── identity      — name, adapter type (lora/alora), schema version, optional role
+├── identity      — name, adapter type (lora/alora), schema version (proposed; see §7 / §17 Q8), optional role
 ├── io_contract   — parsed io.yaml: prompt building, output parsing, model options
 └── weights       — one of three pluggable bindings (LocalFile, Embedded, ServerMediated)
 ```
@@ -122,7 +122,7 @@ These gate decomposition; everything else can live in sub-issues once these are 
 1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
 2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base. **Position received (Jacob):** auto-load yes, auto-unload no — once activated, leave the adapter loaded; let the caller or session teardown trigger explicit `release()`. The multi-tenancy concern is reduced for `LocalHFBackend`, which is primarily a single-user/local backend (see §10).
 3. **Reality C target shape.** The aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked: vLLM has declined to upstream aLoRA support (see §8.3 for history). **Position received (Paul):** leave non-switch vLLM adapters alone; no near-term path there. Recommendation: design the `ServerMediatedBinding` slot so the interface is clean when/if the upstream situation changes, but leave it empty and do not invest in stubs.
-4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? **Working position:** at least one minor release; longer if user impact warrants (Jake's framing). One minor release ≈ 4–6 weeks (Paul). **Sub-question:** can this land without breakage at all? Under the current Q5 lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
+4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? **Working position:** at least one minor release; longer if user impact warrants (Jake's framing). One minor release ≈ 4–6 weeks (Paul). **Sub-question:** can this ship without breakage at all? Under the current Q5 lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
 5. **Terminology rename scope.** Feedback received challenges the framing in this proposal. Three competing positions:
    - **Original proposal model:** "adapter" replaces "intrinsic" as the primary user-facing term; `Intrinsic` AST class and module path are renamed with shims.
    - **Current lean (Jacob's framing):** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
@@ -181,7 +181,7 @@ Files and modules touched, approximate: `mellea/backends/adapters/{adapter,catal
 ### Risk
 
 - **Biggest unknown**: whether the unified `resolve_model_options` handles every combination currently in use. Mitigation: keep the five-layer precedence explicit, add per-adapter override documentation, and assert resolved values in tests.
-- **Second biggest**: schema-version dispatch (§12 and §9 in Part II). Worked example is the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change — verifying v1 and v2 both pass through cleanly gates the parsing refactor.
+- **Second biggest**: handling breaking schema changes from upstream. Three layers: pinning (avoid the risk), `schema_version` parser dispatch (§17 Q8, proposed), helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4, loud safety net). Worked example: the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change, rather than silently returning `False`.
 - **Mitigated by**: per-phase test-parity commitment (nothing merges if existing tests regress); observability introduced alongside the refactor so production regressions surface as dashboard signals rather than silent behavioural drift.
 
 ---
@@ -356,7 +356,7 @@ This is a **backend-keyed dispatch** where the branching key (`_uses_embedded_ad
 | 3. Naming consistency | Three-axis identity (`name`, `adapter_type`, `version`) plus explicit `role`. |
 | 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` dispatches on `(name, version)`; helpers see normalised shape. |
 | 4b. Per-adapter vs standard schema | `io_contract.parse()` is per-adapter; helpers define the normalised post-parse shape. |
-| 4c. Versioning | Schema version declared in `io.yaml` (`schema_version:`); defaults to `v1`. |
+| 4c. Versioning | HF commit SHA is the version (every push = new revision; pin via `revision="..."` for stability). Breaking schema changes (rare) handled by pinning + helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4); `schema_version` parser dispatch (§17 Q8) is an optional layer if the granite team adds the field. |
 | 5. OpenAI backend support | Ships as one or two `ServerMediatedBinding` subclasses. |
 | 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry with two schema versions. |
 | 7. Hardcoded `requirement-check` refs | Callers look up by **role**, not name. |
@@ -419,7 +419,7 @@ graph TD
     root --> prep["intrinsic.prepare<br/><i>LocalFile: download ms</i>"]
     root --> act["intrinsic.activate<br/><i>peft_name / controls / api_id</i>"]
     root --> gen["intrinsic.generate<br/><i>(regular backend span:<br/>tokens, latency)</i>"]
-    root --> par["intrinsic.parse<br/><i>schema_version,<br/>parse_ok, raw_len</i>"]
+    root --> par["intrinsic.parse<br/><i>revision, schema_version*,<br/>parse_ok, raw_len</i>"]
     root --> deact["intrinsic.deactivate"]
 ```
 
@@ -428,7 +428,7 @@ Standard attributes: `intrinsic.name`, `intrinsic.version`, `intrinsic.role`, `i
 **Metrics** — an `IntrinsicMetricsPlugin` alongside the existing Token / Latency / Error plugins:
 - `mellea.intrinsic.invocations` — counter labelled by name, version, binding type, adapter type, outcome.
 - `mellea.intrinsic.phase_duration_ms` — histogram labelled by name, phase.
-- `mellea.intrinsic.parse_failures` — counter labelled by name, version. This is the **schema-drift detector**: a climbing counter against a specific `(name, version)` pair means an upstream adapter shipped a schema change without a version bump.
+- `mellea.intrinsic.parse_failures` — counter labelled by name, revision. This is the **schema-drift detector**: a climbing counter against a specific `(name, revision)` pair means an upstream adapter pushed a breaking schema change at a new HF revision that the local parser doesn't yet handle. Each increment matches an `AdapterSchemaMismatchError` raised at the call site (Jake req 4).
 
 **Content capture** — gated behind PR #1036's `MELLEA_TRACE_CONTENT` flag. Intrinsics emit `intrinsic.input.kwargs` (structured dict), `intrinsic.output.raw` (raw JSON string), and `intrinsic.output.parsed` (normalised shape) as span events. Different shape from chat `gen_ai.*.message` events because intrinsics have different semantics.
 
@@ -451,7 +451,7 @@ Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fi
 
 **Tutorials** — three worth writing alongside the refactor:
 - "Adding a custom intrinsic in 20 lines" — replaces the `CustomIntrinsicAdapter` monkey-patch story.
-- "Shipping a new schema version without breaking users" — worked example using `requirement-check` v1 → v2.
+- "Handling a breaking schema change without breaking users" — worked example using `requirement-check` v1 → v2; covers HF revision pinning, `AdapterSchemaMismatchError` (Jake req 4), and `schema_version` dispatch if §17 Q8 is adopted.
 - "Reading intrinsic telemetry" — short dashboard-building guide.
 
 **Release notes** separate: no-op for high-level helper users; deprecated-but-shimmed for direct adapter constructors; removed at Phase 4 (see below).
