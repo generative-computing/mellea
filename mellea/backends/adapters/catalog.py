@@ -91,7 +91,11 @@ _INTRINSICS_CATALOG_ENTRIES = [
     IntriniscsCatalogEntry(
         name="requirement_check", repo_id=_CORE_REPO
     ),  # Necessary to support granite 3.2 and 3.3.
-    IntriniscsCatalogEntry(name="uncertainty", repo_id=_CORE_R1_REPO),
+    IntriniscsCatalogEntry(
+        name="uncertainty",
+        repo_id=_CORE_R1_REPO,
+        io_yaml_overlay_dir=_OVERLAY_ROOT / "uncertainty",
+    ),
     ############################################
     # RAG Intrinsics
     ############################################
