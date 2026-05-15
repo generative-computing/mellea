@@ -57,7 +57,7 @@ Every thread in #929 is a symptom of not having separated the kinds of adapter a
 Four outcomes, in order of importance. Detail on each lives in Part II; this list is the ask.
 
 1. **One adapter model, one code path.** Reasonable from the outside, unified from the inside — no more `if backend._uses_embedded_adapters:` branches.
-2. **Safe evolution.** Model-option precedence is documented and enforced; adapter output schemas can version without breaking callers.
+2. **Safe evolution.** Model-option precedence is documented and enforced. Adapter weights are versioned by HF commit SHA — Mellea can pin to a specific revision for stability or track latest for newest weights (refresh policy in §17 Q9). Output schemas are stable in the common case (new weights, same schema); the rare breaking schema change is handled either by pinning, by `schema_version` parser dispatch (§17 Q8), or by helpers raising on mismatch (Jake req 4). Helpers like `check_answerability` see a normalised result regardless of underlying churn.
 3. **First-class customer adapters.** Customers can ship their own against the same API as first-party ones — today it requires patching the catalog or subclassing a self-confessed "temporary hack" ([#424](https://github.com/generative-computing/mellea/issues/424)).
 4. **Observable and parity-respecting.** Every lifecycle phase is a distinct span; high-level helpers (`check_answerability` etc.) keep their shape; manual adapter construction becomes simpler, not harder.
 
@@ -200,7 +200,7 @@ Names matter because they appear in user-facing error messages, docs, and teleme
 | **Intrinsic** | The user-facing capability: helper functions (`check_answerability`, `requirement_check`, the Guardian helpers), the `Intrinsic` AST component, input/output parsing. Backed by an adapter. The name is kept as IBM's terminology — current Q5 lean (see Part I §5). |
 | **Adapter** | The backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity, I/O contract, and weights binding. The user-facing **Intrinsic** wraps an adapter to provide helpers and parsing. In the redesign, the class hierarchy collapses from four (`IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` + abstract base) to one `Adapter` + a pluggable binding. |
 | **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
-| **Schema version** | *Proposed addition; not in `io.yaml` today.* A label in an adapter's `io.yaml` (`schema_version:`, default `v1`) identifying the shape of its output. Bumped when an adapter's output keys, nesting, or types change. The I/O contract dispatches its parser on `(name, schema_version)` so v1 and v2 can coexist; helpers consume a normalised post-parse shape. **Adoption requires agreement from the granite-common / granite-formatters team** (who own the `io.yaml` format). |
+| **Schema version** | *Proposed parser-dispatch field for breaking schema changes only.* For routine weight updates the HF commit SHA is the version (no new field needed). `schema_version` would only earn its keep if the granite team ships a *breaking* output-schema change (different keys, nesting, or types) and unpinned callers need graceful v1↔v2 parser dispatch. **Open** (§17 Q8) — granite-common may already have a versioning mechanism we should reuse instead of inventing this. |
 | **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. *Name under discussion: Jacob prefers `io_config`; `io_contract` is used throughout this proposal but is not final.* |
 | **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality. Exposes `prepare`, `activate`, `deactivate`, `release`. |
 | **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = shipped with the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
@@ -273,6 +273,8 @@ Each concrete binding implements the four-verb set from Part I §4. The column m
 `release()` is implemented per-binding as needed (cache eviction for LocalFile; no-op for the others).
 
 > **Which class knows an adapter doesn't need PEFT activation? The binding does — not the backend.** `EmbeddedBinding.activate()` renders `controls` JSON into the chat template; `LocalFileBinding.activate()` calls PEFT `load_adapter`. The backend calls `binding.activate()` uniformly and has no conditional on binding type. This is the mechanism that eliminates the `if getattr(backend, "_uses_embedded_adapters", False):` branch (§11). When embedded-adapter support is later added to `LocalHFBackend` ([#1018](https://github.com/generative-computing/mellea/issues/1018)), the backend does not need to learn about embedding — it calls the same verbs, and `EmbeddedBinding` handles the difference. The backend only needs the verb interface. (Addressing Jacob's review question on backend consumption.)
+
+> **Weight updates:** weights are versioned by HF commit SHA. `prepare()` resolves the configured revision (`main` by default, or a pinned SHA) and refreshes the local cache when upstream has moved. Refresh policy and the long-running-process exception are open (§17 Q9).
 
 ### 9.3 Lifecycle sequence
 
@@ -472,6 +474,7 @@ Observability and docs deliverables attach to the phase that first exercises the
 6. **Telemetry coupling with #1035** (also in Part I §5).
 7. **Deprecation window** (also in Part I §5).
 8. **`schema_version` field in `io.yaml`.** §4, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
+9. **Weight-refresh policy.** Adapter weights are versioned by HF commit SHA. When Mellea is configured to track latest (no pin), how often does `prepare()` re-resolve the upstream revision? Per-session-start is the natural answer; long-running processes (sessions spanning a release) need either an explicit `refresh()` API or accept stale weights until restart.
 
 ---
 
