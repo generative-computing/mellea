@@ -142,7 +142,7 @@ Scope of this refactor in concrete terms so reviewers can weigh the cost.
 ### API surface
 
 - **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) arrives on top, not instead.
-- **Deprecated but shimmed for one release** — `IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter` public classes. Direct users get `DeprecationWarning` pointing to the new constructor.
+- **Deprecated but shimmed for one release** — `IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter` public classes. Direct users get `DeprecationWarning` pointing to the new constructor. *(Applies if Q5 settles on rename or new-API-alongside; under Jake's split, the old types stay as re-exports indefinitely with no deprecation needed.)*
 - **Optional, was mandatory** — the adapter catalogue. Callers no longer have to register custom adapters in `catalog.py` before use; the catalogue stays as a convenience resolver for first-party names, not a precondition.
 - **Possibly moved/renamed** — depends on §5 Q5 (terminology rename scope).
 
@@ -464,7 +464,7 @@ Detail deferred until Part I §5 decisions are agreed, but the intended phasing 
 2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4). Old classes become deprecation shims.
 3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Bindings implement `prepare` / `activate` / `deactivate` / `release` per reality; `LocalFileBinding.prepare` resolves the configured HF revision (§17 Q5 weight-refresh policy). Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
 4. **Phase 3 — Reality C ships.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
-5. **Phase 4 — shim removal.** After one minor release with deprecation warnings.
+5. **Phase 4 — shim removal.** After one minor release with deprecation warnings. *(Skipped if Q5 settles on Jake's split — re-exports stay.)*
 
 Observability and docs deliverables attach to the phase that first exercises them.
 
