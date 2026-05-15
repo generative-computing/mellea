@@ -1,3 +1,4 @@
+<!-- mellea-pr-checklist-marker -->
 # Sampling Strategy PR
 
 Use this template when adding or modifying sampling strategies in `mellea/stdlib/sampling/`.

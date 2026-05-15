@@ -1,3 +1,4 @@
+<!-- mellea-pr-checklist-marker -->
 # Tool PR
 
 Use this template when adding or modifying components in `mellea/stdlib/tools/`.
