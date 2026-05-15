@@ -5,30 +5,28 @@ imports, and plotting. The python_tool_requirements() function bundles these
 together, while specialized validators can be used independently.
 """
 
+import ast
 from collections.abc import Callable
 
 from ...core import Context, Requirement, ValidationResult
-from ..tools.interpreter import StaticAnalysisEnvironment, get_unauthorized_imports
+from ..tools.interpreter import get_unauthorized_imports
 from .plotting import python_plotting_requirements
 from .python_reqs import extract_python_code
 from .tool_reqs import tool_arg_validator, uses_tool
 
 
 def _code_parses(code: str) -> tuple[bool, str | None]:
-    """Check if code parses as valid Python using StaticAnalysisEnvironment.
+    """Check if code parses as valid Python.
 
-    Validates syntax without executing code. Reuses StaticAnalysisEnvironment
-    to avoid duplicating AST parsing logic.
+    Validates syntax without executing code using AST parsing.
 
     Returns:
         (True, None) if code parses
         (False, error_message) if syntax error
     """
-    env = StaticAnalysisEnvironment(allowed_imports=None)
-    result = env.execute(code, timeout=0)
-
-    if not result.success and isinstance(result.analysis_result, SyntaxError):
-        e = result.analysis_result
+    try:
+        ast.parse(code)
+    except SyntaxError as e:
         error_msg = f"Syntax error at line {e.lineno}: {e.msg}"
         if e.text:
             error_msg += f"\n  {e.text.rstrip()}"

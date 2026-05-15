@@ -19,6 +19,36 @@ HEADLESS_BACKENDS = {"Agg", "Svg", "Cairo", "PDF", "PS", "WebAgg", "nbAgg"}
 PYPLOT_PLOT_METHODS = {"plot", "bar", "scatter", "hist", "imshow", "figure", "subplot"}
 
 
+def _has_matplotlib_import(code: str) -> bool:
+    """Check if code imports matplotlib or matplotlib.pyplot.
+
+    Uses AST analysis to detect both `import matplotlib` and `import matplotlib.pyplot`
+    style imports, as well as `from matplotlib import ...` style imports.
+
+    Args:
+        code: Python source code to analyze
+
+    Returns:
+        True if matplotlib or matplotlib.pyplot is imported, False otherwise
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                base_module = alias.name.split(".")[0]
+                if base_module == "matplotlib":
+                    return True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.module.startswith("matplotlib"):
+                return True
+
+    return False
+
+
 def _strip_comments(code: str) -> str:
     """Remove Python comments from code while preserving strings.
 
@@ -203,7 +233,7 @@ def _uses_pyplot_plot(code: str) -> bool:
     only if code doesn't parse.
 
     Note: May have false positives if code calls these methods on non-pyplot objects.
-    For accuracy, combine with matplotlib import checks.
+    Combine with matplotlib import checks in validators to eliminate false positives.
     """
     if _find_attribute_calls(code, list(PYPLOT_PLOT_METHODS)):
         return True
@@ -223,6 +253,7 @@ def _calls_savefig(code: str) -> bool:
     only if code doesn't parse.
 
     Note: May have false positives if code calls savefig() on non-matplotlib objects.
+    Combine with matplotlib import checks in validators to eliminate false positives.
     """
     if _find_attribute_calls(code, ["savefig"]):
         return True
@@ -242,16 +273,9 @@ def _make_matplotlib_headless_validator(
 
     Args:
         output_path: Path where plots should be saved
-        show_patterns: Patterns indicating plt.show() calls; defaults to ["plt.show", ".show()"]
-        backend_patterns: Patterns indicating headless backend setup; defaults to all
-            matplotlib.use() calls with HEADLESS_BACKENDS
+        show_patterns: Deprecated; ignored in favor of AST-based detection
+        backend_patterns: Deprecated; ignored in favor of AST-based detection
     """
-    if show_patterns is None:
-        show_patterns = ["plt.show", ".show()"]
-    if backend_patterns is None:
-        backend_patterns = [f"matplotlib.use('{b}')" for b in HEADLESS_BACKENDS] + [
-            f'matplotlib.use("{b}")' for b in HEADLESS_BACKENDS
-        ]
 
     def validate(ctx: Context) -> ValidationResult:
         extraction_result = extract_python_code(ctx)
@@ -259,8 +283,8 @@ def _make_matplotlib_headless_validator(
             return ValidationResult(result=True)
 
         code = extraction_result.reason
-        has_show = _code_contains_strings(code, show_patterns)
-        has_backend = _code_contains_strings(code, backend_patterns)
+        has_show = _uses_pyplot_show(code)
+        has_backend = _sets_headless_backend(code)
 
         if has_show and not has_backend:
             savefig_instruction = (
@@ -292,16 +316,9 @@ def _make_plots_saved_validator(
 
     Args:
         output_path: Path where plots should be saved
-        plot_patterns: Patterns indicating plot creation; defaults to all PYPLOT_PLOT_METHODS
-            prefixed with "plt." and "."
-        save_patterns: Patterns indicating plot saving; defaults to ["savefig"]
+        plot_patterns: Deprecated; ignored in favor of AST-based detection
+        save_patterns: Deprecated; ignored in favor of AST-based detection
     """
-    if plot_patterns is None:
-        plot_patterns = [f"plt.{m}" for m in PYPLOT_PLOT_METHODS] + [
-            f".{m}(" for m in PYPLOT_PLOT_METHODS
-        ]
-    if save_patterns is None:
-        save_patterns = ["savefig"]
 
     def validate(ctx: Context) -> ValidationResult:
         extraction_result = extract_python_code(ctx)
@@ -309,8 +326,8 @@ def _make_plots_saved_validator(
             return ValidationResult(result=True)
 
         code = extraction_result.reason
-        has_plot = _code_contains_strings(code, plot_patterns)
-        has_save = _code_contains_strings(code, save_patterns)
+        has_plot = _uses_pyplot_plot(code)
+        has_save = _calls_savefig(code)
 
         if has_plot and not has_save:
             savefig_instruction = (
