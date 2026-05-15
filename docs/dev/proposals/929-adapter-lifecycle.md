@@ -195,9 +195,10 @@ Names matter because they appear in user-facing error messages, docs, and teleme
 | Term | Meaning |
 | --- | --- |
 | **Base model** | The general-purpose LLM (e.g. `ibm-granite/granite-4.1-3b`) that everything runs on top of. |
-| **Adapter** | The user-facing term for a specialised capability added to a base model — answerability, citations, requirement-check, etc. In the redesign, `Adapter` is one class composed of three parts (identity, I/O contract, weights binding). This is the primary noun users and docs should reach for. |
-| **Intrinsic** | Legacy Mellea term for the same concept. Still appears in the current class names (`Intrinsic` AST component, `IntrinsicAdapter`, `mellea.stdlib.components.intrinsic` module). The direction of travel is to fold "intrinsic" language into "adapter" — the rename scope is a decision in Part I §5. |
+| **Intrinsic** | The user-facing capability: helper functions (`check_answerability`, `requirement_check`, the Guardian helpers), the `Intrinsic` AST component, input/output parsing. Backed by an adapter. The name is kept as IBM's terminology — current Q5 lean (see Part I §5). |
+| **Adapter** | The backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity, I/O contract, and weights binding. The user-facing **Intrinsic** wraps an adapter to provide helpers and parsing. In the redesign, the class hierarchy collapses from four (`IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` + abstract base) to one `Adapter` + a pluggable binding. |
 | **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
+| **Schema version** | *Proposed addition; not in `io.yaml` today.* A label in an adapter's `io.yaml` (`schema_version:`, default `v1`) identifying the shape of its output. Bumped when an adapter's output keys, nesting, or types change. The I/O contract dispatches its parser on `(name, schema_version)` so v1 and v2 can coexist; helpers consume a normalised post-parse shape. **Adoption requires agreement from the granite-common / granite-formatters team** (who own the `io.yaml` format). |
 | **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. *Name under discussion: Jacob prefers `io_config`; `io_contract` is used throughout this proposal but is not final.* |
 | **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality. Exposes `prepare`, `activate`, `deactivate`, `release`. |
 | **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = shipped with the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
@@ -467,6 +468,7 @@ Observability and docs deliverables attach to the phase that first exercises the
 5. **Rewind interaction (PR #1028).** Some helpers — specifically `factuality_detection` and `factuality_correction` — need to re-format the conversation so that documents are attached to the *last assistant message* rather than earlier in the history. They currently do this by walking back through `context.previous_node`. Question: does that rewind logic belong on `io_contract.build_prompt` (cleaner separation of concerns) or stay in the helper functions (smaller migration blast radius)?
 6. **Telemetry coupling with #1035** (also in Part I §5).
 7. **Deprecation window** (also in Part I §5).
+8. **`schema_version` field in `io.yaml`.** §4, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
 
 ---
 
