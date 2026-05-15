@@ -84,6 +84,8 @@ Adapter
 └── weights       — one of three pluggable bindings (LocalFile, Embedded, ServerMediated)
 ```
 
+**Sane defaults:** when an adapter's weights come from a HuggingFace repo, the `io_contract` defaults to the `io.yaml` in that same repo. Callers rarely pass `io_contract=` explicitly. Identity, I/O contract, and weights are tightly coupled by design; the defaults treat them as a unit.
+
 The **weights binding** is where the three realities live. It exposes a single verb set — `prepare`, `activate`, `deactivate`, `release` — that every backend calls uniformly. What each verb does per reality lives in §9; the high-level picture is all three realities converging on one shared `io_contract`:
 
 ```mermaid
@@ -374,11 +376,12 @@ score = check_answerability(question, documents, context, backend,
 adapter = Adapter(name="answerability",
                   weights=LocalFileBinding.from_catalog("answerability"))
 
-# Adapter for a custom intrinsic — no catalog monkey-patching:
+# Adapter for a custom intrinsic — io.yaml auto-loaded from the same HF repo:
 adapter = Adapter(name="my-thing",
                   weights=LocalFileBinding(source="myuser/my-adapter",
-                                           base_model_name="granite-4.1-3b"),
-                  io_contract=IOContract.from_yaml("./io.yaml"))
+                                           base_model_name="granite-4.1-3b"))
+# To override io_contract with a local file:
+# adapter = Adapter(..., io_contract=IOContract.from_yaml("./io.yaml"))
 
 # Adapter for the Granite Switch embedded variant:
 adapter = Adapter(name="answerability",
