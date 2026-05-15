@@ -1,9 +1,11 @@
 # Blocks merge when the "do-not-merge/hold" label is applied to a PR.
 #
+# Thin wrapper around the org-wide reusable workflow at
+# generative-computing/.github. The trigger lives here (so PR/merge_group
+# events are observed in this repo) but all logic is centralized upstream.
+#
 # Uses pull_request_target so the label event from forks also triggers this
-# check. This workflow does NOT check out or execute PR code — do not add
-# actions/checkout of the PR head ref or run steps that reference
-# PR-controlled files.
+# check. The reusable workflow does NOT check out or execute PR code.
 
 name: "Hold"
 
@@ -12,29 +14,9 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled]
   merge_group:
 
-permissions: {}
+permissions:
+  pull-requests: read
 
 jobs:
   hold:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
-    steps:
-      - name: Check for hold label
-        if: github.event_name == 'pull_request_target'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        with:
-          script: |
-            const HOLD_LABEL = 'do-not-merge/hold';
-            const labels = context.payload.pull_request.labels.map(l => l.name);
-            if (labels.includes(HOLD_LABEL)) {
-              core.setFailed(
-                `PR is labeled "${HOLD_LABEL}". ` +
-                `Remove the label to allow this check to pass.`
-              );
-            } else {
-              core.info(`No "${HOLD_LABEL}" label present.`);
-            }
-      - name: Skip in merge queue
-        if: github.event_name == 'merge_group'
-        run: echo "Hold status already validated before entering the merge queue"
+    uses: generative-computing/.github/.github/workflows/hold.yml@31ecef85b868eb2a9d7ea3a0efd5c12cb4746fc1 # main
