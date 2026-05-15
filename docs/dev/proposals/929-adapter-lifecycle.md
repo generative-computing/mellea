@@ -353,12 +353,12 @@ This is a **backend-keyed dispatch** where the branching key (`_uses_embedded_ad
 | 1c. Backend- + adapter-type-specific abstraction | `WeightsBinding` is the adapter-type axis; `AdapterMixin` verbs are the backend axis. |
 | 2a. Intrinsic rewriters overwrite options | `Adapter.resolve_model_options()` replaces the five-place merge with one documented stack. |
 | 2b/2c. Model-option hierarchy | Five layers enforced in `resolve_model_options` (base model → adapter config → `io.yaml` defaults → `io.yaml` per-intrinsic → caller). |
-| 3. Naming consistency | Three-axis identity (`name`, `adapter_type`, `version`) plus explicit `role`. |
-| 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` dispatches on `(name, version)`; helpers see normalised shape. |
+| 3. Naming consistency | Three-axis identity (`name`, `adapter_type`, `revision`) plus explicit `role`. |
+| 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` validates the output shape and raises `AdapterSchemaMismatchError` on mismatch (Jake req 4); helpers see a normalised shape. Dispatch on `(name, schema_version)` is an optional layer if §17 Q8 is adopted. |
 | 4b. Per-adapter vs standard schema | `io_contract.parse()` is per-adapter; helpers define the normalised post-parse shape. |
 | 4c. Versioning | HF commit SHA is the version (every push = new revision; pin via `revision="..."` for stability). Breaking schema changes (rare) handled by pinning + helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4); `schema_version` parser dispatch (§17 Q8) is an optional layer if the granite team adds the field. |
 | 5. OpenAI backend support | Ships as one or two `ServerMediatedBinding` subclasses. |
-| 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry with two schema versions. |
+| 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry; the v1 → v2 output-schema change (PR #1008) is handled by Jake req 4 + optional `schema_version` dispatch (§17 Q8). |
 | 7. Hardcoded `requirement-check` refs | Callers look up by **role**, not name. |
 
 ## 13. What users see — detailed
@@ -403,7 +403,7 @@ adapter = Adapter(name="answerability",
 Adapter calls hide the complexity that matters most when something goes wrong (weight fetching, activation side-effects, schema contracts). Without per-phase instrumentation, four failure modes are hard or impossible to diagnose — and Mellea has already hit the first two in production:
 
 1. **Masked errors.** The `obtain_lora`-always-called bug (#929 point 1b) showed users a misleading download error while the real cause (adapter-type mismatch) stayed invisible. A span at the `prepare` boundary recording the exception would have surfaced the actual cause on first run.
-2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. Under Jake req 4 (helpers raise on schema mismatch), this would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change — the caller gets a named error instead of a silently wrong value. The `parse_failures` counter labelled by `(name, version)` is the dashboard signal; the exception is the runtime signal.
+2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. Under Jake req 4 (helpers raise on schema mismatch), this would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change — the caller gets a named error instead of a silently wrong value. The `parse_failures` counter labelled by `(name, revision)` is the dashboard signal; the exception is the runtime signal.
 3. **Latency attribution.** "`check_answerability` is slow" is unanswerable today — download, PEFT load, generation, and JSON parse collapse into one backend span. Phase-level spans make the culprit obvious in any trace viewer.
 4. **Alerting and cost attribution.** OTel `ERROR` status on failed download/activation makes generic dashboards and alerts work. Token counts labelled by adapter answer "which capability is 30% of our spend?" Both impossible today.
 
@@ -415,7 +415,7 @@ Adding instrumentation now costs one span attribute per verb. Retrofitting after
 
 ```mermaid
 graph TD
-    root["intrinsic.call<br/><i>name, version, role,<br/>binding_type, adapter_type</i>"]
+    root["intrinsic.call<br/><i>name, revision, role,<br/>binding_type, adapter_type</i>"]
     root --> prep["intrinsic.prepare<br/><i>LocalFile: download ms</i>"]
     root --> act["intrinsic.activate<br/><i>peft_name / controls / api_id</i>"]
     root --> gen["intrinsic.generate<br/><i>(regular backend span:<br/>tokens, latency)</i>"]
@@ -423,10 +423,10 @@ graph TD
     root --> deact["intrinsic.deactivate"]
 ```
 
-Standard attributes: `intrinsic.name`, `intrinsic.version`, `intrinsic.role`, `intrinsic.adapter_type`, `intrinsic.binding_type`, `intrinsic.source`, `intrinsic.target`. Errors set OTel `ERROR` status (aligns with #1035 gap 4).
+Standard attributes: `intrinsic.name`, `intrinsic.revision`, `intrinsic.role`, `intrinsic.adapter_type`, `intrinsic.binding_type`, `intrinsic.source`, `intrinsic.target`. Errors set OTel `ERROR` status (aligns with #1035 gap 4).
 
 **Metrics** — an `IntrinsicMetricsPlugin` alongside the existing Token / Latency / Error plugins:
-- `mellea.intrinsic.invocations` — counter labelled by name, version, binding type, adapter type, outcome.
+- `mellea.intrinsic.invocations` — counter labelled by name, revision, binding type, adapter type, outcome.
 - `mellea.intrinsic.phase_duration_ms` — histogram labelled by name, phase.
 - `mellea.intrinsic.parse_failures` — counter labelled by name, revision. This is the **schema-drift detector**: a climbing counter against a specific `(name, revision)` pair means an upstream adapter pushed a breaking schema change at a new HF revision that the local parser doesn't yet handle. Each increment matches an `AdapterSchemaMismatchError` raised at the call site (Jake req 4).
 
