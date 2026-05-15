@@ -37,6 +37,9 @@ BASE_MODEL_TO_CANONICAL_NAME = {
     "ibm-granite/granite-4.1-8b": "granite-4.1-8b",
     "ibm-granite/granite-4.1-30b": "granite-4.1-30b",
     "granite4:micro": "granite4_micro",
+    "granite4.1:3b": "granite4.1_3b",
+    "granite4.1:8b": "granite4.1_8b",
+    "granite4.1:30b": "granite4.1_30b",
 }
 """Base model names that we accept for LoRA/aLoRA adapters in intrinsics libraries.
 Each model name maps to the name of the directory that contains (a)LoRA adapters for
