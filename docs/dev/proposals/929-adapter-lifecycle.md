@@ -371,6 +371,8 @@ score = check_answerability(question, documents, context, backend,
                             model_options={"temperature": 0.1})
 ```
 
+**Validation on parse.** Helpers declare their expected output shape; `io_contract.parse()` validates against it and raises `AdapterSchemaMismatchError` on mismatch — with `name`, observed keys, and expected keys in the message. Schema drift is loud, not silent. (Jake req 4.)
+
 **Manual adapter construction** collapses from four classes (`IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter`, abstract base) to one `Adapter` + a binding:
 
 ```python
@@ -399,7 +401,7 @@ adapter = Adapter(name="answerability",
 Adapter calls hide the complexity that matters most when something goes wrong (weight fetching, activation side-effects, schema contracts). Without per-phase instrumentation, four failure modes are hard or impossible to diagnose — and Mellea has already hit the first two in production:
 
 1. **Masked errors.** The `obtain_lora`-always-called bug (#929 point 1b) showed users a misleading download error while the real cause (adapter-type mismatch) stayed invisible. A span at the `prepare` boundary recording the exception would have surfaced the actual cause on first run.
-2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. A `parse_failures` counter labelled by `(name, version)` would have climbed immediately; a parse-status span attribute would have shown every call as "parsed with warnings."
+2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. Under Jake req 4 (helpers raise on schema mismatch), this would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change — the caller gets a named error instead of a silently wrong value. The `parse_failures` counter labelled by `(name, version)` is the dashboard signal; the exception is the runtime signal.
 3. **Latency attribution.** "`check_answerability` is slow" is unanswerable today — download, PEFT load, generation, and JSON parse collapse into one backend span. Phase-level spans make the culprit obvious in any trace viewer.
 4. **Alerting and cost attribution.** OTel `ERROR` status on failed download/activation makes generic dashboards and alerts work. Token counts labelled by adapter answer "which capability is 30% of our spend?" Both impossible today.
 
