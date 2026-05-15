@@ -18,17 +18,19 @@ from mellea.backends.adapters import IntrinsicAdapter
 from mellea.backends.adapters.adapter import _resolve_catalog_overlay
 from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 
-GUARDIAN_INTRINSICS = [
+OVERLAID_INTRINSICS = [
     "guardian-core",
     "policy-guardrails",
     "factuality-detection",
     "factuality-correction",
+    "requirement-check",
+    "uncertainty",
 ]
 
 
-@pytest.mark.parametrize("intrinsic_name", GUARDIAN_INTRINSICS)
+@pytest.mark.parametrize("intrinsic_name", OVERLAID_INTRINSICS)
 def test_overlay_resolves_for_granite_4_1_3b_lora(intrinsic_name):
-    """Each Guardian intrinsic has a lora overlay for granite-4.1-3b."""
+    """Each overlaid intrinsic has a lora overlay for granite-4.1-3b."""
     metadata = fetch_intrinsic_metadata(intrinsic_name)
     path = _resolve_catalog_overlay(metadata, "ibm-granite/granite-4.1-3b", alora=False)
     assert path is not None
@@ -40,7 +42,7 @@ def test_overlay_resolves_for_granite_4_1_3b_lora(intrinsic_name):
     assert path.parent.parent.parent.name == intrinsic_name
 
 
-@pytest.mark.parametrize("intrinsic_name", GUARDIAN_INTRINSICS)
+@pytest.mark.parametrize("intrinsic_name", OVERLAID_INTRINSICS)
 def test_overlay_resolves_with_canonical_short_name(intrinsic_name):
     """Passing the canonical short model name finds the same overlay."""
     metadata = fetch_intrinsic_metadata(intrinsic_name)
@@ -83,7 +85,7 @@ def test_overlay_distinguishes_lora_and_alora():
     assert lora_path.read_bytes() != alora_path.read_bytes()
 
 
-@pytest.mark.parametrize("intrinsic_name", GUARDIAN_INTRINSICS)
+@pytest.mark.parametrize("intrinsic_name", OVERLAID_INTRINSICS)
 def test_intrinsic_adapter_loads_overlay_without_hitting_hf(intrinsic_name):
     """IntrinsicAdapter uses the overlay and never calls obtain_io_yaml."""
     with patch(
@@ -149,6 +151,6 @@ def test_overlay_yaml_files_are_package_data():
     package interface, which is what a wheel install exposes.
     """
     overlays = importlib.resources.files("mellea.backends.adapters") / "_overlays"
-    for intrinsic_name in GUARDIAN_INTRINSICS:
+    for intrinsic_name in OVERLAID_INTRINSICS:
         candidate = overlays / intrinsic_name / "granite-4.1-3b" / "lora" / "io.yaml"
         assert candidate.is_file(), f"missing package-data overlay: {candidate}"
