@@ -30,11 +30,11 @@ The `weights_binding` is pluggable — `LocalFileBinding`, `EmbeddedBinding`, or
 
 | # | Question | Status |
 | --- | --- | --- |
-| Q1 | Does the `Adapter = identity + io_contract + weights` shape hold? | Open |
-| Q2 | Lifecycle default: session-scoped (no auto-unload) or request-scoped? | Lean: session-scoped, no auto-unload |
-| Q3 | Reality C (server-mediated): design slot now, fill later — or leave fully empty? | Lean: design slot, leave empty |
-| Q4 | Deprecation window for old classes? | Lean: 1 minor release (~4–6 weeks) |
-| Q5 | Terminology: replace "intrinsic" with "adapter", or keep both with distinct meanings? | Open — competing positions received |
+| Q1 | Does the `Adapter = identity + io_contract + weights` shape hold? | **Open** — Jake wants more discussion |
+| Q2 | Lifecycle default | **Resolved**: session-scoped, no auto-unload (Jake) |
+| Q3 | Reality C (server-mediated): design slot or leave empty? | **Resolved**: design slot, leave empty (Paul; vLLM blocked) |
+| Q4 | Deprecation window for old classes | **Resolved**: 1 minor release ≈ 4–6 weeks; longer if user impact warrants (Paul, Jake) |
+| Q5 | Terminology: replace "intrinsic" with "adapter", or keep both with distinct meanings? | **Open** — three competing positions |
 
 Detail on each in §5.
 
@@ -57,7 +57,7 @@ Every thread in #929 is a symptom of not having separated the kinds of adapter a
 Four outcomes, in order of importance. Detail on each lives in Part II; this list is the ask.
 
 1. **One adapter model, one code path.** Reasonable from the outside, unified from the inside — no more `if backend._uses_embedded_adapters:` branches.
-2. **Safe evolution.** Model-option precedence is documented and enforced. Adapter weights are versioned by HF commit SHA — Mellea can pin to a specific revision for stability or track latest for newest weights (refresh policy in §17 Q9). Output schemas are stable in the common case (new weights, same schema); the rare breaking schema change is handled either by pinning, by `schema_version` parser dispatch (§17 Q8), or by helpers raising on mismatch (Jake req 4). Helpers like `check_answerability` see a normalised result regardless of underlying churn.
+2. **Safe evolution.** Model-option precedence is documented and enforced. Adapter weights are versioned by HF commit SHA — Mellea can pin to a specific revision for stability or track latest for newest weights (refresh policy in §17 Q5). Output schemas are stable in the common case (new weights, same schema); the rare breaking schema change is handled either by pinning, by `schema_version` parser dispatch (§17 Q4), or by helpers raising on mismatch (Jake req 4). Helpers like `check_answerability` see a normalised result regardless of underlying churn.
 3. **First-class customer adapters.** Customers can ship their own against the same API as first-party ones — today it requires patching the catalog or subclassing a self-confessed "temporary hack" ([#424](https://github.com/generative-computing/mellea/issues/424)).
 4. **Observable and parity-respecting.** Every lifecycle phase is a distinct span; high-level helpers (`check_answerability` etc.) keep their shape; manual adapter construction becomes simpler, not harder.
 
@@ -79,7 +79,7 @@ An **Adapter** is a small object composed of three parts:
 
 ```
 Adapter
-├── identity      — name, adapter type (lora/alora), schema version (proposed; see §7 / §17 Q8), optional role
+├── identity      — name, adapter type (lora/alora), schema version (proposed; see §7 / §17 Q4), optional role
 ├── io_contract   — parsed io.yaml: prompt building, output parsing, model options
 └── weights       — one of three pluggable bindings (LocalFile, Embedded, ServerMediated)
 ```
@@ -120,9 +120,9 @@ Of Mellea's five backends (`LocalHFBackend`, `OpenAIBackend`, `OllamaBackend`, `
 These gate decomposition; everything else can live in sub-issues once these are agreed.
 
 1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
-2. **Adapter lifecycle default — session-scoped or request-scoped?** Today's HF backend keeps adapters loaded once added; request-scoped load/unload is safer for multi-tenancy but costs latency on a 7B base. **Position received (Jacob):** auto-load yes, auto-unload no — once activated, leave the adapter loaded; let the caller or session teardown trigger explicit `release()`. The multi-tenancy concern is reduced for `LocalHFBackend`, which is primarily a single-user/local backend (see §10).
-3. **Reality C target shape.** The aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked: vLLM has declined to upstream aLoRA support (see §8.3 for history). **Position received (Paul):** leave non-switch vLLM adapters alone; no near-term path there. Recommendation: design the `ServerMediatedBinding` slot so the interface is clean when/if the upstream situation changes, but leave it empty and do not invest in stubs.
-4. **Deprecation window.** How long do `IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` stay as shims before removal? **Working position:** at least one minor release; longer if user impact warrants (Jake's framing). One minor release ≈ 4–6 weeks (Paul). **Sub-question:** can this ship without breakage at all? Under the current Q5 lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
+2. **Adapter lifecycle — session-scoped, no auto-unload.** **Resolved (Jake):** auto-load yes, auto-unload no. Once activated, the adapter stays loaded; the caller or session teardown triggers explicit `release()`. The multi-tenancy concern is reduced because `LocalHFBackend` is primarily a single-user/local backend (see §10). Request-scoped lifecycle remains an opt-in for deployments that need per-call isolation.
+3. **Reality C target shape — design slot, leave empty.** **Resolved (Paul):** the aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked — vLLM has declined to upstream aLoRA support (see §8.3 for history). The `ServerMediatedBinding` slot is designed so the interface is clean if the upstream situation ever changes, but the implementation stays empty and we don't invest in stubs.
+4. **Deprecation window — at least 1 minor release; longer if user impact warrants.** **Resolved (Paul, Jake):** Paul confirms 1 minor release ≈ 4–6 weeks is sufficient, extendable if needed; Jake notes the final length depends on how many users are impacted. **Sub-question (open):** can this ship without breakage at all? Under Q5's current lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
 5. **Terminology rename scope.** Feedback received challenges the framing in this proposal. Three competing positions:
    - **Original proposal model:** "adapter" replaces "intrinsic" as the primary user-facing term; `Intrinsic` AST class and module path are renamed with shims.
    - **Current lean (Jacob's framing):** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
@@ -181,7 +181,7 @@ Files and modules touched, approximate: `mellea/backends/adapters/{adapter,catal
 ### Risk
 
 - **Biggest unknown**: whether the unified `resolve_model_options` handles every combination currently in use. Mitigation: keep the five-layer precedence explicit, add per-adapter override documentation, and assert resolved values in tests.
-- **Second biggest**: handling breaking schema changes from upstream. Three layers: pinning (avoid the risk), `schema_version` parser dispatch (§17 Q8, proposed), helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4, loud safety net). Worked example: the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change, rather than silently returning `False`.
+- **Second biggest**: handling breaking schema changes from upstream. Three layers: pinning (avoid the risk), `schema_version` parser dispatch (§17 Q4, proposed), helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4, loud safety net). Worked example: the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change, rather than silently returning `False`.
 - **Mitigated by**: per-phase test-parity commitment (nothing merges if existing tests regress); observability introduced alongside the refactor so production regressions surface as dashboard signals rather than silent behavioural drift.
 
 ---
@@ -200,7 +200,7 @@ Names matter because they appear in user-facing error messages, docs, and teleme
 | **Intrinsic** | The user-facing capability: helper functions (`check_answerability`, `requirement_check`, the Guardian helpers), the `Intrinsic` AST component, input/output parsing. Backed by an adapter. The name is kept as IBM's terminology — current Q5 lean (see Part I §5). |
 | **Adapter** | The backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity, I/O contract, and weights binding. The user-facing **Intrinsic** wraps an adapter to provide helpers and parsing. In the redesign, the class hierarchy collapses from four (`IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` + abstract base) to one `Adapter` + a pluggable binding. |
 | **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
-| **Schema version** | *Proposed parser-dispatch field for breaking schema changes only.* For routine weight updates the HF commit SHA is the version (no new field needed). `schema_version` would only earn its keep if the granite team ships a *breaking* output-schema change (different keys, nesting, or types) and unpinned callers need graceful v1↔v2 parser dispatch. **Open** (§17 Q8) — granite-common may already have a versioning mechanism we should reuse instead of inventing this. |
+| **Schema version** | *Proposed parser-dispatch field for breaking schema changes only.* For routine weight updates the HF commit SHA is the version (no new field needed). `schema_version` would only earn its keep if the granite team ships a *breaking* output-schema change (different keys, nesting, or types) and unpinned callers need graceful v1↔v2 parser dispatch. **Open** (§17 Q4) — granite-common may already have a versioning mechanism we should reuse instead of inventing this. |
 | **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. *Name under discussion: Jacob prefers `io_config`; `io_contract` is used throughout this proposal but is not final.* |
 | **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality. Exposes `prepare`, `activate`, `deactivate`, `release`. |
 | **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = shipped with the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
@@ -274,7 +274,7 @@ Each concrete binding implements the four-verb set from Part I §4. The column m
 
 > **Which class knows an adapter doesn't need PEFT activation? The binding does — not the backend.** `EmbeddedBinding.activate()` renders `controls` JSON into the chat template; `LocalFileBinding.activate()` calls PEFT `load_adapter`. The backend calls `binding.activate()` uniformly and has no conditional on binding type. This is the mechanism that eliminates the `if getattr(backend, "_uses_embedded_adapters", False):` branch (§11). When embedded-adapter support is later added to `LocalHFBackend` ([#1018](https://github.com/generative-computing/mellea/issues/1018)), the backend does not need to learn about embedding — it calls the same verbs, and `EmbeddedBinding` handles the difference. The backend only needs the verb interface. (Addressing Jacob's review question on backend consumption.)
 
-> **Weight updates:** weights are versioned by HF commit SHA. `prepare()` resolves the configured revision (`main` by default, or a pinned SHA) and refreshes the local cache when upstream has moved. Refresh policy and the long-running-process exception are open (§17 Q9).
+> **Weight updates:** weights are versioned by HF commit SHA. `prepare()` resolves the configured revision (`main` by default, or a pinned SHA) and refreshes the local cache when upstream has moved. Refresh policy and the long-running-process exception are open (§17 Q5).
 
 ### 9.3 Lifecycle sequence
 
@@ -354,11 +354,11 @@ This is a **backend-keyed dispatch** where the branching key (`_uses_embedded_ad
 | 2a. Intrinsic rewriters overwrite options | `Adapter.resolve_model_options()` replaces the five-place merge with one documented stack. |
 | 2b/2c. Model-option hierarchy | Five layers enforced in `resolve_model_options` (base model → adapter config → `io.yaml` defaults → `io.yaml` per-intrinsic → caller). |
 | 3. Naming consistency | Three-axis identity (`name`, `adapter_type`, `revision`) plus explicit `role`. |
-| 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` validates the output shape and raises `AdapterSchemaMismatchError` on mismatch (Jake req 4); helpers see a normalised shape. Dispatch on `(name, schema_version)` is an optional layer if §17 Q8 is adopted. |
+| 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` validates the output shape and raises `AdapterSchemaMismatchError` on mismatch (Jake req 4); helpers see a normalised shape. Dispatch on `(name, schema_version)` is an optional layer if §17 Q4 is adopted. |
 | 4b. Per-adapter vs standard schema | `io_contract.parse()` is per-adapter; helpers define the normalised post-parse shape. |
-| 4c. Versioning | HF commit SHA is the version (every push = new revision; pin via `revision="..."` for stability). Breaking schema changes (rare) handled by pinning + helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4); `schema_version` parser dispatch (§17 Q8) is an optional layer if the granite team adds the field. |
+| 4c. Versioning | HF commit SHA is the version (every push = new revision; pin via `revision="..."` for stability). Breaking schema changes (rare) handled by pinning + helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4); `schema_version` parser dispatch (§17 Q4) is an optional layer if the granite team adds the field. |
 | 5. OpenAI backend support | Ships as one or two `ServerMediatedBinding` subclasses. |
-| 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry; the v1 → v2 output-schema change (PR #1008) is handled by Jake req 4 + optional `schema_version` dispatch (§17 Q8). |
+| 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry; the v1 → v2 output-schema change (PR #1008) is handled by Jake req 4 + optional `schema_version` dispatch (§17 Q4). |
 | 7. Hardcoded `requirement-check` refs | Callers look up by **role**, not name. |
 
 ## 13. What users see — detailed
@@ -451,7 +451,7 @@ Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fi
 
 **Tutorials** — three worth writing alongside the refactor:
 - "Adding a custom intrinsic in 20 lines" — replaces the `CustomIntrinsicAdapter` monkey-patch story.
-- "Handling a breaking schema change without breaking users" — worked example using `requirement-check` v1 → v2; covers HF revision pinning, `AdapterSchemaMismatchError` (Jake req 4), and `schema_version` dispatch if §17 Q8 is adopted.
+- "Handling a breaking schema change without breaking users" — worked example using `requirement-check` v1 → v2; covers HF revision pinning, `AdapterSchemaMismatchError` (Jake req 4), and `schema_version` dispatch if §17 Q4 is adopted.
 - "Reading intrinsic telemetry" — short dashboard-building guide.
 
 **Release notes** separate: no-op for high-level helper users; deprecated-but-shimmed for direct adapter constructors; removed at Phase 4 (see below).
@@ -460,26 +460,24 @@ Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fi
 
 Detail deferred until Part I §5 decisions are agreed, but the intended phasing is:
 
-1. **Phase 0 — parallel types.** Introduce the new types (`Adapter`, `WeightsBinding`, `IOContract`, plus a user-facing `Intrinsic` class if Q5 is settled on Jake's split) alongside existing classes. Catalogue entries gain pinned HF revision SHAs (Jake req 5; Q10). No call-site changes, tests unchanged.
+1. **Phase 0 — parallel types.** Introduce the new types (`Adapter`, `WeightsBinding`, `IOContract`, plus a user-facing `Intrinsic` class if Q5 is settled on Jake's split) alongside existing classes. Catalogue entries gain pinned HF revision SHAs (Jake req 5; §17 Q6). No call-site changes, tests unchanged.
 2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4). Old classes become deprecation shims.
-3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Bindings implement `prepare` / `activate` / `deactivate` / `release` per reality; `LocalFileBinding.prepare` resolves the configured HF revision (Q9 weight-refresh policy). Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
+3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Bindings implement `prepare` / `activate` / `deactivate` / `release` per reality; `LocalFileBinding.prepare` resolves the configured HF revision (§17 Q5 weight-refresh policy). Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
 4. **Phase 3 — Reality C ships.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
 5. **Phase 4 — shim removal.** After one minor release with deprecation warnings.
 
 Observability and docs deliverables attach to the phase that first exercises them.
 
-## 17. Open questions (full list)
+## 17. Open questions and implementation positions
 
-1. **Naming.** `WeightsBinding` vs `ResourceStrategy` vs `AdapterProvider`. Pick one; the term leaks into error messages.
-2. **Lifecycle default** — session-scoped or request-scoped (also in Part I §5).
-3. **Role vs name.** Free-form `role` string, or a small enum so users can't invent roles backends don't honour?
-4. **Reality C idiom.** Back-reference to Part I §5 Q3 — no separate question here; the sub-case framing (C1 = vLLM-backed, C2 = commercial fine-tunes) is in §8.3.
-5. **Rewind interaction (PR #1028).** Some helpers — specifically `factuality_detection` and `factuality_correction` — need to re-format the conversation so that documents are attached to the *last assistant message* rather than earlier in the history. They currently do this by walking back through `context.previous_node`. Question: does that rewind logic belong on `io_contract.build_prompt` (cleaner separation of concerns) or stay in the helper functions (smaller migration blast radius)?
-6. **Telemetry coupling with #1035** (also in Part I §5).
-7. **Deprecation window** (also in Part I §5).
-8. **`schema_version` field in `io.yaml`.** §4, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
-9. **Weight-refresh policy.** Adapter weights are versioned by HF commit SHA. When Mellea is configured to track latest (no pin), how often does `prepare()` re-resolve the upstream revision? Per-session-start is the natural answer; long-running processes (sessions spanning a release) need either an explicit `refresh()` API or accept stale weights until restart.
-10. **Version pinning for auto-loaded adapters.** When an adapter is auto-loaded from the catalogue (caller didn't specify a revision), should Mellea pin to a known-good revision (the catalogue entry's recorded SHA) or track upstream's default branch? **Recommendation:** pin by default — catalogue entries record a pinned SHA; `revision="main"` is an explicit opt-in to track latest. Pinning gives reproducibility; explicit tracking gives latest weights at the cost of behaviour drift between runs. (Jake req 5; coupled to Q9 weight-refresh policy.)
+Items marked **[Open]** need decision; **[Position]** is the proposal's working answer (reviewers can push back); **[Resolved]** has explicit reviewer agreement. Decisions that gate decomposition are in Part I §5; this section is for implementation-level questions and positions.
+
+1. **Naming `WeightsBinding`** [Position]. Used throughout the doc; alternatives `ResourceStrategy` / `AdapterProvider` were considered. `WeightsBinding` is concrete (says what it binds) and unambiguous in error messages.
+2. **Role vs name** [Position]. `role` is a free-form string with an advisory known-roles registry (e.g., `mellea.backends.adapters.roles.KNOWN_ROLES`). Backends warn on unknown roles but accept any string. Pure enum was considered but rejected — it would lock role names at library-release time.
+3. **Rewind interaction (PR #1028)** [Resolved] (Jake on PR #1080). The rewind logic in `_resolve_question` / `_resolve_response` stays in the helpers. Phase 1 of this refactor can revisit moving it to `io_contract.build_prompt` if cleaner separation is wanted; not gating.
+4. **`schema_version` field in `io.yaml`** [Open] — cross-team. §4, §7, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
+5. **Weight-refresh policy** [Position]. Adapter weights are versioned by HF commit SHA. `prepare()` re-resolves the upstream revision at session start; long-running processes (sessions spanning a release) opt into an explicit `refresh()` API. Default cadence matches the session-scoped lifecycle (Part I §5 Q2 Resolved).
+6. **Version pinning for auto-loaded adapters** [Position]. When an adapter is auto-loaded from the catalogue (caller didn't specify a revision), Mellea pins to the catalogue entry's recorded SHA. `revision="main"` is an explicit opt-in to track latest. Pinning gives reproducibility; explicit tracking gives latest weights at the cost of behaviour drift between runs. (Jake req 5; coupled to Q5 weight-refresh policy.)
 
 ---
 
