@@ -1,14 +1,6 @@
-<!-- mellea-pr-checklist-marker -->
-# Sampling Strategy PR
+# Sampling Strategy PR Checklist
 
-Use this template when adding or modifying sampling strategies in `mellea/stdlib/sampling/`.
-
-## Description
-- [ ] Link to Issue: Fixes <!-- issue number -->
-
-<!-- Brief description of the sampling strategy being added/modified along with an explanation for why it should be in the standard library. -->
-
-## Implementation Checklist
+Use this checklist when adding or modifying sampling strategies in `mellea/stdlib/sampling/`.
 
 ### Base Class
 - [ ] Extends appropriate base class:
@@ -22,11 +14,3 @@ Use this template when adding or modifying sampling strategies in `mellea/stdlib
 
 ### Integration
 - [ ] Strategy exported in `mellea/stdlib/sampling/__init__.py`
-
-### Testing
-- [ ] Tests added to `tests/sampling/`
-- [ ] New code has 100% coverage
-- [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)
-
-### Attribution
-- [ ] AI coding assistants used

@@ -1,14 +1,6 @@
-<!-- mellea-pr-checklist-marker -->
-# Requirement PR
+# Requirement PR Checklist
 
-Use this template when adding or modifying requirements in `mellea/stdlib/requirements/`.
-
-## Description
-- [ ] Link to Issue: Fixes <!-- issue number -->
-
-<!-- Brief description of the requirement being added/modified along with an explanation for why it should be in the standard library. -->
-
-## Implementation Checklist
+Use this checklist when adding or modifying requirements in `mellea/stdlib/requirements/`.
 
 ### Base Class
 - [ ] Extends appropriate base class:
@@ -24,11 +16,3 @@ Use this template when adding or modifying requirements in `mellea/stdlib/requir
 
 ### Integration
 - [ ] Requirement exported in `mellea/stdlib/requirements/__init__.py` or, if you are adding a library of requirements, from your sub-module
-
-### Testing
-- [ ] Tests added to `tests/requirements/`
-- [ ] New code has 100% coverage
-- [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)
-
-### Attribution
-- [ ] AI coding assistants used

@@ -10,12 +10,11 @@ name: PR Bot
 
 on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [opened]
+    types: [opened, edited]
 
 jobs:
-  append-checklist:
+  manage-checklist-comment:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.pull_request.body, 'mellea-pr-checklist-marker') }}
     permissions:
       pull-requests: write
       contents: read
@@ -25,49 +24,72 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Detect PR type from checkboxes
-        id: detect-type
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          # Default to misc — the picker is the primary path; this is the safety net.
-          PR_TYPE="misc"
-
-          if   echo "$PR_BODY" | grep -qi '\[x\] Component';         then PR_TYPE="component"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Requirement';       then PR_TYPE="requirement"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Sampling Strategy'; then PR_TYPE="sampling"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Tool';              then PR_TYPE="tool"
-          fi
-
-          echo "pr_type=$PR_TYPE" >> "$GITHUB_OUTPUT"
-          echo "Detected PR type: $PR_TYPE"
-
-      - name: Append checklist to PR body
+      - name: Sync checklist comment with checked type
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_TYPE: ${{ steps.detect-type.outputs.pr_type }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          TEMPLATE_FILE=".github/PULL_REQUEST_TEMPLATE/${PR_TYPE}.md"
+          set -euo pipefail
 
+          # 1. Detect the first checked type box. Empty string if none.
+          #    Case-sensitive [x] — GitHub renders [X] as checked too, but
+          #    keeping it strict avoids false positives from prose.
+          CURRENT_TYPE=""
+          if   printf '%s' "$PR_BODY" | grep -qF '[x] Component';         then CURRENT_TYPE="component"
+          elif printf '%s' "$PR_BODY" | grep -qF '[x] Requirement';       then CURRENT_TYPE="requirement"
+          elif printf '%s' "$PR_BODY" | grep -qF '[x] Sampling Strategy'; then CURRENT_TYPE="sampling"
+          elif printf '%s' "$PR_BODY" | grep -qF '[x] Tool';              then CURRENT_TYPE="tool"
+          fi
+
+          # 2. Find any prior bot comment by its embedded marker.
+          #    Marker shape: <!-- mellea-pr-checklist-comment: TYPE -->
+          COMMENTS_JSON=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --paginate)
+          EXISTING_ID=$(printf '%s' "$COMMENTS_JSON" \
+            | jq -r '[.[] | select(.body | test("<!-- mellea-pr-checklist-comment:"))] | .[0].id // empty')
+          EXISTING_TYPE=$(printf '%s' "$COMMENTS_JSON" \
+            | jq -r '[.[] | select(.body | test("<!-- mellea-pr-checklist-comment:"))] | .[0].body // empty' \
+            | sed -n 's/.*<!-- mellea-pr-checklist-comment: \([a-z]*\) -->.*/\1/p' | head -n1)
+
+          echo "current_type='${CURRENT_TYPE}' existing_type='${EXISTING_TYPE}' existing_id='${EXISTING_ID}'"
+
+          # 3. Decide what to do.
+          if [ -z "$CURRENT_TYPE" ] && [ -z "$EXISTING_ID" ]; then
+            echo "No type checked and no prior comment — nothing to do."
+            exit 0
+          fi
+
+          if [ -z "$CURRENT_TYPE" ] && [ -n "$EXISTING_ID" ]; then
+            echo "Type unchecked; deleting stale comment ${EXISTING_ID}."
+            gh api -X DELETE "repos/${GH_REPO}/issues/comments/${EXISTING_ID}"
+            exit 0
+          fi
+
+          if [ -n "$CURRENT_TYPE" ] && [ "$CURRENT_TYPE" = "$EXISTING_TYPE" ]; then
+            echo "Comment already matches '${CURRENT_TYPE}' — no change."
+            exit 0
+          fi
+
+          # Need to post (no existing) or replace (different type).
+          TEMPLATE_FILE=".github/PULL_REQUEST_TEMPLATE/${CURRENT_TYPE}.md"
           if [ ! -f "$TEMPLATE_FILE" ]; then
             echo "::error::Template file not found: $TEMPLATE_FILE"
             exit 1
           fi
 
-          TEMPLATE_CONTENT=$(cat "$TEMPLATE_FILE")
+          # Friendly heads-up + machine marker. The marker line must stay
+          # intact for the bot to find this comment again on later edits;
+          # if it gets stripped, the next event will post a duplicate.
+          BODY=$(printf '<!-- mellea-pr-checklist-comment: %s -->\n> _This comment is managed by a bot. Editing it is fine — checking off boxes, adding notes — but please leave the HTML comment marker on the first line alone, otherwise checklist updates will break._\n\n%s\n' \
+            "$CURRENT_TYPE" "$(cat "$TEMPLATE_FILE")")
 
-          # Preserve the user's body verbatim; append the checklist below a divider.
-          NEW_BODY=$(printf '%s\n\n---\n\n%s\n' "$PR_BODY" "$TEMPLATE_CONTENT")
-
-          gh pr edit "$PR_NUMBER" --body "$NEW_BODY"
-          echo "Appended ${PR_TYPE} checklist to PR body"
-
-      - name: Comment on PR
-        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc
-        with:
-          message: |
-            A PR checklist has been appended to your description. Please complete it — your original text above the `---` divider has been preserved.
-
-            Next time, you can pick a template directly from the PR description box to skip this step.
+          if [ -n "$EXISTING_ID" ]; then
+            echo "Updating comment ${EXISTING_ID}: ${EXISTING_TYPE:-?} -> ${CURRENT_TYPE}."
+            jq -n --arg body "$BODY" '{body: $body}' \
+              | gh api -X PATCH "repos/${GH_REPO}/issues/comments/${EXISTING_ID}" --input -
+          else
+            echo "Posting new ${CURRENT_TYPE} checklist comment."
+            jq -n --arg body "$BODY" '{body: $body}' \
+              | gh api -X POST "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --input -
+          fi
