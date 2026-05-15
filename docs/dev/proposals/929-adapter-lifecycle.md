@@ -376,9 +376,11 @@ score = check_answerability(question, documents, context, backend,
 **Manual adapter construction** collapses from four classes (`IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter`, abstract base) to one `Adapter` + a binding:
 
 ```python
-# Adapter for the answerability intrinsic (from catalogue):
+# Adapter for the answerability intrinsic (auto-loaded from catalogue; pinned revision):
 adapter = Adapter(name="answerability",
                   weights=LocalFileBinding.from_catalog("answerability"))
+# Catalogue entry includes a pinned HF commit SHA (Jake req 5).
+# Pass revision="main" to LocalFileBinding directly to override and track latest.
 
 # Adapter for a custom intrinsic — io.yaml auto-loaded from the same HF repo:
 adapter = Adapter(name="my-thing",
@@ -477,6 +479,7 @@ Observability and docs deliverables attach to the phase that first exercises the
 7. **Deprecation window** (also in Part I §5).
 8. **`schema_version` field in `io.yaml`.** §4, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
 9. **Weight-refresh policy.** Adapter weights are versioned by HF commit SHA. When Mellea is configured to track latest (no pin), how often does `prepare()` re-resolve the upstream revision? Per-session-start is the natural answer; long-running processes (sessions spanning a release) need either an explicit `refresh()` API or accept stale weights until restart.
+10. **Version pinning for auto-loaded adapters.** When an adapter is auto-loaded from the catalogue (caller didn't specify a revision), should Mellea pin to a known-good revision (the catalogue entry's recorded SHA) or track upstream's default branch? **Recommendation:** pin by default — catalogue entries record a pinned SHA; `revision="main"` is an explicit opt-in to track latest. Pinning gives reproducibility; explicit tracking gives latest weights at the cost of behaviour drift between runs. (Jake req 5; coupled to Q9 weight-refresh policy.)
 
 ---
 
