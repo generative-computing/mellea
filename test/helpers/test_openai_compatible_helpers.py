@@ -322,6 +322,34 @@ class TestMessageToOpenaiMessage:
         assert len(result["content"]) == 1
         assert result["content"][0] == {"type": "text", "text": "hello"}
 
+    def test_image_with_data_uri_prefix_not_double_wrapped(self):
+        """ImageBlock with data URI prefix should not be double-wrapped."""
+        # Create an ImageBlock with the data URI prefix already included
+        img_with_prefix = ImageBlock(f"data:image/png;base64,{_B64_PNG}")
+        msg = Message(role="user", content="describe", images=[img_with_prefix])
+        result = message_to_openai_message(msg)
+
+        # The URL should have exactly one data:image/png;base64, prefix
+        url = result["content"][1]["image_url"]["url"]
+        assert url.startswith("data:image/png;base64,")
+        # Count occurrences of the prefix - should be exactly 1
+        assert url.count("data:image/png;base64,") == 1
+        # Verify the base64 data follows immediately after the prefix
+        assert url == f"data:image/png;base64,{_B64_PNG}"
+
+    def test_image_without_data_uri_prefix_gets_wrapped(self):
+        """ImageBlock without data URI prefix should get wrapped once."""
+        # Create an ImageBlock with just the base64 data (no prefix)
+        img_without_prefix = ImageBlock(_B64_PNG)
+        msg = Message(role="user", content="describe", images=[img_without_prefix])
+        result = message_to_openai_message(msg)
+
+        # The URL should have exactly one data:image/png;base64, prefix
+        url = result["content"][1]["image_url"]["url"]
+        assert url.startswith("data:image/png;base64,")
+        assert url.count("data:image/png;base64,") == 1
+        assert url == f"data:image/png;base64,{_B64_PNG}"
+
 
 # --- messages_to_docs ---
 

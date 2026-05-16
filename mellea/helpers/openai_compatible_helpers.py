@@ -188,10 +188,17 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     content = formatter.print(msg) if formatter else msg.content
     if msg.images is not None:
-        img_list = [
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
-            for img in msg.images
-        ]
+        img_list = []
+        for img in msg.images:
+            # Strip data URI prefix if present to avoid double-wrapping
+            if "data:" in img and "base64," in img:
+                img = img.split("base64,")[1]
+            img_list.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img}"},
+                }
+            )
 
         return {
             "role": msg.role,
