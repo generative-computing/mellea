@@ -42,7 +42,7 @@ def serve(
     Returns:
         ModelOutputThunk with the generated response
     """
-    message = input[-1].content or "No message provided"
+    message = input[-1].get_text_content() or "No message provided"
 
     # When format is provided (from json_schema response_format),
     # pass it to instruct() to get structured output

@@ -34,6 +34,68 @@ def test_from_mellea_keys_are_subset_of_to_mellea_values(backend):
     )
 
 
+# --- _strip_data_uri_prefix ---
+
+
+def test_strip_data_uri_prefix_removes_prefix():
+    """_strip_data_uri_prefix removes data URI prefix from base64 strings."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = [
+        "data:image/png;base64,iVBORw0KGgo...",
+        "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+    ]
+    result = _strip_data_uri_prefix(images)
+    assert result[0] == "iVBORw0KGgo..."
+    assert result[1] == "/9j/4AAQSkZJRg..."
+
+
+def test_strip_data_uri_prefix_handles_already_stripped():
+    """_strip_data_uri_prefix leaves already-stripped base64 strings unchanged."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = ["iVBORw0KGgo...", "/9j/4AAQSkZJRg..."]
+    result = _strip_data_uri_prefix(images)
+    assert result[0] == "iVBORw0KGgo..."
+    assert result[1] == "/9j/4AAQSkZJRg..."
+
+
+def test_strip_data_uri_prefix_mixed_input():
+    """_strip_data_uri_prefix handles mixed prefixed and unprefixed strings."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = [
+        "data:image/png;base64,iVBORw0KGgo...",
+        "already-stripped-base64",
+        "data:image/webp;base64,UklGRiQAAABXRUJQ...",
+    ]
+    result = _strip_data_uri_prefix(images)
+    assert result[0] == "iVBORw0KGgo..."
+    assert result[1] == "already-stripped-base64"
+    assert result[2] == "UklGRiQAAABXRUJQ..."
+
+
+def test_strip_data_uri_prefix_empty_list():
+    """_strip_data_uri_prefix handles empty list."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    result = _strip_data_uri_prefix([])
+    assert result == []
+
+
+def test_strip_data_uri_prefix_preserves_order():
+    """_strip_data_uri_prefix preserves the order of images."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = [
+        "data:image/png;base64,first",
+        "data:image/png;base64,second",
+        "data:image/png;base64,third",
+    ]
+    result = _strip_data_uri_prefix(images)
+    assert result == ["first", "second", "third"]
+
+
 # --- _simplify_and_merge ---
 
 
@@ -294,3 +356,9 @@ async def test_generate_from_raw_preserves_sibling_results_on_empty(
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+"""Unit tests for Ollama backend pure-logic helpers — no Ollama server required.
+
+Covers _simplify_and_merge, _make_backend_specific_and_remove,
+chat_response_delta_merge, _strip_data_uri_prefix, and generate_from_raw exception propagation.
+"""
