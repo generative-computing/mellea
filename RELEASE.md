@@ -23,10 +23,10 @@ compatible with SemVer for final releases).
 | Phase | Branch | Version example | Tag |
 |-------|--------|-----------------|-----|
 | Dev on main | `main` | `0.6.0.dev0` | (untagged) |
-| Release branch cut | `release/v0.6` | `0.6.0rc0` | `v0.6.0rc0` |
-| Further RCs | `release/v0.6` | `0.6.0rc1`, `rc2`, … | `v0.6.0rcN` |
+| Release branch cut | `release/v0.6` | `0.6.0rc0` | `v0.6.0rc0` if `PUBLISH_PRERELEASES`, else untagged |
+| Further RCs | `release/v0.6` | `0.6.0rc1`, `rc2`, … | `v0.6.0rcN` if `PUBLISH_PRERELEASES`, else untagged |
 | Final minor | `release/v0.6` | `0.6.0` | `v0.6.0` |
-| Patch RC | `release/v0.6` | `0.6.1rc0` | `v0.6.1rc0` |
+| Patch RC | `release/v0.6` | `0.6.1rc0` | `v0.6.1rc0` if `PUBLISH_PRERELEASES`, else untagged |
 | Patch final | `release/v0.6` | `0.6.1` | `v0.6.1` |
 | Next minor dev on main | `main` | `0.7.0.dev0` | (untagged) |
 
@@ -36,30 +36,40 @@ Invariants:
   publication runs (`publish-dev-from-main` workflow); never during routine
   commits.
 - Release branches always carry `X.Y.Zrc?` or `X.Y.Z`.
-- Prereleases (`rcN`, `.devN`) always receive a git tag. PyPI upload is
-  governed by the `PUBLISH_PRERELEASES` repo variable (see below);
-  prereleases never produce a GitHub Release.
+- Prereleases (`rcN`, `.devN`) are tagged, uploaded to PyPI, and given a
+  prerelease-marked GitHub Release only when the `PUBLISH_PRERELEASES` repo
+  variable is `true` (see below). With the default (`false`), the version
+  bump commits to the branch but no tag, no PyPI upload, and no Release.
+  Prerelease Releases use `--prerelease` so they don't appear as the
+  repo's "latest" release on GitHub.
 
 ## The `PUBLISH_PRERELEASES` flag
 
-Repo variable `PUBLISH_PRERELEASES` (default `false`) governs PyPI upload
-for prereleases. Prereleases never produce a GitHub Release; the flag only
-gates PyPI.
+Repo variable `PUBLISH_PRERELEASES` (default `false`) governs whether
+prereleases are tagged, uploaded to PyPI, and given a GitHub Release.
 
 | `PUBLISH_PRERELEASES` | rc / dev | Finals |
 |-----------------------|----------|--------|
-| `false` (default) | tag only | tag + GitHub Release + PyPI + changelog entry + sync PR |
-| `true` | tag + PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
+| `false` (default) | version bump committed; no tag, no Release, no PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
+| `true` | tag + prerelease GitHub Release + PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
 
-Tags always push. Users can install any tagged prerelease via
-`pip install git+https://github.com/generative-computing/mellea@v0.6.0rc1`
-regardless of the flag.
+With the default, prereleases stay branch-local — the bump commit identifies
+the version but there is no immutable tag pointer. Users who need a specific
+prerelease can install from a branch SHA
+(`pip install git+https://github.com/generative-computing/mellea@<sha>`).
+
+When the flag is enabled, every rc and dev produces a `--prerelease`-marked
+GitHub Release. The notes are incremental — `0.6.0rc2` diffs against
+`0.6.0rc1`, so testers can see "what changed in this rc" without re-reading
+the full cycle. The cumulative view ("everything in 0.6") shows up on the
+final's Release page, which diffs against the previous final. Prerelease
+Releases never become the repo's "latest" release.
 
 Finals always follow the full release flow regardless of the flag.
 
-To enable prerelease publishing on PyPI, a repo admin sets the variable to
-`true` under **Settings → Secrets and variables → Actions → Variables**.
-No code change needed.
+To enable prerelease publishing, a repo admin sets the variable to `true`
+under **Settings → Secrets and variables → Actions → Variables**. No code
+change needed.
 
 ## Workflows
 
@@ -67,10 +77,9 @@ No code change needed.
 |----------|---------|
 | `cut-release-branch` | Cut `release/vX.Y` from `main`, publish `X.Y.0rc0`, bump `main` to next minor `.dev0` |
 | `publish-release` | Publish a release (rc, final, patch-rc, patch-final, or retry a failed publish) |
-| `cherry-pick-to-release` | Cherry-pick commits from `main` onto a release branch |
 | `publish-dev-from-main` | Iterate main's `.devN` counter and publish a dev release |
 
-All four are `workflow_dispatch`-only and run from the GitHub Actions UI.
+All three are `workflow_dispatch`-only and run from the GitHub Actions UI.
 
 Whether any given prerelease (`rc`, `dev`) produces a PyPI artifact depends
 on the `PUBLISH_PRERELEASES` flag described above.
@@ -89,8 +98,9 @@ The workflow:
 
 - Verifies `pyproject.toml` on `main` matches `X.Y.0.devN`.
 - Creates `release/vX.Y` with version set to `X.Y.0rc0`.
-- Publishes `X.Y.0rc0` per the `PUBLISH_PRERELEASES` flag (tag-only by
-  default; tag + PyPI when enabled).
+- Publishes `X.Y.0rc0` per the `PUBLISH_PRERELEASES` flag — by default the
+  version bump is committed to the release branch with no tag and no PyPI
+  upload; with the flag enabled, also tags and uploads.
 - Pushes `main` with version bumped to `X.(Y+1).0.dev0`.
 
 The `main` push requires `github-actions[bot]` to be listed as a bypass actor
@@ -109,9 +119,13 @@ The workflow:
 
 - Computes the next rc (e.g. `0.6.0rc0` → `0.6.0rc1`).
 - Commits the bump to the release branch.
-- Pushes tag `v{version}`. PyPI upload happens only when
-  `PUBLISH_PRERELEASES=true`. No GitHub Release object, no changelog entry,
-  no sync PR — those are reserved for finals.
+- When `PUBLISH_PRERELEASES=true`: pushes tag `v{version}`, creates a
+  `--prerelease`-marked GitHub Release with incremental notes (diffed
+  against the previous rc), and uploads to PyPI.
+- With the default (`false`): the bump commit is the only artifact — no
+  tag, no Release, no PyPI upload.
+- Either way, no changelog entry, no sync PR — those are reserved for
+  finals.
 
 ## Promoting an RC to a final minor
 
@@ -131,34 +145,15 @@ triggers the docs production deploy.
 Patches live on the original release branch. `main` is touched only when a
 `patch-final` lands and opens its changelog sync PR.
 
-### 1. Cherry-pick fixes
+### 1. Land the fix on the release branch
 
-1. Identify the commit SHAs on `main` that need to go into the patch.
-2. **Actions → Cherry-pick to release branch → Run workflow**.
-3. `target_branch`: `release/v0.6`; `shas`: space- or comma-separated SHAs.
-4. Run.
+Open a PR targeting the release branch (e.g. `release/v0.6`). Branch
+protection applies the same way as `main`: review + CI required.
 
-The workflow topologically sorts the SHAs by their position in `git log main`,
-cherry-picks with `git cherry-pick -x`, and pushes directly to the release
-branch (`github-actions[bot]` needs bypass on `release/**`). It then
-dispatches `ci.yml` explicitly against the release branch since
-`GITHUB_TOKEN` pushes do not fire `push:` triggers on other workflows.
-
-If the workflow hits a conflict it fails with a resolution playbook. To
-resolve:
-
-```bash
-git fetch origin
-git checkout release/v0.6
-git reset --hard origin/release/v0.6
-./.github/scripts/cherry_pick_to_release.sh release/v0.6 <sha> [<sha> ...]
-# Resolve conflicts:
-git add <resolved-files>
-git cherry-pick --continue
-git push origin release/v0.6
-```
-
-Requires push access to `release/**` (or bypass).
+If the same fix also belongs on `main`, open a separate followup PR — usually
+after the release-branch PR merges, but the order can be flipped if it makes
+review easier. Either direction works; the only constraint is that both
+branches end up carrying the change so it doesn't regress in the next minor.
 
 ### 2. Publish a patch RC and final
 
@@ -181,25 +176,34 @@ releases.
 
 The workflow (publish-then-increment):
 
-1. Publishes `main`'s **current** `.devN` per `PUBLISH_PRERELEASES` — tag-only
-   by default, full release flow if enabled. The tag points at the current
-   `main` HEAD.
+1. Publishes `main`'s **current** `.devN` per `PUBLISH_PRERELEASES` — skipped
+   by default; tag + prerelease GitHub Release + PyPI upload if enabled.
+   When tagged, the tag points at the current `main` HEAD.
 2. Iterates pyproject on main: `X.Y.Z.devN → X.Y.Z.dev(N+1)`, commits, pushes.
 
 The invariant is that `main`'s pyproject always carries "the next version
 that would be published." Inspecting main tells you what the next dispatch
 will produce.
 
-With `PUBLISH_PRERELEASES=false` (default) the outcome is a tag like
-`v0.7.0.dev3` pointing at main HEAD and nothing else. With the flag enabled
-it additionally uploads to PyPI (installable via `pip install --pre mellea`).
-Dev publishes never create a GitHub Release or touch `CHANGELOG.md`.
+With `PUBLISH_PRERELEASES=false` (default), the publish step is a no-op —
+the `.devN` counter still advances, but no tag is pushed and nothing reaches
+PyPI. With the flag enabled, the publish tags main HEAD, creates a
+`--prerelease`-marked GitHub Release, and uploads to PyPI (installable via
+`pip install --pre mellea`). Dev publishes never touch `CHANGELOG.md` and
+never become the repo's "latest" release.
 
 ## Rollback and retry
 
 `bump_type: none` re-runs CD against whatever version is currently in
 `pyproject.toml`, skipping the version-bump step. Useful when a previous
 run failed after the bump committed but before the publish completed.
+
+The retry is a "skip what's done, finish what isn't" path — it does not
+validate existing artifacts. If a prior run produced a tag pointing at the
+wrong commit, a Release with stale notes, or a sync PR with a stale body,
+delete the bad artifact (`gh release delete`, `git push --delete`,
+`gh pr close`) before re-dispatching. Retry is for resuming after a partial
+failure, not for fixing a corrupted prior result.
 
 ## Release branch retention
 
@@ -218,8 +222,8 @@ listed as a **bypass actor** on two rulesets:
 
 - `main`: `cut-release-branch` pushes the `X.(Y+1).0.dev0` bump directly;
   `publish-dev-from-main` pushes the `.dev(N+1)` advance commit directly.
-- `release/**`: `publish-release` pushes the version-bump commit; `cherry-pick-to-release`
-  pushes cherry-picked commits directly.
+- `release/**`: `publish-release` pushes the version-bump commit and (when
+  publishing a final) the changelog update.
 
 Recommended ruleset for `release/**`:
 

@@ -32,6 +32,7 @@ jobs:
       pull-requests: write   # release.sh may open changelog sync PR if rc0 is published (flag on)
       actions: write         # release.sh dispatches pypi.yml after tagging rc0
     runs-on: ubuntu-latest
+    concurrency: release
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:

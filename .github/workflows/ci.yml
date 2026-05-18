@@ -6,9 +6,7 @@ on:
   merge_group:
   push:
     branches: ['release/**']
-  # Dispatchable by cherry-pick-to-release.yml to run CI on direct-pushed
-  # cherry-picks.
-  workflow_dispatch:
+  workflow_dispatch:  # used by release.sh for sync-PR CI (anti-loop workaround)
     inputs:
       ref:
         description: 'Branch or ref to run CI against'

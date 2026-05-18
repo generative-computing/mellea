@@ -344,6 +344,9 @@ jobs:
       # to the older minor's docs.
       - name: Check release is latest final
         id: latest_check
+        # Fail open: deploy if the check succeeded (true) or a transient API
+        # error left the output empty. Only skip on an explicit 'false'.
+        continue-on-error: true
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -431,7 +434,7 @@ jobs:
         # release_tag set; either path can request the skip.
         if: >-
           steps.latest_check.conclusion == 'skipped' ||
-          steps.latest_check.outputs.is_latest_final == 'true'
+          steps.latest_check.outputs.is_latest_final != 'false'
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
