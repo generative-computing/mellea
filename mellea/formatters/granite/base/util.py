@@ -17,8 +17,11 @@ from typing import TYPE_CHECKING
 # Third Party
 import pydantic
 
+from ....core.utils import MelleaLogger
+
 if TYPE_CHECKING:
     import llguidance
+    import torch
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
@@ -113,30 +116,41 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
     return model, tokenizer
 
 
-# Modified from VLLM v0.9.2 code base
-# https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
 class _GuidanceLogitsProcessor:
     """A HuggingFace logits processor that enforces an llguidance grammar."""
 
+    # Modified from VLLM v0.9.2 code base
+    # https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
+
     def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
         """Initialize the processor with a compiled grammar and an llguidance tokenizer."""
+        with import_optional("llguidance"):
+            # Callers will have already had to import llguidance. Ensure it here.
+            import llguidance
+            import llguidance.torch
+
         self.grammar = grammar
         self.vocab_size: int = ll_tokenizer.vocab_size
         self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
         self.ll_matchers: list[llguidance.LLMatcher] = []
-        self.bitmasks: list = []
+        self.bitmasks: list[torch.Tensor] = []
         self.new_sampling: bool = False
         self.batch_size: int = -1
 
-    def __call__(self, batch_input_ids, batch_scores):  # type: ignore[no-untyped-def]
+    def __call__(
+        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
+    ) -> torch.Tensor:
         """Apply the grammar's allowed-token bitmask to ``batch_scores`` in place."""
-        # Third Party
+        # Guaranteed to be imported by class __init__.
         import llguidance
         import llguidance.torch
 
         i_batch, _ = batch_input_ids.shape
         s_batch, _ = batch_scores.shape
-        assert i_batch == s_batch
+        if i_batch != s_batch:
+            raise RuntimeError(
+                f"batch size mismatch: input_ids={i_batch}, scores={s_batch}"
+            )
 
         if self.batch_size != i_batch:
             self.batch_size = i_batch
@@ -156,7 +170,7 @@ class _GuidanceLogitsProcessor:
                 ll_matcher.consume_token(input_ids.tolist()[-1])  # type: ignore[attr-defined]
                 err = ll_matcher.get_error()  # type: ignore[attr-defined]
                 if err:
-                    logging.warning("Error in LLMatcher: %s", err)
+                    MelleaLogger.get_logger().warning("Error in LLMatcher: %s", err)
 
             llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
             llguidance.torch.apply_token_bitmask_inplace(  # type: ignore[attr-defined]
@@ -169,8 +183,8 @@ class _GuidanceLogitsProcessor:
 
 def chat_completion_request_to_transformers_inputs(
     request: dict,
-    tokenizer: PreTrainedTokenizerBase | None = None,
-    model: PreTrainedModel | None = None,
+    tokenizer: PreTrainedTokenizerBase,
+    model: PreTrainedModel,
     constrained_decoding_prefix: str | None = None,
     ll_tokenizer: llguidance.LLTokenizer | None = None,
 ) -> tuple[dict, dict]:
@@ -181,10 +195,9 @@ def chat_completion_request_to_transformers_inputs(
 
     Args:
         request: Request as parsed JSON or equivalent dataclass.
-        tokenizer: HuggingFace tokenizer for the model. Only required if the request
-            uses constrained decoding.
-        model: HuggingFace model object. Only required if the request uses constrained
-            decoding.
+        tokenizer: HuggingFace tokenizer.
+        model: HuggingFace model object. Used for ``model.device`` placement and
+            when ``constrained_decoding_prefix`` is set.
         constrained_decoding_prefix: Optional generation prefix to append to the prompt.
         ll_tokenizer: Pre-built ``llguidance.LLTokenizer``. Only used when the request
             uses constrained decoding; if not provided, one is constructed from
@@ -201,7 +214,7 @@ def chat_completion_request_to_transformers_inputs(
         TypeError: If ``tokenizer.apply_chat_template()`` returns an unexpected type.
         ValueError: If padding or end-of-sequence token IDs cannot be determined
             from the tokenizer, or if a constrained-decoding request is made
-            without passing a ``tokenizer`` or ``model`` argument.
+            without the required ``tokenizer``/``ll_tokenizer``/``model`` arguments.
     """
     with import_optional("torch"):
         # Third Party
@@ -250,8 +263,7 @@ def chat_completion_request_to_transformers_inputs(
 
     # generate() will fail with many different creative error messages if tokens aren't
     # on the right device.
-    if model is not None:
-        input_tokens = input_tokens.to(model.device)
+    input_tokens = input_tokens.to(model.device)
     generate_input["input_tokens"] = input_tokens
 
     # The generate() method sometimes needs to know what is the integer ID
@@ -298,25 +310,24 @@ def chat_completion_request_to_transformers_inputs(
             # Third Party
             import llguidance
             import llguidance.hf
-        if tokenizer is None:
+        if tokenizer is None and ll_tokenizer is None:
             raise ValueError(
-                "Request specifies constrained decoding, but no "
-                "tokenizer object was passed to this function."
-            )
-        if model is None:
-            raise ValueError(
-                "Request specifies constrained decoding, but no "
-                "model object was passed to this function."
+                "Request specifies constrained decoding, but neither a "
+                "tokenizer nor an ll_tokenizer was passed to this function."
             )
 
         if ll_tokenizer is None:
-            ll_tokenizer = llguidance.hf.from_tokenizer(tokenizer)  # type: ignore[arg-type]
+            # HF model components disagree on vocab size (resized embeddings, added
+            # special tokens, etc.). Pass the maximum so the bitmask covers every
+            # token id the model can emit. llguidance defaults to the tokenizer's
+            # value when n_vocab is None, which can be smaller than model.vocab_size.
+            n_vocab = max(tokenizer.vocab_size, len(tokenizer))  # type: ignore[union-attr,arg-type]
+            if model is not None:
+                n_vocab = max(n_vocab, model.vocab_size)
+            ll_tokenizer = llguidance.hf.from_tokenizer(tokenizer, n_vocab=n_vocab)  # type: ignore[arg-type]
 
         grammar = llguidance.LLMatcher.grammar_from_json_schema(
             request["extra_body"]["structured_outputs"]["json"]
-            # NOTE: Mellea's structured output for hf sets `whitespace_flexible` to False.
-            #       Not doing so here to match the previous granite formatter behavior.
-            # defaults={"whitespace_flexible": False},
         )
         logits_processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
 
@@ -324,6 +335,12 @@ def chat_completion_request_to_transformers_inputs(
         generate_input["logits_processor"] = [logits_processor]  # type: ignore[assignment]
 
         if constrained_decoding_prefix is not None:
+            if tokenizer is None or model is None:
+                raise ValueError(
+                    "constrained_decoding_prefix requires both a tokenizer "
+                    "and a model to be passed to this function; "
+                    f"received tokenizer ({tokenizer}) and model ({model})."
+                )
             # Some models generate boilerplate before getting to the place where the
             # logits processor should activate. Append that boilerplate to the prompt,
             # since the logits processor we just created will

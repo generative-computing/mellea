@@ -257,13 +257,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             case _:
                 self._tokenizer, self._model, self._device = custom_config
 
+        # Preemptively fix vocab size discrepancies between the tokenizer and model if needed.
+        n_vocab = max(
+            self._tokenizer.vocab_size, len(self._tokenizer), self._model.vocab_size
+        )
         self._llguidance_tokenizer: llguidance.LLTokenizer = (
-            llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
+            llguidance.hf.from_tokenizer(self._tokenizer, n_vocab=n_vocab)  # type:ignore
         )
         assert (
             self._llguidance_tokenizer.vocab_size
             == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
-        ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
+        ), "vocab size mismatch between llguidance and huggingface tokenizers"
 
         self._use_caches = use_caches
         self._cache = (
