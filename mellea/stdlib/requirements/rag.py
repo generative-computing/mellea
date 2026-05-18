@@ -754,7 +754,7 @@ class GroundednessRequirement(Requirement):
                     continue
 
                 span_id = judgment.get("span_id")
-                needs_citation_flag = judgment.get("needs_citation", "").lower().strip()
+                needs_citation_flag = (judgment.get("needs_citation") or "").lower().strip()
 
                 logger.debug(
                     f"  Judgment: span_id={span_id}, needs_citation={needs_citation_flag}"
