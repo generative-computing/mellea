@@ -13,15 +13,22 @@ estimation methods:
    trained on hand-coded labeled examples.
 
 3. **Classifier with HF data** - Same classifier method, but training data
-   is generated live from TriviaQA (short QA) and SAMSum (dialogue
-   summarization) via Ollama.
+   is generated live via Ollama from one of two supported HF datasets:
+   ``"triviaqa"`` (short factoid QA) or ``"samsum"`` (dialogue summarization).
+   No other datasets are supported by ``generate_training_data()``.
 
 4. **Classifier with pre-trained classifier** - Trains a RandomForestClassifier
    externally using HF-generated data, then passes the fitted object directly
    to SIMBAUQSamplingStrategy via the ``classifier=`` argument.
 
-Both methods generate multiple samples across different temperature values,
-compute a similarity matrix, and select the most confident response.
+All variants generate multiple samples across different temperature values,
+compute a pairwise similarity matrix, and select the most confident response.
+
+Available similarity metrics (set via ``METRIC`` in the CONFIG block below):
+``"rouge"``, ``"jaccard"``, ``"sbert"``, ``"difflib"``, ``"levenshtein"``.
+
+To control which example runs, edit the CONFIG block immediately below the
+imports — set ``EXAMPLE``, ``DATASET``, ``METRIC``, and ``THRESHOLD`` there.
 
 The example uses OllamaModelBackend with granite4:micro. To run:
 
@@ -42,6 +49,70 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import FancyLogger, SamplingResult
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling.simbauq import SIMBAUQSamplingStrategy
+
+# ============================================================================
+# CONFIG — edit these to control which example(s) run.
+# ============================================================================
+
+# Which example(s) to run.
+#   "aggregation" — data-free similarity aggregation
+#   "synthetic"   — classifier with hand-coded labeled groups
+#   "hf"          — classifier trained on data generated from an HF dataset
+#   "pretrained"  — classifier trained externally, passed in via `classifier=`
+#   "all"         — run all four sequentially
+EXAMPLE = "aggregation"
+
+# HF dataset for the `hf` and `pretrained` examples. Only two datasets are
+# supported by `generate_training_data()`:
+#   "triviaqa" — short factoid QA (rc.nocontext split)
+#   "samsum"   — dialogue summarization
+DATASET = "triviaqa"
+
+# Pairwise similarity metric. Used by both the strategy and the labelling
+# pass in `generate_training_data()`. Available metrics:
+#   "rouge"       — RougeL F-measure (default; needs `rouge-score`)
+#   "jaccard"     — word-level set overlap, fast, no extra deps
+#   "sbert"       — Sentence-BERT cosine; needs `sentence-transformers`
+#   "difflib"     — `difflib.SequenceMatcher` ratio; stdlib only
+#   "levenshtein" — normalized edit distance; stdlib only
+METRIC: Literal["rouge", "jaccard", "sbert", "difflib", "levenshtein"] = "sbert"
+
+# Aggregation method for the "aggregation" confidence method. Options:
+#   "mean"        — Arithmetic mean (default)
+#   "geometric_mean" — Geometric mean
+#   "harmonic_mean" — Harmonic mean
+#   "median"      — Median
+#   "max"         — Maximum
+#   "min"         — Minimum
+AGGREGATION: Literal[
+    "mean", "geometric_mean", "harmonic_mean", "median", "max", "min"
+] = "mean"
+
+# Similarity threshold for labelling generated responses against the HF
+# reference: score >= THRESHOLD → label 1 (correct), else 0. Tune per
+# dataset/metric/model — too strict drops every group, too loose makes every
+# response "correct" and the classifier sees no negatives. Groups where every
+# response receives the same label are discarded automatically.
+# Reasonable starting points:
+#   sbert + triviaqa: 0.5 - 0.7
+#   sbert + samsum:   0.2 - 0.4
+#   rouge + triviaqa: 0.3 - 0.5
+THRESHOLD = 0.2
+
+# ============================================================================
+
+# Allowed values, used for CONFIG validation in `main()`.
+_VALID_EXAMPLES = ("aggregation", "synthetic", "hf", "pretrained", "all")
+_VALID_DATASETS = ("triviaqa", "samsum")
+_VALID_METRICS = ("rouge", "jaccard", "sbert", "difflib", "levenshtein")
+_VALID_AGGREGATIONS = (
+    "mean",
+    "geometric_mean",
+    "harmonic_mean",
+    "median",
+    "max",
+    "min",
+)
 
 # Number of training groups collected per dataset.
 # Each group has len(temperatures) * n_per_temp samples.
@@ -138,6 +209,11 @@ def generate_training_data(
         Tuple of (training_samples, training_labels), each a list of groups
         with exactly ``len(temperatures) * n_per_temp`` entries per group.
     """
+    if dataset not in _VALID_DATASETS:
+        raise ValueError(
+            f"Unknown dataset {dataset!r}. Supported: {list(_VALID_DATASETS)}."
+        )
+
     try:
         from datasets import load_dataset  # type: ignore[import-not-found]
     except ImportError:
@@ -190,9 +266,6 @@ def generate_training_data(
         return items
 
     loaders = {"triviaqa": _load_triviaqa, "samsum": _load_samsum}
-    if dataset not in loaders:
-        raise ValueError(f"Unknown dataset '{dataset}'. Choose from: {list(loaders)}")
-
     print(f"  Collecting {n_groups} training groups from {dataset}...")
     items = loaders[dataset](n_groups * 3)
 
@@ -225,6 +298,13 @@ def generate_training_data(
             ]
             labels = [1 if s >= threshold else 0 for s in scores]
 
+            print(
+                "Responses:\n  "
+                + "\n  ".join(
+                    f"{i}. {r!r} (score={s:.4f}, label={label})"
+                    for i, (r, s, label) in enumerate(zip(responses, scores, labels))
+                )
+            )
             if len(set(labels)) < 2:
                 pbar.set_postfix_str(
                     f"discarded (scores {min(scores):.2f}–{max(scores):.2f}, threshold={threshold})"
@@ -281,16 +361,22 @@ def train_classifier(
     return clf
 
 
-def run_aggregation_example(session: MelleaSession) -> None:
+def run_aggregation_example(
+    session: MelleaSession,
+    similarity_metric: Literal["rouge", "jaccard", "sbert", "difflib", "levenshtein"],
+    aggregation: Literal[
+        "mean", "geometric_mean", "harmonic_mean", "median", "max", "min"
+    ],
+) -> None:
     """Run SIMBA-UQ with data-free similarity aggregation."""
     print("\n>>> AGGREGATION CONFIDENCE METHOD <<<\n")
 
     strategy = SIMBAUQSamplingStrategy(
         temperatures=[0.3, 0.5, 0.7, 1.0],
         n_per_temp=3,
-        similarity_metric="sbert",
+        similarity_metric=similarity_metric,
         confidence_method="aggregation",
-        aggregation="mean",
+        aggregation=aggregation,
     )
 
     result: SamplingResult = session.instruct(
@@ -303,7 +389,10 @@ def run_aggregation_example(session: MelleaSession) -> None:
     print_results(result)
 
 
-def run_classifier_synthetic_example(session: MelleaSession) -> None:
+def run_classifier_synthetic_example(
+    session: MelleaSession,
+    similarity_metric: Literal["rouge", "jaccard", "sbert", "difflib", "levenshtein"],
+) -> None:
     """Run SIMBA-UQ classifier with hand-coded synthetic training data."""
     print("\n>>> CLASSIFIER CONFIDENCE METHOD (synthetic training data) <<<\n")
 
@@ -365,7 +454,7 @@ def run_classifier_synthetic_example(session: MelleaSession) -> None:
     strategy = SIMBAUQSamplingStrategy(
         temperatures=temperatures,
         n_per_temp=n_per_temp,
-        similarity_metric="rouge",
+        similarity_metric=similarity_metric,
         confidence_method="classifier",
         training_samples=training_samples,
         training_labels=training_labels,
@@ -515,24 +604,43 @@ def run_classifier_pretrained_example(
     print_results(result)
 
 
-def main():
-    """Run all SIMBA-UQ confidence estimation examples."""
-    dataset = "triviaqa"
-    similarity_metric = "sbert"
-    threshold = 0.2
+def main() -> None:
+    """Run the SIMBA-UQ example(s) selected via the CONFIG block at the top of this file."""
+    if EXAMPLE not in _VALID_EXAMPLES:
+        raise ValueError(
+            f"Unknown EXAMPLE={EXAMPLE!r}. Choose one of: {list(_VALID_EXAMPLES)}."
+        )
+    if DATASET not in _VALID_DATASETS:
+        raise ValueError(
+            f"Unknown DATASET={DATASET!r}. Choose one of: {list(_VALID_DATASETS)}."
+        )
+    if METRIC not in _VALID_METRICS:
+        raise ValueError(
+            f"Unknown METRIC={METRIC!r}. Choose one of: {list(_VALID_METRICS)}."
+        )
+    if AGGREGATION not in _VALID_AGGREGATIONS:
+        raise ValueError(
+            f"Unknown AGGREGATION={AGGREGATION!r}. Choose one of: {list(_VALID_AGGREGATIONS)}."
+        )
 
+    # Start a Mellea session with OllamaModelBackend.
     m = make_session()
-    run_aggregation_example(m)
-    print("\n" + "=" * 70 + "\n")
-    run_classifier_synthetic_example(m)
-    print("\n" + "=" * 70 + "\n")
-    run_classifier_hf_example(
-        m, dataset=dataset, similarity_metric=similarity_metric, threshold=threshold
-    )
-    print("\n" + "=" * 70 + "\n")
-    run_classifier_pretrained_example(
-        m, dataset=dataset, similarity_metric=similarity_metric, threshold=threshold
-    )
+
+    runners = {
+        "aggregation": lambda: run_aggregation_example(m, METRIC, AGGREGATION),
+        "synthetic": lambda: run_classifier_synthetic_example(m, METRIC),
+        "hf": lambda: run_classifier_hf_example(m, DATASET, METRIC, THRESHOLD),
+        "pretrained": lambda: run_classifier_pretrained_example(
+            m, DATASET, METRIC, THRESHOLD
+        ),
+    }
+
+    to_run = list(runners.values()) if EXAMPLE == "all" else [runners[EXAMPLE]]
+
+    for i, run in enumerate(to_run):
+        if i > 0:
+            print("\n" + "=" * 70 + "\n")
+        run()
 
 
 if __name__ == "__main__":

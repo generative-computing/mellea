@@ -11,7 +11,7 @@ temperatures and selects the one with the highest estimated confidence.
 ### simbauq_example.py
 
 Complete example demonstrating all four confidence estimation variants with
-Ollama and granite-4.0-micro:
+Ollama and granite4:micro:
 
 1. **Aggregation** — data-free, no training data required.
 2. **Classifier (synthetic)** — trained on hand-coded labeled groups.
@@ -27,11 +27,44 @@ Ollama and granite-4.0-micro:
    Useful when you want to persist, inspect, or swap the classifier independently
    of the sampling strategy.
 
-### simbauq_data.py
+## Running the example
 
-Standalone CLI script for generating larger training datasets offline. Supports
-all 9 HF datasets (3 QA, 3 summarization, 3 generative) and writes one JSON
-file per dataset to an output directory. See `--help` for options.
+```
+ollama serve
+uv run python docs/examples/simbauq/simbauq_example.py
+```
+
+The script runs against the demo query
+`"Which magazine was started first Arthur's Magazine or First for Women?"`.
+
+Which variant runs is controlled by the **CONFIG block** at the top of the
+script (immediately below the imports). Edit the values in place:
+
+| Variable | Purpose | Allowed values |
+|----------|---------|----------------|
+| `EXAMPLE` | Which variant(s) to run | `"aggregation"`, `"synthetic"`, `"hf"`, `"pretrained"`, `"all"` |
+| `DATASET` | HF dataset for the `hf` and `pretrained` variants | `"triviaqa"`, `"samsum"` |
+| `METRIC` | Pairwise similarity metric (used by both the strategy and HF labelling) | `"rouge"`, `"jaccard"`, `"sbert"`, `"difflib"`, `"levenshtein"` |
+| `AGGREGATION` | Aggregation function for the `aggregation` confidence method | `"mean"`, `"geometric_mean"`, `"harmonic_mean"`, `"median"`, `"max"`, `"min"` |
+| `THRESHOLD` | Similarity score above which an HF-generated response is labelled correct (1) | float; tune per metric/dataset |
+
+The shipped defaults are `EXAMPLE="aggregation"`, `DATASET="triviaqa"`,
+`METRIC="sbert"`, `AGGREGATION="mean"`, `THRESHOLD=0.2`. Set `EXAMPLE="all"`
+to run all four variants sequentially.
+
+Reasonable starting points for `THRESHOLD`:
+
+- `sbert` + `triviaqa`: 0.5 - 0.7
+- `sbert` + `samsum`: 0.2 - 0.4
+- `rouge` + `triviaqa`: 0.3 - 0.5
+
+Too strict drops every group; too loose makes every response "correct" and
+the classifier sees no negatives. Groups where every response receives the
+same label are discarded automatically.
+
+The number of HF training groups is controlled by the module-level constant
+`N_TRAINING_GROUPS=5` — increase for stronger classifier signal at the cost
+of more LLM calls.
 
 ## Architecture
 
@@ -69,7 +102,7 @@ from mellea.stdlib.sampling.simbauq import SIMBAUQSamplingStrategy
 strategy = SIMBAUQSamplingStrategy(
     temperatures=[0.3, 0.5, 0.7, 1.0],
     n_per_temp=3,
-    similarity_metric="rouge",
+    similarity_metric="sbert",
     confidence_method="aggregation",
     aggregation="mean",
 )
@@ -88,6 +121,11 @@ so the feature vectors match at inference time.
 
 **Option A — synthetic training data:**
 
+With `temperatures=[0.3, 0.5, 0.7, 1.0]` and `n_per_temp=3`, each group must
+contain exactly 12 samples (4 temperatures × 3 per temp). See
+`run_classifier_synthetic_example()` in `simbauq_example.py` for a complete,
+hand-coded example.
+
 ```python
 strategy = SIMBAUQSamplingStrategy(
     temperatures=[0.3, 0.5, 0.7, 1.0],
@@ -95,12 +133,12 @@ strategy = SIMBAUQSamplingStrategy(
     similarity_metric="rouge",
     confidence_method="classifier",
     training_samples=[
-        ["correct answer 1", "correct answer 2", ..., "wrong answer"],  # group 1
-        ["correct answer 1", "correct answer 2", ..., "wrong answer"],  # group 2
+        ["correct answer 1", "correct answer 2", ..., "wrong answer"],  # group 1 (12 samples)
+        ["correct answer 1", "correct answer 2", ..., "wrong answer"],  # group 2 (12 samples)
     ],
     training_labels=[
-        [1, 1, ..., 0],  # labels for group 1
-        [1, 1, ..., 0],  # labels for group 2
+        [1, 1, ..., 0],  # labels for group 1 (12 entries)
+        [1, 1, ..., 0],  # labels for group 2 (12 entries)
     ],
 )
 ```
@@ -230,4 +268,3 @@ for i, mot in enumerate(result.sample_generations):
 
 - `mellea/stdlib/sampling/simbauq.py` -- Strategy implementation
 - `test/stdlib/sampling/test_simbauq.py` -- Unit and integration tests
-- `docs/examples/simbauq/simbauq_data.py` -- CLI tool for large-scale offline training data generation

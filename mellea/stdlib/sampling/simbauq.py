@@ -23,7 +23,9 @@ from difflib import SequenceMatcher
 from typing import Literal, Protocol, runtime_checkable
 
 import numpy as np
-from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
+from rouge_score.rouge_scorer import RougeScorer
+
+from mellea.stdlib import context  # codespell:ignore
 
 from ...core import (
     Backend,
@@ -159,6 +161,16 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         if confidence_method == "classifier":
             if classifier is not None:
                 self._classifier = classifier
+
+                # If a classifier is provided, do a sanity check to ensure the feature
+                # dimensionality matches the expected number of samples.
+                expected = len(temperatures) * n_per_temp - 1
+                n_features = getattr(classifier, "n_features_in_", None)
+                if n_features is not None and n_features != expected:
+                    raise ValueError(
+                        f"Classifier expects {n_features} features but this configuration "
+                        f"produces {expected} (len(temperatures) * n_per_temp - 1)."
+                    )
             elif training_samples is not None and training_labels is not None:
                 n_samples = len(temperatures) * n_per_temp
                 for i, group in enumerate(training_samples):
@@ -227,14 +239,16 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
         # --- Phase 1: Generate samples across temperatures ---
         generation_tasks: list[asyncio.Task] = []
-        temp_assignments: list[float] = []
+        task_actions: list[Component[S]] = []
+        task_temps: list[float] = []
 
         for temp in self.temperatures:
             for _ in range(self.n_per_temp):
                 opts = {**model_options, "temperature": temp}
+                task_action = deepcopy(action)
                 task = asyncio.create_task(
                     backend.generate_from_context(
-                        deepcopy(action),
+                        task_action,
                         ctx=context,
                         format=format,
                         model_options=opts,
@@ -242,25 +256,38 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
                     )
                 )
                 generation_tasks.append(task)
-                temp_assignments.append(temp)
+                task_actions.append(task_action)
+                task_temps.append(temp)
 
-        generation_results = await asyncio.gather(*generation_tasks)
+        generation_results = await asyncio.gather(
+            *generation_tasks, return_exceptions=True
+        )
 
-        # Resolve all thunks and parse.
+        # Resolve all thunks and parse. Skip failed tasks but keep
+        # all_mots / all_contexts / all_actions / temp_assignments aligned positionally.
         all_mots = []
         all_contexts = []
-        all_actions = []
-        for result_mot, result_ctx in generation_results:
+        all_actions: list[Component[S]] = []
+        temp_assignments: list[float] = []
+        for gen_result, task_action, task_temp in zip(
+            generation_results, task_actions, task_temps
+        ):
+            if isinstance(gen_result, BaseException):
+                continue  # Skip failed generations.
+            result_mot, result_ctx = gen_result
             await result_mot.avalue()
-            result_mot.parsed_repr = action.parse(result_mot)
+            result_mot.parsed_repr = task_action.parse(result_mot)
             all_mots.append(result_mot)
             all_contexts.append(result_ctx)
-            all_actions.append(action)
+            all_actions.append(task_action)
+            temp_assignments.append(task_temp)
 
         # --- Phase 2: Compute SIMBA-UQ confidence scores ---
         sample_strings = [str(mot) for mot in all_mots]
         n = len(sample_strings)
-        if n == 1:
+        if n == 0:
+            raise RuntimeError("No successful samples were generated.")
+        elif n == 1:
             sim_matrix = np.ones((1, 1))
             confidences = np.array([0.5])
         else:
@@ -298,10 +325,14 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             [] for _ in all_mots
         ]
 
+        validation_ctx = (
+            validation_ctx if validation_ctx is not None else all_contexts[best_index]
+        )
+
         if reqs:
             val_results = await mfuncs.avalidate(
                 reqs=reqs,
-                context=all_contexts[best_index],
+                context=validation_ctx,
                 backend=backend,
                 output=best_mot,
                 format=None,
@@ -372,7 +403,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             except ImportError:
                 msg = (
                     "sklearn.metrics.pairwise.cosine_similarity is required for sbert similarity. "
-                    "Please install with `pip install scikit-learn`."
+                    "Please install with extra dependencies: `pip install mellea[simbauq]`."
                 )
                 raise ImportError(msg)
 
@@ -387,13 +418,17 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             max_len = max(len(text1), len(text2))
             return 1.0 - dist / max_len if max_len > 0 else 1.0
 
-        # Jaccard: word-level set overlap.
-        words1 = set(text1.lower().split())
-        words2 = set(text2.lower().split())
-        if len(words1) == 0 and len(words2) == 0:
-            return 1.0
-        union = len(words1 | words2)
-        return len(words1 & words2) / union if union > 0 else 0.0
+        if self.similarity_metric == "jaccard":
+            # Jaccard: word-level set overlap.
+            words1 = set(text1.lower().split())
+            words2 = set(text2.lower().split())
+            if len(words1) == 0 and len(words2) == 0:
+                return 1.0
+            union = len(words1 | words2)
+            return len(words1 & words2) / union if union > 0 else 0.0
+
+        msg = f"Unknown similarity metric: {self.similarity_metric!r}"
+        raise ValueError(msg)
 
     def _compute_similarity_matrix(self, samples: list[str]) -> np.ndarray:
         """Build a symmetric pairwise similarity matrix.
@@ -416,7 +451,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             except ImportError:
                 msg = (
                     "sklearn.metrics.pairwise.cosine_similarity is required for sbert similarity. "
-                    "Please install with `pip install scikit-learn`."
+                    "Please install with extra dependencies: `pip install mellea[simbauq]`."
                 )
                 raise ImportError(msg)
 
@@ -455,16 +490,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             return float(np.exp(np.mean(log_sims)))
 
         if self.aggregation == "harmonic_mean":
-            try:
-                from scipy import stats as scipy_stats
-            except ImportError:
-                msg = (
-                    "scipy is required for harmonic mean aggregation. "
-                    "Please install with `pip install scipy`."
-                )
-                raise ImportError(msg)
-
-            return float(scipy_stats.hmean(similarities + epsilon))
+            return float(len(similarities) / np.sum(1.0 / (similarities + epsilon)))
 
         if self.aggregation == "median":
             return float(np.median(similarities))
@@ -518,7 +544,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         except ImportError:
             msg = (
                 "sklearn is required for training a Random Forest classifier. "
-                "Please install with `pip install scikit-learn`."
+                "Please install with extra dependencies: `pip install mellea[simbauq]`."
             )
             raise ImportError(msg)
 
@@ -546,7 +572,10 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             Array of P(correct) confidence scores with shape ``(n,)``.
         """
         x_test = [self._extract_features(sim_matrix, i) for i in range(n)]
-        assert self._classifier is not None
+        if self._classifier is None:
+            raise RuntimeError(
+                "Classifier is not initialised — this is a bug in SIMBAUQSamplingStrategy."
+            )
         probs = self._classifier.predict_proba(x_test)
         return probs[:, 1]
 
