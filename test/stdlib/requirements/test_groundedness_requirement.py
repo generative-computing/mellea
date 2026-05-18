@@ -166,10 +166,7 @@ async def test_groundedness_requirement_allow_partial_support_parameter(
 
 
 @pytest.mark.asyncio
-@pytest.mark.e2e
-@pytest.mark.huggingface
-@require_gpu(min_vram_gb=8)
-async def test_span_extraction_simple(backend, sample_docs):
+async def test_span_extraction_simple(sample_docs):
     """Test span extraction with simple response."""
     req = GroundednessRequirement(documents=sample_docs)
 
