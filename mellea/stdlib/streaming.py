@@ -134,8 +134,19 @@ class StreamChunkingResult:
             self._orchestration_exception = None
             raise exc
         if self._orchestration_task is not None and self._orchestration_task.done():
+            # Raise-once: a prior call already surfaced the exception.
+            if self._exception_surfaced:
+                return
+            # ``task.exception()`` raises CancelledError on a cancelled task
+            # (rather than returning it), so check cancelled status first.
+            # This branch covers BaseException paths that bypass the
+            # ``except Exception`` handler in ``_orchestrate_streaming``.
+            if self._orchestration_task.cancelled():
+                self._exception_surfaced = True
+                raise asyncio.CancelledError()
             task_exc = self._orchestration_task.exception()
             if task_exc is not None:
+                self._exception_surfaced = True
                 raise task_exc
 
     @property

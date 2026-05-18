@@ -941,6 +941,39 @@ async def test_external_task_cancellation_releases_consumers() -> None:
 
 
 @pytest.mark.asyncio
+async def test_external_cancellation_acomplete_raise_once() -> None:
+    """Raise-once contract holds for the task-fallback path on external cancel.
+
+    CancelledError bypasses the orchestrator's ``except Exception`` handler,
+    so ``_orchestration_exception`` is never set. ``acomplete()`` surfaces the
+    cancel via ``self._orchestration_task.exception()`` instead — and that
+    branch must also flip ``_exception_surfaced`` so a second ``acomplete()``
+    call does not raise the same exception twice.
+    """
+    response = "word " * 200
+    backend = StreamingMockBackend(response, token_size=2)
+
+    result = await stream_with_chunking(
+        _action(),
+        backend,
+        _ctx(),
+        quick_check_requirements=[AlwaysUnknownReq()],
+        chunking="word",
+    )
+
+    assert result._orchestration_task is not None
+    await asyncio.sleep(0.01)
+    result._orchestration_task.cancel()
+    await asyncio.wait_for(result._done.wait(), timeout=2.0)
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(result.acomplete(), timeout=2.0)
+
+    # Second call must NOT re-raise — raise-once contract.
+    await asyncio.wait_for(result.acomplete(), timeout=2.0)
+
+
+@pytest.mark.asyncio
 async def test_raise_once_acomplete_then_astream() -> None:
     """Regression for the raise-once stash bug: acomplete() first, astream() second.
 

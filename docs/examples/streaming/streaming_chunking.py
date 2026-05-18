@@ -10,6 +10,7 @@ Demonstrates:
 """
 
 import asyncio
+import re
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -21,14 +22,25 @@ from mellea.core.requirement import (
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import stream_with_chunking
 
+# Crude sentence-terminator detector. A run of ``.``/``!``/``?`` counts once
+# (so "..." and "!!!" are a single terminator). Good enough for an example;
+# production code might use spaCy/NLTK for proper sentence segmentation.
+_SENTENCE_END = re.compile(r"[.!?]+")
+
 
 class MaxSentencesReq(Requirement):
     """Fails if the model generates more than *limit* sentences mid-stream.
 
-    Each ``stream_validate`` call receives one complete sentence from the
-    :class:`~mellea.stdlib.chunking.SentenceChunker`.  The running count is
-    maintained on ``self`` — this is the standard pattern for requirements
-    that need context beyond a single chunk.
+    Counts sentence terminators in the chunk *text* rather than counting
+    ``stream_validate`` calls.  This makes the requirement **chunker-agnostic**:
+    the same instance behaves correctly with sentence, word, or paragraph
+    chunking, because the semantics depend on content, not on the chunker's
+    structural decisions.
+
+    When writing your own streaming requirements, prefer this content-driven
+    pattern over coupling the requirement to a specific chunker.  Reach for
+    chunker-coupled logic only when the requirement is genuinely a property
+    of chunk boundaries (e.g. "no chunk longer than N tokens").
     """
 
     def __init__(self, limit: int) -> None:
@@ -42,7 +54,7 @@ class MaxSentencesReq(Requirement):
     async def stream_validate(
         self, chunk: str, *, backend: Backend, ctx: Context
     ) -> PartialValidationResult:
-        self._count += 1
+        self._count += len(_SENTENCE_END.findall(chunk))
         if self._count > self._limit:
             return PartialValidationResult(
                 "fail",
