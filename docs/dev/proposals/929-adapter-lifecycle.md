@@ -107,7 +107,7 @@ flowchart LR
 
 Adapter invocation becomes one flow, with no branches on backend type. From this shape, the seven threads of #929 resolve cleanly. The simplified invocation pseudocode, the per-binding verb semantics, the lifecycle sequence diagram, and the thread-by-thread mapping are in Part II (§9 and §12).
 
-**What users see:** high-level helpers (`check_answerability` etc.) keep their current shape, with the `model_options=` addition that PR #1003 is introducing. Manual adapter construction collapses from four classes to one, with the binding as the pluggable part. Custom intrinsics no longer require monkey-patching the catalog. Detail in Part II §13.
+**What users see:** high-level helpers (`check_answerability` etc.) keep their current shape, with the `model_options=` and `documents=` additions that fold in here from #1003 (PR #1028 was closed 2026-05-15 in favour of this epic). Manual adapter construction collapses from four classes to one, with the binding as the pluggable part. Custom intrinsics no longer require monkey-patching the catalog. Detail in Part II §13.
 
 **What cross-cutting concerns look like:** observability (spans + a schema-drift metric), docs rewrite (`intrinsics_and_adapters.md` is 39 lines describing classes this renames), and a test-parity commitment travel **with** the refactor, not after it. Detail in Part II §14–§15.
 
@@ -142,7 +142,7 @@ Scope of this refactor in concrete terms so reviewers can weigh the cost.
 
 ### API surface
 
-- **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) arrives on top, not instead.
+- **Unchanged** — every high-level helper (`check_answerability` etc.) keeps its signature. `m.instruct`, `m.validate`, `m.chat` unaffected. The `model_options=` and `documents=` additions from [#1003](https://github.com/generative-computing/mellea/issues/1003) (PR #1028 closed 2026-05-15 in favour of this epic) ship as part of Phase 1.
 - **Deprecated but shimmed for one release** — `IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter` public classes. Direct users get `DeprecationWarning` pointing to the new constructor. *(Applies if Q5 settles on rename or new-API-alongside; under Jake's split, the old types stay as re-exports indefinitely with no deprecation needed.)*
 - **Optional, was mandatory** — the adapter catalogue. Callers no longer have to register custom adapters in `catalog.py` before use; the catalogue stays as a convenience resolver for first-party names, not a precondition.
 - **Possibly moved/renamed** — depends on §5 Q5 (terminology rename scope).
@@ -151,7 +151,7 @@ Scope of this refactor in concrete terms so reviewers can weigh the cost.
 
 | Audience | Impact |
 | --- | --- |
-| Helper user (`check_answerability`-style calls) | None beyond the `model_options=` addition from [#1003](https://github.com/generative-computing/mellea/issues/1003) and clearer error messages. |
+| Helper user (`check_answerability`-style calls) | None beyond the `model_options=` / `documents=` additions from [#1003](https://github.com/generative-computing/mellea/issues/1003) and clearer error messages. |
 | Advanced user constructing adapters directly | One release of deprecation warnings, then adopt the new `Adapter(name=…, weights=…)` constructor. |
 | Customer writing their own adapter | First-class path; no more `CustomIntrinsicAdapter` monkey-patching; no forced catalogue upload. Resolves [#424](https://github.com/generative-computing/mellea/issues/424). |
 | Backend author | `AdapterMixin` verb set narrows to the natural operations each backend can perform; existing implementations update or use shim methods. |
@@ -364,7 +364,7 @@ This is a **backend-keyed dispatch** where the branching key (`_uses_embedded_ad
 
 ## 13. What users see — detailed
 
-**High-level helpers** keep their signatures. The `model_options=` parameter is added via PR #1003:
+**High-level helpers** keep their signatures. The `model_options=` parameter (and `documents=` keyword on `factuality_detection` / `factuality_correction`) is added in Phase 1, folding in #1003 (PR #1028 closed in favour of this epic):
 
 ```python
 score = check_answerability(question, documents, context, backend)
@@ -462,7 +462,7 @@ Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fi
 Detail deferred until Part I §5 decisions are agreed, but the intended phasing is:
 
 1. **Phase 0 — parallel types.** Introduce the new types (`Adapter`, `WeightsBinding`, `IOContract`, plus a user-facing `Intrinsic` class if Q5 is settled on Jake's split) alongside existing classes. Catalogue entries gain pinned HF revision SHAs (Jake req 5; §17 Q6). No call-site changes, tests unchanged.
-2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4). Old classes become deprecation shims.
+2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4). #1003 helper signature work folds in here: `model_options=` on all top-level helpers; `documents=` keyword-only on `factuality_detection` / `factuality_correction`. Old classes become deprecation shims.
 3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Bindings implement `prepare` / `activate` / `deactivate` / `release` per reality; `LocalFileBinding.prepare` resolves the configured HF revision (§17 Q5 weight-refresh policy). Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
 4. **Phase 3 — Reality C ships.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
 5. **Phase 4 — shim removal.** After one minor release with deprecation warnings. *(Skipped if Q5 settles on Jake's split — re-exports stay.)*
@@ -475,7 +475,9 @@ Items marked **[Open]** need decision; **[Position]** is the proposal's working 
 
 1. **Naming `WeightsBinding`** [Position]. Used throughout the doc; alternatives `ResourceStrategy` / `AdapterProvider` were considered. `WeightsBinding` is concrete (says what it binds) and unambiguous in error messages.
 2. **Role vs name** [Position]. `role` is a free-form string with an advisory known-roles registry (e.g., `mellea.backends.adapters.roles.KNOWN_ROLES`). Backends warn on unknown roles but accept any string. Pure enum was considered but rejected — it would lock role names at library-release time.
-3. **Rewind interaction (PR #1028)** [Resolved] (Jake on PR #1080). The rewind logic in `_resolve_question` / `_resolve_response` stays in the helpers. Phase 1 of this refactor can revisit moving it to `io_contract.build_prompt` if cleaner separation is wanted; not gating.
+3. **Rewind interaction (formerly PR #1028).** Two parts:
+   - **Where rewind logic lives** [Resolved] (Jake on PR #1080): the rewind in `_resolve_question` / `_resolve_response` stays in the helpers. Phase 1 can revisit moving it to `io_contract.build_prompt` if cleaner separation is wanted; not gating.
+   - **Manual-Message document detection** [Open] — Phase 1 design call. When `documents=None` is passed to `factuality_detection` / `factuality_correction`, how should the helper find user-supplied documents? Two approaches: (a) require explicit `documents=` and don't scan the conversation; (b) scan the context for `Message`s with `_docs` and extract from there. PR #1028 implemented (b) via `_resolve_response`'s manual-Message fallback; the design call was deferred when #1028 closed (2026-05-15) so the work isn't lost.
 4. **`schema_version` field in `io.yaml`** [Open] — cross-team. §4, §7, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
 5. **Weight-refresh policy** [Position]. Adapter weights are versioned by HF commit SHA. `prepare()` re-resolves the upstream revision at session start; long-running processes (sessions spanning a release) opt into an explicit `refresh()` API. Default cadence matches the session-scoped lifecycle (Part I §5 Q2 Resolved).
 6. **Version pinning for auto-loaded adapters** [Position]. When an adapter is auto-loaded from the catalogue (caller didn't specify a revision), Mellea pins to the catalogue entry's recorded SHA. `revision="main"` is an explicit opt-in to track latest. Pinning gives reproducibility; explicit tracking gives latest weights at the cost of behaviour drift between runs. (Jake req 5; coupled to Q5 weight-refresh policy.)
@@ -528,7 +530,8 @@ Seven recent fix-up commits in the adapter area, all symptomatic of the design g
 
 | Ref | Title | Role in this doc |
 | --- | --- | --- |
-| [#1003](https://github.com/generative-computing/mellea/issues/1003) | fix: intrinsic function signatures (model_options on helpers) | high-level helper signature evolution |
+| [#1003](https://github.com/generative-computing/mellea/issues/1003) | fix: intrinsic function signatures | folded into Phase 1 of this epic; PR #1028 closed 2026-05-15 |
+| [PR #1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | closed 2026-05-15 in favour of folding into this epic; manual-Message detection carried forward as Phase 1 design call (§17 Q3) |
 | [#1035](https://github.com/generative-computing/mellea/issues/1035) | OTel emission gaps | parent for telemetry coordination |
 | [PR #1036](https://github.com/generative-computing/mellea/pull/1036) | feat(telemetry): close five OTel GenAI semconv gaps | in-flight telemetry work to coordinate with |
 
