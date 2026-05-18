@@ -1,0 +1,42 @@
+name: uncertainty
+# Model name string, or null to use whatever is provided in the chat completion request
+model: ~
+# JSON schema of the model's output
+response_format: |
+  {
+    "type": "object",
+    "properties": {
+      "score": {
+        "type": "string",
+        "enum": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+      }
+    },
+    "required": ["score"],
+    "additionalProperties": false
+  }
+# Output transformation rules to apply
+transformations:
+  - type: likelihood
+    categories_to_values:
+      # Each 1-digit output maps to 0.1 * <output> + 0.05
+      "0": 0.05
+      "1": 0.15
+      "2": 0.25
+      "3": 0.35
+      "4": 0.45
+      "5": 0.55
+      "6": 0.65
+      "7": 0.75
+      "8": 0.85
+      "9": 0.95
+    input_path: ["score"]
+  # Convert scalar value to a record for consistency with other intrinsics
+  - type: project
+    input_path: []
+    retained_fields:
+      score: "certainty"
+instruction: <certainty>
+parameters:
+  max_completion_tokens: 15
+  temperature: 0.0
+sentence_boundaries: ~

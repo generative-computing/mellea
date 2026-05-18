@@ -74,14 +74,14 @@ def test_guardian_check_harm(backend):
 
     # First call triggers adapter loading
     result = guardian.guardian_check(
-        context, backend, criteria="harm", target_role="user"
+        context, backend, criteria="harm", scoring_schema="user_prompt"
     )
     assert isinstance(result, float)
     assert 0.7 <= result <= 1.0, f"Expected high risk score, got {result}"
 
     # Second call hits a different code path from the first one
     result = guardian.guardian_check(
-        context, backend, criteria="harm", target_role="user"
+        context, backend, criteria="harm", scoring_schema="user_prompt"
     )
     assert isinstance(result, float)
     assert 0.7 <= result <= 1.0, f"Expected high risk score, got {result}"
