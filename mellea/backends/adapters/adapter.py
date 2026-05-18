@@ -9,9 +9,25 @@ loading and unloading.
 """
 
 import abc
+import os
 import pathlib
 import re
 from typing import TypeVar
+
+# Set ``MELLEA_ENABLE_ADAPTER_OVERLAYS=1`` (or ``true``/``yes``/``on``) to use
+# the in-repo ``_overlays/`` ``io.yaml`` files instead of the HF cache. By
+# default overlays are off and the HF-cached ``io.yaml`` is used. See
+# ``_resolve_catalog_overlay``.
+_OVERLAY_ENABLE_ENV = "MELLEA_ENABLE_ADAPTER_OVERLAYS"
+
+
+def _overlays_enabled() -> bool:
+    return os.environ.get(_OVERLAY_ENABLE_ENV, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 import yaml
 
@@ -49,6 +65,8 @@ def _resolve_catalog_overlay(
         Path to the overlay ``io.yaml``, or ``None`` if no overlay is
         available for this intrinsic/model/variant combination.
     """
+    if not _overlays_enabled():
+        return None
     overlay_dir = metadata.io_yaml_overlay_dir
     if overlay_dir is None:
         return None

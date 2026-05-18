@@ -38,6 +38,12 @@ from mellea.formatters.granite.base.types import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _enable_overlays(monkeypatch):
+    """Overlays are opt-in via env var; enable them for these tests."""
+    monkeypatch.setenv("MELLEA_ENABLE_ADAPTER_OVERLAYS", "1")
+
+
 def _overlay_config(intrinsic_name: str) -> dict:
     """Load the granite-4.1-3b lora overlay yaml for the given intrinsic."""
     metadata = fetch_intrinsic_metadata(intrinsic_name)
