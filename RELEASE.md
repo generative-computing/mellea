@@ -7,8 +7,8 @@ Mellea uses a release-branch workflow. Every release has a long-lived
 and any subsequent patch releases. `main` carries `.dev`-versioned work for
 the next release.
 
-This gives each release a frozen codebase and keeps CD resilient to concurrent
-merges on `main`.
+This gives each release a frozen codebase and keeps release publishing
+resilient to concurrent merges on `main`.
 
 ## Release Cadence
 
@@ -145,9 +145,10 @@ never become the repo's "latest" release.
 
 ## Rollback and retry
 
-`bump_type: none` re-runs CD against whatever version is currently in
-`pyproject.toml`, skipping the version-bump step. Useful when a previous
-run failed after the bump committed but before the publish completed.
+`bump_type: none` re-runs `publish-release` against whatever version is
+currently in `pyproject.toml`, skipping the version-bump step. Useful when
+a previous run failed after the bump committed but before the publish
+completed.
 
 The retry is a "skip what's done, finish what isn't" path — it does not
 validate existing artifacts. If a prior run produced a tag pointing at the
