@@ -15,10 +15,47 @@ from typing import TypeVar
 
 import yaml
 
-from ...core import Backend
+from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
+from ...formatters.granite.intrinsics.constants import BASE_MODEL_TO_CANONICAL_NAME
 from ...helpers import _ServerType
-from .catalog import AdapterType, fetch_intrinsic_metadata
+from .catalog import AdapterType, IntriniscsCatalogEntry, fetch_intrinsic_metadata
+
+
+def _resolve_catalog_overlay(
+    metadata: IntriniscsCatalogEntry, base_model_name: str, alora: bool
+) -> pathlib.Path | None:
+    """Return the overlay ``io.yaml`` declared by a catalog entry, if present.
+
+    When a catalog entry sets ``io_yaml_overlay_dir``, Mellea ships the
+    ``io.yaml`` for that intrinsic in-repo and uses it instead of the
+    HuggingFace-cached copy. Layout mirrors the HF repo:
+    ``<overlay_dir>/<canonical-model>/<lora|alora>/io.yaml``. Returning
+    ``None`` causes the loader to fall back to the HF cache transparently
+    (either because no overlay is declared, or because the declared overlay
+    has no variant for ``base_model_name``/``alora``).
+
+    The ``base_model_name`` is normalized through
+    :data:`BASE_MODEL_TO_CANONICAL_NAME` so callers can pass either the
+    fully-qualified HF id (``"ibm-granite/granite-4.1-3b"``) or the short
+    form (``"granite-4.1-3b"``).
+
+    Args:
+        metadata: Catalog entry for the intrinsic.
+        base_model_name: Base model name, either HF id or canonical short form.
+        alora: ``True`` for the aLoRA variant, ``False`` for LoRA.
+
+    Returns:
+        Path to the overlay ``io.yaml``, or ``None`` if no overlay is
+        available for this intrinsic/model/variant combination.
+    """
+    overlay_dir = metadata.io_yaml_overlay_dir
+    if overlay_dir is None:
+        return None
+    canonical = BASE_MODEL_TO_CANONICAL_NAME.get(base_model_name, base_model_name)
+    adapter_subdir = "alora" if alora else "lora"
+    candidate = overlay_dir / canonical / adapter_subdir / "io.yaml"
+    return candidate if candidate.is_file() else None
 
 
 class Adapter(abc.ABC):
@@ -154,12 +191,28 @@ class IntrinsicAdapter(LocalHFAdapter):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
-            config_file = intrinsics.obtain_io_yaml(
-                self.intrinsic_name,
-                self.base_model_name,
-                self.intrinsic_metadata.repo_id,
-                alora=is_alora,
+            # Prefer a catalog-declared overlay when present; fall back to
+            # the HF cache otherwise. See ``_resolve_catalog_overlay``.
+            overlay = _resolve_catalog_overlay(
+                self.intrinsic_metadata, self.base_model_name, is_alora
             )
+            if overlay is not None:
+                MelleaLogger.get_logger().info(
+                    "Using catalog-declared io.yaml overlay for intrinsic '%s' "
+                    "(base_model=%s, alora=%s) at %s",
+                    self.intrinsic_name,
+                    self.base_model_name,
+                    is_alora,
+                    overlay,
+                )
+                config_file = overlay
+            else:
+                config_file = intrinsics.obtain_io_yaml(
+                    self.intrinsic_name,
+                    self.base_model_name,
+                    self.intrinsic_metadata.repo_id,
+                    alora=is_alora,
+                )
         if config_file:
             with open(config_file, encoding="utf-8") as f:
                 config_dict = yaml.safe_load(f)
