@@ -14,21 +14,6 @@ import pathlib
 import re
 from typing import TypeVar
 
-# Set ``MELLEA_ENABLE_ADAPTER_OVERLAYS=1`` (or ``true``/``yes``/``on``) to use
-# the in-repo ``_overlays/`` ``io.yaml`` files instead of the HF cache. By
-# default overlays are off and the HF-cached ``io.yaml`` is used. See
-# ``_resolve_catalog_overlay``.
-_OVERLAY_ENABLE_ENV = "MELLEA_ENABLE_ADAPTER_OVERLAYS"
-
-
-def _overlays_enabled() -> bool:
-    return os.environ.get(_OVERLAY_ENABLE_ENV, "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
 import yaml
 
 from ...core import Backend, MelleaLogger
@@ -36,6 +21,20 @@ from ...formatters.granite import intrinsics as intrinsics
 from ...formatters.granite.intrinsics.constants import BASE_MODEL_TO_CANONICAL_NAME
 from ...helpers import _ServerType
 from .catalog import AdapterType, IntriniscsCatalogEntry, fetch_intrinsic_metadata
+
+# Set ``MELLEA_DISABLE_ADAPTER_OVERLAYS=1`` (or ``true``/``yes``/``on``) to skip
+# the in-repo ``_overlays/`` ``io.yaml`` files and force loading from the HF
+# cache. Overlays are on by default. See ``_resolve_catalog_overlay``.
+_OVERLAY_DISABLE_ENV = "MELLEA_DISABLE_ADAPTER_OVERLAYS"
+
+
+def _overlays_disabled() -> bool:
+    return os.environ.get(_OVERLAY_DISABLE_ENV, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _resolve_catalog_overlay(
@@ -65,7 +64,7 @@ def _resolve_catalog_overlay(
         Path to the overlay ``io.yaml``, or ``None`` if no overlay is
         available for this intrinsic/model/variant combination.
     """
-    if not _overlays_enabled():
+    if _overlays_disabled():
         return None
     overlay_dir = metadata.io_yaml_overlay_dir
     if overlay_dir is None:

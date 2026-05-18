@@ -28,12 +28,6 @@ OVERLAID_INTRINSICS = [
 ]
 
 
-@pytest.fixture(autouse=True)
-def _enable_overlays(monkeypatch):
-    """Overlays are opt-in via env var; enable them for these tests."""
-    monkeypatch.setenv("MELLEA_ENABLE_ADAPTER_OVERLAYS", "1")
-
-
 @pytest.mark.parametrize("intrinsic_name", OVERLAID_INTRINSICS)
 def test_overlay_resolves_for_granite_4_1_3b_lora(intrinsic_name):
     """Each overlaid intrinsic has a lora overlay for granite-4.1-3b."""

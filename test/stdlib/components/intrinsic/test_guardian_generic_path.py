@@ -36,12 +36,6 @@ from mellea.formatters.granite.base.types import (
 from mellea.formatters.granite.intrinsics.input import IntrinsicsRewriter
 
 
-@pytest.fixture(autouse=True)
-def _enable_overlays(monkeypatch):
-    """Overlays are opt-in via env var; enable them for these tests."""
-    monkeypatch.setenv("MELLEA_ENABLE_ADAPTER_OVERLAYS", "1")
-
-
 def _overlay_path(intrinsic_name: str) -> pathlib.Path | None:
     """Resolve the granite-4.1-3b lora overlay via the catalog."""
     metadata = fetch_intrinsic_metadata(intrinsic_name)
