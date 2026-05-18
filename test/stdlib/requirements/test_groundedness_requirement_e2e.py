@@ -46,7 +46,7 @@ async def test_groundedness_e2e_fully_grounded(backend, simple_docs):
 
     result = await req.validate(backend, ctx)
     # Response is fully grounded in the provided documents
-    assert isinstance(result.as_bool(), bool)
+    assert result.as_bool() is True
     assert result.reason is not None
 
 
