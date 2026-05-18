@@ -687,7 +687,7 @@ class GroundednessRequirement(Requirement):
                     continue
 
                 span_id = judgment.get("span_id")
-                support_level_raw = judgment.get("support_level", "").upper().strip()
+                support_level_raw = (judgment.get("support_level") or "").upper().strip()
 
                 logger.debug(
                     f"  Judgment: span_id={span_id}, support_level={support_level_raw}"
