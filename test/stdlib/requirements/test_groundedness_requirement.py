@@ -314,17 +314,17 @@ async def test_identify_citation_necessity_none_output():
 
 
 @pytest.mark.asyncio
-async def test_assess_citation_support_overlap_edge_case(sample_docs):
-    """Test citation support assessment with edge cases in span-citation overlap.
+async def test_assess_citation_support_skips_llm_when_no_overlap():
+    """Test that citation support assessment early-exits without LLM when span has no citation overlap.
 
-    This tests the scenario where a span is marked as not having citations,
-    but citations might partially overlap due to boundary/whitespace issues.
+    When a span requires citations but no citations overlap with it, the method
+    should immediately assign NOT_SUPPORTED without calling the backend.
     """
     req = GroundednessRequirement()
 
-    # Response with potential whitespace boundary issues
+    # Response with two separate sentences
     response = "Fact one. Fact two."
-    # Citation covers "Fact one"
+    # Citation covers "Fact one" (0-9)
     citations = [
         {
             "response_begin": 0,
@@ -334,29 +334,20 @@ async def test_assess_citation_support_overlap_edge_case(sample_docs):
         }
     ]
 
-    # Span that needs citations but isn't fully covered
-    span_necessity = {
-        (11, 20): True  # "Fact two" needs citation but isn't covered by citations
-    }
+    # Span "Fact two" (11-20) needs citation but has no citation overlap
+    span_necessity = {(11, 20): True}
 
+    # Backend should not be called since there's no overlap
     mock_backend = AsyncMock()
-    mock_output = '[{"support_level": "NOT_SUPPORTED"}]'
-    mock_thunk = MagicMock(spec=ModelOutputThunk)
-    mock_thunk.avalue = AsyncMock()
-    mock_thunk.value = mock_output
-
-    mock_backend.generate_from_context = AsyncMock(
-        return_value=(mock_thunk, ChatContext())
-    )
-
     context = ChatContext().add(Message("user", "Test question"))
 
     span_support = await req._assess_citation_support(
-        response, citations, span_necessity, mock_backend, context, sample_docs
+        response, citations, span_necessity, mock_backend, context, []
     )
 
-    # Should attempt to assess support even though span isn't covered by citations
-    assert (11, 20) in span_support
+    # Span should be marked NOT_SUPPORTED without any backend call
+    assert span_support[(11, 20)] == "NOT_SUPPORTED"
+    mock_backend.generate_from_context.assert_not_called()
 
 
 @pytest.mark.asyncio
