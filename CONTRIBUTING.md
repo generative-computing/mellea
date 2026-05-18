@@ -40,7 +40,7 @@ to melleaadmin@ibm.com.
 
 ### Prerequisites
 
-- Python 3.10 or higher (3.13+ requires [Rust compiler](https://www.rust-lang.org/tools/install) for outlines)
+- Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or conda/mamba
 - [Ollama](https://ollama.com/download) with [required models](#required-models) (for local testing) 
 
