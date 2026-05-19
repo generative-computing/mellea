@@ -254,6 +254,48 @@ The model string must exactly match the name your server recognises. For OpenAI,
 refer to the [OpenAI models page](https://platform.openai.com/docs/models). For
 local servers, list available models from the server's API or UI.
 
+### Empty `value` from a thinking-mode model
+
+A response with `result.value == ""` despite non-zero `completion_tokens` is the
+signature of a thinking-mode model that emitted only reasoning tokens and no
+final answer. The OpenAI backend reports the response faithfully — the model
+genuinely returned `content=None` — but the reasoning content is preserved
+separately on the underlying `ModelOutputThunk`.
+
+Diagnose with:
+
+```python
+result = m.instruct("What is 2 + 2?")
+print(repr(result.value))                    # ''
+print(result.generation.usage)               # {'completion_tokens': 9, ...}
+print(result._thinking)                      # populated reasoning content, if any
+```
+
+This affects models that default to thinking mode, most commonly Qwen3 served
+via vLLM with `--reasoning-parser qwen3`. To disable thinking and get a normal
+text response, pass the runtime-specific switch through `model_options`. For
+vLLM:
+
+```python
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="Qwen/Qwen3-Coder-Next-FP8",
+        base_url="http://localhost:8000/v1",
+        api_key="unused",
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        },
+    )
+)
+```
+
+Other inference servers expose the same control under different names — check
+your runtime's documentation. If you intend to use thinking mode, read the
+reasoning trace from `result._thinking` rather than `result.value`.
+
 ---
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration) |
