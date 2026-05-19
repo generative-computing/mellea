@@ -331,9 +331,10 @@ Guardian functions also do not emit `mellea.requirement` metrics — see
 ---
 
 > **Full example:** [`docs/examples/intrinsics/guardian_core.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/guardian_core.py)
-> covers all six built-in criteria (harm, social_bias, jailbreak, groundedness,
-> custom criteria, function_call) plus answer_relevance against a single
-> `LocalHFBackend`. Companion examples in the same directory:
+> demonstrates `guardian_check()` against five `CRITERIA_BANK` keys
+> (`harm`, `social_bias`, `groundedness`, `function_call`, `answer_relevance`)
+> plus a custom free-text criterion, all against a single `LocalHFBackend`.
+> Companion examples in the same directory:
 > [`factuality_detection.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_detection.py),
 > [`factuality_correction.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_correction.py),
 > and [`policy_guardrails.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/policy_guardrails.py).
