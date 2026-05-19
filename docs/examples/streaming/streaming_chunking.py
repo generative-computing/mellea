@@ -70,7 +70,7 @@ class MaxSentencesReq(Requirement):
         format: type | None = None,
         model_options: dict | None = None,
     ) -> ValidationResult:
-        return ValidationResult(result=True)
+        return ValidationResult(result=self._count <= self._limit)
 
 
 async def main() -> None:
@@ -86,7 +86,7 @@ async def main() -> None:
     req = MaxSentencesReq(limit=3)
 
     result = await stream_with_chunking(
-        action, backend, ctx, quick_check_requirements=[req], chunking="sentence"
+        action, backend, ctx, requirements=[req], chunking="sentence"
     )
 
     print("Streaming chunks as they arrive:")

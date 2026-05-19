@@ -221,7 +221,7 @@ async def test_normal_completion_calls_validate_at_stream_end() -> None:
     req = AlwaysUnknownReq()
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+        _action(), backend, _ctx(), requirements=[req], chunking="sentence"
     )
     await result.acomplete()
 
@@ -241,7 +241,7 @@ async def test_early_exit_on_fail() -> None:
     req = FailAfterWordsReq(threshold=4)
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="word"
+        _action(), backend, _ctx(), requirements=[req], chunking="word"
     )
     await result.acomplete()
 
@@ -264,20 +264,12 @@ async def test_clone_isolation_across_retries() -> None:
     backend = StreamingMockBackend(response, token_size=4)
 
     r1 = await stream_with_chunking(
-        _action(),
-        backend,
-        _ctx(),
-        quick_check_requirements=original_reqs,
-        chunking="sentence",
+        _action(), backend, _ctx(), requirements=original_reqs, chunking="sentence"
     )
     await r1.acomplete()
 
     r2 = await stream_with_chunking(
-        _action(),
-        backend,
-        _ctx(),
-        quick_check_requirements=original_reqs,
-        chunking="sentence",
+        _action(), backend, _ctx(), requirements=original_reqs, chunking="sentence"
     )
     await r2.acomplete()
 
@@ -286,8 +278,8 @@ async def test_clone_isolation_across_retries() -> None:
 
 
 @pytest.mark.asyncio
-async def test_quick_check_backend_routing() -> None:
-    """stream_validate and validate receive quick_check_backend, not the main backend."""
+async def test_validation_backend_routing() -> None:
+    """stream_validate and validate receive validation_backend, not the main backend."""
     response = "One sentence. Two sentences. "
     main_backend = StreamingMockBackend(response, token_size=3)
     val_backend = StreamingMockBackend("unused", token_size=1)
@@ -309,9 +301,9 @@ async def test_quick_check_backend_routing() -> None:
             _action(),
             main_backend,
             _ctx(),
-            quick_check_requirements=[req],
+            requirements=[req],
             chunking="sentence",
-            quick_check_backend=val_backend,
+            validation_backend=val_backend,
         )
         await result.acomplete()
     finally:
@@ -335,7 +327,7 @@ async def test_early_exit_does_not_deadlock() -> None:
     req = FailAfterWordsReq(threshold=3)
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="word"
+        _action(), backend, _ctx(), requirements=[req], chunking="word"
     )
     # 5-second timeout — should complete in milliseconds on success
     await asyncio.wait_for(result.acomplete(), timeout=5.0)
@@ -439,11 +431,7 @@ async def test_stream_validate_receives_individual_chunks() -> None:
     ChunkRecordingReq.__copy__ = _capturing_copy  # type: ignore[method-assign]
     try:
         result = await stream_with_chunking(
-            _action(),
-            backend,
-            _ctx(),
-            quick_check_requirements=[req],
-            chunking="sentence",
+            _action(), backend, _ctx(), requirements=[req], chunking="sentence"
         )
         await result.acomplete()
     finally:
@@ -507,11 +495,7 @@ async def test_trailing_fragment_is_flushed_to_consumer() -> None:
     ChunkRecordingReq.__copy__ = _capturing_copy  # type: ignore[method-assign]
     try:
         result = await stream_with_chunking(
-            _action(),
-            backend,
-            _ctx(),
-            quick_check_requirements=[req],
-            chunking="sentence",
+            _action(), backend, _ctx(), requirements=[req], chunking="sentence"
         )
         yielded: list[str] = []
         async for chunk in result.astream():
@@ -562,7 +546,7 @@ async def test_early_exit_on_trailing_fragment() -> None:
     req = FailOnSecondSentence()
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+        _action(), backend, _ctx(), requirements=[req], chunking="sentence"
     )
     yielded: list[str] = []
     async for chunk in result.astream():
@@ -579,12 +563,12 @@ async def test_early_exit_on_trailing_fragment() -> None:
 
 @pytest.mark.asyncio
 async def test_no_requirements_streams_without_validation() -> None:
-    """quick_check_requirements=None → chunks produced, no validate() called."""
+    """requirements=None → chunks produced, no validate() called."""
     response = "Chunk one. Chunk two. Chunk three. "
     backend = StreamingMockBackend(response, token_size=3)
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=None, chunking="sentence"
+        _action(), backend, _ctx(), requirements=None, chunking="sentence"
     )
     await result.acomplete()
 
@@ -644,7 +628,7 @@ async def test_multiple_chunks_in_one_batch_with_mid_batch_fail() -> None:
     req = FailOnNthChunk(n=2)
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+        _action(), backend, _ctx(), requirements=[req], chunking="sentence"
     )
     yielded: list[str] = []
     async for c in result.astream():
@@ -709,7 +693,7 @@ async def test_cancel_generation_invoked_on_fail() -> None:
             _action(),
             backend,
             _ctx(),
-            quick_check_requirements=[FailOnFirstChunk()],
+            requirements=[FailOnFirstChunk()],
             chunking="word",
         )
         await asyncio.wait_for(result.acomplete(), timeout=5.0)
@@ -754,7 +738,7 @@ async def test_cancelled_flag_reflects_cancellation_state() -> None:
         _action(),
         fail_backend,
         _ctx(),
-        quick_check_requirements=[FailImmediately()],
+        requirements=[FailImmediately()],
         chunking="word",
     )
     await asyncio.wait_for(fail_result.acomplete(), timeout=5.0)
@@ -771,7 +755,7 @@ async def test_cancelled_flag_reflects_cancellation_state() -> None:
         _action(),
         ok_backend,
         _ctx(),
-        quick_check_requirements=[AlwaysUnknownReq()],
+        requirements=[AlwaysUnknownReq()],
         chunking="sentence",
     )
     await ok_result.acomplete()
@@ -833,11 +817,7 @@ async def test_exception_in_stream_validate_cancels_generation() -> None:
     ModelOutputThunk.cancel_generation = spy_cancel  # type: ignore[method-assign]
     try:
         result = await stream_with_chunking(
-            _action(),
-            backend,
-            _ctx(),
-            quick_check_requirements=[RaisingReq()],
-            chunking="word",
+            _action(), backend, _ctx(), requirements=[RaisingReq()], chunking="word"
         )
         with pytest.raises(ValueError, match="boom"):
             async for _chunk in result.astream():
@@ -886,11 +866,7 @@ async def test_acomplete_surfaces_exception_without_astream() -> None:
     backend = StreamingMockBackend(response, token_size=3)
 
     result = await stream_with_chunking(
-        _action(),
-        backend,
-        _ctx(),
-        quick_check_requirements=[RaisingReq()],
-        chunking="word",
+        _action(), backend, _ctx(), requirements=[RaisingReq()], chunking="word"
     )
     # Deliberately skip astream(). wait_for bounds any hang.
     with pytest.raises(ValueError, match="surfaced-without-astream"):
@@ -915,11 +891,7 @@ async def test_external_task_cancellation_releases_consumers() -> None:
     backend = StreamingMockBackend(response, token_size=2)
 
     result = await stream_with_chunking(
-        _action(),
-        backend,
-        _ctx(),
-        quick_check_requirements=[AlwaysUnknownReq()],
-        chunking="word",
+        _action(), backend, _ctx(), requirements=[AlwaysUnknownReq()], chunking="word"
     )
 
     assert result._orchestration_task is not None
@@ -954,11 +926,7 @@ async def test_external_cancellation_acomplete_raise_once() -> None:
     backend = StreamingMockBackend(response, token_size=2)
 
     result = await stream_with_chunking(
-        _action(),
-        backend,
-        _ctx(),
-        quick_check_requirements=[AlwaysUnknownReq()],
-        chunking="word",
+        _action(), backend, _ctx(), requirements=[AlwaysUnknownReq()], chunking="word"
     )
 
     assert result._orchestration_task is not None
@@ -1004,11 +972,7 @@ async def test_raise_once_acomplete_then_astream() -> None:
     response = "word " * 10
     backend = StreamingMockBackend(response, token_size=3)
     result = await stream_with_chunking(
-        _action(),
-        backend,
-        _ctx(),
-        quick_check_requirements=[RaisingReq()],
-        chunking="word",
+        _action(), backend, _ctx(), requirements=[RaisingReq()], chunking="word"
     )
 
     # acomplete() sees the exception first and raises it.
@@ -1072,7 +1036,7 @@ async def test_full_text_contains_only_validated_chunks_on_early_exit() -> None:
     req = FailOnNthChunkText(n=2)
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[req], chunking="sentence"
+        _action(), backend, _ctx(), requirements=[req], chunking="sentence"
     )
     yielded: list[str] = []
     async for chunk in result.astream():
@@ -1086,6 +1050,24 @@ async def test_full_text_contains_only_validated_chunks_on_early_exit() -> None:
     assert result.full_text == "One."
     # as_thunk.value must agree with full_text.
     assert result.as_thunk.value == result.full_text
+
+    # Fail on chunk 3: two chunks emitted before early exit.  full_text must
+    # preserve the original inter-sentence spacing from the token stream, not
+    # the stripped chunk concatenation ("One.Two." would be wrong).
+    backend2 = StreamingMockBackend(response, token_size=100)
+    req2 = FailOnNthChunkText(n=3)
+    result2 = await stream_with_chunking(
+        _action(), backend2, _ctx(), requirements=[req2], chunking="sentence"
+    )
+    yielded2: list[str] = []
+    async for chunk in result2.astream():
+        yielded2.append(chunk)
+    await result2.acomplete()
+
+    assert result2.completed is False
+    assert yielded2 == ["One.", "Two."]
+    assert result2.full_text == "One. Two."
+    assert result2.as_thunk.value == result2.full_text
 
 
 @pytest.mark.asyncio
@@ -1202,15 +1184,13 @@ async def test_stream_with_chunking_requirement_copy_contract(
     req = req_cls()
     if expect_raise:
         with pytest.raises(ValueError, match="copy boom"):
-            await stream_with_chunking(
-                _action(), backend, _ctx(), quick_check_requirements=[req]
-            )
+            await stream_with_chunking(_action(), backend, _ctx(), requirements=[req])
         # Hard invariant: reorder ensures backend never starts on copy failure.
         assert backend.generate_from_context_call_count == 0
         assert backend.last_mot is None
     else:
         result = await stream_with_chunking(
-            _action(), backend, _ctx(), quick_check_requirements=[req]
+            _action(), backend, _ctx(), requirements=[req]
         )
         await result.acomplete()
         assert backend.generate_from_context_call_count == 1
@@ -1277,7 +1257,7 @@ async def test_stream_with_chunking_cancels_peer_validators() -> None:
 
     backend = StreamingMockBackend("Hello world. ", token_size=2)
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=[_RaisingReq(), _SlowReq()]
+        _action(), backend, _ctx(), requirements=[_RaisingReq(), _SlowReq()]
     )
     with pytest.raises(RuntimeError, match="validator failed"):
         await result.acomplete()

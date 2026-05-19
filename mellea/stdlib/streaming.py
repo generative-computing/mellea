@@ -150,7 +150,7 @@ class StreamChunkingResult:
                 raise task_exc
 
     @property
-    def as_thunk(self) -> ModelOutputThunk:
+    def as_thunk(self) -> ModelOutputThunk[str]:
         """Wrap the output as a computed :class:`~mellea.core.base.ModelOutputThunk`.
 
         Returns a new thunk with ``value`` set to :attr:`full_text` and
@@ -161,14 +161,17 @@ class StreamChunkingResult:
         Note:
             On early exit, ``cancel_generation()`` forces the MOT into a
             computed state without running the backend's
-            ``post_processing()``.  Telemetry fields on the returned thunk
-            (``generation.usage``, ``generation.ttfb_ms``, etc.) may
-            therefore be ``None`` or reflect the partial state at
-            cancellation time.  ``value`` and ``streaming`` are reliable;
-            usage totals are not.
+            ``post_processing()``.  ``value`` and ``streaming`` are
+            reliable.  ``parsed_repr`` is set to the raw text (same as
+            ``value``) — consistent with normal completion for plain-text
+            outputs, but for typed outputs the backend-parsed representation
+            will not be available.  Telemetry fields (``generation.usage``,
+            ``generation.ttfb_ms``, etc.) may be ``None`` or reflect the
+            partial state at cancellation time; usage totals are not
+            recoverable.
 
         Returns:
-            ModelOutputThunk: A computed thunk containing the streamed output.
+            ModelOutputThunk[str]: A computed thunk containing the streamed output.
 
         Raises:
             RuntimeError: If called before :meth:`acomplete` has returned.
@@ -180,6 +183,7 @@ class StreamChunkingResult:
         thunk = ModelOutputThunk(value=self.full_text)
         thunk._cancelled = self._mot._cancelled
         thunk.generation = copy(self._mot.generation)
+        thunk.parsed_repr = thunk.value  # type: ignore[assignment]
         return thunk
 
 
@@ -192,7 +196,7 @@ async def _orchestrate_streaming(
     val_backend: Backend,
 ) -> None:
     accumulated = ""
-    emitted_text = ""
+    emitted_end = 0  # byte offset into accumulated after the last emitted chunk
     prev_chunk_count = 0
     failed_indices: set[int] = set()
     early_exit = False
@@ -248,7 +252,9 @@ async def _orchestrate_streaming(
                     result.completed = False
                     await mot.cancel_generation()
                     break
-                emitted_text += c
+                pos = accumulated.find(c, emitted_end)
+                if pos >= 0:
+                    emitted_end = pos + len(c)
 
             if early_exit:
                 break  # break the while loop; cancel_generation() already set _computed=True
@@ -263,14 +269,15 @@ async def _orchestrate_streaming(
                     early_exit = True
                     result.completed = False
                     break
-                emitted_text += c
+                pos = accumulated.find(c, emitted_end)
+                if pos >= 0:
+                    emitted_end = pos + len(c)
 
-        # On early exit, full_text reflects only validated-and-emitted chunks
-        # so it matches exactly what the consumer received via astream().
-        # On natural completion emitted_text == accumulated (every character
-        # ends up in some chunk or flushed fragment), so either value is
-        # equivalent; accumulated is used to preserve the original raw text.
-        result.full_text = emitted_text if early_exit else accumulated
+        # On early exit, full_text is the prefix of accumulated up to and
+        # including the last emitted chunk — preserving original inter-chunk
+        # spacing from the token stream (chunk concatenation would strip it).
+        # On natural completion, accumulated is used directly.
+        result.full_text = accumulated[:emitted_end] if early_exit else accumulated
 
         non_failed = [
             req for i, req in enumerate(cloned_reqs) if i not in failed_indices
@@ -344,9 +351,9 @@ async def stream_with_chunking(
     backend: Backend,
     ctx: Context,
     *,
-    quick_check_requirements: Sequence[Requirement] | None = None,
+    requirements: Sequence[Requirement] | None = None,
     chunking: str | ChunkingStrategy = "sentence",
-    quick_check_backend: Backend | None = None,
+    validation_backend: Backend | None = None,
 ) -> StreamChunkingResult:
     """Generate a streaming response with per-chunk validation.
 
@@ -412,13 +419,13 @@ async def stream_with_chunking(
         action: The component or content block to generate from.
         backend: The backend used for generation and final validation.
         ctx: The generation context.
-        quick_check_requirements: Sequence of requirements to validate against
-            each chunk during streaming.  ``None`` disables streaming validation
-            (chunks are still produced; ``validate()`` is not called at stream end).
+        requirements: Sequence of requirements to validate against each chunk
+            during streaming.  ``None`` disables streaming validation (chunks
+            are still produced; ``validate()`` is not called at stream end).
         chunking: Chunking strategy — either a :class:`~mellea.stdlib.chunking.ChunkingStrategy`
             instance or one of the string aliases ``"sentence"`` (default),
             ``"word"``, or ``"paragraph"``.
-        quick_check_backend: Optional alternate backend for both
+        validation_backend: Optional alternate backend for both
             ``stream_validate`` and final ``validate`` calls.  When ``None``,
             *backend* is used for validation.
 
@@ -436,9 +443,9 @@ async def stream_with_chunking(
             ``ModelOption.STREAM``.
 
     Note:
-        Any exception raised by ``copy(req)`` on a ``quick_check_requirements``
-        entry propagates to the caller; no backend generation is started in
-        that case.  See :class:`~mellea.core.Requirement` for the ``__copy__``
+        Any exception raised by ``copy(req)`` on a ``requirements`` entry
+        propagates to the caller; no backend generation is started in that
+        case.  See :class:`~mellea.core.Requirement` for the ``__copy__``
         override contract.
     """
     if isinstance(chunking, str):
@@ -454,8 +461,8 @@ async def stream_with_chunking(
     # Clone requirements before starting backend generation so that a raising
     # __copy__ (an advertised extension point on Requirement) cannot leave the
     # backend feeder task wedged against a full _async_queue with no consumer.
-    cloned_reqs = [copy(req) for req in (quick_check_requirements or [])]
-    val_backend = quick_check_backend if quick_check_backend is not None else backend
+    cloned_reqs = [copy(req) for req in (requirements or [])]
+    val_backend = validation_backend if validation_backend is not None else backend
 
     mot, gen_ctx = await backend.generate_from_context(action, ctx, model_options=opts)
     if mot.is_computed():
