@@ -6,6 +6,8 @@ of matplotlib operations, with string matching fallback for edge cases.
 """
 
 import ast
+import io
+import tokenize
 from collections.abc import Callable
 from pathlib import Path
 
@@ -81,28 +83,17 @@ def _get_pyplot_aliases(code: str) -> list[str]:
 def _strip_comments(code: str) -> str:
     """Remove Python comments from code while preserving strings.
 
-    Splits code by lines and removes comments (text after # that's not in a string).
-    Handles both single and double quoted strings.
+    Uses the stdlib tokenizer to correctly handle edge cases: escaped quotes,
+    multi-line strings, triple-quoted strings, and f-string expressions.
+    Falls back to returning original code if tokenization fails (syntax errors).
     """
-    lines = code.split("\n")
-    result = []
-    for line in lines:
-        in_string = False
-        string_char = None
-        for i, char in enumerate(line):
-            if char in ('"', "'") and (i == 0 or line[i - 1] != "\\"):
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
-            elif char == "#" and not in_string:
-                result.append(line[:i])
-                break
-        else:
-            result.append(line)
-    return "\n".join(result)
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(code).readline))
+    except tokenize.TokenError:
+        return code
+
+    kept = [tok for tok in tokens if tok.type != tokenize.COMMENT]
+    return tokenize.untokenize(kept)
 
 
 def _find_attribute_calls(code: str, method_names: list[str]) -> bool:

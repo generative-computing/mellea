@@ -16,6 +16,7 @@ from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.plotting.matplotlib import (
     _calls_savefig,
     _sets_headless_backend,
+    _strip_comments,
     _uses_pyplot_plot,
     _uses_pyplot_show,
 )
@@ -206,6 +207,45 @@ class TestMatplotlibDetection:
         """Code without savefig should not be detected."""
         code = "plt.plot([1, 2, 3])\nplt.show()"
         assert _calls_savefig(code) is False
+
+    def test_strip_comments_escaped_quote(self):
+        """Comments after escaped quotes should not be stripped."""
+        code = r'x = "a \" # not a comment"'
+        result = _strip_comments(code)
+        assert "# not a comment" in result
+
+    def test_strip_comments_multiline_string(self):
+        """Comments inside multi-line strings should not be stripped."""
+        code = "s = '''\n# inside string\n'''"
+        result = _strip_comments(code)
+        assert "# inside string" in result
+
+    def test_strip_comments_fstring_expression(self):
+        """Comments inside f-string expressions should be preserved."""
+        code = 'f"x = {1 # comment in expr}"'
+        result = _strip_comments(code)
+        assert "# comment in expr" in result
+
+    def test_strip_comments_normal_comment(self):
+        """Normal comments should be stripped."""
+        code = "x = 5  # this is a comment"
+        result = _strip_comments(code)
+        assert "# this is a comment" not in result
+        assert "x = 5" in result
+
+    def test_strip_comments_full_line_comment(self):
+        """Full-line comments should be stripped."""
+        code = "# Full line comment\nx = 5"
+        result = _strip_comments(code)
+        assert "# Full line comment" not in result
+        assert "x = 5" in result
+
+    def test_strip_comments_url_in_string(self):
+        """URLs with # should be preserved when in strings."""
+        code = 'url = "http://example.com/#section"  # website'
+        result = _strip_comments(code)
+        assert "http://example.com/#section" in result
+        assert "# website" not in result
 
 
 # endregion
