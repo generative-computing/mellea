@@ -267,7 +267,9 @@ chunking waits for blank lines — full paragraph context for the validator, but
 detection is later and may happen after the model has produced a large amount
 of invalid content.
 
-Switch to word chunking for a forbidden-word check:
+To see the granularity difference concretely, switch to word chunking and print
+every fifth word — so you can count how many more validation events fire compared
+to Step 1's two sentences:
 
 ```python
 # Requires: mellea
@@ -323,11 +325,14 @@ async def main() -> None:
         match event:
             case ChunkEvent():
                 word_count += 1
+                # Print every fifth word to show how many events fire.
+                if word_count % 5 == 1:
+                    print(f"  word {word_count:>3}: {event.text!r}")
             case QuickCheckEvent(passed=False):
-                print(f"  CANCELLED after word {event.chunk_index}: {event.results[0].reason}")
+                print(f"  CANCELLED at word {event.chunk_index}: {event.results[0].reason}")
             case CompletedEvent():
-                status = "cancelled" if not event.success else "ok"
-                print(f"  {status} after {word_count} words")
+                status = "CANCELLED" if not event.success else "ok"
+                print(f"  {status} — {word_count} word events total")
             case _:
                 pass
 
@@ -336,150 +341,43 @@ async def main() -> None:
     if result.streaming_failures:
         print(f"Failure: {result.streaming_failures[0][1].reason}")
     else:
-        print(f"OK — full text: {result.full_text!r}")
+        print(f"Full text: {result.full_text!r}")
 
 
 asyncio.run(main())
 ```
 
 ```text Sample output
-  ok after 38 words
-OK — full text: 'Cloud-native development enables scalable, resilient applications that can be deployed ...'
+  word   1: 'Cloud-native'
+  word   6: 'resilient'
+  word  11: 'and'
+  word  16: 'allows'
+  word  21: 'horizontally,'
+  word  26: 'costs,'
+  word  31: 'deployments,'
+  word  36: 'services.'
+  ok — 38 word events total
+Full text: 'Cloud-native development enables scalable, resilient ...'
 ```
 
-> **Note:** Your output may not trigger the forbidden words at all — the model
-> tends to comply when they appear in `format_for_llm()`. The example shows what
-> the output looks like on a clean run. Replace `_FORBIDDEN` with words you
-> expect the model to produce to see early-exit behaviour.
+> **Note:** LLM output is non-deterministic. Your result will vary in wording.
+
+The same two-sentence response that produced **2** `ChunkEvent` items with sentence
+chunking now produces **38**. The validator fires on every word — maximum reaction
+speed at the cost of per-chunk context.
+
+If a forbidden word appears, the stream stops at that word and no further
+`ChunkEvent` items are emitted. To see early exit in action, change `_FORBIDDEN`
+to include a common English word like `"and"` or `"the"`.
 
 ---
 
-## Step 4: A custom chunking strategy
-
-The built-in strategies cover the most common boundaries. For structured output
-— numbered lists, code blocks, CSV rows — you can subclass `ChunkingStrategy`
-and define your own split boundary.
-
-Two methods to implement:
-
-- **`split(accumulated_text)`** — called on every new token delta. Return all
-  complete chunks found so far; withhold any trailing fragment. Must be
-  stateless: it receives the full accumulated text, not a delta.
-- **`flush(accumulated_text)`** — called once at end of stream. Release the
-  withheld trailing fragment, or return `[]` to discard it.
-
-Here is a `LineChunker` that splits on single newlines — natural for numbered
-list output where each line is one item:
-
-```python
-# Requires: mellea
-# Returns: None
-import asyncio
-import re
-
-from mellea.core.backend import Backend
-from mellea.core.base import Context
-from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
-from mellea.stdlib.chunking import ChunkingStrategy
-from mellea.stdlib.components import Instruction
-from mellea.stdlib.streaming import ChunkEvent, CompletedEvent, QuickCheckEvent, stream_with_chunking
-
-_NUMBERED_LINE = re.compile(r"^\s*\d+[\.\)]\s")
-
-
-class LineChunker(ChunkingStrategy):
-    """Emits one complete line per chunk, splitting on single newlines."""
-
-    def split(self, accumulated_text: str) -> list[str]:
-        if "\n" not in accumulated_text:
-            return []
-        last_nl = accumulated_text.rfind("\n")
-        return [line for line in accumulated_text[:last_nl].split("\n") if line.strip()]
-
-    def flush(self, accumulated_text: str) -> list[str]:
-        if not accumulated_text:
-            return []
-        last_nl = accumulated_text.rfind("\n")
-        trailing = (
-            accumulated_text if last_nl == -1 else accumulated_text[last_nl + 1 :]
-        ).strip()
-        return [trailing] if trailing else []
-
-
-class NumberedLineReq(Requirement):
-    """Cancels the stream if any line does not begin with a number."""
-
-    def format_for_llm(self) -> str:
-        return "Every line must begin with a number followed by a period (e.g. '1. ')."
-
-    async def stream_validate(
-        self, chunk: str, *, backend: Backend, ctx: Context
-    ) -> PartialValidationResult:
-        if not _NUMBERED_LINE.match(chunk):
-            return PartialValidationResult(
-                "fail", reason=f"Line does not start with a number: {chunk.strip()!r}"
-            )
-        return PartialValidationResult("unknown")
-
-    async def validate(
-        self, backend: Backend, ctx: Context, *, format=None, model_options=None
-    ) -> ValidationResult:
-        return ValidationResult(result=True)
-
-
-async def main() -> None:
-    from mellea.stdlib.session import start_session
-
-    m = start_session()
-
-    result = await stream_with_chunking(
-        Instruction(
-            "List five world capitals, one per line, numbered 1 through 5. "
-            "Use the format: '1. City'. Output only the numbered list, nothing else."
-        ),
-        m.backend,
-        m.ctx,
-        requirements=[NumberedLineReq()],
-        chunking=LineChunker(),
-    )
-
-    async for event in result.events():
-        match event:
-            case ChunkEvent():
-                print(f"  line[{event.chunk_index}]: {event.text.strip()!r}")
-            case QuickCheckEvent(passed=False):
-                print(f"  FAIL: {event.results[0].reason}")
-            case CompletedEvent():
-                print(f"  completed — success={event.success}")
-            case _:
-                pass
-
-    await result.acomplete()
-
-
-asyncio.run(main())
-```
-
-```text Sample output
-  line[0]: '1. London'
-  line[1]: '2. Paris'
-  line[2]: '3. Tokyo'
-  line[3]: '4. Ottawa'
-  line[4]: '5. Canberra'
-  completed — success=True
-```
-
-Pass a `ChunkingStrategy` **instance** (not a string alias) to use a custom
-chunker. Built-in chunkers are available as instances too — `LineChunker()`,
-`WordChunker()`, etc. — if you want to override the default `flush()` behaviour.
-
----
-
-## Step 5: Raw chunk access with `astream()`
+## Step 4: Raw chunk access with `astream()`
 
 If you only need the validated chunks and do not want event metadata, use
 `result.astream()` instead of `result.events()`. It yields the text of each
-validated chunk as a plain string:
+validated chunk as a plain string — useful for streaming output directly to a
+UI buffer or building the response incrementally without a `match` dispatch:
 
 ```python
 # Requires: mellea
@@ -551,10 +449,150 @@ snow, replenishing rivers, lakes, and groundwater.
 completed=True
 ```
 
+> **Note:** LLM output is non-deterministic. Your result will vary in wording.
+
 `astream()` and `events()` are independent — both are available on the same
 result object and can even be consumed concurrently with `asyncio.gather`. Each
 is **single-consumer**: calling either iterator a second time raises
-`RuntimeError`.
+`RuntimeError`. If you need chunks after the fact, capture them to a list
+during iteration or read `result.full_text` after `acomplete()`.
+
+---
+
+## Step 5: A custom chunking strategy
+
+The built-in strategies cover the most common boundaries. For structured output
+— numbered lists, code blocks, CSV rows — you can subclass `ChunkingStrategy`
+and define your own split boundary.
+
+Two methods to implement:
+
+- **`split(accumulated_text)`** — called on every new token delta. Return all
+  complete chunks found so far; withhold any trailing fragment. Must be
+  stateless: it receives the full accumulated text each time, not a delta.
+- **`flush(accumulated_text)`** — called once at natural end of stream. Release
+  the withheld trailing fragment, or return `[]` to discard it.
+
+Here is a `LineChunker` that splits on single newlines — natural for numbered
+list output where each line is one item:
+
+```python
+# Requires: mellea
+# Returns: None
+import asyncio
+import re
+
+from mellea.core.backend import Backend
+from mellea.core.base import Context
+from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
+from mellea.stdlib.chunking import ChunkingStrategy
+from mellea.stdlib.components import Instruction
+from mellea.stdlib.streaming import ChunkEvent, CompletedEvent, QuickCheckEvent, stream_with_chunking
+
+_NUMBERED_LINE = re.compile(r"^\s*\d+[\.\)]\s")
+
+
+class LineChunker(ChunkingStrategy):
+    """Emits one complete line per chunk, splitting on single newlines."""
+
+    def split(self, accumulated_text: str) -> list[str]:
+        if "\n" not in accumulated_text:
+            return []
+        last_nl = accumulated_text.rfind("\n")
+        return [line for line in accumulated_text[:last_nl].split("\n") if line.strip()]
+
+    def flush(self, accumulated_text: str) -> list[str]:
+        if not accumulated_text:
+            return []
+        last_nl = accumulated_text.rfind("\n")
+        trailing = (
+            accumulated_text if last_nl == -1 else accumulated_text[last_nl + 1 :]
+        ).strip()
+        return [trailing] if trailing else []
+
+
+class NumberedLineReq(Requirement):
+    """Cancels the stream if any line does not begin with a number."""
+
+    def format_for_llm(self) -> str:
+        return "Every line must begin with a number followed by a period (e.g. '1. ')."
+
+    async def stream_validate(
+        self, chunk: str, *, backend: Backend, ctx: Context
+    ) -> PartialValidationResult:
+        if not _NUMBERED_LINE.match(chunk):
+            return PartialValidationResult(
+                "fail", reason=f"Line does not start with a number: {chunk.strip()!r}"
+            )
+        return PartialValidationResult("unknown")
+
+    async def validate(
+        self, backend: Backend, ctx: Context, *, format=None, model_options=None
+    ) -> ValidationResult:
+        # All format checking happens during streaming. Lines that reach validate()
+        # are guaranteed to have passed stream_validate() already.
+        return ValidationResult(result=True)
+
+
+async def main() -> None:
+    from mellea.stdlib.session import start_session
+
+    m = start_session()
+
+    result = await stream_with_chunking(
+        Instruction(
+            "List five world capitals, one per line, numbered 1 through 5. "
+            "Use the format: '1. City'. Output only the numbered list, nothing else."
+        ),
+        m.backend,
+        m.ctx,
+        requirements=[NumberedLineReq()],
+        chunking=LineChunker(),
+    )
+
+    async for event in result.events():
+        match event:
+            case ChunkEvent():
+                print(f"  line[{event.chunk_index}]: {event.text.strip()!r}")
+            case QuickCheckEvent(passed=False):
+                print(f"  FAIL: {event.results[0].reason}")
+            case CompletedEvent():
+                print(f"  completed — success={event.success}")
+            case _:
+                pass
+
+    await result.acomplete()
+
+
+asyncio.run(main())
+```
+
+```text Sample output
+  line[0]: '1. London'
+  line[1]: '2. Paris'
+  line[2]: '3. Tokyo'
+  line[3]: '4. Ottawa'
+  line[4]: '5. Canberra'
+  completed — success=True
+```
+
+> **Note:** LLM output is non-deterministic. Your result will vary in wording.
+
+`validate()` on `NumberedLineReq` always returns `True` because all format
+checking happens during streaming. If any line fails, the stream is cancelled
+before reaching `validate()`. Lines that do reach it have already passed
+`stream_validate()`. This pattern — enforce in `stream_validate`, pass in
+`validate` — is common for requirements whose invariant is a property of
+individual chunks rather than the full output.
+
+Pass a `ChunkingStrategy` **instance** (not a string alias) to use a custom
+chunker. The built-in chunkers (`WordChunker`, `SentenceChunker`,
+`ParagraphChunker`) are also available as instances if you need to pass one
+explicitly or subclass to override `flush()`.
+
+> **See also:** [`docs/examples/streaming/custom_chunking.py`](../examples/index)
+> for an annotated version of this pattern with a more detailed `split()`/`flush()`
+> contract walkthrough.
 
 ---
 
