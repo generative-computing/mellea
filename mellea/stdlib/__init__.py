@@ -10,9 +10,20 @@ the sub-packages — ``mellea.stdlib.components``, ``mellea.stdlib.sampling``, a
 ``mellea.stdlib.session`` — for day-to-day use.
 
 Streaming chunking strategies (for use with streaming validation) are available at
-``mellea.stdlib.chunking`` and re-exported here for convenience.
+``mellea.stdlib.chunking`` and re-exported here for convenience.  The core streaming
+orchestration primitive :func:`~mellea.stdlib.streaming.stream_with_chunking` and
+its result type :class:`~mellea.stdlib.streaming.StreamChunkingResult` are also
+re-exported here.
 """
 
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
+from .streaming import StreamChunkingResult, stream_with_chunking
 
-__all__ = ["ChunkingStrategy", "ParagraphChunker", "SentenceChunker", "WordChunker"]
+__all__ = [
+    "ChunkingStrategy",
+    "ParagraphChunker",
+    "SentenceChunker",
+    "StreamChunkingResult",
+    "WordChunker",
+    "stream_with_chunking",
+]

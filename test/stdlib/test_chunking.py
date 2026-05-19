@@ -242,3 +242,79 @@ def test_paragraph_chunker_incremental_simulation():
         "First paragraph.",
         "Second paragraph.",
     ]
+
+
+# ---------------------------------------------------------------------------
+# flush() — trailing-fragment release at end of stream
+# ---------------------------------------------------------------------------
+
+
+def test_default_flush_returns_empty_list():
+    """The ABC default discards the trailing fragment."""
+
+    class Minimal(ChunkingStrategy):
+        def split(self, accumulated_text: str) -> list[str]:
+            _ = accumulated_text
+            return []
+
+    assert Minimal().flush("anything at all") == []
+    assert Minimal().flush("") == []
+
+
+def test_sentence_chunker_flush_empty():
+    assert SentenceChunker().flush("") == []
+
+
+def test_sentence_chunker_flush_only_complete():
+    """All text ends in a complete sentence with trailing whitespace → no fragment."""
+    assert SentenceChunker().flush("One. Two. ") == []
+
+
+def test_sentence_chunker_flush_trailing_fragment():
+    """Final sentence without trailing whitespace is released by flush."""
+    assert SentenceChunker().flush("One. Two without period") == ["Two without period"]
+
+
+def test_sentence_chunker_flush_terminated_no_trailing_space():
+    """Final sentence with terminator but no trailing whitespace is a fragment
+    under split() semantics and gets released by flush()."""
+    assert SentenceChunker().flush("One. Two.") == ["Two."]
+
+
+def test_sentence_chunker_flush_single_sentence_no_terminator():
+    assert SentenceChunker().flush("Incomplete sentence") == ["Incomplete sentence"]
+
+
+def test_word_chunker_flush_empty():
+    assert WordChunker().flush("") == []
+
+
+def test_word_chunker_flush_trailing_whitespace():
+    """Trailing whitespace means all words are complete → no fragment."""
+    assert WordChunker().flush("one two three ") == []
+
+
+def test_word_chunker_flush_trailing_fragment():
+    assert WordChunker().flush("one two three") == ["three"]
+
+
+def test_word_chunker_flush_single_word():
+    assert WordChunker().flush("solo") == ["solo"]
+
+
+def test_paragraph_chunker_flush_empty():
+    assert ParagraphChunker().flush("") == []
+
+
+def test_paragraph_chunker_flush_only_complete():
+    assert ParagraphChunker().flush("Para one.\n\nPara two.\n\n") == []
+
+
+def test_paragraph_chunker_flush_trailing_fragment():
+    assert ParagraphChunker().flush("Para one.\n\nPara two (no sep)") == [
+        "Para two (no sep)"
+    ]
+
+
+def test_paragraph_chunker_flush_single_paragraph_no_separator():
+    assert ParagraphChunker().flush("Only paragraph") == ["Only paragraph"]

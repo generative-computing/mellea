@@ -22,6 +22,10 @@ try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.cache_utils import DynamicCache
     from transformers.generation.logits_process import LogitsProcessorList
+    from transformers.generation.stopping_criteria import (
+        StoppingCriteria,
+        StoppingCriteriaList,
+    )
     from transformers.generation.streamers import AsyncTextIteratorStreamer
     from transformers.generation.utils import GenerateDecoderOnlyOutput
     from transformers.modeling_utils import PreTrainedModel
@@ -73,6 +77,45 @@ from .tools import (
     convert_tools_to_json,
 )
 from .utils import to_chat, to_tool_calls
+
+
+class _EventStoppingCriteria(StoppingCriteria):
+    """StoppingCriteria that signals the model to stop when a threading.Event is set.
+
+    Used by LocalHFBackend to implement cooperative cancellation: when
+    ``cancel_generation`` is called, it sets the backing event via
+    ``_cancel_hook`` before cancelling the asyncio task, giving the HF
+    ``model.generate`` thread a chance to exit cleanly rather than running
+    to completion.
+    """
+
+    def __init__(self, event: threading.Event) -> None:
+        self._event = event
+
+    def __call__(self, input_ids: Any, scores: Any, **kwargs: Any) -> bool:  # type: ignore[override]
+        return self._event.is_set()
+
+
+def _install_cancel_stopping_criteria(
+    generate_options: dict[str, Any], streaming_kwargs: dict[str, Any]
+) -> threading.Event:
+    """Wire a cooperative-cancel event into the generate call's stopping criteria.
+
+    Pops any caller-supplied ``stopping_criteria`` from *generate_options* (to
+    avoid passing it twice via both ``**generate_options`` and
+    ``**streaming_kwargs``), prepends an :class:`_EventStoppingCriteria` backed
+    by a fresh ``threading.Event``, and stores the merged list in
+    *streaming_kwargs*.  Returns the event so the caller can arm
+    ``output._cancel_hook = event.set``.
+    """
+    cancel_event = threading.Event()
+    user_sc = generate_options.pop("stopping_criteria", None)
+    streaming_kwargs["stopping_criteria"] = StoppingCriteriaList(
+        [_EventStoppingCriteria(cancel_event)]
+        + (list(user_sc) if user_sc is not None else [])
+    )
+    return cancel_event
+
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
@@ -892,6 +935,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
             linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
             _input_text, input_ids, merged_cache, attention_mask = (
@@ -920,6 +972,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -1055,6 +1111,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -1069,6 +1134,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
