@@ -1,0 +1,23 @@
+---
+title: "mellea.formatters"
+sidebarTitle: "mellea.formatters"
+description: "Formatters for converting components into model-ready prompts."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Formatters for converting components into model-ready prompts.
+
+
+
+
+
+Formatters translate [`Component`](../core/base#class-component) objects into the prompt strings or chat message
+lists that inference backends consume. This package exports the abstract [`Formatter`](../core/formatter#class-formatter)
+interface and two concrete implementations: [`ChatFormatter`](chat_formatter#class-chatformatter), which converts
+components into role-labelled chat messages, and [`TemplateFormatter`](template_formatter#class-templateformatter), which renders
+them through Jinja2 templates. Pass a formatter when constructing a
+[`FormatterBackend`](../backends/backend#class-formatterbackend) for your chosen model.

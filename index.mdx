@@ -1,0 +1,141 @@
+---
+canonical: "https://docs.mellea.ai/"
+title: "Mellea — build predictable AI without guesswork"
+description: "A Python library for writing reliable generative programs."
+---
+
+<div style={{overflow: "hidden", marginBottom: "1.5rem"}}>
+  <img src="/images/mellea_draft_logo_300.png" alt="Mellea mascot" height="96" style={{float: "left", margin: "0 1.5rem 0.5rem 0"}} />
+  <p>Mellea helps you manage the unreliable part of every AI-powered pipeline: the LLM call itself.
+  It replaces ad-hoc prompt chains and brittle agents with structured
+  <em>generative programs</em> — Python code where LLM calls are first-class operations
+  governed by type annotations, requirement verifiers, and principled repair loops.</p>
+</div>
+
+```bash
+uv pip install mellea
+```
+
+<CardGroup cols={2}>
+  <Card title="Get started" icon="rocket" href="/getting-started/installation">
+    Install Mellea and run your first generative program in minutes.
+  </Card>
+  <Card title="Tutorial" icon="graduation-cap" href="/tutorials/01-your-first-generative-program">
+    Build a complete program with generation, validation, and repair.
+  </Card>
+  <Card title="Code examples" icon="github" href="https://github.com/generative-computing/mellea/tree/main/docs/examples">
+    Runnable examples: RAG, agents, sampling, MObjects, and more.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/mellea/backends/backend">
+    Full public API — backends, session, components, requirements, sampling.
+  </Card>
+</CardGroup>
+
+## How Mellea works
+
+Mellea's design rests on three interlocking ideas.
+
+<CardGroup cols={3}>
+  <Card title="Python, not prose" icon="function" href="/concepts/generative-functions">
+    `@generative` turns a typed function signature into an LLM-backed implementation.
+    Docstrings become prompts. Type hints become output schemas. No DSL required.
+  </Card>
+  <Card title="Requirements driven" icon="list-check" href="/concepts/requirements-system">
+    Declare what good output looks like with `req()`. Mellea checks every response
+    before it leaves the session — using LLM verifiers, programmatic checks, or
+    domain-trained adapters.
+  </Card>
+  <Card title="Instruct · Validate · Repair" icon="shield-check" href="/concepts/instruct-validate-repair">
+    When a requirement fails, Mellea feeds the failure back and tries again.
+    Rejection sampling, majority voting, and SOFAI are built in.
+  </Card>
+</CardGroup>
+
+## Key patterns
+
+<CardGroup cols={3}>
+  <Card title="MObjects and mify" icon="cube" href="/concepts/mobjects-and-mify">
+    Add `@mify` to any class to make it LLM-queryable and tool-accessible
+    without rewriting your data model.
+  </Card>
+  <Card title="Context and sessions" icon="timeline" href="/concepts/context-and-sessions">
+    Explicit context threading with push/pop state keeps multi-turn
+    workflows reproducible and debuggable.
+  </Card>
+  <Card title="Async and streaming" icon="bolt" href="/how-to/use-async-and-streaming">
+    `ainstruct()`, `aact()`, and token-by-token streaming for production
+    throughput and responsive UIs.
+  </Card>
+  <Card title="Safety checks" icon="shield" href="/tutorials/04-making-agents-reliable">
+    `GuardianCheck` detects harmful, off-topic, or hallucinated outputs
+    before they reach downstream code.
+  </Card>
+  <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
+    Best-of-n, SOFAI, majority voting — swap strategies in one line.
+  </Card>
+  <Card title="Tools and agents" icon="wrench" href="/how-to/tools-and-agents">
+    `@tool`, `MelleaTool`, and the ReACT loop for goal-driven multi-step agents.
+  </Card>
+</CardGroup>
+
+## Backends
+
+Mellea is backend-agnostic. The same program runs on any inference engine.
+
+<CardGroup cols={4}>
+  <Card title="Ollama" icon="server" href="/integrations/ollama">
+    Local inference, zero cloud costs.
+  </Card>
+  <Card title="OpenAI" icon="sparkles" href="/integrations/openai">
+    GPT-4o, o3-mini, any OpenAI-compatible API.
+  </Card>
+  <Card title="AWS Bedrock" icon="cloud" href="/integrations/bedrock">
+    AWS Bedrock via Bedrock Mantle or LiteLLM.
+  </Card>
+  <Card title="IBM WatsonX" icon="cloud" href="/integrations/watsonx">
+    IBM WatsonX managed AI platform.
+  </Card>
+  <Card title="HuggingFace" icon="microchip" href="/integrations/huggingface">
+    Local inference with Transformers — aLoRA and constrained decoding.
+  </Card>
+  <Card title="LiteLLM / Vertex AI" icon="cloud" href="/integrations/vertex-ai">
+    Google Vertex AI, Anthropic, and 100+ providers via LiteLLM.
+  </Card>
+  <Card title="LangChain" icon="link" href="/integrations/langchain">
+    Use LangChain tools in Mellea sessions or call Mellea from LangChain chains.
+  </Card>
+</CardGroup>
+
+See [Backends and configuration](/how-to/backends-and-configuration) for the full list of supported backends and how to configure them.
+
+## How-to guides
+
+<CardGroup cols={3}>
+  <Card title="Enforce structured output" icon="brackets-curly" href="/how-to/enforce-structured-output">
+    Pydantic models, `Literal` types, and `@generative` for guaranteed schemas.
+  </Card>
+  <Card title="Write custom verifiers" icon="check-circle" href="/how-to/write-custom-verifiers">
+    Python functions, `ValidationResult`, and multi-field validation logic.
+  </Card>
+  <Card title="Async and streaming" icon="bolt" href="/how-to/use-async-and-streaming">
+    `aact()`, `ainstruct()`, and token-by-token streaming output.
+  </Card>
+  <Card title="Use context and sessions" icon="layers" href="/how-to/use-context-and-sessions">
+    `ChatContext`, explicit context threading, and multi-session workflows.
+  </Card>
+  <Card title="Configure model options" icon="sliders-horizontal" href="/how-to/configure-model-options">
+    Temperature, seed, max tokens, system prompts — cross-backend with `ModelOption`.
+  </Card>
+  <Card title="Use images and vision" icon="image" href="/how-to/use-images-and-vision">
+    Pass images to `instruct()` and `chat()` with any vision-capable backend.
+  </Card>
+  <Card title="Build a RAG pipeline" icon="database" href="/how-to/build-a-rag-pipeline">
+    Vector search, LLM relevance filtering, and grounded generation end-to-end.
+  </Card>
+</CardGroup>
+
+---
+
+[GitHub](https://github.com/generative-computing/mellea) ·
+[PyPI](https://pypi.org/project/mellea/) ·
+[Discussions](https://github.com/generative-computing/mellea/discussions)
