@@ -44,7 +44,7 @@ hf = [
     "datasets>=4.0.0",
     "llguidance",
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
-    "transformers (>=4.42.0,<6.0.0,!=5.0.*,!=5.1.*,!=5.2.*,!=5.3.*,!=5.5.0)", # 5.5.0 broke granite 4.0
+    "transformers>5.5.0,<6.0.0", # 5.5.0 broke granite 4.0
     "trl==0.19.1",
     "xgrammar==0.1.33", # Necessary for granite_common intrinsics. Pinned due to Issue 990.
     "huggingface-hub>=0.33.4",

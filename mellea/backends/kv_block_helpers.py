@@ -1,10 +1,11 @@
 """Low-level utilities for concatenating transformer KV caches (KV smashing).
 
-Provides functions for merging ``DynamicCache`` and legacy tuple caches along the
-time axis (``merge_dynamic_caches_v5``, ``legacy_cache_smash``), and
-``tokens_to_legacy_cache`` for converting a tokenized prompt into a prefilled KV
-cache. These helpers are used internally by local HuggingFace backends that reuse
-cached prefix computations across multiple generation calls.
+Provides ``prefill_cache_v5`` for converting a tokenized prompt into a prefilled
+``DynamicCache``, ``merge_dynamic_caches_v5`` for concatenating multiple
+``DynamicCache`` objects along the time axis, and ``merge_v5`` which composes
+the two. These helpers are used internally by local HuggingFace backends
+(transformers v5+) that reuse cached prefix computations across multiple
+generation calls.
 """
 
 from collections.abc import Iterable
@@ -52,13 +53,18 @@ def prefill_cache_v5(
 def merge_dynamic_caches_v5(caches: Iterable[DynamicCache]) -> DynamicCache:
     """Merge multiple v5 DynamicCache objects by concatenating KV states along the time axis."""
     caches = list(caches)
-    assert len(caches) >= 1
+    if not caches:
+        raise ValueError("caches must be non-empty")
 
     for c in caches:
         if any(
             getattr(layer, "is_sliding", False) for layer in getattr(c, "layers", [])
         ):
-            raise ValueError("Check the issue.")
+            raise ValueError(
+                "KV cache smashing does not currently support sliding-window "
+                "attention layers (e.g. Granite 4 models). Disable prefix "
+                "caching for this model."
+            )
 
     merged = DynamicCache()
 

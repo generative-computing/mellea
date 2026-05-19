@@ -229,6 +229,8 @@ def train_model(
         base_model, padding_side="right", trust_remote_code=True
     )
     tokenizer.pad_token = tokenizer.eos_token
+    # Note: previously had `tokenizer.add_special_tokens = False` here, which was
+    # a no-op (assigning False to a method reference). Removed — do not restore.
 
     dataset = load_dataset_from_json(dataset_path, tokenizer, invocation_prompt)
     dataset = dataset.shuffle(seed=42)

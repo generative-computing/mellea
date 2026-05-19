@@ -3379,7 +3379,7 @@ requires-dist = [
     { name = "rouge-score" },
     { name = "sentence-transformers", marker = "extra == 'granite-retriever'" },
     { name = "smolagents", marker = "extra == 'tools'", specifier = ">=1.0.0" },
-    { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.42.0,!=5.0.*,!=5.1.*,!=5.2.*,!=5.3.*,!=5.5.0,<6.0.0" },
+    { name = "transformers", marker = "extra == 'hf'", specifier = ">5.5.0,<6.0.0" },
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
     { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'server'" },

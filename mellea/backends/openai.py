@@ -6,7 +6,7 @@ import functools
 import inspect
 import os
 from collections.abc import Coroutine, Sequence
-from typing import TYPE_CHECKING, Any, overload
+from typing import Any, overload
 
 import openai
 from openai.types.chat import ChatCompletion

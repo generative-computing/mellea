@@ -19,8 +19,6 @@ try:
     import llguidance.hf
     import llguidance.torch
     import torch
-    import transformers as _transformers_module
-    from packaging.version import Version
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.cache_utils import DynamicCache
     from transformers.generation.logits_process import LogitsProcessorList
@@ -75,8 +73,6 @@ from .tools import (
     convert_tools_to_json,
 )
 from .utils import to_chat, to_tool_calls
-
-_TRANSFORMERS_V5 = Version(_transformers_module.__version__) >= Version("5.0")
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
@@ -1214,7 +1210,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
-                q_end=input_ids["input_ids"].shape[1],  # type: ignore
+                q_end=(
+                    input_ids
+                    if isinstance(input_ids, torch.Tensor)
+                    else input_ids["input_ids"]
+                ).shape[1],
                 scores=hf_output.scores,
             )
 
@@ -1244,7 +1244,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
                 if input_ids is not None and hf_output.sequences is not None:
-                    n_prompt = input_ids["input_ids"].shape[1]
+                    n_prompt = (
+                        input_ids
+                        if isinstance(input_ids, torch.Tensor)
+                        else input_ids["input_ids"]
+                    ).shape[1]
                     n_completion = hf_output.sequences[0].shape[0] - n_prompt
             except Exception:
                 pass
@@ -1616,18 +1620,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         try:
-            adapter_kwargs = {}
-
-            # v4: Peft tries to stringify the device. If it's mps, it gets stringified as "mps:0" which
-            # causes an error when loading with safetensors.torch.load_file. Force the device as a string
-            # "mps" to fix.
-            # v5: adapter_kwargs is forwarded to download_kwargs only; device is derived automatically
-            # from self.device, so passing it here would hit find_adapter_config_file() which no longer
-            # accepts a 'device' argument.
-            if not _TRANSFORMERS_V5 and self._device == torch.device("mps"):
-                adapter_kwargs["device"] = "mps"
+            # v5: adapter_kwargs is forwarded to download_kwargs only; device is
+            # derived automatically from self.device, so we don't pass it here —
+            # find_adapter_config_file() no longer accepts a 'device' argument.
             self._model.load_adapter(
-                adapter.path, adapter.qualified_name, adapter_kwargs=adapter_kwargs
+                adapter.path, adapter.qualified_name, adapter_kwargs={}
             )
         except ValueError as e:
             # If it's just that it's already loaded, ignore it.
