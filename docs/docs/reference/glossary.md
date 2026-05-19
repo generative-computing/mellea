@@ -281,6 +281,29 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ---
 
+## SCORING_SCHEMA_BANK
+
+A dictionary mapping short string keys to scoring-schema sentences used by
+[`guardian_check()`](#guardian_check). Pass a key as the `scoring_schema`
+argument to control which span Guardian evaluates.
+
+Available keys: `"assistant_response"` (default), `"user_prompt"`,
+`"last_turn"`, `"tool_call"`. Custom strings are also accepted but must
+resolve to a yes/no verdict.
+
+```python
+from mellea.stdlib.components.intrinsic.guardian import SCORING_SCHEMA_BANK
+
+print(list(SCORING_SCHEMA_BANK.keys()))
+```
+
+The deprecated `target_role="user" | "assistant"` argument is now superseded
+by `scoring_schema="user_prompt" | "assistant_response"`.
+
+See: [Safety Guardrails](../how-to/safety-guardrails)
+
+---
+
 ## factuality_correction()
 
 A Guardian Intrinsic function that generates a corrected version of the assistant's

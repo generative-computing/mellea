@@ -101,8 +101,8 @@ for criteria in ["harm", "social_bias", "jailbreak"]:
 
 ## Check user input
 
-Set `target_role="user"` to evaluate the last user message before generation — useful
-as an input gate to block unsafe or jailbreak prompts:
+Pass `scoring_schema="user_prompt"` to evaluate the last user message before
+generation — useful as an input gate to block unsafe or jailbreak prompts:
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
@@ -119,7 +119,7 @@ context = ChatContext().add(
     )
 )
 score = guardian.guardian_check(
-    context, guardian_backend, criteria="jailbreak", target_role="user"
+    context, guardian_backend, criteria="jailbreak", scoring_schema="user_prompt"
 )
 if score >= 0.5:
     print(f"Input blocked — jailbreak score: {score:.4f}")
@@ -128,6 +128,14 @@ else:
     ...
 # Example output: Input blocked — jailbreak score: 0.9997
 ```
+
+`scoring_schema` accepts a key from `SCORING_SCHEMA_BANK`
+(`"assistant_response"` — the default; `"user_prompt"`; `"last_turn"`;
+`"tool_call"`) or any custom yes/no schema string.
+
+> **Deprecated:** `target_role="user" | "assistant"` still works but emits a
+> `DeprecationWarning`. Replace it with `scoring_schema="user_prompt"` or
+> `scoring_schema="assistant_response"` (the default).
 
 ## Custom criteria
 
@@ -150,7 +158,7 @@ pii_criteria = (
     "information that is included as a part of a prompt."
 )
 score = guardian.guardian_check(
-    context, guardian_backend, criteria=pii_criteria, target_role="user"
+    context, guardian_backend, criteria=pii_criteria, scoring_schema="user_prompt"
 )
 print(f"PII score: {score:.4f}")
 # Example output: PII score: 0.9820

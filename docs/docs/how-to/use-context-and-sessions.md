@@ -138,7 +138,7 @@ class SafeChatSession(MelleaSession):
         eval_ctx = ChatContext().add(Message("user", content))
         for criteria in self._criteria:
             score = guardian.guardian_check(
-                eval_ctx, self._guardian, criteria=criteria, target_role="user"
+                eval_ctx, self._guardian, criteria=criteria, scoring_schema="user_prompt"
             )
             if score >= 0.5:
                 return Message(
@@ -165,8 +165,9 @@ A few things to note:
   instance and pass it in to avoid reloading on every session.
 - `guardian_check()` returns a float score from `0.0` (safe) to `1.0` (risk). Values
   at or above `0.5` indicate risk detected.
-- The `target_role="user"` argument tells Guardian to evaluate the user message
-  rather than the assistant response.
+- `scoring_schema="user_prompt"` tells Guardian to evaluate the last user
+  message rather than the assistant response (the default,
+  `"assistant_response"`).
 - Neither the blocked message nor the rejection reply is added to the chat context,
   so the conversation history stays clean.
 
