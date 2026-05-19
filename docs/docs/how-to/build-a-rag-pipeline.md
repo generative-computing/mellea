@@ -217,7 +217,7 @@ against exactly what the generator was given.
 ## Putting it together
 
 ```python
-# Requires: mellea, faiss-cpu, sentence-transformers
+# Requires: mellea[hf], faiss-cpu, sentence-transformers
 # Returns: str
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer

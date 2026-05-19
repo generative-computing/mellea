@@ -177,4 +177,6 @@ else:
     print("Message blocked: jailbreak attempt detected.")
 ```
 
-> **Full example:** [`docs/examples/safety/guardian.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/safety/guardian.py)
+> **Full example:** the deprecated `docs/examples/safety/guardian.py` has been removed.
+> See [`docs/examples/intrinsics/guardian_core.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/guardian_core.py)
+> for the equivalent on the current Guardian Intrinsics API.
