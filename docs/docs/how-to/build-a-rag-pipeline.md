@@ -248,10 +248,12 @@ def search(query: str, docs: list[str], index: IndexFlatIP,
     return [docs[i] for i in indices[0]]
 
 
+# Loaded at module scope so weights are downloaded once and the model stays
+# resident across calls. First import triggers a multi-GB Granite download.
 guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
 
-def rag(docs: list[str], query: str) -> str | None:
+def rag(docs: list[str], query: str, *, check_groundedness: bool = True) -> str | None:
     embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
     index = build_index(docs, embedding_model)
     candidates = search(query, docs, index, embedding_model)
@@ -270,15 +272,19 @@ def rag(docs: list[str], query: str) -> str | None:
         requirements=[req("Answer only from the provided documents.")],
     )
 
-    docs_for_eval = [Document(text=doc, doc_id=str(i)) for i, doc in enumerate(relevant)]
-    eval_ctx = (
-        ChatContext()
-        .add(Message("user", query))
-        .add(Message("assistant", str(answer), documents=docs_for_eval))
-    )
-    score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="groundedness")
-    if score >= 0.5:
-        print(f"Warning: groundedness risk detected (score: {score:.4f})")
+    # Optional: groundedness check. Adds Guardian latency on every call;
+    # disable with `check_groundedness=False` when latency matters more
+    # than fact-verification (e.g. low-stakes summaries).
+    if check_groundedness:
+        docs_for_eval = [Document(text=doc, doc_id=str(i)) for i, doc in enumerate(relevant)]
+        eval_ctx = (
+            ChatContext()
+            .add(Message("user", query))
+            .add(Message("assistant", str(answer), documents=docs_for_eval))
+        )
+        score = guardian.guardian_check(eval_ctx, guardian_backend, criteria="groundedness")
+        if score >= 0.5:
+            print(f"Warning: groundedness risk detected (score: {score:.4f})")
 
     return str(answer)
 ```

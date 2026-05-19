@@ -22,5 +22,5 @@ re-invoke `m.instruct()` with an additional requirement on failure.
 
 ## Related Documentation
 
-- [Safety Guardrails (current)](../../docs/docs/how-to/safety-guardrails.md)
-- [Security and Taint Tracking (deprecated)](../../docs/docs/advanced/security-and-taint-tracking.md)
+- [Safety Guardrails (current)](../../docs/docs/how-to/safety-guardrails)
+- [Security and Taint Tracking (deprecated)](../../docs/docs/advanced/security-and-taint-tracking)

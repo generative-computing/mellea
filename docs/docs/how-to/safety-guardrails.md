@@ -164,11 +164,26 @@ print(f"PII score: {score:.4f}")
 # Example output: PII score: 0.9820
 ```
 
-> **Migrating from `GuardianRisk`?** Not all deprecated `GuardianRisk` enum
-> values have a corresponding `CRITERIA_BANK` key. Notably,
-> `GuardianRisk.SEXUAL_CONTENT` has no equivalent key — pass a custom free-text
-> criteria string instead. For any other risk category not listed in the table
-> above, do the same.
+> **Migrating from `GuardianRisk`?** Most enum values map directly to a
+> `CRITERIA_BANK` key:
+>
+> | `GuardianRisk` value | `criteria` argument |
+> | -------------------- | ------------------- |
+> | `HARM` | `"harm"` |
+> | `SOCIAL_BIAS` | `"social_bias"` |
+> | `JAILBREAK` | `"jailbreak"` |
+> | `PROFANITY` | `"profanity"` |
+> | `UNETHICAL_BEHAVIOR` | `"unethical_behavior"` |
+> | `VIOLENCE` | `"violence"` |
+> | `GROUNDEDNESS` | `"groundedness"` |
+> | `ANSWER_RELEVANCE` | `"answer_relevance"` |
+> | `FUNCTION_CALL` | `"function_call"` |
+> | `SEXUAL_CONTENT` | *(no equivalent — pass a free-text criteria string)* |
+>
+> `CRITERIA_BANK` also adds `"context_relevance"`, which has no `GuardianRisk`
+> counterpart. For `SEXUAL_CONTENT` or any other custom category, pass a
+> descriptive free-text string as the `criteria` argument (see
+> [Custom criteria](#custom-criteria) above).
 
 ## Policy compliance
 
@@ -255,8 +270,11 @@ else:
 ## Factuality correction
 
 `factuality_correction()` generates a corrected version of the assistant's response
-grounded in the provided context. Pass the same context used for detection.
-Returns the corrected response text, or `"none"` if no correction was needed:
+grounded in the provided context. Pass the same context used for detection. The
+function returns whatever the model emits — typically the corrected response text;
+the model may emit the literal string `"none"` when no correction is needed, but
+this is a model-side convention rather than an API contract. Always gate the call
+on a positive `factuality_detection()` result:
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
@@ -295,5 +313,13 @@ else:
 ```
 
 ---
+
+> **Full example:** [`docs/examples/intrinsics/guardian_core.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/guardian_core.py)
+> covers all six built-in criteria (harm, social_bias, jailbreak, groundedness,
+> custom criteria, function_call) plus answer_relevance against a single
+> `LocalHFBackend`. Companion examples in the same directory:
+> [`factuality_detection.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_detection.py),
+> [`factuality_correction.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_correction.py),
+> and [`policy_guardrails.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/policy_guardrails.py).
 
 **See also:** [Intrinsics](../advanced/intrinsics) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters) | [Tutorial: Making Agents Reliable](../tutorials/04-making-agents-reliable)

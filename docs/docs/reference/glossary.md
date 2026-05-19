@@ -307,8 +307,10 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 ## factuality_correction()
 
 A Guardian Intrinsic function that generates a corrected version of the assistant's
-last response grounded in the documents provided in context. Returns the corrected
-text as a `str`, or `"none"` if the original response was already factually correct.
+last response grounded in the documents provided in context. Returns whatever the
+model emits as a `str` — typically the corrected text. The model may emit `"none"`
+when no correction is needed, but this is a model-side convention, not part of the
+API contract; gate calls on a positive `factuality_detection()` result.
 
 ```python
 from mellea.stdlib.components.intrinsic.guardian import factuality_correction
