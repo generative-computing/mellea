@@ -314,6 +314,22 @@ else:
 
 ---
 
+## Limitations
+
+Guardian Intrinsics return a numeric score (or label string) rather than a
+[`Requirement`](../reference/glossary#requirement) instance, so they cannot be
+passed to `m.validate()` or wired into `RepairTemplateStrategy` the way the
+deprecated `GuardianCheck` could. The practical workaround is to call
+`guardian_check()` (or another Intrinsic) manually after generation and
+re-invoke `m.instruct()` with an additional requirement when the score crosses
+your threshold. The pattern is sketched in
+[`docs/examples/safety/README.md`](https://github.com/generative-computing/mellea/blob/main/docs/examples/safety/README.md).
+
+Guardian functions also do not emit `mellea.requirement` metrics — see
+[Observability and metrics](../observability/metrics) for details.
+
+---
+
 > **Full example:** [`docs/examples/intrinsics/guardian_core.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/guardian_core.py)
 > covers all six built-in criteria (harm, social_bias, jailbreak, groundedness,
 > custom criteria, function_call) plus answer_relevance against a single
