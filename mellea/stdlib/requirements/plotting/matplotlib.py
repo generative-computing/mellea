@@ -49,6 +49,35 @@ def _has_matplotlib_import(code: str) -> bool:
     return False
 
 
+def _get_pyplot_aliases(code: str) -> list[str]:
+    """Extract all aliases for matplotlib.pyplot imports.
+
+    Returns qualified names (alias.method) for pyplot imports.
+    E.g., `import matplotlib.pyplot as plt` -> ["plt"]
+          `import matplotlib.pyplot as mpl` -> ["mpl"]
+          `import matplotlib as plt` -> [] (doesn't match pyplot)
+
+    Args:
+        code: Python source code to analyze
+
+    Returns:
+        List of pyplot aliases (e.g., ["plt", "mpl"])
+    """
+    aliases = []
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return aliases
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "matplotlib.pyplot":
+                    aliases.append(alias.asname or "pyplot")
+
+    return aliases
+
+
 def _strip_comments(code: str) -> str:
     """Remove Python comments from code while preserving strings.
 
@@ -173,13 +202,20 @@ def _uses_pyplot_show(code: str) -> bool:
     """Check if code calls plt.show() or similar show() methods.
 
     Uses AST analysis to robustly detect show() calls regardless of import
-    aliases (e.g., `import matplotlib.pyplot as mpl`). AST approach detects
-    actual method calls, avoiding false positives from string literals.
-    Falls back to string matching only if code doesn't parse.
+    aliases (e.g., `import matplotlib.pyplot as mpl`). Checks for qualified
+    names like plt.show() first, then falls back to string matching if parsing fails.
 
-    Note: May have false positives if code calls .show() on non-matplotlib objects.
+    Args:
+        code: Python source code to analyze
+
+    Returns:
+        True if pyplot show() is called, False otherwise
     """
-    if _find_attribute_calls(code, ["show"]):
+    pyplot_aliases = _get_pyplot_aliases(code)
+    if not pyplot_aliases:
+        pyplot_aliases = ["plt", "pyplot"]
+    func_names = [f"{alias}.show" for alias in pyplot_aliases]
+    if _find_function_calls(code, func_names):
         return True
     try:
         ast.parse(code)
@@ -232,10 +268,21 @@ def _uses_pyplot_plot(code: str) -> bool:
     string literals or method references. Falls back to string matching
     only if code doesn't parse.
 
-    Note: May have false positives if code calls these methods on non-pyplot objects.
-    Combine with matplotlib import checks in validators to eliminate false positives.
+    Args:
+        code: Python source code to analyze
+
+    Returns:
+        True if any pyplot plotting function is called, False otherwise
     """
-    if _find_attribute_calls(code, list(PYPLOT_PLOT_METHODS)):
+    pyplot_aliases = _get_pyplot_aliases(code)
+    if not pyplot_aliases:
+        pyplot_aliases = ["plt", "pyplot"]
+    func_names = [
+        f"{alias}.{method}"
+        for alias in pyplot_aliases
+        for method in PYPLOT_PLOT_METHODS
+    ]
+    if _find_function_calls(code, func_names):
         return True
     try:
         ast.parse(code)
@@ -252,12 +299,23 @@ def _calls_savefig(code: str) -> bool:
     false positives from string literals. Falls back to string matching
     only if code doesn't parse.
 
-    Note: May have false positives if code calls savefig() on non-matplotlib objects.
-    Combine with matplotlib import checks in validators to eliminate false positives.
+    Args:
+        code: Python source code to analyze
+
+    Returns:
+        True if savefig is called with pyplot aliases, False otherwise
     """
-    if _find_attribute_calls(code, ["savefig"]):
+    pyplot_aliases = _get_pyplot_aliases(code)
+    if not pyplot_aliases:
+        pyplot_aliases = ["plt", "pyplot"]
+    func_names = [f"{alias}.savefig" for alias in pyplot_aliases]
+    if _find_function_calls(code, func_names):
         return True
-    return _code_contains_strings(code, ["savefig"])
+    try:
+        ast.parse(code)
+    except (SyntaxError, ValueError):
+        return _code_contains_strings(code, ["savefig"])
+    return False
 
 
 def _make_matplotlib_headless_validator(
