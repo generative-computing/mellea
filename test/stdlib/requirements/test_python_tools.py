@@ -71,7 +71,6 @@ def requirements_matching(
     *,
     output_path: str | None = None,
     allowed_imports: list[str] | None = None,
-    output_limit_bytes: int = 50_000,
     check_output_artifacts: bool | None = None,
 ) -> list[Requirement]:
     """Return requirements whose description contains the substring."""
@@ -80,7 +79,6 @@ def requirements_matching(
         for requirement in python_tool_requirements(
             output_path=output_path,
             allowed_imports=allowed_imports,
-            output_limit_bytes=output_limit_bytes,
             check_output_artifacts=check_output_artifacts,
         )
         if substring in requirement_description(requirement).lower()
@@ -600,116 +598,6 @@ class TestOutputArtifactsRequirement:
         """Output artifact requirement should not be present without output_path."""
         artifact_reqs = requirements_matching("output file")
         assert len(artifact_reqs) == 0
-
-
-class TestOutputLimitValidator:
-    """Tests for _make_output_limit_validator."""
-
-    def test_empty_output_passes(self):
-        """No stdout/stderr should pass."""
-        ctx = ChatContext().add(ModelOutputThunk(value="response"))
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        assert len(limit_reqs) > 0
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is True
-
-    def test_output_within_limit_passes(self):
-        """Output under limit should pass."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "x" * 500)
-        setattr(output, "stderr", "")
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is True
-
-    def test_stdout_exceeds_limit_fails(self):
-        """Stdout exceeding limit should fail."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "x" * 1500)
-        setattr(output, "stderr", "")
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is False
-        assert "exceeding" in validation_reason(result).lower()
-        assert "1500" in validation_reason(result)
-
-    def test_stderr_exceeds_limit_fails(self):
-        """Stderr exceeding limit should fail."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "")
-        setattr(output, "stderr", "e" * 1500)
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is False
-        assert "exceeding" in validation_reason(result).lower()
-
-    def test_combined_output_exceeds_limit_fails(self):
-        """Combined stdout+stderr exceeding limit should fail."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "x" * 600)
-        setattr(output, "stderr", "e" * 600)  # Combined: 1200 bytes
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is False
-        assert "1200" in validation_reason(result)
-
-    def test_utf8_multibyte_characters_counted_correctly(self):
-        """Multibyte UTF-8 characters should be counted in bytes, not chars."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "🎉" * 100)  # 4 bytes per emoji = 400 bytes
-        setattr(output, "stderr", "")
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=300)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is False  # 400 > 300
-        assert "exceeding" in validation_reason(result).lower()
-
-    def test_limit_at_boundary(self):
-        """Output exactly at limit should pass."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "x" * 1000)  # Exactly 1000 bytes
-        setattr(output, "stderr", "")
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is True
-
-    def test_limit_one_byte_over_boundary_fails(self):
-        """Output one byte over limit should fail."""
-        output = ModelOutputThunk(value="response")
-        setattr(output, "stdout", "x" * 1001)  # 1001 bytes
-        setattr(output, "stderr", "")
-        ctx = ChatContext().add(output)
-
-        limit_reqs = requirements_matching("exceed", output_limit_bytes=1000)
-        limit_req = limit_reqs[0]
-
-        result = validation_fn(limit_req)(ctx)
-        assert result.as_bool() is False
 
 
 # endregion

@@ -105,12 +105,13 @@ def _extract_markdown_python_code(content: str) -> ValidationResult:
 def extract_python_code(ctx: Context) -> ValidationResult:
     """Extract Python code from tool calls or markdown code blocks.
 
-    Checks for code in two places (in order of priority):
+    Checks for code in order of priority, returning the first match found:
     1. Direct python tool calls (used by python interpreter tool)
     2. Markdown ```python or ``` code blocks in text responses
 
     This function is used by requirements validators that may be called before
-    or after tool invocation, so it checks both sources.
+    or after tool invocation, so it checks both sources and stops at the first one
+    with available code.
 
     Args:
         ctx: Context object containing the LLM output to extract code from.

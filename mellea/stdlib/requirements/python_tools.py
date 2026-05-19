@@ -117,44 +117,12 @@ def _make_imports_allowed_validator(
     return validate
 
 
-def _make_output_limit_validator(
-    limit_bytes: int,
-) -> Callable[[Context], ValidationResult]:
-    """Create a validator that checks stdout/stderr size limits."""
-
-    def validate(ctx: Context) -> ValidationResult:
-        output = ctx.last_output()
-        if output is None:
-            return ValidationResult(result=True)
-
-        stdout = getattr(output, "stdout", "")
-        stderr = getattr(output, "stderr", "")
-        total_output = ""
-        if isinstance(stdout, str):
-            total_output += stdout
-        if isinstance(stderr, str):
-            total_output += stderr
-
-        size = len(total_output.encode("utf-8"))
-        if size > limit_bytes:
-            return ValidationResult(
-                result=False,
-                reason=f"Your code produced {size} bytes of output, exceeding the limit of {limit_bytes} bytes.\n"
-                f"Add output limiting (e.g., redirect to /dev/null) or optimize your code.",
-            )
-
-        return ValidationResult(result=True)
-
-    return validate
-
-
 # endregion
 
 
 def python_tool_requirements(
     output_path: str | None = None,
     allowed_imports: list[str] | None = None,
-    output_limit_bytes: int = 50_000,
     check_output_artifacts: bool | None = None,
 ) -> list[Requirement]:
     """Build requirements for Python code generation via the python tool.
@@ -162,7 +130,6 @@ def python_tool_requirements(
     Args:
         output_path: Path where plotting output should be saved; enables plot-related checks.
         allowed_imports: List of allowed import module names; if provided, code must only import these.
-        output_limit_bytes: Maximum bytes for stdout/stderr combined; defaults to 50KB.
         check_output_artifacts: Whether to verify output file exists after execution; auto-enabled if output_path is set.
 
     Returns:
@@ -204,14 +171,6 @@ def python_tool_requirements(
     reqs.extend(
         python_plotting_requirements(
             output_path=output_path, check_output_artifacts=check_output_artifacts
-        )
-    )
-
-    reqs.append(
-        Requirement(
-            description=f"Output must not exceed {output_limit_bytes} bytes.",
-            validation_fn=_make_output_limit_validator(output_limit_bytes),
-            check_only=False,
         )
     )
 
