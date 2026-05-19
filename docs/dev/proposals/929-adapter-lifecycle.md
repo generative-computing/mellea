@@ -6,7 +6,7 @@
 >
 > **Structure:** **Part I** covers the problem, goals, terminology, end state, and the decisions that gate decomposition. **Part II** contains supporting detail — read after Part I is agreed, not before.
 >
-> **Terminology:** **"Intrinsic"** is the user-facing term: helpers, input/output parsing, the `Intrinsic` AST component (matching IBM's terminology). **"Adapter"** is the backend artefact: the weights loaded by a backend.
+> **Terminology:** **"Adapter"** is the backend artefact: the weights loaded by a backend. The user-facing layer — helpers, input/output parsing, the AST component — is referred to as **`AdapterBasedComponent`** throughout this document. This is a placeholder name: IBM is retiring "Intrinsic" but has not yet confirmed the replacement; Mellea will adopt whatever name is settled upstream.
 >
 > **Related issues and prior work:** see the appendix at the end of this document for a linked index with annotations.
 
@@ -30,11 +30,11 @@ The `weights_binding` is pluggable — `LocalFileBinding`, `EmbeddedBinding`, or
 
 | # | Question | Status |
 | --- | --- | --- |
-| Q1 | Does the `Adapter = identity + io_contract + weights` shape hold? | **Open** — Jake wants more discussion |
-| Q2 | Lifecycle default | **Resolved**: session-scoped, no auto-unload (Jake) |
+| Q1 | Does the `Adapter = identity + io_contract + weights` shape hold? | **Resolved** (Jake): shape holds |
+| Q2 | Lifecycle default | **Resolved** (Jake): session-scoped loading; per-call auto-activate/deactivate |
 | Q3 | Reality C (server-mediated): design slot or leave empty? | **Resolved**: design slot, leave empty (Paul; vLLM blocked) |
 | Q4 | Deprecation window for old classes | **Resolved**: 1 minor release ≈ 4–6 weeks; longer if user impact warrants (Paul, Jake) |
-| Q5 | Terminology: replace "intrinsic" with "adapter", or keep both with distinct meanings? | **Open** — two endpoints; mechanism sub-decision |
+| Q5 | Terminology: name for the user-facing layer | **Resolved** (Jake): two-layer split adopted; user-facing layer named `AdapterBasedComponent` as placeholder pending IBM's final decision |
 
 Detail on each in §5.
 
@@ -65,7 +65,7 @@ Four outcomes, in order of importance. Detail on each lives in Part II; this lis
 
 Only the few terms needed to read Part I:
 
-- **Intrinsic** — the user-facing capability: helper functions like `check_answerability`, the `Intrinsic` AST component, and input/output parsing. Implemented by an adapter.
+- **AdapterBasedComponent** *(placeholder name)* — the user-facing capability: helper functions like `check_answerability`, the AST component, and input/output parsing. Implemented by an adapter. IBM is retiring "Intrinsic" and the replacement name is not yet confirmed; this document uses `AdapterBasedComponent` until that decision lands.
 - **Adapter** — the backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity and I/O contract.
 - **Base model** — the general-purpose LLM everything runs on top of (e.g. `ibm-granite/granite-4.1-3b`).
 - **LoRA / aLoRA** — the two PEFT technologies adapters use. Both are supported.
@@ -119,20 +119,16 @@ Of Mellea's five backends (`LocalHFBackend`, `OpenAIBackend`, `OllamaBackend`, `
 
 These gate decomposition; everything else can live in sub-issues once these are agreed.
 
-1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. Yes / no / what's missing.
-2. **Adapter lifecycle — session-scoped, no auto-unload.** **Resolved (Jake):** auto-load yes, auto-unload no. Once activated, the adapter stays loaded; the caller or session teardown triggers explicit `release()`. The multi-tenancy concern is reduced because `LocalHFBackend` is primarily a single-user/local backend (see §10). Request-scoped lifecycle remains an opt-in for deployments that need per-call isolation.
+1. **Does the end-state shape (§4) hold?** Three realities, `Adapter = identity + io_contract + weights`, role-based lookup for rerouting. **Resolved (Jake):** shape holds. In most cases identity / io_contract / weights will be colocated, but allowing divergence is the point — it enables separation of how weights are fetched from the adapter's functional definition.
+2. **Adapter lifecycle — session-scoped loading, per-call activate/deactivate.** **Resolved (Jake):** two-level lifecycle. Weight loading (`prepare`) is session-scoped — the adapter is loaded once and held until explicit `release()` at session teardown. Activation/deactivation (`activate`/`deactivate`) is call-scoped — auto-wrapped around each generation. This matches the §9.3 sequence diagram. The multi-tenancy concern is reduced because `LocalHFBackend` is primarily a single-user/local backend (see §10). Request-scoped lifecycle (including `prepare`/`release` per call) remains an opt-in for deployments that need per-call isolation.
 3. **Reality C target shape — design slot, leave empty.** **Resolved (Paul):** the aLoRA-on-vLLM path ([#27](https://github.com/generative-computing/mellea/issues/27)) is currently blocked — vLLM has declined to upstream aLoRA support (see §8.3 for history). The `ServerMediatedBinding` slot is designed so the interface is clean if the upstream situation ever changes, but the implementation stays empty and we don't invest in stubs.
-4. **Deprecation window — at least 1 minor release; longer if user impact warrants.** **Resolved (Paul, Jake):** Paul confirms 1 minor release ≈ 4–6 weeks is sufficient, extendable if needed; Jake notes the final length depends on how many users are impacted. **Sub-question (open):** can this ship without breakage at all? Under Q5's current lean, `IntrinsicAdapter` could stay as a re-export of `Adapter`, which would remove the deprecation-window pressure entirely.
-5. **Terminology — "Adapter" alone, or both names with split meaning?** Two competing endpoints:
-   - **"Adapter" as the user-facing term going forward.** "Adapter" replaces "Intrinsic" in user-facing code. *Transition mechanism is a sub-decision:*
-     - *Rename with shims* (original proposal): rename `Intrinsic` AST class and module path to `Adapter` (or similar); old names aliased as deprecation shims for one release.
-     - *Create new alongside* (Paul's preference): stand up a new `Adapter` API beside the existing intrinsic API; old API gradually deprecated. Don't rename.
-   - **Current lean (Jacob's framing):** keep "Intrinsic" — it is IBM's term and must survive. The semantic split is: "adapter" = the backend artefact (weights loaded by the backend); "intrinsic" = the user-facing abstraction (helper functions, input/output parsing, classes). Both names stay, with distinct meanings.
+4. **Deprecation window — at least 1 minor release; longer if user impact warrants.** **Resolved (Paul, Jake):** Paul confirms 1 minor release ≈ 4–6 weeks is sufficient, extendable if needed; Jake notes the final length depends on how many users are impacted. **Sub-question (open):** can this ship without breakage at all? IBM is retiring "Intrinsic" (see Q5), so `IntrinsicAdapter` cannot stay as a permanent re-export — it will eventually need to go. The question is whether the deprecation shim for `IntrinsicAdapter` → `AdapterBasedComponent` (placeholder) can be deferred until the upstream name is confirmed, effectively separating the structural refactor from the naming change.
+5. **Terminology — two-layer split, with `AdapterBasedComponent` as placeholder.** **Resolved (Jake):** the conceptual split is agreed. "Adapter" is the backend artefact (weights loaded by a backend). The user-facing layer — helper functions, input/output parsing, the AST component — is a distinct abstraction. IBM is retiring the "Intrinsic" name but has not yet confirmed its replacement; until that decision lands, Mellea will use **`AdapterBasedComponent`** as the working placeholder name throughout the codebase and docs.
 
-   These two endpoints need alignment before §5 Q1 can be finalised. The three original sub-questions remain relevant if the first endpoint is chosen:
-   - **Q5a. Prose rename** — shift docs, error messages, help text to "adapter." Zero breakage. Likely agreed regardless of endpoint chosen.
-   - **Q5b. Module rename** — rename `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter`, with the old path re-exported for one release. Breaking for submodule importers.
-   - **Q5c. AST class rename** — rename `Intrinsic` → something like `AdapterCall`, with `Intrinsic` as an alias. If Jacob's split is adopted, Q5c answer is "no rename" — `Intrinsic` stays as the AST component name and receives a precise definition alongside the new `Adapter` class.
+   Three implementation sub-questions follow from this:
+   - **Q5a. Prose rename** — shift docs, error messages, and help text away from "Intrinsic" to `AdapterBasedComponent` (or the final IBM name once known). Zero breakage.
+   - **Q5b. Module rename** — rename `mellea.stdlib.components.intrinsic` → `mellea.stdlib.components.adapter_based_component` (placeholder path), with the old path re-exported for one release. Breaking for submodule importers.
+   - **Q5c. AST class rename** — rename `Intrinsic` AST component → `AdapterBasedComponent`, with `Intrinsic` as a deprecation alias for one release.
 
 > **Implementation note, not a reviewer question:** intrinsic-level observability (§14) should coordinate with the in-flight [#1035](https://github.com/generative-computing/mellea/issues/1035) / [PR #1036](https://github.com/generative-computing/mellea/pull/1036) work so content capture uses the same `MELLEA_TRACE_CONTENT` flag and doesn't get designed twice. Flagged here for awareness; sequenced during implementation.
 
@@ -198,7 +194,7 @@ Names matter because they appear in user-facing error messages, docs, and teleme
 | Term | Meaning |
 | --- | --- |
 | **Base model** | The general-purpose LLM (e.g. `ibm-granite/granite-4.1-3b`) that everything runs on top of. |
-| **Intrinsic** | The user-facing capability: helper functions (`check_answerability`, `requirement_check`, the Guardian helpers), the `Intrinsic` AST component, input/output parsing. Backed by an adapter. The name is kept as IBM's terminology — current Q5 lean (see Part I §5). |
+| **AdapterBasedComponent** *(placeholder)* | The user-facing capability: helper functions (`check_answerability`, `requirement_check`, the Guardian helpers), the AST component, input/output parsing. Backed by an adapter. IBM is retiring "Intrinsic" and has not yet confirmed the replacement name; `AdapterBasedComponent` is used throughout this document as a placeholder (see Part I §5). |
 | **Adapter** | The backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity, I/O contract, and weights binding. The user-facing **Intrinsic** wraps an adapter to provide helpers and parsing. In the redesign, the class hierarchy collapses from four (`IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` + abstract base) to one `Adapter` + a pluggable binding. |
 | **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
 | **Schema version** | *Proposed parser-dispatch field for breaking schema changes only.* For routine weight updates the HF commit SHA is the version (no new field needed). `schema_version` would only earn its keep if the granite team ships a *breaking* output-schema change (different keys, nesting, or types) and unpinned callers need graceful v1↔v2 parser dispatch. **Open** (§17 Q4) — granite-common may already have a versioning mechanism we should reuse instead of inventing this. |
@@ -259,7 +255,7 @@ return adapter.io_contract.parse(raw)
 
 Every verb that varies per reality lives inside `adapter_scope` (see §9.3); the outer flow is the same whether the adapter is a local PEFT file, an embedded Granite Switch adapter, or a server-mediated one.
 
-> **Boundary constraint:** `io_contract.build_prompt()` and `io_contract.parse()` must delegate to `granite-common` / `granite-formatters` for all `io.yaml` handling and parsing. The `IOContract` class in Mellea wraps these libraries; it does not re-implement their logic. (Jacob's requirement — keep `io.yaml` parsing in the granite-common / granite-formatters boundary.)
+> **Boundary constraint:** `io_contract.build_prompt()` and `io_contract.parse()` must delegate to `granite-common` / `granite-formatters` for all `io.yaml` handling and parsing. The `IOContract` class in Mellea wraps these libraries; it does not re-implement their logic. (Jacob's requirement — keep `io.yaml` parsing in the granite-common / granite-formatters boundary.) `build_prompt()` returns a `Component`-compatible prompt object — not a raw string — consistent with the rest of Mellea's prompt pipeline.
 
 ### 9.2 Weights binding verbs per reality
 
@@ -443,12 +439,7 @@ First-class deliverables, not afterthoughts.
 
 **Qualitative effectiveness suite (optional, per-adapter).** The tests above verify plumbing. They do *not* answer "does the answerability adapter actually judge answerability correctly?" A per-adapter qualitative suite (`@pytest.mark.qualitative`, opt-in, kept out of the fast loop) takes a small canonical dataset per adapter and asserts an accuracy floor on its outputs. Without this, a refactor can pass every structural test while silently degrading the behaviour users care about.
 
-Two existing tools — already part of Mellea's broader LLM-unit-testing conversation rather than bespoke to this refactor — fit naturally here and should be preferred over ad-hoc harnesses:
-
-- **`TestBasedEval`** (in-tree — `mellea/templates/prompts/default/TestBasedEval.jinja2`, documented at `docs.mellea.ai/how-to/unit-test-generative-code`) is Mellea's own LLM-as-judge component. Each adapter gets a JSON file of test cases (`{input, target, guidelines}`); a judge model returns `{"score": 0|1, "justification": "..."}`. Runnable from the CLI (`m eval run tests/eval_data/<adapter>.json --backend ollama --model granite4.1:3b`) so the same fixtures power both CI and interactive debugging. This is the default mechanism for per-adapter qualitative coverage.
-- **BenchDrift** (`github.com/IBM/BenchDrift`) addresses a second failure mode: an adapter that works on its canonical phrasing but breaks on semantically-equivalent rephrasings. BenchDrift generates syntactic variations of each test case while preserving meaning, then scores consistency across variations. Worth applying to the adapters where phrasing-invariance is a real concern — answerability, context-relevance, requirement-check, and the Guardian family all qualify. Optional extension rather than baseline coverage, but enabling it per-adapter is a one-config-file step once the `TestBasedEval` fixtures exist.
-
-Kept cheap (tens of test cases per adapter, not hundreds) so qualitative runs fit in a reasonable nightly-CI budget.
+The implementation approach for this suite is intentionally left open — start simple and file a separate proposal if a more structured approach (e.g. `TestBasedEval`, `BenchDrift`) is warranted.
 
 **Tutorials** — three worth writing alongside the refactor:
 - "Adding a custom intrinsic in 20 lines" — replaces the `CustomIntrinsicAdapter` monkey-patch story.
