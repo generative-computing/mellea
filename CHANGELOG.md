@@ -1,3 +1,50 @@
+## [v0.6.0](https://github.com/generative-computing/mellea/releases/tag/v0.6.0) - 2026-05-19
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### New Features
+* feat: adding typing to melleatools by @akihikokuroda in https://github.com/generative-computing/mellea/pull/959
+* feat: add tool calling support to m serve by @markstur in https://github.com/generative-computing/mellea/pull/850
+* feat: cli OpenAI-compatible API `response_format` support by @markstur in https://github.com/generative-computing/mellea/pull/884
+* feat: allow async functions as tools by @ajbozarth in https://github.com/generative-computing/mellea/pull/1041
+* feat: add as_generic_chat_history function to convert any Context to … by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1007
+* feat: add MCP tool integration by @ajbozarth in https://github.com/generative-computing/mellea/pull/1042
+* feat(telemetry): close five OTel GenAI semantic convention emission gaps (#1035) by @planetf1 in https://github.com/generative-computing/mellea/pull/1036
+* feat: add bash tool  by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1056
+* refactor: get instructions from upstream guardian adapters by @psschwei in https://github.com/generative-computing/mellea/pull/1037
+* feat(stdlib): add stream_with_chunking() with per-chunk validation (#901) by @planetf1 in https://github.com/generative-computing/mellea/pull/942
+* feat(stdlib): add streaming event types, events() iterator, and OTEL bridge (#902) by @planetf1 in https://github.com/generative-computing/mellea/pull/1095
+### Bug Fixes
+* fix: tool call arguments by @akihikokuroda in https://github.com/generative-computing/mellea/pull/896
+* fix: Remove tests and examples for deprecated models by @frreiss in https://github.com/generative-computing/mellea/pull/1012
+* fix: remove unused keys from Message template args by @ajbozarth in https://github.com/generative-computing/mellea/pull/1010
+* fix: silence false-positive context warning in react framework by @ajbozarth in https://github.com/generative-computing/mellea/pull/1009
+* fix: populate `context_view` in `COMPONENT_PRE_EXECUTE` payload by @araujof in https://github.com/generative-computing/mellea/pull/941
+* fix: skip tool hooks for framework-internal tools by @araujof in https://github.com/generative-computing/mellea/pull/939
+* fix: drop unused docs dependency group by @ajbozarth in https://github.com/generative-computing/mellea/pull/1044
+* fix: log unexpected errors server-side, return generic message to client (#991) by @SAY-5 in https://github.com/generative-computing/mellea/pull/1057
+* fix: make FunctionParameters and LogitBias OpenAI-compatible by @markstur in https://github.com/generative-computing/mellea/pull/1039
+* fix(backends): capture vLLM reasoning field in mot._thinking by @planetf1 in https://github.com/generative-computing/mellea/pull/1063
+* fix(test): loosen fragile equality assertions in astream incremental tests by @planetf1 in https://github.com/generative-computing/mellea/pull/1069
+* fix: update docs and comment references to python 3.11 and remove rust mention  by @jakelorocco in https://github.com/generative-computing/mellea/pull/1089
+* docs(openai): document empty response from thinking-mode models by @planetf1 in https://github.com/generative-computing/mellea/pull/1062
+* fix: revert feat: add bash tool  by @akihikokuroda in https://github.com/generative-computing/mellea/pull/1098
+### Documentation
+* docs: add canonical url headers by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/961
+* docs: add release and testing notes by @jakelorocco in https://github.com/generative-computing/mellea/pull/1031
+### Other Changes
+* ci: more flexible pr template handling by @psschwei in https://github.com/generative-computing/mellea/pull/1082
+* ci: better pr type checker experience by @psschwei in https://github.com/generative-computing/mellea/pull/1083
+* chore: Add Ollama model name mappings for Granite 4.1 to intrinsics adapter resolution by @kndtran in https://github.com/generative-computing/mellea/pull/1085
+* ci: migrate hold and pr-label actions to common org versions by @psschwei in https://github.com/generative-computing/mellea/pull/1081
+
+## New Contributors
+* @SAY-5 made their first contribution in https://github.com/generative-computing/mellea/pull/1057
+* @kndtran made their first contribution in https://github.com/generative-computing/mellea/pull/1085
+
+**Full Changelog**: https://github.com/generative-computing/mellea/compare/v0.5.0...v0.6.0
+
 ## [v0.5.0](https://github.com/generative-computing/mellea/releases/tag/v0.5.0) - 2026-05-05
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
