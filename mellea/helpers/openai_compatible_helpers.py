@@ -190,15 +190,8 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     if msg.images is not None:
         img_list = []
         for img in msg.images:
-            # Strip data URI prefix if present to avoid double-wrapping
-            if "data:" in img and "base64," in img:
-                img = img.split("base64,")[1]
-            img_list.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{img}"},
-                }
-            )
+            url = img if img.startswith("data:") else f"data:image/png;base64,{img}"
+            img_list.append({"type": "image_url", "image_url": {"url": url}})
 
         return {
             "role": msg.role,
