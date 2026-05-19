@@ -372,6 +372,7 @@ class StreamChunkingResult:
         """
         await self._done.wait()
         # Raise-once: if astream() already surfaced the exception, skip.
+        # Raise-once: if astream() already surfaced the exception, skip.
         exc = self._orchestration_exception
         if exc is not None and not self._exception_surfaced:
             self._exception_surfaced = True
@@ -646,6 +647,7 @@ async def _orchestrate_streaming(
                 provider=result._mot.generation.provider or "unknown",
                 exception_class=type(exc).__name__,
             )
+            result._orchestration_exception = exc
             await result._chunk_queue.put(exc)
         finally:
             # CancelledError (BaseException, not Exception) bypasses the except

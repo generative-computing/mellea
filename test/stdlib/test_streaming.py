@@ -592,13 +592,13 @@ async def test_no_requirements_streams_without_validation() -> None:
 
 @pytest.mark.asyncio
 async def test_no_requirements_events_omits_full_validation_event() -> None:
-    """With no quick_check_requirements, events() emits StreamingDoneEvent but
+    """With no requirements, events() emits StreamingDoneEvent but
     NOT FullValidationEvent — there is nothing to validate at stream end."""
     response = "Chunk one. Chunk two. "
     backend = StreamingMockBackend(response, token_size=3)
 
     result = await stream_with_chunking(
-        _action(), backend, _ctx(), quick_check_requirements=None, chunking="sentence"
+        _action(), backend, _ctx(), requirements=None, chunking="sentence"
     )
     await result.acomplete()
 
@@ -1680,8 +1680,10 @@ async def test_cancelled_task_sets_completed_false() -> None:
     # The finally block must have run to completion: _done must be set and
     # acomplete() must not hang.  This is the actual failure mode the fix
     # guards against — if _done is never set, acomplete() blocks forever.
+    # External cancellation surfaces as CancelledError (raise-once contract).
     assert result._done.is_set()
-    await asyncio.wait_for(result.acomplete(), timeout=2.0)
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(result.acomplete(), timeout=2.0)
 
     # Clean up the blocking feed task to avoid "Task destroyed while pending".
     if feed_task is not None:
