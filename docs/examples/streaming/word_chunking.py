@@ -93,7 +93,7 @@ async def main() -> None:
     req = ForbiddenWordReq(forbidden=_FORBIDDEN)
 
     result = await stream_with_chunking(
-        action, backend, ctx, quick_check_requirements=[req], chunking="word"
+        action, backend, ctx, requirements=[req], chunking="word"
     )
 
     print("Streaming events as they arrive (one per word):")

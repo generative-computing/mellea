@@ -146,7 +146,7 @@ async def main() -> None:
     req = NumberedLineReq()
 
     result = await stream_with_chunking(
-        action, backend, ctx, quick_check_requirements=[req], chunking=chunker
+        action, backend, ctx, requirements=[req], chunking=chunker
     )
 
     print("Streaming events as they arrive (one ChunkEvent per line):")

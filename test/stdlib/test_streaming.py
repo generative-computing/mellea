@@ -798,6 +798,7 @@ async def test_cancelled_flag_reflects_cancellation_state() -> None:
     assert ok_result.as_thunk.is_computed() is True
 
 
+@pytest.mark.asyncio
 async def test_unknown_chunking_alias_raises_value_error() -> None:
     """An unrecognised chunking alias raises ValueError before any backend call."""
     backend = StreamingMockBackend("hello world")
@@ -1548,7 +1549,7 @@ async def test_record_requirement_failure_called_on_fail() -> None:
     assert mock_fail.call_count >= 1
     first_call = mock_fail.call_args_list[0]
     assert first_call.args[0] == "FailAfterWordsReq"
-    assert first_call.args[1] == "too many words"
+    assert first_call.args[1] == ""  # reason not included in metric (cardinality)
 
 
 @pytest.mark.asyncio
@@ -1613,6 +1614,30 @@ async def test_concurrent_astream_and_events() -> None:
 
     chunk_evts = [e for e in evts if isinstance(e, ChunkEvent)]
     assert [e.chunk_index for e in chunk_evts] == list(range(len(chunks)))
+
+
+# ---------------------------------------------------------------------------
+# events() single-consumer guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_events_single_consumer_guard_raises_on_second_call() -> None:
+    """events() raises RuntimeError if called a second time on the same result."""
+    response = "One sentence. "
+    backend = StreamingMockBackend(response, token_size=4)
+
+    result = await stream_with_chunking(_action(), backend, _ctx(), chunking="sentence")
+    await result.acomplete()
+
+    # First drain — OK.
+    async for _ in result.events():
+        pass
+
+    # Second call must raise immediately.
+    with pytest.raises(RuntimeError, match="single-consumer"):
+        async for _ in result.events():
+            pass
 
 
 # ---------------------------------------------------------------------------

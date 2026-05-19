@@ -238,7 +238,7 @@ async def main() -> None:
     req = MaxSentencesReq(limit=3)
 
     result = await stream_with_chunking(
-        action, m.backend, m.ctx, quick_check_requirements=[req], chunking="sentence"
+        action, m.backend, m.ctx, requirements=[req], chunking="sentence"
     )
 
     async for event in result.events():
@@ -268,7 +268,7 @@ If you only need the raw validated text without event metadata, use
 
 ```python
 result = await stream_with_chunking(
-    action, m.backend, m.ctx, quick_check_requirements=[req], chunking="sentence"
+    action, m.backend, m.ctx, requirements=[req], chunking="sentence"
 )
 async for chunk in result.astream():
     print(chunk)

@@ -100,7 +100,7 @@ async def main() -> None:
     req = ParagraphLengthReq(max_words=_MAX_PARAGRAPH_WORDS)
 
     result = await stream_with_chunking(
-        action, backend, ctx, quick_check_requirements=[req], chunking="paragraph"
+        action, backend, ctx, requirements=[req], chunking="paragraph"
     )
 
     print("Streaming events as they arrive (one ChunkEvent per paragraph):")

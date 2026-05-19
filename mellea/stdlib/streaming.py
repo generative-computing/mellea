@@ -105,10 +105,12 @@ class QuickCheckEvent(StreamEvent):
 
 @dataclass
 class StreamingDoneEvent(StreamEvent):
-    """Emitted when the raw token stream ends, before final validation.
+    """Emitted after all chunks have been validated and delivered to the consumer.
 
-    Only emitted on natural stream completion.  Not emitted on early exit
-    (generation was cancelled before the stream finished) or on exception.
+    Fired after the regular token stream and any trailing fragment released by
+    :meth:`~mellea.stdlib.chunking.ChunkingStrategy.flush` have both been
+    processed.  Only emitted on natural completion — not on early exit (a
+    requirement returned ``"fail"``) or on exception.
 
     Args:
         attempt: Sampling attempt number (always ``1`` in v1).
@@ -317,8 +319,9 @@ class StreamChunkingResult:
 
         1. :class:`QuickCheckEvent` / :class:`ChunkEvent` pairs, one per chunk
            (validation fires first; the chunk is released to the consumer only
-           after passing).
-        2. :class:`StreamingDoneEvent` — raw token stream has ended.
+           after passing).  Includes any trailing fragment released by the
+           chunking strategy's ``flush()`` method.
+        2. :class:`StreamingDoneEvent` — all chunks (including flush) delivered.
         3. :class:`FullValidationEvent` — final ``validate()`` calls returned.
         4. :class:`CompletedEvent` — orchestrator is exiting.
 
@@ -364,14 +367,14 @@ class StreamChunkingResult:
         exhaustion, this call is effectively a no-op.
 
         Raises:
-            BaseException: Propagates any :class:`BaseException` that escaped
-                the orchestration task entirely (e.g. ``KeyboardInterrupt``).
-                Ordinary :class:`Exception` types are caught by the orchestrator,
-                surfaced as :class:`ErrorEvent` objects, and re-raised to
-                :meth:`astream` consumers — they do **not** propagate here.
+            Exception: Propagates the orchestrator exception if :meth:`astream`
+                has not yet consumed it (raise-once — only one of ``astream``
+                or ``acomplete`` raises, whichever drains the failure marker
+                first).
+            asyncio.CancelledError: If the orchestration task was externally
+                cancelled (e.g. via :func:`asyncio.wait_for` timeout).
         """
         await self._done.wait()
-        # Raise-once: if astream() already surfaced the exception, skip.
         # Raise-once: if astream() already surfaced the exception, skip.
         exc = self._orchestration_exception
         if exc is not None and not self._exception_surfaced:
@@ -496,7 +499,7 @@ async def _orchestrate_streaming(
                 for (_, req), pvr in zip(active, pvrs):
                     record_requirement_check(type(req).__name__)
                     if pvr.success == "fail":
-                        record_requirement_failure(type(req).__name__, pvr.reason or "")
+                        record_requirement_failure(type(req).__name__, "")
 
                 if failed_indices:
                     return True
@@ -545,18 +548,12 @@ async def _orchestrate_streaming(
                 if early_exit:
                     break
 
-            # Stream ended naturally: emit StreamingDoneEvent first (the raw
-            # token stream is finished regardless of what flush validation does),
-            # then flush any withheld trailing fragment.
-            # Skipped entirely on early exit — the generation was cancelled.
+            # Stream ended naturally: flush any withheld trailing fragment, then
+            # emit StreamingDoneEvent once all chunks (regular + flush) have been
+            # validated and delivered.  If a flush chunk fails, early_exit is
+            # set and StreamingDoneEvent is suppressed (same contract as the
+            # regular early-exit path).  Skipped entirely on early exit.
             if not early_exit:
-                streaming_done = StreamingDoneEvent(attempt=1, full_text=accumulated)
-                await result._event_queue.put(streaming_done)
-                if span is not None:
-                    span.add_event(
-                        "streaming_done", {"full_text_length": len(accumulated)}
-                    )
-
                 for c in chunking.flush(accumulated):
                     failed = await _process_chunk(c, chunk_index)
                     if failed:
@@ -572,6 +569,16 @@ async def _orchestrate_streaming(
                     if pos >= 0:
                         emitted_end = pos + len(c)
                     chunk_index += 1
+
+                if not early_exit:
+                    streaming_done = StreamingDoneEvent(
+                        attempt=1, full_text=accumulated
+                    )
+                    await result._event_queue.put(streaming_done)
+                    if span is not None:
+                        span.add_event(
+                            "streaming_done", {"full_text_length": len(accumulated)}
+                        )
 
             # On early exit, full_text is the portion of accumulated that was
             # actually validated and emitted to the consumer. On natural
@@ -604,6 +611,10 @@ async def _orchestrate_streaming(
                         )
 
         except Exception as exc:
+            # Stash the exception before any await so acomplete() can always
+            # surface it even if a subsequent await is interrupted by an
+            # external CancelledError.
+            result._orchestration_exception = exc
             # Mark as failed immediately — before any event is enqueued — so
             # that CompletedEvent.success and result.completed are consistent
             # if the consumer observes them during ErrorEvent processing.
@@ -647,7 +658,6 @@ async def _orchestrate_streaming(
                 provider=result._mot.generation.provider or "unknown",
                 exception_class=type(exc).__name__,
             )
-            result._orchestration_exception = exc
             await result._chunk_queue.put(exc)
         finally:
             # CancelledError (BaseException, not Exception) bypasses the except
