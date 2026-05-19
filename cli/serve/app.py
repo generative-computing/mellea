@@ -7,12 +7,12 @@ import os
 import sys
 import time
 import uuid
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 try:
     import typer
     import uvicorn
-    from fastapi import FastAPI, Request
+    from fastapi import FastAPI, HTTPException, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse, StreamingResponse
     from pydantic import BaseModel
@@ -45,11 +45,48 @@ from .utils import extract_finish_reason
 
 logger = MelleaLogger.get_logger()
 
+# Track whether the server has been initialized with a module
+_server_ready = False
+
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
     description="M programs that run as a simple OpenAI API-compatible server",
     version="0.1.0",
 )
+
+
+@app.get("/health", status_code=200)
+async def health_check():
+    """Basic liveness check endpoint.
+
+    Returns a 200 OK status to signal that the Python process is alive and responding.
+
+    Returns:
+        dict: A dictionary with status "healthy".
+    """
+    return {"status": "healthy"}
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Readiness check endpoint.
+
+    Returns 200 if the server has loaded a module and registered the chat
+    completions route. Returns 503 if the server is still starting up.
+
+    This endpoint is useful for Kubernetes readiness probes to ensure the
+    service doesn't receive traffic before it's ready to handle requests.
+
+    Returns:
+        dict: A dictionary with status "ready" when ready (HTTP 200).
+
+    Raises:
+        HTTPException: 503 status with error detail if server is not ready.
+    """
+    if _server_ready:
+        return {"status": "ready"}
+    else:
+        raise HTTPException(status_code=503, detail="Server not ready")
 
 
 @app.exception_handler(RequestValidationError)
@@ -286,6 +323,8 @@ def run_server(
     port: int = 8080,
 ):
     """Serve a FastAPI endpoint for a given script."""
+    global _server_ready
+
     module = load_module_from_path(script_path)
     route_path = "/v1/chat/completions"
 
@@ -295,5 +334,9 @@ def run_server(
         methods=["POST"],
         response_model=ChatCompletion | OpenAIErrorResponse,
     )
+
+    # Mark server as ready after route is successfully registered
+    _server_ready = True
+
     typer.echo(f"Serving {route_path} at http://{host}:{port}")
     uvicorn.run(app, host=host, port=port)

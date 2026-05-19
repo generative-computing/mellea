@@ -10,7 +10,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
 
-from cli.serve.app import make_chat_endpoint, validation_exception_handler
+import cli.serve.app as app_module
+from cli.serve.app import (
+    _server_ready,
+    app,
+    make_chat_endpoint,
+    validation_exception_handler,
+)
 from cli.serve.models import (
     ChatCompletion,
     ChatCompletionRequest,
@@ -43,6 +49,52 @@ def sample_request():
         temperature=0.7,
         max_tokens=100,
     )
+
+
+class TestHealthCheckEndpoint:
+    """Tests for the health check endpoint."""
+
+    def test_health_check(self):
+        """Test that /health endpoint returns 200 with correct JSON response."""
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "healthy"}
+
+
+class TestReadinessCheckEndpoint:
+    """Tests for the readiness check endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def reset_server_ready(self):
+        """Reset _server_ready state before and after each test."""
+        # Save original state
+        original_state = app_module._server_ready
+        # Reset to False for clean test start
+        app_module._server_ready = False
+        yield
+        # Restore original state after test
+        app_module._server_ready = original_state
+
+    def test_ready_returns_503_before_module_loaded(self):
+        """Test that /ready returns 503 when server hasn't loaded a module yet."""
+        client = TestClient(app)
+        response = client.get("/ready")
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Server not ready"
+
+    def test_ready_returns_200_after_module_loaded(self):
+        """Test that /ready returns 200 after run_server() marks it ready."""
+        # Simulate what run_server() does
+        app_module._server_ready = True
+
+        client = TestClient(app)
+        response = client.get("/ready")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ready"}
 
 
 class TestChatEndpoint:
@@ -722,8 +774,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_schema_missing_schema_field(self, mock_module):
         """Test that json_schema without schema field raises ValidationError."""
-        from pydantic import ValidationError
-
         # Should raise ValidationError when creating ResponseFormat
         with pytest.raises(ValidationError) as exc_info:
             ResponseFormat(
