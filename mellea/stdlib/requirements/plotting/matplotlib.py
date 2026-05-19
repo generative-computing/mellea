@@ -63,7 +63,7 @@ def _get_pyplot_aliases(code: str) -> list[str]:
     Returns:
         List of pyplot aliases (e.g., ["plt", "mpl"])
     """
-    aliases = []
+    aliases: list[str] = []
     try:
         tree = ast.parse(code)
     except (SyntaxError, ValueError):

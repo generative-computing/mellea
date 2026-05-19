@@ -135,19 +135,6 @@ def extract_python_code(ctx: Context) -> ValidationResult:
     return _extract_markdown_python_code(last_output.value)
 
 
-def _has_python_code_listing(ctx: Context) -> ValidationResult:
-    """Extract Python code from markdown code blocks in context only.
-
-    Similar to extract_python_code but does not check tool calls. Used internally
-    by execution validators that always work with markdown code blocks.
-    """
-    last_output = ctx.last_output()
-    if last_output is None or last_output.value is None:
-        return ValidationResult(result=False, reason="No output found in context")
-
-    return _extract_markdown_python_code(last_output.value)
-
-
 # endregion
 
 # region execution validation
@@ -165,7 +152,7 @@ def _python_executes_without_error(
     First extracts the highest-scoring Python code block from the context,
     then validates/executes it based on the specified execution mode.
     """
-    extraction_result = _has_python_code_listing(ctx)
+    extraction_result = extract_python_code(ctx)
     if not extraction_result.as_bool():
         return ValidationResult(
             result=False,

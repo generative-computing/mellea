@@ -20,7 +20,6 @@ from mellea.core import Context, ModelOutputThunk
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.python_reqs import (
     PythonExecutionReq,
-    _has_python_code_listing,
     _python_executes_without_error,
 )
 
@@ -94,28 +93,6 @@ NO_PYTHON_CTX = from_model(NO_PYTHON_CODE)
 
 
 # region: Code extraction tests
-
-
-def test_has_python_code_listing_valid():
-    """Test extraction of valid Python code."""
-    result = _has_python_code_listing(VALID_PYTHON_CTX)
-    assert result.as_bool() is True
-    assert "def hello_world" in result.reason  # type: ignore
-
-
-def test_has_python_code_listing_no_code():
-    """Test handling when no Python code is present."""
-    result = _has_python_code_listing(NO_PYTHON_CTX)
-    assert result.as_bool() is False
-    assert "No Python code blocks found" in result.reason  # type: ignore
-
-
-def test_has_python_code_listing_simple():
-    """Test extraction of simple Python code."""
-    result = _has_python_code_listing(PYTHON_SIMPLE_CTX)
-    assert result.as_bool() is True
-    assert "print" in result.reason  # type: ignore
-
 
 # endregion
 
