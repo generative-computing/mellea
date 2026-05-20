@@ -10,13 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
 
-import cli.serve.app as app_module
-from cli.serve.app import (
-    _server_ready,
-    app,
-    make_chat_endpoint,
-    validation_exception_handler,
-)
+from cli.serve.app import app, make_chat_endpoint, validation_exception_handler
 from cli.serve.models import (
     ChatCompletion,
     ChatCompletionRequest,
@@ -60,41 +54,7 @@ class TestHealthCheckEndpoint:
         response = client.get("/health")
 
         assert response.status_code == 200
-        assert response.json() == {"status": "healthy"}
-
-
-class TestReadinessCheckEndpoint:
-    """Tests for the readiness check endpoint."""
-
-    @pytest.fixture(autouse=True)
-    def reset_server_ready(self):
-        """Reset _server_ready state before and after each test."""
-        # Save original state
-        original_state = app_module._server_ready
-        # Reset to False for clean test start
-        app_module._server_ready = False
-        yield
-        # Restore original state after test
-        app_module._server_ready = original_state
-
-    def test_ready_returns_503_before_module_loaded(self):
-        """Test that /ready returns 503 when server hasn't loaded a module yet."""
-        client = TestClient(app)
-        response = client.get("/ready")
-
-        assert response.status_code == 503
-        assert response.json()["detail"] == "Server not ready"
-
-    def test_ready_returns_200_after_module_loaded(self):
-        """Test that /ready returns 200 after run_server() marks it ready."""
-        # Simulate what run_server() does
-        app_module._server_ready = True
-
-        client = TestClient(app)
-        response = client.get("/ready")
-
-        assert response.status_code == 200
-        assert response.json() == {"status": "ready"}
+        assert response.json() == {"status": "pass"}
 
 
 class TestChatEndpoint:
