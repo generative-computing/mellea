@@ -2,13 +2,19 @@
 
 Provides ``BashEnvironment`` (abstract base for bash execution) and three concrete
 implementations: ``StaticBashEnvironment`` (parse and safety-check only, no execution),
-``_LocalBashEnvironment`` (private; subprocess execution in the current shell), and
+``_LocalBashEnvironment`` (subprocess execution in the current shell), and
 ``LLMSandboxBashEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
 environments enforce a conservative safety denylist (sudo, rm -rf, git push --force,
 system paths, interactive shells). Write operations may also be constrained by
-``working_dir`` and ``allowed_paths``. The top-level ``bash_executor`` (recommended
-for production) and ``unsafe_local_bash_executor`` (development-only) functions are
-ready to be wrapped as ``MelleaTool`` instances for ReACT or other agentic loops.
+``working_dir`` and ``allowed_paths``.
+
+The top-level ``bash_executor`` (recommended entry point) executes commands locally
+with denylist safety checks. For untrusted LLM-generated code or high-risk operations,
+pass ``sandbox=True`` to run in an isolated Docker container via ``llm-sandbox``.
+The deprecated ``unsafe_local_bash_executor`` exists for backward compatibility only.
+
+Both functions are ready to be wrapped as ``MelleaTool`` instances for ReACT or
+other agentic loops.
 
 Security note: The denylist covers inline code execution (e.g., bash -c, python -e) and
 dangerous commands in argv. However, it does not prevent execution of pre-existing
@@ -650,12 +656,19 @@ class StaticBashEnvironment(BashEnvironment):
 
 
 class _LocalBashEnvironment(BashEnvironment):
-    """Private environment that executes bash commands directly with subprocess.
+    """Environment that executes bash commands directly with subprocess.
 
-    ⚠️ WARNING: This environment has no isolation. Use only for trusted,
-    developer-controlled code in local development/testing. For any code from
-    untrusted sources (including LLM-generated code), use LLMSandboxBashEnvironment
-    with docker isolation instead.
+    This is the primary execution environment for bash_executor(). Commands execute
+    in the current process with access to the host environment (working directory,
+    PATH, git repos, installed tools, environment variables).
+
+    Safety model: Denylist-based (not isolation-based). The conservative denylist
+    covers dangerous commands, shell operators, code execution paths, and writes to
+    system directories. This is sufficient for typical agentic workflows where
+    the command source is trusted (e.g., LLM-generated code in a known pipeline).
+
+    For higher isolation requirements (untrusted code, CTF challenges, or security
+    research), use LLMSandboxBashEnvironment via bash_executor(..., sandbox=True).
     """
 
     def execute(self, command: str) -> ExecutionResult:
@@ -718,11 +731,23 @@ class _LocalBashEnvironment(BashEnvironment):
 class LLMSandboxBashEnvironment(BashEnvironment):
     """Environment using llm-sandbox for secure Docker-based bash execution.
 
+    Use this for high-isolation requirements: untrusted LLM-generated code,
+    CTF challenges, security research, or experiments where the command
+    must not affect host state. Access via bash_executor(..., sandbox=True).
+
+    The denylist checks still apply (same as local execution), but the
+    Docker container provides an additional isolation boundary.
+
     Note:
         The ``working_dir`` parameter is interpreted as a container-internal path.
         Path validation during command checking is performed against the host
         filesystem and is best-effort; the actual command execution happens inside
         an isolated Docker container with its own filesystem namespace.
+
+    Important:
+        Sandboxed execution requires the ``llm-sandbox`` package
+        (installed via ``pip install 'mellea[sandbox]'``). If not installed,
+        execution is skipped with a helpful error message.
     """
 
     def execute(self, command: str) -> ExecutionResult:
@@ -820,60 +845,74 @@ class LLMSandboxBashEnvironment(BashEnvironment):
 
 
 def bash_executor(
-    command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None
+    command: str,
+    working_dir: str | None = None,
+    allowed_paths: list[str] | None = None,
+    sandbox: bool = False,
 ) -> ExecutionResult:
-    """Execute a bash command in a Docker-isolated sandbox.
+    """Execute a bash command with denylist safety checks.
 
-    This is the recommended entry point for production use. Commands are validated
-    against a conservative safety denylist before execution. Execution happens
-    in an isolated Docker container via llm-sandbox.
+    This is the recommended entry point. By default, commands execute locally
+    with access to the host environment (working directory, PATH, git repos,
+    installed tools). For untrusted LLM-generated code or high-risk operations,
+    pass ``sandbox=True`` to run in an isolated Docker container.
 
-    Safety defaults: Refuses sudo, interactive shells, destructive operations
-    (rm -rf, git push --force), and writes to system paths (/etc, /sys, /proc, etc.).
+    Safety model: Conservative denylist applied to all commands, regardless of
+    execution environment. The denylist refuses sudo, interactive shells,
+    destructive operations (rm -rf, git push --force), shell operators (|, >, &&),
+    code execution paths (python -c, bash -c), and writes to system paths
+    (/etc, /sys, /proc, etc.).
 
     Args:
         command: The bash command to execute.
-        working_dir: Optional container working directory (container-internal path).
-            Path validation during safety checks is best-effort (performed against
-            the host filesystem) but does not restrict container execution, which uses
-            its own isolated filesystem. When specified, sandboxed command execution
-            uses this directory as its cwd.
-        allowed_paths: Optional explicit write allowlist. When provided, write-target
-            paths must fall under one of these roots (in addition to passing the
-            default dangerous-path checks). Same best-effort caveat applies for
-            sandboxed execution.
+        working_dir: Optional working directory for the command. For local
+            execution, this is a host path. For sandboxed execution, this is
+            a container-internal path; validation is best-effort.
+        allowed_paths: Optional explicit write allowlist. When provided,
+            write-target paths must fall under one of these roots (in addition
+            to passing the default dangerous-path checks).
+        sandbox: If True, execute in an isolated Docker container via llm-sandbox
+            (requires 'mellea[sandbox]' extra). Default: False (local execution).
+            Use for untrusted code, CTF challenges, or security research.
 
     Returns:
-        An ``ExecutionResult`` with stdout, stderr, and a success flag. If the command
-        was rejected for safety reasons, ``skipped=True`` and ``skip_message`` contains
-        the reason.
+        An ``ExecutionResult`` with stdout, stderr, and success flag. If the
+        command was rejected for safety reasons, ``skipped=True`` and
+        ``skip_message`` contains the reason.
+
+    Examples:
+        Local execution (default):
+        >>> result = bash_executor("echo hello")
+        >>> assert result.success is True
+        >>> assert result.stdout == "hello"
+
+        Sandboxed execution (opt-in):
+        >>> result = bash_executor("ls /tmp", sandbox=True)
+        >>> assert result.success is True
+
+        With working directory:
+        >>> result = bash_executor("pwd", working_dir="/tmp")
+        >>> assert "/tmp" in result.stdout
+
+    See Also:
+        ``unsafe_local_bash_executor()``: Deprecated alias for local execution.
     """
-    env = LLMSandboxBashEnvironment(
-        allowed_paths=allowed_paths, working_dir=working_dir
-    )
+    env_class = LLMSandboxBashEnvironment if sandbox else _LocalBashEnvironment
+    env = env_class(allowed_paths=allowed_paths, working_dir=working_dir)
     return env.execute(command)
 
 
 def unsafe_local_bash_executor(
     command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None
 ) -> ExecutionResult:
-    """Execute a bash command in the current shell with no isolation.
+    """Execute a bash command in the current shell (deprecated API).
 
-    ⚠️ SECURITY WARNING: This executor has no isolation. Use **ONLY** for:
-    - Local development and testing
-    - Trusted, developer-controlled code
-    - Non-sensitive operations
+    ⚠️ DEPRECATED: Use ``bash_executor()`` instead (which is local by default now).
 
-    **DO NOT** use this for:
-    - LLM-generated code (use ``bash_executor()`` instead)
-    - Untrusted or user-supplied commands
-    - Production environments
+    This function is identical to ``bash_executor()`` with ``sandbox=False`` and
+    exists for backward compatibility only. It will be removed in a future release.
 
-    Commands are validated against a conservative safety denylist, but validation
-    is not a substitute for isolation. Container isolation is the real boundary.
-
-    Safety defaults: Refuses sudo, interactive shells, destructive operations
-    (rm -rf, git push --force), and writes to system paths (/etc, /sys, /proc, etc.).
+    For sandboxed execution, use ``bash_executor(..., sandbox=True)`` instead.
 
     Args:
         command: The bash command to execute.
@@ -889,10 +928,13 @@ def unsafe_local_bash_executor(
         the reason.
 
     See Also:
-        ``bash_executor()``: Recommended for production use with LLM-generated code.
+        ``bash_executor()``: Recommended entry point (local execution by default,
+        with optional ``sandbox=True`` parameter for Docker isolation).
     """
     logger.warning(
-        "Using unsafe_local_bash_executor: no isolation. Use bash_executor() for LLM-generated code."
+        "unsafe_local_bash_executor is deprecated and will be removed in a future release. "
+        "Use bash_executor() instead (which is local by default now). "
+        "For sandboxing, use bash_executor(..., sandbox=True)."
     )
     env = _LocalBashEnvironment(allowed_paths=allowed_paths, working_dir=working_dir)
     return env.execute(command)

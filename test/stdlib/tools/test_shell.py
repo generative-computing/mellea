@@ -938,20 +938,14 @@ class TestLLMSandboxBashEnvironment:
 class TestBashExecutorFunctions:
     """Tests for public bash_executor and unsafe_local_bash_executor functions."""
 
-    def test_bash_executor_creates_sandbox_environment(self) -> None:
-        """bash_executor should use LLMSandboxBashEnvironment by default."""
-        # This will skip if llm-sandbox is not installed, which is fine
+    def test_bash_executor_uses_local_by_default(self) -> None:
+        """bash_executor should use _LocalBashEnvironment by default (no sandbox)."""
         result = bash_executor("echo test")
 
-        # Either succeeds with output, or skips due to missing llm-sandbox or language support
-        if result.skip_message is not None and (
-            "not installed" in result.skip_message
-            or "not a valid" in result.skip_message
-        ):
-            assert result.skipped is True
-        else:
-            # If sandbox is available, command should execute
-            assert result.success is True
+        # bash_executor with no sandbox parameter should always succeed (uses local execution)
+        assert result.success is True
+        assert result.stdout is not None
+        assert "test" in result.stdout
 
     def test_unsafe_local_bash_executor_creates_local_environment(self) -> None:
         """unsafe_local_bash_executor should use _LocalBashEnvironment."""
@@ -1025,6 +1019,62 @@ class TestBashExecutorFunctions:
         assert result.success is False
         assert result.skip_message is not None
         assert "outside explicitly allowed paths" in result.skip_message.lower()
+
+    def test_bash_executor_sandbox_false_uses_local(self) -> None:
+        """bash_executor with sandbox=False should use local execution."""
+        result = bash_executor("echo hello", sandbox=False)
+
+        assert result.success is True
+        assert result.stdout is not None
+        assert "hello" in result.stdout
+
+    def test_bash_executor_sandbox_true_isolation(self) -> None:
+        """bash_executor with sandbox=True should attempt Docker isolation."""
+        result = bash_executor("echo hello", sandbox=True)
+
+        # Either succeeds with sandbox, or skips if llm-sandbox not available
+        if result.skip_message is not None and "not installed" in result.skip_message:
+            assert result.skipped is True
+        else:
+            assert result.success is True
+            assert result.stdout is not None
+            assert "hello" in result.stdout
+
+    def test_bash_executor_sandbox_false_default(self) -> None:
+        """bash_executor without sandbox parameter should use local execution."""
+        result = bash_executor("echo default")
+
+        # Default (no sandbox parameter) should use local execution, so should always succeed
+        assert result.success is True
+        assert result.stdout is not None
+        assert "default" in result.stdout
+
+    def test_unsafe_local_bash_executor_still_works_but_deprecated(self) -> None:
+        """unsafe_local_bash_executor still works (backward compatibility)."""
+        # The function is deprecated but should continue to work
+        result = unsafe_local_bash_executor("echo test")
+        assert result.success is True
+        assert result.stdout is not None
+        # Note: The deprecation warning is logged via logger.warning() and will
+        # appear in logs, but cannot be captured by pytest.warns().
+
+    def test_dangerous_command_rejected_with_sandbox_true(self) -> None:
+        """Dangerous commands should be rejected regardless of sandbox setting."""
+        result = bash_executor("sudo echo test", sandbox=True)
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_dangerous_command_rejected_with_sandbox_false(self) -> None:
+        """Dangerous commands should be rejected regardless of sandbox setting."""
+        result = bash_executor("sudo echo test", sandbox=False)
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
 
 
 class TestCommandParsing:
