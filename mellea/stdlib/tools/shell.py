@@ -11,9 +11,8 @@ system paths, interactive shells). Write operations may also be constrained by
 The top-level ``bash_executor`` (recommended entry point) executes commands locally
 with denylist safety checks. For untrusted LLM-generated code or high-risk operations,
 pass ``sandbox=True`` to run in an isolated Docker container via ``llm-sandbox``.
-The deprecated ``unsafe_local_bash_executor`` exists for backward compatibility only.
 
-Both functions are ready to be wrapped as ``MelleaTool`` instances for ReACT or
+The function is ready to be wrapped as a ``MelleaTool`` instance for ReACT or
 other agentic loops.
 
 Security note: The denylist covers inline code execution (e.g., bash -c, python -e) and
@@ -681,7 +680,7 @@ class StaticBashEnvironment(BashEnvironment):
             stdout=None,
             stderr=None,
             skipped=True,
-            skip_message="Command passes safety checks; static analysis environment does not execute commands. To execute, use bash_executor (recommended) or unsafe_local_bash_executor (development-only).",
+            skip_message="Command passes safety checks; static analysis environment does not execute commands. To execute, use bash_executor().",
             analysis_result=argv,
         )
 
@@ -924,48 +923,7 @@ def bash_executor(
         With working directory:
         >>> result = bash_executor("pwd", working_dir="/tmp")
         >>> assert "/tmp" in result.stdout
-
-    See Also:
-        ``unsafe_local_bash_executor()``: Deprecated alias for local execution.
     """
     env_class = LLMSandboxBashEnvironment if sandbox else _LocalBashEnvironment
     env = env_class(allowed_paths=allowed_paths, working_dir=working_dir)
-    return env.execute(command)
-
-
-def unsafe_local_bash_executor(
-    command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None
-) -> ExecutionResult:
-    """Execute a bash command in the current shell (deprecated API).
-
-    ⚠️ DEPRECATED: Use ``bash_executor()`` instead (which is local by default now).
-
-    This function is identical to ``bash_executor()`` with ``sandbox=False`` and
-    exists for backward compatibility only. It will be removed in a future release.
-
-    For sandboxed execution, use ``bash_executor(..., sandbox=True)`` instead.
-
-    Args:
-        command: The bash command to execute.
-        working_dir: Optional directory to restrict file operations to. If specified,
-            the command is executed with this directory as the working directory.
-        allowed_paths: Optional explicit write allowlist. When provided, write-target
-            paths must fall under one of these roots (in addition to passing the
-            default dangerous-path checks).
-
-    Returns:
-        An ``ExecutionResult`` with stdout, stderr, and a success flag. If the command
-        was rejected for safety reasons, ``skipped=True`` and ``skip_message`` contains
-        the reason.
-
-    See Also:
-        ``bash_executor()``: Recommended entry point (local execution by default,
-        with optional ``sandbox=True`` parameter for Docker isolation).
-    """
-    logger.warning(
-        "unsafe_local_bash_executor is deprecated and will be removed in a future release. "
-        "Use bash_executor() instead (which is local by default now). "
-        "For sandboxing, use bash_executor(..., sandbox=True)."
-    )
-    env = _LocalBashEnvironment(allowed_paths=allowed_paths, working_dir=working_dir)
     return env.execute(command)

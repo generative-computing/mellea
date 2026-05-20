@@ -9,7 +9,6 @@ from mellea.stdlib.tools.shell import (
     StaticBashEnvironment,
     _LocalBashEnvironment,
     bash_executor,
-    unsafe_local_bash_executor,
 )
 
 
@@ -936,22 +935,13 @@ class TestLLMSandboxBashEnvironment:
 
 
 class TestBashExecutorFunctions:
-    """Tests for public bash_executor and unsafe_local_bash_executor functions."""
+    """Tests for public bash_executor function."""
 
     def test_bash_executor_uses_local_by_default(self) -> None:
         """bash_executor should use _LocalBashEnvironment by default (no sandbox)."""
         result = bash_executor("echo test")
 
         # bash_executor with no sandbox parameter should always succeed (uses local execution)
-        assert result.success is True
-        assert result.stdout is not None
-        assert "test" in result.stdout
-
-    def test_unsafe_local_bash_executor_creates_local_environment(self) -> None:
-        """unsafe_local_bash_executor should use _LocalBashEnvironment."""
-        result = unsafe_local_bash_executor("echo test")
-
-        assert result.skipped is False
         assert result.success is True
         assert result.stdout is not None
         assert "test" in result.stdout
@@ -973,17 +963,6 @@ class TestBashExecutorFunctions:
                 assert result.stdout is not None
                 assert tmpdir in result.stdout
 
-    def test_unsafe_local_bash_executor_with_working_dir(self) -> None:
-        """unsafe_local_bash_executor should accept working_dir parameter."""
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = unsafe_local_bash_executor("pwd", working_dir=tmpdir)
-
-            assert result.success is True
-            assert result.stdout is not None
-            assert tmpdir in result.stdout
-
     def test_bash_executor_with_allowed_paths(self) -> None:
         """bash_executor should accept allowed_paths parameter."""
         # Just verify the parameter is accepted (actual execution may skip on sandbox)
@@ -999,26 +978,6 @@ class TestBashExecutorFunctions:
             assert result.skipped is True
         else:
             assert result.success is True
-
-    def test_unsafe_local_bash_executor_with_allowed_paths(self) -> None:
-        """unsafe_local_bash_executor should accept allowed_paths parameter."""
-        result = unsafe_local_bash_executor(
-            "echo test", allowed_paths=["/tmp", "/home/user/project"]
-        )
-
-        assert result.success is True
-        assert result.stdout is not None
-
-    def test_unsafe_local_bash_executor_allowed_paths_restriction(self) -> None:
-        """Writes outside allowed_paths should be rejected."""
-        result = unsafe_local_bash_executor(
-            "touch /home/user/other/file.txt", allowed_paths=["/home/user/project"]
-        )
-
-        assert result.skipped is True
-        assert result.success is False
-        assert result.skip_message is not None
-        assert "outside explicitly allowed paths" in result.skip_message.lower()
 
     def test_bash_executor_sandbox_false_uses_local(self) -> None:
         """bash_executor with sandbox=False should use local execution."""
@@ -1048,15 +1007,6 @@ class TestBashExecutorFunctions:
         assert result.success is True
         assert result.stdout is not None
         assert "default" in result.stdout
-
-    def test_unsafe_local_bash_executor_still_works_but_deprecated(self) -> None:
-        """unsafe_local_bash_executor still works (backward compatibility)."""
-        # The function is deprecated but should continue to work
-        result = unsafe_local_bash_executor("echo test")
-        assert result.success is True
-        assert result.stdout is not None
-        # Note: The deprecation warning is logged via logger.warning() and will
-        # appear in logs, but cannot be captured by pytest.warns().
 
     def test_dangerous_command_rejected_with_sandbox_true(self) -> None:
         """Dangerous commands should be rejected regardless of sandbox setting."""
@@ -1145,9 +1095,9 @@ def test_tool_wrapping() -> None:
     try:
         from mellea.backends.tools import MelleaTool
 
-        tool = MelleaTool.from_callable(unsafe_local_bash_executor)
+        tool = MelleaTool.from_callable(bash_executor)
 
-        assert tool.name == "unsafe_local_bash_executor"
+        assert tool.name == "bash_executor"
         # Check that the tool schema is generated correctly
         schema = tool.as_json_tool
         assert "parameters" in schema or "function" in schema  # Schema format may vary
