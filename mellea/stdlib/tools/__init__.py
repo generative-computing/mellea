@@ -24,7 +24,6 @@ from .shell import (
     LLMSandboxBashEnvironment,
     StaticBashEnvironment,
     bash_executor,
-    unsafe_local_bash_executor,
 )
 
 __all__ = [
