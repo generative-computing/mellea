@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 
 from mellea.stdlib.tools.shell import (
-    LLMSandboxBashEnvironment,
     StaticBashEnvironment,
     _LocalBashEnvironment,
     bash_executor,
@@ -845,95 +844,6 @@ class TestLocalBashEnvironment:
             assert tmpdir in result.stdout
 
 
-class TestLLMSandboxBashEnvironment:
-    """Tests for sandbox-specific error handling."""
-
-    def test_timeout_maps_to_skip_message(self) -> None:
-        """Sandbox timeout exceptions should produce a timeout skip message."""
-        env = LLMSandboxBashEnvironment(timeout=3)
-
-        from llm_sandbox.exceptions import SandboxTimeoutError
-
-        with patch("llm_sandbox.SandboxSession") as mock_session_factory:
-            session = mock_session_factory.return_value.__enter__.return_value
-            session.run.side_effect = SandboxTimeoutError(
-                "timed out", timeout_duration=3
-            )
-
-            result = env.execute("echo hello")
-
-        assert result.skipped is True
-        assert result.success is False
-        assert result.skip_message is not None
-        assert "timed out" in result.skip_message.lower()
-
-    def test_generic_exception_maps_to_sandbox_error(self) -> None:
-        """Unexpected sandbox exceptions should map to generic sandbox errors."""
-        env = LLMSandboxBashEnvironment(timeout=3)
-
-        with patch("llm_sandbox.SandboxSession") as mock_session_factory:
-            session = mock_session_factory.return_value.__enter__.return_value
-            session.run.side_effect = RuntimeError("boom")
-
-            result = env.execute("echo hello")
-
-        assert result.skipped is True
-        assert result.success is False
-        assert result.skip_message is not None
-        assert "sandbox execution error" in result.skip_message.lower()
-
-    def test_sandbox_working_dir_is_container_path(self) -> None:
-        """Sandbox working_dir should be interpreted as a container-internal path."""
-        env = LLMSandboxBashEnvironment(working_dir="/container/workdir")
-
-        # Verify that working_dir is stored (actual validation is best-effort)
-        assert env.working_dir == "/container/workdir"
-
-        # Validation happens (but is best-effort for sandbox)
-        result = env.execute("pwd")
-
-        # Command should pass validation (pwd is safe), though execution may skip
-        # if llm-sandbox is not installed
-        if result.skip_message is None or "not installed" not in result.skip_message:
-            # If sandbox runs, working_dir was used as container path
-            assert result.success is True or result.skipped is False
-
-    def test_sandbox_handles_path_objects_in_argv(self) -> None:
-        """Sandbox should handle Path objects in argv without repr() errors.
-
-        Regression test: if argv contains Path objects, repr() would generate
-        'PosixPath(...)' which is not defined in the sandbox namespace, causing
-        a NameError. The fix coerces argv to strings before repr().
-        """
-        from pathlib import Path
-
-        env = LLMSandboxBashEnvironment()
-
-        # Simulate a caller that passes Path objects (plausible in real usage)
-        # We patch the validation to allow this, then execute with mocked sandbox
-        with patch("llm_sandbox.SandboxSession") as mock_session_factory:
-            session = mock_session_factory.return_value.__enter__.return_value
-            from llm_sandbox.session import ExecutionResult as SandboxResult
-
-            session.run.return_value = SandboxResult(
-                exit_code=0, stdout="test output", stderr=""
-            )
-
-            # Directly call the execute method with Path objects in argv
-            # (StaticBashEnvironment would reject this, so we bypass it)
-            result = env.execute("echo /tmp")
-
-            # Verify the command executed (was not rejected)
-            # The mock ensures the generated Python wrapper runs without NameError
-            if (
-                result.skip_message is None
-                or "not installed" not in result.skip_message
-            ):
-                # If we get here, the python_wrapper was generated successfully
-                # (no NameError from PosixPath not being defined)
-                assert result.success or result.skipped
-
-
 class TestBashExecutorFunctions:
     """Tests for public bash_executor function."""
 
@@ -979,47 +889,17 @@ class TestBashExecutorFunctions:
         else:
             assert result.success is True
 
-    def test_bash_executor_sandbox_false_uses_local(self) -> None:
-        """bash_executor with sandbox=False should use local execution."""
-        result = bash_executor("echo hello", sandbox=False)
+    def test_bash_executor_local_execution(self) -> None:
+        """bash_executor should execute locally."""
+        result = bash_executor("echo hello")
 
         assert result.success is True
         assert result.stdout is not None
         assert "hello" in result.stdout
 
-    def test_bash_executor_sandbox_true_isolation(self) -> None:
-        """bash_executor with sandbox=True should attempt Docker isolation."""
-        result = bash_executor("echo hello", sandbox=True)
-
-        # Either succeeds with sandbox, or skips if llm-sandbox not available
-        if result.skip_message is not None and "not installed" in result.skip_message:
-            assert result.skipped is True
-        else:
-            assert result.success is True
-            assert result.stdout is not None
-            assert "hello" in result.stdout
-
-    def test_bash_executor_sandbox_false_default(self) -> None:
-        """bash_executor without sandbox parameter should use local execution."""
-        result = bash_executor("echo default")
-
-        # Default (no sandbox parameter) should use local execution, so should always succeed
-        assert result.success is True
-        assert result.stdout is not None
-        assert "default" in result.stdout
-
-    def test_dangerous_command_rejected_with_sandbox_true(self) -> None:
-        """Dangerous commands should be rejected regardless of sandbox setting."""
-        result = bash_executor("sudo echo test", sandbox=True)
-
-        assert result.skipped is True
-        assert result.success is False
-        assert result.skip_message is not None
-        assert "not allowed" in result.skip_message.lower()
-
-    def test_dangerous_command_rejected_with_sandbox_false(self) -> None:
-        """Dangerous commands should be rejected regardless of sandbox setting."""
-        result = bash_executor("sudo echo test", sandbox=False)
+    def test_dangerous_command_rejected(self) -> None:
+        """Dangerous commands should be rejected."""
+        result = bash_executor("sudo echo test")
 
         assert result.skipped is True
         assert result.success is False

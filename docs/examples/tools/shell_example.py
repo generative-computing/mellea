@@ -5,17 +5,17 @@ Demonstrates multiple ways to use Mellea's bash execution capabilities:
 1. Direct execution for local commands
 2. Wrapping as a MelleaTool for agent use
 3. LLM-based tool calling with forced tool use
-4. Opt-in sandboxed execution for untrusted code
+4. Working directory and path restrictions
 5. Integration with error handling
 
-⚠️  Security note: bash_executor runs commands locally by default with a
-conservative safety denylist (recommended for typical agentic workflows).
-For untrusted LLM-generated code or high-risk operations, pass sandbox=True
-to run in a Docker container via llm-sandbox.
+⚠️  Security note: bash_executor runs commands locally with a conservative
+safety denylist (recommended for typical agentic workflows). The denylist
+enforces: no sudo, no rm -rf, no destructive git operations, no writes to
+/etc, /sys, /proc, etc. Write operations can also be constrained with
+``working_dir`` and explicit ``allowed_paths``.
 
-Both enforce the same denylist: no sudo, no rm -rf, no destructive git
-operations, no writes to /etc, /sys, /proc, etc. Write operations can also
-be constrained with ``working_dir`` and explicit ``allowed_paths``.
+For higher isolation requirements (untrusted code, security research),
+provide isolation at the application layer (containers, VMs).
 
 Note: Commands must use argv-friendly syntax (no pipes, redirects, or shell builtins).
 Use individual commands and compose them in Python instead.
@@ -198,26 +198,6 @@ def example_4_safety_features() -> None:
         print()
 
 
-def example_4_sandboxed_execution() -> None:
-    """Example 4: Opt-in sandboxed execution for untrusted code."""
-    print("=== Example 4: Sandboxed Execution (Opt-In) ===")
-
-    # Same command, but run in isolated Docker container
-    result = bash_executor("echo 'Running in sandbox'", sandbox=True)
-    print("Command: echo 'Running in sandbox' (with sandbox=True)")
-    print(f"Success: {result.success}")
-    print(f"Output: {result.stdout}")
-    print()
-
-    # Sandboxing provides an additional isolation boundary, but the denylist
-    # still applies. Dangerous commands are rejected the same way.
-    result = bash_executor("sudo echo test", sandbox=True)
-    print("Command: sudo echo test (with sandbox=True)")
-    print(f"Rejected: {result.skipped}")
-    print(f"Reason: {result.skip_message}")
-    print()
-
-
 def example_5_error_handling() -> None:
     """Example 5: Handle execution errors gracefully."""
     print("=== Example 5: Error Handling ===")
@@ -253,5 +233,4 @@ if __name__ == "__main__":
 
     example_3_with_working_dir()
     example_4_safety_features()
-    example_4_sandboxed_execution()
     example_5_error_handling()
