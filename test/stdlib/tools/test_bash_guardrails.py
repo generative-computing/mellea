@@ -370,3 +370,87 @@ class TestPatternExtensibility:
         for cmd in safe_commands:
             is_dangerous, reason = check_all_patterns(cmd)
             assert is_dangerous is False, f"Safe command {cmd} failed with: {reason}"
+
+
+class TestBashAuditTrail:
+    """Tests for audit trail recording and querying."""
+
+    def test_violation_recorded_on_pattern_rejection(self) -> None:
+        """Verify violation recorded when pattern rejects."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        check_all_patterns(["sudo", "echo"])
+        violations = trail.get_violations()
+        assert len(violations) == 1
+        assert violations[0].pattern == "DangerousCommandPattern"
+
+    def test_violation_contains_correct_metadata(self) -> None:
+        """Verify violation has all required fields."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        check_all_patterns(["rm", "-rf", "/"])
+        violations = trail.get_violations()
+        v = violations[0]
+        assert v.command == "rm -rf /"
+        assert v.severity in ("HIGH", "MEDIUM")
+        assert v.reason
+        assert v.timestamp > 0
+
+    def test_get_violations_filters_by_severity(self) -> None:
+        """Verify filter by severity works."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        check_all_patterns(["sudo", "ls"])  # CRITICAL
+        check_all_patterns(["rm", "-r", "/tmp"])  # HIGH
+
+        critical = trail.get_violations(severity="CRITICAL")
+        assert len(critical) >= 1
+
+    def test_export_metrics_counts_violations(self) -> None:
+        """Verify metrics export includes violation counts."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        check_all_patterns(["sudo", "ls"])
+        check_all_patterns(["rm", "-r", "/tmp"])
+
+        metrics = trail.export_metrics()
+        assert metrics["total"] == 2
+        assert any(k.startswith("severity_") for k in metrics.keys())
+
+    def test_violations_cleared_between_tests(self) -> None:
+        """Verify clear() removes all violations."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        check_all_patterns(["sudo", "ls"])
+        assert len(trail.get_violations()) == 1
+
+        trail.clear()
+        assert len(trail.get_violations()) == 0
+
+    def test_query_violations_with_pattern_filter(self) -> None:
+        """Verify filter by pattern name works."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        check_all_patterns(["sudo", "ls"])  # DangerousCommandPattern
+        check_all_patterns(["echo", "|", "grep"])  # ShellOperatorPattern
+
+        dangerous = trail.get_violations(pattern="DangerousCommandPattern")
+        assert len(dangerous) >= 1
