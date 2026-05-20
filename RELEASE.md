@@ -1,167 +1,131 @@
 # RELEASE.md
 
-## Overview
+Mellea uses a release-branch workflow. Each minor release lives on a
+long-lived `release/vX.Y` branch that carries the final release and any
+later patches. `main` carries `.devN`-versioned work for the next minor.
+Releases target a roughly 4-week cadence; patch releases happen as needed.
 
-Mellea uses a release-branch workflow. Every release has a long-lived
-`release/vX.Y` branch that carries release candidates, the final release,
-and any subsequent patch releases. `main` carries `.dev`-versioned work for
-the next release.
+- [Making a minor release](#making-a-minor-release)
+- [Making a patch release](#making-a-patch-release)
+- [Troubleshooting](#troubleshooting)
+- [Appendix](#appendix)
 
-This gives each release a frozen codebase and keeps release publishing
-resilient to concurrent merges on `main`.
+## Making a minor release
 
-## Release Cadence
+1. [Cut the release branch](#cut-the-release-branch)
+2. [Stabilize on the release branch](#stabilize-on-the-release-branch)
+3. [Publish the final](#publish-the-final)
+4. [Sync the changelog back to main](#sync-the-changelog-back-to-main)
 
-Releases target a roughly 4-week cadence. Patch releases happen as needed.
+### Cut the release branch
 
-## Cutting a release
+Run [Cut release branch](https://github.com/generative-computing/mellea/actions/workflows/cut-release-branch.yml)
+against `main`.
 
-To ship `X.Y.0`:
+- **Optional**: enter the expected `X.Y` (e.g. `0.6`) in `confirm_minor` as
+  a sanity check. Leave blank to trust whatever is in `pyproject.toml`.
 
-1. Dispatch **Cut release branch** against `main` — creates `release/vX.Y` at
-   `X.Y.0rc0` and bumps `main` to `X.(Y+1).0.dev0`.
-2. Stabilize on `release/vX.Y` by landing fixes via PRs targeting that branch
-   (open a separate followup PR to port the fix to `main` if it also belongs
-   there).
-3. Dispatch **Publish release** against `release/vX.Y` with `bump_type: rc` to
-   produce each rc; repeat as needed.
-4. Dispatch **Publish release** against `release/vX.Y` with `bump_type: final`
-   to ship `X.Y.0`.
+After this runs: `release/vX.Y` exists at `X.Y.0rc0`, and `main` has been
+bumped to `X.(Y+1).0.dev0`.
 
-The per-step detail follows.
+### Stabilize on the release branch
 
-### 1. Cut the release branch
+Land fixes via PRs targeting `release/vX.Y` (normal review + CI; protection
+mirrors `main`). If the same change also belongs on `main`, open a
+follow-up PR to `main` once the release-branch PR is merged.
 
-When `main` is ready to freeze for the next release:
+> RC iteration during stabilization (`bump_type: rc`) is currently a no-op:
+> the rc counter advances in `pyproject.toml` but nothing is published.
+> See [rc cycling](#rc-cycling) in the appendix for what changes when
+> prereleases are enabled.
 
-1. Go to **Actions → Cut release branch → Run workflow**.
-2. Optionally enter the expected X.Y (e.g. `0.6`) in `confirm_minor` as a
-   safety check. Leave blank to trust whatever is in `pyproject.toml` on
-   `main`.
-3. Run.
+### Publish the final
 
-The workflow:
+Run [Publish release](https://github.com/generative-computing/mellea/actions/workflows/publish-release.yml)
+against `release/vX.Y`.
 
-- Verifies `pyproject.toml` on `main` matches `X.Y.0.devN`.
-- Creates `release/vX.Y` with version set to `X.Y.0rc0`.
-- Publishes `X.Y.0rc0` per the [`PUBLISH_PRERELEASES`](#b-the-publish_prereleases-flag)
-  flag — by default the version bump is committed to the release branch with
-  no tag and no PyPI upload; with the flag enabled, also tags and uploads.
-- Pushes `main` with version bumped to `X.(Y+1).0.dev0`. The push goes through
-  `github-actions[bot]`, which has bypass-actor permission on `main`'s ruleset
-  (see [Appendix D](#d-branch-protection)).
+- `bump_type`: `final`
 
-To cut a major release (e.g. `1.0.0` from a `0.x` line), first land a regular
-PR on `main` setting `pyproject.toml` to `(X+1).0.0.dev0`, then dispatch
-**Cut release branch** as above. The workflow always bumps `main` by one
-minor; the major bump itself is a manual step performed beforehand.
+After this runs: `vX.Y.0` is tagged, the GitHub Release exists, the PyPI
+upload is done, and docs/production has been redeployed.
 
-### 2. Stabilize on the release branch
+### Sync the changelog back to main
 
-Stabilization fixes land on `release/vX.Y` via normal PRs targeting that
-branch. Branch protection applies the same way as `main`: review + CI
-required.
+The publish workflow opens a PR titled `docs: sync changelog for vX.Y.0`
+from `chore/changelog-sync-X.Y.0` to `main`. Review and merge it.
 
-If the same fix also belongs on `main`, open a separate followup PR — usually
-after the release-branch PR merges, but the order can be flipped if it makes
-review easier. Either direction works; the only constraint is that both
-branches end up carrying the change so it doesn't regress in the next
-release.
+## Making a patch release
 
-To publish each rc:
+1. [Land fixes on the release branch](#land-fixes-on-the-release-branch)
+2. [Publish the patch](#publish-the-patch)
+3. [Sync the changelog back to main](#sync-the-changelog-back-to-main-1)
 
-1. Go to **Actions → Publish release → Run workflow**.
-2. Select the release branch (e.g. `release/v0.6`) from the branch picker.
-3. Choose `bump_type: rc`.
-4. Run.
+### Land fixes on the release branch
 
-The workflow:
+PR targeting `release/vX.Y`. If the change also belongs on `main`, open a
+follow-up PR to `main` once the release-branch PR is merged.
 
-- Computes the next rc (e.g. `0.6.0rc0` → `0.6.0rc1`).
-- Commits the bump to the release branch.
-- When `PUBLISH_PRERELEASES=true`: pushes tag `v{version}`, creates a
-  `--prerelease`-marked GitHub Release with incremental notes (diffed
-  against the previous rc), and uploads to PyPI.
-- With the default (`false`): the bump commit is the only artifact — no
-  tag, no Release, no PyPI upload.
-- Either way, no changelog entry, no sync PR — those are reserved for
-  finals.
+### Publish the patch
 
-### 3. Promote to final
+Run [Publish release](https://github.com/generative-computing/mellea/actions/workflows/publish-release.yml)
+against `release/vX.Y`.
 
-When testing on an rc is complete:
+- `bump_type`: `patch-final`
 
-1. **Actions → Publish release → Run workflow** against the same release branch.
-2. `bump_type: final`.
-3. Run.
+> Patch rc iteration (`bump_type: patch-rc`) is currently a no-op for the
+> same reason as minor rc iteration; see [rc cycling](#rc-cycling).
 
-This creates the `v0.6.0` GitHub Release (with auto-generated notes from
-the previous final), uploads to PyPI, appends to `CHANGELOG.md` on the
-release branch, opens a sync PR to `main` with the changelog delta, and
-triggers the docs production deploy.
+### Sync the changelog back to main
 
-## Patch releases
+Same as the minor flow: review and merge the auto-opened
+`chore/changelog-sync-X.Y.Z` PR.
 
-Patches live on the original release branch. `main` is touched only when a
-`patch-final` lands and opens its changelog sync PR.
+## Troubleshooting
 
-1. Land the fix on `release/vX.Y` via a PR targeting that branch (open a
-   separate followup PR to port to `main` if the fix also belongs there).
-2. **Publish release** against `release/vX.Y` with `bump_type: patch-rc`.
-   Produces e.g. `v0.6.1rc0`.
-3. Test.
-4. Repeat **Publish release** with `bump_type: patch-rc` for additional rcs
-   if needed.
-5. **Publish release** with `bump_type: patch-final` to promote to `v0.6.1`.
-
-## Dev release from main
-
-Ad-hoc, case-by-case `.devN` bumps on `main`. Typical uses: a contributor
-wants a tagged snapshot of main for debugging, an external tester needs a
-specific point-in-time artifact, etc. Not intended for routine or scheduled
-releases.
-
-1. **Actions → Publish dev release from main → Run workflow** (must dispatch
-   against `main`).
-2. Run.
-
-The workflow (publish-then-increment):
-
-1. Publishes `main`'s **current** `.devN` per `PUBLISH_PRERELEASES` — skipped
-   by default; tag + prerelease GitHub Release + PyPI upload if enabled.
-   When tagged, the tag points at the current `main` HEAD.
-2. Iterates pyproject on main: `X.Y.Z.devN → X.Y.Z.dev(N+1)`, commits, pushes.
-
-The invariant is that `main`'s pyproject always carries "the next version
-that would be published." Inspecting main tells you what the next dispatch
-will produce.
-
-With `PUBLISH_PRERELEASES=false` (default), the publish step is a no-op —
-the `.devN` counter still advances, but no tag is pushed and nothing reaches
-PyPI. With the flag enabled, the publish tags main HEAD, creates a
-`--prerelease`-marked GitHub Release, and uploads to PyPI (installable via
-`pip install --pre mellea`). Dev publishes never touch `CHANGELOG.md` and
-never become the repo's "latest" release.
-
-## Rollback and retry
+### Retry a failed publish
 
 `bump_type: none` re-runs `publish-release` against whatever version is
-currently in `pyproject.toml`, skipping the version-bump step. Useful when
-a previous run failed after the bump committed but before the publish
+already in `pyproject.toml`, skipping the version-bump step. Useful when a
+previous run failed after the bump committed but before the publish
 completed.
 
 The retry is a "skip what's done, finish what isn't" path — it does not
-validate existing artifacts. If a prior run produced a tag pointing at the
-wrong commit, a Release with stale notes, or a sync PR with a stale body,
-delete the bad artifact (`gh release delete`, `git push --delete`,
-`gh pr close`) before re-dispatching. Retry is for resuming after a partial
-failure, not for fixing a corrupted prior result.
+validate existing artifacts. If a prior run produced a tag at the wrong
+commit, a Release with stale notes, or a sync PR with a stale body, delete
+the bad artifact (`gh release delete`, `git push --delete`, `gh pr close`)
+before re-dispatching. Retry is for resuming after a partial failure, not
+for fixing a corrupted result.
+
+### Cutting a major release
+
+The cut-release workflow always bumps `main` by one minor. To cut a major
+(e.g. `1.0.0` from a `0.x` line):
+
+1. Land a regular PR on `main` setting `pyproject.toml` to
+   `(X+1).0.0.dev0`.
+2. Dispatch [Cut release branch](https://github.com/generative-computing/mellea/actions/workflows/cut-release-branch.yml)
+   as usual.
+
+### Ad-hoc dev publish from main
+
+Used when someone needs a tagged point-in-time artifact of `main` outside
+the normal release cadence. With `PUBLISH_PRERELEASES=false` (the default)
+this workflow is a no-op for publishing; the only effect is that `main`'s
+`.devN` counter advances.
+
+Run [Publish dev release from main](https://github.com/generative-computing/mellea/actions/workflows/publish-dev-from-main.yml)
+against `main`. With the flag enabled, the workflow tags `main` HEAD,
+creates a prerelease GitHub Release, and uploads to PyPI. Either way, it
+then bumps `main` from `X.Y.Z.devN` to `X.Y.Z.dev(N+1)` and pushes.
+
+`main`'s `pyproject.toml` always reflects the version that the next
+dispatch will publish.
 
 ---
 
 # Appendix
 
-## A. Versioning
+## Versioning
 
 Versions follow **[PEP 440](https://peps.python.org/pep-0440/)** (which is
 compatible with SemVer for final releases).
@@ -179,65 +143,34 @@ compatible with SemVer for final releases).
 Invariants:
 
 - `main` always carries `X.Y.0.devN`. `main` is tagged only when a dev
-  publication runs (`publish-dev-from-main` workflow); never during routine
-  commits.
+  publication runs; never during routine commits.
 - Release branches always carry `X.Y.Zrc?` or `X.Y.Z`.
 - Prereleases (`rcN`, `.devN`) are tagged, uploaded to PyPI, and given a
-  prerelease-marked GitHub Release only when the `PUBLISH_PRERELEASES` repo
-  variable is `true` (see [Appendix B](#b-the-publish_prereleases-flag)).
-  With the default (`false`), the version bump commits to the branch but no
-  tag, no PyPI upload, and no Release. Prerelease Releases use `--prerelease`
-  so they don't appear as the repo's "latest" release on GitHub.
+  prerelease-marked GitHub Release only when
+  [`PUBLISH_PRERELEASES`](#the-publish_prereleases-flag) is `true`. With the
+  default (`false`), the version bump commits to the branch but no tag, no
+  PyPI upload, and no Release. Prerelease Releases use `--prerelease` so
+  they don't appear as "latest" on GitHub.
 
-## B. The `PUBLISH_PRERELEASES` flag
-
-`PUBLISH_PRERELEASES` is a forward-looking feature flag. It exists so the
-project can start publishing public prerelease artifacts later (likely
-post-1.0) without a code change. It defaults to `false` and is expected to
-stay `false` for the foreseeable future; the rest of this section documents
-both states for when that changes.
-
-The flag is a repo variable that gates whether prereleases are tagged,
-uploaded to PyPI, and given a GitHub Release.
-
-| `PUBLISH_PRERELEASES` | rc / dev | Finals |
-|-----------------------|----------|--------|
-| `false` (current) | version bump committed; no tag, no Release, no PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
-| `true` (future) | tag + prerelease GitHub Release + PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
-
-While `false`, prereleases stay branch-local — the bump commit identifies
-the version but there is no immutable tag pointer. Users who need a specific
-prerelease can install from a branch SHA
-(`pip install git+https://github.com/generative-computing/mellea@<sha>`).
-
-When the flag is eventually enabled, every rc and dev would produce a
-`--prerelease`-marked GitHub Release. Notes would be incremental —
-`0.6.0rc2` diffs against `0.6.0rc1`, so testers see "what changed in this
-rc" without re-reading the full cycle. The cumulative view ("everything in
-0.6") shows up on the final's Release page, which diffs against the previous
-final. Prerelease Releases never become the repo's "latest" release.
-
-Finals always follow the full release flow regardless of the flag.
-
-## C. Workflow inventory
+## Workflow inventory
 
 | Workflow | Purpose |
 |----------|---------|
-| `cut-release-branch` | Cut `release/vX.Y` from `main`, publish `X.Y.0rc0`, bump `main` to the next `.dev0` |
-| `publish-release` | Publish a release (rc, final, patch-rc, patch-final, or retry a failed publish) |
-| `publish-dev-from-main` | Iterate main's `.devN` counter and publish a dev release |
+| [`cut-release-branch`](.github/workflows/cut-release-branch.yml) | Cut `release/vX.Y` from `main`, publish `X.Y.0rc0`, bump `main` to the next `.dev0` |
+| [`publish-release`](.github/workflows/publish-release.yml) | Publish a release (rc, final, patch-rc, patch-final, or retry a failed publish) |
+| [`publish-dev-from-main`](.github/workflows/publish-dev-from-main.yml) | Iterate main's `.devN` counter and (when enabled) publish a dev release |
 
 All three are `workflow_dispatch`-only and run from the GitHub Actions UI.
 
 Whether any given prerelease (`rc`, `dev`) produces a PyPI artifact depends
-on the [`PUBLISH_PRERELEASES`](#b-the-publish_prereleases-flag) flag.
+on the [`PUBLISH_PRERELEASES`](#the-publish_prereleases-flag) flag.
 
-## D. Branch protection
+## Branch protection
 
 All three write-capable workflows authenticate via `secrets.GITHUB_TOKEN`,
 declaring scopes via inline `permissions:` blocks. The `GITHUB_TOKEN`
-identity is `github-actions[bot]`, which is configured as a bypass actor on
-the `main` and `release/**` rulesets so workflows can push directly:
+identity is `github-actions[bot]`, configured as a bypass actor on the
+`main` and `release/**` rulesets so workflows can push directly:
 
 - `main`: `cut-release-branch` pushes the `X.(Y+1).0.dev0` bump;
   `publish-dev-from-main` pushes the `.dev(N+1)` advance commit.
@@ -247,14 +180,14 @@ the `main` and `release/**` rulesets so workflows can push directly:
 The `release/**` ruleset otherwise mirrors `main`: PR review required,
 status checks (CI) required, no force-push, no deletion.
 
-## E. Release branch retention
+## Release branch retention
 
 **Release branches are never deleted.** GitHub Releases pin to specific
-commits on each branch, so pruning a branch would orphan those references and
-break `git checkout v0.4.2` semantics. Old `release/v0.3`, `release/v0.4`, etc.
-stay around indefinitely.
+commits on each branch, so pruning a branch would orphan those references
+and break `git checkout v0.4.2` semantics. Old `release/v0.3`,
+`release/v0.4`, etc. stay around indefinitely.
 
-## F. Docs behavior by release type
+## Docs behavior by release type
 
 Docs publishing (`docs-publish.yml`) deploys to `docs/production` only when
 a published GitHub Release is the latest final by semver, so older-branch
@@ -266,3 +199,54 @@ patches don't overwrite production docs.
 | Final X.Y release (`v0.6.0`) | deployed | (main-push rebuilds as usual) |
 | Patch on latest X.Y (`v0.6.1` after `v0.6.0`) | deployed | unchanged |
 | Patch on older X.Y (`v0.5.1` after `v0.6.0`) | unchanged | unchanged |
+
+## RC cycling
+
+`bump_type: rc` (minor) and `bump_type: patch-rc` (patch) iterate the rc
+counter on the release branch:
+
+- **`PUBLISH_PRERELEASES=false`** (current default): the rc counter
+  advances in `pyproject.toml`, but no tag is pushed, no Release is
+  created, and nothing reaches PyPI. The rc step is effectively a no-op
+  during stabilization, so the documented flow above goes straight from
+  cut to final.
+- **`PUBLISH_PRERELEASES=true`** (future): each `rc` dispatch tags
+  `vX.Y.ZrcN`, creates a `--prerelease` GitHub Release with notes diffed
+  against the previous rc, and uploads to PyPI.
+
+When `PUBLISH_PRERELEASES` is enabled, the rc step is a real publish and
+fits between [Stabilize](#stabilize-on-the-release-branch) and
+[Publish the final](#publish-the-final): dispatch
+[Publish release](https://github.com/generative-computing/mellea/actions/workflows/publish-release.yml) with
+`bump_type: rc` (or `patch-rc`) as many times as needed.
+
+## The `PUBLISH_PRERELEASES` flag
+
+`PUBLISH_PRERELEASES` is a forward-looking feature flag. It exists so the
+project can start publishing public prerelease artifacts later (likely
+post-1.0) without a code change. It defaults to `false` and is expected to
+stay `false` for the foreseeable future; the rest of this section
+documents both states for when that changes.
+
+The flag is a repo variable that gates whether prereleases are tagged,
+uploaded to PyPI, and given a GitHub Release.
+
+| `PUBLISH_PRERELEASES` | rc / dev | Finals |
+|-----------------------|----------|--------|
+| `false` (current) | version bump committed; no tag, no Release, no PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
+| `true` (future) | tag + prerelease GitHub Release + PyPI | tag + GitHub Release + PyPI + changelog entry + sync PR |
+
+While `false`, prereleases stay branch-local — the bump commit identifies
+the version but there is no immutable tag pointer. Users who need a
+specific prerelease can install from a branch SHA
+(`pip install git+https://github.com/generative-computing/mellea@<sha>`).
+
+When the flag is eventually enabled, every rc and dev produces a
+`--prerelease`-marked GitHub Release. Notes are incremental —
+`0.6.0rc2` diffs against `0.6.0rc1`, so testers see "what changed in this
+rc" without re-reading the full cycle. The cumulative view ("everything
+in 0.6") shows up on the final's Release page, which diffs against the
+previous final. Prerelease Releases never become the repo's "latest"
+release.
+
+Finals always follow the full release flow regardless of the flag.
