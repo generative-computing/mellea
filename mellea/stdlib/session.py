@@ -10,6 +10,7 @@ session.
 
 from __future__ import annotations
 
+import collections.abc
 import contextlib
 import contextvars
 import inspect
@@ -18,7 +19,11 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-from ..backends.model_ids import IBM_GRANITE_4_MICRO_3B, ModelIdentifier
+from ..backends.model_ids import (
+    IBM_GRANITE_4_1_3B,
+    IBM_GRANITE_4_HYBRID_SMALL,
+    ModelIdentifier,
+)
 from ..core import (
     Backend,
     BaseModelSubclass,
@@ -43,7 +48,7 @@ from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
 from ..telemetry.context import with_context
-from .components import Message
+from .components import Document, Message
 from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
 from .start_backend import (
@@ -77,7 +82,7 @@ def get_session() -> MelleaSession:
 
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_1_3B,
     ctx: Context | None = None,
     *,
     context_type: Literal["simple", "chat"] | None = None,
@@ -98,7 +103,7 @@ def start_session(
             - "ollama": Use Ollama backend for local models
             - "hf" or "huggingface": Use HuggingFace transformers backend
             - "openai": Use OpenAI API backend
-            - "watsonx": Use IBM WatsonX backend
+            - "watsonx": Use IBM WatsonX backend, WARNING: this defaults to the IBM_GRANITE_4_HYBRID_SMALL model for now.
             - "litellm": Use the LiteLLM backend
         model_id: Model identifier or name. Can be a `ModelIdentifier` from
             mellea.backends.model_ids or a string model name.
@@ -181,8 +186,23 @@ def start_session(
             model_id_str = pre_payload.model_id
             model_options = pre_payload.model_options
 
-        # Construct backend post-hook.
-        backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+        backend_class = backend_name_to_class(backend_name)
+        if backend_class is None:
+            raise Exception(
+                f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
+            )
+        assert backend_class is not None
+        if "watsonx" in backend_name:
+            # Temp hack for watsonx for granite 4.1
+            backend = backend_class(
+                IBM_GRANITE_4_HYBRID_SMALL.watsonx_name,
+                model_options=model_options,
+                **backend_kwargs,
+            )
+        else:
+            backend = backend_class(
+                model_id, model_options=model_options, **backend_kwargs
+            )
 
         logger.info(
             f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
@@ -546,6 +566,7 @@ class MelleaSession:
         role: Message.Role = "user",
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -557,6 +578,8 @@ class MelleaSession:
             content: The message text to send.
             role: The role for the outgoing message (default ``"user"``).
             images: Optional list of images to include in the message.
+            documents: Optional documents to attach to the message. Each element
+                may be a string or a ``Document`` object.
             user_variables: Optional Jinja variable substitutions applied to ``content``.
             format: Optional Pydantic model for constrained decoding of the response.
             model_options: Additional model options to merge with backend defaults.
@@ -571,6 +594,7 @@ class MelleaSession:
             backend=self.backend,
             role=role,
             images=images,
+            documents=documents,
             user_variables=user_variables,
             format=format,
             model_options=model_options,
@@ -939,6 +963,7 @@ class MelleaSession:
         role: Message.Role = "user",
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -950,6 +975,8 @@ class MelleaSession:
             content: The message text to send.
             role: The role for the outgoing message (default ``"user"``).
             images: Optional list of images to include in the message.
+            documents: Optional documents to attach to the message. Each element
+                may be a string or a ``Document`` object.
             user_variables: Optional Jinja variable substitutions applied to ``content``.
             format: Optional Pydantic model for constrained decoding of the response.
             model_options: Additional model options to merge with backend defaults.
@@ -964,6 +991,7 @@ class MelleaSession:
             backend=self.backend,
             role=role,
             images=images,
+            documents=documents,
             user_variables=user_variables,
             format=format,
             model_options=model_options,

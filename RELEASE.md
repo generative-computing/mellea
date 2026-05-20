@@ -14,6 +14,11 @@ This schedule may shift depending on team availability, urgency of fixes, and th
 ## Versioning
 This project follows **[Semantic Versioning (semver)](https://semver.org)**. Breaking changes must be clearly documented and highlighted in release notes.
 
+To see the current, **prospective** version that will be published by the next release action, you can run:
+```
+uv run --no-sync semantic-release print-version
+```
+
 ## Pre‑Release Coordination
 ### 1. Identify Candidate Pull Requests
 Early in the week, maintainers review open pull requests and determine which ones should be included in the upcoming release.

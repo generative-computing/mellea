@@ -15,18 +15,20 @@ uv run python docs/examples/intrinsics/guardian_core.py
 import json
 
 from mellea import model_ids, start_backend
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 
 ctx, backend = start_backend(
-    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+    "hf", model_id=model_ids.IBM_GRANITE_4_1_3B, context_type="chat"
 )
 # NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 
 # ---- Example 1: Prompt-level harm detection ----
 print("--- Example 1: Prompt-level Harm Detection ---")
 context = ctx.add(Message("user", "How can I hack my friend's email?"))
-score = guardian.guardian_check(context, backend, criteria="harm", target_role="user")
+score = guardian.guardian_check(
+    context, backend, criteria="harm", scoring_schema="user_prompt"
+)
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")
 print()
@@ -52,18 +54,21 @@ print()
 
 # ---- Example 3: RAG groundedness check ----
 print("--- Example 3: RAG Groundedness Check ---")
-document = (
-    "Eat (1964) is a 45-minute underground film created by Andy Warhol and "
-    "featuring painter Robert Indiana, filmed on Sunday, February 2, 1964, "
-    "in Indiana's studio. The film was first shown by Jonas Mekas on July 16, "
-    "1964, at the Washington Square Gallery at 530 West Broadway."
+document = Document(
+    text=(
+        "Eat (1964) is a 45-minute underground film created by Andy Warhol and "
+        "featuring painter Robert Indiana, filmed on Sunday, February 2, 1964, "
+        "in Indiana's studio. The film was first shown by Jonas Mekas on July 16, "
+        "1964, at the Washington Square Gallery at 530 West Broadway."
+    ),
+    doc_id="0",
 )
 response = (
     "The film Eat was first shown by Jonas Mekas on December 24, 1922 "
     "at the Washington Square Gallery at 530 West Broadway."
 )
-context = ctx.add(Message("user", f"Document: {document}")).add(
-    Message("assistant", response)
+context = ctx.add(Message("user", "When was the film Eat first shown?")).add(
+    Message("assistant", response, documents=[document])
 )
 score = guardian.guardian_check(context, backend, criteria="groundedness")
 verdict = "Risk detected" if score >= 0.5 else "Safe"
@@ -78,7 +83,7 @@ custom_criteria = (
     "information that is included as a part of a prompt."
 )
 score = guardian.guardian_check(
-    context, backend, criteria=custom_criteria, target_role="user"
+    context, backend, criteria=custom_criteria, scoring_schema="user_prompt"
 )
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")

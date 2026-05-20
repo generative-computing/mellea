@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/enforce-structured-output"
 title: "Enforce Structured Output"
 description: "Get JSON, Pydantic models, and typed values from LLM calls using @generative and instruct(format=...)."
 # diataxis: how-to

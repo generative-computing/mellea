@@ -3,12 +3,14 @@
 Defines ``Message``, the ``Component`` subtype used to represent a single turn in a
 chat history with a ``role`` (``user``, ``assistant``, ``system``, or ``tool``),
 text ``content``, and optional ``images`` and ``documents`` attachments. Also provides
-``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments) and
-the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
-``Message`` objects.
+``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments), and
+utilities for converting a ``Context`` into a flat list of ``Message`` objects:
+``as_chat_history`` (strict typing) and ``as_generic_chat_history`` (flexible with
+configurable formatter).
 """
 
-from collections.abc import Mapping
+import logging
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal
 
 from ...core import (
@@ -20,14 +22,13 @@ from ...core import (
     ModelToolCall,
     TemplateRepresentation,
 )
-from .docs.document import Document
+from .docs.document import Document, _coerce_to_documents
+
+_logger = logging.getLogger(__name__)
 
 
 class Message(Component["Message"]):
     """A single Message in a Chat history.
-
-    TODO: we may want to deprecate this Component entirely.
-    The fact that some Component gets rendered as a chat message is `Formatter` miscellania.
 
     Args:
         role (str): The role that this message came from (e.g., ``"user"``,
@@ -51,14 +52,14 @@ class Message(Component["Message"]):
         content: str,
         *,
         images: None | list[ImageBlock] = None,
-        documents: None | list[Document] = None,
+        documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
         self._images = images
-        self._docs = documents
+        self._docs = _coerce_to_documents(documents)
 
     @property
     def images(self) -> None | list[str]:
@@ -89,12 +90,7 @@ class Message(Component["Message"]):
         """
         return TemplateRepresentation(
             obj=self,
-            args={
-                "role": self.role,
-                "content": self._content_cblock,
-                "images": self._images,
-                "documents": self._docs,
-            },
+            args={"content": self._content_cblock, "documents": self._docs},
             template_order=["*", "Message"],
         )
 
@@ -106,7 +102,15 @@ class Message(Component["Message"]):
 
         docs = []
         if self._docs is not None:
-            docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
+            # Do a quick format of each document.
+            docs = [
+                # Equivalent to: "[Document <ID>] <TITLE>: <TEXT>...".
+                f"[Document{' ' + str(doc.doc_id) if doc.doc_id else ''}] {str(doc.title) + ': ' if doc.title else ''}{doc.text}"[
+                    :20
+                ]
+                + "..."
+                for doc in self._docs
+            ]
         return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
 
     def _parse(self, computed: ModelOutputThunk) -> "Message":
@@ -214,21 +218,6 @@ class ToolMessage(Message):
         self._tool_output = tool_output
         self._tool = tool
 
-    def format_for_llm(self) -> TemplateRepresentation:
-        """Return the same representation as ``Message`` with a ``name`` field added to the args dict.
-
-        Returns:
-            TemplateRepresentation: Template representation including the tool
-            name alongside the standard message fields.
-        """
-        message_repr = super().format_for_llm()
-        args = message_repr.args
-        args["name"] = self.name
-
-        return TemplateRepresentation(
-            obj=self, args=args, template_order=["*", "Message"]
-        )
-
     def __repr__(self) -> str:
         """Pretty representation of messages, because they are a special case."""
         return f'mellea.ToolMessage(role="{self.role}", content="{self.content}", name="{self.name}")'
@@ -245,7 +234,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
         List of ``Message`` objects in conversation order.
 
     Raises:
-        Exception: If the context history is non-linear and cannot be cast to a
+        ValueError: If the context history is non-linear and cannot be cast to a
             flat list.
         AssertionError: If any entry in the context cannot be converted to a
             ``Message``.
@@ -266,8 +255,93 @@ def as_chat_history(ctx: Context) -> list[Message]:
 
     all_ctx_events = ctx.as_list()
     if all_ctx_events is None:
-        raise Exception("Trying to cast a non-linear history into a chat history.")
+        raise ValueError("Trying to cast a non-linear history into a chat history.")
     else:
         history = [_to_msg(c) for c in all_ctx_events]
         assert None not in history, "Could not render this context as a chat history."
         return history  # type: ignore
+
+
+def _default_formatter(obj: object) -> str:
+    """Default formatter for unknown component types.
+
+    Logs a warning and converts the object to a string representation.
+    """
+    _logger.warning(
+        f"Unknown component type {type(obj).__name__} in as_generic_chat_history; "
+        f"converting to string representation."
+    )
+    return str(obj)
+
+
+def as_generic_chat_history(
+    ctx: Context, formatter: Callable[[object], str] | None = None
+) -> list[Message]:
+    """Returns a list of Messages corresponding to a Context, with flexible type handling.
+
+    This function is more permissive than ``as_chat_history()``, allowing arbitrary
+    component types. Unknown types are converted to strings using a configurable
+    formatter, making it suitable for general-purpose use where context composition
+    may be heterogeneous.
+
+    The formatter is applied to:
+    - ``ModelOutputThunk`` with non-Message ``parsed_repr``
+    - ``CBlock`` subclasses (subclasses only; plain ``CBlock`` is stringified)
+    - Other unknown component types
+
+    Existing ``Message`` objects are preserved as-is; their content is not formatted.
+    This design preserves Message fidelity while providing an escape hatch for unknown types.
+
+    Args:
+        ctx: A linear ``Context`` that may contain ``Message``, ``ModelOutputThunk``,
+            or other ``Component`` types.
+        formatter: Optional callable that converts unknown types to strings.
+            Defaults to ``_default_formatter`` which logs a warning and stringifies.
+
+    Returns:
+        List of ``Message`` objects in conversation order.
+
+    Raises:
+        ValueError: If the context history is non-linear and cannot be cast to a
+            flat list.
+    """
+    if formatter is None:
+        formatter = _default_formatter
+
+    def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message:
+        match c:
+            case Message():
+                return c
+            case ModelOutputThunk():
+                if isinstance(c.parsed_repr, Message):
+                    return c.parsed_repr
+                if isinstance(c.parsed_repr, str):
+                    return Message(role="assistant", content=c.parsed_repr)
+                # Use value if parsed_repr is None
+                if c.parsed_repr is None:
+                    if c.value is None:
+                        raise ValueError(
+                            "ModelOutputThunk has no value and no parsed_repr — was it evaluated?"
+                        )
+                    content = str(c.value)
+                else:
+                    _logger.warning(
+                        f"ModelOutputThunk.parsed_repr is {type(c.parsed_repr).__name__}, "
+                        f"not a Message; falling back to value."
+                    )
+                    content = formatter(c.parsed_repr)
+                return Message(role="assistant", content=content)
+            case CBlock():
+                if type(c) is not CBlock:
+                    content = formatter(c)
+                else:
+                    content = str(c)
+                return Message(role="user", content=content)
+            case _:
+                content = formatter(c)
+                return Message(role="user", content=content)
+
+    all_ctx_events = ctx.as_list()
+    if all_ctx_events is None:
+        raise ValueError("Trying to cast a non-linear history into a chat history.")
+    return [_to_msg(c) for c in all_ctx_events]

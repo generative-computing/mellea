@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/index"
 title: "Examples"
 description: "Complete working programs demonstrating Mellea patterns in production-like scenarios."
 # diataxis: reference
@@ -32,6 +33,7 @@ to run.
 | `context/` | Context inspection, sampling with context trees, parallel context branches |
 | `sessions/` | Custom session types and backend selection |
 | `async/` | How to utilize basic async capabilities |
+| `streaming/` | `stream_with_chunking()` with per-chunk validation, typed event vocabulary, early-exit on fail |
 
 ### Data and documents
 
@@ -128,4 +130,4 @@ uv run docs/examples/<folder>/<file>.py
 
 **Default backend:** `start_session()` with no arguments connects to a local
 [Ollama](https://ollama.ai) instance running **IBM Granite 4 Micro**
-(`granite4:micro`). Make sure Ollama is running before you execute any example.
+(`granite4.1:3b`). Make sure Ollama is running before you execute any example.

@@ -191,3 +191,129 @@ def test_mot_deep_copy_clones_generation():
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 — cancel_generation invokes _cancel_hook before task cancellation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_invokes_cancel_hook_before_task_cancel() -> None:
+    """Fix 2: _cancel_hook fires and cancel_generation() returns promptly.
+
+    Simulates a backend thread that blocks for 5 s unless the hook sets the
+    event. Without the hook, cancel_generation() would only observe the asyncio
+    task as CancelledError but the thread would keep running — on a slow box
+    that can mean the task wrapper hangs past the 1 s timeout here.  With the
+    hook, the event is set first, the thread unblocks, and the whole path
+    completes within the timeout.
+    """
+    import asyncio
+    import threading
+
+    hook_called = threading.Event()
+    thread_released = threading.Event()
+
+    def hook() -> None:
+        hook_called.set()
+        thread_released.set()
+
+    mot = ModelOutputThunk(value=None)
+    mot._cancel_hook = hook  # type: ignore[attr-defined]
+
+    # Task that blocks in a thread until thread_released is set.
+    async def spin() -> None:
+        await asyncio.to_thread(thread_released.wait, 5.0)
+
+    mot._generate = asyncio.create_task(spin())  # type: ignore[attr-defined]
+    await asyncio.sleep(0)  # let the task reach to_thread
+
+    # Must return within 1 s; without the hook it would hang ~5 s.
+    await asyncio.wait_for(mot.cancel_generation(), timeout=1.0)  # type: ignore[attr-defined]
+
+    assert hook_called.is_set(), "_cancel_hook was never called"
+    assert mot._cancelled is True  # type: ignore[attr-defined]
+
+
+def test_cancel_hook_not_forwarded_by_copy_methods() -> None:
+    """Fix 2: copied MOTs must not inherit _cancel_hook (distinct computation)."""
+    import copy as copy_mod
+
+    def _hook() -> None:
+        pass
+
+    mot = ModelOutputThunk(value="x")
+    mot._cancel_hook = _hook  # type: ignore[attr-defined]
+
+    shallow = copy_mod.copy(mot)
+    assert shallow._cancel_hook is None, "__copy__ must reset _cancel_hook to None"  # type: ignore[attr-defined]
+
+    deep = copy_mod.deepcopy(mot)
+    assert deep._cancel_hook is None, "__deepcopy__ must reset _cancel_hook to None"  # type: ignore[attr-defined]
+
+    target = ModelOutputThunk(value="original")
+    target._copy_from(mot)  # type: ignore[attr-defined]
+    assert target._cancel_hook is None, "_copy_from must reset _cancel_hook to None"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_hook_exception_is_suppressed() -> None:
+    """Fix 2: a faulty _cancel_hook must not mask cancel_generation itself."""
+    import asyncio
+
+    def _bad_hook() -> None:
+        raise RuntimeError("hook exploded")
+
+    mot = ModelOutputThunk(value=None)
+    mot._cancel_hook = _bad_hook  # type: ignore[attr-defined]
+
+    # No _generate task — cancel_generation still runs the hook path.
+    # The hook raises, but cancel_generation must complete without propagating.
+    await mot.cancel_generation()  # type: ignore[attr-defined]
+    assert mot._cancelled is True  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_propagates_outer_cancellation() -> None:
+    """Outer cancellation of the cancel_generation() task must re-raise CancelledError.
+
+    When cancel_generation() is awaiting self._generate and the *cancel_generation*
+    task is itself cancelled from outside, cur.cancelling() > 0 and the
+    CancelledError must propagate — not be swallowed by the bare ``pass`` path.
+    """
+    import asyncio
+
+    inner_cancelled = asyncio.Event()
+
+    async def _absorbs_first_cancel() -> None:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # Signal that cancel_generation() has called .cancel() and is
+            # now blocked at ``await self._generate``.
+            inner_cancelled.set()
+            # Absorb this cancel so cancel_generation() stays at the await.
+            await asyncio.sleep(60)
+
+    mot = ModelOutputThunk(value=None)
+    mot._generate = asyncio.create_task(_absorbs_first_cancel())  # type: ignore[attr-defined]
+    await asyncio.sleep(0)
+
+    cg_task = asyncio.create_task(mot.cancel_generation())  # type: ignore[attr-defined]
+    # Wait until _generate has absorbed cancel_generation()'s .cancel() call —
+    # at that point cg_task is blocked at ``await self._generate``.
+    await asyncio.wait_for(inner_cancelled.wait(), timeout=2.0)
+
+    # Cancel cancel_generation() from outside (simulates asyncio.wait_for timeout
+    # or an outer TaskGroup cancelling this coroutine).
+    cg_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(cg_task, timeout=2.0)
+
+    # Cleanup: stop the still-running _generate task.
+    mot._generate.cancel()  # type: ignore[attr-defined]
+    try:
+        await asyncio.wait_for(mot._generate, timeout=1.0)  # type: ignore[attr-defined]
+    except (TimeoutError, asyncio.CancelledError):
+        pass

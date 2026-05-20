@@ -40,7 +40,7 @@ We look forward to seeing everyone there and celebrating our hard work together.
 requirement = "Use a professional tone."
 
 ctx, backend = start_backend(
-    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+    "hf", model_id=model_ids.IBM_GRANITE_4_1_3B, context_type="chat"
 )
 # NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 

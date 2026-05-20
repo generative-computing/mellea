@@ -7,7 +7,7 @@ sampling strategy using a graph coloring constraint satisfaction problem.
 
 In this example, we use the SOFAI sampling strategy. Because we wrote this
 example to run on consumer grade hardware, each model is still relatively small:
-1. S1 Solver (granite4:micro) - Fast model with iterative feedback loop
+1. S1 Solver (granite4.1:3b) - Fast model with iterative feedback loop
 2. S2 Solver (granite4:latest) - Slow model, called once on escalation
 3. Custom validator - Provides detailed feedback for constraint violations
 
@@ -142,7 +142,7 @@ requirements = [
 def main():
     """Run the graph coloring example with SOFAI strategy."""
     # Initialize backends
-    s1_solver_backend = OllamaModelBackend(model_id="granite4:micro")
+    s1_solver_backend = OllamaModelBackend(model_id="granite4.1:3b")
     s2_solver_backend = OllamaModelBackend(model_id="granite4:latest")
 
     # Optional: Initialize judge backend for LLM-as-Judge validation
@@ -195,7 +195,7 @@ def main():
 
         # Determine which solver was used
         if i < solver_1_attempts:
-            solver_name = "S1 Solver (granite4:micro)"
+            solver_name = "S1 Solver (granite4.1:3b)"
         else:
             solver_name = "S2 Solver (granite4:latest)"
 

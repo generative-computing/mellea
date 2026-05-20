@@ -28,7 +28,6 @@ from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
     start_generate_span,
 )
@@ -62,7 +61,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_1_3B,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -368,9 +367,11 @@ class OllamaModelBackend(FormatterBackend):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
         conversation.extend(
             [
-                {"role": m.role, "content": m.content, "images": m.images}
+                {"role": m.role, "content": self.formatter.print(m), "images": m.images}
                 for m in messages
             ]
         )

@@ -6,7 +6,7 @@ import pytest
 
 import mellea.stdlib.functional as mfuncs
 from mellea import MelleaSession, start_session
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import (
     CBlock,
@@ -65,10 +65,10 @@ def backend(gh_run: int):
     """Shared backend."""
     if gh_run == 1:
         return OllamaModelBackend(
-            model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name  # type: ignore
+            model_id=IBM_GRANITE_4_1_3B.ollama_name  # type: ignore
         )
     else:
-        return OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+        return OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
 
 
 @pytest.fixture(scope="module")
@@ -78,16 +78,16 @@ def session(backend) -> MelleaSession:
 
 def test_mot_init_typing():
     mot = ModelOutputThunk[float](value="1")
-    assert hasattr(mot, "__orig_class__"), (
-        "mots are generics and should have this field"
+    assert "__orig_class__" in mot.__dict__, (
+        "mots are generics and should have this field in instance dict"
     )
     assert get_args(mot.__orig_class__)[0] is float, (  # type: ignore
         f"expected float, got {get_args(mot.__orig_class__)[0]} as mot type"  # type: ignore
     )  # type: ignore
 
     unknown_mot = ModelOutputThunk(value="2")
-    assert not hasattr(unknown_mot, "__orig_class__"), (
-        "unknown mots / mots with no type defined at instantiate don't have this attribute"
+    assert "__orig_class__" not in unknown_mot.__dict__, (
+        "unknown mots / mots with no type defined at instantiate don't have this attribute in instance dict"
     )
 
 
@@ -118,7 +118,7 @@ def test_incorrect_type_override():
 
 
 # Marking as qualitative for now since there's so much generation required for this.
-# Uses granite4:micro-h (3B hybrid, lightweight) in local mode
+# Uses granite4.1:3b (3B hybrid, lightweight) in local mode
 @pytest.mark.qualitative
 @pytest.mark.ollama
 @pytest.mark.e2e

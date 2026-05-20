@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/generative-functions"
 title: "Generative Functions"
 description: "How the @generative decorator turns a Python function signature into an LLM-backed implementation."
 # diataxis: explanation

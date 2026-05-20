@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/legacy-code-integration"
 title: "Legacy Code Integration with @mify"
 description: "Apply the @mify decorator to existing Python classes so a Mellea session can act on, query, and transform your objects without rewriting them."
 # diataxis: reference
@@ -24,7 +25,7 @@ class or instance so you can pass it directly to session methods like `m.act()`,
 
 - [Quick Start](../getting-started/quickstart) complete
 - [MObjects and mify](../concepts/mobjects-and-mify) concept page (recommended background)
-- Ollama running locally with `granite4:micro` pulled
+- Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
 

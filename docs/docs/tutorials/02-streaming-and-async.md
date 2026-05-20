@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/02-streaming-and-async"
 title: "Tutorial: Streaming and Async"
 description: "Make LLM calls non-blocking, stream tokens as they arrive, and process batches concurrently."
 # diataxis: tutorial
@@ -16,7 +17,7 @@ By the end you will have covered:
 - Context behaviour with concurrent async calls
 
 **Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

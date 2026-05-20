@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/getting-started/installation"
 title: "Installation"
 description: "Install Mellea and set up your Python environment."
 # diataxis: tutorial
@@ -57,5 +58,5 @@ The default session connects to [Ollama](https://ollama.ai) running locally.
 Install Ollama and pull the default model before running any examples:
 
 ```bash
-ollama pull granite4:micro
+ollama pull granite4.1:3b
 ```

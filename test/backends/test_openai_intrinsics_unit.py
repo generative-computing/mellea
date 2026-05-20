@@ -4,6 +4,8 @@ Mocks the OpenAI async client to verify that ``_generate_from_intrinsic`` correc
 - injects ``intrinsic_name`` into ``chat_template_kwargs``
 - applies the ``IntrinsicsResultProcessor`` to the raw response
 - forwards ``temperature`` and ``seed`` from model options
+- user-provided model options override io.yaml parameter defaults
+- all applicable model options (MAX_NEW_TOKENS, SYSTEM_PROMPT, etc.) are forwarded
 - raises when no adapter is registered or streaming is requested
 """
 
@@ -43,6 +45,28 @@ _SIMPLE_CONFIG = {
     "transformations": None,
     "instruction": None,
     "parameters": {"max_completion_tokens": 64},
+    "sentence_boundaries": None,
+}
+
+# Config that sets temperature and seed in the io.yaml parameters, simulating
+# an intrinsic whose io.yaml provides default sampling settings.
+_CONFIG_WITH_TEMP_AND_SEED = {
+    "model": None,
+    "response_format": None,
+    "transformations": None,
+    "instruction": None,
+    "parameters": {"max_completion_tokens": 64, "temperature": 1.0, "seed": 99},
+    "sentence_boundaries": None,
+}
+
+# Config that sets reasoning_effort in io.yaml parameters (e.g. an intrinsic
+# that defaults to low reasoning).
+_CONFIG_WITH_REASONING_EFFORT = {
+    "model": None,
+    "response_format": None,
+    "transformations": None,
+    "instruction": None,
+    "parameters": {"max_completion_tokens": 64, "reasoning_effort": "low"},
     "sentence_boundaries": None,
 }
 
@@ -264,3 +288,229 @@ async def test_streaming_raises():
             strategy=None,
             model_options={ModelOption.STREAM: True},
         )
+
+
+async def test_model_options_override_io_yaml_defaults():
+    """User-provided temperature and seed override io.yaml parameter defaults."""
+    backend = _make_backend_with_adapter(_CONFIG_WITH_TEMP_AND_SEED)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.TEMPERATURE: 0.5, ModelOption.SEED: 42},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    # User values (0.5, 42) must win over io.yaml defaults (1.0, 99).
+    assert call_kwargs.kwargs.get("temperature") == 0.5
+    assert call_kwargs.kwargs.get("seed") == 42
+    # io.yaml parameters not overridden by the user should still be present.
+    assert call_kwargs.kwargs.get("max_completion_tokens") == 64
+
+
+async def test_model_options_forwarded():
+    """All applicable model options are forwarded to the API call."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                ModelOption.TEMPERATURE: 0.5,
+                ModelOption.MAX_NEW_TOKENS: 100,
+                ModelOption.SYSTEM_PROMPT: "You are helpful",
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    # Temperature is forwarded.
+    assert call_kwargs.kwargs.get("temperature") == 0.5
+    # MAX_NEW_TOKENS is remapped to max_completion_tokens and forwarded.
+    assert call_kwargs.kwargs.get("max_completion_tokens") == 100
+    # SYSTEM_PROMPT is added to messages, not to api_params.
+    messages = call_kwargs.kwargs.get("messages", [])
+    assert messages[0]["role"] == "system"
+    assert messages[0]["content"] == "You are helpful"
+    # Sentinel keys must not leak as raw sentinel strings.
+    all_kwargs = {**call_kwargs.kwargs}
+    assert ModelOption.MAX_NEW_TOKENS not in all_kwargs
+    assert ModelOption.SYSTEM_PROMPT not in all_kwargs
+
+
+async def test_reasoning_effort_user_overrides_io_yaml():
+    """User THINKING overrides reasoning_effort from io.yaml without duplicate kwargs."""
+    backend = _make_backend_with_adapter(_CONFIG_WITH_REASONING_EFFORT)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.THINKING: "high"},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    # User "high" must override io.yaml "low".
+    assert call_kwargs.kwargs.get("reasoning_effort") == "high"
+
+
+async def test_no_system_prompt_omitted():
+    """When SYSTEM_PROMPT is not provided, no system message is prepended."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    messages = call_kwargs.kwargs.get("messages", [])
+    # No system message should be prepended.
+    assert all(m.get("role") != "system" for m in messages)
+
+
+async def test_reasoning_effort_from_io_yaml_only():
+    """reasoning_effort from io.yaml passes through when user doesn't set THINKING."""
+    backend = _make_backend_with_adapter(_CONFIG_WITH_REASONING_EFFORT)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"), ctx, backend, strategy=None
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    assert call_kwargs.kwargs.get("reasoning_effort") == "low"
+
+
+async def test_reasoning_effort_bool_true():
+    """THINKING: True is normalized to reasoning_effort='medium'."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.THINKING: True},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    assert call_kwargs.kwargs.get("reasoning_effort") == "medium"
+
+
+async def test_tools_passed_to_api():
+    """Tools are forwarded to chat.completions.create when tool_calls=True."""
+    from mellea.backends.tools import MelleaTool
+
+    def get_temperature(location: str) -> int:
+        """Returns the temperature of a city.
+
+        Args:
+            location: A city name.
+        """
+        return 21
+
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            tool_calls=True,
+            model_options={
+                ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    tools = call_kwargs.kwargs.get("tools")
+    assert tools is not None
+    assert len(tools) == 1
+    assert tools[0]["function"]["name"] == "get_temperature"

@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO, ModelIdentifier
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, ModelIdentifier
 from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.components import Instruction, Message, MObject
@@ -173,7 +173,7 @@ def test_no_template(tf: TemplateFormatter):
 
 
 def test_load_with_model_id(instr: Instruction):
-    tf = TemplateFormatter(IBM_GRANITE_4_HYBRID_MICRO)
+    tf = TemplateFormatter(IBM_GRANITE_4_1_3B)
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
     assert "granite" in tmpl.name, (
@@ -308,6 +308,53 @@ def test_to_chat_messages_not_parsed_repr(tf: TemplateFormatter):
     messages = tf.to_chat_messages([action])
     assert messages[0] is parsed_repr
     assert messages[0].content == "different content"
+
+
+def test_unused_template_args_inline_warns(tf: TemplateFormatter, caplog):
+    """Debug message emitted when inline template does not use all provided args."""
+    import logging
+
+    repr = TemplateRepresentation(
+        obj=Instruction("desc"),
+        args={"description": "hello", "extra_key": "unused"},
+        template="{{description}}",
+    )
+    with caplog.at_level(logging.DEBUG, logger="mellea"):
+        tf._render_representation(repr, {"description": "hello", "extra_key": "unused"})
+
+    assert any("not referenced by template" in r.message for r in caplog.records)
+    assert any("extra_key" in r.message for r in caplog.records)
+
+
+def test_no_unused_keys_warning_when_all_used(
+    tf: TemplateFormatter, instr: Instruction, caplog
+):
+    """No debug message when all args keys are consumed by the file-loaded template."""
+    import logging
+
+    repr = instr.format_for_llm()
+    args = {k: tf._stringify(v) for k, v in repr.args.items()}
+    with caplog.at_level(logging.DEBUG, logger="mellea"):
+        tf._render_representation(repr, args)
+
+    assert not any("not referenced by template" in r.message for r in caplog.records)
+
+
+def test_unused_template_args_file_loaded_warns(tf: TemplateFormatter, caplog):
+    """Debug message emitted when a file-loaded template ignores some provided args."""
+    import logging
+
+    repr = TemplateRepresentation(
+        obj=Instruction("content"),
+        args={"content": "hello", "unused_key": "unused_value"},
+        template_order=["MObject"],
+    )
+    with caplog.at_level(logging.DEBUG, logger="mellea"):
+        tf._render_representation(
+            repr, {"content": "hello", "unused_key": "unused_value"}
+        )
+
+    assert any("unused_key" in r.message for r in caplog.records)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/intrinsics"
 title: "Intrinsics"
 description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters with Granite models."
 # diataxis: how-to
@@ -19,6 +20,7 @@ reliable than prompting a general-purpose model for these specialized micro-task
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
 >   `load_embedded_adapters=True`. Only intrinsics embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
+>   See `docs/docs/examples/granite-switch/README.md`
 >
 > Intrinsics do not work with Ollama or other remote backends.
 
@@ -36,12 +38,12 @@ Or, with a Granite Switch model via the OpenAI backend:
 
 ```python
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
 
 backend = OpenAIBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
     base_url="http://localhost:8000/v1",  # vLLM server
     api_key="EMPTY",
     load_embedded_adapters=True,
@@ -225,7 +227,7 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
 # Register an adapter by task name
 req_adapter = CustomIntrinsicAdapter(
-    "requirement_check",
+    "requirement-check",
     base_model_name=backend.base_model_name,
 )
 backend.add_adapter(req_adapter)
@@ -236,7 +238,7 @@ ctx = ctx.add(Message("assistant", "Yes! What can I help with?"))
 
 out, _ = mfuncs.act(
     Intrinsic(
-        "requirement_check",
+        "requirement-check",
         intrinsic_kwargs={"requirement": "The assistant is helpful."},
     ),
     ctx,
@@ -248,4 +250,4 @@ print(out)  # {"requirement_likelihood": 1.0}
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
 HuggingFace repository configuration instead of the intrinsic catalog.
-Output format is task-specific — `requirement_check` returns a likelihood score.
+Output format is task-specific — `requirement-check` returns a likelihood score.

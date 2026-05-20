@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/01-your-first-generative-program"
 title: "Tutorial: Your First Generative Program"
 description: "Build a document analysis pipeline step by step — from a single instruct() call to a composed, typed, validated generative program."
 # diataxis: tutorial
@@ -20,7 +21,7 @@ By the end you will have covered:
 > see [Tutorial 03: Using Generative Stubs](../tutorials/03-using-generative-stubs).
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
-Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro` downloaded.
+Mellea installed (`uv add mellea`), Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

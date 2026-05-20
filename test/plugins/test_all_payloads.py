@@ -77,13 +77,13 @@ class TestSessionPostInitPayload:
     def test_construction_with_values(self):
         payload = SessionPostInitPayload(
             session_id="s-001",
-            model_id="granite4:micro",
+            model_id="granite4.1:3b",
             context=_SENTINEL_CONTEXT,
             request_id="r-001",
             hook="session_post_init",
         )
         assert payload.session_id == "s-001"
-        assert payload.model_id == "granite4:micro"
+        assert payload.model_id == "granite4.1:3b"
         assert payload.context is _SENTINEL_CONTEXT
         assert payload.request_id == "r-001"
         assert payload.hook == "session_post_init"

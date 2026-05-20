@@ -54,6 +54,16 @@ def test_default_adapter_types():
     assert AdapterType.ALORA in entry.adapter_types
 
 
-def test_lora_only_entry():
+def test_lora_only_entry(monkeypatch):
+    from mellea.backends.adapters import catalog
+
+    fake_entry = catalog.IntriniscsCatalogEntry(
+        name="query_clarification",
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        adapter_types=(AdapterType.LORA,),
+    )
+    monkeypatch.setattr(
+        catalog, "_INTRINSICS_CATALOG", {"query_clarification": fake_entry}
+    )
     entry = fetch_intrinsic_metadata("query_clarification")
     assert entry.adapter_types == (AdapterType.LORA,)

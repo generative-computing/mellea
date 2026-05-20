@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/lora-and-alora-adapters"
 title: "LoRA and aLoRA adapters"
 description: "Train lightweight adapters on your own labeled data and use them as requirement validators in Mellea programs."
 # diataxis: how-to

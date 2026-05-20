@@ -140,7 +140,7 @@ Or a section-level callout if multiple blocks share the caveat:
 All code — fenced blocks AND inline backtick references — must match current source:
 
 - Import paths, class names, method names exact.
-- Model IDs current (e.g., `ibm-granite/granite-4.0-micro`).
+- Model IDs current (e.g., `ibm-granite/granite-4.1-3b`).
 - Inline prose fragments consistent with adjacent code blocks.
 
 If the source itself has inconsistencies, document as-is and note in the glossary.

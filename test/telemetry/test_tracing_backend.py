@@ -4,10 +4,7 @@ import asyncio
 
 import pytest
 
-from mellea.backends.model_ids import (
-    IBM_GRANITE_4_HYBRID_MICRO,
-    IBM_GRANITE_4_HYBRID_SMALL,
-)
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_HYBRID_SMALL
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
@@ -74,7 +71,7 @@ def span_exporter():
 async def test_span_duration_captures_async_operation(span_exporter):
     """Test that span duration includes the full async operation time."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -110,7 +107,7 @@ async def test_span_duration_captures_async_operation(span_exporter):
 async def test_context_propagation_parent_child(span_exporter):
     """Test that parent-child span relationships are maintained."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -157,7 +154,7 @@ async def test_context_propagation_parent_child(span_exporter):
 async def test_token_usage_recorded_after_completion(span_exporter):
     """Test that token usage metrics are recorded after async completion."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -206,7 +203,7 @@ async def test_token_usage_recorded_after_completion(span_exporter):
 async def test_span_not_closed_prematurely(span_exporter):
     """Test that spans are not closed before async operations complete."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 5"))
 
@@ -240,7 +237,7 @@ async def test_span_not_closed_prematurely(span_exporter):
 async def test_multiple_generations_separate_spans(span_exporter):
     """Test that multiple generations create separate spans."""
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test'"))
 
@@ -274,7 +271,7 @@ async def test_streaming_span_duration(span_exporter):
 
     from mellea.backends.model_options import ModelOption
 
-    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 3"))
 

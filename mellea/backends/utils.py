@@ -68,8 +68,10 @@ def to_chat(
     # add action
     ctx_as_message_list.extend(formatter.to_chat_messages([action]))
 
+    # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+    # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     ctx_as_conversation: list = [
-        {"role": m.role, "content": m.content} for m in ctx_as_message_list
+        {"role": m.role, "content": formatter.print(m)} for m in ctx_as_message_list
     ]
 
     # Check that we ddin't accidentally end up with CBlocks.

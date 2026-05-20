@@ -29,6 +29,10 @@ _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
 _pending_background_results: list[Any] = []
 _collect_background_results: bool = False  # opt-in; only tests enable this
 
+# Framework control-flow tool names (e.g. loop terminators).
+# These are flagged on the payload so plugins can decide per-tool policy.
+_INTERNAL_TOOL_NAMES: frozenset[str] = frozenset({"final_answer"})
+
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
 DEFAULT_HOOK_POLICY: Literal["allow"] | Literal["deny"] = "deny"
 
@@ -86,6 +90,18 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
     if hook_type is not None:
         return _plugin_manager.has_hooks_for(hook_type.value)
     return True
+
+
+def is_internal_tool(tool_name: str) -> bool:
+    """Return whether the given tool name is a framework-internal tool.
+
+    Args:
+        tool_name: Name of the tool to check.
+
+    Returns:
+        ``True`` if the tool is in the internal tools registry.
+    """
+    return tool_name in _INTERNAL_TOOL_NAMES
 
 
 def get_plugin_manager() -> Any | None:

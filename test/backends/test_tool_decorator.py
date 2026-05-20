@@ -268,6 +268,18 @@ class TestToolDecoratorEdgeCases:
         assert tool1.name == "base_func"
         assert tool2.name == "custom"
 
+    def test_decorator_on_async_function(self):
+        """Test that @tool works end-to-end on an async function."""
+
+        @tool
+        async def decorated(input: int) -> str:
+            """Async tool via decorator."""
+            return str(input * 2)
+
+        assert isinstance(decorated, MelleaTool)
+        assert decorated.name == "decorated"
+        assert decorated.run(3) == "6"
+
 
 # ============================================================================
 # Test Cases: Usage Patterns

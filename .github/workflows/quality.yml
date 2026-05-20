@@ -62,8 +62,7 @@ jobs:
         run: nohup ollama serve &
       - name: Pull models
         run: |
-          ollama pull granite4:micro
-          ollama pull granite4:micro-h
+          ollama pull granite4.1:3b
       - name: Run Tests
         id: tests
         run: uv run -m pytest -v --junit-xml=/tmp/pytest-results.xml test

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Iterable
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
@@ -30,10 +30,17 @@ from ..core import (
 )
 from ..helpers import _run_async_in_thread
 from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
-from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.manager import has_plugins, invoke_hook, is_internal_tool
 from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
-from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
+from .components import (
+    Document,
+    Instruction,
+    Message,
+    MObjectProtocol,
+    ToolMessage,
+    mify,
+)
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
 
@@ -245,6 +252,7 @@ def chat(
     *,
     role: Message.Role = "user",
     images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    documents: Iterable[str | Document] | None = None,
     user_variables: dict[str, str] | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -258,6 +266,8 @@ def chat(
         backend: The backend used to generate the response.
         role: The role for the outgoing message (default ``"user"``).
         images: Optional list of images to include in the message.
+        documents: Optional documents to attach to the message. Each element
+            may be a string or a ``Document`` object.
         user_variables: Optional Jinja variable substitutions applied to ``content``.
         format: Optional Pydantic model for constrained decoding of the response.
         model_options: Additional model options to merge with backend defaults.
@@ -273,7 +283,9 @@ def chat(
     else:
         content_resolved = content
     images = _parse_and_clean_image_args(images)
-    user_message = Message(role=role, content=content_resolved, images=images)
+    user_message = Message(
+        role=role, content=content_resolved, images=images, documents=documents
+    )
 
     result, new_ctx = act(
         user_message,
@@ -589,6 +601,7 @@ async def aact(
             pre_exec_payload = ComponentPreExecutePayload(
                 component_type=_component_type_name,
                 action=action,
+                context_view=context.view_for_generation(),
                 requirements=requirements or [],
                 model_options=model_options or {},
                 format=format,
@@ -915,6 +928,7 @@ async def achat(
     *,
     role: Message.Role = "user",
     images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    documents: Iterable[str | Document] | None = None,
     user_variables: dict[str, str] | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -928,6 +942,8 @@ async def achat(
         backend: The backend used to generate the response.
         role: The role for the outgoing message (default ``"user"``).
         images: Optional list of images to include in the message.
+        documents: Optional documents to attach to the message. Each element
+            may be a string or a ``Document`` object.
         user_variables: Optional Jinja variable substitutions applied to ``content``.
         format: Optional Pydantic model for constrained decoding of the response.
         model_options: Additional model options to merge with backend defaults.
@@ -943,7 +959,9 @@ async def achat(
     else:
         content_resolved = content
     images = _parse_and_clean_image_args(images)
-    user_message = Message(role=role, content=content_resolved, images=images)
+    user_message = Message(
+        role=role, content=content_resolved, images=images, documents=documents
+    )
 
     result, new_ctx = await aact(
         user_message,
@@ -1270,9 +1288,13 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         return outputs
 
     for name, tool in tool_calls.items():
+        control_flow = is_internal_tool(name)
+
         # --- tool_pre_invoke ---
         if has_plugins(HookType.TOOL_PRE_INVOKE):
-            pre_payload = ToolPreInvokePayload(model_tool_call=tool)
+            pre_payload = ToolPreInvokePayload(
+                model_tool_call=tool, is_control_flow=control_flow
+            )
             _, pre_payload = await invoke_hook(
                 HookType.TOOL_PRE_INVOKE, pre_payload, backend=backend
             )
@@ -1318,6 +1340,7 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
                 execution_time_ms=latency_ms,
                 success=success,
                 error=error,
+                is_control_flow=control_flow,
             )
             _, post_payload = await invoke_hook(
                 HookType.TOOL_POST_INVOKE, post_payload, backend=backend

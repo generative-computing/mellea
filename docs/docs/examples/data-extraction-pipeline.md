@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/data-extraction-pipeline"
 title: "Data Extraction Pipeline"
 description: "Use the @generative decorator with a typed return value to extract structured data from unstructured text in a single declarative function."
 # diataxis: reference
@@ -20,7 +21,7 @@ runtime exactly what shape the result must have.
 ## Prerequisites
 
 - [Quick Start](../getting-started/quickstart) complete
-- Ollama running locally with `granite4:micro` pulled
+- Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
 

@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import uuid
+from typing import Any, Literal, cast
 
 try:
     import typer
@@ -14,6 +15,7 @@ try:
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse, StreamingResponse
+    from pydantic import BaseModel
 except ImportError as e:
     raise ImportError(
         "The 'm serve' command requires extra dependencies. "
@@ -21,17 +23,27 @@ except ImportError as e:
     ) from e
 
 from mellea.backends.model_options import ModelOption
-from mellea.helpers.openai_compatible_helpers import build_completion_usage
+from mellea.core import MelleaLogger
+from mellea.helpers.openai_compatible_helpers import (
+    build_completion_usage,
+    build_tool_calls,
+)
 
 from .models import (
     ChatCompletion,
     ChatCompletionMessage,
+    ChatCompletionMessageToolCall,
     ChatCompletionRequest,
     Choice,
+    JsonSchemaFormat,
     OpenAIError,
     OpenAIErrorResponse,
 )
+from .schema_converter import json_schema_to_pydantic
 from .streaming import stream_chat_completion_chunks
+from .utils import extract_finish_reason
+
+logger = MelleaLogger.get_logger()
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
@@ -108,17 +120,17 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "presence_penalty",  # Presence penalty - not yet implemented
         "frequency_penalty",  # Frequency penalty - not yet implemented
         "logit_bias",  # Logit bias - not yet implemented
-        "response_format",  # Response format (json_object) - not yet implemented
+        "response_format",  # Response format - handled separately
         "functions",  # Legacy function calling - not yet implemented
         "function_call",  # Legacy function calling - not yet implemented
-        "tools",  # Tool calling - not yet implemented
-        "tool_choice",  # Tool choice - not yet implemented
     }
     openai_to_model_option = {
         "temperature": ModelOption.TEMPERATURE,
         "max_tokens": ModelOption.MAX_NEW_TOKENS,
         "seed": ModelOption.SEED,
         "stream": ModelOption.STREAM,
+        "tools": ModelOption.TOOLS,
+        "tool_choice": ModelOption.TOOL_CHOICE,
     }
 
     # Get all non-None fields
@@ -137,6 +149,10 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
 
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
+    # Inspect serve function once at endpoint creation time
+    serve_sig = inspect.signature(module.serve)
+    accepts_format = "format" in serve_sig.parameters
+    is_async = inspect.iscoroutinefunction(module.serve)
 
     async def endpoint(request: ChatCompletionRequest):
         try:
@@ -154,25 +170,51 @@ def make_chat_endpoint(module):
 
             model_options = _build_model_options(request)
 
+            # Handle response_format
+            format_model: type[BaseModel] | None = None
+            if request.response_format is not None:
+                if request.response_format.type == "json_schema":
+                    # json_schema presence is validated by ResponseFormat.model_validator
+                    json_schema = cast(
+                        JsonSchemaFormat, request.response_format.json_schema
+                    )
+                    try:
+                        format_model = json_schema_to_pydantic(
+                            json_schema.schema_, json_schema.name
+                        )
+                    except (ValueError, TypeError, RecursionError) as e:
+                        message = (
+                            "Invalid JSON schema: recursive $ref is not supported"
+                            if isinstance(e, RecursionError)
+                            else f"Invalid JSON schema: {e!s}"
+                        )
+                        return create_openai_error_response(
+                            status_code=400,
+                            message=message,
+                            error_type="invalid_request_error",
+                            param="response_format.json_schema.schema",
+                        )
+                # For "json_object" and "text", format_model remains None
+                # Note: "json_object" mode is not yet implemented - the backend
+                # receives no signal to produce JSON output (same as "text" mode)
+
+            # Build kwargs for serve call
+            serve_kwargs: dict[str, Any] = {
+                "input": request.messages,
+                "requirements": request.requirements,
+                "model_options": model_options,
+            }
+            if accepts_format:
+                serve_kwargs["format"] = format_model
+
             # Detect if serve is async or sync and handle accordingly
-            if inspect.iscoroutinefunction(module.serve):
+            if is_async:
                 # It's async, await it directly
-                output = await module.serve(
-                    input=request.messages,
-                    requirements=request.requirements,
-                    model_options=model_options,
-                )
+                output = await module.serve(**serve_kwargs)
             else:
                 # It's sync, run in thread pool to avoid blocking event loop
-                output = await asyncio.to_thread(
-                    module.serve,
-                    input=request.messages,
-                    requirements=request.requirements,
-                    model_options=model_options,
-                )
+                output = await asyncio.to_thread(module.serve, **serve_kwargs)
 
-            # system_fingerprint represents backend config hash, not model name
-            # The model name is already in response.model (line 73)
             # Leave as None since we don't track backend config fingerprints yet
             system_fingerprint = None
 
@@ -190,6 +232,16 @@ def make_chat_endpoint(module):
                     media_type="text/event-stream",
                 )
 
+            tool_calls_list = build_tool_calls(output)
+            tool_calls = (
+                [
+                    ChatCompletionMessageToolCall.model_validate(tc)
+                    for tc in tool_calls_list
+                ]
+                if tool_calls_list
+                else None
+            )
+
             return ChatCompletion(
                 id=completion_id,
                 model=request.model,
@@ -198,9 +250,11 @@ def make_chat_endpoint(module):
                     Choice(
                         index=0,
                         message=ChatCompletionMessage(
-                            content=output.value, role="assistant"
+                            content=output.value,
+                            role="assistant",
+                            tool_calls=tool_calls,
                         ),
-                        finish_reason="stop",
+                        finish_reason=extract_finish_reason(output),
                     )
                 ],
                 object="chat.completion",  # type: ignore
@@ -214,11 +268,11 @@ def make_chat_endpoint(module):
                 message=f"Invalid request: {e!s}",
                 error_type="invalid_request_error",
             )
-        except Exception as e:
-            # Catch-all for any unexpected errors (including AttributeError)
+        except Exception:
+            logger.exception("Unhandled error in chat-completion handler")
             return create_openai_error_response(
                 status_code=500,
-                message=f"Internal server error: {e!s}",
+                message="Internal server error",
                 error_type="server_error",
             )
 

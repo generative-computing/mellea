@@ -17,11 +17,20 @@ import base64
 import binascii
 import datetime
 import enum
+import logging
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Generic, Literal, Protocol, TypeVar, runtime_checkable
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    ParamSpec,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -320,6 +329,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
+        self._cancelled: bool = False
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
@@ -344,6 +354,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._generate_extra: asyncio.Task[Any] | None = (
             None  # Currently only used by hf.
         )
+        # Optional cooperative-cancel hook called before asyncio task cancellation.
+        # Backends that run generation in a thread (e.g. HuggingFace via
+        # asyncio.to_thread) set this to a non-blocking callable (e.g.
+        # threading.Event.set) so the thread receives a stop signal before the
+        # task wrapper is cancelled. Must be non-blocking; exceptions are logged
+        # and suppressed. Copied MOTs reset this to None — each computation owns
+        # its own thread signal.
+        self._cancel_hook: Callable[[], None] | None = None
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
@@ -364,6 +382,115 @@ class ModelOutputThunk(CBlock, Generic[S]):
             ).total_seconds() * 1000
             self._first_chunk_received = True
 
+    async def cancel_generation(self, error: Exception | None = None) -> None:
+        """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
+
+        Safe to call at any point during streaming. After this method returns,
+        ``is_computed()`` is ``True`` and ``value`` contains whatever text was
+        accumulated before cancellation.  Calling on an already-computed MOT
+        is a no-op.
+
+        Draining the internal queue after cancellation is necessary to release
+        any ``asyncio.Queue.put()`` call that the generation task was blocked on
+        (queue maxsize=20).
+
+        Args:
+            error: Optional cause attributed to the open telemetry span.  When
+                provided, this exception is recorded via ``set_span_error`` so
+                the span reflects the actual reason for cancellation (e.g. the
+                requirement failure or an unhandled exception from a streaming
+                validator).  When ``None``, a generic
+                ``RuntimeError("Generation cancelled")`` is recorded.
+
+        Raises:
+            asyncio.CancelledError: Re-raised when the *calling* task itself is
+                being cancelled (``asyncio.current_task().cancelling() > 0``).
+                This prevents external cancellation (e.g. ``asyncio.wait_for``
+                timeout) from being silently absorbed while awaiting the inner
+                generation task.
+        """
+        if self._computed:
+            return
+
+        def _drain() -> None:
+            while not self._async_queue.empty():
+                try:
+                    self._async_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+        # Signal any backend thread before cancelling the asyncio task wrapper
+        # so the thread can stop cooperatively instead of running to completion.
+        if self._cancel_hook is not None:
+            try:
+                self._cancel_hook()
+            except Exception as hook_exc:
+                logging.getLogger(__name__).warning(
+                    "cancel_generation: _cancel_hook raised (suppressed): %r", hook_exc
+                )
+
+        if self._generate is not None and not self._generate.done():
+            self._generate.cancel()
+
+        if self._generate_extra is not None and not self._generate_extra.done():
+            self._generate_extra.cancel()
+
+        # Drain before awaiting — unblocks any put() the task is stuck on.
+        _drain()
+
+        if self._generate is not None:
+            try:
+                await self._generate
+            except asyncio.CancelledError:
+                # Re-raise if the *outer* task is being cancelled (Python 3.11+
+                # task.cancelling() > 0) so we don't silently absorb external
+                # cancellation. For the inner task's own CancelledError (the
+                # expected result of .cancel() above), cancelling() is 0.
+                cur = asyncio.current_task()
+                if cur is not None and cur.cancelling() > 0:
+                    raise
+            except Exception:
+                pass
+
+        if self._generate_extra is not None:
+            try:
+                await self._generate_extra
+            except asyncio.CancelledError:
+                cur = asyncio.current_task()
+                if cur is not None and cur.cancelling() > 0:
+                    raise
+            except Exception:
+                pass
+
+        # Drain again for any final item the task put before terminating.
+        _drain()
+
+        span = self._meta.pop("_telemetry_span", None)
+        if span is not None:
+            from ..telemetry import end_backend_span, set_span_error
+
+            recorded: Exception = (
+                error if error is not None else RuntimeError("Generation cancelled")
+            )
+            set_span_error(span, recorded)
+            end_backend_span(span)
+
+        if self._underlying_value is None:
+            self._underlying_value = ""
+        self._cancelled = True
+        self._computed = True
+
+    @property
+    def cancelled(self) -> bool:
+        """``True`` if :meth:`cancel_generation` ran to completion on this MOT.
+
+        A normally-completed MOT leaves this ``False``; only an actual
+        cancellation via :meth:`cancel_generation` flips it.  Consumers holding
+        a computed MOT can use this to distinguish a genuine result from one
+        cut short (for example by a streaming requirement failure).
+        """
+        return self._cancelled
+
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
 
@@ -378,6 +505,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._thinking = other._thinking
         self.generation = other.generation
         self._generate_log = other._generate_log
+        self._cancelled = other._cancelled
+        # _cancel_hook is deliberately not copied: _copy_from swaps output state,
+        # not backend-thread plumbing, which is tied to the original computation.
+        self._cancel_hook = None
 
     def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled.
@@ -515,10 +646,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # but we must not leak the span.
             span = self._meta.get("_telemetry_span")
             if span is not None:
-                from ..telemetry import end_backend_span, set_span_error
+                from ..telemetry.backend_instrumentation import finalize_backend_span
 
-                set_span_error(span, chunks[-1])
-                end_backend_span(span)
+                finalize_backend_span(span, error=chunks[-1])
                 del self._meta["_telemetry_span"]
 
             # Fire generation_error hook (FIRE_AND_FORGET — does not block the raise)
@@ -606,6 +736,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
             copied.parsed_repr = copied  # type: ignore
 
         copied._computed = self._computed
+        copied._cancelled = self._cancelled
+        # _cancel_hook is not forwarded: a copied MOT is a distinct computation
+        # and must not share the original's backend thread signal.
+        copied._cancel_hook = None
         copied._thinking = self._thinking
         copied._action = self._action
         copied._context = self._context
@@ -634,6 +768,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._meta = deepcopy(self._meta)
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
+        deepcopied._cancelled = self._cancelled
+        # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
+        # and must not share the original's backend thread signal.
+        deepcopied._cancel_hook = None
         deepcopied._thinking = self._thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
@@ -947,8 +1085,16 @@ class Context(abc.ABC):
         ...
 
 
-class AbstractMelleaTool(abc.ABC):
-    """Abstract base class for Mellea Tool.
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class AbstractMelleaTool(abc.ABC, Generic[P, R]):
+    """Abstract base class for Mellea Tool with parameter and return type support.
+
+    Type parameters:
+        P: Parameter specification for the tool's callable (via ParamSpec)
+        R: Return type of the tool
 
     Attributes:
         name (str): The unique name used to identify the tool in JSON descriptions and tool-call dispatch.
@@ -960,7 +1106,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args: Any, **kwargs: Any) -> Any:
+    def run(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Executes the tool with the provided arguments and returns the result.
 
         Args:
@@ -968,7 +1114,7 @@ class AbstractMelleaTool(abc.ABC):
             **kwargs: Keyword arguments forwarded to the tool implementation.
 
         Returns:
-            Any: The result produced by the tool; the concrete type depends on the implementation.
+            R: The result produced by the tool; the concrete type depends on the implementation.
         """
 
     @property

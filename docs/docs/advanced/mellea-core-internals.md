@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/mellea-core-internals"
 title: "Mellea Core Internals"
 description: "The three core data structures and abstraction layers underlying every Mellea program."
 sidebarTitle: "Core Internals"

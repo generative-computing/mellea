@@ -92,9 +92,11 @@ from .metrics import (
 )
 from .pricing import is_pricing_enabled
 from .tracing import (
+    add_span_event,
     end_backend_span,
     is_application_tracing_enabled,
     is_backend_tracing_enabled,
+    is_content_tracing_enabled,
     set_span_attribute,
     set_span_error,
     start_backend_span,
@@ -104,6 +106,7 @@ from .tracing import (
 
 __all__ = [
     "MelleaContextFilter",
+    "add_span_event",
     "async_with_context",
     "create_counter",
     "create_histogram",
@@ -118,6 +121,7 @@ __all__ = [
     "get_session_id",
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
+    "is_content_tracing_enabled",
     "is_metrics_enabled",
     "is_pricing_enabled",
     "record_cost",

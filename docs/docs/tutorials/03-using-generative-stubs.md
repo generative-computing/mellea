@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/03-using-generative-stubs"
 title: "Tutorial: Using Generative Stubs"
 description: "Replace ad-hoc instruct() calls with typed, composable @generative functions."
 # diataxis: tutorial
@@ -16,7 +17,7 @@ By the end you will have covered:
 - Precondition and postcondition validation patterns
 
 **Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

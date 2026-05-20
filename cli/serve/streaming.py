@@ -1,19 +1,25 @@
 """Streaming utilities for OpenAI-compatible server responses."""
 
 from collections.abc import AsyncGenerator
+from typing import Literal
 
 from mellea.core.base import ModelOutputThunk
 from mellea.core.utils import MelleaLogger
-from mellea.helpers.openai_compatible_helpers import build_completion_usage
+from mellea.helpers.openai_compatible_helpers import (
+    build_completion_usage,
+    build_tool_calls,
+)
 
 from .models import (
     ChatCompletionChunk,
     ChatCompletionChunkChoice,
     ChatCompletionChunkDelta,
+    ChatCompletionMessageToolCallDelta,
     OpenAIError,
     OpenAIErrorResponse,
     StreamOptions,
 )
+from .utils import extract_finish_reason
 
 
 async def stream_chat_completion_chunks(
@@ -25,6 +31,11 @@ async def stream_chat_completion_chunks(
     system_fingerprint: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate OpenAI-compatible SSE chat completion chunks from a model output.
+
+    This function acts as a pass-through streaming layer, forwarding chunks directly
+    from the backend to the client without buffering or validation. Format validation
+    for structured outputs happens at the module level (in the serve function) and
+    client side, not in this streaming layer.
 
     Args:
         output: The model output object to stream.
@@ -98,6 +109,32 @@ async def stream_chat_completion_chunks(
                     )
                     yield f"data: {chunk.model_dump_json()}\n\n"
 
+        tool_calls_list = build_tool_calls(output)
+
+        if tool_calls_list:
+            # Convert to ChatCompletionMessageToolCallDelta objects with required index
+            tool_calls = [
+                ChatCompletionMessageToolCallDelta.model_validate({**tc, "index": idx})
+                for idx, tc in enumerate(tool_calls_list)
+            ]
+
+            # Emit tool calls in a separate chunk before the final chunk
+            tool_call_chunk = ChatCompletionChunk(
+                id=completion_id,
+                model=model,
+                created=created,
+                choices=[
+                    ChatCompletionChunkChoice(
+                        index=0,
+                        delta=ChatCompletionChunkDelta(tool_calls=tool_calls),
+                        finish_reason=None,
+                    )
+                ],
+                object="chat.completion.chunk",
+                system_fingerprint=system_fingerprint,
+            )
+            yield f"data: {tool_call_chunk.model_dump_json()}\n\n"
+
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
         include_usage = stream_options is not None and stream_options.include_usage
@@ -112,7 +149,7 @@ async def stream_chat_completion_chunks(
                 ChatCompletionChunkChoice(
                     index=0,
                     delta=ChatCompletionChunkDelta(content=None),
-                    finish_reason="stop",
+                    finish_reason=extract_finish_reason(output),
                 )
             ],
             object="chat.completion.chunk",

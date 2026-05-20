@@ -13,9 +13,14 @@ on:
     types: [opened, edited]
 
 jobs:
-  update-pr-body:
+  manage-checklist-comment:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.pull_request.body, 'mellea-pr-edited-marker') }}
+    # Serialize per-PR runs so rapid edited/opened events can't race —
+    # without this, two runs could both fetch comments before either
+    # posts, both see no marker, and both POST → duplicate comments.
+    concurrency:
+      group: pr-bot-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     permissions:
       pull-requests: write
       contents: read
@@ -25,60 +30,98 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Detect PR type from checkboxes
-        id: detect-type
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          PR_TYPE=""
-
-          # Check for checked boxes (supports [x] and [X])
-          if echo "$PR_BODY" | grep -qi '\[x\] Component'; then
-            PR_TYPE="component"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Requirement'; then
-            PR_TYPE="requirement"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Sampling Strategy'; then
-            PR_TYPE="sampling"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Tool'; then
-            PR_TYPE="tool"
-          elif echo "$PR_BODY" | grep -qi '\[x\] Misc'; then
-            PR_TYPE="misc"
-          fi
-
-          if [ -z "$PR_TYPE" ]; then
-            echo "::error::No PR type selected. Please check one of of the boxes from the original pr template."
-            exit 1
-          fi
-
-          echo "pr_type=$PR_TYPE" >> "$GITHUB_OUTPUT"
-          echo "Detected PR type: $PR_TYPE"
-
-      - name: Update PR body with checklist
+      - name: Sync checklist comment with checked type
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_TYPE: ${{ steps.detect-type.outputs.pr_type }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          TEMPLATE_FILE=".github/PULL_REQUEST_TEMPLATE/${PR_TYPE}.md"
+          set -euo pipefail
 
-          if [ -f "$TEMPLATE_FILE" ]; then
-            MARKER="<!-- mellea-pr-edited-marker: do not remove this marker -->"
-            TEMPLATE_CONTENT=$(cat "$TEMPLATE_FILE")
+          # 1. Detect the first checked type box. Empty string if none.
+          #    -iF treats brackets literally (no regex false positives) and
+          #    matches both [x] and [X], which GitHub renders identically.
+          #    First-match-wins on multiple checked boxes — the template
+          #    asks users to split such PRs, but we warn below if it happens.
+          CURRENT_TYPE=""
+          if   printf '%s' "$PR_BODY" | grep -qiF '[x] Component';         then CURRENT_TYPE="component"
+          elif printf '%s' "$PR_BODY" | grep -qiF '[x] Requirement';       then CURRENT_TYPE="requirement"
+          elif printf '%s' "$PR_BODY" | grep -qiF '[x] Sampling Strategy'; then CURRENT_TYPE="sampling"
+          elif printf '%s' "$PR_BODY" | grep -qiF '[x] Tool';              then CURRENT_TYPE="tool"
+          fi
 
-            NEW_BODY="${MARKER}
-            ${TEMPLATE_CONTENT}"
+          # Warn (but don't fail) if more than one type box is checked, so
+          # maintainers can spot the misconfiguration in the workflow log.
+          MATCH_COUNT=0
+          for label in '[x] Component' '[x] Requirement' '[x] Sampling Strategy' '[x] Tool'; do
+            if printf '%s' "$PR_BODY" | grep -qiF "$label"; then
+              MATCH_COUNT=$((MATCH_COUNT + 1))
+            fi
+          done
+          if [ "$MATCH_COUNT" -gt 1 ]; then
+            echo "::warning::Multiple type boxes checked (${MATCH_COUNT}); using first match '${CURRENT_TYPE}'. Consider splitting into separate PRs."
+          fi
 
-            gh pr edit "$PR_NUMBER" --body "$NEW_BODY"
-            echo "Updated PR body with ${PR_TYPE} checklist"
-          else
+          # 2. Find any prior bot comments by their embedded marker.
+          #    Marker shape: <!-- mellea-pr-checklist-comment: TYPE -->
+          #    Keep the first marker comment as the canonical one; delete
+          #    any extras (a prior bug or manual action could leak duplicates).
+          COMMENTS_JSON=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --paginate)
+          MARKER_IDS=$(printf '%s' "$COMMENTS_JSON" \
+            | jq -r '.[] | select(.body | test("<!-- mellea-pr-checklist-comment:")) | .id')
+          EXISTING_ID=$(printf '%s\n' "$MARKER_IDS" | head -n1)
+          EXTRA_IDS=$(printf '%s\n' "$MARKER_IDS" | tail -n +2)
+          EXISTING_TYPE=$(printf '%s' "$COMMENTS_JSON" \
+            | jq -r '[.[] | select(.body | test("<!-- mellea-pr-checklist-comment:"))] | .[0].body // empty' \
+            | sed -n 's/.*<!-- mellea-pr-checklist-comment: \([a-z]*\) -->.*/\1/p' | head -n1)
+
+          if [ -n "$EXTRA_IDS" ]; then
+            while IFS= read -r extra_id; do
+              [ -z "$extra_id" ] && continue
+              echo "Deleting duplicate marker comment ${extra_id}."
+              gh api -X DELETE "repos/${GH_REPO}/issues/comments/${extra_id}"
+            done <<< "$EXTRA_IDS"
+          fi
+
+          echo "current_type='${CURRENT_TYPE}' existing_type='${EXISTING_TYPE}' existing_id='${EXISTING_ID}'"
+
+          # 3. Decide what to do.
+          if [ -z "$CURRENT_TYPE" ] && [ -z "$EXISTING_ID" ]; then
+            echo "No type checked and no prior comment — nothing to do."
+            exit 0
+          fi
+
+          if [ -z "$CURRENT_TYPE" ] && [ -n "$EXISTING_ID" ]; then
+            echo "Type unchecked; deleting stale comment ${EXISTING_ID}."
+            gh api -X DELETE "repos/${GH_REPO}/issues/comments/${EXISTING_ID}"
+            exit 0
+          fi
+
+          if [ -n "$CURRENT_TYPE" ] && [ "$CURRENT_TYPE" = "$EXISTING_TYPE" ]; then
+            echo "Comment already matches '${CURRENT_TYPE}' — no change."
+            exit 0
+          fi
+
+          # Need to post (no existing) or replace (different type).
+          TEMPLATE_FILE=".github/PULL_REQUEST_TEMPLATE/${CURRENT_TYPE}.md"
+          if [ ! -f "$TEMPLATE_FILE" ]; then
             echo "::error::Template file not found: $TEMPLATE_FILE"
-            echo "Something as gone wrong. Contact a maintainer."
             exit 1
           fi
 
-      - name: Comment on PR
-        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc
-        with:
-          message: |
-            The PR description has been updated. Please fill out the template for your PR to be reviewed. 
+          # Friendly heads-up + machine marker. The marker line must stay
+          # intact for the bot to find this comment again on later edits;
+          # if it gets stripped, the next event will post a duplicate.
+          BODY=$(printf '<!-- mellea-pr-checklist-comment: %s -->\n> _This comment is managed by a bot. Editing it is fine — checking off boxes, adding notes — but please leave the HTML comment marker on the first line alone, otherwise checklist updates will break._\n\n%s\n' \
+            "$CURRENT_TYPE" "$(cat "$TEMPLATE_FILE")")
+
+          if [ -n "$EXISTING_ID" ]; then
+            echo "Updating comment ${EXISTING_ID}: ${EXISTING_TYPE:-?} -> ${CURRENT_TYPE}."
+            jq -n --arg body "$BODY" '{body: $body}' \
+              | gh api -X PATCH "repos/${GH_REPO}/issues/comments/${EXISTING_ID}" --input -
+          else
+            echo "Posting new ${CURRENT_TYPE} checklist comment."
+            jq -n --arg body "$BODY" '{body: $body}' \
+              | gh api -X POST "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --input -
+          fi

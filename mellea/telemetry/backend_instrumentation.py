@@ -7,7 +7,7 @@ https://opentelemetry.io/docs/specs/semconv/gen-ai/
 from typing import Any
 
 from ..backends.utils import get_value
-from .tracing import set_span_attribute, trace_backend
+from .tracing import end_backend_span, set_span_attribute, set_span_error, trace_backend
 
 
 def get_model_id_str(backend: Any) -> str:
@@ -30,6 +30,9 @@ def get_model_id_str(backend: Any) -> str:
 def get_system_name(backend: Any) -> str:
     """Get the Gen-AI system name from backend.
 
+    Kept for back-compatibility with existing dashboards keyed on ``gen_ai.system``.
+    New code should prefer ``get_provider_name()``.
+
     Args:
         backend: Backend instance
 
@@ -51,6 +54,21 @@ def get_system_name(backend: Any) -> str:
         return backend.__class__.__name__
 
 
+def get_provider_name(backend: Any) -> str:
+    """Get the Gen-AI provider name from backend.
+
+    Returns the value for ``gen_ai.provider.name`` (semconv v1.37.0+), which
+    supersedes the deprecated ``gen_ai.system`` attribute.
+
+    Args:
+        backend: Backend instance
+
+    Returns:
+        Provider name (e.g., 'openai', 'ollama', 'huggingface')
+    """
+    return get_system_name(backend)
+
+
 def get_context_size(ctx: Any) -> int:
     """Get the size of a context.
 
@@ -68,44 +86,6 @@ def get_context_size(ctx: Any) -> int:
     except Exception:
         pass
     return 0
-
-
-def instrument_generate_from_context(
-    backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False
-):
-    """Create a backend trace span for generate_from_context.
-
-    Follows Gen-AI semantic conventions for chat operations.
-
-    Args:
-        backend: Backend instance
-        action: Action component
-        ctx: Context
-        format: Response format (BaseModel subclass or None)
-        tool_calls: Whether tool calling is enabled
-
-    Returns:
-        Context manager for the trace span
-    """
-    model_id = get_model_id_str(backend)
-    system_name = get_system_name(backend)
-
-    return trace_backend(
-        "chat",  # Gen-AI convention: use 'chat' for chat completions
-        **{
-            # Gen-AI semantic convention attributes
-            "gen_ai.system": system_name,
-            "gen_ai.request.model": model_id,
-            "gen_ai.operation.name": "chat",
-            # Mellea-specific attributes
-            "mellea.backend": backend.__class__.__name__,
-            "mellea.action_type": action.__class__.__name__,
-            "mellea.context_size": get_context_size(ctx),
-            "mellea.has_format": format is not None,
-            "mellea.format_type": format.__name__ if format else None,
-            "mellea.tool_calls_enabled": tool_calls,
-        },
-    )
 
 
 def start_generate_span(
@@ -130,13 +110,15 @@ def start_generate_span(
 
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)
+    provider_name = get_provider_name(backend)
 
     from .context import get_current_context
 
     telemetry_ctx = get_current_context()
-    span_attrs: dict = {
+    span_attrs: dict[str, Any] = {
         # Gen-AI semantic convention attributes
         "gen_ai.system": system_name,
+        "gen_ai.provider.name": provider_name,
         "gen_ai.request.model": model_id,
         "gen_ai.operation.name": "chat",
         # Mellea-specific attributes
@@ -147,9 +129,15 @@ def start_generate_span(
         "mellea.format_type": format.__name__ if format else None,
         "mellea.tool_calls_enabled": tool_calls,
     }
+
     # Propagate telemetry context to span
     for key, value in telemetry_ctx.items():
         span_attrs[f"mellea.{key}"] = value
+
+    # gen_ai.conversation.id maps from the existing session_id ContextVar
+    session_id = telemetry_ctx.get("session_id")
+    if session_id is not None:
+        span_attrs["gen_ai.conversation.id"] = session_id
 
     return start_backend_span("chat", **span_attrs)
 
@@ -172,12 +160,14 @@ def instrument_generate_from_raw(
     """
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)
+    provider_name = get_provider_name(backend)
 
     return trace_backend(
         "text_completion",  # Gen-AI convention: use 'text_completion' for completions
         **{
             # Gen-AI semantic convention attributes
             "gen_ai.system": system_name,
+            "gen_ai.provider.name": provider_name,
             "gen_ai.request.model": model_id,
             "gen_ai.operation.name": "text_completion",
             # Mellea-specific attributes
@@ -214,6 +204,22 @@ def record_token_usage(span: Any, usage: Any) -> None:
         total_tokens = get_value(usage, "total_tokens")
         if total_tokens is not None:
             set_span_attribute(span, "gen_ai.usage.total_tokens", total_tokens)
+
+        cache_read = get_value(usage, "cache_read_input_tokens")
+        if cache_read is not None:
+            set_span_attribute(span, "gen_ai.usage.cache_read.input_tokens", cache_read)
+
+        cache_creation = get_value(usage, "cache_creation_input_tokens")
+        if cache_creation is not None:
+            set_span_attribute(
+                span, "gen_ai.usage.cache_creation.input_tokens", cache_creation
+            )
+
+        reasoning_tokens = get_value(usage, "reasoning_tokens")
+        if reasoning_tokens is not None:
+            set_span_attribute(
+                span, "gen_ai.usage.reasoning.output_tokens", reasoning_tokens
+            )
     except Exception:
         # Don't fail if we can't extract token usage
         pass
@@ -260,12 +266,42 @@ def record_response_metadata(
         pass
 
 
+def finalize_backend_span(span: Any, *, error: Exception | None = None) -> None:
+    """Close a backend span on the error path, setting error.type and ERROR status.
+
+    Used by the streaming error path in ``ModelOutputThunk.__aiter__`` where a
+    span may be left open after an exception.  Backends close spans on the
+    success path themselves via ``record_token_usage`` + ``record_response_metadata``
+    + ``end_backend_span``.
+
+    Args:
+        span: The span to finalise (no-op when ``None``).
+        error: Exception to record; sets ERROR status and ``error.type``.
+    """
+    if span is None:
+        return
+
+    try:
+        if error is not None:
+            set_span_error(span, error)
+            # error.type is a Stable OTel cross-signal attribute
+            set_span_attribute(span, "error.type", type(error).__name__)
+    except Exception:
+        pass
+    try:
+        end_backend_span(span)
+    except Exception:
+        pass
+
+
 __all__ = [
+    "finalize_backend_span",
     "get_context_size",
     "get_model_id_str",
+    "get_provider_name",
     "get_system_name",
-    "instrument_generate_from_context",
     "instrument_generate_from_raw",
     "record_response_metadata",
     "record_token_usage",
+    "start_generate_span",
 ]

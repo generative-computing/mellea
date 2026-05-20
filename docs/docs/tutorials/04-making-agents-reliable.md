@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/04-making-agents-reliable"
 title: "Tutorial: Making Agents Reliable"
 description: "Add requirements validation and Guardian safety checks to a ReACT tool-using agent."
 # diataxis: tutorial
@@ -18,7 +19,7 @@ By the end you will have covered:
 
 **Prerequisites:** [Tutorial 02](./02-streaming-and-async) and
 [Tutorial 03](./03-using-generative-stubs) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

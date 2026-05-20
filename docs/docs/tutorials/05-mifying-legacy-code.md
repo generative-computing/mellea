@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/tutorials/05-mifying-legacy-code"
 title: "Tutorial: Mifying Legacy Code"
 description: "Add LLM query and transform capabilities to existing Python classes without rewriting them."
 # diataxis: tutorial
@@ -18,7 +19,7 @@ By the end you will have covered:
 - Using `stringify_func` for custom text representations
 
 **Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+`pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
 

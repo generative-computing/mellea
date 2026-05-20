@@ -24,7 +24,7 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 @cache
 def get_session():
     """Get M session (change model here)."""
-    return MelleaSession(backend=OllamaModelBackend(model_ids.IBM_GRANITE_4_MICRO_3B))
+    return MelleaSession(backend=OllamaModelBackend(model_ids.IBM_GRANITE_4_1_3B))
 
 
 @cache

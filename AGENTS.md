@@ -126,6 +126,11 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
+6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), run the docstring quality gate before pushing:
+   ```bash
+   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100 --orphans
+   ```
+   Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
 
 ## 11. Writing Tests
 
@@ -134,6 +139,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 - Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
+- **Static type checks** live in `test/typing/` as `check_*.py` files (not `test_*.py`, so pytest skips them). They use `typing.assert_type` inside function bodies to verify overload resolution and generic parameterization — e.g., that `session.aact(..., await_result=True)` narrows to `ComputedModelOutputThunk[str]`. Verification happens via `uv run mypy .`; the functions are never executed. Add a new `check_*.py` here when introducing or modifying `@overload` signatures or generic type parameters on public APIs.
 
 ## 12. Writing Docs
 
@@ -178,7 +184,7 @@ Intrinsics are specialized LoRA adapters that add task-specific capabilities (RA
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1) |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python
@@ -187,7 +193,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 context = (
     ChatContext()
     .add(Message("user", "What is the square root of 4?"))
@@ -223,5 +229,5 @@ https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name
 
 Core and Guardian intrinsics (include model subfolder):
 ```
-https://huggingface.co/ibm-granite/granitelib-{core,guardian}-r1.0/blob/main/{intrinsic_name}/granite-4.0-micro/README.md
+https://huggingface.co/ibm-granite/granitelib-{core,guardian,rag}-r1.0/blob/main/{intrinsic_name}/granite-4.1-{3b,8b,30b}/{lora,alora}/README.md
 ```

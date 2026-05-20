@@ -22,6 +22,10 @@ try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.cache_utils import DynamicCache
     from transformers.generation.logits_process import LogitsProcessorList
+    from transformers.generation.stopping_criteria import (
+        StoppingCriteria,
+        StoppingCriteriaList,
+    )
     from transformers.generation.streamers import AsyncTextIteratorStreamer
     from transformers.generation.utils import GenerateDecoderOnlyOutput
     from transformers.modeling_utils import PreTrainedModel
@@ -73,6 +77,45 @@ from .tools import (
     convert_tools_to_json,
 )
 from .utils import to_chat, to_tool_calls
+
+
+class _EventStoppingCriteria(StoppingCriteria):
+    """StoppingCriteria that signals the model to stop when a threading.Event is set.
+
+    Used by LocalHFBackend to implement cooperative cancellation: when
+    ``cancel_generation`` is called, it sets the backing event via
+    ``_cancel_hook`` before cancelling the asyncio task, giving the HF
+    ``model.generate`` thread a chance to exit cleanly rather than running
+    to completion.
+    """
+
+    def __init__(self, event: threading.Event) -> None:
+        self._event = event
+
+    def __call__(self, input_ids: Any, scores: Any, **kwargs: Any) -> bool:  # type: ignore[override]
+        return self._event.is_set()
+
+
+def _install_cancel_stopping_criteria(
+    generate_options: dict[str, Any], streaming_kwargs: dict[str, Any]
+) -> threading.Event:
+    """Wire a cooperative-cancel event into the generate call's stopping criteria.
+
+    Pops any caller-supplied ``stopping_criteria`` from *generate_options* (to
+    avoid passing it twice via both ``**generate_options`` and
+    ``**streaming_kwargs``), prepends an :class:`_EventStoppingCriteria` backed
+    by a fresh ``threading.Event``, and stores the merged list in
+    *streaming_kwargs*.  Returns the event so the caller can arm
+    ``output._cancel_hook = event.set``.
+    """
+    cancel_event = threading.Event()
+    user_sc = generate_options.pop("stopping_criteria", None)
+    streaming_kwargs["stopping_criteria"] = StoppingCriteriaList(
+        [_EventStoppingCriteria(cancel_event)]
+        + (list(user_sc) if user_sc is not None else [])
+    )
+    return cancel_event
+
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
@@ -404,7 +447,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if isinstance(action, Requirement):
                 # See docs/dev/requirement_aLoRA_rerouting.md
                 reroute_to_alora = self.default_to_constraint_checking_alora
-                adapter_name = "requirement_check"
+                adapter_name = "requirement-check"
 
                 if isinstance(action, ALoraRequirement):
                     reroute_to_alora = True
@@ -416,7 +459,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                # Check if a requirement_check (or AloraRequirement specified) adapter
+                # Check if a requirement-check (or AloraRequirement specified) adapter
                 # exists.
                 alora_req_adapter = get_adapter_for_intrinsic(
                     adapter_name, [AdapterType.ALORA], self._added_adapters
@@ -435,7 +478,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 if reroute_to_alora:
                     # Keep the alora requirement handling separate for now.
                     mot = await self._generate_from_intrinsic(
-                        alora_action, ctx, model_options=model_opts
+                        alora_action,
+                        ctx,
+                        model_options=model_opts,
+                        tool_calls=tool_calls,
                     )
                     # Store span for telemetry
                     if span is not None:
@@ -444,7 +490,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
-                    action, ctx, model_options=model_opts
+                    action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
                 # Store span for telemetry
                 if span is not None:
@@ -492,14 +538,58 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return out
 
     async def _generate_from_intrinsic(
-        self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
     ) -> ModelOutputThunk:
+        """Generate a completion for an intrinsic action using an adapter.
+
+        Applies the intrinsic's I/O rewriter to transform the conversation,
+        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        Granite Switch chat template activates the correct adapter, and
+        post-processes the model output through the intrinsic's result
+        processor.
+
+        Intrinsics default to options provided by `io.yaml`. Model options
+        override these defaults. All model options besides streaming are
+        respected. We add `do_sample=True` if `temperature != 0.0` and `temperature is not None`.
+
+        Args:
+            action (Intrinsic): The intrinsic component to execute.
+            ctx (Context): The current generation context (must be a chat context).
+            model_options (dict[str, Any]): Merged model options for this call.
+            tool_calls (bool): If ``True``, expose available tools to the model
+                and parse tool-call responses.
+
+        Returns:
+            ModelOutputThunk: A thunk that lazily resolves to the processed
+            intrinsic output.
+
+        Raises:
+            ValueError: If no adapter is registered for the requested intrinsic.
+            TypeError: If the adapter isn't an IntrinsicAdapter.
+        """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
 
-        if len(model_options.items()) > 0:
-            MelleaLogger.get_logger().info(
-                "passing in model options when generating with an intrinsic; only temperature and seed are kept from model options"
+        seed = model_options.get(ModelOption.SEED, None)
+        if seed is not None:
+            set_seed(seed)
+
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+        # Intrinsics don't support streaming because of their post-processing step.
+        if model_options.get(ModelOption.STREAM, False):
+            raise NotImplementedError(
+                "Intrinsics do not support streaming due to structured output parsing."
             )
 
         linearized_ctx = ctx.view_for_generation()
@@ -513,18 +603,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
         #       through their rewriters.
 
+        # Extract system prompt and prepend to conversation.
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         conversation: list[dict] = []
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
         docs = messages_to_docs(ctx_as_message_list)
-
-        seed = model_options.get(ModelOption.SEED, None)
-        if seed is not None:
-            set_seed(seed)
-
-        # Intrinsics don't support streaming because of their post-processing step.
-        if model_options.get(ModelOption.STREAM, False):
-            raise NotImplementedError("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -551,19 +637,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             config_dict=intrinsic_config
         )
 
+        # The pydantic models used by the intrinsic rewriter are stricter than the actual OpenAI SDK.
+        # Extract the "function" fields from each json tool which contains `{"name":..., "description":..., "parameters":...}`.
+        formatted_tools = [tool["function"] for tool in convert_tools_to_json(tools)]
         # Convert our conversation into a proper chat completions dict.
         # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
         request_json: dict = {
             "messages": conversation,
             "extra_body": {"documents": docs},
+            "tools": formatted_tools if len(formatted_tools) > 0 else None,
         }
 
-        # Convert other parameters from Mellea proprietary format to standard format.
-        for model_option in model_options:
-            if model_option == ModelOption.TEMPERATURE:
-                request_json["temperature"] = model_options[model_option]
-
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # Extract temperature and apply it to the rewritten request so that
+        # chat_completion_request_to_transformers_inputs handles the
+        # do_sample/temperature logic correctly.
+        temperature = model_options.pop(ModelOption.TEMPERATURE, None)
+        if temperature is not None:
+            rewritten = rewritten.model_copy(update={"temperature": temperature})
 
         # TODO: Handle caching here. granite_formatters doesn't tell us what changed,
         #       so we will have to invalidate the cache on our side. This requires
@@ -574,6 +666,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 rewritten, self._tokenizer, self._model
             )
         )
+
+        # Apply remaining user model options directly to generate_input,
+        # overwriting any values set by the util function or io.yaml defaults.
+        # We don't update other_input since those inputs are specific to `generate_with_transformers`
+        # and not covered by model options.
+        user_params = self._make_backend_specific_and_remove(model_options)
+        generate_input.update(user_params)
 
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
@@ -625,8 +724,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             conversation=conversation,
             input_ids=generate_input["input_tokens"],
             _format=None,
-            tool_calls=False,
-            tools={},
+            tool_calls=tool_calls,
+            tools=tools,
             seed=seed,
         )
 
@@ -836,6 +935,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
             linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
             _input_text, input_ids, merged_cache, attention_mask = (
@@ -864,6 +972,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -999,6 +1111,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -1013,6 +1134,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action

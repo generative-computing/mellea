@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/security-and-taint-tracking"
 title: "Security and Taint Tracking"
 description: "Use GuardianCheck with IBM Granite Guardian to validate LLM outputs for safety risks."
 # diataxis: how-to

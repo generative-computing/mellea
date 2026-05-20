@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/use-images-and-vision"
 title: "Use Images and Vision Models"
 description: "Pass images to instruct() and chat() calls, and configure vision-capable backends."
 # diataxis: how-to
@@ -10,7 +11,7 @@ Mellea supports multimodal input: pass images alongside your text prompt to any
 **Prerequisites:** `pip install mellea pillow`, a vision-capable model downloaded and
 running.
 
-> **Backend note:** The default Ollama model (`granite4:micro`) does not support image
+> **Backend note:** The default Ollama model (`granite4.1:3b`) does not support image
 > input. You must switch to a vision-capable model such as `granite3.2-vision` or
 > `llava`. Not all backends support vision — see backend notes below.
 

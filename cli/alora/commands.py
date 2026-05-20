@@ -204,7 +204,13 @@ def alora_add_readme(
         OSError: If no Hugging Face authentication token is found.
         SystemExit: If the user declines to upload the generated README.
     """
-    from huggingface_hub import HfFolder, create_repo, upload_file
+    try:
+        from huggingface_hub import HfFolder, create_repo, upload_file
+    except ImportError as e:
+        raise ImportError(
+            "The 'm alora' command requires extra dependencies. "
+            'Please install them with: pip install "mellea[hf]"'
+        ) from e
 
     from cli.alora.readme_generator import generate_readme
 

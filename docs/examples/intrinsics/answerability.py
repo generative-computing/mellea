@@ -12,7 +12,7 @@ from mellea import model_ids, start_backend
 from mellea.stdlib.components.intrinsic import rag
 
 ctx, backend = start_backend(
-    "hf", model_id=model_ids.IBM_GRANITE_4_MICRO_3B, context_type="chat"
+    "hf", model_id=model_ids.IBM_GRANITE_4_1_3B, context_type="chat"
 )
 # NOTE: This example can also be run with the OpenAIBackend using a GraniteSwitch model. See docs/examples/granite-switch/.
 

@@ -14,7 +14,7 @@ The actual rule is slightly more complicated.
 
 ## The Actual Rule
 
-If a `Requirement` is validated using a backend that could either use a `requirement_check` aLoRA or perform an LLMaJ prompt on the underlying model, then the aLoRA is used for validation, even if the `backend.generate_from_context` method is called instead of the `backend._generate_from_intrinsic` method.
+If a `Requirement` is validated using a backend that could either use a `requirement-check` aLoRA or perform an LLMaJ prompt on the underlying model, then the aLoRA is used for validation, even if the `backend.generate_from_context` method is called instead of the `backend._generate_from_intrinsic` method.
 
 There are three exceptions to this rule:
 1. `Backend.default_to_constraint_checking_alora` is set to `False` (this parameter defaults to `True`).
@@ -39,8 +39,8 @@ from mellea.backends.adapters import IntrinsicAdapter
 m = start_session(
     "huggingface.LocalHFBackend:ibm-granite/granite-4.0-micro")
 
-# By default, the AloraRequirement uses a IntrinsicAdapter with "requirement_check".
-m.backend.add_adapter(IntrinsicAdapter("ibm-granite/rag-intrinsics-lib", "requirement_check", base_model_name="granite-4.0-micro"))
+# By default, the AloraRequirement uses a IntrinsicAdapter with "requirement-check".
+m.backend.add_adapter(IntrinsicAdapter("ibm-granite/rag-intrinsics-lib", "requirement-check", base_model_name="granite-4.0-micro"))
 
 m.instruct(
     "Corporate wants you to find the difference between these two strings:\n\naaa\naba")

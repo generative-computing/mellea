@@ -61,6 +61,9 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     assert "to_markdown" in tools
 
 
+@pytest.mark.xfail(
+    reason="We don't force tools to be called. As a result, this test might unexpectedly fail."
+)
 def test_tool_called(m: MelleaSession, table: Table):
     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
     r = 10

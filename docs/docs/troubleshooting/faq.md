@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/troubleshooting/faq"
 title: "FAQ"
 description: "Answers to frequently asked questions about Mellea installation, backends, and generative functions."
 # diataxis: reference
@@ -38,7 +39,7 @@ m = MelleaSession(
 )
 ```
 
-## How do I use a model other than `granite4:micro`?
+## How do I use a model other than `granite4.1:3b`?
 
 Pass the `model_id` parameter to `start_session()`:
 

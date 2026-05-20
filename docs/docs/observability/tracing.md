@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/observability/tracing"
 title: "Tracing"
 description: "Export distributed traces from Mellea using OpenTelemetry semantic conventions."
 # diataxis: how-to
@@ -158,7 +159,7 @@ session_context           (mellea.application)
 │   │                     [mellea.backend=OllamaModelBackend]
 │   ├── chat              (mellea.backend)
 │   │                     [gen_ai.system=ollama]
-│   │                     [gen_ai.request.model=granite4:micro]
+│   │                     [gen_ai.request.model=granite4.1:3b]
 │   │                     [gen_ai.usage.input_tokens=150]
 │   │                     [gen_ai.usage.output_tokens=42]
 │   └── requirement_validation  (mellea.application)

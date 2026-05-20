@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/openai"
 title: "OpenAI and OpenAI-Compatible APIs"
 description: "Use Mellea with OpenAI's API and any OpenAI-compatible endpoint — LM Studio, vLLM, Anthropic, and more."
 # diataxis: how-to
@@ -278,12 +279,12 @@ Then create a backend with `load_embedded_adapters=True`:
 
 ```python
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
 
 backend = OpenAIBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
     base_url="http://localhost:8000/v1",
     api_key="EMPTY",
     load_embedded_adapters=True,
@@ -305,12 +306,12 @@ For more control, load adapters manually with `load_embedded_adapters=False`:
 ```python
 from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
 from mellea.formatters import TemplateFormatter
 
 backend = OpenAIBackend(
-    model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
-    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B.hf_model_name),
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
     base_url="http://localhost:8000/v1",
     api_key="EMPTY",
     load_embedded_adapters=False,
@@ -318,7 +319,7 @@ backend = OpenAIBackend(
 
 # Load a single adapter from the model's HuggingFace repo
 adapters = EmbeddedIntrinsicAdapter.from_hub(
-    IBM_GRANITE_SWITCH_4_1_3B.hf_model_name,
+    IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     intrinsic_name="answerability",
 )
 for adapter in adapters:
@@ -343,8 +344,50 @@ The model string must exactly match the name your server recognises. For OpenAI,
 refer to the [OpenAI models page](https://platform.openai.com/docs/models). For
 local servers, list available models from the server's API or UI.
 
+### Empty `value` from a thinking-mode model
+
+A response with `result.value == ""` despite non-zero `completion_tokens` is the
+signature of a thinking-mode model that emitted only reasoning tokens and no
+final answer. The OpenAI backend reports the response faithfully — the model
+genuinely returned `content=None` — but the reasoning content is preserved
+separately on the underlying `ModelOutputThunk`.
+
+Diagnose with:
+
+```python
+result = m.instruct("What is 2 + 2?")
+print(repr(result.value))                    # ''
+print(result.generation.usage)               # {'completion_tokens': 9, ...}
+print(result._thinking)                      # populated reasoning content, if any
+```
+
+This affects models that default to thinking mode, most commonly Qwen3 served
+via vLLM with `--reasoning-parser qwen3`. To disable thinking and get a normal
+text response, pass the runtime-specific switch through `model_options`. For
+vLLM:
+
+```python
+from mellea import MelleaSession
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id="Qwen/Qwen3-Coder-Next-FP8",
+        base_url="http://localhost:8000/v1",
+        api_key="unused",
+        model_options={
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        },
+    )
+)
+```
+
+Other inference servers expose the same control under different names — check
+your runtime's documentation. If you intend to use thinking mode, read the
+reasoning trace from `result._thinking` rather than `result.value`.
+
 ---
 
 **See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
 [Enforce Structured Output](../how-to/enforce-structured-output) |
-[Official Granite Switch Documentation](GRANITE_SWITCH_DOCS)
+[Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch)

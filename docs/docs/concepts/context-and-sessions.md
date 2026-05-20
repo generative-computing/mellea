@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/context-and-sessions"
 title: "Context and Sessions"
 description: "How Component, Backend, Context, and Session fit together in Mellea's architecture."
 # diataxis: explanation
@@ -129,7 +130,7 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.context import SimpleContext
 
 backend = OllamaModelBackend(
-    "granite4:micro",
+    "granite4.1:3b",
     model_options={"temperature": 0.2},
 )
 m = MelleaSession(backend, SimpleContext())

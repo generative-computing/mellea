@@ -76,16 +76,16 @@ def test_simple_validate_invalid():
 
 
 def test_requirement_check_to_bool_above_threshold():
-    assert requirement_check_to_bool('{"requirement_likelihood": 0.8}') is True
+    assert requirement_check_to_bool('{"requirement_check": {"score": 0.8}}') is True
 
 
 def test_requirement_check_to_bool_below_threshold():
-    assert requirement_check_to_bool('{"requirement_likelihood": 0.3}') is False
+    assert requirement_check_to_bool('{"requirement_check": {"score":0.3}}') is False
 
 
 def test_requirement_check_to_bool_at_threshold():
     """0.5 is NOT > 0.5, so should return False."""
-    assert requirement_check_to_bool('{"requirement_likelihood": 0.5}') is False
+    assert requirement_check_to_bool('{"requirement_check": {"score": 0.5}}') is False
 
 
 def test_requirement_check_to_bool_missing_key():
@@ -163,7 +163,7 @@ def test_alora_requirement_default_intrinsic(mock_intrinsic_init):
     # Intrinsic.__init__ is unbound; mock receives self as first positional arg.
     mock_intrinsic_init.assert_called_once_with(
         r,
-        intrinsic_name="requirement_check",
+        intrinsic_name="requirement-check",
         intrinsic_kwargs={"requirement": "must be valid"},
     )
 

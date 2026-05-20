@@ -28,7 +28,7 @@ if streaming:
         messages=[
             {"role": "user", "content": "Count down from 100 using words not digits."}
         ],
-        model="granite4:micro-h",
+        model="granite4.1:3b",
         stream=True,
     )
     for chunk in stream_result:
@@ -40,7 +40,7 @@ else:
         messages=[
             {"role": "user", "content": "Count down from 100 using words not digits."}
         ],
-        model="granite4:micro-h",
+        model="granite4.1:3b",
         stream=False,
     )
     print(completion_result.choices[0].message.content)
