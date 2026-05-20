@@ -14,7 +14,9 @@ from mellea.backends.ollama import OllamaModelBackend, chat_response_delta_merge
 from mellea.core import ModelOutputThunk
 
 
-def _make_backend(model_options: dict | None = None) -> OllamaModelBackend:
+def _make_backend(
+    model_options: dict | None = None, timeout: float | None = None
+) -> OllamaModelBackend:
     """Return an OllamaModelBackend with all network calls patched."""
     with (
         patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
@@ -22,7 +24,9 @@ def _make_backend(model_options: dict | None = None) -> OllamaModelBackend:
         patch("mellea.backends.ollama.ollama.Client", return_value=MagicMock()),
         patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
     ):
-        return OllamaModelBackend(model_id="granite3.3:8b", model_options=model_options)
+        return OllamaModelBackend(
+            model_id="granite3.3:8b", model_options=model_options, timeout=timeout
+        )
 
 
 @pytest.fixture
@@ -145,6 +149,54 @@ def test_delta_merge_thinking_concatenated():
     chat_response_delta_merge(mot, _make_delta("reply", thinking="step 1"))
     chat_response_delta_merge(mot, _make_delta("", thinking=" step 2"))
     assert mot._meta["chat_response"].message.thinking == "step 1 step 2"
+
+
+# --- timeout wiring ---
+
+
+def test_timeout_default_not_passed_to_clients():
+    """When timeout is omitted, it must not be forwarded to the Ollama clients."""
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client") as mock_client,
+        patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
+    ):
+        OllamaModelBackend(model_id="granite3.3:8b")
+
+    _, sync_kwargs = mock_client.call_args
+    assert "timeout" not in sync_kwargs
+    _, async_kwargs = mock_async_client.call_args
+    assert "timeout" not in async_kwargs
+
+
+def test_timeout_forwarded_to_sync_and_async_clients():
+    """When timeout is set, it must reach both ollama.Client and ollama.AsyncClient."""
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client") as mock_client,
+        patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
+    ):
+        OllamaModelBackend(model_id="granite3.3:8b", timeout=12.5)
+
+    _, sync_kwargs = mock_client.call_args
+    assert sync_kwargs.get("timeout") == 12.5
+    _, async_kwargs = mock_async_client.call_args
+    assert async_kwargs.get("timeout") == 12.5
+
+
+def test_timeout_forwarded_to_new_async_clients_per_event_loop():
+    """Newly created AsyncClients (one per event loop) must inherit the timeout."""
+    backend = _make_backend(timeout=7.0)
+    with patch(
+        "mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()
+    ) as mock_async_client:
+        backend._client_cache = type(backend._client_cache)(2)  # reset cache
+        _ = backend._async_client
+
+    _, async_kwargs = mock_async_client.call_args
+    assert async_kwargs.get("timeout") == 7.0
 
 
 if __name__ == "__main__":

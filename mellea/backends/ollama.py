@@ -51,6 +51,10 @@ class OllamaModelBackend(FormatterBackend):
         base_url (str | None): Ollama server endpoint; defaults to
             ``env(OLLAMA_HOST)`` or ``http://localhost:11434``.
         model_options (dict | None): Default model options for generation requests.
+        timeout (float | None): Request timeout in seconds for the underlying HTTP
+            client. ``None`` (the default) preserves the upstream ``ollama`` SDK
+            default. Set this to bound how long a single request will wait when
+            the Ollama server is overloaded or stalled.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
@@ -65,6 +69,7 @@ class OllamaModelBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
+        timeout: float | None = None,
     ):
         """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
@@ -81,7 +86,12 @@ class OllamaModelBackend(FormatterBackend):
 
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
-        self._client = ollama.Client(base_url)
+        self._timeout = timeout
+        client_kwargs: dict[str, Any] = {}
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
+        self._client_kwargs = client_kwargs
+        self._client = ollama.Client(base_url, **client_kwargs)
 
         self._client_cache = ClientCache(2)
 
@@ -207,7 +217,7 @@ class OllamaModelBackend(FormatterBackend):
 
         _async_client = self._client_cache.get(key)
         if _async_client is None:
-            _async_client = ollama.AsyncClient(self._base_url)
+            _async_client = ollama.AsyncClient(self._base_url, **self._client_kwargs)
             self._client_cache.put(key, _async_client)
         return _async_client
 
