@@ -689,7 +689,7 @@ _IN_GHA = os.environ.get("GITHUB_ACTIONS") == "true"
 # will resolve once the PR introducing them is merged.
 _CONTRIB_DOCS_URL = (
     "https://github.com/generative-computing/mellea/blob/main"
-    "/docs/docs/guide/CONTRIBUTING.md"
+    "/docs/CONTRIBUTING_DOCS.md"
 )
 _COVERAGE_DOCS_URL = (
     "https://github.com/generative-computing/mellea/blob/main"

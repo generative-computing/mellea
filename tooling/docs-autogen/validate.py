@@ -23,7 +23,7 @@ _ROOT_CONTRIB = (
 )
 _GUIDE_CONTRIB = (
     "https://github.com/generative-computing/mellea/blob/main"
-    "/docs/docs/guide/CONTRIBUTING.md"
+    "/docs/CONTRIBUTING_DOCS.md"
 )
 
 # Per-check fix hints: label (as passed to _print_check_errors) -> (fix text, ref URL)

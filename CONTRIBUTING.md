@@ -469,7 +469,7 @@ print(m.last_prompt())
 
 ### Documentation
 
-- **[Docs writing guide](docs/docs/guide/CONTRIBUTING.md)** - Conventions, PR checklist, and review process for documentation contributions
+- **[Docs writing guide](docs/CONTRIBUTING_DOCS.md)** - Conventions, PR checklist, and review process for documentation contributions
 - **[API Documentation](https://docs.mellea.ai)** - Published documentation site
 - **[Test Markers Guide](test/MARKERS_GUIDE.md)** - Detailed pytest marker documentation
 - **[AGENTS.md](AGENTS.md)** - Guidelines for AI assistants working on Mellea internals
