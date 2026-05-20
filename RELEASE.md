@@ -12,12 +12,12 @@ Releases target a roughly 4-week cadence; patch releases happen as needed.
 
 ## Making a minor release
 
-1. [Cut the release branch](#cut-the-release-branch)
-2. [Stabilize on the release branch](#stabilize-on-the-release-branch)
-3. [Publish the final](#publish-the-final)
-4. [Sync the changelog back to main](#sync-the-changelog-back-to-main)
+1. [Cut the release branch](#1-cut-the-release-branch)
+2. [Stabilize on the release branch](#2-stabilize-on-the-release-branch)
+3. [Publish the final](#3-publish-the-final)
+4. [Sync the changelog back to main](#4-sync-the-changelog-back-to-main)
 
-### Cut the release branch
+### 1. Cut the release branch
 
 Run [Cut release branch](https://github.com/generative-computing/mellea/actions/workflows/cut-release-branch.yml)
 against `main`.
@@ -28,7 +28,7 @@ against `main`.
 After this runs: `release/vX.Y` exists at `X.Y.0rc0`, and `main` has been
 bumped to `X.(Y+1).0.dev0`.
 
-### Stabilize on the release branch
+### 2. Stabilize on the release branch
 
 Land fixes via PRs targeting `release/vX.Y` (normal review + CI; protection
 mirrors `main`). If the same change also belongs on `main`, open a
@@ -39,7 +39,7 @@ follow-up PR to `main` once the release-branch PR is merged.
 > See [rc cycling](#rc-cycling) in the appendix for what changes when
 > prereleases are enabled.
 
-### Publish the final
+### 3. Publish the final
 
 Run [Publish release](https://github.com/generative-computing/mellea/actions/workflows/publish-release.yml)
 against `release/vX.Y`.
@@ -49,23 +49,23 @@ against `release/vX.Y`.
 After this runs: `vX.Y.0` is tagged, the GitHub Release exists, the PyPI
 upload is done, and docs/production has been redeployed.
 
-### Sync the changelog back to main
+### 4. Sync the changelog back to main
 
 The publish workflow opens a PR titled `docs: sync changelog for vX.Y.0`
 from `chore/changelog-sync-X.Y.0` to `main`. Review and merge it.
 
 ## Making a patch release
 
-1. [Land fixes on the release branch](#land-fixes-on-the-release-branch)
-2. [Publish the patch](#publish-the-patch)
-3. [Sync the changelog back to main](#sync-the-changelog-back-to-main-1)
+1. [Land fixes on the release branch](#1-land-fixes-on-the-release-branch)
+2. [Publish the patch](#2-publish-the-patch)
+3. [Sync the changelog back to main](#3-sync-the-changelog-back-to-main)
 
-### Land fixes on the release branch
+### 1. Land fixes on the release branch
 
 PR targeting `release/vX.Y`. If the change also belongs on `main`, open a
 follow-up PR to `main` once the release-branch PR is merged.
 
-### Publish the patch
+### 2. Publish the patch
 
 Run [Publish release](https://github.com/generative-computing/mellea/actions/workflows/publish-release.yml)
 against `release/vX.Y`.
@@ -75,7 +75,7 @@ against `release/vX.Y`.
 > Patch rc iteration (`bump_type: patch-rc`) is currently a no-op for the
 > same reason as minor rc iteration; see [rc cycling](#rc-cycling).
 
-### Sync the changelog back to main
+### 3. Sync the changelog back to main
 
 Same as the minor flow: review and merge the auto-opened
 `chore/changelog-sync-X.Y.Z` PR.
@@ -215,8 +215,8 @@ counter on the release branch:
   against the previous rc, and uploads to PyPI.
 
 When `PUBLISH_PRERELEASES` is enabled, the rc step is a real publish and
-fits between [Stabilize](#stabilize-on-the-release-branch) and
-[Publish the final](#publish-the-final): dispatch
+fits between [Stabilize](#2-stabilize-on-the-release-branch) and
+[Publish the final](#3-publish-the-final): dispatch
 [Publish release](https://github.com/generative-computing/mellea/actions/workflows/publish-release.yml) with
 `bump_type: rc` (or `patch-rc`) as many times as needed.
 
