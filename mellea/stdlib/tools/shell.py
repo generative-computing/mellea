@@ -29,6 +29,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from ...core import MelleaLogger
+from ._bash_audit import record_bash_violation
 from .interpreter import ExecutionResult
 
 logger = MelleaLogger.get_logger()
@@ -574,6 +575,16 @@ class BashEnvironment(ABC):
 
         is_dangerous, reason = _is_dangerous_command(argv)
         if is_dangerous:
+            record_bash_violation(
+                command=" ".join(argv),
+                argv=argv,
+                pattern_name="DangerousCommandPattern",
+                category="UNKNOWN",
+                severity="HIGH",
+                reason=reason,
+                working_dir=self.working_dir,
+                allowed_paths=self.allowed_paths,
+            )
             return ExecutionResult(
                 success=False,
                 stdout=None,
@@ -584,6 +595,16 @@ class BashEnvironment(ABC):
 
         has_dangerous, reason = _check_dangerous_paths(argv, self.allowed_paths)
         if has_dangerous:
+            record_bash_violation(
+                command=" ".join(argv),
+                argv=argv,
+                pattern_name="DangerousPathPattern",
+                category="UNKNOWN",
+                severity="HIGH",
+                reason=reason,
+                working_dir=self.working_dir,
+                allowed_paths=self.allowed_paths,
+            )
             return ExecutionResult(
                 success=False,
                 stdout=None,
@@ -596,6 +617,16 @@ class BashEnvironment(ABC):
             argv, self.working_dir
         )
         if violates_restriction:
+            record_bash_violation(
+                command=" ".join(argv),
+                argv=argv,
+                pattern_name="WorkingDirRestrictionPattern",
+                category="UNKNOWN",
+                severity="MEDIUM",
+                reason=reason,
+                working_dir=self.working_dir,
+                allowed_paths=self.allowed_paths,
+            )
             return ExecutionResult(
                 success=False,
                 stdout=None,

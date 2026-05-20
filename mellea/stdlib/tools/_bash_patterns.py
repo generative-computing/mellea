@@ -6,6 +6,7 @@ New patterns can be added without modifying core validation logic.
 
 from abc import ABC, abstractmethod
 
+from ._bash_audit import record_bash_violation
 from ._bash_guardrails import COMMAND_RULES, SHELL_OPERATOR_RULES
 
 
@@ -206,11 +207,17 @@ SECURITY_PATTERNS: list[BashSecurityPattern] = [
 ]
 
 
-def check_all_patterns(argv: list[str]) -> tuple[bool, str]:
+def check_all_patterns(
+    argv: list[str],
+    working_dir: str | None = None,
+    allowed_paths: list[str] | None = None,
+) -> tuple[bool, str]:
     """Check command against all registered security patterns.
 
     Args:
         argv: Tokenized command arguments.
+        working_dir: Working directory context for audit trail.
+        allowed_paths: Allowed paths context for audit trail.
 
     Returns:
         Tuple of (is_dangerous, reason_message) from the first matching pattern,
@@ -219,6 +226,19 @@ def check_all_patterns(argv: list[str]) -> tuple[bool, str]:
     for pattern in SECURITY_PATTERNS:
         is_dangerous, reason = pattern.check(argv)
         if is_dangerous:
+            pattern_name = type(pattern).__name__
+            category = getattr(pattern, "category", "unknown")
+            severity = getattr(pattern, "severity", "MEDIUM")
+            record_bash_violation(
+                command=" ".join(argv),
+                argv=argv,
+                pattern_name=pattern_name,
+                category=category,
+                severity=severity,
+                reason=reason,
+                working_dir=working_dir,
+                allowed_paths=allowed_paths,
+            )
             return True, reason
     return False, ""
 
