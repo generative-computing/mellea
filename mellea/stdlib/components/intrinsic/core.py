@@ -27,23 +27,15 @@ def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
     return result_json["certainty"]
 
 
-_EVALUATION_PROMPT = (
-    "Please verify if the assistant's generation satisfies the user's "
-    "requirements or not and reply with a binary label accordingly. "
-    'Respond with a json {"score": "yes"} if the constraints are '
-    'satisfied or respond with {"score": "no"} if the constraints are not '
-    "satisfied."
-)
-
-
 def requirement_check(
     context: ChatContext, backend: AdapterMixin, requirement: str
 ) -> float:
     """Detect if text adheres to provided requirements.
 
     Intrinsic function that determines if the text satisfies the given
-    requirements. Appends an evaluation prompt to the context following
-    the format specified by the Granite Guardian requirement checker model card.
+    requirements. The requirement text is passed through to the adapter's
+    ``io.yaml`` ``instruction`` template via ``IntrinsicsRewriter``, which
+    appends the formatted evaluation prompt as a new user message.
 
     Args:
         context: Chat context containing user question and assistant answer.
@@ -53,9 +45,9 @@ def requirement_check(
     Returns:
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
     """
-    eval_message = f"<requirements>: {requirement}\n{_EVALUATION_PROMPT}"
-    context = context.add(Message("user", eval_message))
-    result_json = call_intrinsic("requirement-check", context, backend)
+    result_json = call_intrinsic(
+        "requirement-check", context, backend, kwargs={"requirement": requirement}
+    )
     return result_json["requirement_check"]["score"]
 
 

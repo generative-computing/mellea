@@ -35,7 +35,8 @@
               "tutorials/02-streaming-and-async",
               "tutorials/03-using-generative-stubs",
               "tutorials/04-making-agents-reliable",
-              "tutorials/05-mifying-legacy-code"
+              "tutorials/05-mifying-legacy-code",
+              "tutorials/06-streaming-validation"
             ]
           },
           {
