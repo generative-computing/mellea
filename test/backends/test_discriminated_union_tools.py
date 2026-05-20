@@ -10,6 +10,7 @@ the output (the JSON Schema subset accepted by tool-calling APIs does not
 include it; the ``Literal`` tag fields carry the discriminator signal).
 """
 
+import json
 from typing import Annotated, Literal
 
 import pytest
@@ -31,6 +32,19 @@ class Dog(BaseModel):
     kind: Literal["dog"]
     name: str
     breed: str
+
+
+class Fish(BaseModel):
+    kind: Literal["fish"]
+    name: str
+    species: str
+
+
+class Email(BaseModel):
+    """Non-discriminated nested model for the no-op regression test."""
+
+    to: str
+    subject: str
 
 
 def act(pet: Annotated[Cat | Dog, Field(discriminator="kind")]) -> str:
@@ -56,12 +70,19 @@ def act_optional(
 def _pet_schema(func) -> dict:
     """Convert ``func`` and return the ``pet`` parameter schema."""
     tool = convert_function_to_ollama_tool(func)
+    assert tool.function is not None
+    assert tool.function.parameters is not None
     return tool.function.parameters.model_dump(exclude_none=True)["properties"]["pet"]
 
 
 def _has_branch(schema: dict, kind_value: str, *, must_have: set[str]) -> bool:
-    """Check that ``schema`` contains an inlined object branch for ``kind_value``."""
-    branches = schema.get("anyOf") or schema.get("oneOf") or []
+    """Check that ``schema`` contains an inlined ``anyOf`` branch for ``kind_value``.
+
+    After the fix lands the output schema must contain ``anyOf`` only, never
+    ``oneOf`` — accepting ``oneOf`` here would silently mask a regression of
+    the discriminator-flattening pre-pass.
+    """
+    branches = schema.get("anyOf", [])
     for branch in branches:
         props = branch.get("properties", {})
         kind = props.get("kind", {})
@@ -104,8 +125,6 @@ class TestDiscriminatedUnionSchema:
 
     def test_required_union_no_dangling_refs(self):
         """No ``$ref`` should leak into the output for the issue reproducer."""
-        import json
-
         rendered = json.dumps(_pet_schema(act))
         assert "$ref" not in rendered, f"unresolved $ref in tool schema: {rendered}"
 
@@ -131,9 +150,81 @@ class TestDiscriminatedUnionSchema:
     def test_optional_union_drops_from_required(self):
         """The optional parameter must not be in the function's required list."""
         tool = convert_function_to_ollama_tool(act_optional)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
         params = tool.function.parameters.model_dump(exclude_none=True)
         assert "pet" not in params.get("required", []), (
             f"optional 'pet' should not be required: {params}"
+        )
+
+    def test_optional_union_strips_discriminator_keyword(self):
+        """The Optional variant must also drop the OAS-3 ``discriminator``.
+
+        The required variant strips it via the top-level ``oneOf`` path; the
+        optional variant strips it implicitly when the wrapper sub-schema is
+        replaced by its expanded branches. Asserted explicitly so a refactor
+        that re-introduces the wrapper does not slip past silently.
+        """
+        rendered = json.dumps(_pet_schema(act_optional))
+        assert "discriminator" not in rendered, (
+            f"discriminator keyword should be stripped from optional output: {rendered}"
+        )
+
+    def test_three_way_union_preserves_all_branches(self):
+        """A three-arm discriminated union must preserve all three branches."""
+
+        def act_three(
+            pet: Annotated[Cat | Dog | Fish, Field(discriminator="kind")],
+        ) -> str:
+            """Act on a three-way pet.
+
+            Args:
+                pet: the pet to act on
+            """
+            return "ok"
+
+        pet = _pet_schema(act_three)
+        assert _has_branch(pet, "cat", must_have={"kind", "name"}), (
+            f"Cat branch missing in three-way union: {pet!r}"
+        )
+        assert _has_branch(pet, "dog", must_have={"kind", "name", "breed"}), (
+            f"Dog branch missing in three-way union: {pet!r}"
+        )
+        assert _has_branch(pet, "fish", must_have={"kind", "name", "species"}), (
+            f"Fish branch missing in three-way union: {pet!r}"
+        )
+
+    def test_non_discriminated_optional_unchanged(self):
+        """Non-discriminated ``Optional[Email]`` must still flow through unchanged.
+
+        Regression guard: the new pre-pass must be a no-op for plain
+        ``$ref`` + ``| None`` shapes that the existing inliner already
+        handles. Pydantic emits this as
+        ``{"anyOf": [{"$ref": "..."}, {"type": "null"}]}`` — no ``oneOf``
+        in any sub-schema, so the pre-pass should not activate.
+        """
+
+        def send(email: Email | None = None) -> str:
+            """Send an email.
+
+            Args:
+                email: optional email payload
+            """
+            return "sent"
+
+        tool = convert_function_to_ollama_tool(send)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        rendered = tool.function.parameters.model_dump(exclude_none=True)
+        email_schema = rendered["properties"]["email"]
+        # The existing complex-anyOf path inlines the $ref and preserves the
+        # full object schema with properties. The exact shape is owned by the
+        # pre-existing logic; we only assert the pre-pass did not collapse it.
+        assert email_schema.get("type") != "string", (
+            f"non-discriminated Optional collapsed: {email_schema!r}"
+        )
+        assert "email" not in rendered.get("required", []), (
+            f"optional email should not be required: {rendered}"
         )
 
 

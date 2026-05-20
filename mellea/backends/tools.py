@@ -1003,9 +1003,14 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     discriminator signal, so we can safely drop ``discriminator`` and emit
     ``anyOf`` — equivalent here because the tag field forces uniqueness.
 
-    This rewrites the schema in place: ``oneOf`` becomes ``anyOf`` with branches
-    inlined, ``discriminator`` is stripped, and Optional unions flatten to
-    ``{"anyOf": [...inlined_branches, {"type": "null"}]}``.
+    Returns a new schema dict with ``oneOf`` rewritten to ``anyOf``, branches
+    inlined, and ``discriminator`` stripped. The input is not mutated; callers
+    must reassign the result.
+
+    Flattening is single-level. Discriminated unions nested inside an inlined
+    branch (e.g. a Pydantic model whose own field is another discriminated
+    union) are not recursively flattened — that case is tracked alongside the
+    recursive ``$ref`` resolution work in #911.
     """
 
     def _inline(branch: dict) -> dict:
@@ -1015,24 +1020,29 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
                 return copy.deepcopy(ref_schema)
         return copy.deepcopy(branch)
 
-    # Top-level discriminated union (required parameter case)
+    out = {kk: vv for kk, vv in v.items() if kk not in ("oneOf", "discriminator")}
+
+    # Top-level discriminated union (required parameter case). Append rather
+    # than overwrite so a defensive ``oneOf`` + ``anyOf`` co-occurrence does
+    # not silently drop the existing ``anyOf`` entries. Pydantic does not
+    # currently emit both at the same level, but the helper is callable in
+    # isolation and should not lose data.
     if "oneOf" in v:
-        branches = [_inline(b) for b in v["oneOf"]]
-        v = {kk: vv for kk, vv in v.items() if kk not in ("oneOf", "discriminator")}
-        v["anyOf"] = branches
+        existing = list(out.get("anyOf", []))
+        out["anyOf"] = existing + [_inline(b) for b in v["oneOf"]]
 
     # Nested oneOf inside anyOf (Optional discriminated union case)
-    if "anyOf" in v:
+    if "anyOf" in out:
         flattened: list[dict] = []
-        for sub in v["anyOf"]:
+        for sub in out["anyOf"]:
             if "oneOf" in sub:
                 for branch in sub["oneOf"]:
                     flattened.append(_inline(branch))
             else:
                 flattened.append(sub)
-        v["anyOf"] = flattened
+        out["anyOf"] = flattened
 
-    return v
+    return out
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
@@ -1071,9 +1081,7 @@ def convert_function_to_ollama_tool(
     for k, v in schema.get("properties", {}).items():
         # Pre-pass: flatten Pydantic discriminated unions (oneOf + discriminator)
         # into plain anyOf with branches inlined. See _flatten_discriminated_union.
-        if "oneOf" in v or (
-            "anyOf" in v and any("oneOf" in s for s in v.get("anyOf", []))
-        ):
+        if "oneOf" in v or ("anyOf" in v and any("oneOf" in s for s in v["anyOf"])):
             v = _flatten_discriminated_union(v, defs)
             schema["properties"][k] = v
 
