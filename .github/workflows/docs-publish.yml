@@ -252,7 +252,7 @@ jobs:
 
           CONTRIB_URL = (
               "https://github.com/generative-computing/mellea/blob/main"
-              "/docs/docs/guide/CONTRIBUTING.md"
+              "/docs/CONTRIBUTING_DOCS.md"
           )
           REPO = os.environ.get("GITHUB_REPOSITORY", "")
           RUN_ID = os.environ.get("GITHUB_RUN_ID", "")

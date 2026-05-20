@@ -466,7 +466,7 @@
     },
     {
       "source": "/core-concept/contribution-guide",
-      "destination": "/guide/CONTRIBUTING"
+      "destination": "/community/contributing-guide"
     },
     {
       "source": "/core-concept/prompt-engineering",

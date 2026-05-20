@@ -688,8 +688,7 @@ _IN_GHA = os.environ.get("GITHUB_ACTIONS") == "true"
 # These point to upstream main; anchors for the CI checks reference section
 # will resolve once the PR introducing them is merged.
 _CONTRIB_DOCS_URL = (
-    "https://github.com/generative-computing/mellea/blob/main"
-    "/docs/docs/guide/CONTRIBUTING.md"
+    "https://github.com/generative-computing/mellea/blob/main/docs/CONTRIBUTING_DOCS.md"
 )
 _COVERAGE_DOCS_URL = (
     "https://github.com/generative-computing/mellea/blob/main"
