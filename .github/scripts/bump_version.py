@@ -146,10 +146,6 @@ def write_pyproject(new_version: Version) -> None:
     PYPROJECT.write_text(new_content)
 
 
-def run(cmd: list[str]) -> None:
-    subprocess.run(cmd, cwd=REPO_ROOT, check=True)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -213,8 +209,14 @@ def main() -> int:
         check=True,
         env={**os.environ, "UV_FROZEN": "0"},
     )
-    run(["git", "add", "pyproject.toml", "uv.lock"])
-    run(["git", "commit", "-m", f"release: bump version to {next_version} [skip ci]"])
+    subprocess.run(
+        ["git", "add", "pyproject.toml", "uv.lock"], cwd=REPO_ROOT, check=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", f"release: bump version to {next_version} [skip ci]"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
 
     print(next_version)
     return 0
