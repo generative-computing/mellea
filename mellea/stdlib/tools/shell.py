@@ -1,16 +1,15 @@
 """Bash shell command execution tool and execution environments for agentic workflows.
 
-Provides ``BashEnvironment`` (abstract base for bash execution) and three concrete
-implementations: ``StaticBashEnvironment`` (parse and safety-check only, no execution),
-``_LocalBashEnvironment`` (subprocess execution in the current shell), and
-``LLMSandboxBashEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
+Provides ``BashEnvironment`` (abstract base for bash execution) and two concrete
+implementations: ``StaticBashEnvironment`` (parse and safety-check only, no execution)
+and ``_LocalBashEnvironment`` (subprocess execution in the current shell). All
 environments enforce a conservative safety denylist (sudo, rm -rf, git push --force,
 system paths, interactive shells). Write operations may also be constrained by
 ``working_dir`` and ``allowed_paths``.
 
 The top-level ``bash_executor`` (recommended entry point) executes commands locally
-with denylist safety checks. For untrusted LLM-generated code or high-risk operations,
-pass ``sandbox=True`` to run in an isolated Docker container via ``llm-sandbox``.
+with denylist safety checks. Bash executor runs with access to the host environment;
+isolation must be provided by the application layer (containers, VMs).
 
 The function is ready to be wrapped as a ``MelleaTool`` instance for ReACT or
 other agentic loops.
@@ -511,12 +510,8 @@ class BashEnvironment(ABC):
             provided, write-target paths must fall under one of these roots in
             addition to passing the default dangerous-path checks.
         working_dir (str | None): Optional directory restriction for write
-            operations. For ``_LocalBashEnvironment``, this is a host path where
-            the command executes. For ``LLMSandboxBashEnvironment``, this is a
-            container-internal path; validation is best-effort since it checks
-            against the host filesystem, but actual execution uses the container
-            filesystem. When specified, writes must remain within this directory
-            or ``/tmp``.
+            operations. This is a host path where the command executes. When
+            specified, writes must remain within this directory or ``/tmp``.
         timeout (int): Maximum number of seconds to allow command execution.
 
     Note:
@@ -698,7 +693,7 @@ class _LocalBashEnvironment(BashEnvironment):
     the command source is trusted (e.g., LLM-generated code in a known pipeline).
 
     For higher isolation requirements (untrusted code, CTF challenges, or security
-    research), use LLMSandboxBashEnvironment via bash_executor(..., sandbox=True).
+    research), provide isolation at the application layer (containers, VMs).
     """
 
     def execute(self, command: str) -> ExecutionResult:
@@ -758,152 +753,25 @@ class _LocalBashEnvironment(BashEnvironment):
             )
 
 
-class LLMSandboxBashEnvironment(BashEnvironment):
-    """Environment using llm-sandbox for secure Docker-based bash execution.
-
-    Use this for high-isolation requirements: untrusted LLM-generated code,
-    CTF challenges, security research, or experiments where the command
-    must not affect host state. Access via bash_executor(..., sandbox=True).
-
-    The denylist checks still apply (same as local execution), but the
-    Docker container provides an additional isolation boundary.
-
-    Note:
-        The ``working_dir`` parameter is interpreted as a container-internal path.
-        Path validation during command checking is performed against the host
-        filesystem and is best-effort; the actual command execution happens inside
-        an isolated Docker container with its own filesystem namespace.
-
-    Important:
-        Sandboxed execution requires the ``llm-sandbox`` package
-        (installed via ``pip install 'mellea[sandbox]'``). If not installed,
-        execution is skipped with a helpful error message.
-    """
-
-    def execute(self, command: str) -> ExecutionResult:
-        """Execute bash command using llm-sandbox in an isolated Docker container.
-
-        Validates command safety first (against host filesystem for best-effort
-        path checking), then runs the command inside a Python-based sandbox session.
-        The validated shell command is executed via ``subprocess.run(..., cwd=working_dir)``
-        inside the container so that sandbox execution honors ``self.working_dir``
-        when provided. Returns a skipped result if ``llm-sandbox`` is not installed.
-
-        Args:
-            command (str): The bash command to execute.
-
-        Returns:
-            ExecutionResult: Execution outcome with stdout/stderr and success
-            flag, or a skipped result on safety check failure, timeout, or
-            sandbox error.
-
-        Raises:
-            No exceptions are raised; all errors are caught and returned as
-            skipped results in the ExecutionResult.
-        """
-        validated = self._validate_command(command)
-        if isinstance(validated, ExecutionResult):
-            return validated
-
-        argv = validated
-
-        try:
-            from llm_sandbox import SandboxSession
-            from llm_sandbox.exceptions import SandboxTimeoutError
-        except ImportError:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message="llm-sandbox not installed. Install with: pip install 'mellea[sandbox]'",
-            )
-
-        sandbox_workdir = self.working_dir or "/sandbox"
-        # Coerce argv to strings to avoid repr() generating PosixPath/etc. that won't
-        # be defined in the sandbox namespace (e.g., if caller passes Path objects).
-        argv_strs = [str(a) for a in argv]
-        # Pass argv as a list (not shell string) to avoid re-parse and unnecessary quoting
-        python_wrapper = (
-            "import subprocess\n"
-            "import sys\n"
-            f"result = subprocess.run({argv_strs!r}, shell=False, cwd={sandbox_workdir!r}, "
-            "capture_output=True, text=True)\n"
-            "sys.stdout.write(result.stdout)\n"
-            "sys.stderr.write(result.stderr)\n"
-            "raise SystemExit(result.returncode)\n"
-        )
-
-        try:
-            with SandboxSession(
-                lang="python",
-                verbose=False,
-                keep_template=False,
-                workdir=sandbox_workdir,
-                execution_timeout=self.timeout,
-            ) as session:
-                result = session.run(python_wrapper, timeout=self.timeout)
-
-                stdout, stdout_truncated = _truncate_output(result.stdout.strip())
-                stderr, stderr_truncated = _truncate_output(result.stderr.strip())
-
-                # Append truncation warnings if needed
-                if stdout_truncated:
-                    stdout += "\n[Output truncated - stdout exceeded 10KB]"
-                if stderr_truncated:
-                    stderr += "\n[Output truncated - stderr exceeded 10KB]"
-
-                return ExecutionResult(
-                    success=result.exit_code == 0, stdout=stdout, stderr=stderr
-                )
-        except SandboxTimeoutError:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=f"Sandbox execution timed out after {self.timeout} seconds",
-            )
-        except Exception as e:
-            return ExecutionResult(
-                success=False,
-                stdout=None,
-                stderr=None,
-                skipped=True,
-                skip_message=f"Sandbox execution error: {e!s}",
-            )
-
-
 def bash_executor(
-    command: str,
-    working_dir: str | None = None,
-    allowed_paths: list[str] | None = None,
-    sandbox: bool = False,
+    command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None
 ) -> ExecutionResult:
     """Execute a bash command with denylist safety checks.
 
-    This is the recommended entry point. By default, commands execute locally
-    with access to the host environment (working directory, PATH, git repos,
-    installed tools). For untrusted LLM-generated code or high-risk operations,
-    pass ``sandbox=True`` to run in an isolated Docker container.
+    This is the recommended entry point. Commands execute locally with access to
+    the host environment (working directory, PATH, git repos, installed tools).
 
-    Safety model: Conservative denylist applied to all commands, regardless of
-    execution environment. The denylist refuses sudo, interactive shells,
-    destructive operations (rm -rf, git push --force), shell operators (|, >, &&),
-    code execution paths (python -c, bash -c), and writes to system paths
-    (/etc, /sys, /proc, etc.).
+    Safety model: Conservative denylist applied to all commands. The denylist
+    refuses sudo, interactive shells, destructive operations (rm -rf, git push
+    --force), shell operators (|, >, &&), code execution paths (python -c, bash
+    -c), and writes to system paths (/etc, /sys, /proc, etc.).
 
     Args:
         command: The bash command to execute.
-        working_dir: Optional working directory for the command. For local
-            execution, this is a host path. For sandboxed execution, this is
-            a container-internal path; validation is best-effort.
+        working_dir: Optional working directory for the command (host path).
         allowed_paths: Optional explicit write allowlist. When provided,
             write-target paths must fall under one of these roots (in addition
             to passing the default dangerous-path checks).
-        sandbox: If True, execute in an isolated Docker container via llm-sandbox
-            (requires 'mellea[sandbox]' extra). Default: False (local execution).
-            Use for untrusted code, CTF challenges, or security research.
 
     Returns:
         An ``ExecutionResult`` with stdout, stderr, and success flag. If the
@@ -911,19 +779,18 @@ def bash_executor(
         ``skip_message`` contains the reason.
 
     Examples:
-        Local execution (default):
+        Basic execution:
         >>> result = bash_executor("echo hello")
         >>> assert result.success is True
         >>> assert result.stdout == "hello"
 
-        Sandboxed execution (opt-in):
-        >>> result = bash_executor("ls /tmp", sandbox=True)
-        >>> assert result.success is True
-
         With working directory:
         >>> result = bash_executor("pwd", working_dir="/tmp")
         >>> assert "/tmp" in result.stdout
+
+        With path restrictions:
+        >>> result = bash_executor("touch file.txt", allowed_paths=["/tmp"])
+        >>> assert result.success is True
     """
-    env_class = LLMSandboxBashEnvironment if sandbox else _LocalBashEnvironment
-    env = env_class(allowed_paths=allowed_paths, working_dir=working_dir)
+    env = _LocalBashEnvironment(allowed_paths=allowed_paths, working_dir=working_dir)
     return env.execute(command)

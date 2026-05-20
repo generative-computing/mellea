@@ -1,6 +1,6 @@
 """Implementations of tools."""
 
-<<<<<<< HEAD
+
 from .execution_policy import (
     COMPATIBILITY_MATRIX,
     DOCKER_POLICY,
@@ -38,6 +38,7 @@ __all__ = [
     "ExecutionTier",
     "LLMSandboxBashEnvironment",
     "LLMSandboxEnvironment",
+    "BashEnvironment",
     "StaticBashEnvironment",
     "StaticAnalysisEnvironment",
     "UnsafeEnvironment",
