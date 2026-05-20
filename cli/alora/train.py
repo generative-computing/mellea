@@ -20,6 +20,7 @@ try:
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
+        PreTrainedTokenizerBase,
         TrainerCallback,
         TrainerControl,
         TrainerState,
@@ -53,7 +54,7 @@ if sys.platform == "darwin" and hasattr(torch.backends, "mps"):
 
 
 def load_dataset_from_json(
-    json_path: str, tokenizer: AutoTokenizer, invocation_prompt: str
+    json_path: str, tokenizer: PreTrainedTokenizerBase, invocation_prompt: str
 ) -> Dataset:
     """Load a JSONL dataset and format it for SFT training.
 
@@ -165,8 +166,12 @@ class SafeSaveTrainer(SFTTrainer):
         """
         if self.model is not None:
             self.model.save_pretrained(output_dir, safe_serialization=True)
-            if self.tokenizer is not None:
-                self.tokenizer.save_pretrained(output_dir)
+            # transformers v5 renamed .tokenizer -> .processing_class
+            processor = getattr(self, "processing_class", None) or getattr(
+                self, "tokenizer", None
+            )
+            if processor is not None:
+                processor.save_pretrained(output_dir)
 
 
 def train_model(
@@ -224,7 +229,8 @@ def train_model(
         base_model, padding_side="right", trust_remote_code=True
     )
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.add_special_tokens = False
+    # Note: previously had `tokenizer.add_special_tokens = False` here, which was
+    # a no-op (assigning False to a method reference). Removed — do not restore.
 
     dataset = load_dataset_from_json(dataset_path, tokenizer, invocation_prompt)
     dataset = dataset.shuffle(seed=42)

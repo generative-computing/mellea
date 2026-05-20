@@ -371,19 +371,33 @@ async def test_generate_with_lock(backend) -> None:
     memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
 
-    def mock_func(input_ids, *args, **kwargs):
+    def _extract_inputs(inputs, args, kwargs):
+        # Callers in mellea/backends/huggingface.py use three different conventions
+        # (positional, inputs=, input_ids=); canonicalize to one tensor key.
+        if inputs is not None:
+            return inputs
+        if args:
+            return args[0]
+        return kwargs.get("input_ids", kwargs.get("inputs"))
+
+    def mock_func(inputs=None, *args, **kwargs):
         """Mocks the generate function. Must call `populate_mocked_dict` with each input that must be cached before using this."""
+        key_tensor = _extract_inputs(inputs, args, kwargs)
         for key, val in memoized.items():
-            if torch.equal(key, input_ids):
+            if torch.equal(key, key_tensor):
                 time.sleep(random.uniform(0.1, 0.5))  # Simulate a bit of work.
                 return val
         assert False, "did not get a cached response"
 
     # Safely create the dict.
-    def populate_mocked_dict(input_ids, *args, **kwargs):
+    def populate_mocked_dict(inputs=None, *args, **kwargs):
         """Generates the model output and adds to the memoized dict."""
-        output = gen_func(input_ids, *args, **kwargs)  # type: ignore
-        memoized[input_ids] = output
+        key_tensor = _extract_inputs(inputs, args, kwargs)
+        if inputs is not None:
+            output = gen_func(inputs, *args, **kwargs)  # type: ignore
+        else:
+            output = gen_func(*args, **kwargs)  # type: ignore
+        memoized[key_tensor] = output
         return output
 
     model.generate = Mock(side_effect=populate_mocked_dict)

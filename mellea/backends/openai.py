@@ -6,7 +6,7 @@ import functools
 import inspect
 import os
 from collections.abc import Coroutine, Sequence
-from typing import TYPE_CHECKING, Any, overload
+from typing import Any, overload
 
 import openai
 from openai.types.chat import ChatCompletion
@@ -63,9 +63,6 @@ from .tools import (
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-
-if TYPE_CHECKING:
-    from transformers.tokenization_utils import PreTrainedTokenizer
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
