@@ -63,6 +63,9 @@ class ModelOption:
         string would silently work on OpenAI/LiteLLM but break HuggingFace's
         ``stop_strings``.
 
+        Args:
+            model_options: Model options dict to validate; checked for the ``STOP_SEQUENCES`` key.
+
         Raises:
             TypeError: if ``STOP_SEQUENCES`` is set and is not a ``list`` of ``str``.
         """
