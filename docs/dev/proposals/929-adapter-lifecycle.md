@@ -57,7 +57,7 @@ Every thread in #929 is a symptom of not having separated the kinds of adapter a
 Four outcomes, in order of importance. Detail on each lives in Part II; this list is the ask.
 
 1. **One adapter model, one code path.** Reasonable from the outside, unified from the inside — no more `if backend._uses_embedded_adapters:` branches.
-2. **Safe evolution.** Model-option precedence is documented and enforced. Adapter weights are versioned by HF commit SHA — Mellea can pin to a specific revision for stability or track latest for newest weights (refresh policy in §17 Q5). Output schemas are stable in the common case (new weights, same schema); the rare breaking schema change is handled either by pinning, by `schema_version` parser dispatch (§17 Q4), or by helpers raising on mismatch (Jake req 4). Helpers like `check_answerability` see a normalised result regardless of underlying churn.
+2. **Safe evolution.** Model-option precedence is documented and enforced. Adapter weights are versioned by HF commit SHA — Mellea can pin to a specific revision for stability or track latest for newest weights (refresh policy in §17 Q5). Output schemas are stable in the common case (new weights, same schema); the rare breaking schema change is handled by pinning the HF revision and by helpers raising `AdapterSchemaMismatchError` when parse cannot yield the helper's declared output contract (Jake req 4). Forward-compatible additions (e.g. an extra optional field) do not trigger the error — only contract-breaking deltas do. Helpers like `check_answerability` see a normalised result regardless of underlying churn. Output-schema versioning beyond this is tracked in [#1111](https://github.com/generative-computing/mellea/issues/1111) (§17 Q4).
 3. **First-class customer adapters.** Customers can ship their own against the same API as first-party ones — today it requires patching the catalog or subclassing a self-confessed "temporary hack" ([#424](https://github.com/generative-computing/mellea/issues/424)).
 4. **Observable and parity-respecting.** Every lifecycle phase is a distinct span; high-level helpers (`check_answerability` etc.) keep their shape; manual adapter construction becomes simpler, not harder.
 
@@ -79,7 +79,7 @@ An **Adapter** is a small object composed of three parts:
 
 ```
 Adapter
-├── identity      — name, adapter type (lora/alora), schema version (proposed; see §7 / §17 Q4), optional role
+├── identity      — name, adapter type (lora/alora), optional role
 ├── io_contract   — parsed io.yaml: prompt building, output parsing, model options
 └── weights       — one of three pluggable bindings (LocalFile, Embedded, ServerMediated)
 ```
@@ -178,7 +178,7 @@ Files and modules touched, approximate: `mellea/backends/adapters/{adapter,catal
 ### Risk
 
 - **Biggest unknown**: whether the unified `resolve_model_options` handles every combination currently in use. Mitigation: keep the five-layer precedence explicit, add per-adapter override documentation, and assert resolved values in tests.
-- **Second biggest**: handling breaking schema changes from upstream. Three layers: pinning (avoid the risk), `schema_version` parser dispatch (§17 Q4, proposed), helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4, loud safety net). Worked example: the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change, rather than silently returning `False`.
+- **Second biggest**: handling breaking schema changes from upstream. Two layers: pinning (avoid the risk), and helpers raising `AdapterSchemaMismatchError` when parse cannot yield the helper's declared output contract (Jake req 4, loud safety net). Forward-compatible additions do not trigger the error. Worked example: the [#1008](https://github.com/generative-computing/mellea/pull/1008) `requirement-check` change would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change, rather than silently returning `False`. (Output-schema versioning is tracked separately in [#1111](https://github.com/generative-computing/mellea/issues/1111) — §17 Q4.)
 - **Mitigated by**: per-phase test-parity commitment (nothing merges if existing tests regress); observability introduced alongside the refactor so production regressions surface as dashboard signals rather than silent behavioural drift.
 
 ---
@@ -196,8 +196,7 @@ Names matter because they appear in user-facing error messages, docs, and teleme
 | **Base model** | The general-purpose LLM (e.g. `ibm-granite/granite-4.1-3b`) that everything runs on top of. |
 | **AdapterBasedComponent** *(placeholder)* | The user-facing capability: helper functions (`check_answerability`, `requirement_check`, the Guardian helpers), the AST component, input/output parsing. Backed by an adapter. IBM is retiring "Intrinsic" and has not yet confirmed the replacement name; `AdapterBasedComponent` is used throughout this document as a placeholder (see Part I §5). |
 | **Adapter** | The backend artefact: the weights loaded by a backend (LoRA / aLoRA / embedded), with its identity, I/O contract, and weights binding. The user-facing **Intrinsic** wraps an adapter to provide helpers and parsing. In the redesign, the class hierarchy collapses from four (`IntrinsicAdapter` / `EmbeddedIntrinsicAdapter` / `CustomIntrinsicAdapter` + abstract base) to one `Adapter` + a pluggable binding. |
-| **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), schema version, and optional role. |
-| **Schema version** | *Proposed parser-dispatch field for breaking schema changes only.* For routine weight updates the HF commit SHA is the version (no new field needed). `schema_version` would only earn its keep if the granite team ships a *breaking* output-schema change (different keys, nesting, or types) and unpinned callers need graceful v1↔v2 parser dispatch. **Open** (§17 Q4) — granite-common may already have a versioning mechanism we should reuse instead of inventing this. |
+| **Identity** | The part of an adapter that says *what it is*: name (e.g. `answerability`), adapter type (`lora` / `alora`), and optional role. |
 | **I/O contract** | The parsed `io.yaml` — prompt template, output parser, model-option defaults. Always present, same shape regardless of reality. *Name under discussion: Jacob prefers `io_config`; `io_contract` is used throughout this proposal but is not final.* |
 | **Weights binding** | The part of an adapter that says *how its weights are made available*. Three subclasses, one per reality. Exposes `prepare`, `activate`, `deactivate`, `release`. |
 | **Reality A / B / C** | Shorthand for the three "where the weights live" stories: A = local PEFT file, B = shipped with the base model (Granite Switch), C = server-mediated (future OpenAI/vLLM). |
@@ -351,11 +350,11 @@ This is a **backend-keyed dispatch** where the branching key (`_uses_embedded_ad
 | 2a. Intrinsic rewriters overwrite options | `Adapter.resolve_model_options()` replaces the five-place merge with one documented stack. |
 | 2b/2c. Model-option hierarchy | Five layers enforced in `resolve_model_options` (base model → adapter config → `io.yaml` defaults → `io.yaml` per-intrinsic → caller). |
 | 3. Naming consistency | Three-axis identity (`name`, `adapter_type`, `revision`) plus explicit `role`. |
-| 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` validates the output shape and raises `AdapterSchemaMismatchError` on mismatch (Jake req 4); helpers see a normalised shape. Dispatch on `(name, schema_version)` is an optional layer if §17 Q4 is adopted. |
+| 4a. `call_intrinsic` assumes one output schema | `io_contract.parse()` validates the output shape and raises `AdapterSchemaMismatchError` when parse cannot yield the declared contract (Jake req 4); forward-compatible additions do not trigger the error. Helpers see a normalised shape. |
 | 4b. Per-adapter vs standard schema | `io_contract.parse()` is per-adapter; helpers define the normalised post-parse shape. |
-| 4c. Versioning | HF commit SHA is the version (every push = new revision; pin via `revision="..."` for stability). Breaking schema changes (rare) handled by pinning + helpers raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4); `schema_version` parser dispatch (§17 Q4) is an optional layer if the granite team adds the field. |
+| 4c. Versioning | HF commit SHA is the version (every push = new revision; pin via `revision="..."` for stability). Breaking schema changes (rare) handled by pinning and by helpers raising `AdapterSchemaMismatchError` when parse cannot yield the declared contract (Jake req 4). Output-schema versioning beyond this is tracked separately in [#1111](https://github.com/generative-computing/mellea/issues/1111) (§17 Q4). |
 | 5. OpenAI backend support | Ships as one or two `ServerMediatedBinding` subclasses. |
-| 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry; the v1 → v2 output-schema change (PR #1008) is handled by Jake req 4 + optional `schema_version` dispatch (§17 Q4). |
+| 6. Catalog cleanup | Catalog becomes optional resolver (`LocalFileBinding.from_catalog(name)`). Custom adapters bypass it; no monkey-patching. Duplicate `requirement_check` / `requirement-check` entries collapse into one entry; the v1 → v2 output-schema change (PR #1008) is handled by Jake req 4 (helper raises when parse cannot yield the declared contract); pinning the prior HF revision is the avoidance path. |
 | 7. Hardcoded `requirement-check` refs | Callers look up by **role**, not name. |
 
 ## 13. What users see — detailed
@@ -368,7 +367,7 @@ score = check_answerability(question, documents, context, backend,
                             model_options={"temperature": 0.1})
 ```
 
-**Validation on parse.** Helpers declare their expected output shape; `io_contract.parse()` validates against it and raises `AdapterSchemaMismatchError` on mismatch — with `name`, observed keys, and expected keys in the message. Schema drift is loud, not silent. (Jake req 4.)
+**Validation on parse.** Helpers declare their expected output shape; `io_contract.parse()` validates against it and raises `AdapterSchemaMismatchError` when the parse cannot yield the helper's declared output contract — with `name`, observed keys, and expected keys in the message. Forward-compatible additions (an extra optional field the parser ignores) do not trigger the error; contract-breaking deltas (missing required field, type change on a depended-on key) do. Schema drift is loud, not silent. (Jake req 4.)
 
 **Manual adapter construction** collapses from four classes (`IntrinsicAdapter`, `EmbeddedIntrinsicAdapter`, `CustomIntrinsicAdapter`, abstract base) to one `Adapter` + a binding:
 
@@ -400,7 +399,7 @@ adapter = Adapter(name="answerability",
 Adapter calls hide the complexity that matters most when something goes wrong (weight fetching, activation side-effects, schema contracts). Without per-phase instrumentation, four failure modes are hard or impossible to diagnose — and Mellea has already hit the first two in production:
 
 1. **Masked errors.** The `obtain_lora`-always-called bug (#929 point 1b) showed users a misleading download error while the real cause (adapter-type mismatch) stayed invisible. A span at the `prepare` boundary recording the exception would have surfaced the actual cause on first run.
-2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. Under Jake req 4 (helpers raise on schema mismatch), this would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change — the caller gets a named error instead of a silently wrong value. The `parse_failures` counter labelled by `(name, revision)` is the dashboard signal; the exception is the runtime signal.
+2. **Silent schema drift.** When PR #1008 changed `requirement-check` output from `{"requirement_likelihood": 0.9}` to `{"requirement_check": {"score": 0.9}}`, `requirement_check_to_bool` silently returned `False` for every call until someone noticed. Under Jake req 4 (helpers raise when parse cannot yield the declared contract), this would have surfaced as `AdapterSchemaMismatchError` on the first call after the schema change — the caller gets a named error instead of a silently wrong value. The `parse_failures` counter labelled by `(name, revision)` is the dashboard signal; the exception is the runtime signal.
 3. **Latency attribution.** "`check_answerability` is slow" is unanswerable today — download, PEFT load, generation, and JSON parse collapse into one backend span. Phase-level spans make the culprit obvious in any trace viewer.
 4. **Alerting and cost attribution.** OTel `ERROR` status on failed download/activation makes generic dashboards and alerts work. Token counts labelled by adapter answer "which capability is 30% of our spend?" Both impossible today.
 
@@ -416,7 +415,7 @@ graph TD
     root --> prep["intrinsic.prepare<br/><i>LocalFile: download ms</i>"]
     root --> act["intrinsic.activate<br/><i>peft_name / controls / api_id</i>"]
     root --> gen["intrinsic.generate<br/><i>(regular backend span:<br/>tokens, latency)</i>"]
-    root --> par["intrinsic.parse<br/><i>revision, schema_version*,<br/>parse_ok, raw_len</i>"]
+    root --> par["intrinsic.parse<br/><i>revision, parse_ok, raw_len</i>"]
     root --> deact["intrinsic.deactivate"]
 ```
 
@@ -443,7 +442,7 @@ The implementation approach for this suite is intentionally left open — start 
 
 **Tutorials** — three worth writing alongside the refactor:
 - "Adding a custom intrinsic in 20 lines" — replaces the `CustomIntrinsicAdapter` monkey-patch story.
-- "Handling a breaking schema change without breaking users" — worked example using `requirement-check` v1 → v2; covers HF revision pinning, `AdapterSchemaMismatchError` (Jake req 4), and `schema_version` dispatch if §17 Q4 is adopted.
+- "Handling a breaking schema change without breaking users" — worked example using `requirement-check` v1 → v2; covers HF revision pinning and `AdapterSchemaMismatchError` (Jake req 4).
 - "Reading intrinsic telemetry" — short dashboard-building guide.
 
 **Release notes** separate: no-op for high-level helper users; deprecated-but-shimmed for direct adapter constructors; removed at Phase 4 (see below).
@@ -453,7 +452,7 @@ The implementation approach for this suite is intentionally left open — start 
 Detail deferred until Part I §5 decisions are agreed, but the intended phasing is:
 
 1. **Phase 0 — parallel types.** Introduce the new types (`Adapter`, `WeightsBinding`, `IOContract`, plus a user-facing `Intrinsic` class if Q5 is settled on Jake's split) alongside existing classes. Catalogue entries gain pinned HF revision SHAs (Jake req 5; §17 Q6). No call-site changes, tests unchanged.
-2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` on parse mismatch (Jake req 4). #1003 helper signature work folds in here: `model_options=` on all top-level helpers; `documents=` keyword-only on `factuality_detection` / `factuality_correction`. Old classes become deprecation shims.
+2. **Phase 1 — callers move.** `_util.call_intrinsic`, requirement rerouting, and each helper switch to new types. Helpers gain output validation raising `AdapterSchemaMismatchError` when parse cannot yield the declared contract (Jake req 4). #1003 helper signature work folds in here: `model_options=` on all top-level helpers; `documents=` keyword-only on `factuality_detection` / `factuality_correction`. Auto-context document discovery for `documents=None` lifted from PR #1028 (§17 Q3); mechanism refined per intrinsics-team guidance — helpers read documents from ordinary conversation context, not from a `_docs`-specific scan path. Old classes become deprecation shims.
 3. **Phase 2 — backends move.** `AdapterMixin` narrows to the new verb set. Bindings implement `prepare` / `activate` / `deactivate` / `release` per reality; `LocalFileBinding.prepare` resolves the configured HF revision (§17 Q5 weight-refresh policy). Backends drop per-call `_simplify_and_merge` in favour of `resolve_model_options`.
 4. **Phase 3 — Reality C ships.** `ServerMediatedBinding` subclass(es) written; OpenAI backend drops `_uses_embedded_adapters` hard-code.
 5. **Phase 4 — shim removal.** After one minor release with deprecation warnings. *(Skipped if Q5 settles on Jake's split — re-exports stay.)*
@@ -468,8 +467,8 @@ Items marked **[Open]** need decision; **[Position]** is the proposal's working 
 2. **Role vs name** [Position]. `role` is a free-form string with an advisory known-roles registry (e.g., `mellea.backends.adapters.roles.KNOWN_ROLES`). Backends warn on unknown roles but accept any string. Pure enum was considered but rejected — it would lock role names at library-release time.
 3. **Rewind interaction (formerly PR #1028).** Two parts:
    - **Where rewind logic lives** [Resolved] (Jake on PR #1080): the rewind in `_resolve_question` / `_resolve_response` stays in the helpers. Phase 1 can revisit moving it to `io_contract.build_prompt` if cleaner separation is wanted; not gating.
-   - **Manual-Message document detection** [Open] — Phase 1 design call. When `documents=None` is passed to `factuality_detection` / `factuality_correction`, how should the helper find user-supplied documents? Two approaches: (a) require explicit `documents=` and don't scan the conversation; (b) scan the context for `Message`s with `_docs` and extract from there. PR #1028 implemented (b) via `_resolve_response`'s manual-Message fallback; the design call was deferred when #1028 closed (2026-05-15) so the work isn't lost.
-4. **`schema_version` field in `io.yaml`** [Open] — cross-team. §4, §7, §9, and §12 all assume the `io.yaml` parsed by granite-common / granite-formatters carries a `schema_version`. It doesn't today, so this is asking that team to add a field. Worth suggesting to them? Or do they have another approach to versioning?
+   - **Document discovery when `documents=None`** [Resolved] (Jake on PR #1080, 2026-05-20). When `documents=None` is passed to `factuality_detection` / `factuality_correction`, the helper auto-discovers user-supplied documents from the conversation context rather than requiring an explicit `documents=` argument. The auto-discovery direction was the contribution of PR #1028; intrinsics-team guidance refines the *mechanism*: documents flow through ordinary conversation context (no `_docs`-scanning fallback path needed). Phase 1 implements helpers that read whatever documents are present in the context they receive; populating that context is the caller's responsibility (explicit `documents=`, prior `Message`s, retrieval, …). PR #1028's specific `_resolve_response` `_docs`-scanning code is shelved.
+4. **Output-schema versioning** [Resolved — Defer to [#1111](https://github.com/generative-computing/mellea/issues/1111)]. This refactor assumes `io.yaml` does **not** carry a `schema_version` field, and Mellea does not introduce one. Forward-compatibility is preserved: helpers only raise `AdapterSchemaMismatchError` when parse cannot yield the declared contract, not on benign additions. Versioning is tracked separately in #1111; promote to in-progress when the trigger conditions documented there are hit.
 5. **Weight-refresh policy** [Position]. Adapter weights are versioned by HF commit SHA. `prepare()` re-resolves the upstream revision at session start; long-running processes (sessions spanning a release) opt into an explicit `refresh()` API. Default cadence matches the session-scoped lifecycle (Part I §5 Q2 Resolved).
 6. **Version pinning for auto-loaded adapters** [Position]. When an adapter is auto-loaded from the catalogue (caller didn't specify a revision), Mellea pins to the catalogue entry's recorded SHA. `revision="main"` is an explicit opt-in to track latest. Pinning gives reproducibility; explicit tracking gives latest weights at the cost of behaviour drift between runs. (Jake req 5; coupled to Q5 weight-refresh policy.)
 
@@ -500,7 +499,7 @@ Linked index of every issue, PR, and commit cited in this document. Use this to 
 | [#979](https://github.com/generative-computing/mellea/pull/979) | fix: key in json returned by policy_guardrails intrinsic | rework evidence for output parsing |
 | [#986](https://github.com/generative-computing/mellea/pull/986) | fix: issues introduced by intrinsic changes | rework evidence |
 | [#994](https://github.com/generative-computing/mellea/pull/994) | fix: default intrinsic adapter types; granite-switch tests | rework evidence |
-| [#1008](https://github.com/generative-computing/mellea/pull/1008) | fix: rewrite requirement_check_to_bool for new schema | worked example for the schema-version story |
+| [#1008](https://github.com/generative-computing/mellea/pull/1008) | fix: rewrite requirement_check_to_bool for new schema | worked example for the contract-mismatch story (Jake req 4) |
 | [#1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | introduces the factuality rewind path |
 
 #### Rework evidence in detail
@@ -522,7 +521,7 @@ Seven recent fix-up commits in the adapter area, all symptomatic of the design g
 | Ref | Title | Role in this doc |
 | --- | --- | --- |
 | [#1003](https://github.com/generative-computing/mellea/issues/1003) | fix: intrinsic function signatures | folded into Phase 1 of this epic; PR #1028 closed 2026-05-15 |
-| [PR #1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | closed 2026-05-15 in favour of folding into this epic; manual-Message detection carried forward as Phase 1 design call (§17 Q3) |
+| [PR #1028](https://github.com/generative-computing/mellea/pull/1028) | feat: normalize intrinsics interfaces | closed 2026-05-15 in favour of folding into this epic. Two threads inherited: (1) #1003 helper signatures → Phase 1 (already scoped); (2) auto-context document discovery → Phase 1 (§17 Q3 Resolved 2026-05-20; mechanism refined to ordinary-context reading, not `_docs` scanning). |
 | [#1035](https://github.com/generative-computing/mellea/issues/1035) | OTel emission gaps | parent for telemetry coordination |
 | [PR #1036](https://github.com/generative-computing/mellea/pull/1036) | feat(telemetry): close five OTel GenAI semconv gaps | in-flight telemetry work to coordinate with |
 
