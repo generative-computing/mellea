@@ -104,9 +104,13 @@ def test_simplify_and_merge_all_to_mellea_entries(backend, context):
     is_chat = context == "chats"
     to_map = getattr(backend, f"to_mellea_model_opts_map_{context}")
     for backend_key, mellea_key in to_map.items():
-        result = backend._simplify_and_merge({backend_key: 42}, is_chat_context=is_chat)
+        # STOP_SEQUENCES is validated as list[str]; other sentinels accept anything.
+        value = ["STOP"] if mellea_key == ModelOption.STOP_SEQUENCES else 42
+        result = backend._simplify_and_merge(
+            {backend_key: value}, is_chat_context=is_chat
+        )
         assert mellea_key in result, f"{backend_key!r} did not produce {mellea_key!r}"
-        assert result[mellea_key] == 42
+        assert result[mellea_key] == value
 
 
 def test_simplify_and_merge_remaps_max_completion_tokens(backend):

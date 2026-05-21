@@ -403,12 +403,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         backend_model_opts = ModelOption.replace_keys(self.model_options, remap_dict)
 
         if model_options is None:
+            ModelOption.validate_stop_sequences(backend_model_opts)
             return backend_model_opts
 
         generate_call_model_opts = ModelOption.replace_keys(model_options, remap_dict)
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        ModelOption.validate_stop_sequences(merged)
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool

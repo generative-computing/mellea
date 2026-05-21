@@ -56,6 +56,26 @@ class ModelOption:
     """
 
     @staticmethod
+    def validate_stop_sequences(model_options: dict[str, Any]) -> None:
+        """Reject non-list values for ``STOP_SEQUENCES``.
+
+        Mellea requires ``list[str]`` so behavior is uniform across backends — a bare
+        string would silently work on OpenAI/LiteLLM but break HuggingFace's
+        ``stop_strings``.
+
+        Raises:
+            TypeError: if ``STOP_SEQUENCES`` is set and is not a ``list`` of ``str``.
+        """
+        value = model_options.get(ModelOption.STOP_SEQUENCES)
+        if value is None:
+            return
+        if not isinstance(value, list) or not all(isinstance(s, str) for s in value):
+            raise TypeError(
+                "ModelOption.STOP_SEQUENCES must be a list[str]; "
+                f"got {type(value).__name__}: {value!r}"
+            )
+
+    @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
         """Return a new dict with selected keys in ``options`` renamed according to ``from_to``.
 
