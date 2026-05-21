@@ -302,6 +302,9 @@ Use your real name and a reachable email. PRs with unsigned commits will be bloc
 by the DCO check until every commit is signed off. To retroactively sign existing
 commits, use `git rebase --signoff <base>` and force-push.
 
+The repo's pre-commit config also runs a local DCO check at `commit-msg` time, so
+unsigned commits fail before they're pushed.
+
 <details>
 <summary>Developer Certificate of Origin v1.1 (full text)</summary>
 
