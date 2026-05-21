@@ -52,7 +52,7 @@ app = FastAPI(
 )
 
 
-@app.get("/health", status_code=200)
+@app.get("/health")
 async def health_check():
     """Basic liveness check endpoint.
 
