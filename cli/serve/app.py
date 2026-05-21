@@ -53,7 +53,7 @@ app = FastAPI(
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     """Basic liveness check endpoint.
 
     Returns a 200 OK status to signal that the Python process is alive and responding.

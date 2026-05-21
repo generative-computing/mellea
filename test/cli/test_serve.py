@@ -48,17 +48,22 @@ def sample_request():
 class TestHealthCheckEndpoint:
     """Tests for the health check endpoint."""
 
-    def test_health_check(self):
+    @pytest.fixture(scope="class")
+    def client(self, request) -> TestClient:
+        """Set up the test client."""
+
+        # /health is registered at module-load time — TestClient(app) is correct here
+        return TestClient(app)
+
+    def test_health_check(self, client: TestClient):
         """Test that /health GET endpoint returns 200 with correct JSON response."""
-        client = TestClient(app)
         response = client.get("/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "pass"}
 
-    def test_health_check_rejects_post(self):
+    def test_health_check_rejects_post(self, client: TestClient):
         """Test that /health POST endpoint returns 405"""
-        client = TestClient(app)
         assert client.post("/health").status_code == 405
 
 
