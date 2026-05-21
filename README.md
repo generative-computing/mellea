@@ -1,6 +1,6 @@
 <img src="https://github.com/generative-computing/mellea/raw/main/docs/mellea_draft_logo_300.png" alt="Mellea logo" height=100>
 
-# Mellea — build predictable AI without guesswork
+# Mellea — building predictable AI without guesswork
 
 Inside every AI-powered pipeline, the unreliable part is the same: the LLM call itself.
 Silent failures, untestable outputs, no guarantees.
