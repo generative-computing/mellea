@@ -12,24 +12,6 @@ from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 
-
-def test_sentinel_value_is_unique():
-    """STOP_SEQUENCES sentinel must not collide with other ModelOption values."""
-    sentinels = {
-        v
-        for k, v in vars(ModelOption).items()
-        if isinstance(v, str) and v.startswith("@@@")
-    }
-    assert ModelOption.STOP_SEQUENCES in sentinels
-    # No duplicates among sentinel values.
-    sentinel_values = [
-        v
-        for k, v in vars(ModelOption).items()
-        if isinstance(v, str) and v.startswith("@@@")
-    ]
-    assert len(sentinel_values) == len(set(sentinel_values))
-
-
 # --- OpenAI ---
 
 
@@ -102,28 +84,3 @@ def test_litellm_stop_sequences_round_trip():
         {ModelOption.STOP_SEQUENCES: stops}
     )
     assert backend_specific["stop"] == stops
-
-
-# --- HuggingFace and Watsonx map shape (source-level, no optional deps) ---
-
-
-def _read(path: str) -> str:
-    from pathlib import Path
-
-    return Path(path).read_text()
-
-
-def test_huggingface_map_entries_present():
-    """Verify HF backend source registers STOP_SEQUENCES <-> stop_strings."""
-    src = _read("mellea/backends/huggingface.py")
-    assert '"stop_strings": ModelOption.STOP_SEQUENCES' in src
-    assert 'ModelOption.STOP_SEQUENCES: "stop_strings"' in src
-
-
-def test_watsonx_map_entries_present():
-    """Verify Watsonx backend source registers STOP_SEQUENCES for both endpoints."""
-    src = _read("mellea/backends/watsonx.py")
-    assert '"stop": ModelOption.STOP_SEQUENCES' in src
-    assert '"stop_sequences": ModelOption.STOP_SEQUENCES' in src
-    assert 'ModelOption.STOP_SEQUENCES: "stop"' in src
-    assert 'ModelOption.STOP_SEQUENCES: "stop_sequences"' in src

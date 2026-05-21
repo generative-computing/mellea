@@ -675,7 +675,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # overwriting any values set by the util function or io.yaml defaults.
         # We don't update other_input since those inputs are specific to `generate_with_transformers`
         # and not covered by model options.
-        user_params = self._make_backend_specific_and_remove(model_options)
+        user_params = self._generate_kwargs(model_options)
         generate_input.update(user_params)
 
         chat_response = asyncio.to_thread(
@@ -970,7 +970,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=attention_mask.to(self._device),
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(generate_options),
+                **self._generate_kwargs(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
@@ -1132,7 +1132,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 input_ids,
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
-                **self._make_backend_specific_and_remove(generate_options),
+                **self._generate_kwargs(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
@@ -1473,7 +1473,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(model_opts),
+                **self._generate_kwargs(model_opts),
                 **format_kwargs,
             )
 
@@ -1593,11 +1593,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
-        cleaned = ModelOption.remove_special_keys(backend_specific)
-        # transformers' generate() requires `tokenizer=` whenever stop_strings is set.
-        if "stop_strings" in cleaned and "tokenizer" not in cleaned:
-            cleaned["tokenizer"] = self._tokenizer
-        return cleaned
+        return ModelOption.remove_special_keys(backend_specific)
+
+    def _generate_kwargs(self, model_options: dict[str, Any]) -> dict[str, Any]:
+        """Backend-specific options ready to splat into ``model.generate(...)``.
+
+        Wraps :meth:`_make_backend_specific_and_remove` and injects ``tokenizer=`` when
+        ``stop_strings`` is present, since transformers' ``generate()`` requires it.
+        """
+        kwargs = self._make_backend_specific_and_remove(model_options)
+        if "stop_strings" in kwargs and "tokenizer" not in kwargs:
+            kwargs["tokenizer"] = self._tokenizer
+        return kwargs
 
     def _filter_chat_template_only_options(
         self, model_options: dict[str, Any]
