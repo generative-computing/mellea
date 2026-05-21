@@ -41,6 +41,12 @@ on:
         description: "Fail the build if validation checks fail"
         type: boolean
         default: false
+      release_tag:
+        description: >-
+          Set to a release tag (e.g. `v0.6.0`) to run the
+          deploy-on-release flow. Used by release.sh.
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -315,13 +321,15 @@ jobs:
       contents: write
     timeout-minutes: 10
 
-    # Deploy on: push to main, release, force_publish via dispatch,
-    # or PRs labelled "docs-preview" (→ docs/preview branch).
+    # Deploy on: push to main, release event, force_publish or release_tag
+    # via dispatch, or PRs labelled "docs-preview" (→ docs/preview branch).
+    # The runtime latest-final-by-semver check below prevents older-branch
+    # patches from overwriting production docs.
     if: >-
       github.event_name == 'push' ||
       github.event_name == 'release' ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'docs-preview')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.force_publish)
+      (github.event_name == 'workflow_dispatch' && (inputs.force_publish || inputs.release_tag != ''))
 
     steps:
       - name: Download docs artifact
@@ -330,10 +338,64 @@ jobs:
           name: docs-site
           path: docs-site/
 
+      # For release events, confirm the published tag is the latest final by
+      # semver across all release branches. Without this, publishing v0.6.1
+      # after v0.7.0 already exists would incorrectly downgrade docs/production
+      # to the older minor's docs.
+      - name: Check release is latest final
+        id: latest_check
+        # Fail open: deploy if the check succeeded (true) or a transient API
+        # error left the output empty. Only skip on an explicit 'false'.
+        continue-on-error: true
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+          from packaging.version import Version, InvalidVersion
+
+          current = os.environ["CURRENT_TAG"]
+          repo = os.environ["REPO"]
+          raw = subprocess.check_output(
+              ["gh", "api", f"repos/{repo}/releases", "--paginate",
+               "--jq", ".[] | select(.prerelease==false and .draft==false) | .tag_name"],
+              text=True,
+          )
+          candidates = []
+          for line in raw.splitlines():
+              t = line.strip()
+              if not t:
+                  continue
+              try:
+                  candidates.append((Version(t.lstrip("v")), t))
+              except InvalidVersion:
+                  continue
+
+          try:
+              current_version = Version(current.lstrip("v"))
+          except InvalidVersion:
+              print(f"error: current tag {current} is not a valid version")
+              sys.exit(1)
+
+          # include the current release itself (the API may not include it
+          # yet if eventing races with the release event)
+          candidates.append((current_version, current))
+          latest_version, latest_tag = max(candidates)
+          is_latest = (latest_tag == current or latest_version == current_version)
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a") as fh:
+              fh.write(f"is_latest_final={'true' if is_latest else 'false'}\n")
+              fh.write(f"latest_tag={latest_tag}\n")
+          print(f"current={current} latest={latest_tag} is_latest={is_latest}")
+          PY
+
       - name: Determine target branch
         id: target
         run: |
-          if [ "$EVENT_NAME" = "release" ]; then
+          if [ "$EVENT_NAME" = "release" ] || [ -n "${INPUTS_RELEASE_TAG}" ]; then
             echo "branch=docs/production" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             echo "branch=docs/preview" >> "$GITHUB_OUTPUT"
@@ -345,6 +407,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUTS_TARGET_BRANCH: ${{ inputs.target_branch }}
+          INPUTS_RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Add DO NOT EDIT warning
         run: |
@@ -365,6 +428,13 @@ jobs:
           EOF
 
       - name: Deploy to ${{ steps.target.outputs.branch }}
+        # Skip production deploy when a release is not the latest final by
+        # semver (e.g. a patch on an older release branch). The latest_check
+        # step runs for both `release` events and workflow_dispatch with
+        # release_tag set; either path can request the skip.
+        if: >-
+          steps.latest_check.conclusion == 'skipped' ||
+          steps.latest_check.outputs.is_latest_final != 'false'
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
