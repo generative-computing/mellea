@@ -249,5 +249,23 @@ def test_client_cache(session) -> None:
     assert len(backend._client_cache.cache.values()) == 2
 
 
+@pytest.mark.qualitative
+def test_stop_sequences(session) -> None:
+    """Generation should halt before any of the configured stop strings appears."""
+    stop = "STOP_HERE_MARKER"
+    result = session.instruct(
+        "Count from 1 to 20, separated by spaces. After 20, write 'STOP_HERE_MARKER' "
+        "and then keep counting to 30.",
+        model_options={
+            ModelOption.STOP_SEQUENCES: [stop],
+            ModelOption.MAX_NEW_TOKENS: 200,
+        },
+    )
+    # Ollama strips the stop string from the returned text, so it should not appear.
+    assert stop not in result.value, (
+        f"stop sequence leaked into output: {result.value!r}"
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -117,6 +117,7 @@ class OllamaModelBackend(FormatterBackend):
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -128,6 +129,7 @@ class OllamaModelBackend(FormatterBackend):
             ModelOption.CONTEXT_WINDOW: "num_ctx",
             ModelOption.MAX_NEW_TOKENS: "num_predict",
             ModelOption.SEED: "seed",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
     def _get_ollama_model_id(self) -> str:

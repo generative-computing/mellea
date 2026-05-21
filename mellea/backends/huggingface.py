@@ -318,6 +318,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop_strings": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -325,7 +326,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+        self.from_mellea_model_opts_map = {
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_strings",
+        }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
@@ -1589,7 +1593,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
-        return ModelOption.remove_special_keys(backend_specific)
+        cleaned = ModelOption.remove_special_keys(backend_specific)
+        # transformers' generate() requires `tokenizer=` whenever stop_strings is set.
+        if "stop_strings" in cleaned and "tokenizer" not in cleaned:
+            cleaned["tokenizer"] = self._tokenizer
+        return cleaned
 
     def _filter_chat_template_only_options(
         self, model_options: dict[str, Any]
