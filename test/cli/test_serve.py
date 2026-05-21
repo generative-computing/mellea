@@ -49,12 +49,17 @@ class TestHealthCheckEndpoint:
     """Tests for the health check endpoint."""
 
     def test_health_check(self):
-        """Test that /health endpoint returns 200 with correct JSON response."""
+        """Test that /health GET endpoint returns 200 with correct JSON response."""
         client = TestClient(app)
         response = client.get("/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "pass"}
+
+    def test_health_check_rejects_post(self):
+        """Test that /health POST endpoint returns 405"""
+        client = TestClient(app)
+        assert client.post("/health").status_code == 405
 
 
 class TestChatEndpoint:
