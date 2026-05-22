@@ -201,7 +201,7 @@ def start_session(
             )
         else:
             backend = backend_class(
-                model_id, model_options=model_options, **backend_kwargs
+                model_id_str, model_options=model_options, **backend_kwargs
             )
 
         logger.info(
