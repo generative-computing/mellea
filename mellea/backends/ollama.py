@@ -246,7 +246,6 @@ class OllamaModelBackend(FormatterBackend):
         )
 
         if model_options is None:
-            ModelOption.validate_stop_sequences(backend_model_opts)
             return backend_model_opts
 
         generate_call_model_opts = ModelOption.replace_keys(
@@ -255,7 +254,6 @@ class OllamaModelBackend(FormatterBackend):
         merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
-        ModelOption.validate_stop_sequences(merged)
         return merged
 
     def _make_backend_specific_and_remove(

@@ -12,27 +12,6 @@ from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 
-# --- Input validation ---
-
-
-def test_stop_sequences_rejects_bare_string():
-    """A bare ``str`` is rejected — only ``list[str]`` is allowed."""
-    backend = _make_openai_backend()
-    with pytest.raises(TypeError, match="STOP_SEQUENCES must be a list"):
-        backend._simplify_and_merge(
-            {ModelOption.STOP_SEQUENCES: "END"}, is_chat_context=True
-        )
-
-
-def test_stop_sequences_rejects_non_string_elements():
-    """Lists containing non-str elements are rejected."""
-    backend = _make_openai_backend()
-    with pytest.raises(TypeError, match="STOP_SEQUENCES must be a list"):
-        backend._simplify_and_merge(
-            {ModelOption.STOP_SEQUENCES: ["END", 42]}, is_chat_context=True
-        )
-
-
 # --- OpenAI ---
 
 
@@ -148,45 +127,29 @@ def test_watsonx_stop_sequences_round_trip(is_chat, native_key):
     assert ModelOption.STOP_SEQUENCES not in backend_specific
 
 
-# --- HuggingFace _generate_kwargs branch ---
+# --- HuggingFace ---
 
 
 def _make_hf_backend_stub():
     """Construct a LocalHFBackend without loading a model.
 
     Bypasses ``__init__`` because the real constructor downloads weights. We only
-    need the attributes ``_generate_kwargs`` reads: ``_tokenizer`` and
-    ``from_mellea_model_opts_map``.
+    need ``from_mellea_model_opts_map`` for the round-trip mapping check.
     """
     pytest.importorskip("transformers")
     from mellea.backends.huggingface import LocalHFBackend
 
     backend = LocalHFBackend.__new__(LocalHFBackend)
-    backend._tokenizer = MagicMock(name="tokenizer")  # type: ignore[attr-defined]
     backend.from_mellea_model_opts_map = {  # type: ignore[attr-defined]
         ModelOption.STOP_SEQUENCES: "stop_strings"
     }
     return backend
 
 
-def test_hf_generate_kwargs_injects_tokenizer_when_stop_strings_present():
+def test_hf_stop_sequences_maps_to_stop_strings():
     backend = _make_hf_backend_stub()
-    kwargs = backend._generate_kwargs({ModelOption.STOP_SEQUENCES: ["END"]})
-    assert kwargs["stop_strings"] == ["END"]
-    assert kwargs["tokenizer"] is backend._tokenizer
-
-
-def test_hf_generate_kwargs_omits_tokenizer_when_no_stop_strings():
-    backend = _make_hf_backend_stub()
-    kwargs = backend._generate_kwargs({"max_new_tokens": 16})
-    assert "tokenizer" not in kwargs
-    assert "stop_strings" not in kwargs
-
-
-def test_hf_generate_kwargs_preserves_user_supplied_tokenizer():
-    backend = _make_hf_backend_stub()
-    user_tokenizer = MagicMock(name="user-tokenizer")
-    kwargs = backend._generate_kwargs(
-        {ModelOption.STOP_SEQUENCES: ["END"], "tokenizer": user_tokenizer}
+    kwargs = backend._make_backend_specific_and_remove(
+        {ModelOption.STOP_SEQUENCES: ["END"]}
     )
-    assert kwargs["tokenizer"] is user_tokenizer
+    assert kwargs["stop_strings"] == ["END"]
+    assert ModelOption.STOP_SEQUENCES not in kwargs
