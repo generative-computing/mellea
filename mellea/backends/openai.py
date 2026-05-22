@@ -144,6 +144,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "tools": ModelOption.TOOLS,
             "functions": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
@@ -154,6 +155,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
             ModelOption.STREAM: "stream",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         # See notes above.
@@ -161,12 +163,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "seed": ModelOption.SEED,
             "max_tokens": ModelOption.MAX_NEW_TOKENS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
         # See notes above.
         self.from_mellea_model_opts_map_completions = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_tokens",
             ModelOption.STREAM: "stream",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
@@ -402,9 +406,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             return backend_model_opts
 
         generate_call_model_opts = ModelOption.replace_keys(model_options, remap_dict)
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool

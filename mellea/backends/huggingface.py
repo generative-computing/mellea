@@ -318,6 +318,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop_strings": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -325,7 +326,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+        self.from_mellea_model_opts_map = {
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_strings",
+        }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
@@ -672,6 +676,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # We don't update other_input since those inputs are specific to `generate_with_transformers`
         # and not covered by model options.
         user_params = self._make_backend_specific_and_remove(model_options)
+        if "stop_strings" in user_params and "tokenizer" not in user_params:
+            user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
 
         chat_response = asyncio.to_thread(
@@ -955,6 +961,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
             )
 
+            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -966,7 +977,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=attention_mask.to(self._device),
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(generate_options),
+                **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
@@ -1120,6 +1131,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     generate_options, streaming_kwargs
                 )
 
+            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -1128,7 +1144,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 input_ids,
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
-                **self._make_backend_specific_and_remove(generate_options),
+                **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
@@ -1460,6 +1476,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     [logits_processor]
                 )
 
+            generate_kwargs = self._make_backend_specific_and_remove(model_opts)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             outputs = await asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapter.
@@ -1469,7 +1490,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(model_opts),
+                **generate_kwargs,
                 **format_kwargs,
             )
 
@@ -1571,9 +1592,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         generate_call_model_opts = ModelOption.replace_keys(
             model_options, self.to_mellea_model_opts_map
         )
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any]

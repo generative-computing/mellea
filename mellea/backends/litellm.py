@@ -116,6 +116,7 @@ class LiteLLMBackend(FormatterBackend):
             "tools": ModelOption.TOOLS,
             "functions": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -127,6 +128,7 @@ class LiteLLMBackend(FormatterBackend):
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
             ModelOption.STREAM: "stream",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         self._past_event_loops: set[int] = set()
@@ -211,9 +213,10 @@ class LiteLLMBackend(FormatterBackend):
         generate_call_model_opts = ModelOption.replace_keys(
             model_options, self.to_mellea_model_opts_map
         )
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any]

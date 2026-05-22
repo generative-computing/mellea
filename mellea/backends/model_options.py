@@ -30,6 +30,8 @@ class ModelOption:
         THINKING (str): Sentinel key for enabling/configuring reasoning/thinking mode.
         SEED (str): Sentinel key for the random seed for reproducible generation.
         STREAM (str): Sentinel key for enabling streaming responses.
+        STOP_SEQUENCES (str): Sentinel key for a ``list[str]`` of strings that, when
+            encountered in the model output, cause generation to halt.
     """
 
     TOOLS = "@@@tools@@@"
@@ -45,6 +47,13 @@ class ModelOption:
     THINKING = "@@@thinking@@@"
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
+    STOP_SEQUENCES = "@@@stop_sequences@@@"
+    """Must be a ``list[str]``. Generation halts when the model emits any of these strings.
+
+    Backends translate this to their native parameter (``stop`` for OpenAI/Ollama/LiteLLM
+    chat backends, ``stop_strings`` for HuggingFace, ``stop_sequences`` for the WatsonX
+    text-generation endpoint).
+    """
 
     @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:

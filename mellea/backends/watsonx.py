@@ -144,6 +144,7 @@ class WatsonxAIBackend(FormatterBackend):
             "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
@@ -151,7 +152,8 @@ class WatsonxAIBackend(FormatterBackend):
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
         self.from_mellea_model_opts_map_chats = {
-            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens"
+            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         # See notes above.
@@ -159,11 +161,13 @@ class WatsonxAIBackend(FormatterBackend):
             "random_seed": ModelOption.SEED,
             "max_new_tokens": ModelOption.MAX_NEW_TOKENS,
             "stream": ModelOption.STREAM,
+            "stop_sequences": ModelOption.STOP_SEQUENCES,
         }
         # See notes above.
         self.from_mellea_model_opts_map_completions = {
             ModelOption.SEED: "random_seed",
             ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_sequences",
         }
 
     @property
@@ -241,9 +245,10 @@ class WatsonxAIBackend(FormatterBackend):
             return backend_model_opts
 
         generate_call_model_opts = ModelOption.replace_keys(model_options, remap_dict)
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool

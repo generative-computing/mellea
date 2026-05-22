@@ -58,9 +58,11 @@ def test_simplify_and_merge_none_returns_empty_dict(backend):
 def test_simplify_and_merge_all_to_mellea_entries(backend):
     """Every to_mellea entry remaps to its ModelOption via _simplify_and_merge."""
     for backend_key, mellea_key in backend.to_mellea_model_opts_map.items():
-        result = backend._simplify_and_merge({backend_key: 42})
+        # STOP_SEQUENCES is validated as list[str]; other sentinels accept anything.
+        value = ["STOP"] if mellea_key == ModelOption.STOP_SEQUENCES else 42
+        result = backend._simplify_and_merge({backend_key: value})
         assert mellea_key in result, f"{backend_key!r} did not produce {mellea_key!r}"
-        assert result[mellea_key] == 42
+        assert result[mellea_key] == value
 
 
 def test_simplify_and_merge_remaps_num_predict(backend):
