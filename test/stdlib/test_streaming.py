@@ -936,9 +936,11 @@ async def test_external_task_cancellation_releases_consumers() -> None:
     )
 
     assert result._orchestration_task is not None
-    # Yield once so the orchestration task enters its main loop before we
-    # cancel it.
-    await asyncio.sleep(0.01)
+    # Wait until the orchestration coroutine has started and hit its first
+    # suspension point.  Using _started rather than a wall-clock sleep avoids
+    # the race where a fast runner drains the whole stream within the sleep
+    # window, making cancel() a no-op on an already-done task.
+    await asyncio.wait_for(result._started.wait(), timeout=2.0)
 
     # Same mechanism asyncio.wait_for uses on timeout.
     result._orchestration_task.cancel()
@@ -971,7 +973,7 @@ async def test_external_cancellation_acomplete_raise_once() -> None:
     )
 
     assert result._orchestration_task is not None
-    await asyncio.sleep(0.01)
+    await asyncio.wait_for(result._started.wait(), timeout=2.0)
     result._orchestration_task.cancel()
     await asyncio.wait_for(result._done.wait(), timeout=2.0)
 

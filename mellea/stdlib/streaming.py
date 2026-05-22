@@ -244,6 +244,9 @@ class StreamChunkingResult:
         self._event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         self._orchestration_task: asyncio.Task[None] | None = None
         self._done = asyncio.Event()
+        # Set by _orchestrate_streaming before its first suspension point so
+        # tests can wait for the task to be live before cancelling externally.
+        self._started = asyncio.Event()
         # Stashed so acomplete() surfaces orchestrator failures even when the
         # consumer never iterates astream(). Cleared once consumed by
         # whichever of the two reads it first.
@@ -448,6 +451,11 @@ async def _orchestrate_streaming(
     chunking: ChunkingStrategy,
     val_backend: Backend,
 ) -> None:
+    # Signal that the coroutine body is executing before the first suspension.
+    # Tests that cancel the task externally wait on this to avoid a race where
+    # cancel() fires after the task has already completed (no-op on a done task).
+    result._started.set()
+
     accumulated = ""
     emitted_end = 0  # byte offset in accumulated after the last emitted chunk
     prev_chunk_count = 0
