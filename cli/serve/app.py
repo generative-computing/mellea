@@ -7,7 +7,7 @@ import os
 import sys
 import time
 import uuid
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 try:
     import typer
@@ -50,6 +50,18 @@ app = FastAPI(
     description="M programs that run as a simple OpenAI API-compatible server",
     version="0.1.0",
 )
+
+
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    """Basic liveness check endpoint.
+
+    Returns a 200 OK status to signal that the Python process is alive and responding.
+
+    Returns:
+        dict: A dictionary with status "pass".
+    """
+    return {"status": "pass"}
 
 
 @app.exception_handler(RequestValidationError)
