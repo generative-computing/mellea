@@ -633,7 +633,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Extract temperature and apply it to the rewritten request so that
         # chat_completion_request_to_transformers_inputs handles the
         # do_sample/temperature logic correctly.
-        temperature = model_options.pop(ModelOption.TEMPERATURE, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
         if temperature is not None:
             rewritten = rewritten.model_copy(update={"temperature": temperature})
 
@@ -655,6 +655,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # We don't update other_input since those inputs are specific to `generate_with_transformers`
         # and not covered by model options.
         user_params = self._make_backend_specific_and_remove(model_options)
+        if temperature == 0.0:
+            # Preserve the formatter's greedy do_sample=False setup; temperature=0 is invalid once sampling is disabled.
+            user_params.pop("temperature", None)
         if "stop_strings" in user_params and "tokenizer" not in user_params:
             user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
