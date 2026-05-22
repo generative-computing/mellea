@@ -1602,16 +1602,28 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
+        If the caller supplied a ``SEED`` or a non-zero ``TEMPERATURE`` but did
+        not explicitly set ``do_sample``, ``do_sample`` is forced to ``True`` so
+        the underlying transformers ``generate`` call respects those parameters
+        (they are silently ignored under the default greedy ``do_sample=False``).
+
         Args:
             model_options: the model_options for this call
 
         Returns:
             a new dict
         """
+        seed = model_options.get(ModelOption.SEED, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
-        return ModelOption.remove_special_keys(backend_specific)
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+        if "do_sample" not in backend_specific and (
+            seed is not None or (temperature is not None and temperature != 0.0)
+        ):
+            backend_specific["do_sample"] = True
+        return backend_specific
 
     def _filter_chat_template_only_options(
         self, model_options: dict[str, Any]
