@@ -231,5 +231,217 @@ async def test_react_rejects_non_chat_context():
         await react(goal="g", context=Mock(), backend=Mock(), tools=None)
 
 
+# --- compaction integration ---
+
+
+def test_pin_react_initiator_finds_initiator():
+    from mellea.stdlib.components.chat import Message
+    from mellea.stdlib.components.react import pin_react_initiator
+
+    components = [
+        Message("system", "sys"),
+        ReactInitiator("solve x", []),
+        Message("user", "step 1"),
+    ]
+    # Pinned prefix = system + initiator = first two indices.
+    assert pin_react_initiator(components) == 2
+
+
+def test_pin_react_initiator_returns_zero_when_absent():
+    from mellea.stdlib.components.chat import Message
+    from mellea.stdlib.components.react import pin_react_initiator
+
+    components = [Message("user", "a"), Message("assistant", "b")]
+    assert pin_react_initiator(components) == 0
+
+
+def test_react_summary_prompt_default():
+    """Without a goal the prompt has no GOAL: line and contains {conversation}."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    prompt = react_summary_prompt()
+    assert "{conversation}" in prompt
+    assert "GOAL:" not in prompt
+    assert "research progress" in prompt
+    assert "search queries" in prompt
+    assert "dead ends" in prompt
+
+
+def test_react_summary_prompt_with_goal():
+    """Goal is interpolated and the prompt still has the {conversation} placeholder."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    prompt = react_summary_prompt(goal="find papers on context compaction")
+    assert "GOAL: find papers on context compaction" in prompt
+    assert "{conversation}" in prompt
+
+
+def test_react_summary_prompt_escapes_braces_in_goal():
+    """Braces in the goal must survive str.format() in LLMSummarizeCompactor."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    prompt = react_summary_prompt(goal="solve {x: 1, y: 2}")
+    # After str.format(conversation=...), the goal should appear with literal braces.
+    rendered = prompt.format(conversation="<chat>")
+    assert "GOAL: solve {x: 1, y: 2}" in rendered
+    assert "<chat>" in rendered
+
+
+def test_react_summary_prompt_works_with_llm_summarize_compactor():
+    """The factory's output passes LLMSummarizeCompactor's template validation."""
+    from mellea.stdlib.components.react import react_summary_prompt
+    from mellea.stdlib.context import LLMSummarizeCompactor
+
+    # Should not raise on construction (template contains {conversation}).
+    LLMSummarizeCompactor(prompt_template=react_summary_prompt(goal="g"))
+    LLMSummarizeCompactor(prompt_template=react_summary_prompt())
+    LLMSummarizeCompactor(
+        prompt_template=react_summary_prompt(goal="g", max_tokens_hint=2000)
+    )
+
+
+def test_react_summary_prompt_max_tokens_hint_omitted_by_default():
+    """Without a hint, the prompt is byte-identical to the un-hinted form."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    prompt = react_summary_prompt(goal="g")
+    prompt_explicit_none = react_summary_prompt(goal="g", max_tokens_hint=None)
+    assert prompt == prompt_explicit_none
+    assert "Be at most" not in prompt
+    assert "tokens (roughly" not in prompt
+
+
+def test_react_summary_prompt_max_tokens_hint_injects_bullet():
+    """Positive hint adds a bullet with token + word estimates."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    prompt = react_summary_prompt(goal="g", max_tokens_hint=2000)
+    # The bullet sits after "structured clearly" and before "Context to summarize:".
+    assert "- Be at most ~2000 tokens (roughly 1500 words)" in prompt
+    assert "Prioritize density" in prompt
+    # Ordering: structured-clearly bullet comes before the length bullet,
+    # length bullet comes before the conversation marker.
+    sc_idx = prompt.index("structured clearly")
+    bullet_idx = prompt.index("Be at most ~2000")
+    conv_idx = prompt.index("Context to summarize:")
+    assert sc_idx < bullet_idx < conv_idx
+
+
+def test_react_summary_prompt_max_tokens_hint_zero_or_negative_omits_bullet():
+    """Non-positive hint values are treated as no hint."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    base = react_summary_prompt()
+    assert react_summary_prompt(max_tokens_hint=0) == base
+    assert react_summary_prompt(max_tokens_hint=-1) == base
+
+
+def test_react_summary_prompt_max_tokens_hint_word_estimate_scales():
+    """Word estimate uses the ~0.75 words/token heuristic (int truncation)."""
+    from mellea.stdlib.components.react import react_summary_prompt
+
+    # 1000 tokens → 750 words; 4000 → 3000.
+    assert "~1000 tokens (roughly 750 words)" in react_summary_prompt(
+        max_tokens_hint=1000
+    )
+    assert "~4000 tokens (roughly 3000 words)" in react_summary_prompt(
+        max_tokens_hint=4000
+    )
+
+
+@pytest.mark.asyncio
+async def test_react_invokes_per_turn_compactor():
+    """The ``compactor=`` hook runs once per turn after the tool observation."""
+    search = _make_tool("search", "found it")
+    backend = ScriptedBackend(
+        [
+            _tool_call_turn("search", search, "step 1"),
+            _tool_call_turn("search", search, "step 2"),
+            _final_answer_call("done"),
+        ]
+    )
+
+    calls = []
+
+    class RecordingCompactor:
+        def compact(self, ctx, *, backend=None):
+            calls.append(len(ctx.as_list()))
+            return ctx  # no-op compaction; we just observe
+
+    result, _ctx = await react(
+        goal="find info",
+        context=ChatContext(),
+        backend=backend,
+        tools=[search],
+        loop_budget=10,
+        compactor=RecordingCompactor(),
+    )
+
+    # Two non-terminal turns each invoke the compactor; the final turn skips it.
+    assert result.value == "done"
+    assert len(calls) == 2
+    # Per-turn context monotonically grows in this trace.
+    assert calls[0] < calls[1]
+
+
+@pytest.mark.asyncio
+async def test_react_runs_llm_summarize_compactor():
+    """LLMSummarizeCompactor.compact is sync (hides async internally), so react()
+    just calls it like any other sync Compactor.
+    """
+    from mellea.stdlib.components.react import pin_react_initiator
+    from mellea.stdlib.context import LLMSummarizeCompactor
+
+    search = _make_tool("search", "found it")
+    backend = ScriptedBackend(
+        [_tool_call_turn("search", search, "step 1"), _final_answer_call("done")]
+    )
+
+    # keep_n large → no actual summarisation fires; the test verifies that
+    # the sync compact() method is callable from inside the async react()
+    # loop without exception.
+    result, ctx = await react(
+        goal="find info",
+        context=ChatContext(window_size=10_000),
+        backend=backend,
+        tools=[search],
+        loop_budget=10,
+        compactor=LLMSummarizeCompactor(keep_n=1000, pin_predicate=pin_react_initiator),
+    )
+    assert result.value == "done"
+    assert any(isinstance(c, ReactInitiator) for c in ctx.as_list())
+
+
+@pytest.mark.asyncio
+async def test_react_compactor_can_actually_compact():
+    """A real WindowCompactor wired in via the per-turn hook truncates context."""
+    from mellea.stdlib.components.react import pin_react_initiator
+    from mellea.stdlib.context import WindowCompactor
+
+    search = _make_tool("search", "found it")
+    backend = ScriptedBackend(
+        [
+            _tool_call_turn("search", search, "step 1"),
+            _tool_call_turn("search", search, "step 2"),
+            _tool_call_turn("search", search, "step 3"),
+            _final_answer_call("done"),
+        ]
+    )
+
+    result, ctx = await react(
+        goal="find info",
+        # Permissive per-add window so we isolate the per-turn compactor's effect.
+        context=ChatContext(window_size=10_000),
+        backend=backend,
+        tools=[search],
+        loop_budget=10,
+        compactor=WindowCompactor(size=2, pin_predicate=pin_react_initiator),
+    )
+
+    # The ReactInitiator must survive thanks to pin_react_initiator.
+    assert any(isinstance(c, ReactInitiator) for c in ctx.as_list())
+    assert result.value == "done"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
