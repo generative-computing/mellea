@@ -5,6 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
+pytest.importorskip(
+    "transformers", reason="transformers not installed — install mellea[hf]"
+)
+pytest.importorskip(
+    "llguidance", reason="llguidance not installed — install mellea[hf]"
+)
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend
@@ -43,6 +49,12 @@ def test_nonzero_temperature_forces_do_sample_true(stub_backend):
 def test_zero_temperature_does_not_force_do_sample(stub_backend):
     """temperature=0 means greedy; don't override do_sample."""
     out = _call(stub_backend, {ModelOption.TEMPERATURE: 0.0})
+    assert "do_sample" not in out
+
+
+def test_seed_with_zero_temperature_does_not_force_do_sample(stub_backend):
+    """temperature=0 wins over seed — do_sample=True with temperature=0 crashes transformers."""
+    out = _call(stub_backend, {ModelOption.SEED: 42, ModelOption.TEMPERATURE: 0.0})
     assert "do_sample" not in out
 
 

@@ -1607,6 +1607,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         the underlying transformers ``generate`` call respects those parameters
         (they are silently ignored under the default greedy ``do_sample=False``).
 
+        An explicit ``TEMPERATURE`` of ``0.0`` always means greedy decoding and
+        suppresses this override even when a seed is set — pairing
+        ``do_sample=True`` with ``temperature=0`` would crash transformers
+        ("temperature has to be a strictly positive float").
+
         Args:
             model_options: the model_options for this call
 
@@ -1619,8 +1624,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             model_options, self.from_mellea_model_opts_map
         )
         backend_specific = ModelOption.remove_special_keys(backend_specific)
-        if "do_sample" not in backend_specific and (
-            seed is not None or (temperature is not None and temperature != 0.0)
+        temp_allows_sampling = temperature is None or temperature != 0.0
+        if (
+            "do_sample" not in backend_specific
+            and temp_allows_sampling
+            and (seed is not None or temperature is not None)
         ):
             backend_specific["do_sample"] = True
         return backend_specific
