@@ -9,12 +9,35 @@ description: "Install Mellea and set up your Python environment."
 
 ## Install
 
+For an existing Python environment, install Mellea with pip:
+
 ```bash
 pip install mellea
 ```
 
+For an existing uv project, add Mellea as a project dependency:
+
 ```bash
 uv add mellea
+```
+
+If you are starting from scratch with uv, initialize the project first so uv can
+create `pyproject.toml`, select a supported Python version, and manage the
+virtual environment:
+
+```bash
+uv init my-mellea-app --python 3.11
+cd my-mellea-app
+uv add mellea
+```
+
+If you only want to try Mellea inside the current virtual environment without
+creating a uv project, use `uv pip install` instead:
+
+```bash
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install mellea
 ```
 
 ## Optional extras
