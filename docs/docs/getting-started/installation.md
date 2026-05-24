@@ -17,6 +17,11 @@ pip install mellea
 uv add mellea
 ```
 
+> **Note:** `uv add` adds Mellea to an existing uv project, so run it from a
+> directory created with `uv init` (or one that already has a `pyproject.toml`).
+> To install into a plain virtual environment without a uv project, use
+> `uv pip install mellea` instead.
+
 ## Optional extras
 
 Install extras for specific backends and features:
