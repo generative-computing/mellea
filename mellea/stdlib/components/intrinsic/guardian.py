@@ -31,6 +31,8 @@ from ._guardian_legacy import (
 )
 from ._util import call_intrinsic
 
+# Transitional; remove alongside ``_overlays/`` per #1017 once upstream ships
+# the r1.0 ``io.yaml`` templates and pre-r1.0 checkouts are clearly legacy.
 _LEGACY_ENVELOPE_ENV = "MELLEA_GUARDIAN_LEGACY_ENVELOPE"
 
 
