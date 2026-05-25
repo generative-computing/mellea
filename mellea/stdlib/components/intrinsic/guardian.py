@@ -7,14 +7,48 @@ That envelope is built from the ``instruction:`` field of each adapter's
 ``io.yaml`` via :class:`IntrinsicsRewriter`; the helpers below just resolve
 any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
 resolved kwargs through.
+
+Pre-#1037 adapters (and any adapter checkout whose ``io.yaml`` has
+``instruction: ~``) cannot be driven by the new path: the rewriter sees no
+template and silently sends the bare context to the model. For those, pass
+``legacy_envelope=True`` (or set ``MELLEA_GUARDIAN_LEGACY_ENVELOPE=1``) to
+restore the pre-#1037 behavior of building the envelope locally and
+appending it as a user message before dispatch.
 """
 
+import os
 import warnings
 
 from ....backends.adapters import AdapterMixin
 from ....core.utils import MelleaLogger
 from ...context import ChatContext
+from ..chat import Message
+from ._guardian_legacy import (
+    _legacy_factuality_correction_envelope,
+    _legacy_factuality_detection_envelope,
+    _legacy_guardian_check_envelope,
+    _legacy_policy_guardrails_envelope,
+)
 from ._util import call_intrinsic
+
+_LEGACY_ENVELOPE_ENV = "MELLEA_GUARDIAN_LEGACY_ENVELOPE"
+
+
+def _should_use_legacy_envelope(flag: bool | None) -> bool:
+    """Return whether the legacy ``<guardian>`` envelope path should be used.
+
+    Resolves the explicit ``legacy_envelope`` kwarg first; falls back to the
+    ``MELLEA_GUARDIAN_LEGACY_ENVELOPE`` environment variable.
+    """
+    if flag is not None:
+        return flag
+    return os.environ.get(_LEGACY_ENVELOPE_ENV, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
 
 _UNSET: object = object()
 """Sentinel distinguishing 'caller omitted scoring_schema' from 'caller passed
@@ -26,7 +60,11 @@ _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_respons
 
 
 def policy_guardrails(
-    context: ChatContext, backend: AdapterMixin, policy_text: str
+    context: ChatContext,
+    backend: AdapterMixin,
+    policy_text: str,
+    *,
+    legacy_envelope: bool | None = None,
 ) -> str:
     """Checks whether text complied with specified policy.
 
@@ -36,11 +74,22 @@ def policy_guardrails(
     :param context: Chat context containing the conversation to evaluate.
     :param backend: Backend instance that supports LoRA adapters.
     :param policy_text: Policy against with compliance is to be checked
+    :param legacy_envelope: When ``True``, build the pre-#1037 ``<guardian>``
+        envelope locally and append it as a user message instead of relying on
+        the ``instruction:`` template in the adapter's ``io.yaml``. Use this
+        with adapters whose ``io.yaml`` has ``instruction: ~`` (i.e.
+        pre-r1.0 HuggingFace checkouts). Falls back to the
+        ``MELLEA_GUARDIAN_LEGACY_ENVELOPE`` env var when ``None``.
     :return: Compliance as a "Yes/No/Ambiguous" label (Yes = compliant).
     """
-    result_json = call_intrinsic(
-        "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
-    )
+    if _should_use_legacy_envelope(legacy_envelope):
+        envelope = _legacy_policy_guardrails_envelope(policy_text)
+        context = context.add(Message("user", envelope))
+        result_json = call_intrinsic("policy-guardrails", context, backend)
+    else:
+        result_json = call_intrinsic(
+            "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
+        )
 
     if "label" not in result_json.keys() and "score" not in result_json.keys():
         raise Exception(
@@ -166,6 +215,8 @@ def guardian_check(
     criteria: str,
     scoring_schema: str | object = _UNSET,
     target_role: str | None = None,
+    *,
+    legacy_envelope: bool | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
 
@@ -185,16 +236,46 @@ def guardian_check(
             custom string. Defaults to ``"assistant_response"``. Must
             still resolve to a yes/no verdict — the adapter's
             ``response_format`` constrains output to ``"yes"``/``"no"``.
+            Not supported with ``legacy_envelope=True``.
         target_role: Deprecated. Role whose last message is being
             evaluated (``"user"`` or ``"assistant"``). Prefer
             ``scoring_schema`` with a key from
             :data:`SCORING_SCHEMA_BANK`. Passing both
             ``scoring_schema`` and ``target_role`` raises
             :class:`TypeError`.
+        legacy_envelope: When ``True``, build the pre-#1037 ``<guardian>``
+            envelope locally and append it as a user message instead of
+            relying on the ``instruction:`` template in the adapter's
+            ``io.yaml``. The legacy envelope only supports
+            ``target_role`` semantics; passing ``scoring_schema`` together
+            with ``legacy_envelope=True`` raises :class:`TypeError`. Falls
+            back to the ``MELLEA_GUARDIAN_LEGACY_ENVELOPE`` env var when
+            ``None``.
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
     """
+    if _should_use_legacy_envelope(legacy_envelope):
+        if scoring_schema is not _UNSET:
+            raise TypeError(
+                "scoring_schema is not supported with legacy_envelope=True; "
+                "the legacy adapters were trained on a fixed scoring sentence "
+                "keyed off target_role."
+            )
+        if target_role is None:
+            resolved_target_role = "assistant"
+        elif target_role not in _TARGET_ROLE_TO_SCHEMA:
+            raise ValueError(
+                f"target_role must be 'user' or 'assistant', got {target_role!r}"
+            )
+        else:
+            resolved_target_role = target_role
+        criteria_text = CRITERIA_BANK.get(criteria, criteria)
+        envelope = _legacy_guardian_check_envelope(criteria_text, resolved_target_role)
+        context = context.add(Message("user", envelope))
+        result_json = call_intrinsic("guardian-core", context, backend)
+        return result_json["guardian"]["score"]
+
     if target_role is not None:
         warnings.warn(
             "`target_role` is deprecated; use `scoring_schema` instead "
@@ -240,7 +321,9 @@ def guardian_check(
     return result_json["guardian"]["score"]
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
+def factuality_detection(
+    context: ChatContext, backend: AdapterMixin, *, legacy_envelope: bool | None = None
+) -> str:
     """Determine is the last response is factually incorrect.
 
     Intrinsic function that evaluates the factuality of the
@@ -249,14 +332,23 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
 
     :param context: Chat context containing user question and assistant answer.
     :param backend: Backend instance that supports LoRA/aLoRA adapters.
+    :param legacy_envelope: When ``True``, build the pre-#1037 ``<guardian>``
+        envelope locally and append it as a user message instead of relying on
+        the ``instruction:`` template in the adapter's ``io.yaml``. Falls back
+        to the ``MELLEA_GUARDIAN_LEGACY_ENVELOPE`` env var when ``None``.
 
     :return: Factuality score as a "yes/no" label (yes = factually incorrect).
     """
+    if _should_use_legacy_envelope(legacy_envelope):
+        envelope = _legacy_factuality_detection_envelope()
+        context = context.add(Message("user", envelope))
     result_json = call_intrinsic("factuality-detection", context, backend)
     return result_json["score"]
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
+def factuality_correction(
+    context: ChatContext, backend: AdapterMixin, *, legacy_envelope: bool | None = None
+) -> str:
     """Corrects the last response so that it is factually correct.
 
     Intrinsic function that corrects the assistant's response to a user's
@@ -264,8 +356,15 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
 
     :param context: Chat context containing user question and assistant answer.
     :param backend: Backend instance that supports LoRA/aLoRA adapters.
+    :param legacy_envelope: When ``True``, build the pre-#1037 ``<guardian>``
+        envelope locally and append it as a user message instead of relying on
+        the ``instruction:`` template in the adapter's ``io.yaml``. Falls back
+        to the ``MELLEA_GUARDIAN_LEGACY_ENVELOPE`` env var when ``None``.
 
     :return: Correct assistant response.
     """
+    if _should_use_legacy_envelope(legacy_envelope):
+        envelope = _legacy_factuality_correction_envelope()
+        context = context.add(Message("user", envelope))
     result_json = call_intrinsic("factuality-correction", context, backend)
     return result_json["correction"]
