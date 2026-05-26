@@ -115,15 +115,14 @@ class BashAuditTrail:
         with self._storage_lock:
             results = self._violations[:]
 
-        for violation in results:
-            if session_id and violation.session_id != session_id:
-                results.remove(violation)
-            elif pattern and violation.pattern != pattern:
-                results.remove(violation)
-            elif category and violation.category != category:
-                results.remove(violation)
-            elif severity and violation.severity != severity:
-                results.remove(violation)
+        results = [
+            v
+            for v in results
+            if (session_id is None or v.session_id == session_id)
+            and (pattern is None or v.pattern == pattern)
+            and (category is None or v.category == category)
+            and (severity is None or v.severity == severity)
+        ]
 
         if limit:
             results = results[:limit]

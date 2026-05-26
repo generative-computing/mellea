@@ -28,6 +28,7 @@ from pathlib import Path
 
 from ...core import MelleaLogger
 from ._bash_audit import record_bash_violation
+from ._bash_patterns import check_all_patterns
 from .interpreter import ExecutionResult
 
 logger = MelleaLogger.get_logger()
@@ -104,6 +105,25 @@ DANGEROUS_FLAGS = {"-rf", "-r", "--recursive", "--force", "-f", "--force-all"}
 # Maximum output size (10KB per stream)
 MAX_OUTPUT_SIZE = 10 * 1024
 
+# Commands that perform filesystem writes (including permissions, links, disk writes)
+WRITE_COMMANDS = {
+    "rm",  # Delete files
+    "touch",  # Create/update files
+    "cp",  # Copy files
+    "mv",  # Move/rename files
+    "mkdir",  # Create directories
+    "mkfifo",  # Create named pipes
+    "mknod",  # Create special files
+    "tee",  # Write to files
+    "chmod",  # Change file permissions
+    "chown",  # Change file owner
+    "chgrp",  # Change file group
+    "ln",  # Create symbolic/hard links
+    "dd",  # Copy and convert files (byte-level writes)
+    "install",  # Install files
+    "truncate",  # Truncate file to size
+}
+
 
 def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
     """Check if a command is dangerous based on argv analysis.
@@ -116,6 +136,12 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
     """
     if not argv:
         return False, ""
+
+    # First, check against the pattern framework (comprehensive pattern registry)
+    # The pattern framework provides extensible, well-tested security checks
+    is_dangerous, reason = check_all_patterns(argv)
+    if is_dangerous:
+        return True, reason
 
     cmd = argv[0].split("/")[-1]  # Get basename of command
 
@@ -232,6 +258,15 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
                 # Allow shells as arguments in safe wrappers (e.g., timeout bash script.sh)
                 # but reject sudo/su/etc as nested commands
                 return True, f"Command '{arg_cmd}' is not allowed as an argument"
+            # For shells in safe wrappers, check if they have code-execution flags (-c, -e, etc.)
+            # that bypass the denylist (e.g., env bash -c <payload>)
+            shell_code_exec_flags = {"-c", "-e"}
+            if arg_cmd in ("bash", "sh", "zsh", "ksh", "tcsh"):
+                if any(flag in argv for flag in shell_code_exec_flags):
+                    return (
+                        True,
+                        f"Interpreter code execution ('{arg_cmd} -c' or '{arg_cmd} -e' in nested argument) is not allowed",
+                    )
 
         # Check for dangerous nested commands that aren't in DANGEROUS_COMMANDS but
         # have dangerous flags (e.g., "env rm -rf" or "timeout rm -rf").
@@ -352,30 +387,95 @@ def _check_dangerous_paths(
     Returns:
         A tuple of (has_dangerous_paths, reason_message).
     """
-    write_commands = {"rm", "touch", "cp", "mv", "mkdir", "mkfifo", "mknod", "tee"}
-    if not argv or argv[0].split("/")[-1] not in write_commands:
+    if not argv or argv[0].split("/")[-1] not in WRITE_COMMANDS:
         return False, ""
 
+    cmd = argv[0].split("/")[-1]
     resolved_allowed_paths = _resolve_allowed_paths(allowed_paths or [])
+
+    # For ln (symlink/hardlink), check both source and target
+    # ln can create symlinks pointing outside allowed paths (e.g., ln -s /etc/passwd /allowed/path/link)
+    if cmd == "ln":
+        source_idx = None
+        target_idx = None
+        for i, arg in enumerate(argv[1:], start=1):
+            if not arg.startswith("-"):
+                if source_idx is None:
+                    source_idx = i
+                elif target_idx is None:
+                    target_idx = i
+                    break
+        # For ln, validate that the symlink *target* (not the source) is in allowed paths
+        # The source path is what the link points to (can be arbitrary)
+        if target_idx is not None and target_idx < len(argv):
+            try:
+                target_arg = argv[target_idx]
+                if target_arg.startswith(("/", "~")):
+                    resolved_target = str(
+                        Path(target_arg).expanduser().resolve(strict=False)
+                    )
+                else:
+                    resolved_target = str(
+                        Path(target_arg).expanduser().resolve(strict=False)
+                    )
+            except Exception as e:
+                logger.warning(f"Cannot resolve ln target '{target_arg}': {e}")
+                return (
+                    True,
+                    f"Cannot validate symlink target '{target_arg}': path resolution failed ({type(e).__name__})",
+                )
+            # Check target against dangerous paths and allowed paths
+            for danger_path in DANGEROUS_PATHS:
+                if resolved_target == danger_path or resolved_target.startswith(
+                    danger_path + "/"
+                ):
+                    return (
+                        True,
+                        f"Symlink target '{resolved_target}' points to dangerous path",
+                    )
+            if resolved_allowed_paths:
+                if not any(
+                    _is_path_within(resolved_target, allowed_root)
+                    for allowed_root in resolved_allowed_paths
+                ):
+                    return (
+                        True,
+                        f"Symlink target '{target_arg}' is outside explicitly allowed paths",
+                    )
 
     for arg in argv[1:]:
         if arg.startswith("-"):
             continue
 
+        # Handle key=value format (e.g., of=/boot/vmlinuz for dd command)
+        path_to_check = arg
+        if "=" in arg:
+            # Extract the value part for commands like dd (of=..., if=...)
+            _, path_part = arg.split("=", 1)
+            # Only check if the value looks like a path
+            if path_part.startswith(("/", "~")):
+                path_to_check = path_part
+
         try:
             # Resolve all paths consistently to catch symlink bypasses
-            if arg.startswith(("/", "~")):
-                resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
+            if path_to_check.startswith(("/", "~")):
+                resolved_arg = str(
+                    Path(path_to_check).expanduser().resolve(strict=False)
+                )
             else:
                 # For relative paths, resolve against current directory
-                resolved_arg = str(Path(arg).expanduser().resolve(strict=False))
+                resolved_arg = str(
+                    Path(path_to_check).expanduser().resolve(strict=False)
+                )
         except Exception as e:
             # Fail closed: if we can't resolve a path, deny it.
             # This prevents attackers from bypassing checks via crafted paths that fail to resolve.
-            logger.warning(f"Cannot resolve path '{arg}' in dangerous paths check: {e}")
+            logger.warning(
+                f"Cannot resolve path '{path_to_check}' in dangerous paths check: {e}"
+            )
             return (
                 True,
-                f"Cannot validate path '{arg}': path resolution failed ({type(e).__name__})",
+                f"Cannot validate path '{path_to_check}': path resolution failed ({type(e).__name__})",
             )
 
         for danger_path in DANGEROUS_PATHS:
@@ -391,7 +491,7 @@ def _check_dangerous_paths(
             ):
                 return (
                     True,
-                    f"Path '{arg}' is outside explicitly allowed paths: {', '.join(allowed_paths or [])}",
+                    f"Path '{path_to_check}' is outside explicitly allowed paths: {', '.join(allowed_paths or [])}",
                 )
 
     return False, ""
@@ -412,8 +512,7 @@ def _check_working_dir_restriction(
     if not working_dir:
         return False, ""
 
-    write_commands = {"rm", "touch", "cp", "mv", "mkdir", "mkfifo", "mknod", "tee"}
-    if not argv or argv[0].split("/")[-1] not in write_commands:
+    if not argv or argv[0].split("/")[-1] not in WRITE_COMMANDS:
         return False, ""
 
     try:

@@ -126,6 +126,61 @@ class TestInterpreterIndirectionBypassAttempts:
         assert result.skip_message is not None
         assert "not allowed" in result.skip_message.lower()
 
+    def test_env_bash_c_nested_code_execution_rejected(self) -> None:
+        """env bash -c should be rejected (bypasses shell denylist with nested -c).
+
+        Regression test for: env bash -c <payload> was bypassing the denylist because:
+        - The code-execution check (lines 176-182) only catches bash as argv[0]
+        - Nested bash in env was allowed at line 225-231 (shells allowed in safe wrappers)
+        - But the -c flag on the nested bash was never re-checked
+
+        This test ensures that -c/-e flags on nested shells are caught even when
+        the top-level wrapper is in SAFE_WRAPPER_COMMANDS.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("env bash -c 'id'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_timeout_bash_c_nested_code_execution_rejected(self) -> None:
+        """timeout bash -c should be rejected (same bypass as env)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 5 bash -c 'whoami'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_env_sh_e_nested_code_execution_rejected(self) -> None:
+        """env sh -e should be rejected (similar bypass with -e flag)."""
+        env = StaticBashEnvironment()
+        result = env.execute("env sh -e 'echo test'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_env_bash_script_allowed(self) -> None:
+        """env bash script.sh should be allowed (legitimate use case)."""
+        env = StaticBashEnvironment()
+        result = env.execute("env bash script.sh")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_timeout_bash_script_allowed(self) -> None:
+        """timeout bash script.sh should be allowed (legitimate use case)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 bash script.sh")
+
+        assert result.skipped is True
+        assert result.success is True
+
     def test_env_with_sudo_rejected(self) -> None:
         """env with sudo should be rejected (privilege escalation)."""
         env = StaticBashEnvironment()
@@ -430,7 +485,11 @@ class TestShellOperatorFalsePositives:
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert "not allowed" in result.skip_message.lower()
+        # Message from patterns framework may say "redirection" instead of "not allowed"
+        assert any(
+            phrase in result.skip_message.lower()
+            for phrase in ["not allowed", "redirection", "operator"]
+        )
 
     def test_redirect_to_file_blocked(self) -> None:
         """Redirect to file (>filename) should be blocked."""
@@ -440,7 +499,11 @@ class TestShellOperatorFalsePositives:
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert "not allowed" in result.skip_message.lower()
+        # Message from patterns framework may say "redirection" instead of "not allowed"
+        assert any(
+            phrase in result.skip_message.lower()
+            for phrase in ["not allowed", "redirection", "operator"]
+        )
 
 
 class TestShellMetacharacterDetection:
@@ -469,7 +532,20 @@ class TestShellMetacharacterDetection:
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert "not allowed" in result.skip_message.lower()
+        # Message can be from patterns framework (more detailed) or manual checks (simpler)
+        assert any(
+            phrase in result.skip_message.lower()
+            for phrase in [
+                "not allowed",
+                "redirection",
+                "operator",
+                "substitution",
+                "chaining",
+                "pipes",
+                "background",
+                "execution",
+            ]
+        )
 
 
 class TestMacOSPrivateVarHandling:
@@ -610,6 +686,70 @@ class TestSystemPathDetection:
             assert result.success is False
             assert result.skip_message is not None
             assert "not allowed" in result.skip_message.lower()
+
+    def test_chmod_to_system_path_rejected(self) -> None:
+        """chmod to system paths should be rejected (was missing from write_commands).
+
+        Regression test for planetf1 comment: chmod, chown, ln, dd weren't in
+        the write_commands set, allowing chmod 777 /etc/passwd to bypass.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("chmod 777 /etc/passwd")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_chown_to_system_path_rejected(self) -> None:
+        """chown to system paths should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("chown root:root /etc/config")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_dd_to_dangerous_path_rejected(self) -> None:
+        """dd to dangerous paths should be rejected (was missing from write_commands)."""
+        env = StaticBashEnvironment()
+        result = env.execute("dd if=/dev/urandom of=/boot/vmlinuz")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_ln_symlink_escape_rejected(self) -> None:
+        """ln creating symlinks to dangerous paths should be rejected.
+
+        Regression test: ln -sf /etc/passwd /allowed/path/link creates a link
+        in an allowed path pointing outside (symlink escape). The link target
+        must be validated in allowed_paths context.
+        """
+        env = StaticBashEnvironment(allowed_paths=["/tmp"])
+        # Try to create a symlink in /tmp pointing outside allowed paths
+        result = env.execute("ln -sf /etc/passwd /tmp/link_to_etc")
+
+        # Should reject because /etc/passwd is outside allowed paths
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_ln_symlink_within_allowed_paths_allowed(self) -> None:
+        """ln creating symlinks within allowed paths should be allowed."""
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = os.path.join(tmpdir, "source.txt")
+            target = os.path.join(tmpdir, "link.txt")
+            # Create source file
+            open(source, "w").close()
+
+            env = StaticBashEnvironment(allowed_paths=[tmpdir])
+            result = env.execute(f"ln -s {source} {target}")
+
+            assert result.skipped is True
+            assert result.success is True
 
 
 class TestWorkingDirRestriction:
@@ -780,7 +920,11 @@ class TestLocalBashEnvironment:
         assert result.skipped is True
         assert result.success is False
         assert result.skip_message is not None
-        assert "not allowed" in result.skip_message.lower()
+        # Message from patterns framework may say "redirection" instead of "not allowed"
+        assert any(
+            phrase in result.skip_message.lower()
+            for phrase in ["not allowed", "redirection", "operator"]
+        )
 
     def test_dangerous_command_rejected(self) -> None:
         """Dangerous commands should be rejected even before execution."""
