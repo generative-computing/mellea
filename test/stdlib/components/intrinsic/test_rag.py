@@ -199,7 +199,10 @@ def _compare_hallucination(result: list[dict], expected: list[dict]):
         assert r["faithfulness"] == e["faithfulness"]
 
         # Specifically don't check the explanation due to mentioned differences.
-        # assert result["explanation"] == expected["explanation"]
+        # To re-enable: assert r["explanation"] == e["explanation"]
+
+        # We still check that the explanation is a non-empty string.
+        assert isinstance(r["explanation"], str) and r["explanation"].strip()
 
 
 @pytest.mark.qualitative
