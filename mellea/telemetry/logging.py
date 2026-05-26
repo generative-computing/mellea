@@ -8,10 +8,6 @@ Configuration via environment variables:
 - OTEL_EXPORTER_OTLP_ENDPOINT: General endpoint for all signals (fallback)
 - OTEL_SERVICE_NAME: Service name for logs (default: mellea)
 
-Deprecated:
-- MELLEA_LOG_OTLP: Use MELLEA_LOGS_OTLP instead.
-- OTEL_EXPORTER_OTLP_LOG_ENDPOINT: Use OTEL_EXPORTER_OTLP_LOGS_ENDPOINT instead.
-
 Example:
     export MELLEA_LOGS_OTLP=true
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
@@ -58,16 +54,6 @@ def _setup_logger_provider() -> Any:
         return None
 
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-    if not endpoint:
-        legacy_ep = os.getenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT")
-        if legacy_ep:
-            warnings.warn(
-                "OTEL_EXPORTER_OTLP_LOG_ENDPOINT is deprecated and will be removed in a future release. "
-                "Use OTEL_EXPORTER_OTLP_LOGS_ENDPOINT instead.",
-                DeprecationWarning,
-                stacklevel=4,
-            )
-            endpoint = legacy_ep
     if not endpoint:
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if not endpoint:
@@ -131,16 +117,6 @@ def get_otlp_log_handler() -> Any:
     if not _logger_provider_initialised:
         _logger_provider_initialised = True
         otlp_raw = os.getenv("MELLEA_LOGS_OTLP")
-        if otlp_raw is None:
-            legacy = os.getenv("MELLEA_LOG_OTLP", "")
-            if legacy:
-                warnings.warn(
-                    "MELLEA_LOG_OTLP is deprecated and will be removed in a future release. "
-                    "Use MELLEA_LOGS_OTLP instead.",
-                    DeprecationWarning,
-                    stacklevel=4,
-                )
-                otlp_raw = legacy
         logs_otlp = _OTEL_AVAILABLE and (otlp_raw or "").lower() in ("true", "1", "yes")
         if logs_otlp:
             _logger_provider = _setup_logger_provider()

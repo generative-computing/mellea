@@ -36,29 +36,7 @@ Environment variables
     via ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
 ``MELLEA_LOGS_WEBHOOK``
     HTTP(S) URL to forward log records to via HTTP POST.  When set a
-    :class:`RESTHandler` is attached.  Supersedes the deprecated ``MELLEA_FLOG``
-    and ``FLOG`` variables.
-``MELLEA_LOG_ENABLED``
-    Deprecated alias for ``MELLEA_LOGS_ENABLED``.
-``MELLEA_LOG_LEVEL``
-    Deprecated alias for ``MELLEA_LOGS_LEVEL``.
-``MELLEA_LOG_JSON``
-    Deprecated alias for ``MELLEA_LOGS_JSON``.
-``MELLEA_LOG_CONSOLE``
-    Deprecated alias for ``MELLEA_LOGS_CONSOLE``.
-``MELLEA_LOG_FILE``
-    Deprecated alias for ``MELLEA_LOGS_FILE``.
-``MELLEA_LOG_FILE_MAX_BYTES``
-    Deprecated alias for ``MELLEA_LOGS_FILE_MAX_BYTES``.
-``MELLEA_LOG_FILE_BACKUP_COUNT``
-    Deprecated alias for ``MELLEA_LOGS_FILE_BACKUP_COUNT``.
-``MELLEA_LOG_OTLP``
-    Deprecated alias for ``MELLEA_LOGS_OTLP``.
-``MELLEA_LOG_WEBHOOK``
-    Deprecated alias for ``MELLEA_LOGS_WEBHOOK``.
-``MELLEA_FLOG``
-    Deprecated alias for ``MELLEA_LOGS_WEBHOOK``.  Activates a ``RESTHandler``
-    pointed at ``http://localhost:8000/api/receive``.
+    :class:`RESTHandler` is attached.
 """
 
 import contextlib
@@ -530,76 +508,10 @@ def _parse_bool_env(value: str, default: bool = True) -> bool:
     return default
 
 
-def _get_env_with_legacy(
-    new_var: str, legacy_var: str, stacklevel: int = 4
-) -> str | None:
-    """Return the value of *new_var*, falling back to *legacy_var* with a deprecation warning."""
-    value = os.environ.get(new_var)
-    if value is not None:
-        return value
-    legacy = os.environ.get(legacy_var, "")
-    if legacy:
-        warnings.warn(
-            f"{legacy_var} is deprecated and will be removed in a future release. "
-            f"Use {new_var} instead.",
-            DeprecationWarning,
-            stacklevel=stacklevel,
-        )
-        return legacy
-    return None
-
-
 def _resolve_webhook_url() -> str | None:
-    """Return the configured webhook URL, with deprecated-variable fallbacks.
-
-    Checks in priority order:
-
-    Priority order:
-
-    1. ``MELLEA_LOGS_WEBHOOK`` — the canonical variable.
-    2. ``MELLEA_LOG_WEBHOOK`` — deprecated; emits :class:`DeprecationWarning`.
-    3. ``MELLEA_FLOG`` — deprecated; emits :class:`DeprecationWarning` and
-       returns ``http://localhost:8000/api/receive``.
-    4. ``FLOG`` — deprecated; emits :class:`DeprecationWarning` and returns
-       ``http://localhost:8000/api/receive``.
-
-    Returns:
-        str | None: The URL to POST log records to, or ``None`` if no webhook
-        is configured.
-    """
+    """Return the configured webhook URL from ``MELLEA_LOGS_WEBHOOK``, or ``None``."""
     url = os.environ.get("MELLEA_LOGS_WEBHOOK", "").strip()
-    if url:
-        return url
-
-    legacy_url = os.environ.get("MELLEA_LOG_WEBHOOK", "").strip()
-    if legacy_url:
-        warnings.warn(
-            "MELLEA_LOG_WEBHOOK is deprecated and will be removed in a future release. "
-            "Use MELLEA_LOGS_WEBHOOK instead.",
-            DeprecationWarning,
-            stacklevel=4,
-        )
-        return legacy_url
-
-    if os.environ.get("MELLEA_FLOG"):
-        warnings.warn(
-            "MELLEA_FLOG is deprecated and will be removed in a future release. "
-            "Use MELLEA_LOGS_WEBHOOK instead.",
-            DeprecationWarning,
-            stacklevel=4,
-        )
-        return "http://localhost:8000/api/receive"
-
-    if os.environ.get("FLOG"):
-        warnings.warn(
-            "FLOG is deprecated and will be removed in a future release. "
-            "Use MELLEA_LOGS_WEBHOOK instead.",
-            DeprecationWarning,
-            stacklevel=4,
-        )
-        return "http://localhost:8000/api/receive"
-
-    return None
+    return url or None
 
 
 def configure_logging(logger: logging.Logger) -> None:
@@ -623,11 +535,11 @@ def configure_logging(logger: logging.Logger) -> None:
     Args:
         logger: The :class:`logging.Logger` to configure.
     """
-    enabled_raw = _get_env_with_legacy("MELLEA_LOGS_ENABLED", "MELLEA_LOG_ENABLED")
+    enabled_raw = os.environ.get("MELLEA_LOGS_ENABLED")
     if not _parse_bool_env(enabled_raw or "", default=True):
         return
 
-    json_raw = _get_env_with_legacy("MELLEA_LOGS_JSON", "MELLEA_LOG_JSON")
+    json_raw = os.environ.get("MELLEA_LOGS_JSON")
     use_json = _parse_bool_env(json_raw or "", default=False)
 
     # --- Webhook / REST handler ---
@@ -638,7 +550,7 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(rest_handler)
 
     # --- Console / stream handler ---
-    console_raw = _get_env_with_legacy("MELLEA_LOGS_CONSOLE", "MELLEA_LOG_CONSOLE")
+    console_raw = os.environ.get("MELLEA_LOGS_CONSOLE")
     if _parse_bool_env(console_raw or "", default=True):
         stream_handler = logging.StreamHandler(stream=sys.stdout)
         if use_json:
@@ -648,18 +560,13 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(stream_handler)
 
     # --- Optional rotating file handler ---
-    _log_file_raw = _get_env_with_legacy("MELLEA_LOGS_FILE", "MELLEA_LOG_FILE")
-    log_file = (_log_file_raw or "").strip()
+    log_file = (os.environ.get("MELLEA_LOGS_FILE") or "").strip()
     if log_file:
         try:
-            max_bytes_raw = _get_env_with_legacy(
-                "MELLEA_LOGS_FILE_MAX_BYTES", "MELLEA_LOG_FILE_MAX_BYTES"
-            )
+            max_bytes_raw = os.environ.get("MELLEA_LOGS_FILE_MAX_BYTES")
             max_bytes = int(max_bytes_raw) if max_bytes_raw else 10485760
 
-            backup_raw = _get_env_with_legacy(
-                "MELLEA_LOGS_FILE_BACKUP_COUNT", "MELLEA_LOG_FILE_BACKUP_COUNT"
-            )
+            backup_raw = os.environ.get("MELLEA_LOGS_FILE_BACKUP_COUNT")
             backup_count = int(backup_raw) if backup_raw else 5
             file_handler = _RotatingFileHandler(
                 log_file, maxBytes=max_bytes, backupCount=backup_count
@@ -725,23 +632,12 @@ class MelleaLogger:
     def _resolve_log_level() -> int:
         """Resolves the effective log level from environment variables.
 
-        Checks ``MELLEA_LOGS_LEVEL`` (``MELLEA_LOG_LEVEL`` is deprecated) and
-        defaults to ``INFO``.
+        Checks ``MELLEA_LOGS_LEVEL`` and defaults to ``INFO``.
 
         Returns:
             int: A :mod:`logging` level integer.
         """
         level_name = (os.environ.get("MELLEA_LOGS_LEVEL") or "").strip().upper()
-        if not level_name:
-            legacy = os.environ.get("MELLEA_LOG_LEVEL", "").strip().upper()
-            if legacy:
-                warnings.warn(
-                    "MELLEA_LOG_LEVEL is deprecated and will be removed in a future release. "
-                    "Use MELLEA_LOGS_LEVEL instead.",
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
-                level_name = legacy
         if level_name:
             numeric = getattr(logging, level_name, None)
             if isinstance(numeric, int):

@@ -192,31 +192,6 @@ def test_fancy_logger_works_without_otlp(clean_logging_env):
     logger.info("Test message")
 
 
-def test_mellea_log_otlp_deprecated_still_works(monkeypatch, clean_logging_env):
-    """Test that old MELLEA_LOG_OTLP name still works and emits DeprecationWarning."""
-    import warnings
-
-    monkeypatch.delenv("MELLEA_LOGS_OTLP", raising=False)
-    monkeypatch.setenv("MELLEA_LOG_OTLP", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-
-    _reset_logging_modules()
-
-    import mellea.telemetry.logging
-
-    importlib.reload(mellea.telemetry.logging)
-
-    from mellea.telemetry.logging import get_otlp_log_handler
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        handler = get_otlp_log_handler()
-
-    assert handler is not None
-    dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-    assert any("MELLEA_LOG_OTLP" in str(w.message) for w in dep)
-
-
 def test_mellea_logs_otlp_takes_precedence_over_log_otlp(
     monkeypatch, clean_logging_env
 ):
