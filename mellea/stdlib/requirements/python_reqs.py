@@ -1,12 +1,18 @@
 """Requirements for Python code generation validation."""
 
+import warnings
 from collections.abc import Callable
+from typing import Literal
 
+from mellea.stdlib.tools.execution_policy import (
+    DOCKER_POLICY,
+    LOCAL_POLICY,
+    CapabilityPolicy,
+    ExecutionTier,
+)
 from mellea.stdlib.tools.interpreter import (
     ExecutionEnvironment,
-    LLMSandboxEnvironment,
-    StaticAnalysisEnvironment,
-    UnsafeEnvironment,
+    make_execution_environment,
 )
 
 from ...core import Context, MelleaLogger, Requirement, ValidationResult
@@ -104,16 +110,12 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
 
 def _python_executes_without_error(
-    ctx: Context,
-    timeout: int = 5,
-    allow_unsafe: bool = False,
-    allowed_imports: list[str] | None = None,
-    use_sandbox: bool = False,
+    ctx: Context, environment: ExecutionEnvironment
 ) -> ValidationResult:
     """Validate that Python code executes without raising exceptions.
 
     First extracts the highest-scoring Python code block from the context,
-    then validates/executes it based on the specified execution mode.
+    then validates/executes it using the given environment.
     """
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
@@ -125,15 +127,7 @@ def _python_executes_without_error(
     code = extraction_result.reason
     assert code is not None
 
-    environment: ExecutionEnvironment
-    if use_sandbox:
-        environment = LLMSandboxEnvironment(allowed_imports=allowed_imports)
-    elif allow_unsafe:
-        environment = UnsafeEnvironment(allowed_imports=allowed_imports)
-    else:
-        environment = StaticAnalysisEnvironment(allowed_imports=allowed_imports)
-
-    result = environment.execute(code, timeout)
+    result = environment.execute(code)
     return ValidationResult(
         result=result.success, reason=result.to_validationresult_reason()
     )
@@ -143,16 +137,28 @@ class PythonExecutionReq(Requirement):
     """Verifies that Python code runs without raising exceptions.
 
     Extracts the highest-scoring Python code block from the model's last output
-    and validates or executes it according to the configured execution mode.
+    and validates or executes it according to the configured execution tier.
+
+    Use ``execution_tier`` to select behavior by intent:
+
+    - ``"static"`` (default) — parse and import-check only, no execution.
+    - ``"local_unsafe"`` — subprocess execution, no policy restrictions.
+    - ``"local"`` — subprocess execution with a declared capability policy.
+    - ``"docker_unsafe"`` — Docker-isolated execution, no policy restrictions.
+    - ``"docker"`` — Docker-isolated execution with a declared capability policy.
 
     Args:
-        timeout (int): Maximum seconds to allow code to run. Defaults to `5`.
-        allow_unsafe_execution (bool): If `True`, execute code directly with
-            subprocess. Use only with trusted sources.
+        execution_tier (str): One of ``"static"``, ``"local_unsafe"``, ``"local"``,
+            ``"docker_unsafe"``, or ``"docker"``.  Defaults to ``"static"``.
+        policy (CapabilityPolicy | None): Override the tier's default policy.
+            Ignored for ``"static"`` and unsafe tiers unless explicitly provided.
         allowed_imports (list[str] | None): Allowlist of importable top-level
-            modules. `None` allows any import.
-        use_sandbox (bool): If `True`, use `llm-sandbox` for Docker-based
-            isolated execution.
+            modules.  ``None`` allows any import.
+        timeout (int | None): Deprecated.  Pass ``policy=CapabilityPolicy(timeout=N)``
+            instead.  When provided, overrides the policy timeout.
+        allow_unsafe_execution (bool): Deprecated.  Use
+            ``execution_tier="local_unsafe"`` instead.
+        use_sandbox (bool): Deprecated.  Use ``execution_tier="docker"`` instead.
 
     Attributes:
         validation_fn (Callable[[Context], ValidationResult]): The validation
@@ -161,46 +167,101 @@ class PythonExecutionReq(Requirement):
 
     def __init__(
         self,
-        timeout: int = 5,
-        allow_unsafe_execution: bool = False,
+        execution_tier: Literal[
+            "static", "local_unsafe", "local", "docker_unsafe", "docker"
+        ] = "static",
+        *,
+        policy: CapabilityPolicy | None = None,
         allowed_imports: list[str] | None = None,
+        # Deprecated kwargs — kept for backward compatibility
+        timeout: int | None = None,
+        allow_unsafe_execution: bool = False,
         use_sandbox: bool = False,
     ):
-        """Initialize PythonExecutionReq with execution mode, timeout, and import allowlist settings."""
-        self._timeout = timeout
-        self._allow_unsafe = allow_unsafe_execution
-        self._allowed_imports = allowed_imports
-        self._use_sandbox = use_sandbox
+        """Initialize PythonExecutionReq with an execution tier and optional policy."""
+        # --- Deprecation shims ---
+        if allow_unsafe_execution and execution_tier == "static":
+            warnings.warn(
+                "allow_unsafe_execution is deprecated. Use execution_tier='local_unsafe' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            execution_tier = "local_unsafe"
 
-        if allow_unsafe_execution and not use_sandbox:
-            logger.warning(
-                "⚠️ UNSAFE: Executing untrusted code directly. Only use with trusted sources!"
+        if use_sandbox and execution_tier in ("static", "local_unsafe"):
+            warnings.warn(
+                "use_sandbox is deprecated. Use execution_tier='docker' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            execution_tier = "docker"
+
+        if timeout is not None:
+            warnings.warn(
+                "timeout is deprecated. Pass policy=CapabilityPolicy(timeout=N) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if policy is None:
+                base = (
+                    DOCKER_POLICY
+                    if execution_tier in ("docker", "docker_unsafe")
+                    else LOCAL_POLICY
+                )
+                policy = CapabilityPolicy(**{**vars(base), "timeout": timeout})
+            else:
+                policy = CapabilityPolicy(**{**vars(policy), "timeout": timeout})
+
+        self._tier = execution_tier
+        self._policy = policy
+        self._allowed_imports = allowed_imports
+
+        if execution_tier == "static":
+            from mellea.stdlib.tools.interpreter import StaticAnalysisEnvironment
+
+            environment: ExecutionEnvironment = StaticAnalysisEnvironment(
+                allowed_imports=allowed_imports
+            )
+        else:
+            environment = make_execution_environment(
+                tier=execution_tier,  # type: ignore[arg-type]
+                policy=policy,
+                allowed_imports=allowed_imports,
             )
 
-        if use_sandbox and allow_unsafe_execution:
-            execution_mode = f"sandbox execution (timeout: {timeout}s)"
-        elif allow_unsafe_execution:
-            execution_mode = f"unsafe execution (timeout: {timeout}s)"
-        elif use_sandbox:
-            execution_mode = f"sandbox execution (timeout: {timeout}s)"
-        else:
-            execution_mode = "validation only"
+        if execution_tier in ("local_unsafe", "local"):
+            logger.warning(
+                "⚠️ UNSAFE: Executing untrusted code without container isolation. "
+                "Only use with trusted sources!"
+            )
+
+        tier_label = _tier_label(execution_tier, policy)
 
         super().__init__(
-            description=f"The Python code should execute without errors ({execution_mode}).",
-            validation_fn=lambda ctx: _python_executes_without_error(
-                ctx,
-                self._timeout,
-                self._allow_unsafe,
-                self._allowed_imports,
-                self._use_sandbox,
-            ),
+            description=f"The Python code should execute without errors ({tier_label}).",
+            validation_fn=lambda ctx: _python_executes_without_error(ctx, environment),
             check_only=True,
         )
 
-        # Add type hint to validation_fn here. It's always set for this requirement.
         self.validation_fn: Callable[[Context], ValidationResult]
         assert self.validation_fn is not None
+
+
+def _tier_label(tier: str, policy: CapabilityPolicy | None) -> str:
+    timeout = policy.timeout if policy else None
+    match tier:
+        case "static":
+            return "validation only"
+        case "local_unsafe":
+            return f"local execution, no policy (timeout: {timeout or 30}s)"
+        case "local":
+            return f"local execution with policy (timeout: {timeout or LOCAL_POLICY.timeout}s)"
+        case "docker_unsafe":
+            return f"docker execution, no policy (timeout: {timeout or 60}s)"
+        case "docker":
+            return f"docker execution with policy (timeout: {timeout or DOCKER_POLICY.timeout}s)"
+        case _:
+            return tier
 
 
 # endregion
