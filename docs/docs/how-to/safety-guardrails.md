@@ -7,7 +7,7 @@ description: "Use Guardian Intrinsics to detect harmful, biased, ungrounded, or 
 
 **Prerequisites:** `pip install "mellea[hf]"` for local inference; Apple Silicon or CUDA GPU recommended.
 Guardian Intrinsics work via `LocalHFBackend` (local HuggingFace inference) or `OpenAIBackend`
-pointed at a Granite Switch endpoint (no local GPU required).
+pointed at a Granite Switch endpoint.
 
 Guardian Intrinsics evaluate LLM outputs for safety and quality using LoRA adapters
 loaded directly into a HuggingFace backend — purpose-built for evaluation tasks, not
@@ -133,9 +133,10 @@ else:
 (`"assistant_response"` — the default; `"user_prompt"`; `"last_turn"`;
 `"tool_call"`) or any custom yes/no schema string.
 
-> **Deprecated:** `target_role="user" | "assistant"` still works but emits a
-> `DeprecationWarning`. Replace it with `scoring_schema="user_prompt"` or
-> `scoring_schema="assistant_response"` (the default).
+> **Migrating from `target_role`?** Use `scoring_schema="user_prompt"` in place of
+> `target_role="user"`, and `scoring_schema="assistant_response"` (the default) in
+> place of `target_role="assistant"`. The old parameter still accepts values but
+> emits `DeprecationWarning`.
 
 ## Custom criteria
 

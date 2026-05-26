@@ -364,7 +364,7 @@ A deprecated `Requirement` subclass that validates LLM outputs using a separatel
 Granite Guardian model. Requires an independent Ollama or HuggingFace backend
 for the Guardian model.
 
-See: [Security and Taint Tracking (deprecated)](../advanced/security-and-taint-tracking)
+See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ---
 
@@ -376,7 +376,7 @@ See: [Security and Taint Tracking (deprecated)](../advanced/security-and-taint-t
 An enum specifying which safety risk category the deprecated `GuardianCheck`
 class should detect. Replaced by the string keys in `CRITERIA_BANK`.
 
-See: [Security and Taint Tracking (deprecated)](../advanced/security-and-taint-tracking)
+See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ---
 
