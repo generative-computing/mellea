@@ -6,7 +6,8 @@ Demonstrates multiple ways to use Mellea's bash execution capabilities:
 2. Wrapping as a MelleaTool for agent use
 3. LLM-based tool calling with forced tool use
 4. Working directory and path restrictions
-5. Integration with error handling
+5. Demonstrate safety features
+6. Integration with error handling
 
 ⚠️  Security note: bash_executor runs commands locally with a conservative
 safety denylist (recommended for typical agentic workflows). The denylist
@@ -136,9 +137,9 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
     print()
 
 
-def example_3_with_working_dir() -> None:
-    """Example 3: Restrict write validation and execution cwd to a directory."""
-    print("=== Example 3: Working Directory Restriction ===")
+def example_4_with_working_dir() -> None:
+    """Example 4: Restrict write validation and execution cwd to a directory."""
+    print("=== Example 4: Working Directory Restriction ===")
 
     import os
     import tempfile
@@ -178,9 +179,9 @@ def example_3_with_working_dir() -> None:
         print()
 
 
-def example_4_safety_features() -> None:
-    """Example 4: Demonstrate safety features."""
-    print("=== Example 4: Safety Features ===")
+def example_5_safety_features() -> None:
+    """Example 5: Demonstrate safety features."""
+    print("=== Example 5: Safety Features ===")
 
     dangerous_commands = [
         ("rm -rf /home", "Recursive force delete"),
@@ -198,9 +199,9 @@ def example_4_safety_features() -> None:
         print()
 
 
-def example_5_error_handling() -> None:
-    """Example 5: Handle execution errors gracefully."""
-    print("=== Example 5: Error Handling ===")
+def example_6_error_handling() -> None:
+    """Example 6: Handle execution errors gracefully."""
+    print("=== Example 6: Error Handling ===")
 
     # Command that fails (returns non-zero exit code)
     result = bash_executor("false")
@@ -231,6 +232,6 @@ if __name__ == "__main__":
         print("  Requires: Ollama running locally or compatible LLM configured")
         print("  See: https://docs.ollama.ai/")
 
-    example_3_with_working_dir()
-    example_4_safety_features()
-    example_5_error_handling()
+    example_4_with_working_dir()
+    example_5_safety_features()
+    example_6_error_handling()
