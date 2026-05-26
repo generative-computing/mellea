@@ -906,8 +906,6 @@ class TestMelleaLogConsole:
         monkeypatch.setenv("MELLEA_LOGS_CONSOLE", "false")
         monkeypatch.delenv("MELLEA_LOGS_ENABLED", raising=False)
         monkeypatch.delenv("MELLEA_LOGS_WEBHOOK", raising=False)
-        monkeypatch.delenv("MELLEA_FLOG", raising=False)
-        monkeypatch.delenv("FLOG", raising=False)
         logger = MelleaLogger.get_logger()
         assert not any(isinstance(h, RESTHandler) for h in logger.handlers)
 
@@ -943,7 +941,7 @@ class TestParseBoolEnv:
 
 
 # ---------------------------------------------------------------------------
-# Webhook handler (MELLEA_LOGS_WEBHOOK / deprecated MELLEA_FLOG / FLOG)
+# Webhook handler (MELLEA_LOGS_WEBHOOK)
 # ---------------------------------------------------------------------------
 
 
@@ -970,31 +968,15 @@ class TestWebhookHandler:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("MELLEA_LOGS_WEBHOOK", raising=False)
-        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
-        monkeypatch.delenv("MELLEA_FLOG", raising=False)
-        monkeypatch.delenv("FLOG", raising=False)
         assert len(self._rest_handlers()) == 0
 
     def test_mellea_logs_webhook_attaches_rest_handler(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://example.com/logs")
-        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
-        monkeypatch.delenv("MELLEA_FLOG", raising=False)
-        monkeypatch.delenv("FLOG", raising=False)
         handlers = self._rest_handlers()
         assert len(handlers) == 1
         assert handlers[0].api_url == "http://example.com/logs"
-
-    def test_webhook_takes_precedence_over_mellea_flog(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://new.example.com/hook")
-        monkeypatch.delenv("MELLEA_LOG_WEBHOOK", raising=False)
-        monkeypatch.setenv("MELLEA_FLOG", "1")
-        handlers = self._rest_handlers()
-        assert len(handlers) == 1
-        assert handlers[0].api_url == "http://new.example.com/hook"
 
     def test_rest_handler_emit_sends_unconditionally(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1061,7 +1043,6 @@ class TestConfigureLogging:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("MELLEA_LOGS_FILE", raising=False)
-        monkeypatch.delenv("MELLEA_LOG_FILE", raising=False)
         lg = self._make_bare_logger()
         configure_logging(lg)
         assert not any(isinstance(h, RotatingFileHandler) for h in lg.handlers)

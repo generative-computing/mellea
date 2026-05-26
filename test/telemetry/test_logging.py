@@ -44,10 +44,8 @@ def _reset_logging_modules():
 def clean_logging_env(monkeypatch):
     """Clean logging environment variables before each test."""
     monkeypatch.delenv("MELLEA_LOGS_OTLP", raising=False)
-    monkeypatch.delenv("MELLEA_LOG_OTLP", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
 
     _reset_logging_modules()
@@ -190,19 +188,3 @@ def test_fancy_logger_works_without_otlp(clean_logging_env):
 
     # Verify logger can log messages (backward compatibility)
     logger.info("Test message")
-
-
-def test_mellea_logs_otlp_takes_precedence_over_log_otlp(
-    monkeypatch, clean_logging_env
-):
-    """MELLEA_LOGS_OTLP=false wins over MELLEA_LOG_OTLP=true (no deprecation, no handler)."""
-    monkeypatch.setenv("MELLEA_LOGS_OTLP", "false")
-    monkeypatch.setenv("MELLEA_LOG_OTLP", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-
-    _reset_logging_modules()
-
-    from mellea.telemetry.logging import get_otlp_log_handler
-
-    handler = get_otlp_log_handler()
-    assert handler is None

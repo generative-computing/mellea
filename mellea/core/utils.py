@@ -560,7 +560,7 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(stream_handler)
 
     # --- Optional rotating file handler ---
-    log_file = (os.environ.get("MELLEA_LOGS_FILE") or "").strip()
+    log_file = os.environ.get("MELLEA_LOGS_FILE", "").strip()
     if log_file:
         try:
             max_bytes_raw = os.environ.get("MELLEA_LOGS_FILE_MAX_BYTES")
@@ -637,7 +637,7 @@ class MelleaLogger:
         Returns:
             int: A :mod:`logging` level integer.
         """
-        level_name = (os.environ.get("MELLEA_LOGS_LEVEL") or "").strip().upper()
+        level_name = os.environ.get("MELLEA_LOGS_LEVEL", "").strip().upper()
         if level_name:
             numeric = getattr(logging, level_name, None)
             if isinstance(numeric, int):
