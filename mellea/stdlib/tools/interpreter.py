@@ -20,6 +20,7 @@ import ast
 import subprocess
 import sys
 import tempfile
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,7 +55,9 @@ def _truncate(text: str | None, max_bytes: int | None) -> str | None:
     encoded = text.encode()
     if len(encoded) <= max_bytes:
         return text
-    return encoded[:max_bytes].decode(errors="ignore") + _TRUNCATION_MARKER
+    marker = _TRUNCATION_MARKER.encode()
+    keep = max(0, max_bytes - len(marker))
+    return encoded[:keep].decode(errors="ignore") + _TRUNCATION_MARKER
 
 
 @dataclass
@@ -383,6 +386,14 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         )
         self._session: Any = None  # SandboxSession when open via context manager
         self._container_id: str | None = None  # set after session opens
+        if policy and policy.artifact_export_paths:
+            warnings.warn(
+                "artifact_export_paths is set but this LLMSandboxEnvironment will only "
+                "export artifacts when used as a context manager ('with env:'). "
+                "In one-shot mode (env.execute(...)) artifacts are not exported.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     def _mode(self) -> str:
         return "docker" if self.policy is not None else "docker_unsafe"
@@ -491,7 +502,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                     execution_mode=self._mode(),
                 )
 
-        resolved_timeout = self._resolve_timeout(timeout, default=60)
+        resolved_timeout = self._resolve_timeout(timeout, default=DOCKER_POLICY.timeout)
 
         try:
             from llm_sandbox import SandboxSession
@@ -524,16 +535,6 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             )
 
             artifacts: list[Artifact] = []
-            if (
-                self.policy
-                and self.policy.artifact_export_paths
-                and self._session is None
-            ):
-                logger.warning(
-                    "artifact_export_paths is set but LLMSandboxEnvironment is running "
-                    "in one-shot mode (no context manager). Artifacts will not be exported. "
-                    "Use 'with env:' to enable artifact export."
-                )
             if (
                 self.policy
                 and self.policy.artifact_export_paths
@@ -622,7 +623,7 @@ def make_execution_environment(
     tier.
 
     Args:
-        tier (ExecutionTier): One of ``"local_unsafe"``, ``"local"``,
+        tier (ExecutionTier): One of ``"static"``, ``"local_unsafe"``, ``"local"``,
             ``"docker_unsafe"``, or ``"docker"``.
         policy (CapabilityPolicy | None): Override the tier's default policy.
             ``None`` uses the tier default (``LOCAL_POLICY`` / ``DOCKER_POLICY``

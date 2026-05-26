@@ -181,37 +181,74 @@ class PythonExecutionReq(Requirement):
     ):
         """Initialize PythonExecutionReq with an execution tier and optional policy."""
         # --- Deprecation shims ---
-        if allow_unsafe_execution and execution_tier == "static":
-            warnings.warn(
-                "allow_unsafe_execution is deprecated. Use execution_tier='local_unsafe' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            execution_tier = "local_unsafe"
+        _local_tiers = ("local_unsafe", "local")
+        _docker_tiers = ("docker_unsafe", "docker")
 
-        if use_sandbox and execution_tier in ("static", "local_unsafe"):
-            warnings.warn(
-                "use_sandbox is deprecated. Use execution_tier='docker' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            execution_tier = "docker"
+        if allow_unsafe_execution:
+            if execution_tier not in _local_tiers:
+                if execution_tier in _docker_tiers:
+                    # Caller is already on a docker tier — warn but don't downgrade.
+                    warnings.warn(
+                        f"allow_unsafe_execution is deprecated and has no effect when "
+                        f"execution_tier='{execution_tier}' is already set. "
+                        "Remove the flag.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        "allow_unsafe_execution is deprecated. Use execution_tier='local_unsafe' instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    if execution_tier == "static":
+                        execution_tier = "local_unsafe"
+
+        if use_sandbox:
+            if execution_tier not in _docker_tiers:
+                # Only warn and promote when the flag actually changes something.
+                warnings.warn(
+                    "use_sandbox is deprecated. Use execution_tier='docker' instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if execution_tier in ("static", "local_unsafe", "local"):
+                    execution_tier = "docker"
+            elif execution_tier == "docker_unsafe":
+                # Already in Docker but without a policy — nudge toward 'docker'.
+                warnings.warn(
+                    "use_sandbox is deprecated. Use execution_tier='docker' (with policy) "
+                    "instead of 'docker_unsafe' for capability enforcement.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
 
         if timeout is not None:
-            warnings.warn(
-                "timeout is deprecated. Pass policy=CapabilityPolicy(timeout=N) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if policy is None:
-                base = (
-                    DOCKER_POLICY
-                    if execution_tier in ("docker", "docker_unsafe")
-                    else LOCAL_POLICY
+            if execution_tier == "static":
+                warnings.warn(
+                    "timeout has no effect on the static tier (no code is executed).",
+                    DeprecationWarning,
+                    stacklevel=2,
                 )
-                policy = dataclasses.replace(base, timeout=timeout)
+            elif execution_tier in ("local_unsafe", "docker_unsafe"):
+                warnings.warn(
+                    f"timeout is ignored for the '{execution_tier}' tier (no policy is applied). "
+                    "Use execution_tier='local' or 'docker' with policy=CapabilityPolicy(timeout=N) "
+                    "to enforce a custom timeout.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             else:
-                policy = dataclasses.replace(policy, timeout=timeout)
+                warnings.warn(
+                    "timeout is deprecated. Pass policy=CapabilityPolicy(timeout=N) instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if policy is None:
+                    base = DOCKER_POLICY if execution_tier == "docker" else LOCAL_POLICY
+                    policy = dataclasses.replace(base, timeout=timeout)
+                else:
+                    policy = dataclasses.replace(policy, timeout=timeout)
 
         self._tier = execution_tier
         self._policy = policy
@@ -247,18 +284,22 @@ class PythonExecutionReq(Requirement):
 
 
 def _tier_label(tier: str, policy: CapabilityPolicy | None) -> str:
-    timeout = policy.timeout if policy else None
+    timeout = policy.timeout if policy is not None else None
     match tier:
         case "static":
             return "validation only"
         case "local_unsafe":
-            return f"local execution, no policy (timeout: {timeout or 30}s)"
+            effective = timeout if timeout is not None else LOCAL_POLICY.timeout
+            return f"local execution, no policy (timeout: {effective}s)"
         case "local":
-            return f"local execution with policy (timeout: {timeout or LOCAL_POLICY.timeout}s)"
+            effective = timeout if timeout is not None else LOCAL_POLICY.timeout
+            return f"local execution with policy (timeout: {effective}s)"
         case "docker_unsafe":
-            return f"docker execution, no policy (timeout: {timeout or 60}s)"
+            effective = timeout if timeout is not None else DOCKER_POLICY.timeout
+            return f"docker execution, no policy (timeout: {effective}s)"
         case "docker":
-            return f"docker execution with policy (timeout: {timeout or DOCKER_POLICY.timeout}s)"
+            effective = timeout if timeout is not None else DOCKER_POLICY.timeout
+            return f"docker execution with policy (timeout: {effective}s)"
         case _:
             return tier
 

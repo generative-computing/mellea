@@ -380,8 +380,9 @@ def test_local_policy_has_expected_defaults():
 
 
 def test_docker_policy_has_expected_defaults():
-    """DOCKER_POLICY allows package installation and has a longer timeout."""
+    """DOCKER_POLICY allows package installation, restricts network, and has a longer timeout."""
     assert DOCKER_POLICY.package_installation is True
+    assert DOCKER_POLICY.network_access is False
     assert DOCKER_POLICY.timeout == 60
 
 
@@ -499,21 +500,23 @@ def test_timed_out_flag_set_on_timeout():
 
 
 def test_stdout_truncation_via_policy():
-    """Policy stdout_max_bytes truncates long output."""
-    policy = CapabilityPolicy(timeout=5, stdout_max_bytes=10)
+    """Policy stdout_max_bytes truncates long output and total length stays within budget."""
+    policy = CapabilityPolicy(timeout=5, stdout_max_bytes=30)
     env = UnsafeEnvironment(policy=policy)
     result = env.execute("print('a' * 100)")
     assert result.stdout is not None
     assert "... [truncated]" in result.stdout
+    assert len(result.stdout.encode()) <= 30
 
 
 def test_stderr_truncation_via_policy():
-    """Policy stderr_max_bytes truncates long stderr."""
-    policy = CapabilityPolicy(timeout=5, stderr_max_bytes=10)
+    """Policy stderr_max_bytes truncates long stderr and total length stays within budget."""
+    policy = CapabilityPolicy(timeout=5, stderr_max_bytes=30)
     env = UnsafeEnvironment(policy=policy)
     result = env.execute("import sys; sys.stderr.write('e' * 100)")
     assert result.stderr is not None
     assert "... [truncated]" in result.stderr
+    assert len(result.stderr.encode()) <= 30
 
 
 def test_working_directory_passed_to_subprocess(tmp_path: Path):
@@ -601,31 +604,104 @@ def test_tier_explicit_docker():
     assert req._tier == "docker"
 
 
-def test_deprecated_allow_unsafe_promoted_to_local_unsafe(
-    recwarn: pytest.WarningsRecorder,
-) -> None:
+def test_deprecated_allow_unsafe_promoted_to_local_unsafe() -> None:
     """allow_unsafe_execution=True is promoted to local_unsafe with a DeprecationWarning."""
-    req = PythonExecutionReq(allow_unsafe_execution=True)
+    with pytest.warns(DeprecationWarning, match="allow_unsafe_execution is deprecated"):
+        req = PythonExecutionReq(allow_unsafe_execution=True)
     assert req._tier == "local_unsafe"
-    assert any(issubclass(w.category, DeprecationWarning) for w in recwarn.list)
 
 
-def test_deprecated_use_sandbox_promoted_to_docker(
-    recwarn: pytest.WarningsRecorder,
-) -> None:
+def test_deprecated_allow_unsafe_silent_when_tier_already_local() -> None:
+    """allow_unsafe_execution=True is a no-op (no warning) when a local tier is already set."""
+    import warnings as _warnings
+
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error", DeprecationWarning)
+        req = PythonExecutionReq("local", allow_unsafe_execution=True)
+    assert req._tier == "local"
+
+
+def test_deprecated_use_sandbox_promoted_to_docker() -> None:
     """use_sandbox=True is promoted to docker with a DeprecationWarning."""
-    req = PythonExecutionReq(use_sandbox=True)
+    with pytest.warns(DeprecationWarning, match="use_sandbox is deprecated"):
+        req = PythonExecutionReq(use_sandbox=True)
     assert req._tier == "docker"
-    assert any(issubclass(w.category, DeprecationWarning) for w in recwarn.list)
 
 
-def test_deprecated_timeout_issues_warning(recwarn: pytest.WarningsRecorder) -> None:
+def test_deprecated_use_sandbox_silent_when_tier_already_docker() -> None:
+    """use_sandbox=True is a no-op (no warning) when execution_tier='docker' is already set."""
+    import warnings as _warnings
+
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error", DeprecationWarning)
+        req = PythonExecutionReq("docker", use_sandbox=True)
+    assert req._tier == "docker"
+
+
+def test_deprecated_use_sandbox_with_local_promotes_to_docker() -> None:
+    """use_sandbox=True with execution_tier='local' promotes to 'docker' with a DeprecationWarning."""
+    with pytest.warns(DeprecationWarning, match="use_sandbox is deprecated"):
+        req = PythonExecutionReq("local", use_sandbox=True)
+    assert req._tier == "docker"
+
+
+def test_deprecated_use_sandbox_with_docker_unsafe_warns() -> None:
+    """use_sandbox=True with execution_tier='docker_unsafe' warns to prefer 'docker' for policy enforcement."""
+    with pytest.warns(DeprecationWarning, match="use_sandbox is deprecated"):
+        req = PythonExecutionReq("docker_unsafe", use_sandbox=True)
+    assert req._tier == "docker_unsafe"
+
+
+def test_deprecated_allow_unsafe_with_docker_tier_warns_correctly() -> None:
+    """allow_unsafe_execution=True with a docker tier warns without suggesting local_unsafe."""
+    with pytest.warns(DeprecationWarning, match="has no effect"):
+        req = PythonExecutionReq("docker_unsafe", allow_unsafe_execution=True)
+    assert req._tier == "docker_unsafe"
+
+
+def test_deprecated_timeout_issues_warning() -> None:
     """timeout kwarg issues a DeprecationWarning."""
-    req = PythonExecutionReq("local", timeout=10)
+    with pytest.warns(DeprecationWarning, match="timeout is deprecated"):
+        req = PythonExecutionReq("local", timeout=10)
     assert req._tier == "local"
     assert req._policy is not None
     assert req._policy.timeout == 10
-    assert any(issubclass(w.category, DeprecationWarning) for w in recwarn.list)
+
+
+def test_deprecated_timeout_on_static_warns_no_effect() -> None:
+    """timeout on the static tier warns that it has no effect."""
+    with pytest.warns(DeprecationWarning, match="no effect on the static tier"):
+        req = PythonExecutionReq("static", timeout=5)
+    assert req._tier == "static"
+
+
+def test_deprecated_timeout_on_unsafe_tiers_does_not_attach_policy() -> None:
+    """timeout on local_unsafe/docker_unsafe warns that it is ignored and does not attach a policy."""
+    with pytest.warns(DeprecationWarning, match="ignored for the 'local_unsafe' tier"):
+        req_local = PythonExecutionReq("local_unsafe", timeout=5)
+    assert req_local._policy is None
+
+    with pytest.warns(DeprecationWarning, match="ignored for the 'docker_unsafe' tier"):
+        req_docker = PythonExecutionReq("docker_unsafe", timeout=5)
+    assert req_docker._policy is None
+
+
+def test_combined_deprecated_flags_both_warn() -> None:
+    """Passing both allow_unsafe_execution and use_sandbox emits two DeprecationWarnings."""
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(allow_unsafe_execution=True, use_sandbox=True)
+    categories = [w.category for w in record.list]
+    assert categories.count(DeprecationWarning) >= 2
+    assert req._tier == "docker"
+
+
+def test_tier_label_timeout_zero_displays_correctly() -> None:
+    """A policy timeout of 0 is displayed as 0s, not the policy default."""
+    from mellea.stdlib.requirements.python_reqs import _tier_label
+
+    policy = CapabilityPolicy(timeout=0)
+    assert "0s" in _tier_label("local", policy)
+    assert "0s" in _tier_label("docker", policy)
 
 
 def test_policy_timeout_overrides_default():

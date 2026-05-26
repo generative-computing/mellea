@@ -10,8 +10,7 @@ Four execution tiers are available, selectable by intent rather than by class na
 ``CapabilityPolicy`` declares what a code execution environment is *allowed* to do.
 Enforcement is honest: each capability has a companion ``ENFORCED_*`` class attribute
 indicating whether the declared value is actively enforced at runtime or is informational
-only.  A UX harness can call :meth:`CapabilityPolicy.unenforced_capabilities` to decide
-which capabilities to surface as "allow once / allow always" prompts.
+only.
 
 ``Artifact`` represents a file produced by execution and exported from the environment.
 
@@ -57,7 +56,7 @@ class CapabilityPolicy:
         filesystem_write_roots (list[Path] | None): Host paths the environment may
             write.  ``None`` means unrestricted.  Declared only — not enforced.
         network_access (bool): Whether outbound network connections are allowed.
-            Declared only — not enforced.
+            Defaults to ``False``.  Declared only — not enforced.
         package_installation (bool): Whether the environment may install packages.
             Declared only — not enforced.
         subprocess_execution (bool): Whether spawning child processes is allowed.
@@ -75,7 +74,7 @@ class CapabilityPolicy:
 
     filesystem_read_roots: list[Path] | None = None
     filesystem_write_roots: list[Path] | None = None
-    network_access: bool = True
+    network_access: bool = False
     package_installation: bool = False
     subprocess_execution: bool = False
     env_var_access: bool = True
@@ -145,7 +144,7 @@ LOCAL_POLICY = CapabilityPolicy(
 )
 
 DOCKER_POLICY = CapabilityPolicy(
-    network_access=True,
+    network_access=False,
     package_installation=True,
     subprocess_execution=True,
     env_var_access=True,
