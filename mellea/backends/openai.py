@@ -836,14 +836,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
-        # Add the final message.
-        match action:
-            case ALoraRequirement():
-                raise Exception(
-                    "The OpenAI backend does not currently support activated LoRAs."
-                )
-            case _:
-                messages.extend(self.formatter.to_chat_messages([action]))
+        messages.extend(self.formatter.to_chat_messages([action]))
+        # ALoraRequirement may arrive here when no adapter is registered;
+        # _generate is responsible for logging a warning in that case.
+
         conversation: list[dict] = []
 
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
