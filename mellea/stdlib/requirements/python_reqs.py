@@ -1,5 +1,6 @@
 """Requirements for Python code generation validation."""
 
+import dataclasses
 import warnings
 from collections.abc import Callable
 from typing import Literal
@@ -208,9 +209,9 @@ class PythonExecutionReq(Requirement):
                     if execution_tier in ("docker", "docker_unsafe")
                     else LOCAL_POLICY
                 )
-                policy = CapabilityPolicy(**{**vars(base), "timeout": timeout})
+                policy = dataclasses.replace(base, timeout=timeout)
             else:
-                policy = CapabilityPolicy(**{**vars(policy), "timeout": timeout})
+                policy = dataclasses.replace(policy, timeout=timeout)
 
         self._tier = execution_tier
         self._policy = policy
@@ -224,9 +225,7 @@ class PythonExecutionReq(Requirement):
             )
         else:
             environment = make_execution_environment(
-                tier=execution_tier,  # type: ignore[arg-type]
-                policy=policy,
-                allowed_imports=allowed_imports,
+                tier=execution_tier, policy=policy, allowed_imports=allowed_imports
             )
 
         if execution_tier in ("local_unsafe", "local"):

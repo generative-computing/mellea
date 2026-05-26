@@ -23,7 +23,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from ...core import MelleaLogger
 from .execution_policy import (
@@ -33,9 +33,6 @@ from .execution_policy import (
     CapabilityPolicy,
     ExecutionTier,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = MelleaLogger.get_logger()
 
@@ -90,8 +87,8 @@ class ExecutionResult:
         execution_mode (str): Tier name used for this execution
             (``"local_unsafe"``, ``"local"``, ``"docker_unsafe"``, ``"docker"``,
             ``"static"``, or ``"unknown"``).
-        working_directory (str | None): Working directory inside the environment,
-            or ``None`` if not applicable.
+        working_directory (str | None): The working directory used for execution,
+            or ``None`` if the default was used or not applicable.
     """
 
     success: bool
@@ -138,16 +135,21 @@ class ExecutionEnvironment(ABC):
             that generated code may import.  ``None`` disables the import check.
         policy (CapabilityPolicy | None): Capability policy for this environment.
             ``None`` means no policy is applied (unsafe tiers).
+        working_directory (str | None): Directory to use as cwd during execution.
+            ``None`` means use the process default.  Only honoured by environments
+            that spawn subprocesses (``UnsafeEnvironment``); ignored otherwise.
     """
 
     def __init__(
         self,
         allowed_imports: list[str] | None = None,
         policy: CapabilityPolicy | None = None,
+        working_directory: str | None = None,
     ):
-        """Initialize with an optional import allowlist and capability policy."""
+        """Initialize with an optional import allowlist, capability policy, and working directory."""
         self.allowed_imports = allowed_imports
         self.policy = policy
+        self.working_directory = working_directory
 
     @abstractmethod
     def execute(self, code: str, timeout: int | None = None) -> ExecutionResult:
@@ -303,6 +305,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                cwd=self.working_directory,
             )
             stdout = _truncate(
                 result.stdout.strip(),
@@ -318,6 +321,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 stderr=stderr,
                 exit_code=result.returncode,
                 execution_mode=self._mode(),
+                working_directory=self.working_directory,
             )
         except subprocess.TimeoutExpired:
             return ExecutionResult(
@@ -328,6 +332,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 skip_message="Execution timed out.",
                 timed_out=True,
                 execution_mode=self._mode(),
+                working_directory=self.working_directory,
             )
         except Exception as e:
             return ExecutionResult(
@@ -337,6 +342,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 skipped=True,
                 skip_message=f"Exception encountered in Mellea process (*not* the code interpreter process) when trying to run code_interpreter: {e!s}",
                 execution_mode=self._mode(),
+                working_directory=self.working_directory,
             )
         finally:
             try:
@@ -367,9 +373,14 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         self,
         allowed_imports: list[str] | None = None,
         policy: CapabilityPolicy | None = None,
+        working_directory: str | None = None,
     ):
-        """Initialize with an optional import allowlist and capability policy."""
-        super().__init__(allowed_imports=allowed_imports, policy=policy)
+        """Initialize with an optional import allowlist, capability policy, and working directory."""
+        super().__init__(
+            allowed_imports=allowed_imports,
+            policy=policy,
+            working_directory=working_directory,
+        )
         self._session: Any = None  # SandboxSession when open via context manager
         self._container_id: str | None = None  # set after session opens
 
@@ -516,6 +527,16 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             if (
                 self.policy
                 and self.policy.artifact_export_paths
+                and self._session is None
+            ):
+                logger.warning(
+                    "artifact_export_paths is set but LLMSandboxEnvironment is running "
+                    "in one-shot mode (no context manager). Artifacts will not be exported. "
+                    "Use 'with env:' to enable artifact export."
+                )
+            if (
+                self.policy
+                and self.policy.artifact_export_paths
                 and self._session is not None
             ):
                 for container_path in self.policy.artifact_export_paths:
@@ -591,6 +612,7 @@ def make_execution_environment(
     tier: ExecutionTier,
     policy: CapabilityPolicy | None = None,
     allowed_imports: list[str] | None = None,
+    working_directory: str | None = None,
 ) -> ExecutionEnvironment:
     """Create an :class:`ExecutionEnvironment` for the given tier.
 
@@ -607,36 +629,49 @@ def make_execution_environment(
             for policy tiers; ``None`` for unsafe tiers).
         allowed_imports (list[str] | None): Allowlist of importable top-level
             modules.  ``None`` allows any import.
+        working_directory (str | None): Directory to use as cwd during execution.
+            Only honoured by ``UnsafeEnvironment`` (local tiers); ignored for
+            Docker and static tiers.
 
     Returns:
         ExecutionEnvironment: Configured environment instance.
     """
     resolved_policy: CapabilityPolicy | None
     match tier:
+        case "static":
+            return StaticAnalysisEnvironment(allowed_imports=allowed_imports)
         case "local_unsafe":
             resolved_policy = policy  # None by default — no policy
             return UnsafeEnvironment(
-                allowed_imports=allowed_imports, policy=resolved_policy
+                allowed_imports=allowed_imports,
+                policy=resolved_policy,
+                working_directory=working_directory,
             )
         case "local":
             resolved_policy = policy if policy is not None else LOCAL_POLICY
             return UnsafeEnvironment(
-                allowed_imports=allowed_imports, policy=resolved_policy
+                allowed_imports=allowed_imports,
+                policy=resolved_policy,
+                working_directory=working_directory,
             )
         case "docker_unsafe":
             resolved_policy = policy  # None by default — no policy
             return LLMSandboxEnvironment(
-                allowed_imports=allowed_imports, policy=resolved_policy
+                allowed_imports=allowed_imports,
+                policy=resolved_policy,
+                working_directory=working_directory,
             )
         case "docker":
             resolved_policy = policy if policy is not None else DOCKER_POLICY
             return LLMSandboxEnvironment(
-                allowed_imports=allowed_imports, policy=resolved_policy
+                allowed_imports=allowed_imports,
+                policy=resolved_policy,
+                working_directory=working_directory,
             )
         case _:
             raise ValueError(
                 f"Unknown execution tier {tier!r}. "
-                "Valid tiers: 'local_unsafe', 'local', 'docker_unsafe', 'docker'."
+                "Valid tiers: 'static', 'local_unsafe', 'local', 'docker_unsafe', 'docker'."
             )
 
 

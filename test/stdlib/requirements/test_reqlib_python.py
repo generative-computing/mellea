@@ -371,10 +371,11 @@ def test_capability_policy_enforced_and_unenforced_are_disjoint():
 
 
 def test_local_policy_has_expected_defaults():
-    """LOCAL_POLICY declares subprocess and env_var access, no package installation."""
+    """LOCAL_POLICY declares subprocess and env_var access, no package installation, no network."""
     assert LOCAL_POLICY.subprocess_execution is True
     assert LOCAL_POLICY.env_var_access is True
     assert LOCAL_POLICY.package_installation is False
+    assert LOCAL_POLICY.network_access is False
     assert LOCAL_POLICY.timeout == 30
 
 
@@ -513,6 +514,23 @@ def test_stderr_truncation_via_policy():
     result = env.execute("import sys; sys.stderr.write('e' * 100)")
     assert result.stderr is not None
     assert "... [truncated]" in result.stderr
+
+
+def test_working_directory_passed_to_subprocess(tmp_path: Path):
+    """UnsafeEnvironment uses working_directory as cwd and reflects it on the result."""
+    env = UnsafeEnvironment(working_directory=str(tmp_path))
+    result = env.execute("import os; print(os.getcwd())")
+    assert result.success
+    assert result.stdout is not None
+    assert str(tmp_path) in result.stdout
+    assert result.working_directory == str(tmp_path)
+
+
+def test_working_directory_none_by_default():
+    """UnsafeEnvironment with no working_directory has working_directory=None on result."""
+    env = UnsafeEnvironment()
+    result = env.execute("print('ok')")
+    assert result.working_directory is None
 
 
 # endregion

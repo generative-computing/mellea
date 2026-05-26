@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Literal
 
-ExecutionTier = Literal["local_unsafe", "local", "docker_unsafe", "docker"]
+ExecutionTier = Literal["static", "local_unsafe", "local", "docker_unsafe", "docker"]
 
 
 @dataclass
@@ -105,8 +105,8 @@ class CapabilityPolicy:
         """
         return [
             name.removeprefix("ENFORCED_")
-            for name, val in vars(type(self)).items()
-            if name.startswith("ENFORCED_") and val is False
+            for name, val in _iter_enforced_flags(type(self))
+            if val is False
         ]
 
     def enforced_capabilities(self) -> list[str]:
@@ -117,16 +117,27 @@ class CapabilityPolicy:
         """
         return [
             name.removeprefix("ENFORCED_")
-            for name, val in vars(type(self)).items()
-            if name.startswith("ENFORCED_") and val is True
+            for name, val in _iter_enforced_flags(type(self))
+            if val is True
         ]
+
+
+def _iter_enforced_flags(cls: type) -> list[tuple[str, bool]]:
+    """Collect ENFORCED_* class attributes across the MRO, innermost class wins."""
+    seen: dict[str, bool] = {}
+    # Reverse so base-class values are overwritten by subclass values.
+    for klass in reversed(cls.__mro__):
+        for name, val in vars(klass).items():
+            if name.startswith("ENFORCED_") and isinstance(val, bool):
+                seen[name] = val
+    return list(seen.items())
 
 
 # Canonical default policies for each execution tier.
 # "unsafe" tiers carry no policy — pass None to make_execution_environment.
 
 LOCAL_POLICY = CapabilityPolicy(
-    network_access=True,
+    network_access=False,
     package_installation=False,
     subprocess_execution=True,
     env_var_access=True,
