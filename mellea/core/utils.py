@@ -9,38 +9,34 @@ automatically on the first :meth:`MelleaLogger.get_logger` invocation.
 
 Environment variables
 ---------------------
-``MELLEA_LOG_ENABLED``
+``MELLEA_LOGS_ENABLED``
     Master switch for all logging handlers.  Set to ``false`` / ``0`` / ``no`` to
     suppress all handlers (useful in test environments).  Defaults to ``true``.
-``MELLEA_LOG_LEVEL``
+``MELLEA_LOGS_LEVEL``
     Minimum log level name (e.g. ``DEBUG``, ``INFO``, ``WARNING``).  Defaults to
     ``INFO``.
-``MELLEA_LOG_JSON``
+``MELLEA_LOGS_JSON``
     Set to any truthy value (``1``, ``true``, ``yes``) to emit structured JSON
     instead of colour-coded human-readable text.  Applies to both the console and
     file handlers.
-``MELLEA_LOG_CONSOLE``
+``MELLEA_LOGS_CONSOLE``
     Set to ``false`` / ``0`` / ``no`` to disable the console (stdout) handler.
     Defaults to ``true``.
-``MELLEA_LOG_FILE``
+``MELLEA_LOGS_FILE``
     Absolute or relative path for rotating file output (e.g.
     ``/var/log/mellea.log``).  When unset no file handler is attached.
-``MELLEA_LOG_FILE_MAX_BYTES``
+``MELLEA_LOGS_FILE_MAX_BYTES``
     Maximum size in bytes before the log file is rotated.  Defaults to
     ``10485760`` (10 MB).
-``MELLEA_LOG_FILE_BACKUP_COUNT``
+``MELLEA_LOGS_FILE_BACKUP_COUNT``
     Number of rotated backup files to keep.  Defaults to ``5``.
-``MELLEA_LOG_OTLP``
+``MELLEA_LOGS_OTLP``
     Set to ``true`` / ``1`` / ``yes`` to export logs via OpenTelemetry Logs
     Protocol.  Requires ``opentelemetry-sdk`` and an OTLP endpoint configured
-    via ``OTEL_EXPORTER_OTLP_LOG_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
-``MELLEA_LOG_WEBHOOK``
+    via ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
+``MELLEA_LOGS_WEBHOOK``
     HTTP(S) URL to forward log records to via HTTP POST.  When set a
-    :class:`RESTHandler` is attached.  Supersedes the deprecated ``MELLEA_FLOG``
-    and ``FLOG`` variables.
-``MELLEA_FLOG``
-    Deprecated alias for ``MELLEA_LOG_WEBHOOK``.  Activates a ``RESTHandler``
-    pointed at ``http://localhost:8000/api/receive``.
+    :class:`RESTHandler` is attached.
 """
 
 import contextlib
@@ -513,43 +509,9 @@ def _parse_bool_env(value: str, default: bool = True) -> bool:
 
 
 def _resolve_webhook_url() -> str | None:
-    """Return the configured webhook URL, with deprecated-variable fallbacks.
-
-    Checks in priority order:
-
-    1. ``MELLEA_LOG_WEBHOOK`` — the canonical variable.
-    2. ``MELLEA_FLOG`` — deprecated; emits :class:`DeprecationWarning` and
-       returns ``http://localhost:8000/api/receive``.
-    3. ``FLOG`` — deprecated; emits :class:`DeprecationWarning` and returns
-       ``http://localhost:8000/api/receive``.
-
-    Returns:
-        str | None: The URL to POST log records to, or ``None`` if no webhook
-        is configured.
-    """
-    url = os.environ.get("MELLEA_LOG_WEBHOOK", "").strip()
-    if url:
-        return url
-
-    if os.environ.get("MELLEA_FLOG"):
-        warnings.warn(
-            "MELLEA_FLOG is deprecated and will be removed in a future release. "
-            "Use MELLEA_LOG_WEBHOOK instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return "http://localhost:8000/api/receive"
-
-    if os.environ.get("FLOG"):
-        warnings.warn(
-            "FLOG is deprecated and will be removed in a future release. "
-            "Use MELLEA_LOG_WEBHOOK instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return "http://localhost:8000/api/receive"
-
-    return None
+    """Return the configured webhook URL from ``MELLEA_LOGS_WEBHOOK``, or ``None``."""
+    url = os.environ.get("MELLEA_LOGS_WEBHOOK", "").strip()
+    return url or None
 
 
 def configure_logging(logger: logging.Logger) -> None:
@@ -562,10 +524,10 @@ def configure_logging(logger: logging.Logger) -> None:
     available for programmatic use when you need to attach handlers to a custom
     logger.
 
-    When ``MELLEA_LOG_ENABLED`` is falsy no handlers are attached; the logger
+    When ``MELLEA_LOGS_ENABLED`` is falsy no handlers are attached; the logger
     still exists and accepts records, but they are silently discarded.
 
-    If ``MELLEA_LOG_FILE`` is set but the path cannot be opened (e.g. due to a
+    If ``MELLEA_LOGS_FILE`` is set but the path cannot be opened (e.g. due to a
     permissions error), a :class:`UserWarning` is emitted and file logging is
     skipped.  The remaining handlers are still attached and the application
     continues normally.
@@ -573,10 +535,12 @@ def configure_logging(logger: logging.Logger) -> None:
     Args:
         logger: The :class:`logging.Logger` to configure.
     """
-    if not _parse_bool_env(os.environ.get("MELLEA_LOG_ENABLED", ""), default=True):
+    enabled_raw = os.environ.get("MELLEA_LOGS_ENABLED")
+    if not _parse_bool_env(enabled_raw or "", default=True):
         return
 
-    use_json = _parse_bool_env(os.environ.get("MELLEA_LOG_JSON", ""), default=False)
+    json_raw = os.environ.get("MELLEA_LOGS_JSON")
+    use_json = _parse_bool_env(json_raw or "", default=False)
 
     # --- Webhook / REST handler ---
     webhook_url = _resolve_webhook_url()
@@ -586,7 +550,8 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(rest_handler)
 
     # --- Console / stream handler ---
-    if _parse_bool_env(os.environ.get("MELLEA_LOG_CONSOLE", ""), default=True):
+    console_raw = os.environ.get("MELLEA_LOGS_CONSOLE")
+    if _parse_bool_env(console_raw or "", default=True):
         stream_handler = logging.StreamHandler(stream=sys.stdout)
         if use_json:
             stream_handler.setFormatter(JsonFormatter())
@@ -595,11 +560,14 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(stream_handler)
 
     # --- Optional rotating file handler ---
-    log_file = os.environ.get("MELLEA_LOG_FILE", "").strip()
+    log_file = os.environ.get("MELLEA_LOGS_FILE", "").strip()
     if log_file:
         try:
-            max_bytes = int(os.environ.get("MELLEA_LOG_FILE_MAX_BYTES", "10485760"))
-            backup_count = int(os.environ.get("MELLEA_LOG_FILE_BACKUP_COUNT", "5"))
+            max_bytes_raw = os.environ.get("MELLEA_LOGS_FILE_MAX_BYTES")
+            max_bytes = int(max_bytes_raw) if max_bytes_raw else 10485760
+
+            backup_raw = os.environ.get("MELLEA_LOGS_FILE_BACKUP_COUNT")
+            backup_count = int(backup_raw) if backup_raw else 5
             file_handler = _RotatingFileHandler(
                 log_file, maxBytes=max_bytes, backupCount=backup_count
             )
@@ -634,7 +602,7 @@ class MelleaLogger:
     """Singleton logger with colour-coded console output and configurable handlers.
 
     Obtain the shared logger instance via ``MelleaLogger.get_logger()``. Log level
-    defaults to ``INFO`` but can be overridden via ``MELLEA_LOG_LEVEL``. Handler
+    defaults to ``INFO`` but can be overridden via ``MELLEA_LOGS_LEVEL``. Handler
     setup is delegated to :func:`configure_logging`.
 
     Attributes:
@@ -664,12 +632,12 @@ class MelleaLogger:
     def _resolve_log_level() -> int:
         """Resolves the effective log level from environment variables.
 
-        Checks ``MELLEA_LOG_LEVEL`` and defaults to ``INFO``.
+        Checks ``MELLEA_LOGS_LEVEL`` and defaults to ``INFO``.
 
         Returns:
             int: A :mod:`logging` level integer.
         """
-        level_name = os.environ.get("MELLEA_LOG_LEVEL", "").strip().upper()
+        level_name = os.environ.get("MELLEA_LOGS_LEVEL", "").strip().upper()
         if level_name:
             numeric = getattr(logging, level_name, None)
             if isinstance(numeric, int):
@@ -684,7 +652,7 @@ class MelleaLogger:
         cached instance.  Initialisation is protected by a module-level lock so
         concurrent callers at startup cannot create duplicate handlers.
 
-        When ``MELLEA_LOG_ENABLED`` is falsy :func:`configure_logging` attaches
+        When ``MELLEA_LOGS_ENABLED`` is falsy :func:`configure_logging` attaches
         no handlers — the logger still exists, but records are silently
         discarded (useful for tests or environments that must produce no output).
 

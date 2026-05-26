@@ -43,9 +43,9 @@ def _reset_logging_modules():
 @pytest.fixture
 def clean_logging_env(monkeypatch):
     """Clean logging environment variables before each test."""
-    monkeypatch.delenv("MELLEA_LOG_OTLP", raising=False)
+    monkeypatch.delenv("MELLEA_LOGS_OTLP", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
 
     _reset_logging_modules()
@@ -56,7 +56,7 @@ def clean_logging_env(monkeypatch):
 @pytest.fixture
 def enable_otlp_logging(monkeypatch):
     """Enable OTLP logging with endpoint for tests."""
-    monkeypatch.setenv("MELLEA_LOG_OTLP", "true")
+    monkeypatch.setenv("MELLEA_LOGS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
     _reset_logging_modules()
@@ -86,7 +86,7 @@ def test_otlp_logging_enabled_with_env_var(enable_otlp_logging):
 
 def test_otlp_logging_enabled_without_endpoint_warns(monkeypatch, clean_logging_env):
     """Test that enabling OTLP without endpoint produces warning on first handler request."""
-    monkeypatch.setenv("MELLEA_LOG_OTLP", "true")
+    monkeypatch.setenv("MELLEA_LOGS_OTLP", "true")
     # No endpoint set
 
     _reset_logging_modules()
@@ -104,7 +104,7 @@ def test_otlp_logging_with_various_truthy_values(monkeypatch, clean_logging_env)
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
     for value in ["true", "True", "TRUE", "1", "yes", "Yes", "YES"]:
-        monkeypatch.setenv("MELLEA_LOG_OTLP", value)
+        monkeypatch.setenv("MELLEA_LOGS_OTLP", value)
 
         import mellea.telemetry.logging
 
@@ -117,10 +117,10 @@ def test_otlp_logging_with_various_truthy_values(monkeypatch, clean_logging_env)
 
 
 def test_logs_specific_endpoint_takes_precedence(monkeypatch, clean_logging_env):
-    """Test that OTEL_EXPORTER_OTLP_LOG_ENDPOINT takes precedence over the general endpoint."""
-    monkeypatch.setenv("MELLEA_LOG_OTLP", "true")
+    """Test that OTEL_EXPORTER_OTLP_LOGS_ENDPOINT takes precedence over the general endpoint."""
+    monkeypatch.setenv("MELLEA_LOGS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT", "http://localhost:4318/logs")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "http://localhost:4318/logs")
 
     _reset_logging_modules()
 
