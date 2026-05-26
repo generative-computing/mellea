@@ -3,13 +3,17 @@
 Provides log export using OpenTelemetry Logs API with OTLP exporter support.
 
 Configuration via environment variables:
-- MELLEA_LOG_OTLP: Enable OTLP log exporter (default: false)
-- OTEL_EXPORTER_OTLP_LOG_ENDPOINT: Log-specific endpoint (optional, overrides general)
+- MELLEA_LOGS_OTLP: Enable OTLP log exporter (default: false)
+- OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: Log-specific endpoint (optional, overrides general)
 - OTEL_EXPORTER_OTLP_ENDPOINT: General endpoint for all signals (fallback)
 - OTEL_SERVICE_NAME: Service name for logs (default: mellea)
 
+Deprecated:
+- MELLEA_LOG_OTLP: Use MELLEA_LOGS_OTLP instead.
+- OTEL_EXPORTER_OTLP_LOG_ENDPOINT: Use OTEL_EXPORTER_OTLP_LOGS_ENDPOINT instead.
+
 Example:
-    export MELLEA_LOG_OTLP=true
+    export MELLEA_LOGS_OTLP=true
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
 Programmatic usage:
@@ -53,13 +57,23 @@ def _setup_logger_provider() -> Any:
     if not _OTEL_AVAILABLE:
         return None
 
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT") or os.getenv(
-        "OTEL_EXPORTER_OTLP_ENDPOINT"
-    )
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
+    if not endpoint:
+        legacy_ep = os.getenv("OTEL_EXPORTER_OTLP_LOG_ENDPOINT")
+        if legacy_ep:
+            warnings.warn(
+                "OTEL_EXPORTER_OTLP_LOG_ENDPOINT is deprecated and will be removed in a future release. "
+                "Use OTEL_EXPORTER_OTLP_LOGS_ENDPOINT instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+            endpoint = legacy_ep
+    if not endpoint:
+        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if not endpoint:
         warnings.warn(
-            "OTLP logs exporter is enabled (MELLEA_LOG_OTLP=true) but no endpoint is configured. "
-            "Set OTEL_EXPORTER_OTLP_LOG_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT to export logs.",
+            "OTLP logs exporter is enabled (MELLEA_LOGS_OTLP=true) but no endpoint is configured. "
+            "Set OTEL_EXPORTER_OTLP_LOGS_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT to export logs.",
             UserWarning,
             stacklevel=3,
         )
@@ -96,7 +110,7 @@ def get_otlp_log_handler() -> Any:
     """Get an OTLP logging handler for Python's logging module.
 
     The logger provider is initialised on the first call so that environment
-    variables set after module import (e.g. ``MELLEA_LOG_OTLP``) are
+    variables set after module import (e.g. ``MELLEA_LOGS_OTLP``) are
     respected without requiring a module reload.
 
     Returns:
@@ -116,9 +130,18 @@ def get_otlp_log_handler() -> Any:
     global _logger_provider, _logger_provider_initialised
     if not _logger_provider_initialised:
         _logger_provider_initialised = True
-        logs_otlp = _OTEL_AVAILABLE and os.getenv(
-            "MELLEA_LOG_OTLP", "false"
-        ).lower() in ("true", "1", "yes")
+        otlp_raw = os.getenv("MELLEA_LOGS_OTLP")
+        if otlp_raw is None:
+            legacy = os.getenv("MELLEA_LOG_OTLP", "")
+            if legacy:
+                warnings.warn(
+                    "MELLEA_LOG_OTLP is deprecated and will be removed in a future release. "
+                    "Use MELLEA_LOGS_OTLP instead.",
+                    DeprecationWarning,
+                    stacklevel=4,
+                )
+                otlp_raw = legacy
+        logs_otlp = _OTEL_AVAILABLE and (otlp_raw or "").lower() in ("true", "1", "yes")
         if logs_otlp:
             _logger_provider = _setup_logger_provider()
 
