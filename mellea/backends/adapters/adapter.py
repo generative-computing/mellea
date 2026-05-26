@@ -536,7 +536,9 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
 
         if intrinsic_name not in catalog._INTRINSICS_CATALOG:
             catalog._INTRINSICS_CATALOG_ENTRIES.append(
-                catalog.IntriniscsCatalogEntry(name=intrinsic_name, repo_id=model_id)
+                catalog.IntriniscsCatalogEntry(
+                    name=intrinsic_name, repo_id=model_id, revision="main"
+                )
             )
             catalog._INTRINSICS_CATALOG = {
                 e.name: e for e in catalog._INTRINSICS_CATALOG_ENTRIES
