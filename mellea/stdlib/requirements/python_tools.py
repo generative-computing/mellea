@@ -7,7 +7,7 @@ via the python_tool_requirements() factory function.
 The requirement pipeline validates code in this order:
 1. PythonCodeExtraction — code blocks are present and extractable
 2. PythonSyntaxValid — code parses without syntax errors
-3. PythonExecutesWithoutError — code runs without exceptions
+3. PythonExecutionReq — code runs without exceptions
 4. OutputSizeLimit — captured output stays within bounds
 5. ImportRestrictions — only whitelisted modules are imported (optional)
 """
@@ -17,7 +17,6 @@ import ast
 from mellea.stdlib.tools.interpreter import (
     ExecutionEnvironment,
     LLMSandboxEnvironment,
-    StaticAnalysisEnvironment,
     UnsafeEnvironment,
 )
 
@@ -99,9 +98,18 @@ class OutputSizeLimit(Requirement):
 
     Args:
         limit_chars: Maximum allowed output size in characters. Defaults to 10,000.
+        timeout: Maximum execution time in seconds. Defaults to 5.
+        use_sandbox: Use llm-sandbox for Docker-isolated execution. Defaults to False.
+        allowed_imports: Whitelist of importable top-level modules. None allows all.
     """
 
-    def __init__(self, limit_chars: int = 10_000) -> None:
+    def __init__(
+        self,
+        limit_chars: int = 10_000,
+        timeout: int = 5,
+        use_sandbox: bool = False,
+        allowed_imports: list[str] | None = None,
+    ) -> None:
         """Initialize OutputSizeLimit requirement.
 
         Raises:
@@ -111,6 +119,9 @@ class OutputSizeLimit(Requirement):
             raise ValueError(f"limit_chars must be positive, got {limit_chars}")
 
         self.limit_chars = limit_chars
+        self.timeout = timeout
+        self.use_sandbox = use_sandbox
+        self.allowed_imports = allowed_imports
         super().__init__(
             description=f"Output does not exceed {limit_chars} characters.",
             validation_fn=self._validate_output_size,
@@ -137,15 +148,22 @@ class OutputSizeLimit(Requirement):
         assert code is not None
 
         try:
-            result = _python_executes_without_error(ctx, timeout=5, allow_unsafe=False)
-            if not result.as_bool():
+            environment: ExecutionEnvironment
+            if self.use_sandbox:
+                environment = LLMSandboxEnvironment(
+                    allowed_imports=self.allowed_imports
+                )
+            else:
+                environment = UnsafeEnvironment(allowed_imports=self.allowed_imports)
+
+            exec_result = environment.execute(code, timeout=self.timeout)
+            if not exec_result.success:
                 return ValidationResult(
                     result=False,
-                    reason=f"Code execution failed during output size check: {result.reason}",
+                    reason=f"Code execution failed during output size check: {exec_result.to_validationresult_reason()}",
                 )
 
-            captured_output = getattr(result, "captured_output", "") or ""
-            output_size = len(str(captured_output))
+            output_size = len(exec_result.stdout or "")
 
             if output_size <= self.limit_chars:
                 return ValidationResult(
@@ -167,18 +185,21 @@ class ImportRestrictions(Requirement):
     """Only whitelisted modules are imported in the code.
 
     Uses AST analysis to find all imports (Import and ImportFrom nodes)
-    and validates them against an optional allowlist. If no allowlist is
-    provided, all imports are accepted.
+    and validates them against an optional allowlist. If an empty list is
+    provided, all imports are blocked. If None is provided, all imports are accepted.
 
     Args:
         allowed_imports: List of module names that are allowed to be imported.
-            If None, all imports are accepted.
+            If None, all imports are accepted. If an empty list, all imports are blocked.
     """
 
     def __init__(self, allowed_imports: list[str] | None = None) -> None:
         """Initialize ImportRestrictions requirement."""
-        self.allowed_imports = allowed_imports or []
-        imports_str = ", ".join(self.allowed_imports) if self.allowed_imports else "all"
+        self.allowed_imports: list[str] | None = allowed_imports
+        if allowed_imports is None:
+            imports_str = "all"
+        else:
+            imports_str = ", ".join(allowed_imports) if allowed_imports else "none"
         description = f"Only imports from [{imports_str}] are used."
 
         super().__init__(
@@ -205,7 +226,7 @@ class ImportRestrictions(Requirement):
         code = extraction_result.reason
         assert code is not None
 
-        if not self.allowed_imports:
+        if self.allowed_imports is None:
             return ValidationResult(
                 result=True, reason="No import restrictions configured."
             )
@@ -228,13 +249,19 @@ class ImportRestrictions(Requirement):
                         forbidden_imports.append(module_name)
 
             elif isinstance(node, ast.ImportFrom):
-                if node.module is not None:
+                if node.module is None:
+                    # Relative-only imports like "from . import x"
+                    for alias in node.names:
+                        module_name = alias.name.split(".")[0]
+                        if module_name not in self.allowed_imports:
+                            forbidden_imports.append(module_name)
+                else:
                     module_name = node.module.split(".")[0]
                     if module_name not in self.allowed_imports:
                         forbidden_imports.append(module_name)
 
         if forbidden_imports:
-            unique_forbidden = list(set(forbidden_imports))
+            unique_forbidden = sorted(set(forbidden_imports))
             return ValidationResult(
                 result=False,
                 reason=f"Forbidden imports detected: {', '.join(unique_forbidden)}",
@@ -309,7 +336,12 @@ def python_tool_requirements(
             allowed_imports=allowed_imports,
             use_sandbox=use_sandbox,
         ),
-        OutputSizeLimit(limit_chars=output_limit_chars),
+        OutputSizeLimit(
+            limit_chars=output_limit_chars,
+            timeout=timeout_seconds,
+            use_sandbox=use_sandbox,
+            allowed_imports=allowed_imports,
+        ),
     ]
 
     if allowed_imports is not None:

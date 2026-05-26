@@ -188,8 +188,20 @@ print("Hello, World!")
 ```"""
         ctx = from_model(code)
         result = req.validation_fn(ctx)
-        # Result depends on execution, but size check logic is present
-        assert isinstance(result.as_bool(), bool)
+        # Should pass: "Hello, World!" is much less than 1000 chars
+        assert result.as_bool() is True
+
+    def test_output_exceeds_limit(self):
+        """Test validation when output exceeds limit."""
+        req = OutputSizeLimit(limit_chars=10)
+        code = """```python
+print("Hello, World! This is a long message.")
+```"""
+        ctx = from_model(code)
+        result = req.validation_fn(ctx)
+        # Should fail: output is more than 10 chars
+        assert result.as_bool() is False
+        assert "exceeds" in (result.reason or "").lower()
 
 
 class TestImportRestrictions:
@@ -203,11 +215,16 @@ class TestImportRestrictions:
     def test_init_with_none(self):
         """Test initialization with None allowlist."""
         req = ImportRestrictions(allowed_imports=None)
-        assert req.allowed_imports == []
+        assert req.allowed_imports is None
 
     def test_init_default(self):
         """Test initialization with default (None) allowlist."""
         req = ImportRestrictions()
+        assert req.allowed_imports is None
+
+    def test_init_with_empty_list(self):
+        """Test initialization with empty allowlist (blocks all imports)."""
+        req = ImportRestrictions(allowed_imports=[])
         assert req.allowed_imports == []
 
     def test_allowed_imports_pass(self):
@@ -253,6 +270,15 @@ print(add(2, 3))
         assert result.as_bool() is True
         assert "No import restrictions" in (result.reason or "")
 
+    def test_empty_allowlist_blocks_all(self):
+        """Test validation with empty allowlist blocks all imports."""
+        req = ImportRestrictions(allowed_imports=[])
+        ctx = from_model(PYTHON_WITH_IMPORTS)
+        result = req.validation_fn(ctx)
+
+        assert result.as_bool() is False
+        assert "forbidden" in (result.reason or "").lower()
+
     def test_syntax_error_in_imports_check(self):
         """Test import validation when code has syntax errors."""
         req = ImportRestrictions(allowed_imports=["os"])
@@ -287,6 +313,20 @@ print("fetch")
         result = req.validation_fn(ctx)
 
         assert result.as_bool() is False
+
+    def test_relative_import_forbidden(self):
+        """Test validation catches relative-only imports like 'from . import x'."""
+        req = ImportRestrictions(allowed_imports=["os"])
+        code = """```python
+from . import subprocess as sp
+
+print("relative import")
+```"""
+        ctx = from_model(code)
+        result = req.validation_fn(ctx)
+
+        assert result.as_bool() is False
+        assert "subprocess" in (result.reason or "")
 
 
 class TestPythonToolRequirementsFactory:
@@ -362,11 +402,13 @@ class TestPythonToolRequirementsFactory:
 
     def test_factory_requirement_order(self):
         """Test factory returns requirements in correct validation order."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
         reqs = python_tool_requirements(allowed_imports=["os"])
 
         assert isinstance(reqs[0], PythonCodeExtraction)
         assert isinstance(reqs[1], PythonSyntaxValid)
-        assert isinstance(reqs[2], type(reqs[2]))  # PythonExecutionReq
+        assert isinstance(reqs[2], PythonExecutionReq)
         assert isinstance(reqs[3], OutputSizeLimit)
         assert isinstance(reqs[4], ImportRestrictions)
 
