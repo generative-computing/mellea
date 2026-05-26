@@ -943,7 +943,9 @@ async def test_external_task_cancellation_releases_consumers() -> None:
     # _orchestration_started.wait() must precede cancel() — cancelling before
     # the first scheduling means the event is never set.
     await asyncio.wait_for(result._orchestration_started.wait(), timeout=2.0)
-    assert not result._orchestration_task.done()  # guard: task must still be live
+    assert not result._orchestration_task.done(), (
+        "orchestrator already done before cancel() — test would vacuously pass"
+    )
 
     # Same mechanism asyncio.wait_for uses on timeout.
     result._orchestration_task.cancel()
@@ -977,7 +979,9 @@ async def test_external_cancellation_acomplete_raise_once() -> None:
 
     assert result._orchestration_task is not None
     await asyncio.wait_for(result._orchestration_started.wait(), timeout=2.0)
-    assert not result._orchestration_task.done()  # guard: task must still be live
+    assert not result._orchestration_task.done(), (
+        "orchestrator already done before cancel() — test would vacuously pass"
+    )
     result._orchestration_task.cancel()
     await asyncio.wait_for(result._done.wait(), timeout=2.0)
 
@@ -1692,10 +1696,12 @@ async def test_cancelled_task_sets_completed_false() -> None:
     )
     assert result._orchestration_task is not None
 
-    # Yield once so the orchestration task starts and reaches its first real
-    # await (Queue.get inside astream).  Without this, the task is cancelled
-    # before coro.send(None) is ever called, and Python skips the coroutine
-    # body entirely — the finally block never runs.
+    # Deliberately uses sleep(0) rather than _orchestration_started.wait():
+    # BlockingBackend blocks indefinitely, so there is no race with the stream
+    # completing before cancel().  sleep(0) is sufficient to satisfy the
+    # coro.send(None) requirement: Python 3.12's C Task implementation skips
+    # the coroutine body entirely (including finally blocks) when cancelled
+    # before the first send.
     await asyncio.sleep(0)
 
     result._orchestration_task.cancel()
