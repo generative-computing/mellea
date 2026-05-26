@@ -154,6 +154,8 @@ class IntrinsicAdapter(LocalHFAdapter):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
+            # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision
+            # once revision-aware prepare() lands (issue #1135 / epic #929).
             config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
@@ -196,6 +198,8 @@ class IntrinsicAdapter(LocalHFAdapter):
             a path to the files
         """
         is_alora = self.adapter_type == AdapterType.ALORA
+        # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision once
+        # revision-aware prepare() lands (issue #1135 / epic #929).
         return str(
             intrinsics.obtain_lora(
                 self.intrinsic_name,

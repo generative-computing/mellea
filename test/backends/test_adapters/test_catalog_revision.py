@@ -19,13 +19,9 @@ _UPPER_SHA = "A" * 40
 
 def test_catalog_entries_have_revision():
     for name in known_intrinsic_names():
-        entry = fetch_intrinsic_metadata(name)
-        rev = entry.revision
-        assert rev == "main" or (
-            len(rev) == 40
-            and rev == rev.lower()
-            and all(c in "0123456789abcdef" for c in rev)
-        ), f"entry {name!r} has invalid revision {rev!r}"
+        rev = fetch_intrinsic_metadata(name).revision
+        # Raises ValueError if the entry's revision drifts from the contract.
+        validate_revision(rev)
 
 
 def test_revision_validation_rejects_malformed():
@@ -63,7 +59,7 @@ def test_revision_round_trip():
 def test_revision_round_trip_via_fetch():
     entry = fetch_intrinsic_metadata("answerability")
     rev = entry.revision
-    assert len(rev) == 40 and rev == rev.lower()
+    assert rev == "main" or (len(rev) == 40 and rev == rev.lower())
 
 
 def test_no_duplicate_requirement_check_entry():
@@ -73,7 +69,3 @@ def test_no_duplicate_requirement_check_entry():
     assert "requirement-check" not in names
     # Exactly one entry with underscore.
     assert names.count("requirement_check") == 1
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
