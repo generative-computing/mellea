@@ -46,7 +46,7 @@ from tqdm import tqdm
 from mellea import MelleaSession
 from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import FancyLogger, SamplingResult
+from mellea.core import SamplingResult
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling.simbauq import SIMBAUQSamplingStrategy
 
@@ -122,7 +122,6 @@ N_TRAINING_GROUPS = 5
 
 def make_session() -> MelleaSession:
     """Create a MelleaSession with OllamaModelBackend."""
-    FancyLogger.get_logger().setLevel(logging.WARNING)
     backend = OllamaModelBackend(model_options={ModelOption.MAX_NEW_TOKENS: 150})
     return MelleaSession(backend, ctx=ChatContext())
 
@@ -291,6 +290,9 @@ def generate_training_data(
                         )
                         responses.append(str(mot))
                     except Exception:
+                        print(
+                            f"  Warning: generation failed for prompt: {item['prompt']!r}"
+                        )
                         responses.append("")
 
             scores = [

@@ -115,7 +115,7 @@ hooks = [
     "grpcio>=1.78.0",
 ]
 
-simbauq = ["scikit-learn", "numpy"]
+simbauq = ["scikit-learn", "numpy", "sentence-transformers"]
 
 all = ["mellea[backends,docling,tools,telemetry,server,sandbox,switch,granite_retriever,hooks,cli]"]
 

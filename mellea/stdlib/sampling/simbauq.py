@@ -25,7 +25,8 @@ from typing import Literal, Protocol, runtime_checkable
 import numpy as np
 from rouge_score.rouge_scorer import RougeScorer
 
-from mellea.stdlib import context  # codespell:ignore
+from mellea.core.base import ComponentParseError
+from mellea.core.utils import MelleaLogger
 
 from ...core import (
     Backend,
@@ -60,6 +61,8 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
     Confidence metadata is stored on the selected ``ModelOutputThunk`` in
     ``mot.meta['simba_uq']``.
+
+    Unlike BaseSamplingStrategy, merges both global and per-call requirements.
 
     Args:
         temperatures (list[float]): Temperature values to sample at.
@@ -117,6 +120,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         training_samples: list[list[str]] | None = None,
         training_labels: list[list[int]] | None = None,
         clf_max_depth: int = 4,
+        clf_random_state: int | None = 0,
         rouge_type: str = "rougeL",
         sbert_model: str = "all-MiniLM-L6-v2",
         requirements: list[Requirement] | None = None,
@@ -129,6 +133,10 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             raise ValueError("Temperatures must be a non-empty list")
         if n_per_temp <= 0:
             raise ValueError("n_per_temp must be > 0")
+        if confidence_method == "classifier" and len(temperatures) * n_per_temp <= 1:
+            raise ValueError(
+                "classifier mode requires len(temperatures) * n_per_temp >= 2"
+            )
 
         self.temperatures = temperatures
         self.n_per_temp = n_per_temp
@@ -136,6 +144,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         self.confidence_method = confidence_method
         self.aggregation = aggregation
         self.clf_max_depth = clf_max_depth
+        self.clf_random_state = clf_random_state
         self.rouge_type = rouge_type
         self.sbert_model = sbert_model
         self.requirements = requirements
@@ -149,7 +158,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             except ImportError:
                 msg = (
                     "sentence-transformers is required for sbert similarity. "
-                    "Please install with `pip install sentence-transformers`."
+                    "Please install with extra dependencies: ``pip install mellea[simbauq]`."
                 )
                 raise ImportError(msg)
             self._sbert_model_obj = sentence_transformers.SentenceTransformer(
@@ -276,20 +285,31 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
                 continue  # Skip failed generations.
             result_mot, result_ctx = gen_result
             await result_mot.avalue()
-            result_mot.parsed_repr = task_action.parse(result_mot)
+            try:
+                result_mot.parsed_repr = task_action.parse(result_mot)
+            except ComponentParseError as e:
+                print(f"Error parsing result: {e}")
+                continue  # Skip unparsable results.
             all_mots.append(result_mot)
             all_contexts.append(result_ctx)
             all_actions.append(task_action)
             temp_assignments.append(task_temp)
 
+        flog = MelleaLogger.get_logger()
+
         # --- Phase 2: Compute SIMBA-UQ confidence scores ---
         sample_strings = [str(mot) for mot in all_mots]
+        degraded = False
         n = len(sample_strings)
         if n == 0:
             raise RuntimeError("No successful samples were generated.")
         elif n == 1:
             sim_matrix = np.ones((1, 1))
             confidences = np.array([0.5])
+            degraded = True
+            flog.warning(
+                "Only one successful sample generated; SIMBA-UQ confidence estimation is degraded."
+            )
         else:
             sim_matrix = self._compute_similarity_matrix(sample_strings)
             if self.confidence_method == "classifier":
@@ -302,11 +322,15 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         best_confidence = float(confidences[best_index])
 
         # Store confidence metadata in the selected MOT's meta dict.
+        # TODO: At the moment the SIMBAUQ sampling strategy metadata is stored
+        # in the _meta dictionary under the `simba_uq` key; this may lead to silent
+        # conflicts later on if other strategies also use the same key.
         best_mot = all_mots[best_index]
         if best_mot._meta is None:
             best_mot._meta = {}
         best_mot._meta["simba_uq"] = {
-            "confidence": best_confidence,
+            "degraded": degraded,
+            "confidence": best_confidence if not degraded else None,
             "all_confidences": confidences.tolist(),
             "similarity_matrix": sim_matrix.tolist(),
             "temperatures_used": temp_assignments,
@@ -486,10 +510,12 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             return float(np.mean(similarities))
 
         if self.aggregation == "geometric_mean":
+            similarities = np.clip(similarities, 0.0, 1.0)
             log_sims = np.log(similarities + epsilon)
             return float(np.exp(np.mean(log_sims)))
 
         if self.aggregation == "harmonic_mean":
+            similarities = np.clip(similarities, 0.0, 1.0)
             return float(len(similarities) / np.sum(1.0 / (similarities + epsilon)))
 
         if self.aggregation == "median":
@@ -555,7 +581,9 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             for i, label in enumerate(labels):
                 x_train.append(self._extract_features(sim_matrix, i))
                 y_train.append(label)
-        clf = RandomForestClassifier(max_depth=self.clf_max_depth, random_state=0)
+        clf = RandomForestClassifier(
+            max_depth=self.clf_max_depth, random_state=self.clf_random_state
+        )
         clf.fit(x_train, y_train)
         return clf
 

@@ -17,6 +17,7 @@ __all__ = [
     "RejectionSamplingStrategy",
     "RepairTemplateStrategy",
     "SIMBAUQSamplingStrategy",
+    "SOFAISamplingStrategy",
     "SamplingResult",
     "SamplingStrategy",
 ]
