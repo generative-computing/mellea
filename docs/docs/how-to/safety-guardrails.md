@@ -323,8 +323,8 @@ passed to `m.validate()` or wired into `RepairTemplateStrategy` the way the
 deprecated `GuardianCheck` could. The practical workaround is to call
 `guardian_check()` (or another Intrinsic) manually after generation and
 re-invoke `m.instruct()` with an additional requirement when the score crosses
-your threshold. The pattern is sketched in
-[`docs/examples/safety/README.md`](https://github.com/generative-computing/mellea/blob/main/docs/examples/safety/README.md).
+your threshold. A `Requirement`-backed wrapper is tracked in
+[#1071](https://github.com/generative-computing/mellea/issues/1071).
 
 Guardian functions also do not emit `mellea.requirement` metrics — see
 [Observability and metrics](../observability/metrics) for details.
