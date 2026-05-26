@@ -1,11 +1,11 @@
-"""Placeholder module for ``AdapterBasedComponent``.
+"""``AdapterBasedComponent`` — the user-facing component class for adapter-backed capabilities.
 
-IBM is retiring the term "Intrinsic" but has not yet confirmed a replacement.
-This module re-exports :class:`~mellea.stdlib.components.intrinsic.Intrinsic`
-under the provisional name ``AdapterBasedComponent`` so downstream code can
-begin migrating to the new name before the old one is removed.
-
-The old import path ``mellea.stdlib.components.intrinsic`` remains valid.
+``AdapterBasedComponent`` is the project term for a component whose behaviour is
+provided by a fine-tuned adapter (LoRA / aLoRA) rather than the base model. It
+is currently implemented as an alias for
+:class:`~mellea.stdlib.components.intrinsic.Intrinsic`; the alias allows
+downstream code to migrate to the new name as the rest of Epic #929 lands. The
+old import path ``mellea.stdlib.components.intrinsic`` continues to work.
 """
 
 from ..intrinsic import Intrinsic as AdapterBasedComponent

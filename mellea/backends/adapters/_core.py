@@ -27,6 +27,10 @@ from typing import Literal
 from ...core import Component
 from .roles import KNOWN_ROLES
 
+_PHASE_2_NOT_IMPLEMENTED = (
+    "{cls} is a Phase 0 stub; implementation lands in Epic #929 Phase 2."
+)
+
 
 class AdapterSchemaMismatchError(Exception):
     """Raised by :meth:`IOContract.parse` when output cannot satisfy the declared contract.
@@ -43,13 +47,19 @@ class AdapterSchemaMismatchError(Exception):
         self.name = name
         self.observed_keys = observed_keys
         self.expected_keys = expected_keys
-        super().__init__(
-            f"Adapter '{name}' output cannot satisfy declared contract. "
-            f"Observed keys: {observed_keys}; expected: {expected_keys}."
+        # Pass the structured fields (not the formatted message) to Exception so
+        # that ``self.args`` round-trips through ``pickle`` / ``copy`` — the default
+        # ``Exception.__reduce__`` reconstructs by calling ``cls(*self.args)``.
+        super().__init__(name, observed_keys, expected_keys)
+
+    def __str__(self) -> str:
+        return (
+            f"Adapter '{self.name}' output cannot satisfy declared contract. "
+            f"Observed keys: {self.observed_keys}; expected: {self.expected_keys}."
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Identity:
     """Identifies an adapter by name, type, and optional role.
 
@@ -65,6 +75,8 @@ class Identity:
     role: str | None = None
 
     def __post_init__(self) -> None:
+        # Literal[...] is a static-only constraint; mypy enforces it but Python
+        # does not, so validate at runtime too.
         if self.adapter_type not in ("lora", "alora"):
             raise ValueError(
                 f"adapter_type must be 'lora' or 'alora', got {self.adapter_type!r}"
@@ -86,11 +98,13 @@ class IOContract(abc.ABC):
     """
 
     @abc.abstractmethod
-    def build_prompt(self, **kwargs) -> Component:
+    def build_prompt(self, **kwargs: object) -> Component:
         """Build the prompt component for this adapter.
 
         Args:
-            **kwargs: Adapter-specific keyword arguments.
+            **kwargs: Adapter-specific keyword arguments (e.g. ``documents=...``,
+                ``requirement=...``). Concrete subclasses define the keys they
+                accept.
 
         Returns:
             Component: The constructed prompt component.
@@ -98,14 +112,14 @@ class IOContract(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def parse(self, raw: str) -> dict:
+    def parse(self, raw: str) -> dict[str, object]:
         """Parse raw model output into a structured dict.
 
         Args:
             raw (str): Raw string output from the model.
 
         Returns:
-            dict: Parsed structured output.
+            dict[str, object]: Parsed structured output.
 
         Raises:
             AdapterSchemaMismatchError: Only on contract-breaking failures (not
@@ -119,6 +133,17 @@ class WeightsBinding(abc.ABC):
 
     Subclasses manage how adapter weights are obtained, activated on a backend,
     and released when no longer needed.
+
+    Lifecycle (informal state machine):
+
+    - ``prepare()`` — stage the weights (e.g. download); idempotent.
+    - ``activate()`` — load into the backend; requires ``prepare()`` first.
+    - ``deactivate()`` — unload from the backend; reversible by ``activate()``.
+    - ``release()`` — terminal; releases all resources. The binding is not
+      reusable after ``release()``.
+
+    Concrete implementations are expected to document any deviations from this
+    contract (e.g. servers that prepare-and-activate atomically).
     """
 
     @abc.abstractmethod
@@ -146,51 +171,75 @@ class LocalFileBinding(WeightsBinding):
     """Stub binding for locally stored adapter weights."""
 
     def prepare(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
+        )
 
     def activate(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
+        )
 
     def deactivate(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
+        )
 
     def release(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
+        )
 
 
 class EmbeddedBinding(WeightsBinding):
     """Stub binding for weights embedded in a model artifact."""
 
     def prepare(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
+        )
 
     def activate(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
+        )
 
     def deactivate(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
+        )
 
     def release(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="EmbeddedBinding")
+        )
 
 
 class ServerMediatedBinding(WeightsBinding):
     """Stub binding for server-managed adapter weights."""
 
     def prepare(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="ServerMediatedBinding")
+        )
 
     def activate(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="ServerMediatedBinding")
+        )
 
     def deactivate(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="ServerMediatedBinding")
+        )
 
     def release(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            _PHASE_2_NOT_IMPLEMENTED.format(cls="ServerMediatedBinding")
+        )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Adapter:
     """Composable adapter dataclass (Epic #929 Phase 0).
 

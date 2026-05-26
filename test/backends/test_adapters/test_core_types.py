@@ -1,5 +1,7 @@
 """Unit tests for the Phase 0 adapter scaffolding types (issue #1134)."""
 
+import dataclasses
+import pickle
 import warnings
 
 import pytest
@@ -20,10 +22,10 @@ from mellea.core import Component
 
 def test_adapter_dataclass_construction():
     class _Contract(IOContract):
-        def build_prompt(self, **kwargs) -> Component:
+        def build_prompt(self, **kwargs: object) -> Component:
             raise NotImplementedError
 
-        def parse(self, raw: str) -> dict:
+        def parse(self, raw: str) -> dict[str, object]:
             return {}
 
     contract = _Contract()
@@ -47,19 +49,44 @@ def test_identity_validation():
         Identity(name="bad", adapter_type="qlora")  # type: ignore[arg-type]
 
 
+def test_identity_is_frozen_and_hashable():
+    identity = Identity(name="x", adapter_type="lora")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        identity.adapter_type = "alora"  # type: ignore[misc]
+    # Hashable so it can be used as a dict key / set member.
+    assert hash(identity) == hash(Identity(name="x", adapter_type="lora"))
+
+
+def test_adapter_is_frozen():
+    class _Contract(IOContract):
+        def build_prompt(self, **kwargs: object) -> Component:
+            raise NotImplementedError
+
+        def parse(self, raw: str) -> dict[str, object]:
+            return {}
+
+    adapter = Adapter(
+        identity=Identity(name="x", adapter_type="lora"),
+        io_contract=_Contract(),
+        weights=LocalFileBinding(),
+    )
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        adapter.identity = Identity(name="y", adapter_type="alora")  # type: ignore[misc]
+
+
 def test_io_contract_abc_enforcement():
     with pytest.raises(TypeError):
         IOContract()  # type: ignore[abstract]
 
     class MissingParse(IOContract):
-        def build_prompt(self, **kwargs) -> Component:
+        def build_prompt(self, **kwargs: object) -> Component:
             raise NotImplementedError
 
     with pytest.raises(TypeError):
         MissingParse()  # type: ignore[abstract]
 
     class MissingBuildPrompt(IOContract):
-        def parse(self, raw: str) -> dict:
+        def parse(self, raw: str) -> dict[str, object]:
             return {}
 
     with pytest.raises(TypeError):
@@ -86,17 +113,14 @@ def test_weights_binding_abc_enforcement():
         PartialBinding()  # type: ignore[abstract]
 
 
-def test_stub_binding_subclasses_raise_not_implemented():
-    for cls in (LocalFileBinding, EmbeddedBinding, ServerMediatedBinding):
-        binding = cls()
-        with pytest.raises(NotImplementedError):
-            binding.prepare()
-        with pytest.raises(NotImplementedError):
-            binding.activate()
-        with pytest.raises(NotImplementedError):
-            binding.deactivate()
-        with pytest.raises(NotImplementedError):
-            binding.release()
+@pytest.mark.parametrize(
+    "cls", [LocalFileBinding, EmbeddedBinding, ServerMediatedBinding]
+)
+@pytest.mark.parametrize("verb", ["prepare", "activate", "deactivate", "release"])
+def test_stub_binding_subclasses_raise_not_implemented(cls, verb):
+    binding = cls()
+    with pytest.raises(NotImplementedError, match="Phase 0 stub"):
+        getattr(binding, verb)()
 
 
 def test_adapter_schema_mismatch_error_format():
@@ -115,15 +139,38 @@ def test_adapter_schema_mismatch_error_format():
     assert "expected:" in msg
 
 
+def test_adapter_schema_mismatch_error_pickles():
+    observed = frozenset({"key_a"})
+    expected = frozenset({"key_b"})
+    err = AdapterSchemaMismatchError(
+        name="answerability", observed_keys=observed, expected_keys=expected
+    )
+
+    restored = pickle.loads(pickle.dumps(err))
+
+    assert isinstance(restored, AdapterSchemaMismatchError)
+    assert restored.name == "answerability"
+    assert restored.observed_keys == observed
+    assert restored.expected_keys == expected
+    assert str(restored) == str(err)
+
+
 def test_known_roles_importable():
     assert isinstance(KNOWN_ROLES, frozenset)
     assert "answerability" in KNOWN_ROLES
 
 
 def test_identity_known_role_no_warning():
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    # Tight scope: only treat UserWarning from the role registry as a failure.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         Identity(name="a", adapter_type="lora", role="answerability")
+    role_warnings = [
+        w
+        for w in caught
+        if issubclass(w.category, UserWarning) and "KNOWN_ROLES" in str(w.message)
+    ]
+    assert role_warnings == []
 
 
 def test_identity_unknown_role_warns():
