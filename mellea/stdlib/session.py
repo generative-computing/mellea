@@ -926,7 +926,7 @@ class MelleaSession:
 
         Returns:
             A `ComputedModelOutputThunk` if `strategy` is `None` and `await_results` is `False`,
-            else returns a `ModelOutputThunk` if return_sampling_results` is `False``,
+            else returns a `ModelOutputThunk` if `return_sampling_results` is `False`,
             else a `SamplingResult`.
         """
         r = await mfuncs.ainstruct(
