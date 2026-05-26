@@ -656,7 +656,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # and not covered by model options.
         user_params = self._make_backend_specific_and_remove(model_options)
         if temperature == 0.0:
-            # Preserve the formatter's greedy do_sample=False setup; temperature=0 is invalid once sampling is disabled.
+            # Preserve the formatter's greedy do_sample=False setup; temperature=0 is invalid once sampling is enabled.
             user_params.pop("temperature", None)
         if "stop_strings" in user_params and "tokenizer" not in user_params:
             user_params["tokenizer"] = self._tokenizer
