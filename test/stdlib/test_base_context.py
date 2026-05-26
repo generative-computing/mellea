@@ -15,9 +15,8 @@ def context_construction(cls: type[Context], **kwargs):
 
 def test_context_construction():
     context_construction(SimpleContext)
-    # ChatContext defaults to WindowCompactor(5); a single add stays well under
-    # the window so the linked-list shape is identical to the pre-compaction
-    # behaviour.
+    # ChatContext defaults to compactor=None (no compaction), so the linked-list
+    # shape is identical to the pre-compaction behaviour.
     context_construction(ChatContext)
 
 

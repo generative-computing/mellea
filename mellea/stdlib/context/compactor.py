@@ -12,7 +12,7 @@ Two usage patterns are supported:
   directly between turns, e.g. when compaction is exposed to the model as a
   tool.
 
-See ``docs/rewrite/`` for full usage examples.
+See ``docs/examples/context/`` for full usage examples.
 """
 
 from __future__ import annotations
