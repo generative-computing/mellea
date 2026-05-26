@@ -975,16 +975,74 @@ def _resolve_ref(ref_path: str, defs: dict) -> dict:
 
 
 def _is_complex_anyof(v: dict) -> bool:
-    """Check if anyOf contains complex types (refs or nested objects)."""
+    """Check if anyOf contains complex types (refs, oneOf, or nested objects)."""
     any_of_schemas = v.get("anyOf", [])
     for sub_schema in any_of_schemas:
         # Skip null types - they just indicate optionality
         if sub_schema.get("type") == "null":
             continue
-        # Check for references or nested properties (don't recursively check allOf)
-        if "$ref" in sub_schema or "properties" in sub_schema:
+        # Check for references, nested properties, or oneOf branches
+        # (don't recursively check allOf). oneOf appears in Pydantic discriminated
+        # unions: ``Annotated[A | B, Field(discriminator=...)] | None``.
+        if "$ref" in sub_schema or "properties" in sub_schema or "oneOf" in sub_schema:
             return True
     return False
+
+
+def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
+    """Normalise Pydantic discriminated-union schemas for tool-calling APIs.
+
+    Pydantic emits ``Annotated[A | B, Field(discriminator="kind")]`` as either:
+
+    - Required:   ``{"discriminator": {...}, "oneOf": [{"$ref": ...}, ...]}``
+    - Optional:   ``{"anyOf": [{"discriminator": {...}, "oneOf": [...]}, {"type": "null"}]}``
+
+    The OAS-3 ``discriminator`` keyword and the JSON Schema ``oneOf`` keyword
+    both fall outside the schema subset accepted by tool-calling APIs (Ollama,
+    OpenAI strict mode). The ``Literal`` constraint on the tag field carries the
+    discriminator signal, so we can safely drop ``discriminator`` and emit
+    ``anyOf`` — equivalent here because the tag field forces uniqueness.
+
+    Returns a new schema dict with ``oneOf`` rewritten to ``anyOf``, branches
+    inlined, and ``discriminator`` stripped. The input is not mutated; callers
+    must reassign the result.
+
+    Flattening is single-level. Discriminated unions nested inside an inlined
+    branch (e.g. a Pydantic model whose own field is another discriminated
+    union) are not recursively flattened — that case is tracked alongside the
+    recursive ``$ref`` resolution work in #911.
+    """
+
+    def _inline(branch: dict) -> dict:
+        if "$ref" in branch:
+            ref_schema = _resolve_ref(branch["$ref"], defs)
+            if ref_schema:
+                return copy.deepcopy(ref_schema)
+        return copy.deepcopy(branch)
+
+    out = {kk: vv for kk, vv in v.items() if kk not in ("oneOf", "discriminator")}
+
+    # Top-level discriminated union (required parameter case). Append rather
+    # than overwrite so a defensive ``oneOf`` + ``anyOf`` co-occurrence does
+    # not silently drop the existing ``anyOf`` entries. Pydantic does not
+    # currently emit both at the same level, but the helper is callable in
+    # isolation and should not lose data.
+    if "oneOf" in v:
+        existing = list(out.get("anyOf", []))
+        out["anyOf"] = existing + [_inline(b) for b in v["oneOf"]]
+
+    # Nested oneOf inside anyOf (Optional discriminated union case)
+    if "anyOf" in out:
+        flattened: list[dict] = []
+        for sub in out["anyOf"]:
+            if "oneOf" in sub:
+                for branch in sub["oneOf"]:
+                    flattened.append(_inline(branch))
+            else:
+                flattened.append(sub)
+        out["anyOf"] = flattened
+
+    return out
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
@@ -1021,6 +1079,12 @@ def convert_function_to_ollama_tool(
     defs = schema.get("$defs", schema.get("definitions", {}))
 
     for k, v in schema.get("properties", {}).items():
+        # Pre-pass: flatten Pydantic discriminated unions (oneOf + discriminator)
+        # into plain anyOf with branches inlined. See _flatten_discriminated_union.
+        if "oneOf" in v or ("anyOf" in v and any("oneOf" in s for s in v["anyOf"])):
+            v = _flatten_discriminated_union(v, defs)
+            schema["properties"][k] = v
+
         # First pass: inline all $refs (at top level and within anyOf)
         if "$ref" in v:
             # Resolve the reference and inline it
