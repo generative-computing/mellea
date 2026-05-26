@@ -1,10 +1,10 @@
-"""``MelleaSession``: the primary entry point for running generative programs.
+"""`MelleaSession`: the primary entry point for running generative programs.
 
-``MelleaSession`` wraps a ``Backend`` and a ``Context`` and exposes high-level methods
-(``act``, ``instruct``, ``sample``) that drive the generate-validate-repair loop. It
-also manages a global context variable (accessible via ``get_session()``) so that
+`MelleaSession` wraps a `Backend` and a `Context` and exposes high-level methods
+(`act`, `instruct`, `sample`) that drive the generate-validate-repair loop. It
+also manages a global context variable (accessible via `get_session()`) so that
 nested components can reach the current session without explicit threading. Use
-``start_session(...)`` as a context manager to create and automatically clean up a
+`start_session(...)` as a context manager to create and automatically clean up a
 session.
 """
 
@@ -67,7 +67,7 @@ def get_session() -> MelleaSession:
     """Get the current session from context.
 
     Returns:
-        The currently active ``MelleaSession``.
+        The currently active `MelleaSession`.
 
     Raises:
         RuntimeError: If no session is currently active.
@@ -108,15 +108,15 @@ def start_session(
         model_id: Model identifier or name. Can be a `ModelIdentifier` from
             mellea.backends.model_ids or a string model name.
         ctx: Context instance for conversation history. Defaults to
-            ``SimpleContext()``. Mutually exclusive with ``context_type``.
-        context_type: Shorthand for creating a context — ``"simple"`` for
-            ``SimpleContext``, ``"chat"`` for ``ChatContext``. Mutually
-            exclusive with ``ctx``.
+            `SimpleContext()`. Mutually exclusive with `context_type`.
+        context_type: Shorthand for creating a context — `"simple"` for
+            `SimpleContext`, `"chat"` for `ChatContext`. Mutually
+            exclusive with `ctx`.
         model_options: Additional model configuration options that will be passed
             to the backend (e.g., temperature, max_tokens, etc.).
         plugins: Optional list of plugins scoped to this session. Accepts
-            ``@hook``-decorated functions, ``@plugin``-decorated class instances,
-            ``MelleaPlugin`` instances, or ``PluginSet`` instances.
+            `@hook`-decorated functions, `@plugin`-decorated class instances,
+            `MelleaPlugin` instances, or `PluginSet` instances.
         **backend_kwargs: Additional keyword arguments passed to the backend constructor.
 
     Returns:
@@ -124,8 +124,8 @@ def start_session(
         or called directly with session methods.
 
     Raises:
-        ValueError: If both ``ctx`` and ``context_type`` are provided.
-        Exception: If ``backend_name`` is not one of the recognised backend
+        ValueError: If both `ctx` and `context_type` are provided.
+        Exception: If `backend_name` is not one of the recognised backend
             identifiers.
         ImportError: If the requested backend requires optional dependencies
             that are not installed.
@@ -249,11 +249,11 @@ class MelleaSession:
         backend (Backend): The backend to use for all model inference in this
             session.
         ctx (Context | None): The conversation context. Defaults to a new
-            ``SimpleContext`` if ``None``.
+            `SimpleContext` if `None`.
 
     Attributes:
-        ctx (Context): The active conversation context; never ``None`` (defaults
-            to a fresh ``SimpleContext`` when ``None`` is passed). Updated after
+        ctx (Context): The active conversation context; never `None` (defaults
+            to a fresh `SimpleContext` when `None` is passed). Updated after
             every call that produces model output.
         id (str): Unique session UUID assigned at construction.
     """
@@ -354,8 +354,8 @@ class MelleaSession:
     def reset(self):
         """Reset the context state to a fresh, empty context of the same type.
 
-        Fires the ``SESSION_RESET`` plugin hook if any plugins are registered, then
-        replaces ``self.ctx`` with the result of ``ctx.reset_to_new()``, discarding
+        Fires the `SESSION_RESET` plugin hook if any plugins are registered, then
+        replaces `self.ctx` with the result of `ctx.reset_to_new()`, discarding
         all accumulated conversation history.
         """
         if has_plugins(HookType.SESSION_RESET):
@@ -530,8 +530,8 @@ class MelleaSession:
             images: A list of images to be used in the instruction or None if none.
 
         Returns:
-            A ``ModelOutputThunk`` if ``return_sampling_results`` is ``False``,
-            else a ``SamplingResult``.
+            A `ModelOutputThunk` if `return_sampling_results` is `False`,
+            else a `SamplingResult`.
         """
         r = mfuncs.instruct(
             description,
@@ -576,17 +576,17 @@ class MelleaSession:
 
         Args:
             content: The message text to send.
-            role: The role for the outgoing message (default ``"user"``).
+            role: The role for the outgoing message (default `"user"`).
             images: Optional list of images to include in the message.
             documents: Optional documents to attach to the message. Each element
-                may be a string or a ``Document`` object.
-            user_variables: Optional Jinja variable substitutions applied to ``content``.
+                may be a string or a `Document` object.
+            user_variables: Optional Jinja variable substitutions applied to `content`.
             format: Optional Pydantic model for constrained decoding of the response.
             model_options: Additional model options to merge with backend defaults.
             tool_calls: If true, tool calling is enabled.
 
         Returns:
-            The assistant ``Message`` response.
+            The assistant `Message` response.
         """
         result, context = mfuncs.chat(
             content=content,
@@ -617,15 +617,15 @@ class MelleaSession:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
         Args:
-            reqs: A single ``Requirement`` or a list of them to validate.
-            output: Optional model output ``CBlock`` to validate against instead of the context.
+            reqs: A single `Requirement` or a list of them to validate.
+            output: Optional model output `CBlock` to validate against instead of the context.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+            input: Optional input `CBlock` to include alongside `output` when validating.
 
         Returns:
-            List of ``ValidationResult`` objects, one per requirement.
+            List of `ValidationResult` objects, one per requirement.
         """
         return mfuncs.validate(
             reqs=reqs,
@@ -925,9 +925,9 @@ class MelleaSession:
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Returns:
-            A ``ComputedModelOutputThunk`` if ``strategy`` is ``None`` and ``await_results`` is ``False``,
-            else returns a ``ModelOutputThunk`` if return_sampling_results`` is ``False``,
-            else a ``SamplingResult``.
+            A `ComputedModelOutputThunk` if `strategy` is `None` and `await_results` is `False`,
+            else returns a `ModelOutputThunk` if return_sampling_results` is `False``,
+            else a `SamplingResult`.
         """
         r = await mfuncs.ainstruct(
             description,
@@ -973,17 +973,17 @@ class MelleaSession:
 
         Args:
             content: The message text to send.
-            role: The role for the outgoing message (default ``"user"``).
+            role: The role for the outgoing message (default `"user"`).
             images: Optional list of images to include in the message.
             documents: Optional documents to attach to the message. Each element
-                may be a string or a ``Document`` object.
-            user_variables: Optional Jinja variable substitutions applied to ``content``.
+                may be a string or a `Document` object.
+            user_variables: Optional Jinja variable substitutions applied to `content`.
             format: Optional Pydantic model for constrained decoding of the response.
             model_options: Additional model options to merge with backend defaults.
             tool_calls: If true, tool calling is enabled.
 
         Returns:
-            The assistant ``Message`` response.
+            The assistant `Message` response.
         """
         result, context = await mfuncs.achat(
             content=content,
@@ -1014,15 +1014,15 @@ class MelleaSession:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
         Args:
-            reqs: A single ``Requirement`` or a list of them to validate.
-            output: Optional model output ``CBlock`` to validate against instead of the context.
+            reqs: A single `Requirement` or a list of them to validate.
+            output: Optional model output `CBlock` to validate against instead of the context.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+            input: Optional input `CBlock` to include alongside `output` when validating.
 
         Returns:
-            List of ``ValidationResult`` objects, one per requirement.
+            List of `ValidationResult` objects, one per requirement.
         """
         return await mfuncs.avalidate(
             reqs=reqs,
@@ -1131,13 +1131,13 @@ class MelleaSession:
     def powerup(cls, powerup_cls: type):
         """Appends methods in a class object `powerup_cls` to MelleaSession.
 
-        Iterates over all functions defined on ``powerup_cls`` and attaches each
-        one as a method on the ``MelleaSession`` class, effectively extending
+        Iterates over all functions defined on `powerup_cls` and attaches each
+        one as a method on the `MelleaSession` class, effectively extending
         the session with domain-specific helpers at runtime.
 
         Args:
             powerup_cls (type): A class whose functions should be added to
-                ``MelleaSession`` as instance methods.
+                `MelleaSession` as instance methods.
         """
         for name, fn in inspect.getmembers(powerup_cls, predicate=inspect.isfunction):
             setattr(cls, name, fn)

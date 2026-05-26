@@ -24,16 +24,16 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
     Args:
         number_of_samples (int): Number of samples to generate and use for
-            majority voting. Defaults to ``8``.
-        weighted (bool): Not yet implemented. If ``True``, weights scores
+            majority voting. Defaults to `8`.
+        weighted (bool): Not yet implemented. If `True`, weights scores
             before majority vote.
         loop_budget (int): Inner rejection-sampling loop count. Must be > 0.
         requirements (list[Requirement] | None): Requirements to validate
-            against. If ``None``, uses per-call requirements.
+            against. If `None`, uses per-call requirements.
 
     Attributes:
         symmetric (bool): Whether the similarity metric is symmetric, allowing
-            the upper-triangle score matrix to be mirrored; always ``True`` for
+            the upper-triangle score matrix to be mirrored; always `True` for
             this base class.
     """
 
@@ -70,15 +70,15 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
             pred (str): The predicted string to evaluate.
 
         Returns:
-            float: A similarity score, typically in ``[0.0, 1.0]`` where ``1.0``
+            float: A similarity score, typically in `[0.0, 1.0]` where `1.0`
             indicates a perfect match.
         """
 
     def maybe_apply_weighted(self, scr: np.ndarray) -> np.ndarray:
-        """Apply per-sample weights to the score vector if ``self.weighted`` is ``True``.
+        """Apply per-sample weights to the score vector if `self.weighted` is `True`.
 
         Currently not implemented; the input array is returned unchanged when
-        ``self.weighted`` is ``True``.
+        `self.weighted` is `True`.
 
         Args:
             scr (np.ndarray): 1-D array of aggregated similarity scores, one
@@ -191,19 +191,19 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
     """MajorityVoting Sampling Strategy for Math Expressions.
 
     Args:
-        number_of_samples (int): Number of samples to generate. Defaults to ``8``.
-        float_rounding (int): Decimal places for float comparison. Defaults to ``6``.
-        strict (bool): Enforce strict comparison mode. Defaults to ``True``.
+        number_of_samples (int): Number of samples to generate. Defaults to `8`.
+        float_rounding (int): Decimal places for float comparison. Defaults to `6`.
+        strict (bool): Enforce strict comparison mode. Defaults to `True`.
         allow_set_relation_comp (bool): Allow set-relation comparisons. Defaults
-            to ``False``.
-        weighted (bool): Not yet implemented. Defaults to ``False``.
-        loop_budget (int): Rejection-sampling loop count. Defaults to ``1``.
+            to `False`.
+        weighted (bool): Not yet implemented. Defaults to `False`.
+        loop_budget (int): Rejection-sampling loop count. Defaults to `1`.
         requirements (list[Requirement] | None): Requirements to validate against.
 
     Attributes:
         match_types (list[str]): Extraction target types used for parsing math
-            expressions; always ``["latex", "axpr"]``, computed at init.
-        symmetric (bool): Inherited from ``BaseMBRDSampling``; always ``True``
+            expressions; always `["latex", "axpr"]`, computed at init.
+        symmetric (bool): Inherited from `BaseMBRDSampling`; always `True`
             for this strategy (set explicitly at init).
     """
 
@@ -253,16 +253,16 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
         """Compare two strings using math-aware extraction and verification.
 
         Parses both strings into mathematical expressions using the configured
-        ``match_types`` (latex and/or expr), then verifies equivalence via
-        ``math_verify.verify``.
+        `match_types` (latex and/or expr), then verifies equivalence via
+        `math_verify.verify`.
 
         Args:
             ref (str): The reference (gold) string containing a math expression.
             pred (str): The predicted string to compare against the reference.
 
         Returns:
-            float: ``1.0`` if the expressions are considered equivalent,
-            ``0.0`` otherwise.
+            float: `1.0` if the expressions are considered equivalent,
+            `0.0` otherwise.
         """
         # Convert string match_types to ExtractionTarget objects
         extraction_targets = []
@@ -291,16 +291,16 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
     """Sampling Strategy that uses RougeL to compute symbol-level distances for majority voting.
 
     Args:
-        number_of_samples (int): Number of samples to generate. Defaults to ``8``.
-        weighted (bool): Not yet implemented. Defaults to ``False``.
-        loop_budget (int): Rejection-sampling loop count. Defaults to ``1``.
+        number_of_samples (int): Number of samples to generate. Defaults to `8`.
+        weighted (bool): Not yet implemented. Defaults to `False`.
+        loop_budget (int): Rejection-sampling loop count. Defaults to `1`.
         requirements (list[Requirement] | None): Requirements to validate against.
 
     Attributes:
-        match_types (list[str]): Rouge metric names used for scoring (``["rougeL"]``).
-        scorer (RougeScorer): Pre-configured ``RougeScorer`` instance used for
+        match_types (list[str]): Rouge metric names used for scoring (`["rougeL"]`).
+        scorer (RougeScorer): Pre-configured `RougeScorer` instance used for
             pairwise string comparison.
-        symmetric (bool): Inherited from ``BaseMBRDSampling``; always ``True`` for
+        symmetric (bool): Inherited from `BaseMBRDSampling`; always `True` for
             RougeL (the score is symmetric by construction).
     """
 
@@ -339,7 +339,7 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
             pred (str): The predicted string to evaluate.
 
         Returns:
-            float: RougeL F-measure score in the range ``[0.0, 1.0]``.
+            float: RougeL F-measure score in the range `[0.0, 1.0]`.
         """
         scr: float = self.scorer.score(ref, pred)[self.match_types[-1]].fmeasure
         return scr

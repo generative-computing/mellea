@@ -77,32 +77,32 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     Args:
         model_id (str | ModelIdentifier): OpenAI-compatible model identifier.
-            Defaults to ``model_ids.OPENAI_GPT_5_1``.
+            Defaults to `model_ids.OPENAI_GPT_5_1`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to ``TemplateFormatter``.
+            Defaults to `TemplateFormatter`.
         base_url (str | None): Base URL for the API endpoint; defaults to the
             standard OpenAI endpoint if not set.
         model_options (dict | None): Default model options for generation requests.
-        default_to_constraint_checking_alora (bool): If ``False``, deactivates aLoRA
+        default_to_constraint_checking_alora (bool): If `False`, deactivates aLoRA
             constraint checking; primarily for benchmarking and debugging.
-        load_embedded_adapters (bool): If ``True``, automatically registers
+        load_embedded_adapters (bool): If `True`, automatically registers
             embedded intrinsic adapters from *adapter_source* (or *model_id* if
             *adapter_source* is not set). Looks first for a local directory
             and then for a HuggingFace hub repo.
         adapter_source (str | None): Local directory path or HuggingFace hub
-            repo ID from which to load embedded adapter configs. When ``None``,
+            repo ID from which to load embedded adapter configs. When `None`,
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
-        api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
+        api_key (str | None): API key; falls back to `OPENAI_API_KEY` env var.
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
     Attributes:
         to_mellea_model_opts_map_chats (dict): Mapping from chat-endpoint option names
-            to Mellea ``ModelOption`` sentinel keys.
+            to Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map_chats (dict): Mapping from Mellea sentinel keys to
             chat-endpoint option names.
         to_mellea_model_opts_map_completions (dict): Mapping from completions-endpoint
-            option names to Mellea ``ModelOption`` sentinel keys.
+            option names to Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel keys
             to completions-endpoint option names.
     """
@@ -250,7 +250,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             adapter: The adapter to register.
 
         Raises:
-            TypeError: If *adapter* is not an ``EmbeddedIntrinsicAdapter``.
+            TypeError: If *adapter* is not an `EmbeddedIntrinsicAdapter`.
         """
         if not isinstance(adapter, EmbeddedIntrinsicAdapter):
             raise TypeError(
@@ -333,7 +333,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             kwargs: Arbitrary keyword arguments to filter.
 
         Returns:
-            dict: A dict containing only keys accepted by ``openai.OpenAI.__init__``.
+            dict: A dict containing only keys accepted by `openai.OpenAI.__init__`.
         """
         openai_params = set(inspect.signature(openai.OpenAI.__init__).parameters.keys())  # type: ignore
         openai_params.discard("self")  # Remove 'self' parameter
@@ -349,7 +349,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_options (dict): Model options dict that may contain non-chat keys.
 
         Returns:
-            dict: A dict containing only keys accepted by ``chat.completions.create``.
+            dict: A dict containing only keys accepted by `chat.completions.create`.
         """
         from openai.resources.chat.completions import Completions
 
@@ -367,7 +367,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_options (dict): Model options dict that may contain non-completions keys.
 
         Returns:
-            dict: A dict containing only keys accepted by ``completions.create``.
+            dict: A dict containing only keys accepted by `completions.create`.
         """
         from openai.resources.completions import Completions
 
@@ -446,9 +446,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` via the OpenAI chat API.
+        """Generate a completion for `action` given `ctx` via the OpenAI chat API.
 
-        Delegates to ``generate_from_chat_context``. Only chat contexts are supported.
+        Delegates to `generate_from_chat_context`. Only chat contexts are supported.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -458,12 +458,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
@@ -556,7 +556,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Generate a completion for an intrinsic action using an embedded adapter.
 
         Applies the intrinsic's I/O rewriter to transform the conversation,
-        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        injects `intrinsic_name` into `chat_template_kwargs` so that the
         Granite Switch chat template activates the correct adapter, and
         post-processes the model output through the intrinsic's result
         processor.
@@ -569,7 +569,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             action (Intrinsic): The intrinsic component to execute.
             ctx (Context): The current generation context (must be a chat context).
             model_options (dict[str, Any]): Merged model options for this call.
-            tool_calls (bool): If ``True``, expose available tools to the model
+            tool_calls (bool): If `True`, expose available tools to the model
                 and parse tool-call responses.
 
         Returns:
@@ -788,7 +788,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a new completion from the provided Context using this backend's ``Formatter``.
+        """Generate a new completion from the provided Context using this backend's `Formatter`.
 
         Formats the context and action into OpenAI-compatible chat messages, submits the
         request asynchronously, and returns a thunk that lazily resolves the output.
@@ -800,11 +800,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
                 structured output decoding.
             model_options (dict | None): Per-call model options.
-            tool_calls (bool): If ``True``, expose available tools and parse responses.
+            tool_calls (bool): If `True`, expose available tools and parse responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         await self.do_generate_walk(action)
 
@@ -975,8 +975,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     ):
         """Accumulate content from a single OpenAI response object into the output thunk.
 
-        Called for each ``ChatCompletion`` (non-streaming) or ``ChatCompletionChunk``
-        (streaming). Tool call parsing is deferred to ``post_processing``.
+        Called for each `ChatCompletion` (non-streaming) or `ChatCompletionChunk`
+        (streaming). Tool call parsing is deferred to `post_processing`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -1054,9 +1054,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             conversation (list[dict]): The chat conversation sent to the model,
                 used for logging.
-            thinking: The reasoning effort level passed to the model, or ``None``
+            thinking: The reasoning effort level passed to the model, or `None`
                 if reasoning mode was not enabled.
-            seed: The random seed used during generation, or ``None``.
+            seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """
         # Reconstruct the chat_response from chunks if streamed.

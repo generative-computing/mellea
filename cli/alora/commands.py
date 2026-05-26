@@ -1,10 +1,10 @@
-"""Typer sub-application for the ``m alora`` command group.
+"""Typer sub-application for the `m alora` command group.
 
-Provides three commands: ``train`` (fine-tune a base causal language model on a JSONL
-dataset to produce a LoRA or aLoRA adapter), ``upload`` (push adapter weights to
+Provides three commands: `train` (fine-tune a base causal language model on a JSONL
+dataset to produce a LoRA or aLoRA adapter), `upload` (push adapter weights to
 Hugging Face Hub, optionally packaging the adapter as an intrinsic with an
-``io.yaml`` configuration), and ``add-readme`` (use an LLM to auto-generate and
-upload an ``INTRINSIC_README.md`` for the trained adapter).
+`io.yaml` configuration), and `add-readme` (use an LLM to auto-generate and
+upload an `INTRINSIC_README.md` for the trained adapter).
 """
 
 import json
@@ -37,12 +37,12 @@ def alora_train(
     pairs. Supports both aLoRA (asymmetric LoRA) and standard LoRA adapters.
 
     Prerequisites:
-        Mellea installed with adapter extras (``uv add mellea[adapters]``).
+        Mellea installed with adapter extras (`uv add mellea[adapters]`).
         A CUDA, MPS, or CPU device available for training.
 
     Output:
-        Saves adapter weights to the path specified by ``--outfile``. The output
-        directory contains an ``adapter_config.json`` and the trained weight
+        Saves adapter weights to the path specified by `--outfile`. The output
+        directory contains an `adapter_config.json` and the trained weight
         files, ready for upload or local inference.
 
     Examples:
@@ -56,8 +56,8 @@ def alora_train(
         basemodel: Base model ID or path.
         outfile: Path to save adapter weights.
         promptfile: Path to load the prompt format file.
-        adapter: Adapter type; ``"alora"`` or ``"lora"``.
-        device: Device to train on: ``"auto"``, ``"cpu"``, ``"cuda"``, or ``"mps"``.
+        adapter: Adapter type; `"alora"` or `"lora"`.
+        device: Device to train on: `"auto"`, `"cpu"`, `"cuda"`, or `"mps"`.
         epochs: Number of training epochs.
         learning_rate: Learning rate for the optimizer.
         batch_size: Per-device training batch size.
@@ -100,14 +100,14 @@ def alora_upload(
     """Upload a trained adapter to a remote model registry.
 
     Pushes adapter weights to Hugging Face Hub, optionally packaging the adapter
-    as an intrinsic with an ``io.yaml`` configuration file.
+    as an intrinsic with an `io.yaml` configuration file.
 
     Prerequisites:
-        Hugging Face CLI authenticated (``huggingface-cli login``).
+        Hugging Face CLI authenticated (`huggingface-cli login`).
 
     Output:
         Creates or updates a Hugging Face Hub repository at the name specified
-        by ``--name`` and uploads the adapter weight files.
+        by `--name` and uploads the adapter weight files.
 
     Examples:
         m alora upload ./adapter --name acme/my-alora
@@ -118,10 +118,10 @@ def alora_upload(
     Args:
         weight_path: Path to saved adapter weights directory.
         name: Destination model name on Hugging Face Hub
-            (e.g. ``"acme/carbchecker-alora"``).
-        intrinsic: If ``True``, the adapter implements an intrinsic and an
-            ``io.yaml`` file must also be provided.
-        io_yaml: Path to the ``io.yaml`` file configuring input/output processing
+            (e.g. `"acme/carbchecker-alora"`).
+        intrinsic: If `True`, the adapter implements an intrinsic and an
+            `io.yaml` file must also be provided.
+        io_yaml: Path to the `io.yaml` file configuring input/output processing
             when the model is invoked as an intrinsic.
     """
     from cli.alora.intrinsic_uploader import upload_intrinsic
@@ -179,12 +179,12 @@ def alora_add_readme(
     Face Hub repository.
 
     Prerequisites:
-        Hugging Face CLI authenticated (``huggingface-cli login``).
+        Hugging Face CLI authenticated (`huggingface-cli login`).
         An LLM backend available for README generation.
 
     Output:
         Generates a README.md file, displays it for confirmation, and uploads
-        it to the Hugging Face Hub repository specified by ``--name``.
+        it to the Hugging Face Hub repository specified by `--name`.
 
     Examples:
         m alora add-readme data.jsonl --basemodel ibm-granite/granite-3.3-2b-instruct --name acme/my-alora
@@ -195,10 +195,10 @@ def alora_add_readme(
     Args:
         datafile: JSONL file with item/label pairs used to train the adapter.
         basemodel: Base model ID or path.
-        promptfile: Path to the prompt format file, or ``None``.
+        promptfile: Path to the prompt format file, or `None`.
         name: Destination model name on Hugging Face Hub.
-        hints: Path to a file containing additional domain hints, or ``None``.
-        io_yaml: Path to the ``io.yaml`` intrinsic configuration file, or ``None``.
+        hints: Path to a file containing additional domain hints, or `None`.
+        io_yaml: Path to the `io.yaml` intrinsic configuration file, or `None`.
 
     Raises:
         OSError: If no Hugging Face authentication token is found.

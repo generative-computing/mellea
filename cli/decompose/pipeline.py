@@ -1,9 +1,9 @@
 # decompose/pipeline.py
 """Core decomposition pipeline for turning a task query into scheduled subtasks.
 
-Provides the ``decompose()`` function, which orchestrates a series of LLM calls
+Provides the `decompose()` function, which orchestrates a series of LLM calls
 (subtask listing, constraint extraction, validation strategy selection, prompt
-generation, and constraint assignment) to produce a ``DecompPipelineResult``
+generation, and constraint assignment) to produce a `DecompPipelineResult`
 containing subtasks, per-subtask prompts, constraints, and dependency information.
 
 Supports Ollama and OpenAI-compatible inference backends.
@@ -37,11 +37,11 @@ class ConstraintValData(TypedDict):
     """Validation metadata associated with a single extracted constraint.
 
     Attributes:
-        val_strategy: Validation mode selected for the constraint. ``"code"``
-            means the pipeline generated validation code; ``"llm"`` means the
+        val_strategy: Validation mode selected for the constraint. `"code"`
+            means the pipeline generated validation code; `"llm"` means the
             constraint should be checked by model reasoning rather than code.
-        val_fn: Generated validation function source code when ``val_strategy``
-            is ``"code"``; otherwise ``None``.
+        val_fn: Generated validation function source code when `val_strategy`
+            is `"code"`; otherwise `None`.
     """
 
     val_strategy: Literal["code", "llm"]
@@ -55,7 +55,7 @@ class ConstraintResult(TypedDict):
         constraint: Natural-language description of the constraint.
         val_strategy: Validation mode assigned to the constraint.
         val_fn: Generated validation function source code when the constraint
-            uses code-based validation; otherwise ``None``.
+            uses code-based validation; otherwise `None`.
         val_fn_name: Stable function name assigned to the generated validation
             function in serialized output.
     """
@@ -76,14 +76,14 @@ class DecompSubtasksResult(TypedDict):
         constraints: Constraints assigned to this subtask, each with validation
             metadata.
         prompt_template: Jinja2 prompt template for this subtask, with
-            ``{{ variable }}`` placeholders for user inputs and prior subtask
+            `{{ variable }}` placeholders for user inputs and prior subtask
             results.
         general_instructions: Additional general instructions derived from the
             prompt template for this subtask.
         input_vars_required: Ordered list of user-provided input variable names
-            referenced in ``prompt_template``.
+            referenced in `prompt_template`.
         depends_on: Ordered list of subtask tags whose results are referenced in
-            ``prompt_template``.
+            `prompt_template`.
         generated_response: Model response produced during execution. This field
             is absent until the subtask has been run.
     """
@@ -146,7 +146,7 @@ def _extract_jinja_vars(prompt_template: str) -> list[str]:
 
     Args:
         prompt_template: Prompt template containing zero or more Jinja
-            expressions such as ``{{ variable }}``.
+            expressions such as `{{ variable }}`.
 
     Returns:
         A list of variable expressions captured from the template in match
@@ -164,8 +164,8 @@ def _preview_text(text: str, max_len: int = 240) -> str:
 
     Returns:
         A single-line preview string. Returns the normalized full text when its
-        length does not exceed ``max_len``; otherwise returns a truncated
-        preview ending with ``" ..."``.
+        length does not exceed `max_len`; otherwise returns a truncated
+        preview ending with `" ..."`.
     """
     text = " ".join(text.strip().split())
     if len(text) <= max_len:
@@ -186,8 +186,8 @@ def build_backend_session(
 ) -> MelleaSession:
     """Builds a model session for the configured inference backend.
 
-    Initializes and returns a ``MelleaSession`` backed by Ollama
-    or an OpenAI-compatible endpoint, depending on ``backend``.
+    Initializes and returns a `MelleaSession` backed by Ollama
+    or an OpenAI-compatible endpoint, depending on `backend`.
 
     Args:
         model_id: Model identifier passed to the selected backend.
@@ -198,10 +198,10 @@ def build_backend_session(
         log_mode: Logging verbosity for pipeline execution.
 
     Returns:
-        A configured ``MelleaSession`` ready for prompt generation calls.
+        A configured `MelleaSession` ready for prompt generation calls.
 
     Raises:
-        AssertionError: If ``backend`` is ``DecompBackend.openai`` and
+        AssertionError: If `backend` is `DecompBackend.openai` and
             the required endpoint or API key is not provided.
     """
     logger = get_logger("m_decompose.backend")
@@ -263,8 +263,8 @@ def task_decompose(
         log_mode: Logging verbosity for this stage.
 
     Returns:
-        A tuple ``(subtasks, task_constraints)``, where ``subtasks`` is the
-        ordered list of parsed ``SubtaskItem`` objects and ``task_constraints``
+        A tuple `(subtasks, task_constraints)`, where `subtasks` is the
+        ordered list of parsed `SubtaskItem` objects and `task_constraints`
         is the ordered list of extracted natural-language constraint strings.
     """
     logger = get_logger("m_decompose.task_decompose")
@@ -300,7 +300,7 @@ def constraint_validate(
     """Selects a validation mode for each constraint and generates code when needed.
 
     For every extracted constraint, this stage chooses a validation strategy.
-    When the selected strategy is ``"code"``, it also generates a validation
+    When the selected strategy is `"code"`, it also generates a validation
     function body for later serialization or execution.
 
     Args:
@@ -367,13 +367,13 @@ def task_execute(
         log_mode: Logging verbosity for this stage.
 
     Returns:
-        A list of ``SubtaskPromptConstraintsItem`` objects containing each
+        A list of `SubtaskPromptConstraintsItem` objects containing each
         subtask, its generated prompt template, and the constraints assigned to
         that subtask.
 
     Raises:
         Exception: Re-raises the last exception produced by
-            ``subtask_constraint_assign`` after all retry attempts fail.
+            `subtask_constraint_assign` after all retry attempts fail.
         RuntimeError: If constraint assignment fails without preserving a final
             exception object.
     """
@@ -503,7 +503,7 @@ def finalize_result(
 
     This stage resolves Jinja dependencies for each subtask, attaches validation
     metadata to assigned constraints, generates general instructions from each
-    prompt template, and assembles the final ``DecompPipelineResult``.
+    prompt template, and assembles the final `DecompPipelineResult`.
 
     Args:
         m_session: Active model session used to generate general instructions.
@@ -518,7 +518,7 @@ def finalize_result(
         log_mode: Logging verbosity for this stage.
 
     Returns:
-        A ``DecompPipelineResult`` containing the original prompt, extracted
+        A `DecompPipelineResult` containing the original prompt, extracted
         constraints, and fully annotated subtasks with dependency and validation
         information.
     """
@@ -619,7 +619,7 @@ def decompose(
     Args:
         task_prompt: Natural-language description of the task to decompose.
         user_input_variable: Optional list of user input variable names that may
-            be referenced in generated Jinja prompt templates. Pass ``None`` or
+            be referenced in generated Jinja prompt templates. Pass `None` or
             an empty list when the task requires no external input variables.
         model_id: Model name or identifier used for all pipeline stages.
         backend: Inference backend used for all model calls.
@@ -631,7 +631,7 @@ def decompose(
         log_mode: Logging verbosity for the pipeline run.
 
     Returns:
-        A ``DecompPipelineResult`` containing the original prompt, extracted
+        A `DecompPipelineResult` containing the original prompt, extracted
         subtask list, identified constraints, and fully annotated subtask
         records.
 

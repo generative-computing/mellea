@@ -10,7 +10,7 @@ The output from the lowest level of the parser is a dictionary as follows:
     * "response": Model response text without the above constituents
 
 This dict is further refined into dataclasses before being returned as an extended
-``AssistantMessage``.
+`AssistantMessage`.
 """
 
 # Standard
@@ -541,9 +541,9 @@ class Granite33OutputProcessor(OutputProcessor):
         Args:
             model_output (str): Raw text output from the Granite 3.3 model.
             chat_completion (ChatCompletion | None): The original chat completion
-                request that produced ``model_output``. Used to determine which
+                request that produced `model_output`. Used to determine which
                 output features (thinking, tools, citations, hallucinations) to
-                parse. Defaults to ``None``.
+                parse. Defaults to `None`.
 
         Returns:
             AssistantMessage: A :class:`Granite3AssistantMessage` containing the

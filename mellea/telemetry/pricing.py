@@ -1,20 +1,20 @@
 """LLM pricing via litellm's pricing API.
 
-Pricing metrics require the litellm package (``mellea[litellm]``). Pricing is
+Pricing metrics require the litellm package (`mellea[litellm]`). Pricing is
 auto-enabled when litellm is installed and can be explicitly controlled via the
-``MELLEA_PRICING_ENABLED`` environment variable.
+`MELLEA_PRICING_ENABLED` environment variable.
 
-``MELLEA_PRICING_ENABLED`` tri-state:
-  - ``"true"``  + litellm installed  → enabled
-  - ``"true"``  + litellm absent     → warning, disabled
-  - ``"false"`` (any)                → disabled (silent)
+`MELLEA_PRICING_ENABLED` tri-state:
+  - `"true"`  + litellm installed  → enabled
+  - `"true"`  + litellm absent     → warning, disabled
+  - `"false"` (any)                → disabled (silent)
   - unset       + litellm installed  → enabled (auto)
   - unset       + litellm absent     → disabled (silent)
 
-Pricing is only active when ``MELLEA_METRICS_ENABLED`` is also set.
+Pricing is only active when `MELLEA_METRICS_ENABLED` is also set.
 
 Custom pricing:
-  Set ``MELLEA_PRICING_FILE`` to a JSON file using litellm's native per-token
+  Set `MELLEA_PRICING_FILE` to a JSON file using litellm's native per-token
   schema. Minimal entries with only cost fields are supported::
 
       {
@@ -24,8 +24,8 @@ Custom pricing:
         }
       }
 
-  Optional cache fields: ``cache_read_input_token_cost``,
-  ``cache_creation_input_token_cost``.
+  Optional cache fields: `cache_read_input_token_cost`,
+  `cache_creation_input_token_cost`.
 
 Environment variables:
   - MELLEA_PRICING_ENABLED: Tri-state pricing flag (true/false/unset).
@@ -108,17 +108,17 @@ def compute_cost(
     """Estimate request cost in USD using litellm's pricing data.
 
     Args:
-        model: Model identifier (e.g. ``"gpt-5.4"``, ``"claude-sonnet-4-6"``).
-        provider: Provider name from the backend (e.g. ``"openai"``, ``"watsonx"``).
-            Passed to litellm as ``custom_llm_provider`` to aid model resolution —
-            e.g. ``"watsonx"`` causes litellm to try ``watsonx/ibm/granite-4-h-small``.
-        prompt_tokens: Total prompt tokens including any cached tokens, or ``None``.
-        completion_tokens: Number of completion tokens, or ``None``.
-        cached_tokens: Tokens served from prompt cache, or ``None``.
-        cache_creation_tokens: Tokens written to prompt cache, or ``None``.
+        model: Model identifier (e.g. `"gpt-5.4"`, `"claude-sonnet-4-6"`).
+        provider: Provider name from the backend (e.g. `"openai"`, `"watsonx"`).
+            Passed to litellm as `custom_llm_provider` to aid model resolution —
+            e.g. `"watsonx"` causes litellm to try `watsonx/ibm/granite-4-h-small`.
+        prompt_tokens: Total prompt tokens including any cached tokens, or `None`.
+        completion_tokens: Number of completion tokens, or `None`.
+        cached_tokens: Tokens served from prompt cache, or `None`.
+        cache_creation_tokens: Tokens written to prompt cache, or `None`.
 
     Returns:
-        Estimated cost in USD, or ``None`` if pricing is disabled or no pricing
+        Estimated cost in USD, or `None` if pricing is disabled or no pricing
         data exists for the model.
     """
     if not _PRICING_ENABLED:

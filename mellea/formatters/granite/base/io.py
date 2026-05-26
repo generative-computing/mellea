@@ -35,10 +35,10 @@ class InputProcessor(abc.ABC):
         Args:
             chat_completion (ChatCompletion): Structured representation of the inputs
                 to the chat completion request.
-            add_generation_prompt (bool): If ``True``, the returned prompt string will
+            add_generation_prompt (bool): If `True`, the returned prompt string will
                 contain a prefix of the next assistant response for use as a prompt to a
                 generation request. Otherwise, the prompt will only contain the messages
-                and documents in ``chat_completion``. Defaults to ``True``.
+                and documents in `chat_completion`. Defaults to `True`.
 
         Returns:
             str: String that can be passed to the model's tokenizer to create a prompt
@@ -68,8 +68,8 @@ class OutputProcessor(abc.ABC):
             model_output (str): String output of the generation request, potentially
                 incomplete if it was a streaming request.
             chat_completion (ChatCompletion | None): The chat completion request that
-                produced ``model_output``. Parameters of the request can determine how
-                the output should be decoded. Defaults to ``None``.
+                produced `model_output`. Parameters of the request can determine how
+                the output should be decoded. Defaults to `None`.
 
         Returns:
             AssistantMessage: The parsed output so far, as an instance of
@@ -103,7 +103,7 @@ class ChatCompletionRewriter(abc.ABC):
             ChatCompletion: Rewritten copy of the original chat completion request.
 
         Raises:
-            TypeError: If ``chat_completion`` is not a :class:`ChatCompletion` object,
+            TypeError: If `chat_completion` is not a :class:`ChatCompletion` object,
                 a JSON string, or a dictionary.
         """
         if isinstance(chat_completion, str):
@@ -153,16 +153,16 @@ class ChatCompletionResultProcessor(abc.ABC):
                 :class:`ChatCompletionResponse` dataclass, a raw dictionary, or
                 another Pydantic model.
             chat_completion (ChatCompletion | None): The original chat completion
-                request that produced ``chat_completion_response``. Required by
+                request that produced `chat_completion_response`. Required by
                 some implementations to decode references back to the original
-                request. Defaults to ``None``.
+                request. Defaults to `None`.
 
         Returns:
             ChatCompletionResponse: Post-processed copy of the chat completion
                 response with model-specific transformations applied.
 
         Raises:
-            TypeError: If ``chat_completion_response`` is not a supported type.
+            TypeError: If `chat_completion_response` is not a supported type.
         """
         # Convert from over-the-wire format if necessary
         if isinstance(chat_completion_response, dict):
@@ -206,9 +206,9 @@ class Retriever(abc.ABC):
 
         Args:
             query (str): Query string to use for lookup.
-            top_k (int): Maximum number of results to return. Defaults to ``10``.
+            top_k (int): Maximum number of results to return. Defaults to `10`.
 
         Returns:
             list[Document]: List of the top-k matching :class:`Document` objects,
-                each with fields such as ``text``, ``title``, and ``doc_id``.
+                each with fields such as `text`, `title`, and `doc_id`.
         """

@@ -1,5 +1,5 @@
 # decompose/decompose.py
-"""Implementation of the ``m decompose run`` CLI command.
+"""Implementation of the `m decompose run` CLI command.
 
 Accepts a task prompt (from a text file or interactive input), calls the multi-step
 LLM decomposition pipeline to produce a structured list of subtasks each with
@@ -30,7 +30,7 @@ class DecompVersion(StrEnum):
     """Available template versions for generated decomposition programs.
 
     Newer concrete versions must be declared after older ones so that
-    ``latest`` can resolve to the most recently declared template version.
+    `latest` can resolve to the most recently declared template version.
 
     Attributes:
         latest: Sentinel value that resolves to the last declared concrete
@@ -51,11 +51,11 @@ this_file_dir = Path(__file__).resolve().parent
 def reorder_subtasks(
     subtasks: list[DecompSubtasksResult],
 ) -> list[DecompSubtasksResult]:
-    """Topologically sort subtasks by their ``depends_on`` relationships.
+    """Topologically sort subtasks by their `depends_on` relationships.
 
     Args:
-        subtasks: List of subtask dicts, each with a ``"tag"`` and optional
-            ``"depends_on"`` field.
+        subtasks: List of subtask dicts, each with a `"tag"` and optional
+            `"depends_on"` field.
 
     Returns:
         list[DecompSubtasksResult]: The subtasks reordered so that dependencies
@@ -107,7 +107,7 @@ def verify_user_variables(
 
     Args:
         decomp_data: The decomposition pipeline result containing subtasks.
-        input_var: User-provided input variable names, or ``None`` for none.
+        input_var: User-provided input variable names, or `None` for none.
 
     Returns:
         DecompPipelineResult: The (possibly reordered) decomposition data.
@@ -249,11 +249,11 @@ def run(
     output directory.
 
     Prerequisites:
-        Mellea installed (``uv add mellea``). An Ollama instance running locally,
-        or an OpenAI-compatible endpoint configured via ``--backend-endpoint``.
+        Mellea installed (`uv add mellea`). An Ollama instance running locally,
+        or an OpenAI-compatible endpoint configured via `--backend-endpoint`.
 
     Output:
-        Creates a directory ``<out-dir>/<out-name>/`` containing a JSON
+        Creates a directory `<out-dir>/<out-name>/` containing a JSON
         decomposition result file, a ready-to-run Python script, and any
         generated validation modules. One directory per task job.
 
@@ -278,19 +278,19 @@ def run(
         backend_endpoint: Endpoint URL or base URL required by remote backends.
         backend_api_key: API key required by remote backends.
         version: Template version used to render the generated Python program.
-            ``latest`` resolves to the most recently declared concrete version.
+            `latest` resolves to the most recently declared concrete version.
         input_var: Optional user input variable names to expose in generated
             prompts and programs. Each name must be a valid non-keyword Python
             identifier.
         log_mode: Logging verbosity for CLI and pipeline execution.
         enable_script_run: Whether generated scripts should expose argparse
-            runtime options. Defaults to ``False``.
+            runtime options. Defaults to `False`.
 
     Raises:
-        AssertionError: If ``out_name`` is invalid, ``out_dir`` does not name an
-            existing directory, ``input_file`` does not name an existing file,
-            or any declared ``input_var`` is not a valid Python identifier.
-        ValueError: If ``input_file`` exists but contains no non-empty task
+        AssertionError: If `out_name` is invalid, `out_dir` does not name an
+            existing directory, `input_file` does not name an existing file,
+            or any declared `input_var` is not a valid Python identifier.
+        ValueError: If `input_file` exists but contains no non-empty task
             lines.
         Exception: Propagates pipeline, rendering, parsing, or file-writing
             failures. Any output directories created earlier in the run are

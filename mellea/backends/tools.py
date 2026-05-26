@@ -1,6 +1,6 @@
 """LLM tool definitions, parsing, and validation for mellea backends.
 
-Provides the ``MelleaTool`` class (and the ``@tool`` decorator shorthand) for
+Provides the `MelleaTool` class (and the `@tool` decorator shorthand) for
 wrapping Python callables as OpenAI-compatible tool schemas, with factory methods
 for LangChain and smolagents interoperability. Also includes helpers for converting
 tool lists to JSON, extracting tool call requests from raw LLM output strings, and
@@ -83,14 +83,14 @@ class MelleaTool(AbstractMelleaTool[P, R]):
         """Create a MelleaTool from a LangChain tool object.
 
         Args:
-            tool (Any): A ``langchain_core.tools.BaseTool`` instance to wrap.
+            tool (Any): A `langchain_core.tools.BaseTool` instance to wrap.
 
         Returns:
             MelleaTool[..., Any]: A Mellea tool wrapping the LangChain tool.
 
         Raises:
-            ImportError: If ``langchain-core`` is not installed.
-            ValueError: If ``tool`` is not a ``BaseTool`` instance.
+            ImportError: If `langchain-core` is not installed.
+            ValueError: If `tool` is not a `BaseTool` instance.
         """
         try:
             from langchain_core.tools import BaseTool  # type: ignore[import-not-found]
@@ -200,14 +200,14 @@ class MelleaTool(AbstractMelleaTool[P, R]):
 
         Introspects the callable's signature and docstring to build an
         OpenAI-compatible JSON schema automatically. Async functions (defined
-        with ``async def``) are supported transparently: the coroutine is
-        awaited on mellea's shared event loop so sync callers of ``.run()``
+        with `async def`) are supported transparently: the coroutine is
+        awaited on mellea's shared event loop so sync callers of `.run()`
         receive the resolved value rather than an un-awaited coroutine.
 
         Args:
             func (Callable[P, R] | Callable[P, Awaitable[R]]): The Python
                 callable (sync or async) to wrap as a tool.
-            name (str | None): Optional name override; defaults to ``func.__name__``.
+            name (str | None): Optional name override; defaults to `func.__name__`.
 
         Returns:
             MelleaTool[P, R]: A Mellea tool wrapping the callable with preserved parameter and return types.
@@ -320,8 +320,8 @@ def add_tools_from_model_options(
 
     Args:
         tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
-        model_options: Model options dict that may contain a ``ModelOption.TOOLS``
-            entry (either a list of ``MelleaTool`` or a ``dict[str, MelleaTool]``).
+        model_options: Model options dict that may contain a `ModelOption.TOOLS`
+            entry (either a list of `MelleaTool` or a `dict[str, MelleaTool]`).
     """
     model_opts_tools = model_options.get(ModelOption.TOOLS, None)
     if model_opts_tools is None:
@@ -363,8 +363,8 @@ def add_tools_from_context_actions(
 
     Args:
         tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
-        ctx_actions: List of ``Component`` or ``CBlock`` objects whose template
-            representations may declare tools, or ``None`` to skip.
+        ctx_actions: List of `Component` or `CBlock` objects whose template
+            representations may declare tools, or `None` to skip.
     """
     if ctx_actions is None:
         return
@@ -385,7 +385,7 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     """Convert tools to json dict representation.
 
     Args:
-        tools: Mapping of tool name to ``AbstractMelleaTool`` instance.
+        tools: Mapping of tool name to `AbstractMelleaTool` instance.
 
     Returns:
         List of OpenAI-compatible JSON tool schema dicts, one per tool.
@@ -405,7 +405,7 @@ def json_extraction(text: str) -> Generator[dict, None, None]:
         text: Input string potentially containing one or more JSON objects.
 
     Yields:
-        Each valid JSON object found in ``text``, in order of appearance.
+        Each valid JSON object found in `text`, in order of appearance.
     """
     index = 0
     decoder = json.JSONDecoder()
@@ -428,15 +428,15 @@ def json_extraction(text: str) -> Generator[dict, None, None]:
 def find_func(d: object) -> tuple[str | None, Mapping | None]:
     """Find the first function in a json-like dictionary.
 
-    Most llms output tool requests in the form ``...{"name": string, "arguments": {}}...``
+    Most llms output tool requests in the form `...{"name": string, "arguments": {}}...`
 
     Args:
-        d: A JSON-like Python object (typically a ``dict``) to search for a function
+        d: A JSON-like Python object (typically a `dict`) to search for a function
             call record.
 
     Returns:
-        A ``(name, args)`` tuple where ``name`` is the tool name string and ``args``
-        is the arguments mapping, or ``(None, None)`` if no function call was found.
+        A `(name, args)` tuple where `name` is the tool name string and `args`
+        is the arguments mapping, or `(None, None)` if no function call was found.
     """
     if not isinstance(d, dict):
         return None, None
@@ -468,7 +468,7 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
         llm_response: Raw string output from a language model.
 
     Returns:
-        List of ``(tool_name, arguments)`` tuples for each tool call found.
+        List of `(tool_name, arguments)` tuples for each tool call found.
     """
     processed = " ".join(llm_response.split())
 
@@ -740,10 +740,10 @@ def validate_tool_arguments(
 # so that all backends don't need it installed.
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_types.py#L19-L101
 class SubscriptableBaseModel(BaseModel):
-    """Pydantic ``BaseModel`` subclass that also supports subscript (``[]``) access.
+    """Pydantic `BaseModel` subclass that also supports subscript (`[]`) access.
 
     Imported from the Ollama Python client. Allows model fields to be accessed
-    via ``model["field"]`` in addition to ``model.field``, which is required for
+    via `model["field"]` in addition to `model.field`, which is required for
     compatibility with Ollama's internal response parsing.
     """
 
@@ -822,11 +822,11 @@ class SubscriptableBaseModel(BaseModel):
 
         Args:
             key (str): The field name to look up on the model.
-            default (Any): Value to return when ``key`` is not a field on the model.
-                Defaults to ``None``.
+            default (Any): Value to return when `key` is not a field on the model.
+                Defaults to `None`.
 
         Returns:
-            Any: The field value if the attribute exists, otherwise ``default``.
+            Any: The field value if the attribute exists, otherwise `default`.
 
         >>> msg = Message(role='user')
         >>> msg.get('role')
@@ -849,10 +849,10 @@ class OllamaTool(SubscriptableBaseModel):
 
     Represents the JSON structure that Ollama (and OpenAI-compatible endpoints) expect
     when a tool is passed to the chat API. Mellea builds these objects internally via
-    ``convert_function_to_ollama_tool`` and never exposes them to end users directly.
+    `convert_function_to_ollama_tool` and never exposes them to end users directly.
 
     Attributes:
-        type (str | None): Tool type; always ``"function"`` for function-calling tools.
+        type (str | None): Tool type; always `"function"` for function-calling tools.
         function (Function | None): Nested object containing the function name,
             description, and parameters schema.
     """
@@ -860,7 +860,7 @@ class OllamaTool(SubscriptableBaseModel):
     type: str | None = "function"
 
     class Function(SubscriptableBaseModel):
-        """Pydantic model for the ``function`` field of an Ollama tool schema, imported from the Ollama Python SDK.
+        """Pydantic model for the `function` field of an Ollama tool schema, imported from the Ollama Python SDK.
 
         Attributes:
             name (str | None): The name of the function being described.
@@ -872,11 +872,11 @@ class OllamaTool(SubscriptableBaseModel):
         description: str | None = None
 
         class Parameters(SubscriptableBaseModel):
-            """Pydantic model for the ``parameters`` field of an Ollama function schema, imported from the Ollama Python SDK.
+            """Pydantic model for the `parameters` field of an Ollama function schema, imported from the Ollama Python SDK.
 
             Attributes:
-                type (Literal["object"] | None): Always ``"object"`` for function parameters.
-                defs (Any | None): JSON Schema ``$defs`` for referenced sub-schemas.
+                type (Literal["object"] | None): Always `"object"` for function parameters.
+                defs (Any | None): JSON Schema `$defs` for referenced sub-schemas.
                 items (Any | None): Array item schema, if applicable.
                 required (Sequence[str] | None): List of required parameter names.
                 properties (Mapping[str, Property] | None): Parameter property definitions.
@@ -983,7 +983,7 @@ def _is_complex_anyof(v: dict) -> bool:
             continue
         # Check for references, nested properties, or oneOf branches
         # (don't recursively check allOf). oneOf appears in Pydantic discriminated
-        # unions: ``Annotated[A | B, Field(discriminator=...)] | None``.
+        # unions: `Annotated[A | B, Field(discriminator=...)] | None`.
         if "$ref" in sub_schema or "properties" in sub_schema or "oneOf" in sub_schema:
             return True
     return False
@@ -992,25 +992,25 @@ def _is_complex_anyof(v: dict) -> bool:
 def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     """Normalise Pydantic discriminated-union schemas for tool-calling APIs.
 
-    Pydantic emits ``Annotated[A | B, Field(discriminator="kind")]`` as either:
+    Pydantic emits `Annotated[A | B, Field(discriminator="kind")]` as either:
 
-    - Required:   ``{"discriminator": {...}, "oneOf": [{"$ref": ...}, ...]}``
-    - Optional:   ``{"anyOf": [{"discriminator": {...}, "oneOf": [...]}, {"type": "null"}]}``
+    - Required:   `{"discriminator": {...}, "oneOf": [{"$ref": ...}, ...]}`
+    - Optional:   `{"anyOf": [{"discriminator": {...}, "oneOf": [...]}, {"type": "null"}]}`
 
-    The OAS-3 ``discriminator`` keyword and the JSON Schema ``oneOf`` keyword
+    The OAS-3 `discriminator` keyword and the JSON Schema `oneOf` keyword
     both fall outside the schema subset accepted by tool-calling APIs (Ollama,
-    OpenAI strict mode). The ``Literal`` constraint on the tag field carries the
-    discriminator signal, so we can safely drop ``discriminator`` and emit
-    ``anyOf`` — equivalent here because the tag field forces uniqueness.
+    OpenAI strict mode). The `Literal` constraint on the tag field carries the
+    discriminator signal, so we can safely drop `discriminator` and emit
+    `anyOf` — equivalent here because the tag field forces uniqueness.
 
-    Returns a new schema dict with ``oneOf`` rewritten to ``anyOf``, branches
-    inlined, and ``discriminator`` stripped. The input is not mutated; callers
+    Returns a new schema dict with `oneOf` rewritten to `anyOf`, branches
+    inlined, and `discriminator` stripped. The input is not mutated; callers
     must reassign the result.
 
     Flattening is single-level. Discriminated unions nested inside an inlined
     branch (e.g. a Pydantic model whose own field is another discriminated
     union) are not recursively flattened — that case is tracked alongside the
-    recursive ``$ref`` resolution work in #911.
+    recursive `$ref` resolution work in #911.
     """
 
     def _inline(branch: dict) -> dict:
@@ -1023,8 +1023,8 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     out = {kk: vv for kk, vv in v.items() if kk not in ("oneOf", "discriminator")}
 
     # Top-level discriminated union (required parameter case). Append rather
-    # than overwrite so a defensive ``oneOf`` + ``anyOf`` co-occurrence does
-    # not silently drop the existing ``anyOf`` entries. Pydantic does not
+    # than overwrite so a defensive `oneOf` + `anyOf` co-occurrence does
+    # not silently drop the existing `anyOf` entries. Pydantic does not
     # currently emit both at the same level, but the helper is callable in
     # isolation and should not lose data.
     if "oneOf" in v:
@@ -1055,10 +1055,10 @@ def convert_function_to_ollama_tool(
 
     Args:
         func: The Python callable to convert.
-        name: Optional override for the tool name; defaults to ``func.__name__``.
+        name: Optional override for the tool name; defaults to `func.__name__`.
 
     Returns:
-        An ``OllamaTool`` instance representing the function as an OpenAI-compatible
+        An `OllamaTool` instance representing the function as an OpenAI-compatible
         tool schema.
     """
     doc_string_hash = str(hash(inspect.getdoc(func)))

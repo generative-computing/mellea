@@ -2,10 +2,10 @@
 
 """Common Pydantic types shared across the Granite formatter package.
 
-Defines reusable Pydantic models and mixins, including ``NoDefaultsMixin`` (which
+Defines reusable Pydantic models and mixins, including `NoDefaultsMixin` (which
 suppresses unset default fields from serialized JSON output) and message/request
-types for Granite model chat completions (``ChatMessage``, ``ChatCompletion``,
-``VLLMExtraBody``, ``ChatCompletionLogProbs``, and related classes). These types are
+types for Granite model chat completions (`ChatMessage`, `ChatCompletion`,
+`VLLMExtraBody`, `ChatCompletionLogProbs`, and related classes). These types are
 consumed internally by the Granite intrinsic formatters.
 """
 
@@ -37,7 +37,7 @@ class NoDefaultsMixin:
         See https://github.com/pydantic/pydantic/issues/4554 for the relevant dismissive
         comment from the devs. This comment suggests overriding :func:`dict()`, but that
         method was disabled a year later. Now you need to add a custom serializer method
-        with a ``@model_serializer`` decorator.
+        with a `@model_serializer` decorator.
 
         See the docs at
         https://docs.pydantic.dev/latest/api/functional_serializers/
@@ -130,7 +130,7 @@ class UserMessage(_ChatMessageBase):
     """User message for an IBM Granite model chat completion request.
 
     Attributes:
-        role (str): Always ``"user"``, identifying the message sender.
+        role (str): Always `"user"`, identifying the message sender.
     """
 
     role: Literal["user"] = "user"
@@ -143,7 +143,7 @@ class DocumentMessage(_ChatMessageBase):
     completion request.
 
     Attributes:
-        role (str): A string matching the pattern ``"document <name>"``,
+        role (str): A string matching the pattern `"document <name>"`,
             identifying this message as a document fragment.
     """
 
@@ -180,7 +180,7 @@ class AssistantMessage(_ChatMessageBase):
     completion request.
 
     Attributes:
-        role (str): Always ``"assistant"``, identifying the message sender.
+        role (str): Always `"assistant"`, identifying the message sender.
         tool_calls (list[ToolCall] | None): Optional list of tool calls
             requested by the assistant during this turn.
         reasoning_content (str | None): Optional chain-of-thought or reasoning
@@ -199,7 +199,7 @@ class ToolResultMessage(_ChatMessageBase):
     request.
 
     Attributes:
-        role (str): Always ``"tool"``, identifying this as a tool-result message.
+        role (str): Always `"tool"`, identifying this as a tool-result message.
         tool_call_id (str): The identifier of the tool call this message responds to.
     """
 
@@ -211,7 +211,7 @@ class SystemMessage(_ChatMessageBase):
     """System message for an IBM Granite model chat completion request.
 
     Attributes:
-        role (str): Always ``"system"``, identifying this as a system-level instruction.
+        role (str): Always `"system"`, identifying this as a system-level instruction.
     """
 
     role: Literal["system"] = "system"
@@ -221,7 +221,7 @@ class DeveloperMessage(_ChatMessageBase):
     """Developer system message for a chat completion request.
 
     Attributes:
-        role (str): Always ``"developer"``, identifying this as a developer-role message.
+        role (str): Always `"developer"`, identifying this as a developer-role message.
     """
 
     role: Literal["developer"] = "developer"
@@ -240,7 +240,7 @@ ChatMessage: TypeAlias = (
 
 
 class ToolDefinition(pydantic.BaseModel, NoDefaultsMixin):
-    """An entry in the ``tools`` list in an IBM Granite model chat completion request.
+    """An entry in the `tools` list in an IBM Granite model chat completion request.
 
     Attributes:
         name (str): The name used to identify and invoke the tool.
@@ -281,7 +281,7 @@ class Document(pydantic.BaseModel, NoDefaultsMixin):
 class ChatTemplateKwargs(pydantic.BaseModel):
     """Keyword arguments for chat template.
 
-    Values that can appear in the ``chat_template_kwargs`` portion of a valid chat
+    Values that can appear in the `chat_template_kwargs` portion of a valid chat
     completion request for a Granite model.
 
     Attributes:
@@ -308,8 +308,8 @@ class VLLMExtraBody(pydantic.BaseModel, NoDefaultsMixin):
     Attributes:
         documents (list[Document] | None): RAG documents made accessible to
             the model during generation, if the template supports RAG.
-        add_generation_prompt (bool): When ``True``, the generation prompt is
-            appended to the rendered chat template. Defaults to ``True``.
+        add_generation_prompt (bool): When `True`, the generation prompt is
+            appended to the rendered chat template. Defaults to `True`.
         chat_template_kwargs (ChatTemplateKwargs | None): Additional keyword
             arguments forwarded to the chat template renderer.
         structured_outputs (dict | None): Optional JSON schema that constrains
@@ -396,7 +396,7 @@ class ChatCompletion(pydantic.BaseModel, NoDefaultsMixin):
         """Fetch documents attached to chat completion.
 
         Convenience method for internal code to fetch documents attached to the
-        chat completion without having to dig into ``extra_body``.
+        chat completion without having to dig into `extra_body`.
         """
         if self.extra_body:
             return self.extra_body.documents
@@ -406,7 +406,7 @@ class ChatCompletion(pydantic.BaseModel, NoDefaultsMixin):
         """Fetch chat template arguments.
 
         Convenience method for internal code to fetch chat template arguments
-        without having to dig into ``extra_body``.
+        without having to dig into `extra_body`.
         """
         if self.extra_body:
             return self.extra_body.chat_template_kwargs
@@ -431,7 +431,7 @@ class GraniteChatCompletion(ChatCompletion):
     def _validate_vllm_stuff_in_extra_body(self):
         """Validate non-standard VLLM fields.
 
-        Non-standard VLLM fields should be passed via the ``extra_body`` parameter.
+        Non-standard VLLM fields should be passed via the `extra_body` parameter.
         Make sure the user didn't stuff them into the root, which is currently set up
         to allow arbitrary additional fields.
         """
@@ -452,10 +452,10 @@ class GraniteChatCompletion(ChatCompletion):
         """Validate documents at top level.
 
         Documents for a Granite model chat completion request should be passed in the
-        ``documents`` argument at the top level of the ``extra_body`` portion of the
+        `documents` argument at the top level of the `extra_body` portion of the
         request.
 
-        Detect cases where the documents are hanging off of ``chat_template_kwargs``
+        Detect cases where the documents are hanging off of `chat_template_kwargs`
         and sanitize appropriately.
         """
         if self is None:
@@ -528,7 +528,7 @@ class ChatCompletionLogProb(pydantic.BaseModel, NoDefaultsMixin):
     Attributes:
         token (str): The decoded token string.
         logprob (float): The log-probability of the token. Defaults to
-            ``-9999.0`` when not returned by the server.
+            `-9999.0` when not returned by the server.
         bytes (list[int] | None): The UTF-8 byte values of the token,
             if provided by the server.
     """
@@ -566,7 +566,7 @@ class ChatCompletionLogProbs(pydantic.BaseModel, NoDefaultsMixin):
 
     Attributes:
         content (list[ChatCompletionLogProbsContent] | None): Per-token
-            log-probability entries for each generated token, or ``None`` if
+            log-probability entries for each generated token, or `None` if
             logprobs were not requested.
     """
 
@@ -588,7 +588,7 @@ class ChatCompletionResponseChoice(pydantic.BaseModel, NoDefaultsMixin):
         logprobs (ChatCompletionLogProbs | None): Token log-probabilities for
             this choice, if they were requested.
         finish_reason (str | None): The reason the model stopped generating.
-            Defaults to ``"stop"`` per the OpenAI specification.
+            Defaults to `"stop"` per the OpenAI specification.
     """
 
     index: int

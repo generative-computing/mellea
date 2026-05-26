@@ -1,11 +1,11 @@
 """Foundational data structures for mellea's generative programming model.
 
-Defines the building blocks that flow through every layer of the library: ``CBlock``
-(a content block wrapping a string value), ``Component`` (an abstract composable
-generative unit), ``ModelOutputThunk`` (a lazily-evaluated model response),
-``Context`` and ``ContextTurn`` (stateful conversation history containers),
-``TemplateRepresentation`` (the structured rendering of a component for prompt
-templates), ``ImageBlock``, and ``ModelToolCall``. Understanding these types is
+Defines the building blocks that flow through every layer of the library: `CBlock`
+(a content block wrapping a string value), `Component` (an abstract composable
+generative unit), `ModelOutputThunk` (a lazily-evaluated model response),
+`Context` and `ContextTurn` (stateful conversation history containers),
+`TemplateRepresentation` (the structured rendering of a component for prompt
+templates), `ImageBlock`, and `ModelToolCall`. Understanding these types is
 the starting point for building custom components or sampling strategies.
 """
 
@@ -46,7 +46,7 @@ class CBlock:
         value (str | None): The underlying string content of the block.
         meta (dict[str, Any] | None): Optional metadata about this block (e.g., the inference engine's
             completion object). Defaults to an empty dict.
-        cache (bool): If ``True``, the inference engine may store the KV cache for this block. Experimental.
+        cache (bool): If `True`, the inference engine may store the KV cache for this block. Experimental.
 
     """
 
@@ -98,7 +98,7 @@ class ImageBlock(CBlock):
         """Initialize ImageBlock with a base64-encoded PNG string, validating the encoding.
 
         Raises:
-            AssertionError: If ``value`` is not a valid base64-encoded PNG string.
+            AssertionError: If `value` is not a valid base64-encoded PNG string.
         """
         assert self.is_valid_base64_png(value), (
             "Invalid base64 string representation of image."
@@ -116,7 +116,7 @@ class ImageBlock(CBlock):
             s (str): The string to validate, optionally prefixed with a data URI header.
 
         Returns:
-            bool: ``True`` if the string decodes to a PNG image, ``False`` otherwise.
+            bool: `True` if the string decodes to a PNG image, `False` otherwise.
         """
         try:
             # Check if the string has a data URI prefix and remove it.
@@ -162,17 +162,17 @@ class ImageBlock(CBlock):
     def from_pil_image(
         cls, image: PILImage.Image, meta: dict[str, Any] | None = None
     ) -> ImageBlock:
-        """Creates an ``ImageBlock`` from a PIL image object.
+        """Creates an `ImageBlock` from a PIL image object.
 
         Converts the image to a base64-encoded PNG string and wraps it in a new
-        ``ImageBlock`` instance.
+        `ImageBlock` instance.
 
         Args:
             image (PILImage.Image): The PIL image to encode.
             meta (dict[str, Any] | None): Optional metadata to associate with the block.
 
         Returns:
-            ImageBlock: A new ``ImageBlock`` containing the base64-encoded PNG.
+            ImageBlock: A new `ImageBlock` containing the base64-encoded PNG.
         """
         image_base64 = cls.pil_to_base64(image)
         return cls(image_base64, meta)
@@ -198,10 +198,10 @@ class Component(Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns the set of all constituent sub-components and content blocks of this ``Component``.
+        """Returns the set of all constituent sub-components and content blocks of this `Component`.
 
         Returns:
-            list[Component | CBlock]: A list of child ``Component`` or ``CBlock`` objects that make
+            list[Component | CBlock]: A list of child `Component` or `CBlock` objects that make
             up this component. The list may be empty for leaf components.
 
         Raises:
@@ -210,10 +210,10 @@ class Component(Protocol, Generic[S]):
         raise NotImplementedError("parts isn't implemented by default")
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Formats the ``Component`` into a ``TemplateRepresentation`` or plain string for LLM consumption.
+        """Formats the `Component` into a `TemplateRepresentation` or plain string for LLM consumption.
 
         Returns:
-            TemplateRepresentation | str: A structured ``TemplateRepresentation`` (for components
+            TemplateRepresentation | str: A structured `TemplateRepresentation` (for components
             with tools, fields, or templates) or a plain string for simple components.
 
         Raises:
@@ -222,19 +222,19 @@ class Component(Protocol, Generic[S]):
         raise NotImplementedError("format_for_llm isn't implemented by default")
 
     def parse(self, computed: ModelOutputThunk) -> S:
-        """Parses the expected type ``S`` from a given ``ModelOutputThunk``.
+        """Parses the expected type `S` from a given `ModelOutputThunk`.
 
-        Delegates to the component's underlying ``_parse`` method and wraps any
-        exception in a ``ComponentParseError`` for uniform error handling.
+        Delegates to the component's underlying `_parse` method and wraps any
+        exception in a `ComponentParseError` for uniform error handling.
 
         Args:
             computed (ModelOutputThunk): The model output thunk whose value should be parsed.
 
         Returns:
-            S: The parsed result produced by ``_parse``, typed according to the component's type parameter.
+            S: The parsed result produced by `_parse`, typed according to the component's type parameter.
 
         Raises:
-            ComponentParseError: If the underlying ``_parse`` call raises any exception.
+            ComponentParseError: If the underlying `_parse` call raises any exception.
         """
         try:
             return self._parse(computed)
@@ -251,7 +251,7 @@ class GenerateType(enum.Enum):
 
     Attributes:
         NONE (None): No generation function has been set; the thunk is either already computed or uninitialized.
-        ASYNC (int): The generation function is async-compatible; ``avalue``/``astream`` may be used.
+        ASYNC (int): The generation function is async-compatible; `avalue`/`astream` may be used.
         SYNC (int): The generation function is synchronous only; async extraction methods are unavailable.
     """
 
@@ -307,7 +307,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
 
     Args:
-        value (str | None): The raw model output string, or ``None`` if not yet computed.
+        value (str | None): The raw model output string, or `None` if not yet computed.
         meta (dict[str, Any] | None): Optional metadata from the inference engine (e.g., completion object).
         parsed_repr (S | None): An already-parsed representation to attach; set when re-wrapping existing output.
         tool_calls (dict[str, ModelToolCall] | None): Tool calls returned by the model alongside the text output.
@@ -386,26 +386,26 @@ class ModelOutputThunk(CBlock, Generic[S]):
         """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
 
         Safe to call at any point during streaming. After this method returns,
-        ``is_computed()`` is ``True`` and ``value`` contains whatever text was
+        `is_computed()` is `True` and `value` contains whatever text was
         accumulated before cancellation.  Calling on an already-computed MOT
         is a no-op.
 
         Draining the internal queue after cancellation is necessary to release
-        any ``asyncio.Queue.put()`` call that the generation task was blocked on
+        any `asyncio.Queue.put()` call that the generation task was blocked on
         (queue maxsize=20).
 
         Args:
             error: Optional cause attributed to the open telemetry span.  When
-                provided, this exception is recorded via ``set_span_error`` so
+                provided, this exception is recorded via `set_span_error` so
                 the span reflects the actual reason for cancellation (e.g. the
                 requirement failure or an unhandled exception from a streaming
-                validator).  When ``None``, a generic
-                ``RuntimeError("Generation cancelled")`` is recorded.
+                validator).  When `None`, a generic
+                `RuntimeError("Generation cancelled")` is recorded.
 
         Raises:
             asyncio.CancelledError: Re-raised when the *calling* task itself is
-                being cancelled (``asyncio.current_task().cancelling() > 0``).
-                This prevents external cancellation (e.g. ``asyncio.wait_for``
+                being cancelled (`asyncio.current_task().cancelling() > 0`).
+                This prevents external cancellation (e.g. `asyncio.wait_for`
                 timeout) from being silently absorbed while awaiting the inner
                 generation task.
         """
@@ -482,9 +482,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
     @property
     def cancelled(self) -> bool:
-        """``True`` if :meth:`cancel_generation` ran to completion on this MOT.
+        """`True` if :meth:`cancel_generation` ran to completion on this MOT.
 
-        A normally-completed MOT leaves this ``False``; only an actual
+        A normally-completed MOT leaves this `False`; only an actual
         cancellation via :meth:`cancel_generation` flips it.  Consumers holding
         a computed MOT can use this to distinguish a genuine result from one
         cut short (for example by a streaming requirement failure).
@@ -514,7 +514,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         """Returns true only if this Thunk has already been filled.
 
         Returns:
-            ``True`` if the thunk value has been set, ``False`` otherwise.
+            `True` if the thunk value has been set, `False` otherwise.
         """
         return self._computed
 
@@ -794,7 +794,7 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
 
     Args:
-        thunk: A fully-computed ``ModelOutputThunk`` whose class will be reassigned.
+        thunk: A fully-computed `ModelOutputThunk` whose class will be reassigned.
     """
 
     def __new__(cls, thunk: ModelOutputThunk[S]) -> ComputedModelOutputThunk[S]:
@@ -853,7 +853,7 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         """Returns `True` since thunk is always computed.
 
         Returns:
-            Always ``True``.
+            Always `True`.
         """
         return True
 
@@ -864,9 +864,9 @@ class ContextTurn:
 
     Args:
         model_input (CBlock | Component | None): The input component or content block for this turn,
-            or ``None`` for an output-only partial turn.
+            or `None` for an output-only partial turn.
         output (ModelOutputThunk | None): The model's output thunk for this turn,
-            or ``None`` for an input-only partial turn.
+            or `None` for an input-only partial turn.
 
     """
 
@@ -883,11 +883,11 @@ class Context(abc.ABC):
     A context is immutable. Every alteration leads to a new context.
 
     Attributes:
-        is_root_node (bool): ``True`` when this context is the root (empty) node of the linked list.
+        is_root_node (bool): `True` when this context is the root (empty) node of the linked list.
         previous_node (Context | None): The context node from which this one was created,
-            or ``None`` for the root node.
+            or `None` for the root node.
         node_data (Component | CBlock | None): The data associated with this context node,
-            or ``None`` for the root node.
+            or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
     """
 
@@ -915,7 +915,7 @@ class Context(abc.ABC):
             data (Component | CBlock): The component or content block to associate with the new node.
 
         Returns:
-            ContextT: A new context instance whose ``previous_node`` is ``previous``.
+            ContextT: A new context instance whose `previous_node` is `previous`.
         """
         assert isinstance(previous, Context), (
             "Cannot create a new context from a non-Context object."
@@ -975,7 +975,7 @@ class Context(abc.ABC):
 
         Args:
             last_n_components (int | None): Maximum number of most-recent components to include.
-                Pass ``None`` to return the full history.
+                Pass `None` to return the full history.
 
         Returns:
             list[Component | CBlock]: Components in chronological order (oldest first).
@@ -1006,25 +1006,25 @@ class Context(abc.ABC):
     def actions_for_available_tools(self) -> list[Component | CBlock] | None:
         """Provides a list of actions to extract tools from for use during generation.
 
-        Returns ``None`` if it is not possible to construct such a list. Can be used to make
+        Returns `None` if it is not possible to construct such a list. Can be used to make
         the available tools differ from the tools of all the actions in the context. Can be
         overridden by subclasses.
 
         Returns:
             list[Component | CBlock] | None: The list of actions whose tools should be made
-            available during generation, or ``None`` if unavailable.
+            available during generation, or `None` if unavailable.
         """
         return self.view_for_generation()
 
     def last_output(self, check_last_n_components: int = 3) -> ModelOutputThunk | None:
-        """Returns the most recent ``ModelOutputThunk`` found within the last N context components.
+        """Returns the most recent `ModelOutputThunk` found within the last N context components.
 
         Args:
             check_last_n_components (int): Number of most-recent components to search through.
                 Defaults to 3.
 
         Returns:
-            ModelOutputThunk | None: The most recent output thunk, or ``None`` if none is found
+            ModelOutputThunk | None: The most recent output thunk, or `None` if none is found
             within the searched components.
         """
         for c in self.as_list(last_n_components=check_last_n_components)[::-1]:
@@ -1038,7 +1038,7 @@ class Context(abc.ABC):
         This can be partial. If the last event is an input, then the output is None.
 
         Returns:
-            The most recent turn, or ``None`` if the context is empty.
+            The most recent turn, or `None` if the context is empty.
         """
         history = self.as_list(last_n_components=2)
 
@@ -1060,13 +1060,13 @@ class Context(abc.ABC):
 
     @abc.abstractmethod
     def add(self, c: Component | CBlock) -> Context:
-        """Returns a new context obtained by appending ``c`` to this context.
+        """Returns a new context obtained by appending `c` to this context.
 
         Args:
             c (Component | CBlock): The component or content block to add to the context.
 
         Returns:
-            Context: A new context node with ``c`` as its data and this context as its previous node.
+            Context: A new context node with `c` as its data and this context as its previous node.
         """
         # something along ....from_previous(self, c)
         ...
@@ -1075,12 +1075,12 @@ class Context(abc.ABC):
     def view_for_generation(self) -> list[Component | CBlock] | None:
         """Provides a linear list of context components to use for generation.
 
-        Returns ``None`` if it is not possible to construct such a list (e.g., the context
+        Returns `None` if it is not possible to construct such a list (e.g., the context
         is in an inconsistent state). Concrete subclasses define the ordering and filtering logic.
 
         Returns:
             list[Component | CBlock] | None: An ordered list of components suitable for passing
-            to a backend, or ``None`` if generation is not currently possible.
+            to a backend, or `None` if generation is not currently possible.
         """
         ...
 
@@ -1131,7 +1131,7 @@ class TemplateRepresentation:
         obj (Any): The original component object being represented.
         args (dict): Named arguments extracted from the component for template substitution.
         tools (dict[str, AbstractMelleaTool] | None): Tools available for this representation,
-            keyed by the tool's function name. Defaults to ``None``.
+            keyed by the tool's function name. Defaults to `None`.
         fields (list[Any] | None): An optional ordered list of field values for positional templates.
         template (str | None): An optional Jinja2 template string to use when rendering.
         template_order (list[str] | None): An optional ordering hint for template sections/keys.
@@ -1167,7 +1167,7 @@ class GenerateLog:
         model_options (dict[str, Any] | None): Model configuration options applied to this call.
         model_output (Any | None): The raw output returned by the backend API.
         action (Component | CBlock | None): The component or block that triggered the generation.
-        result (ModelOutputThunk | None): The ``ModelOutputThunk`` produced by this generation call.
+        result (ModelOutputThunk | None): The `ModelOutputThunk` produced by this generation call.
         is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
         extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
 
@@ -1192,7 +1192,7 @@ class ModelToolCall:
 
     Args:
         name (str): The name of the tool the model requested to call.
-        func (AbstractMelleaTool): The ``AbstractMelleaTool`` instance that will be invoked.
+        func (AbstractMelleaTool): The `AbstractMelleaTool` instance that will be invoked.
         args (Mapping[str, Any]): The keyword arguments the model supplied for the tool call.
 
     """
@@ -1205,22 +1205,22 @@ class ModelToolCall:
         """Invokes the tool represented by this object and returns the result.
 
         Returns:
-            Any: The value returned by ``func.run(**args)``; the concrete type depends on the tool.
+            Any: The value returned by `func.run(**args)`; the concrete type depends on the tool.
         """
         return self.func.run(**self.args)
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:
-    """Turn a raw string into a ``CBlock``, leaving ``CBlock`` and ``Component`` objects unchanged.
+    """Turn a raw string into a `CBlock`, leaving `CBlock` and `Component` objects unchanged.
 
     Args:
-        s: A plain string, ``CBlock``, or ``Component`` to normalise.
+        s: A plain string, `CBlock`, or `Component` to normalise.
 
     Returns:
-        A ``CBlock`` wrapping ``s`` if it was a string; otherwise ``s`` unchanged.
+        A `CBlock` wrapping `s` if it was a string; otherwise `s` unchanged.
 
     Raises:
-        Exception: If ``s`` is not a ``str``, ``CBlock``, or ``Component``.
+        Exception: If `s` is not a `str`, `CBlock`, or `Component`.
     """
     # noinspection PyUnreachableCode
     match s:
@@ -1235,14 +1235,14 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
 
 
 def get_images_from_component(c: Component) -> None | list[ImageBlock]:
-    """Return the images attached to a ``Component``, or ``None`` if absent or empty.
+    """Return the images attached to a `Component`, or `None` if absent or empty.
 
     Args:
-        c: The ``Component`` whose ``images`` attribute is inspected.
+        c: The `Component` whose `images` attribute is inspected.
 
     Returns:
-        A non-empty list of ``ImageBlock`` objects if the component has an
-        ``images`` attribute with at least one element; ``None`` otherwise.
+        A non-empty list of `ImageBlock` objects if the component has an
+        `images` attribute with at least one element; `None` otherwise.
     """
     if hasattr(c, "images"):
         imgs = c.images  # type: ignore

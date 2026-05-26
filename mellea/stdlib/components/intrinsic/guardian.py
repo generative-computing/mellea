@@ -1,10 +1,10 @@
 """Intrinsic functions for Guardian safety and hallucination detection.
 
-The Guardian adapters (``guardian-core``, ``policy-guardrails``,
-``factuality-detection``, ``factuality-correction``) require a
-``<guardian>``-prefixed envelope as the last user message of the request.
-That envelope is built from the ``instruction:`` field of each adapter's
-``io.yaml`` via :class:`IntrinsicsRewriter`; the helpers below just resolve
+The Guardian adapters (`guardian-core`, `policy-guardrails`,
+`factuality-detection`, `factuality-correction`) require a
+`<guardian>`-prefixed envelope as the last user message of the request.
+That envelope is built from the `instruction:` field of each adapter's
+`io.yaml` via :class:`IntrinsicsRewriter`; the helpers below just resolve
 any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
 resolved kwargs through.
 """
@@ -19,10 +19,10 @@ from ._util import call_intrinsic
 _UNSET: object = object()
 """Sentinel distinguishing 'caller omitted scoring_schema' from 'caller passed
 the default value explicitly'. Used only to detect conflicts with the
-deprecated ``target_role`` kwarg."""
+deprecated `target_role` kwarg."""
 
 _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_response"}
-"""Mapping used by the deprecated ``target_role`` path of :func:`guardian_check`."""
+"""Mapping used by the deprecated `target_role` path of :func:`guardian_check`."""
 
 
 def policy_guardrails(
@@ -31,7 +31,7 @@ def policy_guardrails(
     """Checks whether text complied with specified policy.
 
     Uses the policy_guardrails LoRA adapter to judge whether the scenario
-    described in the last message in ``context`` is compliant with the given ``policy_text``.
+    described in the last message in `context` is compliant with the given `policy_text`.
 
     :param context: Chat context containing the conversation to evaluate.
     :param backend: Backend instance that supports LoRA adapters.
@@ -75,10 +75,10 @@ SCORING_SCHEMA_BANK = {
 }
 """Pre-baked scoring-schema phrasings for :func:`guardian_check`.
 
-Keys can be passed directly as the ``scoring_schema`` parameter; any
+Keys can be passed directly as the `scoring_schema` parameter; any
 other string is used verbatim. Entries must resolve to a yes/no
-verdict — the adapter's ``io.yaml`` constrains output to ``"yes"`` or
-``"no"``, so a schema like ``'return "safe" or "unsafe"'`` will be
+verdict — the adapter's `io.yaml` constrains output to `"yes"` or
+`"no"`, so a schema like `'return "safe" or "unsafe"'` will be
 coerced to yes/no by constrained decoding.
 """
 
@@ -155,7 +155,7 @@ CRITERIA_BANK = {
 }
 """Pre-baked criteria definitions from the Granite Guardian model card.
 
-Keys can be passed directly to :func:`guardian_check` as the ``criteria``
+Keys can be passed directly to :func:`guardian_check` as the `criteria`
 parameter.
 """
 
@@ -170,26 +170,26 @@ def guardian_check(
     """Check whether text meets specified safety/quality criteria.
 
     Uses the guardian-core LoRA adapter to judge whether the span
-    identified by ``scoring_schema`` in ``context`` meets the given
+    identified by `scoring_schema` in `context` meets the given
     criteria.
 
     Args:
         context: Chat context containing the conversation to evaluate.
         backend: Backend instance that supports LoRA adapters.
         criteria: Description of the criteria to check against. Can be a
-            key from :data:`CRITERIA_BANK` (e.g. ``"harm"``) or a custom
+            key from :data:`CRITERIA_BANK` (e.g. `"harm"`) or a custom
             criteria string.
         scoring_schema: Sentence that tells the judge which span to
             evaluate and how to decide. Can be a key from
-            :data:`SCORING_SCHEMA_BANK` (e.g. ``"user_prompt"``) or a
-            custom string. Defaults to ``"assistant_response"``. Must
+            :data:`SCORING_SCHEMA_BANK` (e.g. `"user_prompt"`) or a
+            custom string. Defaults to `"assistant_response"`. Must
             still resolve to a yes/no verdict — the adapter's
-            ``response_format`` constrains output to ``"yes"``/``"no"``.
+            `response_format` constrains output to `"yes"`/`"no"`.
         target_role: Deprecated. Role whose last message is being
-            evaluated (``"user"`` or ``"assistant"``). Prefer
-            ``scoring_schema`` with a key from
+            evaluated (`"user"` or `"assistant"`). Prefer
+            `scoring_schema` with a key from
             :data:`SCORING_SCHEMA_BANK`. Passing both
-            ``scoring_schema`` and ``target_role`` raises
+            `scoring_schema` and `target_role` raises
             :class:`TypeError`.
 
     Returns:

@@ -16,19 +16,19 @@ if TYPE_CHECKING:
 
 
 def build_global_context(*, backend: Backend | None = None, **extra_fields: Any) -> Any:
-    """Build a ContextForge ``GlobalContext`` from Mellea domain objects.
+    """Build a ContextForge `GlobalContext` from Mellea domain objects.
 
     The global context carries lightweight, cross-cutting ambient metadata
-    (e.g. ``backend_name``) that is useful to every hook regardless of type.
+    (e.g. `backend_name`) that is useful to every hook regardless of type.
     Hook-specific data (context, session, action, etc.) belongs on the typed
     payload, not here.
 
     Args:
-        backend: Optional backend whose ``model_id`` is added to the context.
+        backend: Optional backend whose `model_id` is added to the context.
         **extra_fields: Additional key-value pairs merged into the context state.
 
     Returns:
-        A ``GlobalContext`` instance, or ``None`` if ContextForge is not installed.
+        A `GlobalContext` instance, or `None` if ContextForge is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         return None
