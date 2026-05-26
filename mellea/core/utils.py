@@ -530,6 +530,25 @@ def _parse_bool_env(value: str, default: bool = True) -> bool:
     return default
 
 
+def _get_env_with_legacy(
+    new_var: str, legacy_var: str, stacklevel: int = 4
+) -> str | None:
+    """Return the value of *new_var*, falling back to *legacy_var* with a deprecation warning."""
+    value = os.environ.get(new_var)
+    if value is not None:
+        return value
+    legacy = os.environ.get(legacy_var, "")
+    if legacy:
+        warnings.warn(
+            f"{legacy_var} is deprecated and will be removed in a future release. "
+            f"Use {new_var} instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
+        return legacy
+    return None
+
+
 def _resolve_webhook_url() -> str | None:
     """Return the configured webhook URL, with deprecated-variable fallbacks.
 
@@ -604,31 +623,11 @@ def configure_logging(logger: logging.Logger) -> None:
     Args:
         logger: The :class:`logging.Logger` to configure.
     """
-    enabled_raw = os.environ.get("MELLEA_LOGS_ENABLED")
-    if enabled_raw is None:
-        legacy = os.environ.get("MELLEA_LOG_ENABLED", "")
-        if legacy:
-            warnings.warn(
-                "MELLEA_LOG_ENABLED is deprecated and will be removed in a future release. "
-                "Use MELLEA_LOGS_ENABLED instead.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            enabled_raw = legacy
+    enabled_raw = _get_env_with_legacy("MELLEA_LOGS_ENABLED", "MELLEA_LOG_ENABLED")
     if not _parse_bool_env(enabled_raw or "", default=True):
         return
 
-    json_raw = os.environ.get("MELLEA_LOGS_JSON")
-    if json_raw is None:
-        legacy = os.environ.get("MELLEA_LOG_JSON", "")
-        if legacy:
-            warnings.warn(
-                "MELLEA_LOG_JSON is deprecated and will be removed in a future release. "
-                "Use MELLEA_LOGS_JSON instead.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            json_raw = legacy
+    json_raw = _get_env_with_legacy("MELLEA_LOGS_JSON", "MELLEA_LOG_JSON")
     use_json = _parse_bool_env(json_raw or "", default=False)
 
     # --- Webhook / REST handler ---
@@ -639,17 +638,7 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(rest_handler)
 
     # --- Console / stream handler ---
-    console_raw = os.environ.get("MELLEA_LOGS_CONSOLE")
-    if console_raw is None:
-        legacy = os.environ.get("MELLEA_LOG_CONSOLE", "")
-        if legacy:
-            warnings.warn(
-                "MELLEA_LOG_CONSOLE is deprecated and will be removed in a future release. "
-                "Use MELLEA_LOGS_CONSOLE instead.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            console_raw = legacy
+    console_raw = _get_env_with_legacy("MELLEA_LOGS_CONSOLE", "MELLEA_LOG_CONSOLE")
     if _parse_bool_env(console_raw or "", default=True):
         stream_handler = logging.StreamHandler(stream=sys.stdout)
         if use_json:
@@ -659,44 +648,18 @@ def configure_logging(logger: logging.Logger) -> None:
         logger.addHandler(stream_handler)
 
     # --- Optional rotating file handler ---
-    _log_file_raw = os.environ.get("MELLEA_LOGS_FILE")
-    if _log_file_raw is None:
-        legacy = os.environ.get("MELLEA_LOG_FILE", "").strip()
-        if legacy:
-            warnings.warn(
-                "MELLEA_LOG_FILE is deprecated and will be removed in a future release. "
-                "Use MELLEA_LOGS_FILE instead.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            _log_file_raw = legacy
+    _log_file_raw = _get_env_with_legacy("MELLEA_LOGS_FILE", "MELLEA_LOG_FILE")
     log_file = (_log_file_raw or "").strip()
     if log_file:
         try:
-            max_bytes_raw = os.environ.get("MELLEA_LOGS_FILE_MAX_BYTES")
-            if max_bytes_raw is None:
-                legacy_mb = os.environ.get("MELLEA_LOG_FILE_MAX_BYTES", "")
-                if legacy_mb:
-                    warnings.warn(
-                        "MELLEA_LOG_FILE_MAX_BYTES is deprecated and will be removed in a future release. "
-                        "Use MELLEA_LOGS_FILE_MAX_BYTES instead.",
-                        DeprecationWarning,
-                        stacklevel=3,
-                    )
-                    max_bytes_raw = legacy_mb
+            max_bytes_raw = _get_env_with_legacy(
+                "MELLEA_LOGS_FILE_MAX_BYTES", "MELLEA_LOG_FILE_MAX_BYTES"
+            )
             max_bytes = int(max_bytes_raw) if max_bytes_raw else 10485760
 
-            backup_raw = os.environ.get("MELLEA_LOGS_FILE_BACKUP_COUNT")
-            if backup_raw is None:
-                legacy_bc = os.environ.get("MELLEA_LOG_FILE_BACKUP_COUNT", "")
-                if legacy_bc:
-                    warnings.warn(
-                        "MELLEA_LOG_FILE_BACKUP_COUNT is deprecated and will be removed in a future release. "
-                        "Use MELLEA_LOGS_FILE_BACKUP_COUNT instead.",
-                        DeprecationWarning,
-                        stacklevel=3,
-                    )
-                    backup_raw = legacy_bc
+            backup_raw = _get_env_with_legacy(
+                "MELLEA_LOGS_FILE_BACKUP_COUNT", "MELLEA_LOG_FILE_BACKUP_COUNT"
+            )
             backup_count = int(backup_raw) if backup_raw else 5
             file_handler = _RotatingFileHandler(
                 log_file, maxBytes=max_bytes, backupCount=backup_count
