@@ -32,16 +32,6 @@ Mellea uses `MelleaLogger`, a color-coded singleton logger built on Python's
 | `MELLEA_LOGS_FILE_BACKUP_COUNT` | Number of rotated backup files to keep | `5` |
 | `MELLEA_LOGS_OTLP` | Set to `true` / `1` / `yes` to export logs via OTLP. Requires `opentelemetry-sdk` and a configured OTLP endpoint | `false` |
 | `MELLEA_LOGS_WEBHOOK` | HTTP(S) URL to forward log records to via HTTP POST. Supersedes the deprecated `MELLEA_FLOG` and `FLOG` variables | unset |
-| `MELLEA_LOG_ENABLED` | **Deprecated.** Use `MELLEA_LOGS_ENABLED` instead | — |
-| `MELLEA_LOG_LEVEL` | **Deprecated.** Use `MELLEA_LOGS_LEVEL` instead | — |
-| `MELLEA_LOG_JSON` | **Deprecated.** Use `MELLEA_LOGS_JSON` instead | — |
-| `MELLEA_LOG_CONSOLE` | **Deprecated.** Use `MELLEA_LOGS_CONSOLE` instead | — |
-| `MELLEA_LOG_FILE` | **Deprecated.** Use `MELLEA_LOGS_FILE` instead | — |
-| `MELLEA_LOG_FILE_MAX_BYTES` | **Deprecated.** Use `MELLEA_LOGS_FILE_MAX_BYTES` instead | — |
-| `MELLEA_LOG_FILE_BACKUP_COUNT` | **Deprecated.** Use `MELLEA_LOGS_FILE_BACKUP_COUNT` instead | — |
-| `MELLEA_LOG_OTLP` | **Deprecated.** Use `MELLEA_LOGS_OTLP` instead | — |
-| `MELLEA_LOG_WEBHOOK` | **Deprecated.** Use `MELLEA_LOGS_WEBHOOK` instead | — |
-| `MELLEA_FLOG` | **Deprecated.** Activates a webhook handler pointed at `http://localhost:8000/api/receive`. Use `MELLEA_LOGS_WEBHOOK` instead | unset |
 
 > **Note:** If `MELLEA_LOGS_FILE` is set but the path cannot be opened (for
 > example due to a permissions error or an invalid path), Mellea emits a
