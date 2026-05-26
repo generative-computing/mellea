@@ -4,7 +4,6 @@ import pydantic
 import pytest
 
 from mellea.backends.adapters.catalog import (
-    _INTRINSICS_CATALOG_ENTRIES,
     IntriniscsCatalogEntry,
     fetch_intrinsic_metadata,
     known_intrinsic_names,
@@ -19,13 +18,14 @@ _UPPER_SHA = "A" * 40
 
 
 def test_catalog_entries_have_revision():
-    for entry in _INTRINSICS_CATALOG_ENTRIES:
+    for name in known_intrinsic_names():
+        entry = fetch_intrinsic_metadata(name)
         rev = entry.revision
         assert rev == "main" or (
             len(rev) == 40
             and rev == rev.lower()
             and all(c in "0123456789abcdef" for c in rev)
-        ), f"entry {entry.name!r} has invalid revision {rev!r}"
+        ), f"entry {name!r} has invalid revision {rev!r}"
 
 
 def test_revision_validation_rejects_malformed():
@@ -72,8 +72,7 @@ def test_no_duplicate_requirement_check_entry():
     assert "requirement_check" in names
     assert "requirement-check" not in names
     # Exactly one entry with underscore.
-    matching = [e for e in _INTRINSICS_CATALOG_ENTRIES if e.name == "requirement_check"]
-    assert len(matching) == 1
+    assert names.count("requirement_check") == 1
 
 
 if __name__ == "__main__":

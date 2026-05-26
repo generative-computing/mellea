@@ -9,7 +9,7 @@ import re
 
 import pydantic
 
-_REVISION_HEX_RE = re.compile(r"^[0-9a-f]{40}$")
+_REVISION_HEX_RE = re.compile(r"[0-9a-f]{40}")
 
 
 def validate_revision(revision: str) -> str:
@@ -27,7 +27,7 @@ def validate_revision(revision: str) -> str:
     """
     if revision == "main":
         return revision
-    if not _REVISION_HEX_RE.match(revision):
+    if not _REVISION_HEX_RE.fullmatch(revision):
         raise ValueError(
             f"revision must be a 40-char lowercase hex SHA or 'main'; got {revision!r}"
         )
@@ -95,9 +95,9 @@ _CORE_R1_REPO = "ibm-granite/granitelib-core-r1.0"
 _GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"
 
 # SHAs pinned 2026-05-26; re-fetch upstream HEAD before merging.
-_RAG_SHA = "2f0b2c79c6731068625aca8045c2eb2e8912b353"
-_CORE_R1_SHA = "d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43"
-_GUARDIAN_SHA = "773b254e98f993a605ec4b6259634906e0e64e8e"
+_RAG_SHA = "2f0b2c79c6731068625aca8045c2eb2e8912b353"  # main @ 2026-05-26
+_CORE_R1_SHA = "d0a2a96a4cd07e96f0fe7ca29a42bfe088299d43"  # main @ 2026-05-26
+_GUARDIAN_SHA = "773b254e98f993a605ec4b6259634906e0e64e8e"  # main @ 2026-05-26
 
 
 _INTRINSICS_CATALOG_ENTRIES = [
