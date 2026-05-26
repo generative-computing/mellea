@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # PluginSet composition — group hooks by concern and register them together.
 #
@@ -30,7 +30,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("fancy_logger").setLevel(logging.ERROR)
+logging.getLogger("mellea").setLevel(logging.ERROR)
 log = logging.getLogger("plugin_set")
 
 

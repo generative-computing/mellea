@@ -1,14 +1,14 @@
-# pytest: ollama, qualitative, llm
+# pytest: ollama, qualitative, e2e
 
 # This is an example of using the RichDocument class.
 import os
 
 from mellea import start_session
 from mellea.backends import ModelOption, model_ids
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
 
-FancyLogger.get_logger().setLevel("ERROR")
+MelleaLogger.get_logger().setLevel("ERROR")
 
 """
 Here we demonstrate the use of the (internally m-ified) class

@@ -4,6 +4,10 @@ import os
 
 import pytest
 
+pytest.importorskip(
+    "opentelemetry", reason="opentelemetry not installed — install mellea[telemetry]"
+)
+
 
 @pytest.fixture
 def enable_app_tracing(monkeypatch):
@@ -39,7 +43,21 @@ def enable_backend_tracing(monkeypatch):
     importlib.reload(mellea.telemetry.tracing)
 
 
-def test_telemetry_disabled_by_default():
+@pytest.fixture
+def disable_tracing(monkeypatch):
+    """Disable all tracing for tests."""
+    monkeypatch.delenv("MELLEA_TRACE_APPLICATION", raising=False)
+    monkeypatch.delenv("MELLEA_TRACE_BACKEND", raising=False)
+    import importlib
+
+    import mellea.telemetry.tracing
+
+    importlib.reload(mellea.telemetry.tracing)
+    yield
+    importlib.reload(mellea.telemetry.tracing)
+
+
+def test_telemetry_disabled_by_default(disable_tracing):
     """Test that telemetry is disabled by default."""
     from mellea.telemetry import (
         is_application_tracing_enabled,
@@ -109,6 +127,7 @@ def test_set_span_error_with_none_span():
     set_span_error(None, exception)
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_session_with_tracing_disabled():
     """Test that session works normally when tracing is disabled."""
@@ -119,6 +138,7 @@ def test_session_with_tracing_disabled():
         assert result is not None
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_session_with_application_tracing(enable_app_tracing):
     """Test that session works with application tracing enabled."""
@@ -130,6 +150,7 @@ def test_session_with_application_tracing(enable_app_tracing):
         assert result is not None
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_session_with_backend_tracing(enable_backend_tracing):
     """Test that session works with backend tracing enabled."""
@@ -141,6 +162,7 @@ def test_session_with_backend_tracing(enable_backend_tracing):
         assert result is not None
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_generative_function_with_tracing(enable_app_tracing):
     """Test that @generative functions work with tracing enabled."""
@@ -176,31 +198,6 @@ def test_backend_instrumentation_helpers():
 
     assert get_model_id_str(backend) == "test-model"
     assert get_context_size(ctx) == 3
-
-
-def test_instrument_generate_from_context():
-    """Test instrument_generate_from_context helper."""
-    from mellea.telemetry.backend_instrumentation import (
-        instrument_generate_from_context,
-    )
-
-    class MockBackend:
-        model_id = "test-model"
-
-    class MockAction:
-        pass
-
-    class MockContext:
-        turns = []
-
-    backend = MockBackend()
-    action = MockAction()
-    ctx = MockContext()
-
-    # Should return a context manager
-    with instrument_generate_from_context(backend, action, ctx) as span:
-        # Span will be None when tracing is disabled
-        assert span is None or hasattr(span, "set_attribute")
 
 
 def test_instrument_generate_from_raw():

@@ -12,8 +12,19 @@ import shutil
 import tempfile
 from typing import Literal
 
-import git
-from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_file, upload_folder
+try:
+    from huggingface_hub import (
+        HfFolder,
+        RepoUrl,
+        create_repo,
+        upload_file,
+        upload_folder,
+    )
+except ImportError as e:
+    raise ImportError(
+        "The 'm alora upload' command requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 
 def upload_intrinsic(
@@ -72,8 +83,6 @@ def upload_intrinsic(
         print(hf_path)
 
         temp_dir = tempfile.mkdtemp()
-
-        # repo = git.Repo.clone_from(hf_path, temp_dir)
 
         # use granite-3.3-2b-instruct if the base model is granite-3.3-2b-instruct
         # use granite-3.3-2b-instruct if the base model is ibm-granite/granite-3.3-2b-instruct

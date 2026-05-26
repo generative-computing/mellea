@@ -45,6 +45,14 @@ def clean_metrics_env(monkeypatch):
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    # Clear other env vars to prevent user-set values from leaking into reload
+    monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
+    monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
     import importlib
 
@@ -55,6 +63,20 @@ def enable_metrics(monkeypatch):
     # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
     importlib.reload(mellea.telemetry.metrics)
+
+
+@pytest.fixture
+def shutdown_meter_provider():
+    """Shut down the MeterProvider after tests that reload with real exporters enabled.
+
+    Prevents PeriodicExportingMetricReader background threads from firing after
+    pytest closes stdout (60 s default interval).
+    """
+    yield
+    import mellea.telemetry.metrics as _m
+
+    if _m._meter_provider is not None:
+        _m._meter_provider.shutdown()
 
 
 # Configuration Tests
@@ -356,7 +378,7 @@ def test_default_service_name(enable_metrics):
 # Console Exporter Tests
 
 
-def test_console_exporter_enabled(monkeypatch):
+def test_console_exporter_enabled(monkeypatch, shutdown_meter_provider):
     """Test that console exporter can be enabled."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
@@ -382,7 +404,7 @@ def test_console_exporter_disabled_by_default(enable_metrics):
 # OTLP Exporter Tests
 
 
-def test_otlp_explicit_enablement(monkeypatch):
+def test_otlp_explicit_enablement(monkeypatch, shutdown_meter_provider):
     """Test that OTLP exporter requires explicit enablement via MELLEA_METRICS_OTLP."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
@@ -453,6 +475,9 @@ def test_otlp_enabled_without_endpoint_warning(monkeypatch):
     """Test that enabling OTLP without endpoint produces helpful warning."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+    # Ensure no endpoint env vars are set (user env could have these)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
     import importlib
 
@@ -510,7 +535,7 @@ def test_prometheus_exporter_import_error_warning(monkeypatch):
         sys.modules.update(original_modules)
 
 
-def test_prometheus_and_otlp_exporters_together(monkeypatch):
+def test_prometheus_and_otlp_exporters_together(monkeypatch, shutdown_meter_provider):
     """Test that Prometheus and OTLP exporters can run simultaneously."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
@@ -536,7 +561,9 @@ def test_prometheus_exporter_disabled_by_default(enable_metrics):
     assert _METRICS_PROMETHEUS is False
 
 
-def test_prometheus_exporter_with_console_exporter(monkeypatch):
+def test_prometheus_exporter_with_console_exporter(
+    monkeypatch, shutdown_meter_provider
+):
     """Test that Prometheus works alongside console exporter."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
@@ -554,29 +581,177 @@ def test_prometheus_exporter_with_console_exporter(monkeypatch):
     assert _METRICS_CONSOLE is True
 
 
-# Token Counter Tests
+# Metric Instrument Tests
 
 
-def test_token_counters_lazy_initialization(enable_metrics):
-    """Test that token counters are lazily initialized."""
-    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+def test_metric_instruments_lazy_initialization(enable_metrics):
+    """Test that all metric instruments are lazily initialized."""
+    from mellea.telemetry.metrics import (
+        _cost_counter,
+        _duration_histogram,
+        _input_token_counter,
+        _output_token_counter,
+        _requirement_checks_counter,
+        _requirement_failures_counter,
+        _sampling_attempts_counter,
+        _sampling_failures_counter,
+        _sampling_successes_counter,
+        _tool_calls_counter,
+        _ttfb_histogram,
+    )
 
-    # Initially None
+    # All initially None
     assert _input_token_counter is None
     assert _output_token_counter is None
+    assert _duration_histogram is None
+    assert _ttfb_histogram is None
+    assert _cost_counter is None
+    assert _sampling_attempts_counter is None
+    assert _sampling_successes_counter is None
+    assert _sampling_failures_counter is None
+    assert _requirement_checks_counter is None
+    assert _requirement_failures_counter is None
+    assert _tool_calls_counter is None
 
-    # Call record_token_usage_metrics
-    from mellea.telemetry.metrics import record_token_usage_metrics
+    from mellea.telemetry.metrics import (
+        record_cost,
+        record_request_duration,
+        record_requirement_check,
+        record_requirement_failure,
+        record_sampling_attempt,
+        record_sampling_outcome,
+        record_token_usage_metrics,
+        record_tool_call,
+    )
 
     record_token_usage_metrics(
         input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
+    record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+    record_cost(cost=0.001, model="llama2:7b", provider="ollama")
+    record_sampling_attempt("RejectionSamplingStrategy")
+    record_sampling_outcome("RejectionSamplingStrategy", success=True)
+    record_sampling_outcome("RejectionSamplingStrategy", success=False)
+    record_requirement_check("LLMaJRequirement")
+    record_requirement_failure("LLMaJRequirement", "constraint not met")
+    record_tool_call("search", "success")
 
-    # Now should be initialized
-    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+    from mellea.telemetry.metrics import (
+        _cost_counter,
+        _duration_histogram,
+        _input_token_counter,
+        _output_token_counter,
+        _requirement_checks_counter,
+        _requirement_failures_counter,
+        _sampling_attempts_counter,
+        _sampling_failures_counter,
+        _sampling_successes_counter,
+        _tool_calls_counter,
+        _ttfb_histogram,
+    )
 
     assert _input_token_counter is not None
     assert _output_token_counter is not None
+    assert _duration_histogram is not None
+    assert (
+        _ttfb_histogram is not None
+    )  # initialized together via _get_latency_histograms
+    assert _cost_counter is not None
+    assert _sampling_attempts_counter is not None
+    assert _sampling_successes_counter is not None
+    assert _sampling_failures_counter is not None
+    assert _requirement_checks_counter is not None
+    assert _requirement_failures_counter is not None
+    assert _tool_calls_counter is not None
+
+
+def test_record_metrics_noop_when_disabled(clean_metrics_env):
+    """Test that all record functions are no-ops when metrics disabled."""
+    from mellea.telemetry.metrics import (
+        record_cost,
+        record_error,
+        record_request_duration,
+        record_requirement_check,
+        record_requirement_failure,
+        record_sampling_attempt,
+        record_sampling_outcome,
+        record_token_usage_metrics,
+        record_tool_call,
+    )
+
+    record_token_usage_metrics(
+        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
+    )
+    record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+    record_error(
+        error_type="timeout",
+        model="llama2:7b",
+        provider="ollama",
+        exception_class="TimeoutError",
+    )
+    record_cost(cost=0.001, model="llama2:7b", provider="ollama")
+    record_sampling_attempt("RejectionSamplingStrategy")
+    record_sampling_outcome("RejectionSamplingStrategy", success=True)
+    record_requirement_check("LLMaJRequirement")
+    record_requirement_failure("LLMaJRequirement", "constraint not met")
+    record_tool_call("search", "success")
+
+    # No instruments should have been initialized
+    from mellea.telemetry.metrics import (
+        _cost_counter,
+        _duration_histogram,
+        _error_counter,
+        _input_token_counter,
+        _output_token_counter,
+        _requirement_checks_counter,
+        _requirement_failures_counter,
+        _sampling_attempts_counter,
+        _sampling_failures_counter,
+        _sampling_successes_counter,
+        _tool_calls_counter,
+        _ttfb_histogram,
+    )
+
+    assert _input_token_counter is None
+    assert _output_token_counter is None
+    assert _duration_histogram is None
+    assert _ttfb_histogram is None
+    assert _error_counter is None
+    assert _cost_counter is None
+    assert _sampling_attempts_counter is None
+    assert _sampling_successes_counter is None
+    assert _sampling_failures_counter is None
+    assert _requirement_checks_counter is None
+    assert _requirement_failures_counter is None
+    assert _tool_calls_counter is None
+
+
+def test_record_functions_exported_in_public_api():
+    """Test that all record functions are exported in the public API."""
+    from mellea.telemetry import (
+        record_cost,
+        record_request_duration,
+        record_requirement_check,
+        record_requirement_failure,
+        record_sampling_attempt,
+        record_sampling_outcome,
+        record_token_usage_metrics,
+        record_tool_call,
+        record_ttfb,
+    )
+
+    assert callable(record_token_usage_metrics)
+    assert callable(record_request_duration)
+    assert callable(record_ttfb)
+    assert callable(record_cost)
+    assert callable(record_sampling_attempt)
+    assert callable(record_sampling_outcome)
+    assert callable(record_requirement_check)
+    assert callable(record_requirement_failure)
+    assert callable(record_tool_call)
+
+
+# Token Counter Tests
 
 
 def test_record_token_usage_metrics_with_valid_tokens(enable_metrics):
@@ -607,27 +782,3 @@ def test_record_token_usage_metrics_with_zero_tokens(enable_metrics):
     record_token_usage_metrics(
         input_tokens=0, output_tokens=0, model="llama2:7b", provider="ollama"
     )
-
-
-def test_record_token_usage_metrics_noop_when_disabled(clean_metrics_env):
-    """Test that record_token_usage_metrics is no-op when metrics disabled."""
-    from mellea.telemetry.metrics import record_token_usage_metrics
-
-    # Should not raise and should be no-op
-    record_token_usage_metrics(
-        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
-    )
-
-    # Counters should still be None (not initialized)
-    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
-
-    assert _input_token_counter is None
-    assert _output_token_counter is None
-
-
-def test_record_token_usage_metrics_exported_in_public_api():
-    """Test that record_token_usage_metrics is exported in public API."""
-    from mellea.telemetry import record_token_usage_metrics
-
-    assert record_token_usage_metrics is not None
-    assert callable(record_token_usage_metrics)

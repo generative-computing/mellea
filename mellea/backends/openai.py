@@ -22,14 +22,14 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter
+from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import (
     ClientCache,
     _server_type,
@@ -45,9 +45,17 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
+from .adapters.adapter import (
+    Adapter,
+    AdapterMixin,
+    EmbeddedIntrinsicAdapter,
+    get_adapter_for_intrinsic,
+)
+from .adapters.catalog import AdapterType
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -64,7 +72,7 @@ openai_ollama_batching_error = "json: cannot unmarshal array into Go struct fiel
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
-class OpenAIBackend(FormatterBackend):
+class OpenAIBackend(FormatterBackend, AdapterMixin):
     """A generic OpenAI compatible backend.
 
     Args:
@@ -77,6 +85,14 @@ class OpenAIBackend(FormatterBackend):
         model_options (dict | None): Default model options for generation requests.
         default_to_constraint_checking_alora (bool): If ``False``, deactivates aLoRA
             constraint checking; primarily for benchmarking and debugging.
+        load_embedded_adapters (bool): If ``True``, automatically registers
+            embedded intrinsic adapters from *adapter_source* (or *model_id* if
+            *adapter_source* is not set). Looks first for a local directory
+            and then for a HuggingFace hub repo.
+        adapter_source (str | None): Local directory path or HuggingFace hub
+            repo ID from which to load embedded adapter configs. When ``None``,
+            falls back to *model_id*. Use this when the vLLM served model name
+            differs from the adapter config location.
         api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
@@ -99,6 +115,8 @@ class OpenAIBackend(FormatterBackend):
         model_options: dict | None = None,
         *,
         default_to_constraint_checking_alora: bool = True,
+        load_embedded_adapters: bool = False,
+        adapter_source: str | None = None,
         api_key: str | None = None,
         **kwargs,
     ):
@@ -126,6 +144,7 @@ class OpenAIBackend(FormatterBackend):
             "tools": ModelOption.TOOLS,
             "functions": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
@@ -136,6 +155,7 @@ class OpenAIBackend(FormatterBackend):
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
             ModelOption.STREAM: "stream",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         # See notes above.
@@ -143,12 +163,14 @@ class OpenAIBackend(FormatterBackend):
             "seed": ModelOption.SEED,
             "max_tokens": ModelOption.MAX_NEW_TOKENS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
         # See notes above.
         self.from_mellea_model_opts_map_completions = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_tokens",
             ModelOption.STREAM: "stream",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
@@ -161,6 +183,8 @@ class OpenAIBackend(FormatterBackend):
                     "model_id is None. This can also happen if the ModelIdentifier has no `openai_name` name set."
                 )
                 self._model_id = model_id.openai_name
+
+        self._adapter_source = adapter_source
 
         # Use provided parameters or fall back to environment variables
         self._api_key = api_key
@@ -175,7 +199,7 @@ class OpenAIBackend(FormatterBackend):
             )
 
         if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "OPENAI_BASE_URL or base_url is not set.\n"
                 "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
             )
@@ -200,8 +224,91 @@ class OpenAIBackend(FormatterBackend):
 
         self._client_cache = ClientCache(2)
 
+        self._added_adapters: dict[str, EmbeddedIntrinsicAdapter] = {}
+
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
+
+        # TODO: We should change this logic once we have a better protocol for "auto-loading"
+        # adapters during call_intrinsic, or once we support other types of adapters for
+        # OpenAIBackends.
+        # OpenAI Backends only support embedded_adapters.
+        self._uses_embedded_adapters = True
+        if load_embedded_adapters:
+            self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+
+    # ------------------------------------------------------------------
+    # AdapterMixin implementation
+    # ------------------------------------------------------------------
+
+    def add_adapter(self, adapter: Adapter) -> None:
+        """Register an adapter with this backend.
+
+        Currently only :class:`EmbeddedIntrinsicAdapter` is supported.
+
+        Args:
+            adapter: The adapter to register.
+
+        Raises:
+            TypeError: If *adapter* is not an ``EmbeddedIntrinsicAdapter``.
+        """
+        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
+            raise TypeError(
+                f"OpenAIBackend currently only supports EmbeddedIntrinsicAdapter. "
+                f"Got: {type(adapter).__name__}"
+            )
+        adapter.backend = self
+        self._added_adapters[adapter.qualified_name] = adapter
+
+    def load_adapter(self, adapter_qualified_name: str) -> None:
+        """No-op for embedded adapters — weights are baked into the model."""
+        MelleaLogger.get_logger().debug(
+            "load_adapter is a no-op for OpenAIBackends (adapter: %s)",
+            adapter_qualified_name,
+        )
+
+    def unload_adapter(self, adapter_qualified_name: str) -> None:
+        """No-op for embedded adapters — weights are baked into the model."""
+        MelleaLogger.get_logger().debug(
+            "unload_adapter is a no-op for OpenAIBackends (adapter: %s)",
+            adapter_qualified_name,
+        )
+
+    def list_adapters(self) -> list[str]:
+        """Return qualified names of all registered adapters.
+
+        Returns:
+            list[str]: Qualified adapter names.
+        """
+        return list(self._added_adapters.keys())
+
+    # ------------------------------------------------------------------
+    # Convenience registration helpers
+    # ------------------------------------------------------------------
+
+    def register_embedded_adapter_model(
+        self, source: str, *, revision: str = "main", cache_dir: str | None = None
+    ) -> list[str]:
+        """Register all embedded adapters from an Embedded Adapter model.
+
+        Args:
+            source (str): A local model directory path or HuggingFace Hub repo ID.
+            revision (str): Git revision when loading from HuggingFace Hub.
+            cache_dir (str | None): Cache directory for HF downloads.
+
+        Returns:
+            list[str]: Names of the registered intrinsics.
+        """
+        import os
+
+        adapters = EmbeddedIntrinsicAdapter.from_source(
+            source, revision=revision, cache_dir=cache_dir
+        )
+
+        for adapter in adapters:
+            self.add_adapter(adapter)
+
+        return [a.intrinsic_name for a in adapters]
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
@@ -299,9 +406,10 @@ class OpenAIBackend(FormatterBackend):
             return backend_model_opts
 
         generate_call_model_opts = ModelOption.replace_keys(model_options, remap_dict)
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool
@@ -357,14 +465,8 @@ class OpenAIBackend(FormatterBackend):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes ``action`` and the new output.
         """
-        from ..telemetry.backend_instrumentation import start_generate_span
-
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
-        )
-
-        assert not isinstance(action, Intrinsic), (
-            "The openai backend does not currently support adapters, intrinsics, loras, or aloras."
         )
 
         # Start span without auto-closing (will be closed in post_processing)
@@ -372,18 +474,309 @@ class OpenAIBackend(FormatterBackend):
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
 
-        result = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            await self.do_generate_walk(action)
+
+            model_opts = self._simplify_and_merge(
+                model_options, is_chat_context=ctx.is_chat_context
+            )
+
+            # Requirements can be automatically rerouted to a requirement adapter.
+            if isinstance(action, Requirement):
+                reroute_to_alora = self.default_to_constraint_checking_alora
+                adapter_name = "requirement-check"
+
+                if isinstance(action, ALoraRequirement):
+                    reroute_to_alora = True
+                    adapter_name = action.intrinsic_name
+                    alora_action = action
+                else:
+                    assert action.description is not None, (
+                        "must have a description when generating from a requirement"
+                    )
+                    alora_action = ALoraRequirement(action.description, adapter_name)
+
+                alora_req_adapter = get_adapter_for_intrinsic(
+                    adapter_name, [AdapterType.ALORA], self._added_adapters
+                )
+                if alora_req_adapter is None:
+                    if reroute_to_alora and isinstance(action, ALoraRequirement):
+                        MelleaLogger.get_logger().warning(
+                            f"attempted to use an AloraRequirement but backend {self} "
+                            f"doesn't have the specified adapter added {adapter_name}; "
+                            f"defaulting to regular generation"
+                        )
+                    reroute_to_alora = False
+
+                if issubclass(type(action), LLMaJRequirement):
+                    reroute_to_alora = False
+
+                if reroute_to_alora:
+                    mot = await self._generate_from_intrinsic(
+                        alora_action,
+                        ctx,
+                        model_options=model_opts,
+                        tool_calls=tool_calls,
+                    )
+                    if span is not None:
+                        mot._meta["_telemetry_span"] = span
+                    return mot, ctx.add(alora_action).add(mot)
+
+            elif isinstance(action, Intrinsic):
+                mot = await self._generate_from_intrinsic(
+                    action, ctx, model_options=model_opts, tool_calls=tool_calls
+                )
+                if span is not None:
+                    mot._meta["_telemetry_span"] = span
+                return mot, ctx.add(action).add(mot)
+
+            result = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+
         # Store span in ModelOutputThunk for later use in post_processing
         mot, new_ctx = result
         if span is not None:
             mot._meta["_telemetry_span"] = span
         return mot, new_ctx
+
+    async def _generate_from_intrinsic(
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk:
+        """Generate a completion for an intrinsic action using an embedded adapter.
+
+        Applies the intrinsic's I/O rewriter to transform the conversation,
+        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        Granite Switch chat template activates the correct adapter, and
+        post-processes the model output through the intrinsic's result
+        processor.
+
+        Intrinsics default to options provided by `io.yaml`. Model options
+        override these defaults. All model options besides streaming are
+        respected.
+
+        Args:
+            action (Intrinsic): The intrinsic component to execute.
+            ctx (Context): The current generation context (must be a chat context).
+            model_options (dict[str, Any]): Merged model options for this call.
+            tool_calls (bool): If ``True``, expose available tools to the model
+                and parse tool-call responses.
+
+        Returns:
+            ModelOutputThunk: A thunk that lazily resolves to the processed
+            intrinsic output.
+
+        Raises:
+            ValueError: If no embedded adapter is registered for the requested
+                intrinsic.
+            TypeError: If the adapter isn't an EmbeddedIntrinsicAdapter.
+        """
+        if not ctx.is_chat_context:
+            raise NotImplementedError("Intrinsics require a chat context.")
+
+        # Intrinsics don't support streaming because of their post-processing step.
+        if model_options.get(ModelOption.STREAM, False):
+            raise NotImplementedError(
+                "Intrinsics do not support streaming due to structured output parsing."
+            )
+
+        # --- adapter lookup ------------------------------------------------
+        adapter = get_adapter_for_intrinsic(
+            action.intrinsic_name, action.adapter_types, self._added_adapters
+        )
+        if adapter is None:
+            raise ValueError(
+                f"backend ({self}) has no adapter for processing intrinsic: "
+                f"{action.intrinsic_name}"
+            )
+
+        # TODO: OpenAIBackend only supports EmbeddedAdapters.
+        #       It should be refactored into a specific adapter.transform() function.
+        if not isinstance(adapter, EmbeddedIntrinsicAdapter):
+            raise TypeError(
+                f"OpenAIBackend only supports EmbeddedIntrinsicAdapter, got: {type(adapter).__name__}"
+            )
+
+        intrinsic_config = adapter.config
+        assert intrinsic_config is not None
+
+        rewriter = granite_formatters.IntrinsicsRewriter(
+            config_dict=intrinsic_config, model_name=adapter.name
+        )
+        result_processor = granite_formatters.IntrinsicsResultProcessor(
+            config_dict=intrinsic_config
+        )
+
+        # --- linearize context and build conversation ----------------------
+        linearized_context = ctx.view_for_generation()
+        assert linearized_context is not None, (
+            "If ctx.is_chat_context, then the context should be linearizable."
+        )
+
+        # NOTE: Explicitly do not add the action to the context here.
+        #       Intrinsics modify the context through their rewriters.
+        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
+
+        # Extract system prompt and prepend to conversation.
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        conversation: list[dict] = []
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
+        conversation.extend([message_to_openai_message(m) for m in messages])
+
+        docs = messages_to_docs(messages)
+
+        # Convert our conversation into a proper chat completions dict.
+        request_json: dict = {
+            "messages": conversation,
+            "extra_body": {"documents": docs},
+        }
+
+        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # --- prepare extra_body and api_params --------------------------------
+        extra_body = {}
+        if rewritten.extra_body is not None:
+            extra_body = rewritten.extra_body.model_dump(exclude_unset=True)
+
+        # Start with rewriter parameters (io.yaml defaults).
+        api_params: dict[str, Any] = {}
+        if rewriter.parameters:
+            api_params.update(rewriter.parameters)
+
+        # Embedded adapters activate via control tokens in the chat template.
+        if isinstance(adapter, EmbeddedIntrinsicAdapter):
+            chat_template_kwargs = extra_body.pop("chat_template_kwargs", {}) or {}
+            chat_template_kwargs["adapter_name"] = action.intrinsic_name
+            extra_body["chat_template_kwargs"] = chat_template_kwargs
+            # The rewriter config may set `model` to the adapter name, but
+            # for embedded adapters the actual model is self._model_id.
+            api_params.pop("model", None)
+
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+        formatted_tools = convert_tools_to_json(tools)
+        use_tools = len(formatted_tools) > 0
+
+        # Handle thinking/reasoning.
+        thinking = model_options.get(ModelOption.THINKING, None)
+        if type(thinking) is bool and thinking:
+            thinking = "medium"
+
+        # Remap and filter remaining model options, then overlay onto api_params
+        # so user values override rewriter/io.yaml defaults.
+        user_api_params = self._make_backend_specific_and_remove(
+            model_options, is_chat_context=True
+        )
+        api_params.update(user_api_params)
+
+        # Add reasoning_effort last so it overrides any io.yaml default and
+        # avoids duplicate kwargs in the API call.
+        if thinking is not None:
+            api_params["reasoning_effort"] = thinking
+
+        # --- call the OpenAI-compatible API --------------------------------
+        # The rewriter may add instruction messages where 'role' is a default
+        # (e.g. UserMessage with role="user").  exclude_unset would drop it,
+        # so we always force 'role' into the serialized dict.
+        messages_dicts = []
+        for m in rewritten.messages:
+            d = m.model_dump(exclude_unset=True)
+            if "role" not in d:
+                d["role"] = m.role
+            messages_dicts.append(d)
+
+        chat_response = self._async_client.chat.completions.create(
+            model=self._model_id,
+            messages=messages_dicts,  # type: ignore
+            tools=formatted_tools if use_tools else None,  # type: ignore
+            extra_body=extra_body,
+            **api_params,
+        )
+
+        # --- wire up ModelOutputThunk with intrinsic post-processing ------
+        output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
+        output._context = linearized_context
+        output._action = action
+        output._model_options = model_options
+
+        async def granite_formatters_processing(
+            mot: ModelOutputThunk,
+            chunk: ChatCompletion,
+            rewritten: granite_formatters.ChatCompletion,
+            result_processor: granite_formatters.IntrinsicsResultProcessor,
+        ):
+            """Accumulate content and apply intrinsic result processing."""
+            import json as _json
+
+            # Delegate standard metadata storage to the shared processing method.
+            await self.processing(mot, chunk)
+
+            # Apply intrinsic-specific result transformation on top.
+            response_dict = chunk.model_dump()
+            try:
+                res = result_processor.transform(response_dict, rewritten)
+            except _json.JSONDecodeError as e:
+                raise Exception(
+                    f"Intrinsic did not return a JSON: "
+                    f"{chunk.choices[0].message.content}"
+                ) from e
+
+            # Overwrite the value accumulated by processing() with the
+            # post-processed intrinsic output.
+            mot._underlying_value = res.choices[0].message.content
+
+        # Processing functions only pass the ModelOutputThunk (and current chunk
+        # of response). Bind the other vars necessary for each processing step.
+        output._process = functools.partial(
+            granite_formatters_processing,
+            rewritten=rewritten,
+            result_processor=result_processor,
+        )
+
+        output._post_process = functools.partial(
+            self.post_processing,
+            tools=tools,
+            conversation=conversation,
+            thinking=thinking,
+            seed=model_options.get(ModelOption.SEED, None),
+            _format=None,
+        )
+
+        try:
+            # To support lazy computation, will need to remove this create_task
+            # and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing
+            # this ._generate function.
+
+            # This function should always be called from a running event loop so
+            # we don't have to worry about scheduling the task to a specific
+            # event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present.
+            raise e
+
+        return output
 
     async def generate_from_chat_context(
         self,
@@ -447,7 +840,7 @@ class OpenAIBackend(FormatterBackend):
         match action:
             case ALoraRequirement():
                 raise Exception(
-                    "The OpenAI backend does not support currently support activated LoRAs."
+                    "The OpenAI backend does not currently support activated LoRAs."
                 )
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
@@ -456,14 +849,16 @@ class OpenAIBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([message_to_openai_message(m) for m in messages])
+        conversation.extend(
+            [message_to_openai_message(m, self.formatter) for m in messages]
+        )
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
             if self._server_type == _ServerType.OPENAI:
                 # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
                 # However, not all schemas generates by Mellea include additionalProperties.
-                # GenerativeSlot, in particular, does not add this property.
+                # GenerativeStub, in particular, does not add this property.
                 # The easiest way to address this disparity between OpenAI and other inference providers is to
                 # monkey-patch the response format exactly when we are actually using the OpenAI server.
                 #
@@ -481,7 +876,7 @@ class OpenAIBackend(FormatterBackend):
                     },
                 }
             else:
-                FancyLogger().get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
                 )
                 extra_params["response_format"] = {
@@ -497,7 +892,7 @@ class OpenAIBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
@@ -507,7 +902,7 @@ class OpenAIBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
@@ -559,6 +954,10 @@ class OpenAIBackend(FormatterBackend):
             _format=_format,
         )
 
+        # Set model/provider early so they are available in the error path
+        output.generation.model = self._model_id
+        output.generation.provider = "openai"
+
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing this ._generate function.
@@ -596,10 +995,13 @@ class OpenAIBackend(FormatterBackend):
         if isinstance(chunk, ChatCompletion):
             message = chunk.choices[0].message
 
-            if hasattr(message, "reasoning_content"):
-                thinking_chunk = message.reasoning_content  # type: ignore
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            # reasoning_content (Anthropic/DeepSeek attribute path) takes priority;
+            # fall back to the "reasoning" extra field used by vLLM and compatible servers.
+            thinking_chunk = getattr(message, "reasoning_content", None)
+            if thinking_chunk is None:
+                thinking_chunk = (message.model_extra or {}).get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
@@ -620,10 +1022,11 @@ class OpenAIBackend(FormatterBackend):
                 return
 
             message_delta = chunk.choices[0].delta
-            if hasattr(message_delta, "reasoning_content"):
-                thinking_chunk = message_delta.reasoning_content  # type: ignore
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            thinking_chunk = getattr(message_delta, "reasoning_content", None)
+            if thinking_chunk is None:
+                thinking_chunk = (message_delta.model_extra or {}).get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:
@@ -718,11 +1121,11 @@ class OpenAIBackend(FormatterBackend):
 
         # Populate standardized usage field (OpenAI format already matches)
         if usage:
-            mot.usage = usage
+            mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.model = self._model_id
-        mot.provider = "openai"
+        mot.generation.model = self._model_id
+        mot.generation.provider = "openai"
 
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")
@@ -796,7 +1199,7 @@ class OpenAIBackend(FormatterBackend):
 
         extra_body = {}
         if format is not None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The official OpenAI completion api does not accept response format / structured decoding; "
                 "it will be passed as an extra arg."
             )
@@ -808,7 +1211,7 @@ class OpenAIBackend(FormatterBackend):
             else:
                 extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
             )
 
@@ -832,7 +1235,7 @@ class OpenAIBackend(FormatterBackend):
                 )  # type: ignore
             except openai.BadRequestError as e:
                 if openai_ollama_batching_error in e.message:
-                    FancyLogger.get_logger().error(
+                    MelleaLogger.get_logger().error(
                         "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
                         "your requests will fail since ollama doesn't support batching requests."
                     )

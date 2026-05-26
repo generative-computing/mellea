@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/langchain"
 title: "LangChain"
 description: "Use LangChain tools inside Mellea and seed a Mellea session with LangChain message history."
 # diataxis: how-to
@@ -6,9 +7,9 @@ description: "Use LangChain tools inside Mellea and seed a Mellea session with L
 
 Mellea integrates with LangChain in two ways:
 
-1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../guide/glossary#tool)
-   objects and pass them to any [`MelleaSession`](../guide/glossary#melleasession) call.
-2. **Message history** — seed a Mellea [`ChatContext`](../guide/glossary#context) with
+1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../reference/glossary#tool)
+   objects and pass them to any [`MelleaSession`](../reference/glossary#melleasession) call.
+2. **Message history** — seed a Mellea [`ChatContext`](../reference/glossary#context) with
    conversation history from a LangChain session.
 
 ## Using LangChain tools
@@ -17,9 +18,11 @@ Mellea integrates with LangChain in two ways:
 for community tools).
 
 `MelleaTool.from_langchain()` wraps any LangChain `BaseTool` so it can be passed to
-`instruct()` or `chat()` via [`ModelOption.TOOLS`](../guide/glossary#modeloption):
+`instruct()` or `chat()` via [`ModelOption.TOOLS`](../reference/glossary#modeloption):
 
 ```python
+# Requires: langchain-community
+# Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
@@ -51,7 +54,7 @@ instance, so any tool that follows the LangChain `BaseTool` interface works with
 further configuration.
 
 > **Backend note:** Tool calling requires a backend and model that support function
-> calling (e.g., Ollama with `granite4:micro`, OpenAI with `gpt-4o`). The default
+> calling (e.g., Ollama with `granite4.1:3b`, OpenAI with `gpt-4o`). The default
 > Ollama setup supports this.
 
 ## Seeding a session with LangChain message history
@@ -62,6 +65,8 @@ explicit `ChatContext` objects; the bridge is to convert LangChain messages to O
 format first, then build the context:
 
 ```python
+# Requires: langchain-core, mellea[ollama]
+# Returns: str
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages import convert_to_openai_messages
 
@@ -105,11 +110,11 @@ OpenAI chat format — LlamaIndex, Haystack, Semantic Kernel — works with the 
 | -------- | --- |
 | Your tool exists as a LangChain `BaseTool` | `MelleaTool.from_langchain(tool)` |
 | Your tool exists as a smolagents `Tool` | [`MelleaTool.from_smolagents(tool)`](./smolagents) |
-| You have a plain Python function to expose | [`@tool` decorator](../guide/tools-and-agents) |
+| You have a plain Python function to expose | [`@tool` decorator](../how-to/tools-and-agents) |
 | You have LangChain message history to continue | `convert_to_openai_messages` → `ChatContext` |
 | You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve) |
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) |
+**See also:** [Tools and Agents](../how-to/tools-and-agents) |
 [Context and Sessions](../concepts/context-and-sessions)

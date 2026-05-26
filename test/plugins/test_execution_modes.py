@@ -21,8 +21,6 @@ behavior summary
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 pytest.importorskip("cpex.framework")
@@ -31,7 +29,7 @@ from mellea.plugins import PluginMode, PluginResult, block, hook, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import invoke_hook, shutdown_plugins
+from mellea.plugins.manager import invoke_hook
 from mellea.plugins.types import HookType, PluginMode
 
 # ---------------------------------------------------------------------------
@@ -51,18 +49,6 @@ def _generation_payload(**kwargs) -> GenerationPreCallPayload:
     defaults: dict = dict(model_options={"temperature": 0.7})
     defaults.update(kwargs)
     return GenerationPreCallPayload(**defaults)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def cleanup_plugins():
-    """Reset plugin manager state after every test."""
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------
@@ -356,11 +342,10 @@ class TestFireAndForgetMode:
 
         register(faf_observer)
 
-        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+        result, _ = await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        # The hook runs as a background asyncio task; yield to the event loop to
-        # allow it to complete before asserting.
-        await asyncio.sleep(0.05)
+        assert result is not None
+        await result.wait_for_background_tasks()
         assert invocations == ["fired"]
 
     @pytest.mark.asyncio
@@ -425,9 +410,10 @@ class TestFireAndForgetMode:
         register(faf_first)
         register(enforce_second)
 
-        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+        result, _ = await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        await asyncio.sleep(0.05)
+        assert result is not None
+        await result.wait_for_background_tasks()
         assert order == ["enforce", "faf"]
 
     @pytest.mark.asyncio

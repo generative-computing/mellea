@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption

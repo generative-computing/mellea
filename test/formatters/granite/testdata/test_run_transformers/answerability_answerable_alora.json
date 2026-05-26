@@ -3,7 +3,7 @@
         {
             "index": 0,
             "message": {
-                "content": "{\"answerability_likelihood\": 0.9999161720668155}",
+                "content": "{\"answerability\": \"answerable\"}",
                 "role": "assistant"
             }
         }

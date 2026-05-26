@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, llm, slow
+# pytest: ollama, qualitative, e2e, slow
 
 from collections.abc import Callable
 from functools import cache
@@ -24,7 +24,7 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 @cache
 def get_session():
     """Get M session (change model here)."""
-    return MelleaSession(backend=OllamaModelBackend(model_ids.IBM_GRANITE_4_MICRO_3B))
+    return MelleaSession(backend=OllamaModelBackend(model_ids.IBM_GRANITE_4_1_3B))
 
 
 @cache

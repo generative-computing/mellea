@@ -17,7 +17,7 @@ from mellea.plugins.hooks.component import ComponentPostErrorPayload
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.sampling import SamplingIterationPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import invoke_hook, shutdown_plugins
+from mellea.plugins.manager import invoke_hook
 from mellea.plugins.types import HookType
 
 # ---------------------------------------------------------------------------
@@ -37,18 +37,6 @@ def _generation_payload(**kwargs) -> GenerationPreCallPayload:
     )
     defaults.update(kwargs)
     return GenerationPreCallPayload(**defaults)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def reset_plugins():
-    """Shut down and reset the plugin manager after every test."""
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------

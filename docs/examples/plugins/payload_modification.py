@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Payload modification — how to modify payloads in hooks.
 #
@@ -28,7 +28,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("fancy_logger").setLevel(logging.ERROR)
+logging.getLogger("mellea").setLevel(logging.ERROR)
 log = logging.getLogger("payload_modification")
 
 

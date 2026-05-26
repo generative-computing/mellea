@@ -1,54 +1,28 @@
+# Labels PRs based on conventional commit prefix in the title.
+#
+# Thin wrapper around the org-wide reusable workflow at
+# generative-computing/.github. The trigger lives here but all logic is
+# centralized upstream.
+#
+# This caller uses pull_request_target, which grants write access to the repo
+# even for PRs from forks. This is safe ONLY because the reusable workflow
+# never checks out or executes code from the PR branch. Do NOT add:
+#   - actions/checkout (of the PR head ref)
+#   - run: steps that reference PR-controlled files
+#   - any step that executes code from the pull request
+# Doing so would let a malicious fork run arbitrary code with write permissions.
+
 name: "Label PR by conventional commit prefix"
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, edited, synchronize]
   merge_group:
 
+permissions:
+  pull-requests: write
+  issues: write
+
 jobs:
   label:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      issues: write
-    steps:
-      - name: Apply label based on PR title prefix
-        if: github.event_name == 'pull_request_target'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const title = context.payload.pull_request.title;
-            const labelMap = {
-              'feat':     'enhancement',
-              'fix':      'bug',
-              'docs':     'documentation',
-              'test':     'testing',
-              'perf':     'enhancement',
-              'refactor': 'enhancement',
-              'ci':       'integrations',
-              'chore':    null,
-              'build':    null,
-              'style':    null,
-              'revert':   null,
-              'release':  null,
-            };
-
-            const match = title.match(/^(\w+)[\(!\:]/);
-            if (!match) { core.setFailed(`PR title "${title}" does not match conventional commit format.`); return; }
-
-            const prefix = match[1];
-            const label = labelMap[prefix];
-            if (label === undefined) { core.setFailed(`PR title prefix "${prefix}" is not a recognized conventional commit type.`); return; }
-            if (!label) return;
-
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: [label],
-            });
-      - name: Skip label in merge queue
-        if: github.event_name == 'merge_group'
-        run: echo "PR title already validated at PR open/edit time"
-
-
+    uses: generative-computing/.github/.github/workflows/pr-label.yml@31ecef85b868eb2a9d7ea3a0efd5c12cb4746fc1 # main

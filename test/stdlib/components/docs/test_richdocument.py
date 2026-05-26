@@ -2,18 +2,27 @@ import os
 import tempfile
 
 import pytest
+
+pytest.importorskip(
+    "docling_core", reason="docling_core not installed — install mellea[docling]"
+)
 from docling_core.types.doc.document import DoclingDocument
 
 import mellea
 from mellea.core import TemplateRepresentation
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
+from test.predicates import require_gpu
+
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")
 def rd() -> RichDocument:
     # Use a specific document so we can test some of the functionality
     # related to extracting and transforming text.
-    return RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
+    return RichDocument.from_document_file(
+        "https://arxiv.org/pdf/1906.04043", do_ocr=False
+    )
 
 
 def test_richdocument_basics(rd: RichDocument):
@@ -98,6 +107,10 @@ def test_empty_table():
 
 
 @pytest.mark.skip  # Test requires too much memory for smaller machines.
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@pytest.mark.qualitative
+@require_gpu(min_vram_gb=16)
 def test_richdocument_generation(rd: RichDocument):
     m = mellea.start_session(backend_name="hf")
     response = m.chat(rd.to_markdown()[:500] + "\nSummarize the provided document.")

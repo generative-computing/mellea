@@ -10,9 +10,15 @@ from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import fields
 from typing import Any, overload
 
-from ibm_watsonx_ai import APIClient, Credentials
-from ibm_watsonx_ai.foundation_models import ModelInference
-from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
+try:
+    from ibm_watsonx_ai import APIClient, Credentials
+    from ibm_watsonx_ai.foundation_models import ModelInference
+    from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
+except ImportError as e:
+    raise ImportError(
+        "The Watsonx backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[watsonx]"'
+    ) from e
 
 from ..backends import ModelIdentifier, model_ids
 from ..core import (
@@ -21,9 +27,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -42,6 +48,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -137,6 +144,7 @@ class WatsonxAIBackend(FormatterBackend):
             "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
@@ -144,7 +152,8 @@ class WatsonxAIBackend(FormatterBackend):
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
         self.from_mellea_model_opts_map_chats = {
-            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens"
+            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         # See notes above.
@@ -152,11 +161,13 @@ class WatsonxAIBackend(FormatterBackend):
             "random_seed": ModelOption.SEED,
             "max_new_tokens": ModelOption.MAX_NEW_TOKENS,
             "stream": ModelOption.STREAM,
+            "stop_sequences": ModelOption.STOP_SEQUENCES,
         }
         # See notes above.
         self.from_mellea_model_opts_map_completions = {
             ModelOption.SEED: "random_seed",
             ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_sequences",
         }
 
     @property
@@ -234,9 +245,10 @@ class WatsonxAIBackend(FormatterBackend):
             return backend_model_opts
 
         generate_call_model_opts = ModelOption.replace_keys(model_options, remap_dict)
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool
@@ -298,13 +310,16 @@ class WatsonxAIBackend(FormatterBackend):
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
-        mot = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            mot = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
         # Store span in metadata for post_processing to record telemetry
         if span is not None:
@@ -369,7 +384,12 @@ class WatsonxAIBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+        conversation.extend(
+            [{"role": m.role, "content": self.formatter.print(m)} for m in messages]
+        )
 
         if _format is not None:
             model_opts["response_format"] = {
@@ -387,7 +407,7 @@ class WatsonxAIBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = {}
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"tool calling is superseded by format; will not call tools for request: {action}"
                 )
             else:
@@ -397,7 +417,7 @@ class WatsonxAIBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         formatted_tools = convert_tools_to_json(tools)
 
@@ -445,6 +465,10 @@ class WatsonxAIBackend(FormatterBackend):
             seed=model_opts.get(ModelOption.SEED, None),
             _format=_format,
         )
+
+        # Set model/provider early so they are available in the error path
+        output.generation.model = str(self._get_watsonx_model_id())
+        output.generation.provider = "watsonx"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -578,15 +602,11 @@ class WatsonxAIBackend(FormatterBackend):
 
         # Populate standardized usage field (WatsonX uses OpenAI format)
         if usage:
-            mot.usage = usage
+            mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.model = (
-            self.model_id.watsonx_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else str(self.model_id)
-        )
-        mot.provider = "watsonx"
+        mot.generation.model = str(self._get_watsonx_model_id())
+        mot.generation.provider = "watsonx"
 
         # Record tracing if span exists
         span = mot._meta.get("_telemetry_span")
@@ -676,7 +696,7 @@ class WatsonxAIBackend(FormatterBackend):
             await self.do_generate_walks(list(actions))
 
             if format is not None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "WatsonxAI completion api does not accept response format, ignoring it for this request."
                 )
 
@@ -743,7 +763,7 @@ class WatsonxAIBackend(FormatterBackend):
 
             func = tools.get(tool_name)
             if func is None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"model attempted to call a non-existing function: {tool_name}"
                 )
                 continue  # skip this function if we can't find it.

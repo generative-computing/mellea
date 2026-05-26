@@ -31,6 +31,7 @@ class SamplingIterationPayload(MelleaBasePayload):
     """Payload for ``sampling_iteration`` — after each sampling attempt.
 
     Attributes:
+        strategy_name: Class name of the sampling strategy (e.g. ``"RejectionSamplingStrategy"``).
         iteration: 1-based iteration number within the sampling loop.
         action: The ``Component`` used for this attempt.
 
@@ -42,6 +43,7 @@ class SamplingIterationPayload(MelleaBasePayload):
         total_count: Total number of requirements evaluated.
     """
 
+    strategy_name: str = ""
     iteration: int = 0
     action: Any = None
     result: Any = None
@@ -78,6 +80,7 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     """Payload for ``sampling_loop_end`` — when sampling completes.
 
     Attributes:
+        strategy_name: Class name of the sampling strategy (e.g. ``"RejectionSamplingStrategy"``).
         success: ``True`` if at least one attempt passed all requirements.
         iterations_used: Total number of iterations the loop executed.
         final_result: The selected ``ModelOutputThunk`` (best success or best failure).
@@ -91,6 +94,7 @@ class SamplingLoopEndPayload(MelleaBasePayload):
             ``(Requirement, ValidationResult)`` tuples for iteration *i*.
     """
 
+    strategy_name: str = ""
     success: bool = False
     iterations_used: int = 0
     final_result: Any = None

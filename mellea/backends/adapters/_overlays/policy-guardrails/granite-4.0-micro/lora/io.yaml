@@ -1,0 +1,36 @@
+name: policy-guardrails 
+# Model name string, or null to use whatever is provided in the chat completion request
+model: ~
+# JSON schema of the model's output
+response_format: |
+  {
+    "title": "Policy Guardrails Intrinsic",
+    "type": "object",
+    "properties": {
+      "label": {
+        "type": "string",
+        "enum": ["Yes", "No","Ambiguous"]
+      }
+    },
+    "required": ["label"],
+    "additionalProperties": false
+  }
+transformations: ~
+instruction: |-
+  <guardian> You are a compliance agent trying to help determine whether a scenario is compliant with a given policy.
+
+  ### Criteria: Policy: {policy_text}
+
+  ### Scoring Schema: Does the scenario described in the previous message comply with the policy? Compliance is determined based on the following guidelines:
+  <start_of_guidelines>:
+  - "Yes"  if, given the scenario and the policy, it can be decided with certainty that the scenario complies with the policy
+  - "No"  if, given the scenario and the policy, it can be decided with certainty that the scenario does not comply with the policy
+  - "Ambiguous" if, given the scenario and the policy, it is not possible to decide whether the scenario complies with, or violates, the policy and more information is needed to decide with certainty.
+  <end_of_guidelines>
+
+  Your answer must be either "Yes", "No", or "Ambiguous". You MUST return your answer as a valid JSON object with the key "label". For example, if your answer is "Yes", respond as "{{"label":"Yes"}}".
+parameters:
+  temperature: 0.0
+  max_completion_tokens: 20
+# No sentence boundary detection
+sentence_boundaries: ~

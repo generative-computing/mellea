@@ -33,9 +33,10 @@
             "pages": [
               "tutorials/01-your-first-generative-program",
               "tutorials/02-streaming-and-async",
-              "tutorials/03-using-generative-slots",
+              "tutorials/03-using-generative-stubs",
               "tutorials/04-making-agents-reliable",
-              "tutorials/05-mifying-legacy-code"
+              "tutorials/05-mifying-legacy-code",
+              "tutorials/06-streaming-validation"
             ]
           },
           {
@@ -54,16 +55,17 @@
           {
             "group": "How-To",
             "pages": [
-              "guide/generative-functions",
-              "guide/tools-and-agents",
-              "guide/working-with-data",
-              "guide/backends-and-configuration",
-              "guide/act-and-aact",
-              "guide/m-decompose",
+              "how-to/generative-functions",
+              "how-to/tools-and-agents",
+              "how-to/working-with-data",
+              "how-to/backends-and-configuration",
+              "how-to/act-and-aact",
+              "how-to/m-decompose",
               "how-to/use-async-and-streaming",
               "how-to/use-context-and-sessions",
               "how-to/enforce-structured-output",
               "how-to/write-custom-verifiers",
+              "how-to/evaluate-with-llm-as-a-judge",
               "how-to/configure-model-options",
               "how-to/use-images-and-vision",
               "how-to/build-a-rag-pipeline",
@@ -87,7 +89,6 @@
             "pages": [
               "integrations/ollama",
               "integrations/huggingface",
-              "integrations/vllm",
               "integrations/openai",
               "integrations/vertex-ai",
               "integrations/bedrock",
@@ -99,18 +100,12 @@
             ]
           },
           {
-            "group": "Evaluation and Observability",
+            "group": "Observability",
             "pages": [
-              "evaluation-and-observability/evaluate-with-llm-as-a-judge",
-              {
-                "group": "Telemetry",
-                "pages": [
-                  "evaluation-and-observability/telemetry",
-                  "evaluation-and-observability/tracing",
-                  "evaluation-and-observability/metrics",
-                  "evaluation-and-observability/logging"
-                ]
-              }
+              "observability/telemetry",
+              "observability/tracing",
+              "observability/metrics",
+              "observability/logging"
             ]
           },
           {
@@ -137,7 +132,8 @@
           {
             "group": "Reference",
             "pages": [
-              "guide/glossary"
+              "reference/glossary",
+              "reference/cli"
             ]
           },
           {
@@ -343,40 +339,11 @@
               {
                 "group": "telemetry",
                 "pages": [
+                  "api/mellea/telemetry/context",
                   "api/mellea/telemetry/logging",
                   "api/mellea/telemetry/metrics",
                   "api/mellea/telemetry/telemetry",
                   "api/mellea/telemetry/tracing"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "cli",
-            "pages": [
-              "api/cli/m",
-              {
-                "group": "alora",
-                "pages": [
-                  "api/cli/alora/commands",
-                  "api/cli/alora/intrinsic_uploader",
-                  "api/cli/alora/readme_generator",
-                  "api/cli/alora/train",
-                  "api/cli/alora/upload"
-                ]
-              },
-              {
-                "group": "decompose",
-                "pages": [
-                  "api/cli/decompose/decompose"
-                ]
-              },
-              {
-                "group": "eval",
-                "pages": [
-                  "api/cli/eval/commands",
-                  "api/cli/eval/eval",
-                  "api/cli/eval/runner"
                 ]
               }
             ]
@@ -422,11 +389,23 @@
   },
   "redirects": [
     {
+      "source": "/guide/glossary",
+      "destination": "/reference/glossary"
+    },
+    {
       "source": "/overview/overview",
       "destination": "/getting-started/quickstart"
     },
     {
       "source": "/overview/mellea-welcome",
+      "destination": "/"
+    },
+    {
+      "source": "/overview/quick-start",
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/overview/project-mellea",
       "destination": "/concepts/generative-programming"
     },
     {
@@ -435,7 +414,7 @@
     },
     {
       "source": "/overview/architecture",
-      "destination": "/guide/backends-and-configuration"
+      "destination": "/how-to/backends-and-configuration"
     },
     {
       "source": "/core-concept/instruct-validate-repair",
@@ -447,7 +426,7 @@
     },
     {
       "source": "/core-concept/generative-slots",
-      "destination": "/guide/generative-functions"
+      "destination": "/how-to/generative-functions"
     },
     {
       "source": "/core-concept/mobjects",
@@ -455,7 +434,7 @@
     },
     {
       "source": "/core-concept/agents",
-      "destination": "/guide/tools-and-agents"
+      "destination": "/how-to/tools-and-agents"
     },
     {
       "source": "/core-concept/context-management",
@@ -483,11 +462,11 @@
     },
     {
       "source": "/core-concept/adapters",
-      "destination": "/guide/tools-and-agents"
+      "destination": "/how-to/tools-and-agents"
     },
     {
       "source": "/core-concept/contribution-guide",
-      "destination": "/guide/CONTRIBUTING"
+      "destination": "/community/contributing-guide"
     },
     {
       "source": "/core-concept/prompt-engineering",
@@ -504,6 +483,154 @@
     {
       "source": "/integrations/langchain-and-smolagents",
       "destination": "/integrations/langchain"
+    },
+    {
+      "source": "/how-to/safety-guardrails",
+      "destination": "/advanced/security-and-taint-tracking"
+    },
+    {
+      "source": "/dev/constrained-decoding",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/generate-ctx-signature",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/intrinsics-and-adapters",
+      "destination": "/advanced/intrinsics"
+    },
+    {
+      "source": "/dev/mellea-library",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/dev/mify",
+      "destination": "/concepts/mobjects-and-mify"
+    },
+    {
+      "source": "/dev/requirement-alora-rerouting",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/dev/spans",
+      "destination": "/observability/tracing"
+    },
+    {
+      "source": "/dev/tool-calling",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/api/cli/m",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/intrinsic_uploader",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/readme_generator",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/train",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/upload",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/decompose",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/pipeline",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/utils",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/eval",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/runner",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/app",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/models",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/async_fixer",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/genstub_fixer",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/guide/generative-functions",
+      "destination": "/how-to/generative-functions"
+    },
+    {
+      "source": "/guide/tools-and-agents",
+      "destination": "/how-to/tools-and-agents"
+    },
+    {
+      "source": "/guide/working-with-data",
+      "destination": "/how-to/working-with-data"
+    },
+    {
+      "source": "/guide/backends-and-configuration",
+      "destination": "/how-to/backends-and-configuration"
+    },
+    {
+      "source": "/evaluation-and-observability/evaluate-with-llm-as-a-judge",
+      "destination": "/how-to/evaluate-with-llm-as-a-judge"
+    },
+    {
+      "source": "/evaluation-and-observability/telemetry",
+      "destination": "/observability/telemetry"
+    },
+    {
+      "source": "/evaluation-and-observability/tracing",
+      "destination": "/observability/tracing"
+    },
+    {
+      "source": "/evaluation-and-observability/metrics",
+      "destination": "/observability/metrics"
+    },
+    {
+      "source": "/evaluation-and-observability/logging",
+      "destination": "/observability/logging"
+    },
+    {
+      "source": "/guide/act-and-aact",
+      "destination": "/how-to/act-and-aact"
+    },
+    {
+      "source": "/guide/m-decompose",
+      "destination": "/how-to/m-decompose"
     }
   ]
 }

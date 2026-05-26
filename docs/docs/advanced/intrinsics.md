@@ -1,27 +1,53 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/intrinsics"
 title: "Intrinsics"
 description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters with Granite models."
 # diataxis: how-to
 ---
 
-**Prerequisites:** `pip install "mellea[hf]"`, a GPU or Apple Silicon Mac recommended for
-acceptable inference speed. All intrinsics require a `LocalHFBackend` with a
-[Granite](https://huggingface.co/ibm-granite) model.
+**Prerequisites:** `pip install "mellea[hf]"` for LocalHFBackend (GPU or Apple
+Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
+[Granite Switch](../guide/glossary#granite-switch) model served via vLLM.
 
 Intrinsics are adapter-accelerated operations for RAG quality checks. They use
 LoRA/aLoRA adapters loaded directly into the HuggingFace backend — faster and more
 reliable than prompting a general-purpose model for these specialized micro-tasks.
 
-> **Backend note:** Intrinsics require `LocalHFBackend` with an IBM Granite model
-> (e.g., `ibm-granite/granite-4.0-micro`). They do not work with Ollama, OpenAI, or
-> other remote backends.
+> **Backend note:** Intrinsics work with two backends:
+>
+> - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
+>   All intrinsics are available. Requires a GPU or Apple Silicon Mac.
+> - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
+>   `load_embedded_adapters=True`. Only intrinsics embedded in the model are
+>   available — check the model's `adapter_index.json` for the list.
+>   See `docs/docs/examples/granite-switch/README.md`
+>
+> Intrinsics do not work with Ollama or other remote backends.
 
 Set up the backend once and reuse it across intrinsic calls:
 
 ```python
+# Requires: mellea[hf]
+# Returns: LocalHFBackend
 from mellea.backends.huggingface import LocalHFBackend
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+```
+
+Or, with a Granite Switch model via the OpenAI backend:
+
+```python
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.model_ids import IBM_GRANITE_SWITCH_4_1_3B_PREVIEW
+from mellea.formatters import TemplateFormatter
+
+backend = OpenAIBackend(
+    model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
+    formatter=TemplateFormatter(model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name),
+    base_url="http://localhost:8000/v1",  # vLLM server
+    api_key="EMPTY",
+    load_embedded_adapters=True,
+)
 ```
 
 ## Answerability
@@ -29,6 +55,8 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 Check whether a set of retrieved documents can answer a given question:
 
 ```python
+# Requires: mellea[hf]
+# Returns: bool
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -50,6 +78,8 @@ print(rag.check_answerability(question, docs_not_answerable, context, backend)) 
 Assess whether a document is relevant to a question:
 
 ```python
+# Requires: mellea[hf]
+# Returns: float
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document
 from mellea.stdlib.components.intrinsic import rag
@@ -72,6 +102,8 @@ print(result)  # False — the document does not mention the CEO
 Flag sentences in an assistant response that are not grounded in the source documents:
 
 ```python
+# Requires: mellea[hf]
+# Returns: list[str]
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -99,6 +131,8 @@ print(result)
 Rewrite a vague or incomplete answer to be more grounded in the source documents:
 
 ```python
+# Requires: mellea[hf]
+# Returns: str
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -122,6 +156,8 @@ print(result)
 Rewrite an ambiguous user query using conversation history to improve retrieval:
 
 ```python
+# Requires: mellea[hf]
+# Returns: str
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import rag
@@ -147,6 +183,8 @@ print(result)
 Find supporting sentences in source documents for a given assistant response:
 
 ```python
+# Requires: mellea[hf]
+# Returns: dict
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
@@ -177,6 +215,8 @@ print(result)
 > `CustomIntrinsicAdapter` directly.
 
 ```python
+# Requires: mellea[hf]
+# Returns: dict
 import mellea.stdlib.functional as mfuncs
 from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend
@@ -187,7 +227,7 @@ backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
 # Register an adapter by task name
 req_adapter = CustomIntrinsicAdapter(
-    "requirement_check",
+    "requirement-check",
     base_model_name=backend.base_model_name,
 )
 backend.add_adapter(req_adapter)
@@ -198,7 +238,7 @@ ctx = ctx.add(Message("assistant", "Yes! What can I help with?"))
 
 out, _ = mfuncs.act(
     Intrinsic(
-        "requirement_check",
+        "requirement-check",
         intrinsic_kwargs={"requirement": "The assistant is helpful."},
     ),
     ctx,
@@ -208,4 +248,6 @@ print(out)  # {"requirement_likelihood": 1.0}
 ```
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
-Output format is task-specific — `requirement_check` returns a likelihood score.
+For OpenAI backends with Granite Switch, adapters are loaded from the model's
+HuggingFace repository configuration instead of the intrinsic catalog.
+Output format is task-specific — `requirement-check` returns a likelihood score.

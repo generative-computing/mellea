@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/traced-generation-loop"
 title: "Traced Generation Loop"
 description: "Enable OpenTelemetry tracing for a multi-operation Mellea session using environment variables, and export spans to Jaeger or any OTLP backend."
 # diataxis: reference
@@ -25,7 +26,7 @@ calls.
 ## Prerequisites
 
 - [Quick Start](../getting-started/quickstart) complete
-- Ollama running locally with `granite4:micro` pulled
+- Ollama running locally with `granite4.1:3b` pulled
 - (Optional) [Jaeger](https://www.jaegertracing.io/) running locally for span
   visualisation — see the Jaeger section below
 
@@ -364,7 +365,7 @@ applicable:
 
 - Set `OTEL_SERVICE_NAME=my-app` to customise the service name in your trace
   backend.
-- See [Tracing](../evaluation-and-observability/tracing)
+- See [Tracing](../observability/tracing)
   for attribute schemas and advanced configuration.
 - Add `MELLEA_TRACE_CONSOLE=true` alongside an OTLP endpoint to confirm spans
   are generated even when the remote collector is unavailable.

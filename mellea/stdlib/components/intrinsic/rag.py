@@ -6,15 +6,16 @@ from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from ._util import call_intrinsic
+from ..docs.document import _coerce_to_document, _coerce_to_documents
+from ._util import _resolve_question, _resolve_response, call_intrinsic
 
 
 def check_answerability(
-    question: str,
-    documents: collections.abc.Iterable[Document],
+    question: str | None,
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> str:
     """Test a user's question for answerability.
 
     Intrinsic function that checks whether the question in the last user turn of a
@@ -22,27 +23,32 @@ def check_answerability(
 
     Args:
         question: Question that the user has posed in response to the last turn in
-            ``context``.
+            ``context``. When ``None``, the question is extracted from the last
+            user message in ``context``.
         documents: Document snippets retrieved that may or may not answer the
-            indicated question.
+            indicated question. Each element may be a ``Document`` or a plain
+            string (automatically wrapped in ``Document``).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters
             for answerability checks.
 
     Returns:
-        Answerability score as a floating-point value from 0 to 1.
+        A string value of either "answerable" or "unanswerable"
     """
+    question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "answerability",
-        context.add(Message("user", question, documents=list(documents))),
+        context.add(
+            Message("user", question, documents=_coerce_to_documents(documents))
+        ),
         backend,
     )
-    return result_json["answerability_likelihood"]
+    return result_json["answerability"]
 
 
 def rewrite_question(
-    question: str, context: ChatContext, backend: AdapterMixin
-) -> float:
+    question: str | None, context: ChatContext, backend: AdapterMixin
+) -> str:
     """Rewrite a user's question for retrieval.
 
     Intrinsic function that rewrites the question in the next user turn into a
@@ -50,13 +56,15 @@ def rewrite_question(
 
     Args:
         question: Question that the user has posed in response to the last turn in
-            ``context``.
+            ``context``. When ``None``, the question is extracted from the last
+            user message in ``context``.
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters.
 
     Returns:
         Rewritten version of ``question``.
     """
+    question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
     )
@@ -64,8 +72,8 @@ def rewrite_question(
 
 
 def clarify_query(
-    question: str,
-    documents: collections.abc.Iterable[Document],
+    question: str | None,
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> str:
@@ -76,8 +84,11 @@ def clarify_query(
     appropriate clarification question if needed.
 
     Args:
-        question: Question that the user has posed.
-        documents: Document snippets retrieved for the question.
+        question: Question that the user has posed. When ``None``, the question
+            is extracted from the last user message in ``context``.
+        documents: Document snippets retrieved for the question. Each element
+            may be a ``Document`` or a plain string (automatically wrapped in
+            ``Document``).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports the adapters that implement
             this intrinsic.
@@ -86,17 +97,20 @@ def clarify_query(
         Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed.
     """
+    question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
         "query_clarification",
-        context.add(Message("user", question, documents=list(documents))),
+        context.add(
+            Message("user", question, documents=_coerce_to_documents(documents))
+        ),
         backend,
     )
     return result_json["clarification"]
 
 
 def find_citations(
-    response: str,
-    documents: collections.abc.Iterable[Document],
+    response: str | None,
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
 ) -> list[dict]:
@@ -106,10 +120,14 @@ def find_citations(
     in a potential assistant response to a user question.
 
     Args:
-        response: Potential assistant response.
-        documents: Documents that were used to generate ``response``. These documents
-            should set the ``doc_id`` field; otherwise the intrinsic will be unable to
-            specify which document was the source of a given citation.
+        response: Potential assistant response. When ``None``, the response is
+            extracted from the last assistant output in ``context``.
+        documents: Documents that were used to generate ``response``. Each element
+            may be a ``Document`` or a plain string. Strings are wrapped in
+            ``Document`` with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...);
+            for explicit control, pass ``Document`` objects with ``doc_id`` set.
+            ``Document`` objects without ``doc_id`` trigger a warning because the
+            intrinsic uses ``doc_id`` to identify citation sources.
         context: Context of the dialog between user and assistant at the point where
             the user has just asked a question that will be answered with RAG documents.
         backend: Backend that supports one of the adapters that implements this
@@ -121,17 +139,27 @@ def find_citations(
         ``citation_end``, ``citation_text``. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
+    response, context = _resolve_response(response, context)
     result_json = call_intrinsic(
         "citations",
-        context.add(Message("assistant", response, documents=list(documents))),
+        context.add(
+            Message(
+                "assistant",
+                response,
+                documents=_coerce_to_documents(documents, auto_doc_id=False),
+            )
+        ),
         backend,
     )
     return result_json
 
 
 def check_context_relevance(
-    question: str, document: Document, context: ChatContext, backend: AdapterMixin
-) -> float:
+    question: str | None,
+    document: str | Document,
+    context: ChatContext,
+    backend: AdapterMixin,
+) -> str:
     """Test whether a document is relevant to a user's question.
 
     Intrinsic function that checks whether a single document contains part or all of
@@ -139,15 +167,22 @@ def check_context_relevance(
     question was asked.
 
     Args:
-        question: Question that the user has posed.
-        document: A retrieved document snippet.
+        question: Question that the user has posed. When ``None``, the question
+            is extracted from the last user message in ``context``.
+        document: A retrieved document snippet. May be a ``Document`` or a plain
+            string (automatically wrapped in ``Document``).
         context: The chat up to the point where the user asked a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
 
     Returns:
-        Context relevance score as a floating-point value from 0 to 1.
+        Context relevance judgement as one of the following strings:
+        - "relevant"
+        - "irrelevant"
+        - "partially relevant"
     """
+    question, context = _resolve_question(question, context, backend)
+    document = _coerce_to_document(document)
     result_json = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
@@ -159,11 +194,11 @@ def check_context_relevance(
 
 
 def flag_hallucinated_content(
-    response: str,
-    documents: collections.abc.Iterable[Document],
+    response: str | None,
+    documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> list[dict]:
     """Flag potentially-hallucinated sentences in an agent's response.
 
     Intrinsic function that checks whether the sentences in an agent's response to a
@@ -172,20 +207,26 @@ def flag_hallucinated_content(
 
     Args:
         response: The assistant's response to the user's question in the last turn
-            of ``context``.
-        documents: Document snippets that were used to generate ``response``.
+            of ``context``. When ``None``, the response is extracted from the last
+            assistant output in ``context``.
+        documents: Document snippets that were used to generate ``response``. Each
+            element may be a ``Document`` or a plain string (automatically wrapped
+            in ``Document``).
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
 
     Returns:
         List of records with the following fields: ``response_begin``,
-        ``response_end``, ``response_text``, ``faithfulness_likelihood``,
+        ``response_end``, ``response_text``, ``faithfulness``,
         ``explanation``.
     """
+    response, context = _resolve_response(response, context)
     result_json = call_intrinsic(
         "hallucination_detection",
-        context.add(Message("assistant", response, documents=list(documents))),
+        context.add(
+            Message("assistant", response, documents=_coerce_to_documents(documents))
+        ),
         backend,
     )
     return result_json

@@ -10,8 +10,8 @@ history tracking. Raises ``RuntimeError`` if the loop ends without a final answe
 # from PIL import Image as PILImage
 from mellea.backends.model_options import ModelOption
 from mellea.core.backend import Backend, BaseModelSubclass
-from mellea.core.base import AbstractMelleaTool, ModelOutputThunk
-from mellea.core.utils import FancyLogger
+from mellea.core.base import AbstractMelleaTool, ComputedModelOutputThunk
+from mellea.core.utils import MelleaLogger
 from mellea.stdlib import functional as mfuncs
 
 # from mellea.stdlib.components.docs.document import Document
@@ -36,7 +36,7 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
-) -> tuple[ModelOutputThunk[str], ChatContext]:
+) -> tuple[ComputedModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
     Args:
@@ -79,7 +79,7 @@ async def react(
     turn_num = 0
     while (turn_num < loop_budget) or (loop_budget == -1):
         turn_num += 1
-        FancyLogger.get_logger().info(f"## ReACT TURN NUMBER {turn_num}")
+        MelleaLogger.get_logger().info(f"## ReACT TURN NUMBER {turn_num}")
 
         step, next_context = await mfuncs.aact(
             action=ReactThought(),
@@ -89,6 +89,8 @@ async def react(
             strategy=None,
             model_options=model_options,
             tool_calls=True,
+            await_result=True,
+            silence_context_type_warning=True,
         )
 
         # Have to assert this due to type hints.
@@ -117,6 +119,8 @@ async def react(
                     strategy=None,
                     model_options=model_options,
                     format=format,
+                    await_result=True,
+                    silence_context_type_warning=True,
                 )
                 assert isinstance(next_context, ChatContext)
                 context = next_context

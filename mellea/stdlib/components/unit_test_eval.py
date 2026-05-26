@@ -199,8 +199,10 @@ class TestBasedEval(Component[str]):
 
             for example in test_data.examples:
                 user_messages = [msg for msg in example.input if msg.role == "user"]
-                if user_messages:
-                    inputs.append(user_messages[-1].content)
+                if not user_messages:
+                    continue
+
+                inputs.append(user_messages[-1].content)
 
                 targets_for_input = [
                     msg.content for msg in example.targets if msg.role == "assistant"

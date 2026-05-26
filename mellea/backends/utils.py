@@ -13,7 +13,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from ..core import CBlock, Component, Context, FancyLogger, ModelToolCall
+from ..core import CBlock, Component, Context, MelleaLogger, ModelToolCall
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter
 from ..stdlib.components import Message
@@ -68,15 +68,17 @@ def to_chat(
     # add action
     ctx_as_message_list.extend(formatter.to_chat_messages([action]))
 
+    # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+    # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     ctx_as_conversation: list = [
-        {"role": m.role, "content": m.content} for m in ctx_as_message_list
+        {"role": m.role, "content": formatter.print(m)} for m in ctx_as_message_list
     ]
 
     # Check that we ddin't accidentally end up with CBlocks.
     for msg in ctx_as_conversation:
         for v in msg.values():
             if "CBlock" in v:
-                FancyLogger.get_logger().error(
+                MelleaLogger.get_logger().error(
                     f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
                 )
 
@@ -104,7 +106,7 @@ def to_tool_calls(
     for tool_name, tool_args in parse_tools(decoded_result):
         func = tools.get(tool_name)
         if func is None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"model attempted to call a non-existing function: {tool_name}"
             )
             continue

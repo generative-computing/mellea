@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/how-to/build-a-rag-pipeline"
 title: "Build a RAG Pipeline"
 description: "Combine vector retrieval with Mellea's generative filtering and grounded generation to build a reliable retrieval-augmented generation system."
 # diataxis: how-to
@@ -41,6 +42,8 @@ Use any embedding model and vector store. This example uses
 `sentence-transformers` and a FAISS flat inner-product index:
 
 ```python
+# Requires: faiss-cpu, sentence-transformers
+# Returns: IndexFlatIP
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 
@@ -74,9 +77,11 @@ filter acceptance rates.
 ## Step 2: Filter candidates with `@generative`
 
 Vector similarity finds *topically related* documents but cannot determine
-whether a document actually answers the question. Add an [`@generative`](../guide/glossary#generative) LLM filter:
+whether a document actually answers the question. Add an [`@generative`](../reference/glossary#generative) LLM filter:
 
 ```python
+# Requires: mellea
+# Returns: bool
 from mellea import generative
 
 @generative
@@ -87,6 +92,8 @@ def is_relevant(document: str, question: str) -> bool:
 Apply it after retrieval:
 
 ```python
+# Requires: mellea, sentence-transformers, faiss-cpu
+# Returns: str
 from mellea import start_session
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -120,10 +127,12 @@ else:
 
 ## Step 3: Generate with `grounding_context`
 
-Pass the surviving documents as named entries in [`grounding_context`](../guide/glossary#grounding_context). Mellea
+Pass the surviving documents as named entries in [`grounding_context`](../reference/glossary#grounding_context). Mellea
 injects them into the prompt and tracks them as separate context components:
 
 ```python
+# Requires: mellea
+# Returns: str
 answer = m.instruct(
     "Using the provided documents, answer the following question: {{question}}",
     user_variables={"question": query},
@@ -143,6 +152,8 @@ the model's parametric knowledge — no grounding.
 Use `requirements` to enforce answer format, length, or citation style:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea.stdlib.requirements import req, simple_validate
 
 answer = m.instruct(
@@ -168,10 +179,12 @@ answer = m.instruct(
 
 ## Step 5: Check groundedness (optional)
 
-After generation, use [`GuardianCheck`](../guide/glossary#guardiancheck) with `GuardianRisk.GROUNDEDNESS` to
+After generation, use [`GuardianCheck`](../reference/glossary#guardiancheck) with `GuardianRisk.GROUNDEDNESS` to
 verify the answer does not hallucinate beyond the retrieved documents:
 
 ```python
+# Requires: mellea
+# Returns: bool
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 groundedness_check = GuardianCheck(
@@ -200,6 +213,8 @@ the generator was given.
 ## Putting it together
 
 ```python
+# Requires: mellea, faiss-cpu, sentence-transformers
+# Returns: str
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 

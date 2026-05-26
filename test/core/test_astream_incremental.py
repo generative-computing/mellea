@@ -13,7 +13,7 @@ from mellea.stdlib.session import start_session
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_returns_incremental_chunks():
     """Test that astream() returns only new content, not accumulated content.
@@ -40,14 +40,7 @@ async def test_astream_returns_incremental_chunks():
         # If not computed, chunk2 should be new content only
         assert chunk2 is not None, "Second chunk should not be None if not computed"
 
-        # The key test: chunk2 should NOT start with chunk1
-        # (it should be incremental, not accumulated)
         if len(chunk2) > 0:
-            # chunk2 should be different from chunk1 (new content)
-            assert chunk2 != chunk1, (
-                "Second chunk should be different from first (incremental)"
-            )
-
             # Get final value
             final_val = await mot.avalue()
 
@@ -68,7 +61,7 @@ async def test_astream_returns_incremental_chunks():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_multiple_calls_accumulate_correctly():
     """Test that multiple astream() calls accumulate to the final value.
@@ -112,7 +105,7 @@ async def test_astream_multiple_calls_accumulate_correctly():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_beginning_length_tracking():
     """Test that beginning_length is correctly tracked across astream calls.
@@ -133,17 +126,18 @@ async def test_astream_beginning_length_tracking():
     # Second call: beginning_length should be captured at start of this call
     chunk2 = await mot.astream()
 
-    if chunk2 and len(chunk2) > 0:
-        # chunk2 should not include chunk1's content
-        # This verifies the slicing logic at lines 352-356
-        if chunk1:
-            assert not chunk2.startswith(chunk1), (
-                "Second chunk should not start with first chunk (should be incremental)"
-            )
+    if chunk2 and len(chunk2) > 0 and chunk1:
+        # Verify that chunks reassemble correctly (not that they differ textually —
+        # two consecutive identical tokens are valid).
+        final_val = await mot.avalue()
+        accumulated = chunk1 + chunk2
+        assert final_val.startswith(accumulated) or accumulated.startswith(final_val), (
+            "Assembled chunks should match final value progression"
+        )
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_empty_beginning():
     """Test astream when _underlying_value starts as None."""
@@ -168,7 +162,7 @@ async def test_astream_empty_beginning():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 async def test_computed_mot_raises_error_for_astream():
     """Test that computed mot raises an error for astream() calls."""
     # Create a pre-computed thunk
@@ -185,7 +179,7 @@ async def test_computed_mot_raises_error_for_astream():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 async def test_non_streaming_astream():
     """Test that non-streaming astream has exactly one chunk."""
     session = start_session()

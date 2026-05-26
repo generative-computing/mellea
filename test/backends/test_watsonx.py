@@ -1,15 +1,16 @@
-# test/rits_backend_tests/test_watsonx_integration.py
 import asyncio
 import os
 
 import pydantic
 import pytest
 
+from test.predicates import require_api_key
+
 # Mark all tests in this module with backend and auth requirements
 pytestmark = [
     pytest.mark.watsonx,
-    pytest.mark.llm,
-    pytest.mark.requires_api_key,
+    pytest.mark.e2e,
+    require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
     # Skip entire module in CI since 8/9 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -17,6 +18,9 @@ pytestmark = [
     ),
 ]
 
+pytest.importorskip(
+    "ibm_watsonx_ai", reason="ibm_watsonx_ai not installed — install mellea[watsonx]"
+)
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.watsonx import WatsonxAIBackend
@@ -197,6 +201,10 @@ async def test_async_parallel_requests(session):
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+    assert mot1.generation.streaming is True
+    assert mot1.generation.ttfb_ms is not None
+    assert mot1.generation.ttfb_ms > 0
+
 
 @pytest.mark.qualitative
 async def test_async_avalue(session):
@@ -208,12 +216,14 @@ async def test_async_avalue(session):
     assert m1_final_val == mot1.value
 
     # Verify telemetry fields are populated
-    assert mot1.usage is not None
-    assert mot1.usage["prompt_tokens"] >= 0
-    assert mot1.usage["completion_tokens"] > 0
-    assert mot1.usage["total_tokens"] > 0
-    assert isinstance(mot1.model, str)
-    assert mot1.provider == "watsonx"
+    assert mot1.generation.usage is not None
+    assert mot1.generation.usage["prompt_tokens"] >= 0
+    assert mot1.generation.usage["completion_tokens"] > 0
+    assert mot1.generation.usage["total_tokens"] > 0
+    assert isinstance(mot1.generation.model, str)
+    assert mot1.generation.provider == "watsonx"
+    assert mot1.generation.streaming is False
+    assert mot1.generation.ttfb_ms is None
 
 
 def test_client_cache(backend):

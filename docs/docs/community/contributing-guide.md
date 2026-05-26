@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/community/contributing-guide"
 title: "Contributing to Mellea"
 description: "Development setup, coding standards, and PR process for Mellea contributors."
 # diataxis: how-to
@@ -171,6 +172,15 @@ git commit -s -m "feat: your commit message"
 
 **Branch naming:** `feat/topic`, `fix/issue-id`, `docs/topic`
 
+### AI coding assistants
+
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting. AI coding assistants that follow project guidelines automatically add an `Assisted-by:` trailer to commit messages — one line per tool, using its common name (GitHub Copilot, Cursor, etc.):
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
 ### Pre-commit hooks
 
 Pre-commit hooks run automatically before each commit and check:
@@ -198,24 +208,45 @@ git commit -n -m "wip: intermediate work"
 
 ### Test markers
 
-Tests are categorized using pytest markers:
+Tests use a four-tier granularity system. Every test belongs to exactly one tier:
 
-| Marker | Requirement |
-| ------ | ----------- |
-| `@pytest.mark.ollama` | Ollama running locally (lightweight) |
-| `@pytest.mark.huggingface` | HuggingFace backend (local, heavy) |
-| `@pytest.mark.vllm` | vLLM backend (GPU required) |
-| `@pytest.mark.openai` | OpenAI API key |
-| `@pytest.mark.watsonx` | Watsonx API key |
-| `@pytest.mark.litellm` | LiteLLM backend |
-| `@pytest.mark.requires_gpu` | GPU available |
-| `@pytest.mark.requires_heavy_ram` | 48 GB+ RAM |
-| `@pytest.mark.requires_api_key` | External API key |
-| `@pytest.mark.qualitative` | LLM output quality (skipped in CI via `CICD=1`) |
-| `@pytest.mark.llm` | Makes LLM calls (needs at least Ollama) |
-| `@pytest.mark.slow` | Tests taking more than 5 minutes |
+| Tier | When to use | How to apply |
+| ---- | ----------- | ------------ |
+| `unit` | Self-contained, no services, no I/O | Auto-applied — never write `@pytest.mark.unit` |
+| `integration` | Real SDK/library boundary or multi-component wiring | `@pytest.mark.integration` |
+| `e2e` | Real backends (Ollama, APIs, GPU models), deterministic assertions | `@pytest.mark.e2e` + backend marker(s) |
+| `qualitative` | Subset of e2e with non-deterministic output assertions | `@pytest.mark.qualitative` per-function, `e2e` + backend at module level |
 
-> **Warning:** Do not add `qualitative` to trivial tests — keep the fast loop fast. Mark tests taking more than 5 minutes with `slow`.
+**Backend markers** (only for e2e/qualitative tests):
+
+| Marker | Backend | Resources |
+| ------ | ------- | --------- |
+| `ollama` | Ollama (port 11434) | Local, light (~2–4 GB RAM) |
+| `openai` | OpenAI API or compatible | API calls (may use Ollama `/v1`) |
+| `watsonx` | Watsonx API | API calls, requires credentials |
+| `huggingface` | HuggingFace transformers | Local, GPU required |
+| `litellm` | LiteLLM (wraps other backends) | Depends on underlying backend |
+| `bedrock` | AWS Bedrock | API calls, requires credentials |
+
+**Resource predicates** (from `test/predicates.py`, for e2e/qualitative tests):
+
+| Predicate | Use when test needs |
+| --------- | ------------------- |
+| `require_gpu()` | Any GPU (CUDA or MPS) |
+| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
+| `require_ram(min_gb=N)` | N GB+ system RAM |
+| `require_api_key("ENV_VAR")` | Specific API credentials |
+| `require_package("pkg")` | Optional dependency |
+| `require_python((3, 11))` | Minimum Python version |
+
+**Other markers:**
+
+| Marker | Purpose |
+| ------ | ------- |
+| `slow` | Tests taking >1 minute (excluded by default) |
+| `qualitative` | Non-deterministic output (skipped when `CICD=1`) |
+
+For more information, see our [Markers Guide](https://github.com/generative-computing/mellea/blob/main/test/MARKERS_GUIDE.md).
 
 ### Running tests
 
@@ -239,8 +270,8 @@ uv run pytest -m slow
 uv run pytest -m "ollama"
 uv run pytest -m "openai"
 
-# Run tests without LLM calls (unit tests only)
-uv run pytest -m "not llm"
+# Run unit tests only (no backends needed)
+uv run pytest -m unit
 
 # CI/CD mode (skips qualitative tests)
 CICD=1 uv run pytest
@@ -252,7 +283,7 @@ CICD=1 uv run pytest
 | --- | -------- |
 | Fast tests (`-m "not qualitative"`) | ~2 minutes |
 | Default (qualitative, no slow) | Several minutes |
-| Slow tests (`-m slow`) | More than 5 minutes |
+| Slow tests (`-m slow`) | More than 1 minute |
 | Pre-commit hooks | 1–5 minutes |
 
 ### Replicate CI locally
@@ -294,10 +325,10 @@ CICD=1 uv run pytest
 ### Debugging tips
 
 ```python
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 
 # Enable debug logging
-FancyLogger.get_logger().setLevel("DEBUG")
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 # Inspect the exact prompt sent to the LLM
 print(m.last_prompt())
@@ -306,7 +337,7 @@ print(m.last_prompt())
 ## Contributing to the docs
 
 Documentation lives in `docs/docs/`. The writing guide at
-[`docs/docs/guide/CONTRIBUTING`](../guide/CONTRIBUTING) covers conventions, the PR
+[`docs/CONTRIBUTING_DOCS.md`](https://github.com/generative-computing/mellea/blob/main/docs/CONTRIBUTING_DOCS.md) covers conventions, the PR
 checklist, and the review process for documentation contributions. Key points:
 
 - Start body content with H2 — Mintlify renders the frontmatter `title` as the page heading.

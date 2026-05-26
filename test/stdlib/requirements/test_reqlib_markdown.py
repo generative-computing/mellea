@@ -7,6 +7,7 @@ from mellea.stdlib.requirements import (
     is_markdown_list,
     is_markdown_table,
 )
+from mellea.stdlib.requirements.md import _md_list, _md_table
 
 
 def from_model(s: str) -> Context:
@@ -77,6 +78,82 @@ def test_default_output_to_bool_word_with_yes_in_it():
     assert not default_output_to_bool(
         "Here's a word that meets those requirements: ayes."
     )
+
+
+# --- as_markdown_list edge cases ---
+
+
+def test_as_markdown_list_paragraph():
+    """Plain paragraph is not a list — should return None."""
+    ctx = from_model("This is just a paragraph of text.")
+    assert as_markdown_list(ctx) is None
+
+
+def test_as_markdown_list_mixed_content():
+    """List followed by a paragraph should return None (not all children are lists)."""
+    ctx = from_model(
+        """- item one
+- item two
+
+This is a paragraph after the list."""
+    )
+    assert as_markdown_list(ctx) is None
+
+
+def test_as_markdown_list_empty():
+    """Empty string should return None."""
+    ctx = from_model("")
+    assert as_markdown_list(ctx) is None
+
+
+def test_as_markdown_list_single_item():
+    """Single-item list should work."""
+    ctx = from_model("- only item")
+    result = as_markdown_list(ctx)
+    assert result is not None
+    assert len(result) == 1
+
+
+# --- _md_list validation wrapper ---
+
+
+def test_md_list_valid():
+    result = _md_list(MARKDOWN_LIST_CTX)
+    assert result.as_bool() is True
+
+
+def test_md_list_invalid():
+    ctx = from_model("Just a paragraph.")
+    result = _md_list(ctx)
+    assert result.as_bool() is False
+
+
+# --- _md_table edge cases ---
+
+
+def test_md_table_not_a_table():
+    ctx = from_model("This is just text, not a table.")
+    result = _md_table(ctx)
+    assert result.as_bool() is False
+
+
+def test_md_table_multiple_children():
+    """A heading followed by a table = 2 children, should return False."""
+    ctx = from_model(
+        """# Title
+
+| Col A | Col B |
+|-------|-------|
+| 1     | 2     |"""
+    )
+    result = _md_table(ctx)
+    assert result.as_bool() is False
+
+
+def test_md_table_empty():
+    ctx = from_model("")
+    result = _md_table(ctx)
+    assert result.as_bool() is False
 
 
 if __name__ == "__main__":

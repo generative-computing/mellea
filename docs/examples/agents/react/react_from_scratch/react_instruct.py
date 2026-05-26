@@ -1,4 +1,4 @@
-# pytest: ollama, llm, qualitative
+# pytest: ollama, e2e, qualitative
 
 import datetime
 import inspect
@@ -58,7 +58,7 @@ class ReactTool(pydantic.BaseModel):
 
 
 class ReactToolbox(pydantic.BaseModel):
-    """A convienance wrapper around ReactTool."""
+    """A convenience wrapper around ReactTool."""
 
     tools: list[ReactTool]
 

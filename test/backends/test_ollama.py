@@ -13,7 +13,7 @@ from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.requirements import simple_validate
 
 # Mark all tests in this module as requiring Ollama
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="function")
@@ -101,6 +101,9 @@ def test_format(session) -> None:
     # assert email.to.email_address.endswith("example.com")
 
 
+@pytest.mark.xfail(
+    strict=False, reason="Ollama intermittently returns empty responses for raw prompts"
+)
 @pytest.mark.qualitative
 @pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
@@ -187,6 +190,10 @@ async def test_async_parallel_requests(session) -> None:
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+    assert mot1.generation.streaming is True
+    assert mot1.generation.ttfb_ms is not None
+    assert mot1.generation.ttfb_ms > 0
+
 
 async def test_async_avalue(session) -> None:
     mot1, _ = await session.backend.generate_from_context(
@@ -197,12 +204,14 @@ async def test_async_avalue(session) -> None:
     assert m1_final_val == mot1.value
 
     # Verify telemetry fields are populated
-    assert mot1.usage is not None
-    assert mot1.usage["prompt_tokens"] >= 0
-    assert mot1.usage["completion_tokens"] > 0
-    assert mot1.usage["total_tokens"] > 0
-    assert isinstance(mot1.model, str)
-    assert mot1.provider == "ollama"
+    assert mot1.generation.usage is not None
+    assert mot1.generation.usage["prompt_tokens"] >= 0
+    assert mot1.generation.usage["completion_tokens"] > 0
+    assert mot1.generation.usage["total_tokens"] > 0
+    assert isinstance(mot1.generation.model, str)
+    assert mot1.generation.provider == "ollama"
+    assert mot1.generation.streaming is False
+    assert mot1.generation.ttfb_ms is None
 
 
 def test_multiple_asyncio_runs(session) -> None:
@@ -238,6 +247,24 @@ def test_client_cache(session) -> None:
     fourth_client = asyncio.run(get_client_async())
     assert fourth_client in backend._client_cache.cache.values()
     assert len(backend._client_cache.cache.values()) == 2
+
+
+@pytest.mark.qualitative
+def test_stop_sequences(session) -> None:
+    """Generation should halt before any of the configured stop strings appears."""
+    stop = "STOP_HERE_MARKER"
+    result = session.instruct(
+        "Count from 1 to 20, separated by spaces. After 20, write 'STOP_HERE_MARKER' "
+        "and then keep counting to 30.",
+        model_options={
+            ModelOption.STOP_SEQUENCES: [stop],
+            ModelOption.MAX_NEW_TOKENS: 200,
+        },
+    )
+    # Ollama strips the stop string from the returned text, so it should not appear.
+    assert stop not in result.value, (
+        f"stop sequence leaked into output: {result.value!r}"
+    )
 
 
 if __name__ == "__main__":

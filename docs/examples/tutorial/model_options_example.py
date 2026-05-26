@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 import mellea
 from mellea.backends import ModelOption, model_ids

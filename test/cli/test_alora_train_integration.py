@@ -5,20 +5,24 @@ This test actually trains a tiny adapter to verify the migration works end-to-en
 
 import json
 import os
-import shutil
-import sys
 import tempfile
 from pathlib import Path
 
 import pytest
-import torch
+
+from test.conftest import flush_device_caches
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 from transformers import AutoTokenizer
+
+from test.predicates import require_gpu
 
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    pytest.mark.e2e,
+    require_gpu(
+        min_vram_gb=20
+    ),  # 3B bfloat16: ~6 GB inference, ~12 GB training peak + headroom
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -41,7 +45,7 @@ def test_alora_training_integration():
     3. Verifies adapter files are created with correct PEFT 0.18+ format
     4. Cleans up temporary files
 
-    Uses ibm-granite/granite-4.0-micro (smallest Granite model, 3B params).
+    Uses ibm-granite/granite-4.1-3b (smallest Granite model, 3B params).
     """
     from cli.alora.train import train_model
 
@@ -78,10 +82,10 @@ def test_alora_training_integration():
         adapter_path = tmpdir_path / "test_alora_adapter"
 
         # Train aLoRA adapter with minimal settings
-        # Using smallest Granite model: granite-4.0-micro (3B params)
+        # Using smallest Granite model: granite-4.1-3b (3B params)
         train_model(
             dataset_path=str(dataset_path),
-            base_model="ibm-granite/granite-4.0-micro",
+            base_model="ibm-granite/granite-4.1-3b",
             output_file=str(adapter_path),
             adapter="alora",
             epochs=1,  # Just 1 epoch for speed
@@ -182,7 +186,7 @@ def test_alora_training_integration():
 
         # Additional verification: Verify invocation tokens are correct
         # The default invocation prompt is "<|start_of_role|>check_requirement<|end_of_role|>"
-        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-micro")
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.1-3b")
         default_invocation_prompt = "<|start_of_role|>check_requirement<|end_of_role|>"
         expected_tokens = tokenizer.encode(
             default_invocation_prompt, add_special_tokens=False
@@ -200,9 +204,7 @@ def test_alora_training_integration():
         from transformers import AutoModelForCausalLM
 
         base_model = AutoModelForCausalLM.from_pretrained(
-            "ibm-granite/granite-4.0-micro",
-            device_map="auto",
-            torch_dtype=torch.bfloat16,
+            "ibm-granite/granite-4.1-3b", device_map="auto", torch_dtype=torch.bfloat16
         )
 
         # Load the trained adapter
@@ -288,8 +290,6 @@ def test_alora_training_integration():
         )
 
         # Cleanup GPU memory
-        import gc
-
         # 1. Remove accelerate dispatch hooks before moving to CPU.
         #    device_map="auto" installs hooks that prevent full VRAM release otherwise.
         try:
@@ -306,12 +306,8 @@ def test_alora_training_integration():
         base_model.cpu()
         del base_model
 
-        # 4. Force GC and flush CUDA cache synchronously.
-        gc.collect()
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        # 4. Flush device caches.
+        flush_device_caches()
 
 
 def test_lora_training_integration():
@@ -352,7 +348,7 @@ def test_lora_training_integration():
         # Train standard LoRA adapter
         train_model(
             dataset_path=str(dataset_path),
-            base_model="ibm-granite/granite-4.0-micro",
+            base_model="ibm-granite/granite-4.1-3b",
             output_file=str(adapter_path),
             adapter="lora",  # Standard LoRA, not aLoRA
             epochs=1,
@@ -387,10 +383,4 @@ def test_lora_training_integration():
         )
 
         # Cleanup GPU memory after training
-        import gc
-
-        gc.collect()
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        flush_device_caches()

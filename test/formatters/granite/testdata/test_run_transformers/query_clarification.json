@@ -3,7 +3,7 @@
         {
             "index": 0,
             "message": {
-                "content": "{\"clarification\": \"There are many languages that descended from Common Brittonic, like Welsh, Breton, and Cornish. Which one are you referring to?\"}",
+                "content": "{\"clarification\": \"Several languages descended from Common Brittonic are still spoken or have been revived, like Welsh (a living language in Wales), Breton (spoken in Brittany, France), or Cornish (once extinct but now undergoing revitalization). Which one are you referring to?\"}",
                 "role": "assistant"
             }
         }

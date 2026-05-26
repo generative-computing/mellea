@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/data-extraction-pipeline"
 title: "Data Extraction Pipeline"
 description: "Use the @generative decorator with a typed return value to extract structured data from unstructured text in a single declarative function."
 # diataxis: reference
@@ -8,7 +9,7 @@ This example shows the most direct path from raw text to typed, structured
 output in Mellea: a `@generative` function whose return annotation tells the
 runtime exactly what shape the result must have.
 
-**Source file:** `docs/examples/information_extraction/101_with_gen_slots.py`
+**Source file:** `docs/examples/information_extraction/101_with_gen_stubs.py`
 
 ## Concepts covered
 
@@ -20,7 +21,7 @@ runtime exactly what shape the result must have.
 ## Prerequisites
 
 - [Quick Start](../getting-started/quickstart) complete
-- Ollama running locally with `granite4:micro` pulled
+- Ollama running locally with `granite4.1:3b` pulled
 
 ## The full example
 
@@ -35,7 +36,7 @@ m = start_session()
 
 `start_session()` with no arguments creates a session backed by the default
 local model. The `model_ids` import is available if you want to switch to a
-specific model later (see [Backends and configuration](../guide/backends-and-configuration)).
+specific model later (see [Backends and configuration](../how-to/backends-and-configuration)).
 
 ### Declaring the extraction function
 
@@ -46,7 +47,7 @@ def extract_all_person_names(doc: str) -> list[str]:
 ```
 
 The `@generative` decorator converts a bare function stub into a generative
-slot. Three things drive the extraction:
+stub. Three things drive the extraction:
 
 - **Parameter names** (`doc`) become the named inputs the model receives.
 - **Return annotation** (`list[str]`) tells the runtime to parse and validate
@@ -79,7 +80,7 @@ extracted, type-validated data — not a raw string or a thunk.
 ```python
 # pytest: ollama, llm
 
-"""Simple Example of information extraction with Mellea using generative slots."""
+"""Simple Example of information extraction with Mellea using generative stubs."""
 
 from mellea import generative, start_session
 from mellea.backends import model_ids

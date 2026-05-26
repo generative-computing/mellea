@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Execution modes — all five PluginMode values side by side.
 #
@@ -36,7 +36,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("fancy_logger").setLevel(logging.ERROR)
+logging.getLogger("mellea").setLevel(logging.ERROR)
 log = logging.getLogger("execution_modes")
 
 

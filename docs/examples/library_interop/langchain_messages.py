@@ -1,4 +1,4 @@
-# pytest: ollama, llm, qualitative
+# pytest: ollama, e2e, qualitative
 
 # Installing langchain is necessary for this example, but it works for any library
 # you may want to use Mellea with.

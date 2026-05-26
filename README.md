@@ -50,12 +50,15 @@ print(user.name)  # Alice
 print(user.age)   # 31 — always an int, guaranteed by the schema
 ```
 
+`start_session()` is the convenience entry point: it returns a `MelleaSession`
+with sensible defaults you can override as needed.
+
 ## What Mellea Does
 
 - **Structured output** — `@generative` turns typed functions into LLM calls; Pydantic schemas are enforced at generation time
 - **Requirements & repair** — attach natural-language requirements to any call; Mellea validates and retries automatically
 - **Sampling strategies** — run a generation multiple times and pick the best result; swap between rejection sampling, majority voting, and more with one parameter change
-- **Multiple backends** — Ollama, OpenAI, vLLM, HuggingFace, WatsonX, LiteLLM, Bedrock
+- **Multiple backends** — Ollama, OpenAI, HuggingFace, WatsonX, LiteLLM, Bedrock
 - **Legacy integration** — easily drop Mellea into existing codebases with `mify`
 - **MCP compatible** — expose any generative program as an MCP tool
 

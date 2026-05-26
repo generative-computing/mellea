@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/community/building-extensions"
 title: "Building Extensions"
 description: "Create custom components, backends, sampling strategies, and requirements to extend Mellea."
 # diataxis: how-to
@@ -25,7 +26,7 @@ Choose the pathway that fits the scope of your work:
 
 ## Custom requirements
 
-A [`Requirement`](../guide/glossary#requirement) validates a generation against a
+A [`Requirement`](../reference/glossary#requirement) validates a generation against a
 criterion. You can provide a Python function for deterministic checks, or rely on
 LLM-as-a-Judge for semantic validation.
 
@@ -92,7 +93,7 @@ For deeper validation patterns, see [Write Custom Verifiers](../how-to/write-cus
 
 ## Custom components
 
-A [`Component`](../guide/glossary#component) is a composite data structure that an LLM
+A [`Component`](../reference/glossary#component) is a composite data structure that an LLM
 can read and write. Implement the `Component` protocol by providing `parts`,
 `format_for_llm`, and `_parse`:
 
@@ -141,7 +142,7 @@ For a full walkthrough of the Component protocol and templating system, see
 
 ## Custom sampling strategies
 
-A [`SamplingStrategy`](../guide/glossary#sampling-strategy) controls how Mellea
+A [`SamplingStrategy`](../reference/glossary#sampling-strategy) controls how Mellea
 generates and validates outputs — for example, rejection sampling, best-of-n, or
 beam search. Subclass `SamplingStrategy` and implement `sample`:
 
@@ -226,7 +227,7 @@ For built-in strategies and advanced patterns, see
 
 ## Custom backends
 
-A [`Backend`](../guide/glossary#backend) connects Mellea to an inference provider.
+A [`Backend`](../reference/glossary#backend) connects Mellea to an inference provider.
 Subclass the abstract `Backend` class from `mellea.core.backend` and implement
 the two abstract methods:
 

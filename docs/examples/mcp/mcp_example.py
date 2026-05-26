@@ -16,7 +16,7 @@ from mcp.server.fastmcp import FastMCP
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import FancyLogger, ModelOutputThunk, Requirement
+from mellea.core import MelleaLogger, ModelOutputThunk, Requirement
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 

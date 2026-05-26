@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/generative-functions"
 title: "Generative Functions"
 description: "How the @generative decorator turns a Python function signature into an LLM-backed implementation."
 # diataxis: explanation
@@ -6,10 +7,10 @@ description: "How the @generative decorator turns a Python function signature in
 
 In classical programming, a pure function takes inputs and produces outputs deterministically.
 In a generative program, a function can have the same interface but delegate its implementation
-to an LLM. Mellea calls these [**generative functions**](../guide/glossary#generative-function) and provides the [`@generative`](../guide/glossary#generative) decorator
+to an LLM. Mellea calls these [**generative functions**](../reference/glossary#generative-function) and provides the [`@generative`](../reference/glossary#generative) decorator
 to define them.
 
-> **Looking to use this in code?** See [Generative Functions](../guide/generative-functions) for practical examples and API details.
+> **Looking to use this in code?** See [Generative Functions](../how-to/generative-functions) for practical examples and API details.
 
 ## The @generative decorator
 
@@ -18,6 +19,8 @@ is replaced by the LLM at call time — the signature and docstring guide the mo
 the output.
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative, start_session
 
@@ -40,6 +43,8 @@ return anything else.
 Generative functions can also return Pydantic models for structured multi-field output:
 
 ```python
+# Requires: mellea, pydantic
+# Returns: FeedbackSummary
 from typing import Literal
 from pydantic import BaseModel
 from mellea import generative, start_session
@@ -70,6 +75,8 @@ Consider two independent libraries: one that summarizes documents, and one that 
 decisions or risks from summaries.
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import generative
 
 # Summarizer library
@@ -105,6 +112,8 @@ To compose libraries safely without coupling them, use generative functions as c
 classifiers that gate whether a composition makes sense:
 
 ```python
+# Requires: mellea
+# Returns: str
 from typing import Literal
 from mellea import generative
 
@@ -122,6 +131,8 @@ def has_structured_conclusion(summary: str) -> Literal["yes", "no"]:
 These contracts let you write dynamic composition logic in ordinary Python:
 
 ```python
+# Requires: mellea
+# Returns: None
 from mellea import start_session
 
 m = start_session()
@@ -167,4 +178,4 @@ Use `@generative` when you want a named, typed, reusable LLM-backed operation. U
 
 **See also:** [Instruct, Validate, Repair](./instruct-validate-repair) |
 [The Requirements System](./requirements-system) |
-[Tools and Agents](../guide/tools-and-agents)
+[Tools and Agents](../how-to/tools-and-agents)

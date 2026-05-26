@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/lora-and-alora-adapters"
 title: "LoRA and aLoRA adapters"
 description: "Train lightweight adapters on your own labeled data and use them as requirement validators in Mellea programs."
 # diataxis: how-to
@@ -11,12 +12,16 @@ schemes not well-represented in general training data. Mellea lets you train a
 [aLoRA](https://github.com/IBM/activated-lora) adapter on your own labeled dataset
 and use it as a requirement validator in any Mellea program.
 
-**Prerequisites:** `pip install mellea`, `m` CLI available. Training requires a GPU or
+**Prerequisites:** `pip install "mellea[cli]"`. Training requires a GPU or
 Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requires a
 Hugging Face account.
 
-> **Backend note:** Trained adapters can only be loaded into `LocalHFBackend`. They do
-> not work with Ollama, OpenAI, or other remote backends.
+> **Backend note:** Custom-trained adapters can only be loaded into `LocalHFBackend`.
+> They do not work with Ollama, OpenAI, or other remote backends.
+>
+> Granite Switch models ship with pre-trained intrinsic adapters embedded in the
+> model weights, which can be used via `OpenAIBackend` with
+> `load_embedded_adapters=True`. See [Intrinsics](./intrinsics) for details.
 
 ## LoRA vs aLoRA
 
@@ -158,4 +163,5 @@ affect other sessions.
 
 **See also:** [Intrinsics](./intrinsics) |
 [The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers)
+[Write Custom Verifiers](../how-to/write-custom-verifiers) |
+[CLI Reference](../reference/cli)

@@ -1,4 +1,4 @@
-# pytest: ollama, llm, qualitative
+# pytest: ollama, e2e, qualitative
 
 import datetime
 import inspect
@@ -12,10 +12,10 @@ from jinja2 import Template
 
 import mellea
 import mellea.stdlib.components.chat
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 from mellea.stdlib.context import ChatContext
 
-FancyLogger.get_logger().setLevel("ERROR")
+MelleaLogger.get_logger().setLevel("ERROR")
 
 react_system_template: Template = Template(
     """Answer the user's question as best you can.
@@ -61,7 +61,7 @@ class ReactTool(pydantic.BaseModel):
 
 
 class ReactToolbox(pydantic.BaseModel):
-    """A convienance wrapper around ReactTool."""
+    """A convenience wrapper around ReactTool."""
 
     tools: list[ReactTool]
 

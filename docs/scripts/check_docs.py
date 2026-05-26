@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate Mellea documentation: links and Python code snippets.
 
-Standalone script — no dependencies beyond Python 3.10+ stdlib.
+Standalone script — no dependencies beyond Python 3.11+ stdlib.
 Idempotent: read-only, reports problems to stdout, exits non-zero
 if any hard errors are found.
 
@@ -383,7 +383,7 @@ MELLEA_NAMES = {
     "start_session",
     "act",
     "aact",
-    "GenSlot",
+    "GenStub",
     "Requirement",
     "PydanticRequirement",
     "RegexRequirement",

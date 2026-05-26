@@ -5,6 +5,28 @@ import pytest
 import requests
 
 from mellea.helpers import is_vllm_server_with_structured_output
+from mellea.helpers.server_type import _server_type, _ServerType
+
+# --- _server_type ---
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("http://localhost:8000/v1", _ServerType.LOCALHOST),
+        ("http://127.0.0.1:11434", _ServerType.LOCALHOST),
+        ("http://[::1]:8080/v1", _ServerType.LOCALHOST),
+        ("http://0.0.0.0:5000", _ServerType.LOCALHOST),
+        ("https://api.openai.com/v1", _ServerType.OPENAI),
+        ("https://my-company.example.com/v1", _ServerType.UNKNOWN),
+        ("not-a-url", _ServerType.UNKNOWN),
+    ],
+)
+def test_server_type_classification(url, expected):
+    assert _server_type(url) == expected
+
+
+# --- is_vllm_server_with_structured_output ---
 
 BASE_URL = "http://localhost:8000/v1"
 HEADERS = {"Authorization": "Bearer test-key"}

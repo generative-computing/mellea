@@ -3,20 +3,22 @@ import os
 import pytest
 
 from mellea.backends.tools import MelleaTool
+from test.predicates import require_gpu
 
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,
+    pytest.mark.e2e,
+    require_gpu(min_vram_gb=18),
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
         reason="Skipping HuggingFace tools tests in CI - qualitative test",
     ),
 ]
 
+pytest.importorskip(
+    "llguidance", reason="llguidance not installed — install mellea[hf]"
+)
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
 from mellea.backends import ModelOption

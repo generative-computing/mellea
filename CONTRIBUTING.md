@@ -40,7 +40,7 @@ to melleaadmin@ibm.com.
 
 ### Prerequisites
 
-- Python 3.10 or higher (3.13+ requires [Rust compiler](https://www.rust-lang.org/tools/install) for outlines)
+- Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or conda/mamba
 - [Ollama](https://ollama.com/download) with [required models](#required-models) (for local testing) 
 
@@ -278,10 +278,87 @@ error handling and timeout management.
 Closes #123
 ```
 
-**Important:** Always sign off commits using `-s` or `--signoff`:
+### Developer Certificate of Origin (DCO)
+
+Mellea uses the [Developer Certificate of Origin](https://developercertificate.org/)
+to certify that contributors have the right to submit their work under the project's
+license. By signing off on a commit, you are agreeing to the terms of the DCO (full
+text below).
+
+**Sign off every commit** using `-s` or `--signoff`:
+
 ```bash
 git commit -s -m "feat: your commit message"
 ```
+
+This appends a `Signed-off-by` trailer using your `user.name` and `user.email` from
+git config:
+
+```text
+Signed-off-by: Jane Doe <jane@example.com>
+```
+
+Use your real name and a reachable email. PRs with unsigned commits will be blocked
+by the DCO check until every commit is signed off. To retroactively sign existing
+commits, use `git rebase --signoff <base>` and force-push.
+
+The repo's pre-commit config also runs a local DCO check at `commit-msg` time, so
+unsigned commits fail before they're pushed.
+
+<details>
+<summary>Developer Certificate of Origin v1.1 (full text)</summary>
+
+```
+Developer Certificate of Origin
+Version 1.1
+
+Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+
+Developer's Certificate of Origin 1.1
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created in whole or in part by me and I
+    have the right to submit it under the open source license
+    indicated in the file; or
+
+(b) The contribution is based upon previous work that, to the best
+    of my knowledge, is covered under an appropriate open source
+    license and I have the right under that license to submit that
+    work with modifications, whether created in whole or in part
+    by me, under the same open source license (unless I am
+    permitted to submit under a different license), as indicated
+    in the file; or
+
+(c) The contribution was provided directly to me by some other
+    person who certified (a), (b) or (c) and I have not modified
+    it.
+
+(d) I understand and agree that this project and the contribution
+    are public and that a record of the contribution (including all
+    personal information I submit with it, including my sign-off) is
+    maintained indefinitely and may be redistributed consistent with
+    this project or the open source license(s) involved.
+```
+
+</details>
+
+### AI Coding Assistants
+
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting.
+
+AI coding assistants following project guidelines add an `Assisted-by:` trailer to commit messages by default, identifying which tool was used:
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
+Add one line per tool used, using its common name (GitHub Copilot, Cursor, etc.).
 
 ### Pre-commit Hooks
 
@@ -333,18 +410,15 @@ uv run pytest
 # Fast tests only (no qualitative, ~2 min)
 uv run pytest -m "not qualitative"
 
-# Run only slow tests (>5 min)
-uv run pytest -m slow
+# Unit tests only (self-contained, no services)
+uv run pytest -m unit
 
-# Run ALL tests including slow (bypass config)
-uv run pytest --co -q
+# Run only slow tests (>1 min)
+uv run pytest -m slow
 
 # Run specific backend tests
 uv run pytest -m "ollama"
 uv run pytest -m "openai"
-
-# Run tests without LLM calls (unit tests only)
-uv run pytest -m "not llm"
 
 # CI/CD mode (skips qualitative tests)
 CICD=1 uv run pytest
@@ -357,46 +431,47 @@ uv run ruff check .
 ### Required Models
 
 #### Ollama
-- `granite4:micro-h`
-- `granite3.2-vision`
-- `granite4:micro`
-- `qwen2.5vl:7b`
 
-_Note: ollama models can be obtained by running `ollama pull <model>`_
+HuggingFace and cloud backends download or host models automatically. Ollama
+models must be pulled locally before running the tests that need them.
+
+**CI (unit + integration tests):**
+
+- `granite4.1:3b` — default model for `start_session()` and most examples
+
+**Examples (`docs/examples/`):**
+
+- `deepseek-r1:8b` — safety / guardian examples
+- `granite3-guardian:2b` — mini-researcher guardian backend
+- `granite3.2-vision` — vision (Ollama chat) example
+- `granite3.3:8b` — m\_decompose example
+- `granite4:latest` — melp examples
+- `llama3.2` — repair-with-guardian example
+- `llama3.2:3b` — tutorial / mify examples (via `META_LLAMA_3_2_3B`)
+- `qwen2.5vl:7b` — vision (OpenAI-via-Ollama) example
+
+**Additional test models (`test/`):**
+
+- `granite4:small-h` — hybrid-small tests
+- `llama3.2:1b` — lightweight inference tests
+- `llama3:8b` — legacy Llama 3 tests
+- `llava` — multimodal tests
+- `mistral:7b` — Mistral backend tests
+- `smollm2:1.7b` — SmolLM tests
+
+Pull everything:
+
+```bash
+for m in granite4.1:3b deepseek-r1:8b \
+  granite3-guardian:2b granite3.2-vision granite3.3:8b granite4:latest \
+  llama3.2 llama3.2:3b \
+  qwen2.5vl:7b granite4:small-h llama3.2:1b llama3:8b llava mistral:7b \
+  smollm2:1.7b; do ollama pull "$m"; done
+```
 
 ### Test Markers
 
-Tests are categorized using pytest markers:
-
-**Backend Markers:**
-- `@pytest.mark.ollama` - Requires Ollama running (local, lightweight)
-- `@pytest.mark.huggingface` - Requires HuggingFace backend (local, heavy)
-- `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
-- `@pytest.mark.openai` - Requires OpenAI API (requires API key)
-- `@pytest.mark.watsonx` - Requires Watsonx API (requires API key)
-- `@pytest.mark.litellm` - Requires LiteLLM backend
-
-**Capability Markers:**
-- `@pytest.mark.requires_gpu` - Requires GPU
-- `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
-- `@pytest.mark.requires_api_key` - Requires external API keys
-- `@pytest.mark.qualitative` - LLM output quality tests (skipped in CI via `CICD=1`)
-- `@pytest.mark.llm` - Makes LLM calls (needs at least Ollama)
-- `@pytest.mark.slow` - Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
-
-**Execution Strategy Markers:**
-- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
-
-**Default behavior:**
-- `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
-- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
-- Use `pytest -m slow` or `pytest --co -q` to include slow tests
-
-⚠️ **Don't add `qualitative` to trivial tests** - keep the fast loop fast.
-⚠️ **Mark tests taking >5 minutes with `slow`** (e.g., dataset loading, extensive evaluations).
-
-For detailed information about test markers, resource requirements, and running specific
-test categories, see [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md).
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference, including tier definitions, backend markers, resource gates, and auto-skip logic.
 
 ### CI/CD Tests
 
@@ -417,7 +492,7 @@ CICD=1 uv run pytest
 
 - Fast tests (`-m "not qualitative"`): ~2 minutes
 - Default tests (qualitative, no slow): Several minutes
-- Slow tests (`-m slow`): >5 minutes
+- Slow tests (`-m slow`): >1 minute each
 - Pre-commit hooks: 1-5 minutes
 
 ⚠️ **Don't cancel mid-run** - canceling `pytest` or `pre-commit` can corrupt state.
@@ -440,8 +515,8 @@ CICD=1 uv run pytest
 
 ```python
 # Enable debug logging
-from mellea.core import FancyLogger
-FancyLogger.get_logger().setLevel("DEBUG")
+from mellea.core import MelleaLogger
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 # See exact prompt sent to LLM
 print(m.last_prompt())
@@ -458,7 +533,7 @@ print(m.last_prompt())
 
 ### Documentation
 
-- **[Docs writing guide](docs/docs/guide/CONTRIBUTING.md)** - Conventions, PR checklist, and review process for documentation contributions
+- **[Docs writing guide](docs/CONTRIBUTING_DOCS.md)** - Conventions, PR checklist, and review process for documentation contributions
 - **[API Documentation](https://docs.mellea.ai)** - Published documentation site
 - **[Test Markers Guide](test/MARKERS_GUIDE.md)** - Detailed pytest marker documentation
 - **[AGENTS.md](AGENTS.md)** - Guidelines for AI assistants working on Mellea internals

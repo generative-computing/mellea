@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.slow,  # Very slow on the first run.
     pytest.mark.timeout(600),
 ]
@@ -28,8 +29,6 @@ if UV_BIN is None:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-IS_MACOS = sys.platform == "darwin"
-
 # ---------------------------------------------------------------------------
 # Import statements keyed by extra name ("core" for base dependencies)
 # ---------------------------------------------------------------------------
@@ -40,16 +39,17 @@ IS_MACOS = sys.platform == "darwin"
 #       another group (without explicitly listing it). That will lead to false positives here on
 #       the should_fail side. This happens with vllm (which imports all the parts of hf) so we just
 #       exclude the hf import statements from that test.
+
 IMPORTS: dict[str, list[str]] = {
     "core": [
         "import mellea",
         "from mellea.backends import Backend, ModelIdentifier, ModelOption",
         "from mellea.backends.ollama import OllamaModelBackend",
         "from mellea.backends.openai import OpenAIBackend",
+        "from mellea.backends.adapters.adapter import EmbeddedIntrinsicAdapter",
         "from mellea.core import Backend",
     ],
     "hf": ["from mellea.backends.huggingface import LocalHFBackend"],
-    "vllm": ["from mellea.backends.vllm import LocalVLLMBackend"],
     "litellm": ["from mellea.backends.litellm import LiteLLMBackend"],
     "watsonx": ["from mellea.backends.watsonx import WatsonxAIBackend"],
     "tools": ["import langchain_core", "import smolagents"],
@@ -59,11 +59,13 @@ IMPORTS: dict[str, list[str]] = {
     "docling": ["from mellea.stdlib.components.docs.richdocument import RichDocument"],
     "granite_retriever": [
         "import sentence_transformers",
-        "import pyarrow",
+        "from mellea.formatters.granite.retrievers.util import download_mtrag_corpus",
         "import elasticsearch",
     ],
-    "server": ["import uvicorn", "import fastapi"],
+    "cli": ["from cli.m import cli"],
+    "server": ["from cli.serve.app import run_server"],
     "sandbox": ["import llm_sandbox"],
+    "switch": ["import huggingface_hub"],
     "hooks": [
         "import cpex"  # We directly import a non-Mellea class/package here since the hooks classes are defined regardless of if cpex is installed.
     ],
@@ -82,16 +84,20 @@ FLAG_CHECKS: dict[str, list[tuple[str, str, bool]]] = {
 }
 
 # There are a few special tests for backends.
-BACKEND_EXTRAS = {"hf", "vllm", "litellm", "watsonx"}
+BACKEND_EXTRAS = {"hf", "litellm", "watsonx"}
 
 # Meta-groups that compose other extras (no dedicated isolation test needed).
 META_GROUPS = {"backends", "all"}
+
+# Extras whose IMPORTS entries all go through guarded mellea/cli modules
+# (i.e. ImportError will contain a mellea[<extra>] hint). Allows us to
+# check for a nice ImportError message.
+GUARDED_EXTRAS = {*BACKEND_EXTRAS, "server", "docling", "cli"}
 
 # Extras that have a corresponding test_<name> function in this module.
 # Used to determine if we are missing tests for a given optional-dependency group.
 TESTED_EXTRAS = {
     "hf",
-    "vllm",
     "litellm",
     "watsonx",
     "tools",
@@ -100,7 +106,9 @@ TESTED_EXTRAS = {
     "granite_retriever",
     "server",
     "sandbox",
+    "switch",
     "hooks",
+    "cli",
     "backends",
 }
 
@@ -114,7 +122,7 @@ def _parse_optional_dependency_groups() -> set[str]:
     """Parse ``pyproject.toml`` and return the set of optional-dependency group names.
 
     Returns:
-        set[str]: The group names defined in ``pyproject.toml`` (e.g. ``{"hf", "vllm", ...}``).
+        set[str]: The group names defined in ``pyproject.toml`` (e.g. ``{"hf", ...}``).
     """
     pyproject = PROJECT_ROOT / "pyproject.toml"
     with open(pyproject, "rb") as f:
@@ -122,11 +130,19 @@ def _parse_optional_dependency_groups() -> set[str]:
     return set(data.get("project", {}).get("optional-dependencies", {}).keys())
 
 
-def _backend_fail_imports(exclude: set[str] | str = "") -> list[str]:
-    """Return backend import statements that should fail, excluding the given extras.
+def _normalize_exclude(exclude: set[str] | str = "") -> set[str]:
+    """Normalize an exclude argument to a set of extra names."""
+    if isinstance(exclude, str):
+        return {exclude} if exclude else set()
+    return exclude
 
-    Collects import statements from all ``BACKEND_EXTRAS`` except those in
-    ``exclude``, and also excludes ``vllm`` on macOS since it is unsupported there.
+
+def _backend_fail_imports(exclude: set[str] | str = "") -> list[tuple[str, str]]:
+    """Return ``(import_stmt, extra_name)`` pairs for backends expected to fail.
+
+    Collects import statements from all ``BACKEND_EXTRAS`` except those in ``exclude``.
+    Each tuple pairs the import statement with the extra name so the checker
+    script can verify the ``ImportError`` contains a ``mellea[<extra>]`` hint.
 
     Args:
         exclude (set[str] | str): Backend extras to omit (their imports are
@@ -134,20 +150,15 @@ def _backend_fail_imports(exclude: set[str] | str = "") -> list[str]:
             an empty string to include all backends.
 
     Returns:
-        list[str]: Import statements that should raise ``ImportError`` in the
-            isolated environment.
+        list[tuple[str, str]]: Pairs of ``(import_statement, extra_name)``.
     """
-    if isinstance(exclude, str):
-        exclude = {exclude} if exclude else set()
-    extras = BACKEND_EXTRAS - exclude
-    if IS_MACOS:
-        extras -= {"vllm"}
-    return [stmt for name in sorted(extras) for stmt in IMPORTS[name]]
+    extras = BACKEND_EXTRAS - _normalize_exclude(exclude)
+    return [(stmt, name) for name in sorted(extras) for stmt in IMPORTS[name]]
 
 
 def _build_check_script(
     should_succeed: list[str] = [],
-    should_fail: list[str] = [],
+    should_fail: list[tuple[str, str]] = [],
     flag_checks: list[tuple[str, str, bool]] = [],
 ) -> str:
     """Build a self-contained Python script that tests imports and prints failures.
@@ -158,7 +169,9 @@ def _build_check_script(
 
     Args:
         should_succeed (list[str]): Import statements that must execute without error.
-        should_fail (list[str]): Import statements that must raise ``ImportError``.
+        should_fail (list[tuple[str, str]]): Tuples of
+            ``(import_statement, extra_name)`` — the import must raise
+            ``ImportError`` and the message must contain ``mellea[<extra_name>]``.
         flag_checks (list[tuple[str, str, bool]]): Tuples of
             ``(module_path, attribute_name, expected_value)`` for boolean flag
             assertions (e.g. ``("mellea.telemetry.tracing", "_OTEL_AVAILABLE", True)``).
@@ -175,12 +188,16 @@ def _build_check_script(
         lines.append(f"    failures.append(f'SHOULD SUCCEED: {stmt}: {{e}}')")
         lines.append("")
 
-    for stmt in should_fail:
+    for stmt, extra in should_fail:
+        hint = f"mellea[{extra}]"
         lines.append("try:")
         lines.append(f"    {stmt}")
         lines.append(f"    failures.append('SHOULD FAIL but succeeded: {stmt}')")
-        lines.append("except ImportError:")
-        lines.append("    pass")
+        lines.append("except ImportError as e:")
+        lines.append(f"    if '{hint}' not in str(e):")
+        lines.append(
+            f"        failures.append(f'MISSING HINT {hint} in: {stmt}: {{e}}')"
+        )
         lines.append("except Exception:")
         lines.append("    pass  # non-ImportError counts as unavailable")
         lines.append("")
@@ -206,7 +223,7 @@ def _build_check_script(
 def _run_check(
     extra: str | None = None,
     should_succeed: list[str] = [],
-    should_fail: list[str] = [],
+    should_fail: list[tuple[str, str]] = [],
     flag_checks: list[tuple[str, str, bool]] = [],
 ) -> None:
     """Build and run an import check script in an isolated uv environment.
@@ -220,7 +237,9 @@ def _run_check(
         extra (str | None): The optional-dependency extra to install
             (e.g. ``"hf"``). Pass ``None`` to install core mellea only.
         should_succeed (list[str]): Import statements that must execute without error.
-        should_fail (list[str]): Import statements that must raise ``ImportError``.
+        should_fail (list[tuple[str, str]]): Tuples of
+            ``(import_statement, extra_name)`` — must raise ``ImportError``
+            with ``mellea[<extra_name>]`` in the message.
         flag_checks (list[tuple[str, str, bool]]): Tuples of
             ``(module_path, attribute_name, expected_value)`` for boolean flag
             assertions.
@@ -229,7 +248,8 @@ def _run_check(
         ValueError: If any import statement appears in both ``should_succeed``
             and ``should_fail``.
     """
-    overlap = set(should_succeed) & set(should_fail)
+    fail_stmts = {stmt for stmt, _ in should_fail}
+    overlap = set(should_succeed) & fail_stmts
     if overlap:
         raise ValueError(
             f"Same imports in both should_succeed and should_fail: {overlap}"
@@ -283,10 +303,17 @@ def _inverted_flag_checks(extra: str) -> list[tuple[str, str, bool]]:
 
 
 def test_core_only() -> None:
-    """Core mellea with no extras: basic imports work, optional backends fail."""
+    """Core mellea with no extras: basic imports work, optional extras fail with hints."""
     _run_check(
         should_succeed=IMPORTS["core"],
-        should_fail=_backend_fail_imports(exclude=""),
+        should_fail=[
+            *_backend_fail_imports(exclude=""),
+            *[
+                (stmt, name)
+                for name in sorted(GUARDED_EXTRAS - BACKEND_EXTRAS)
+                for stmt in IMPORTS[name]
+            ],
+        ],
         flag_checks=[
             *_inverted_flag_checks("telemetry"),
             *_inverted_flag_checks("hooks"),
@@ -295,7 +322,7 @@ def test_core_only() -> None:
 
 
 def test_hf() -> None:
-    """mellea[hf]: HuggingFace backend imports succeed, others fail."""
+    """mellea[hf]: HuggingFace backend imports succeed, others fail with hints."""
     _run_check(
         extra="hf",
         should_succeed=[*IMPORTS["core"], *IMPORTS["hf"]],
@@ -303,18 +330,8 @@ def test_hf() -> None:
     )
 
 
-@pytest.mark.skipif(IS_MACOS, reason="vllm is not supported on macOS")
-def test_vllm() -> None:
-    """mellea[vllm]: vLLM backend imports succeed, others fail."""
-    _run_check(
-        extra="vllm",
-        should_succeed=[*IMPORTS["core"], *IMPORTS["vllm"]],
-        should_fail=_backend_fail_imports(exclude={"vllm", "hf"}),
-    )
-
-
 def test_litellm() -> None:
-    """mellea[litellm]: LiteLLM backend imports succeed, others fail."""
+    """mellea[litellm]: LiteLLM backend imports succeed, others fail with hints."""
     _run_check(
         extra="litellm",
         should_succeed=[*IMPORTS["core"], *IMPORTS["litellm"]],
@@ -323,7 +340,7 @@ def test_litellm() -> None:
 
 
 def test_watsonx() -> None:
-    """mellea[watsonx]: Watsonx backend imports succeed, others fail."""
+    """mellea[watsonx]: Watsonx backend imports succeed, others fail with hints."""
     _run_check(
         extra="watsonx",
         should_succeed=[*IMPORTS["core"], *IMPORTS["watsonx"]],
@@ -368,6 +385,16 @@ def test_sandbox() -> None:
     _run_check(extra="sandbox", should_succeed=[*IMPORTS["core"], *IMPORTS["sandbox"]])
 
 
+def test_switch() -> None:
+    """mellea[switch]: huggingface_hub is available for embedded adapter downloads."""
+    _run_check(extra="switch", should_succeed=[*IMPORTS["core"], *IMPORTS["switch"]])
+
+
+def test_cli() -> None:
+    """mellea[cli]: typer is available."""
+    _run_check(extra="cli", should_succeed=[*IMPORTS["core"], *IMPORTS["cli"]])
+
+
 def test_hooks() -> None:
     """mellea[hooks]: plugin framework is available."""
     _run_check(
@@ -379,7 +406,7 @@ def test_hooks() -> None:
 
 def test_backends_meta() -> None:
     """mellea[backends]: all backend imports work."""
-    extras = BACKEND_EXTRAS - ({"vllm"} if IS_MACOS else set())
+    extras = BACKEND_EXTRAS
     should_succeed = [*IMPORTS["core"]]
     for name in sorted(extras):
         should_succeed.extend(IMPORTS[name])
@@ -454,7 +481,7 @@ def test_checker_detects_should_succeed_failure() -> None:
 
 def test_checker_detects_should_fail_that_succeeds() -> None:
     """Checker script exits non-zero when a should_fail import actually works."""
-    script = _build_check_script(should_fail=["import json"])
+    script = _build_check_script(should_fail=[("import json", "fake")])
     result = _run_script_raw(script)
     assert result.returncode != 0
     assert "SHOULD FAIL but succeeded" in result.stderr
@@ -470,11 +497,21 @@ def test_checker_detects_wrong_flag_value() -> None:
     assert "FLAG sys.maxsize" in result.stderr
 
 
+def test_checker_detects_missing_hint() -> None:
+    """Checker script exits non-zero when ImportError lacks the expected install hint."""
+    # Raise an ImportError without the expected hint substring
+    script = _build_check_script(
+        should_fail=[("import no_such_module_xyz", "fake_extra")]
+    )
+    result = _run_script_raw(script)
+    assert result.returncode != 0
+    assert "MISSING HINT mellea[fake_extra]" in result.stderr
+
+
 def test_checker_passes_when_all_correct() -> None:
     """Checker script exits zero when all checks pass."""
     script = _build_check_script(
         should_succeed=["import json", "from os.path import join"],
-        should_fail=["import no_such_module_xyz"],
         flag_checks=[("sys", "maxsize", sys.maxsize)],  # type: ignore[list-item]
     )
     result = _run_script_raw(script)

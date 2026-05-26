@@ -160,8 +160,8 @@ Session methods: `ainstruct`, `achat`, `aact`, `avalidate`, `aquery`, `atransfor
 
 #### 12. Debugging
 ```python
-from mellea.core import FancyLogger
-FancyLogger.get_logger().setLevel("DEBUG")
+from mellea.core import MelleaLogger
+MelleaLogger.get_logger().setLevel("DEBUG")
 ```
 - `m.last_prompt()` — see exact prompt sent
 

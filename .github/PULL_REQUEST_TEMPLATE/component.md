@@ -1,13 +1,6 @@
-# Component PR
+# Component PR Checklist
 
-Use this template when adding or modifying components in `mellea/stdlib/components/`.
-
-## Description
-- [ ] Link to Issue: Fixes <!-- issue number -->
-
-<!-- Brief description of the component being added/modified along with an explanation for why it should be in the standard library. -->
-
-## Implementation Checklist
+Use this checklist when adding or modifying components in `mellea/stdlib/components/`.
 
 ### Protocol Compliance
 - [ ] `parts()` returns list of constituent parts (Components or CBlocks)
@@ -20,8 +13,3 @@ Use this template when adding or modifying components in `mellea/stdlib/componen
 
 ### Integration
 - [ ] Component exported in `mellea/stdlib/components/__init__.py` or, if you are adding a library of components, from your sub-module
-
-### Testing
-- [ ] Tests added to `tests/components/`
-- [ ] New code has 100% coverage
-- [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)

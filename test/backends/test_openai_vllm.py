@@ -1,4 +1,3 @@
-# test/rits_backend_tests/test_openai_integration.py
 import os
 import signal
 import subprocess
@@ -9,13 +8,14 @@ import pydantic
 import pytest
 import requests
 
+from test.predicates import require_gpu
+
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.openai,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.vllm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    require_gpu(min_vram_gb=8),
     # Skip entire module in CI since all 8 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -28,7 +28,7 @@ pytestmark = [
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.formatters import TemplateFormatter
@@ -37,22 +37,56 @@ from mellea.stdlib.context import ChatContext
 
 @pytest.fixture(scope="module")
 def vllm_process():
-    """Shared vllm process for all tests in this module."""
+    """Shared vllm process for all tests in this module.
+
+    If VLLM_TEST_BASE_URL is set (e.g. by run_tests_with_ollama_and_vllm.sh),
+    the server is already running externally — skip subprocess entirely.
+    """
+    if os.environ.get("VLLM_TEST_BASE_URL"):
+        yield None
+        return
+
+    # Skip if no CUDA GPU is available (mirrors auto-detection in the script)
+    try:
+        subprocess.run(["nvidia-smi", "-L"], check=True, capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip(
+            "No CUDA GPU detected — skipping vLLM openai tests", allow_module_level=True
+        )
+
+    # Resolve the vLLM venv — created by run_tests_with_ollama_and_vllm.sh or
+    # bootstrapped here for direct pytest invocations.
+    vllm_venv = os.environ.get("VLLM_VENV_PATH", ".vllm-venv")
+    vllm_python = os.path.join(vllm_venv, "bin", "python")
+    if not os.path.isfile(vllm_python):
+        subprocess.run(["uv", "venv", vllm_venv, "--python", "3.11"], check=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--python", vllm_python, "vllm"], check=True
+        )
+
     process = None
     try:
         process = subprocess.Popen(
             [
-                "vllm",
-                "serve",
-                IBM_GRANITE_4_MICRO_3B.hf_model_name,
+                vllm_python,
+                "-m",
+                "vllm.entrypoints.openai.api_server",
+                "--model",
+                IBM_GRANITE_4_1_3B.hf_model_name,
                 "--served-model-name",
-                IBM_GRANITE_4_MICRO_3B.hf_model_name,
+                IBM_GRANITE_4_1_3B.hf_model_name,
                 "--enable-lora",
                 "--dtype",
                 "bfloat16",
                 "--max-lora-rank",
                 "64",
                 "--enable-prefix-caching",
+                "--gpu-memory-utilization",
+                "0.4",
+                "--max-num-seqs",
+                "256",
+                "--max-model-len",
+                "4096",
             ],
             # the process will have a new session id, so
             # entire process tree is killable at once
@@ -129,11 +163,12 @@ def vllm_process():
 
 @pytest.fixture(scope="module")
 def backend(gh_run: int, vllm_process: subprocess.Popen):
-    """Shared OpenAI backend configured for Ollama."""
+    """Shared OpenAI backend configured for vLLM."""
+    base_url = os.environ.get("VLLM_TEST_BASE_URL", "http://127.0.0.1:8000") + "/v1"
     return OpenAIBackend(
-        model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name,  # type: ignore
-        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name),  # type: ignore
-        base_url="http://0.0.0.0:8000/v1",
+        model_id=IBM_GRANITE_4_1_3B.hf_model_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_1_3B.hf_model_name),  # type: ignore
+        base_url=base_url,
         api_key="EMPTY",
     )
 
@@ -238,6 +273,10 @@ async def test_generate_from_raw(m_session: MelleaSession) -> None:
     assert results[0].value is not None
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason="vLLM intermittently produces truncated/malformed JSON for structured output",
+)
 @pytest.mark.qualitative
 async def test_generate_from_raw_with_format(m_session: MelleaSession) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]

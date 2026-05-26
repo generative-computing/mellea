@@ -9,11 +9,13 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
 )
 from mellea.core import ModelOutputThunk
+
+pytest.importorskip("docling", reason="docling not installed — install mellea[docling]")
 from mellea.stdlib.components.docs.richdocument import Table
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="module")
@@ -59,6 +61,9 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     assert "to_markdown" in tools
 
 
+@pytest.mark.xfail(
+    reason="We don't force tools to be called. As a result, this test might unexpectedly fail."
+)
 def test_tool_called(m: MelleaSession, table: Table):
     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
     r = 10

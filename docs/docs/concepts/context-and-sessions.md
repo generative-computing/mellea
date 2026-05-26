@@ -1,11 +1,12 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/context-and-sessions"
 title: "Context and Sessions"
 description: "How Component, Backend, Context, and Session fit together in Mellea's architecture."
 # diataxis: explanation
 ---
 
-Every call to an LLM in Mellea passes through four layers: [**Component**](../guide/glossary#component), [**Backend**](../guide/glossary#backend),
-[**Context**](../guide/glossary#context), and **Session**. Understanding how these fit together explains both why
+Every call to an LLM in Mellea passes through four layers: [**Component**](../reference/glossary#component), [**Backend**](../reference/glossary#backend),
+[**Context**](../reference/glossary#context), and **Session**. Understanding how these fit together explains both why
 Mellea is structured the way it is and how to extend it effectively.
 
 > **Looking to use this in code?** See [Context and Sessions](../how-to/use-context-and-sessions) for practical examples and session extension patterns.
@@ -30,7 +31,7 @@ raw text or a parsed representation of a model output.
 ### Backends
 
 A `Backend` takes a `Component`, formats it into a prompt, sends it to an LLM, and
-returns the model output as a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). The `Thunk` is a lazy wrapper: it
+returns the model output as a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). The `Thunk` is a lazy wrapper: it
 holds the raw model output and parses it on access (via `.value` or `str()`).
 
 The backend is responsible for:
@@ -52,7 +53,7 @@ The context serves two purposes:
 
 1. **Prompt construction** — the backend calls `ctx.view_for_generation()` to get
    the components that should appear in the prompt. For `ChatContext`, this includes
-   all prior turns. For [`SimpleContext`](../guide/glossary#simplecontext), it includes only the current instruction.
+   all prior turns. For [`SimpleContext`](../reference/glossary#simplecontext), it includes only the current instruction.
 
 2. **Validation** — during the IVR loop, requirement validators receive the
    `Context` object. They can call `ctx.last_output()` to inspect the most recent
@@ -60,13 +61,89 @@ The context serves two purposes:
 
 ### Sessions
 
-[`MelleaSession`](../guide/glossary#melleasession) is the developer-facing layer. It wraps a backend and a context,
+[`MelleaSession`](../reference/glossary#melleasession) is the developer-facing layer. It wraps a backend and a context,
 exposes the `instruct()`, `chat()`, `validate()`, and other methods you use in your
 code, and handles the bookkeeping that ties components, context updates, and backend
 calls together.
 
 `start_session()` returns a `MelleaSession` with defaults: Ollama backend, Granite 4
 Micro model, and `SimpleContext`.
+
+## Session creation
+
+There are two ways to create a session in Mellea:
+
+1. `start_session(...)` — a convenience factory that creates and configures a
+   `MelleaSession`
+2. `MelleaSession(backend, ctx)` — explicit construction when you want to provide
+   the backend and context objects yourself
+
+For most application code, prefer `start_session()`. It is shorter, clearer, and
+uses sensible defaults. Reach for direct `MelleaSession(...)` construction when
+you need full control over backend instantiation or want to inject a preconfigured
+backend object.
+
+| Pattern | What you provide | Defaults included | Best for |
+| --- | --- | --- | --- |
+| `start_session()` | Backend name, model ID, optional context, model options, backend kwargs | Yes — backend class resolution, default model, and `SimpleContext` | Quick prototyping, tutorials, most production app code |
+| `MelleaSession(backend, ctx)` | A fully constructed backend object and a context object | No | Advanced usage, custom backend setup, dependency injection, testing |
+
+### `start_session()`: recommended default
+
+Use `start_session()` when you want the standard Mellea entry point:
+
+```python
+from mellea import start_session
+
+m = start_session()
+result = m.instruct("Summarise this paragraph in one sentence.")
+```
+
+Use it when:
+
+- You want the shortest path from example code to a working session
+- The built-in backend selection by name is sufficient
+- You want to configure the model with `model_id`, `model_options`, or backend kwargs
+  without manually instantiating backend objects
+
+You can still customize the session while keeping the convenience factory:
+
+```python
+from mellea import start_session
+from mellea.stdlib.context import ChatContext
+
+m = start_session(
+    backend_name="ollama",
+    ctx=ChatContext(),
+    model_options={"temperature": 0.2},
+)
+```
+
+### `MelleaSession(backend, ctx)`: explicit construction
+
+Use direct construction when you already have a backend instance or need explicit
+control over how it is created:
+
+```python
+from mellea import MelleaSession
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.stdlib.context import SimpleContext
+
+backend = OllamaModelBackend(
+    "granite4.1:3b",
+    model_options={"temperature": 0.2},
+)
+m = MelleaSession(backend, SimpleContext())
+```
+
+Use it when:
+
+- You are wiring Mellea into a larger application with dependency injection
+- You need backend setup that happens before session creation
+- You want tests to construct or swap backend instances explicitly
+
+The two patterns are not different session types: `start_session()` is the
+higher-level convenience API, and it returns a regular `MelleaSession`.
 
 ## `SimpleContext` vs `ChatContext`
 
@@ -201,7 +278,7 @@ print(last.value)
 turn = m.ctx.last_turn()
 ```
 
-`last_turn()` returns a [`ContextTurn`](../guide/glossary#contextturn) with `.input` and `.output` fields. It is
+`last_turn()` returns a [`ContextTurn`](../reference/glossary#contextturn) with `.input` and `.output` fields. It is
 useful for observability or when you need to log exactly what the model received and
 produced.
 

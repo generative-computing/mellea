@@ -3,6 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
+pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
 from mellea.plugins.base import MelleaBasePayload
 from mellea.plugins.hooks.component import ComponentPreExecutePayload
 from mellea.plugins.hooks.generation import GenerationPreCallPayload

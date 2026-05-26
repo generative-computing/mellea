@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 pytest.importorskip("cpex.framework")
 
 from mellea.core.backend import Backend
@@ -26,8 +28,7 @@ from mellea.core.base import (
     GenerateType,
     ModelOutputThunk,
 )
-from mellea.plugins import PluginResult, hook, register
-from mellea.plugins.manager import shutdown_plugins
+from mellea.plugins import HookType, PluginResult, hook, register
 from mellea.stdlib.context import SimpleContext
 
 # ---------------------------------------------------------------------------
@@ -88,18 +89,6 @@ def _make_thunk():
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def reset_plugins():
-    """Shut down and reset the plugin manager after every test."""
-    yield
-    await shutdown_plugins()
-
-
-# ---------------------------------------------------------------------------
 # Generation hook call sites
 # ---------------------------------------------------------------------------
 
@@ -144,7 +133,6 @@ class TestGenerationHookCallSites:
         assert p.action.value == action.value
         assert p.context is not None
 
-    # TODO: JAL.
     async def test_generation_post_call_fires_once(self) -> None:
         """GENERATION_POST_CALL fires exactly once after generate_from_context() returns."""
         observed: list[Any] = []
@@ -164,7 +152,6 @@ class TestGenerationHookCallSites:
         await mot.avalue()
         assert len(observed) == 1
 
-    # TODO: JAL.
     async def test_generation_post_call_model_output_is_the_returned_thunk(
         self,
     ) -> None:
@@ -186,7 +173,6 @@ class TestGenerationHookCallSites:
 
         assert observed[0].model_output is not None
 
-    # TODO: JAL.
     async def test_generation_post_call_latency_ms_is_non_negative(self) -> None:
         """GENERATION_POST_CALL payload.latency_ms >= 0."""
         observed: list[Any] = []
@@ -207,6 +193,47 @@ class TestGenerationHookCallSites:
         await mot.avalue()
 
         assert observed[0].latency_ms >= 0
+
+    async def test_generation_pre_call_mutation_is_applied_before_generation(
+        self,
+    ) -> None:
+        """GENERATION_PRE_CALL mutations reach the backend generation call."""
+        order: list[str] = []
+        captured_kwargs: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            async def _generate_from_context(self, action, ctx, **kwargs):
+                order.append("generate")
+                captured_kwargs.update(kwargs)
+                return await super()._generate_from_context(action, ctx, **kwargs)
+
+        async def fake_invoke_hook(hook_type, payload, **_kwargs):
+            assert hook_type is HookType.GENERATION_PRE_CALL
+            order.append("hook")
+            modified = payload.model_copy(
+                update={"model_options": {"temperature": 0.25}, "tool_calls": True}
+            )
+            return (
+                PluginResult(continue_processing=True, modified_payload=modified),
+                modified,
+            )
+
+        backend = RecordingBackend()
+
+        with (
+            patch("mellea.core.backend.has_plugins", return_value=True),
+            patch("mellea.core.backend.invoke_hook", side_effect=fake_invoke_hook),
+        ):
+            await backend.generate_from_context(
+                CBlock("hook order"),
+                MagicMock(spec=Context),
+                model_options={"temperature": 1.0},
+                tool_calls=False,
+            )
+
+        assert order == ["hook", "generate"]
+        assert captured_kwargs["model_options"] == {"temperature": 0.25}
+        assert captured_kwargs["tool_calls"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +304,48 @@ class TestComponentHookCallSites:
 
         await aact(action, ctx, backend, strategy=None)
         assert observed[0].component_type == "Instruction"
+
+    async def test_component_pre_execute_payload_has_context_view(self) -> None:
+        """COMPONENT_PRE_EXECUTE payload.context_view mirrors view_for_generation()."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.functional import aact
+
+        observed: list[Any] = []
+
+        @hook("component_pre_execute")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext.from_previous(SimpleContext(), CBlock("prior turn"))
+        action = Instruction("Context view test")
+
+        await aact(action, ctx, backend, strategy=None)
+        assert observed[0].context_view is not None
+        assert observed[0].context_view == ctx.view_for_generation()
+
+    async def test_component_pre_execute_empty_context_gives_empty_list(self) -> None:
+        """COMPONENT_PRE_EXECUTE on a fresh context gives an empty list, not None."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.functional import aact
+
+        observed: list[Any] = []
+
+        @hook("component_pre_execute")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        action = Instruction("Fresh context")
+
+        await aact(action, ctx, backend, strategy=None)
+        assert observed[0].context_view is not None
+        assert observed[0].context_view == []
 
     async def test_component_post_success_fires_in_aact(self) -> None:
         """COMPONENT_POST_SUCCESS fires in aact() after successful generation."""
@@ -719,6 +788,55 @@ class TestSessionHookCallSites:
             start_session("ollama", model_id="test-model")
 
         assert order == ["pre_init", "post_init"]
+
+    def test_session_pre_init_mutation_is_applied_before_backend_init(self) -> None:
+        """SESSION_PRE_INIT mutations reach the backend constructor."""
+        from mellea.stdlib.session import start_session
+
+        order: list[str] = []
+        captured_backend_args: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            def __init__(self, model_id, model_options=None, **kwargs):
+                order.append("backend_init")
+                captured_backend_args["model_id"] = model_id
+                captured_backend_args["model_options"] = model_options
+                captured_backend_args["kwargs"] = kwargs
+
+        async def fake_invoke_hook(hook_type, payload, **_kwargs):
+            assert hook_type is HookType.SESSION_PRE_INIT
+            order.append("hook")
+            modified = payload.model_copy(
+                update={
+                    "model_id": "hook-model",
+                    "model_options": {"temperature": 0.25},
+                }
+            )
+            return (
+                PluginResult(continue_processing=True, modified_payload=modified),
+                modified,
+            )
+
+        def has_session_pre_init(hook_type=None):
+            return hook_type is HookType.SESSION_PRE_INIT
+
+        with (
+            patch(
+                "mellea.stdlib.session.has_plugins", side_effect=has_session_pre_init
+            ),
+            patch("mellea.stdlib.session.invoke_hook", side_effect=fake_invoke_hook),
+            patch(
+                "mellea.stdlib.session.backend_name_to_class",
+                return_value=RecordingBackend,
+            ),
+        ):
+            start_session(
+                "ollama", model_id="original-model", model_options={"temperature": 1.0}
+            )
+
+        assert order == ["hook", "backend_init"]
+        assert captured_backend_args["model_id"] == "hook-model"
+        assert captured_backend_args["model_options"] == {"temperature": 0.25}
 
 
 # ---------------------------------------------------------------------------

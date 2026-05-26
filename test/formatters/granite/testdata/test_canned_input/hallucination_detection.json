@@ -40,7 +40,8 @@
                 "enum": [
                   "faithful",
                   "partial",
-                  "unfaithful"
+                  "unfaithful",
+                  "NA"
                 ]
               },
               "e": {
@@ -66,7 +67,5 @@
     }
   },
   "temperature": 0.0,
-  "max_completion_tokens": 4096,
-  "logprobs": true,
-  "top_logprobs": 10
+  "max_completion_tokens": 4096
 }

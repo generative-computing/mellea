@@ -17,7 +17,7 @@ pytest.importorskip("cpex.framework")
 
 from mellea.plugins import Plugin, PluginSet, hook, register
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import invoke_hook, shutdown_plugins
+from mellea.plugins.manager import invoke_hook
 from mellea.plugins.types import HookType
 
 # ---------------------------------------------------------------------------
@@ -29,18 +29,6 @@ def _session_payload() -> SessionPreInitPayload:
     return SessionPreInitPayload(
         backend_name="test-backend", model_id="test-model", model_options=None
     )
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def cleanup_plugins():
-    """Reset plugin manager state after every test."""
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------

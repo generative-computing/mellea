@@ -18,7 +18,7 @@ from mellea.plugins import PluginMode, block, hook, modify, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import ensure_plugin_manager, invoke_hook, shutdown_plugins
+from mellea.plugins.manager import ensure_plugin_manager, invoke_hook
 from mellea.plugins.types import HookType
 
 # ---------------------------------------------------------------------------
@@ -50,18 +50,6 @@ async def _invoke_no_raise(payload: SessionPreInitPayload):
         violations_as_exceptions=False,
     )
     return result
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def reset_plugins():
-    """Shut down and reset the plugin manager after every test."""
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------

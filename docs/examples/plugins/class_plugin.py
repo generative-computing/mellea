@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Class-based plugin — group related hooks in a single Plugin subclass.
 #
@@ -22,7 +22,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("fancy_logger").setLevel(logging.ERROR)
+logging.getLogger("mellea").setLevel(logging.ERROR)
 log = logging.getLogger("class_plugin")
 
 

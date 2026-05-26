@@ -6,10 +6,13 @@ the original generation exception by raising a secondary error from post_process
 """
 
 import datetime
+import importlib.util
 
 import pytest
 
 from mellea.core.base import CBlock, GenerateType, ModelOutputThunk
+
+_otel_available = importlib.util.find_spec("opentelemetry") is not None
 
 
 async def _noop_process(mot, chunk):
@@ -76,6 +79,10 @@ async def test_astream_post_process_only_called_on_success():
     assert post_process_called, "post_process should be called on successful completion"
 
 
+@pytest.mark.skipif(
+    not _otel_available,
+    reason="opentelemetry not installed — install mellea[telemetry]",
+)
 async def test_astream_closes_telemetry_span_on_error():
     """Telemetry span must be ended and error recorded when generation fails."""
     from unittest.mock import MagicMock

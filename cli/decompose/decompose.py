@@ -27,20 +27,22 @@ from .utils import validate_filename
 
 
 class DecompVersion(StrEnum):
-    """Available versions of the decomposition pipeline template.
+    """Available template versions for generated decomposition programs.
 
-    Newer versions must be declared last to ensure ``latest`` always resolves to
-    the most recent template.
+    Newer concrete versions must be declared after older ones so that
+    ``latest`` can resolve to the most recently declared template version.
 
-    Args:
-        latest (str): Sentinel value that resolves to the last declared version.
-        v1 (str): Version 1 of the decomposition pipeline template.
+    Attributes:
+        latest: Sentinel value that resolves to the last declared concrete
+            template version.
+        v1: Version 1 of the decomposition program template.
+        v2: Version 2 of the decomposition program template.
     """
 
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
-    # v3 = "v3"
+    v3 = "v3"
 
 
 this_file_dir = Path(__file__).resolve().parent
@@ -60,8 +62,18 @@ def reorder_subtasks(
         come before dependents, with numbering prefixes updated.
 
     Raises:
+        ValueError: If duplicate subtask tags are detected (case-insensitive).
         ValueError: If a circular dependency is detected.
     """
+    seen: set[str] = set()
+    for subtask in subtasks:
+        tag = subtask["tag"].lower()
+        if tag in seen:
+            raise ValueError(
+                f'Duplicate subtask tag "{tag}". Tags must be unique (case-insensitive).'
+            )
+        seen.add(tag)
+
     subtask_map = {subtask["tag"].lower(): subtask for subtask in subtasks}
 
     graph = {}
@@ -178,9 +190,7 @@ def run(
     backend: Annotated[
         DecompBackend,
         typer.Option(
-            help=(
-                'Backend used for inference. Options: "ollama", "openai", and "rits".'
-            ),
+            help=('Backend used for inference. Options: "ollama" and "openai".'),
             case_sensitive=False,
         ),
     ] = DecompBackend.ollama,
@@ -192,13 +202,10 @@ def run(
     ] = 300,
     backend_endpoint: Annotated[
         str | None,
-        typer.Option(
-            help='Backend endpoint / base URL. Required for "openai" and "rits".'
-        ),
+        typer.Option(help='Backend endpoint / base URL. Required for "openai".'),
     ] = None,
     backend_api_key: Annotated[
-        str | None,
-        typer.Option(help='Backend API key. Required for "openai" and "rits".'),
+        str | None, typer.Option(help='Backend API key. Required for "openai".')
     ] = None,
     version: Annotated[
         DecompVersion,
@@ -224,45 +231,70 @@ def run(
             case_sensitive=False,
         ),
     ] = LogMode.demo,
+    enable_script_run: Annotated[
+        bool,
+        typer.Option(
+            help=(
+                "When true, generated scripts expose argparse runtime options "
+                "for backend, model, endpoint, and API key overrides."
+            )
+        ),
+    ] = False,
 ) -> None:
-    """Decompose one or more user queries into subtasks with constraints and dependency metadata.
+    """Break a complex task into ordered, executable subtasks.
 
-    Reads user queries either from a file or interactively, runs the LLM
-    decomposition pipeline to produce subtask descriptions, Jinja2 prompt templates,
-    constraint lists, and dependency metadata, and writes one ``.json`` result file
-    plus one rendered ``.py`` script per task job to the output directory.
+    Reads user queries from a file or interactive input, runs the LLM-driven
+    decomposition pipeline for each task job, and writes one JSON file, one
+    rendered Python script, and any generated validation modules under a per-job
+    output directory.
 
-    If ``input_file`` contains multiple non-empty lines, each line is treated as a
-    separate task job.
+    Prerequisites:
+        Mellea installed (``uv add mellea``). An Ollama instance running locally,
+        or an OpenAI-compatible endpoint configured via ``--backend-endpoint``.
+
+    Output:
+        Creates a directory ``<out-dir>/<out-name>/`` containing a JSON
+        decomposition result file, a ready-to-run Python script, and any
+        generated validation modules. One directory per task job.
+
+    Examples:
+        m decompose run --out-dir ./output --input-file tasks.txt
+
+    See Also:
+        guide: guide/m-decompose
+        guide: how-to/refactor-prompts-with-cli
 
     Args:
-        out_dir: Path to an existing directory where output files are saved.
-        out_name: Base name (no extension) for the output files. Defaults to
-            ``"m_decomp_result"``.
-        input_file: Optional path to a text file containing one or more user
-            queries. If the file contains multiple non-empty lines, each line is
-            treated as a separate task job. If omitted, the query is collected
-            interactively.
-        model_id: Model name or ID used for all decomposition pipeline steps.
-        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
-        backend_req_timeout: Request timeout in seconds for model inference calls.
-        backend_endpoint: Base URL of the configured endpoint. Required when
-            ``backend="openai"`` or ``backend="rits"``.
-        backend_api_key: API key for the configured endpoint. Required when
-            ``backend="openai"`` or ``backend="rits"``.
-        version: Version of the decomposition pipeline template to use.
-        input_var: Optional list of user-input variable names (e.g. ``"DOC"``).
-            Each name must be a valid Python identifier. Pass this option
-            multiple times to define multiple variables.
-        log_mode: Logging detail mode for CLI and pipeline output.
+        out_dir: Existing directory under which per-job output directories are
+            created.
+        out_name: Base name used for the per-job output directory and generated
+            files.
+        input_file: Optional path to a text file containing one or more task
+            prompts. Each non-empty line is processed as a separate task job.
+            When omitted, the command prompts interactively for one task.
+        model_id: Model identifier used for all decomposition pipeline stages.
+        backend: Inference backend used to execute model calls.
+        backend_req_timeout: Request timeout in seconds for backend inference calls.
+        backend_endpoint: Endpoint URL or base URL required by remote backends.
+        backend_api_key: API key required by remote backends.
+        version: Template version used to render the generated Python program.
+            ``latest`` resolves to the most recently declared concrete version.
+        input_var: Optional user input variable names to expose in generated
+            prompts and programs. Each name must be a valid non-keyword Python
+            identifier.
+        log_mode: Logging verbosity for CLI and pipeline execution.
+        enable_script_run: Whether generated scripts should expose argparse
+            runtime options. Defaults to ``False``.
 
     Raises:
-        AssertionError: If ``out_name`` contains invalid characters, if
-            ``out_dir`` does not exist or is not a directory, or if any
-            ``input_var`` name is not a valid Python identifier.
-        ValueError: If the input file contains no non-empty task lines.
-        Exception: Re-raised from the decomposition pipeline after cleaning up
-            any partially written output directories.
+        AssertionError: If ``out_name`` is invalid, ``out_dir`` does not name an
+            existing directory, ``input_file`` does not name an existing file,
+            or any declared ``input_var`` is not a valid Python identifier.
+        ValueError: If ``input_file`` exists but contains no non-empty task
+            lines.
+        Exception: Propagates pipeline, rendering, parsing, or file-writing
+            failures. Any output directories created earlier in the run are
+            removed before the exception is re-raised.
     """
     created_dirs: list[Path] = []
 
@@ -277,6 +309,7 @@ def run(
         logger.info("model_id       : %s", model_id)
         logger.info("version        : %s", version.value)
         logger.info("log_mode       : %s", log_mode.value)
+        logger.info("script options : %s", enable_script_run)
         logger.info("input_vars     : %s", input_var or "[]")
 
         environment = Environment(
@@ -393,6 +426,11 @@ def run(
                         subtasks=decomp_data["subtasks"],
                         user_inputs=input_var,
                         identified_constraints=decomp_data["identified_constraints"],
+                        model_id=model_id,
+                        backend=backend.value,
+                        backend_endpoint=backend_endpoint,
+                        backend_api_key=backend_api_key,
+                        enable_script_run=enable_script_run,
                     )
                     + "\n"
                 )

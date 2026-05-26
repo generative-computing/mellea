@@ -14,18 +14,28 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
-import llguidance
-import llguidance.hf
-import llguidance.torch
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.cache_utils import DynamicCache
-from transformers.generation.logits_process import LogitsProcessorList
-from transformers.generation.streamers import AsyncTextIteratorStreamer
-from transformers.generation.utils import GenerateDecoderOnlyOutput
-from transformers.modeling_utils import PreTrainedModel
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.trainer_utils import set_seed
+try:
+    import llguidance
+    import llguidance.hf
+    import llguidance.torch
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.cache_utils import DynamicCache
+    from transformers.generation.logits_process import LogitsProcessorList
+    from transformers.generation.stopping_criteria import (
+        StoppingCriteria,
+        StoppingCriteriaList,
+    )
+    from transformers.generation.streamers import AsyncTextIteratorStreamer
+    from transformers.generation.utils import GenerateDecoderOnlyOutput
+    from transformers.modeling_utils import PreTrainedModel
+    from transformers.tokenization_utils import PreTrainedTokenizer
+    from transformers.trainer_utils import set_seed
+except ImportError as e:
+    raise ImportError(
+        "The HuggingFace backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 from ..backends import kv_block_helpers
 from ..core import (
@@ -34,9 +44,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
 )
@@ -49,6 +59,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .adapters import (
     AdapterMixin,
     AdapterType,
@@ -66,6 +77,45 @@ from .tools import (
     convert_tools_to_json,
 )
 from .utils import to_chat, to_tool_calls
+
+
+class _EventStoppingCriteria(StoppingCriteria):
+    """StoppingCriteria that signals the model to stop when a threading.Event is set.
+
+    Used by LocalHFBackend to implement cooperative cancellation: when
+    ``cancel_generation`` is called, it sets the backing event via
+    ``_cancel_hook`` before cancelling the asyncio task, giving the HF
+    ``model.generate`` thread a chance to exit cleanly rather than running
+    to completion.
+    """
+
+    def __init__(self, event: threading.Event) -> None:
+        self._event = event
+
+    def __call__(self, input_ids: Any, scores: Any, **kwargs: Any) -> bool:  # type: ignore[override]
+        return self._event.is_set()
+
+
+def _install_cancel_stopping_criteria(
+    generate_options: dict[str, Any], streaming_kwargs: dict[str, Any]
+) -> threading.Event:
+    """Wire a cooperative-cancel event into the generate call's stopping criteria.
+
+    Pops any caller-supplied ``stopping_criteria`` from *generate_options* (to
+    avoid passing it twice via both ``**generate_options`` and
+    ``**streaming_kwargs``), prepends an :class:`_EventStoppingCriteria` backed
+    by a fresh ``threading.Event``, and stores the merged list in
+    *streaming_kwargs*.  Returns the event so the caller can arm
+    ``output._cancel_hook = event.set``.
+    """
+    cancel_event = threading.Event()
+    user_sc = generate_options.pop("stopping_criteria", None)
+    streaming_kwargs["stopping_criteria"] = StoppingCriteriaList(
+        [_EventStoppingCriteria(cancel_event)]
+        + (list(user_sc) if user_sc is not None else [])
+    )
+    return cancel_event
+
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
@@ -199,7 +249,7 @@ class _GuidanceLogitsProcessor:
                 )
                 err = ll_matcher.get_error()  # type: ignore[attr-defined]
                 if err:
-                    FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+                    MelleaLogger.get_logger().warning("Error in LLMatcher: %s", err)
 
             llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
             llguidance.torch.apply_token_bitmask_inplace(
@@ -268,6 +318,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop_strings": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -275,7 +326,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+        self.from_mellea_model_opts_map = {
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_strings",
+        }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
@@ -300,7 +354,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id, device_map=str(self._device)
+                    self._hf_model_id, device_map=str(self._device), torch_dtype="auto"
                 )
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
@@ -329,6 +383,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         self._generation_lock = threading.Lock()
         """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
+
+    def _get_hf_model_id(self) -> str:
+        """Return the HuggingFace model name as a string.
+
+        Returns the ``hf_model_name`` attribute when a ``ModelIdentifier`` is
+        provided, otherwise casts ``model_id`` to ``str``.
+        """
+        if hasattr(self.model_id, "hf_model_name"):
+            return str(self.model_id.hf_model_name)  # type: ignore
+        return str(self.model_id)
 
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
@@ -373,71 +437,83 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
-        await self.do_generate_walk(action)
 
-        # Upsert model options.
-        model_opts = self._simplify_and_merge(model_options)
+        with with_context(
+            request_id=generate_request_id(),
+            model_id=str(getattr(self, "model_id", "unknown")),
+        ):
+            await self.do_generate_walk(action)
 
-        # Requirements can be automatically rerouted to a requirement adapter.
-        if isinstance(action, Requirement):
-            # See docs/dev/requirement_aLoRA_rerouting.md
-            reroute_to_alora = self.default_to_constraint_checking_alora
-            adapter_name = "requirement_check"
+            # Upsert model options.
+            model_opts = self._simplify_and_merge(model_options)
 
-            if isinstance(action, ALoraRequirement):
-                reroute_to_alora = True
-                adapter_name = action.intrinsic_name
-                alora_action = action
-            else:
-                assert action.description is not None, (
-                    "must have a description when generating from a requirement"
-                )
-                alora_action = ALoraRequirement(action.description, adapter_name)
+            # Requirements can be automatically rerouted to a requirement adapter.
+            if isinstance(action, Requirement):
+                # See docs/dev/requirement_aLoRA_rerouting.md
+                reroute_to_alora = self.default_to_constraint_checking_alora
+                adapter_name = "requirement-check"
 
-            # Check if a requirement_check (or AloraRequirement specified) adapter
-            # exists.
-            alora_req_adapter = get_adapter_for_intrinsic(
-                adapter_name, [AdapterType.ALORA], self._added_adapters
-            )
-            if alora_req_adapter is None:
-                # Log a warning if using an AloraRequirement but no adapter fit.
-                if reroute_to_alora and isinstance(action, ALoraRequirement):
-                    FancyLogger.get_logger().warning(
-                        f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                if isinstance(action, ALoraRequirement):
+                    reroute_to_alora = True
+                    adapter_name = action.intrinsic_name
+                    alora_action = action
+                else:
+                    assert action.description is not None, (
+                        "must have a description when generating from a requirement"
                     )
-                reroute_to_alora = False
+                    alora_action = ALoraRequirement(action.description, adapter_name)
 
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
+                # Check if a requirement-check (or AloraRequirement specified) adapter
+                # exists.
+                alora_req_adapter = get_adapter_for_intrinsic(
+                    adapter_name, [AdapterType.ALORA], self._added_adapters
+                )
+                if alora_req_adapter is None:
+                    # Log a warning if using an AloraRequirement but no adapter fit.
+                    if reroute_to_alora and isinstance(action, ALoraRequirement):
+                        MelleaLogger.get_logger().warning(
+                            f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                        )
+                    reroute_to_alora = False
 
-            if reroute_to_alora:
-                # Keep the alora requirement handling separate for now.
+                if issubclass(type(action), LLMaJRequirement):
+                    reroute_to_alora = False
+
+                if reroute_to_alora:
+                    # Keep the alora requirement handling separate for now.
+                    mot = await self._generate_from_intrinsic(
+                        alora_action,
+                        ctx,
+                        model_options=model_opts,
+                        tool_calls=tool_calls,
+                    )
+                    # Store span for telemetry
+                    if span is not None:
+                        mot._meta["_telemetry_span"] = span
+                    return mot, ctx.add(alora_action).add(mot)
+
+            elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
-                    alora_action, ctx, model_options=model_opts
+                    action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
                 # Store span for telemetry
                 if span is not None:
                     mot._meta["_telemetry_span"] = span
-                return mot, ctx.add(alora_action).add(mot)
+                return mot, ctx.add(action).add(mot)
 
-        elif isinstance(action, Intrinsic):
-            mot = await self._generate_from_intrinsic(
-                action, ctx, model_options=model_opts
+            mot = await self._generate_from_context_standard(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_opts,
+                tool_calls=tool_calls,
             )
-            # Store span for telemetry
+
+            # Store span in metadata for post_processing to record telemetry
             if span is not None:
                 mot._meta["_telemetry_span"] = span
+
             return mot, ctx.add(action).add(mot)
-
-        mot = await self._generate_from_context_standard(
-            action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
-        )
-
-        # Store span in metadata for post_processing to record telemetry
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
-
-        return mot, ctx.add(action).add(mot)
 
     def _generate_with_adapter_lock(
         self, adapter_name: str, generate_func: Callable, *args, **kwargs
@@ -466,14 +542,58 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             return out
 
     async def _generate_from_intrinsic(
-        self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
     ) -> ModelOutputThunk:
+        """Generate a completion for an intrinsic action using an adapter.
+
+        Applies the intrinsic's I/O rewriter to transform the conversation,
+        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        Granite Switch chat template activates the correct adapter, and
+        post-processes the model output through the intrinsic's result
+        processor.
+
+        Intrinsics default to options provided by `io.yaml`. Model options
+        override these defaults. All model options besides streaming are
+        respected. We add `do_sample=True` if `temperature != 0.0` and `temperature is not None`.
+
+        Args:
+            action (Intrinsic): The intrinsic component to execute.
+            ctx (Context): The current generation context (must be a chat context).
+            model_options (dict[str, Any]): Merged model options for this call.
+            tool_calls (bool): If ``True``, expose available tools to the model
+                and parse tool-call responses.
+
+        Returns:
+            ModelOutputThunk: A thunk that lazily resolves to the processed
+            intrinsic output.
+
+        Raises:
+            ValueError: If no adapter is registered for the requested intrinsic.
+            TypeError: If the adapter isn't an IntrinsicAdapter.
+        """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
 
-        if len(model_options.items()) > 0:
-            FancyLogger.get_logger().info(
-                "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
+        seed = model_options.get(ModelOption.SEED, None)
+        if seed is not None:
+            set_seed(seed)
+
+        # Collect tools if tool_calls is enabled.
+        tools: dict[str, AbstractMelleaTool] = dict()
+        if tool_calls:
+            add_tools_from_model_options(tools, model_options)
+            add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+        # Intrinsics don't support streaming because of their post-processing step.
+        if model_options.get(ModelOption.STREAM, False):
+            raise NotImplementedError(
+                "Intrinsics do not support streaming due to structured output parsing."
             )
 
         linearized_ctx = ctx.view_for_generation()
@@ -487,22 +607,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
         #       through their rewriters.
 
-        conversation: list[dict] = []
+        # Extract system prompt and prepend to conversation.
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        conversation: list[dict] = []
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-
         conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
         docs = messages_to_docs(ctx_as_message_list)
-
-        seed = model_options.get(ModelOption.SEED, None)
-        if seed is not None:
-            set_seed(seed)
-
-        if model_options.get(ModelOption.STREAM, None) is not None:
-            # Intrinsics don't support streaming because of their post-processing step.
-            raise Exception("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -514,9 +626,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # TODO: Code below this point is mostly specific to RagIntrinsics
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, IntrinsicAdapter), (
-            "currently Mellea only supports IntrinsicAdapters and Intrinsics"
-        )
+        if not isinstance(adapter, IntrinsicAdapter):
+            raise TypeError(
+                f"LocalHFBackend only supports IntrinsicAdapters, got: {type(adapter).__name__}"
+            )
 
         intrinsic_config = adapter.config
         assert intrinsic_config is not None
@@ -528,19 +641,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             config_dict=intrinsic_config
         )
 
+        # The pydantic models used by the intrinsic rewriter are stricter than the actual OpenAI SDK.
+        # Extract the "function" fields from each json tool which contains `{"name":..., "description":..., "parameters":...}`.
+        formatted_tools = [tool["function"] for tool in convert_tools_to_json(tools)]
         # Convert our conversation into a proper chat completions dict.
         # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
         request_json: dict = {
             "messages": conversation,
             "extra_body": {"documents": docs},
+            "tools": formatted_tools if len(formatted_tools) > 0 else None,
         }
 
-        # Convert other parameters from Mellea proprietary format to standard format.
-        for model_option in model_options:
-            if model_option == ModelOption.TEMPERATURE:
-                request_json["temperature"] = model_options[model_option]
-
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # Extract temperature and apply it to the rewritten request so that
+        # chat_completion_request_to_transformers_inputs handles the
+        # do_sample/temperature logic correctly.
+        temperature = model_options.pop(ModelOption.TEMPERATURE, None)
+        if temperature is not None:
+            rewritten = rewritten.model_copy(update={"temperature": temperature})
 
         # TODO: Handle caching here. granite_formatters doesn't tell us what changed,
         #       so we will have to invalidate the cache on our side. This requires
@@ -551,6 +670,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 rewritten, self._tokenizer, self._model
             )
         )
+
+        # Apply remaining user model options directly to generate_input,
+        # overwriting any values set by the util function or io.yaml defaults.
+        # We don't update other_input since those inputs are specific to `generate_with_transformers`
+        # and not covered by model options.
+        user_params = self._make_backend_specific_and_remove(model_options)
+        if "stop_strings" in user_params and "tokenizer" not in user_params:
+            user_params["tokenizer"] = self._tokenizer
+        generate_input.update(user_params)
 
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
@@ -602,10 +730,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             conversation=conversation,
             input_ids=generate_input["input_tokens"],
             _format=None,
-            tool_calls=False,
-            tools={},
+            tool_calls=tool_calls,
+            tools=tools,
             seed=seed,
         )
+
+        # Set model/provider early so they are available in the error path
+        output.generation.model = self._get_hf_model_id()
+        output.generation.provider = "huggingface"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -648,11 +780,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 case CBlock() if c.cache:
                     assert c.value is not None
                     if c.value in self._cached_blocks:
-                        FancyLogger.get_logger().info(
+                        MelleaLogger.get_logger().info(
                             f"KV CACHE HIT for: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"  # type: ignore
                         )
                     else:
-                        FancyLogger.get_logger().debug(
+                        MelleaLogger.get_logger().debug(
                             f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
                         )
                         tokens = self._tokenizer(c.value, return_tensors="pt")
@@ -690,14 +822,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             prefix, suffix = parts
             # Add the prefix, if any, to str+tok+dc parts.
             if prefix != "":
-                FancyLogger.get_logger().debug(
+                MelleaLogger.get_logger().debug(
                     f"Doing a forward pass on uncached block which is prefix to a cached CBlock: {prefix[:3]}.{len(prefix)}.{prefix[-3:]}"
                 )
                 str_parts.append(prefix)
                 tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
                 dc_parts.append(self._make_dc_cache(tok_parts[-1]))
             # Add the cached CBlock to str+tok+dc parts.
-            FancyLogger.get_logger().debug(
+            MelleaLogger.get_logger().debug(
                 f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
             )
             # str_parts.append(key)
@@ -710,7 +842,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             current_suffix = suffix
         # "base" case: the final suffix.
         if current_suffix != "":
-            FancyLogger.get_logger().debug(  # type: ignore
+            MelleaLogger.get_logger().debug(  # type: ignore
                 f"Doing a forward pass on final suffix, an uncached block: {current_suffix[:3]}.{len(current_suffix)}.{current_suffix[-3:]}"  # type: ignore
             )  # type: ignore
             str_parts.append(current_suffix)
@@ -753,7 +885,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tools: dict[str, AbstractMelleaTool] = dict()
             if tool_calls:
                 if _format:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
@@ -765,7 +897,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     # Add the tools from the action for this generation last so that
                     # they overwrite conflicting names.
                     add_tools_from_context_actions(tools, [action])
-                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+                MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:
@@ -809,6 +941,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
             linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
             _input_text, input_ids, merged_cache, attention_mask = (
@@ -819,6 +960,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     tools=tools,
                 )
             )
+
+            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
 
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
@@ -831,12 +977,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=attention_mask.to(self._device),
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(generate_options),
+                **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -854,6 +1004,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=tools,
                 seed=seed,
             )
+
+            # Set model/provider early so they are available in the error path
+            output.generation.model = self._get_hf_model_id()
+            output.generation.provider = "huggingface"
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -904,7 +1058,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tools: dict[str, AbstractMelleaTool] = dict()
             if tool_calls:
                 if _format:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
@@ -916,7 +1070,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     # Add the tools from the action for this generation last so that
                     # they overwrite conflicting names.
                     add_tools_from_context_actions(tools, [action])
-                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+                MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:
@@ -968,6 +1122,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
+            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -976,12 +1144,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 input_ids,
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
-                **self._make_backend_specific_and_remove(generate_options),
+                **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -999,6 +1171,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=tools,
                 seed=seed,
             )
+
+            # Set model/provider early so they are available in the error path
+            output.generation.model = self._get_hf_model_id()
+            output.generation.provider = "huggingface"
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1146,18 +1322,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 pass
 
         if n_prompt is not None and n_completion is not None:
-            mot.usage = {
+            mot.generation.usage = {
                 "prompt_tokens": n_prompt,
                 "completion_tokens": n_completion,
                 "total_tokens": n_prompt + n_completion,
             }
 
         # Populate model and provider metadata
-        if hasattr(self.model_id, "hf_model_name"):
-            mot.model = str(self.model_id.hf_model_name)  # type: ignore
-        else:
-            mot.model = str(self.model_id)
-        mot.provider = "huggingface"
+        mot.generation.model = self._get_hf_model_id()
+        mot.generation.provider = "huggingface"
 
         # Record tracing if span exists
         if span is not None:
@@ -1169,8 +1342,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
-                if mot.usage:
-                    record_token_usage(span, mot.usage)
+                if mot.generation.usage:
+                    record_token_usage(span, mot.generation.usage)
 
             # Close the span now that async operation is complete
             end_backend_span(span)
@@ -1266,7 +1439,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             await self.do_generate_walks(list(actions))
 
             if tool_calls:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "The raw endpoint does not support tool calling at the moment."
                 )
 
@@ -1274,7 +1447,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # TODO: Remove this when we are able to update the torch package.
                 #       Test this by ensuring all outputs from this call are populated when running on mps.
                 #       https://github.com/pytorch/pytorch/pull/157727
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
                 )
 
@@ -1303,6 +1476,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     [logits_processor]
                 )
 
+            generate_kwargs = self._make_backend_specific_and_remove(model_opts)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             outputs = await asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapter.
@@ -1312,7 +1490,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(model_opts),
+                **generate_kwargs,
                 **format_kwargs,
             )
 
@@ -1414,9 +1592,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         generate_call_model_opts = ModelOption.replace_keys(
             model_options, self.to_mellea_model_opts_map
         )
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any]
@@ -1475,7 +1654,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
         if adapter.backend is not None:
             if adapter.backend is self:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"attempted to add adapter {adapter.name} with type {adapter.adapter_type} to the same backend {adapter.backend}"
                 )
                 return
@@ -1485,7 +1664,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
 
         if self._added_adapters.get(adapter.qualified_name) is not None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but {adapter.name} was already added to {self.__class__}. The backend is refusing to do this, because adapter loading is not idempotent."
             )
             return None
@@ -1551,7 +1730,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Check if the backend knows about this adapter.
         adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
             )
             return

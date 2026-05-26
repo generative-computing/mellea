@@ -17,12 +17,20 @@ import base64
 import binascii
 import datetime
 import enum
-import time
+import logging
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    ParamSpec,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -252,6 +260,49 @@ class GenerateType(enum.Enum):
     SYNC = 2
 
 
+@dataclass
+class GenerationMetadata:
+    """Backend execution metadata attached to every ModelOutputThunk.
+
+    Fields are populated as generation progresses; see individual field docstrings for timing.
+
+    Args:
+        usage: Token usage dict with 'prompt_tokens', 'completion_tokens', 'total_tokens'.
+        model: Model identifier that generated the output.
+        provider: Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx').
+        ttfb_ms: Time to first token in milliseconds; None for non-streaming.
+        streaming: Whether this generation used streaming mode.
+    """
+
+    usage: dict[str, Any] | None = None
+    """Token usage following OpenAI API standard.
+
+    Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
+    May include optional breakdown fields like 'completion_tokens_details'
+    and 'prompt_tokens_details' (nested dicts with per-category token counts
+    for reasoning, audio, caching, etc.).
+    """
+
+    model: str | None = None
+    """Model identifier that generated the output (e.g. 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf')."""
+
+    provider: str | None = None
+    """Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx')."""
+
+    ttfb_ms: float | None = None
+    """Time to first token in milliseconds.
+
+    Set when the first chunk is received from the backend.
+    None for non-streaming requests or when not measured.
+    """
+
+    streaming: bool = False
+    """Whether this generation used streaming mode.
+
+    Set from model options at the start of astream().
+    """
+
+
 class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
 
@@ -278,34 +329,13 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
+        self._cancelled: bool = False
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
         self._thinking: str | None = None
-        self.usage: dict[str, Any] | None = None
-        """Usage information following OpenAI API standard.
-
-        Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
-        Populated by backends during post_processing. None if unavailable.
-
-        May include optional breakdown fields like 'completion_tokens_details'
-        and 'prompt_tokens_details' (nested dicts with per-category token counts
-        for reasoning, audio, caching, etc.).
-        """
-
-        self.model: str | None = None
-        """Model identifier that generated this output.
-
-        Examples: 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf'.
-        Populated by backends. None if unavailable.
-        """
-
-        self.provider: str | None = None
-        """Provider that generated this output.
-
-        Examples: 'openai', 'ollama', 'huggingface', 'watsonx'.
-        Populated by backends. None if unavailable.
-        """
+        self.generation: GenerationMetadata = GenerationMetadata()
+        """Backend execution metadata populated during generation."""
 
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
@@ -324,12 +354,142 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._generate_extra: asyncio.Task[Any] | None = (
             None  # Currently only used by hf.
         )
+        # Optional cooperative-cancel hook called before asyncio task cancellation.
+        # Backends that run generation in a thread (e.g. HuggingFace via
+        # asyncio.to_thread) set this to a non-blocking callable (e.g.
+        # threading.Event.set) so the thread receives a stop signal before the
+        # task wrapper is cancelled. Must be non-blocking; exceptions are logged
+        # and suppressed. Copied MOTs reset this to None — each computation owns
+        # its own thread signal.
+        self._cancel_hook: Callable[[], None] | None = None
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
         self._start: datetime.datetime | None = None
+        self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
+
+    def _record_ttfb(self) -> None:
+        """Record time-to-first-byte if streaming and not yet recorded."""
+        if (
+            self.generation.streaming
+            and not self._first_chunk_received
+            and self._start is not None
+        ):
+            self.generation.ttfb_ms = (
+                datetime.datetime.now() - self._start
+            ).total_seconds() * 1000
+            self._first_chunk_received = True
+
+    async def cancel_generation(self, error: Exception | None = None) -> None:
+        """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
+
+        Safe to call at any point during streaming. After this method returns,
+        ``is_computed()`` is ``True`` and ``value`` contains whatever text was
+        accumulated before cancellation.  Calling on an already-computed MOT
+        is a no-op.
+
+        Draining the internal queue after cancellation is necessary to release
+        any ``asyncio.Queue.put()`` call that the generation task was blocked on
+        (queue maxsize=20).
+
+        Args:
+            error: Optional cause attributed to the open telemetry span.  When
+                provided, this exception is recorded via ``set_span_error`` so
+                the span reflects the actual reason for cancellation (e.g. the
+                requirement failure or an unhandled exception from a streaming
+                validator).  When ``None``, a generic
+                ``RuntimeError("Generation cancelled")`` is recorded.
+
+        Raises:
+            asyncio.CancelledError: Re-raised when the *calling* task itself is
+                being cancelled (``asyncio.current_task().cancelling() > 0``).
+                This prevents external cancellation (e.g. ``asyncio.wait_for``
+                timeout) from being silently absorbed while awaiting the inner
+                generation task.
+        """
+        if self._computed:
+            return
+
+        def _drain() -> None:
+            while not self._async_queue.empty():
+                try:
+                    self._async_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+        # Signal any backend thread before cancelling the asyncio task wrapper
+        # so the thread can stop cooperatively instead of running to completion.
+        if self._cancel_hook is not None:
+            try:
+                self._cancel_hook()
+            except Exception as hook_exc:
+                logging.getLogger(__name__).warning(
+                    "cancel_generation: _cancel_hook raised (suppressed): %r", hook_exc
+                )
+
+        if self._generate is not None and not self._generate.done():
+            self._generate.cancel()
+
+        if self._generate_extra is not None and not self._generate_extra.done():
+            self._generate_extra.cancel()
+
+        # Drain before awaiting — unblocks any put() the task is stuck on.
+        _drain()
+
+        if self._generate is not None:
+            try:
+                await self._generate
+            except asyncio.CancelledError:
+                # Re-raise if the *outer* task is being cancelled (Python 3.11+
+                # task.cancelling() > 0) so we don't silently absorb external
+                # cancellation. For the inner task's own CancelledError (the
+                # expected result of .cancel() above), cancelling() is 0.
+                cur = asyncio.current_task()
+                if cur is not None and cur.cancelling() > 0:
+                    raise
+            except Exception:
+                pass
+
+        if self._generate_extra is not None:
+            try:
+                await self._generate_extra
+            except asyncio.CancelledError:
+                cur = asyncio.current_task()
+                if cur is not None and cur.cancelling() > 0:
+                    raise
+            except Exception:
+                pass
+
+        # Drain again for any final item the task put before terminating.
+        _drain()
+
+        span = self._meta.pop("_telemetry_span", None)
+        if span is not None:
+            from ..telemetry import end_backend_span, set_span_error
+
+            recorded: Exception = (
+                error if error is not None else RuntimeError("Generation cancelled")
+            )
+            set_span_error(span, recorded)
+            end_backend_span(span)
+
+        if self._underlying_value is None:
+            self._underlying_value = ""
+        self._cancelled = True
+        self._computed = True
+
+    @property
+    def cancelled(self) -> bool:
+        """``True`` if :meth:`cancel_generation` ran to completion on this MOT.
+
+        A normally-completed MOT leaves this ``False``; only an actual
+        cancellation via :meth:`cancel_generation` flips it.  Consumers holding
+        a computed MOT can use this to distinguish a genuine result from one
+        cut short (for example by a streaming requirement failure).
+        """
+        return self._cancelled
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
@@ -343,10 +503,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
         self._thinking = other._thinking
-        self.usage = other.usage
-        self.model = other.model
-        self.provider = other.provider
+        self.generation = other.generation
         self._generate_log = other._generate_log
+        self._cancelled = other._cancelled
+        # _cancel_hook is deliberately not copied: _copy_from swaps output state,
+        # not backend-thread plumbing, which is tied to the original computation.
+        self._cancel_hook = None
 
     def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled.
@@ -398,20 +560,24 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
     # If we require a function that returns only the new chunks of data, we can implement that similarly.
     async def astream(self) -> str:
-        """Returns the ModelOutputThunk's partial value including the next chunk(s). Can be used for both async streaming and async non-streaming.
+        """Returns only the NEW text fragment (delta) received since the last call.
 
-        Returns the complete value of the ModelOutputThunk if streaming is done.
+        This method is designed for streaming consumption where you want incremental
+        updates. Each call returns only the newly received content, not the accumulated
+        text. When streaming is complete, subsequent calls will raise RuntimeError.
 
         **Note**: Be careful with calling this function. Only call it from one location at a time. This means you shouldn't pass a ModelOutputThunk to
         multiple coroutines/tasks and call astream from those coroutines/tasks simultaneously. We have considered solutions to this but are waiting until
         we see this error happen in a real use case.
 
         Returns:
-            str: The accumulated output text up to and including the newly received chunk(s).
+            str: Only the new text fragment received since the last call (delta), not the
+                accumulated text. Returns empty string if no new content is available yet.
 
         Raises:
             Exception: Propagates any errors from the underlying inference engine api request.
-            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
+            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible,
+                or if called after the thunk is already computed.
         """
         if self._computed:
             raise RuntimeError(
@@ -419,6 +585,11 @@ class ModelOutputThunk(CBlock, Generic[S]):
             )
 
         do_set_computed = False
+        # Use string directly to avoid importing ModelOption from backends into core (circular import).
+        # ModelOption.STREAM is defined in mellea/backends/model_options.py.
+        self.generation.streaming = bool(
+            (self._model_options or {}).get("@@@stream@@@", False)
+        )
 
         if not self._generate_type == GenerateType.ASYNC:
             raise RuntimeError(
@@ -435,6 +606,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             try:
                 item = self._async_queue.get_nowait()
                 chunks.append(item)
+                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -450,6 +622,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             item = await self._async_queue.get()
             chunks.append(item)
+            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -473,11 +646,20 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # but we must not leak the span.
             span = self._meta.get("_telemetry_span")
             if span is not None:
-                from ..telemetry import end_backend_span, set_span_error
+                from ..telemetry.backend_instrumentation import finalize_backend_span
 
-                set_span_error(span, chunks[-1])
-                end_backend_span(span)
+                finalize_backend_span(span, error=chunks[-1])
                 del self._meta["_telemetry_span"]
+
+            # Fire generation_error hook (FIRE_AND_FORGET — does not block the raise)
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
+
+                err_payload = GenerationErrorPayload(
+                    exception=chunks[-1], model_output=self
+                )
+                await invoke_hook(HookType.GENERATION_ERROR, err_payload)
+
             raise chunks[-1]
 
         for chunk in chunks:
@@ -554,14 +736,16 @@ class ModelOutputThunk(CBlock, Generic[S]):
             copied.parsed_repr = copied  # type: ignore
 
         copied._computed = self._computed
+        copied._cancelled = self._cancelled
+        # _cancel_hook is not forwarded: a copied MOT is a distinct computation
+        # and must not share the original's backend thread signal.
+        copied._cancel_hook = None
         copied._thinking = self._thinking
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
-        copied.usage = self.usage
-        copied.model = self.model
-        copied.provider = self.provider
+        copied.generation = copy(self.generation)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -584,6 +768,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._meta = deepcopy(self._meta)
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
+        deepcopied._cancelled = self._cancelled
+        # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
+        # and must not share the original's backend thread signal.
+        deepcopied._cancel_hook = None
         deepcopied._thinking = self._thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
@@ -591,10 +779,83 @@ class ModelOutputThunk(CBlock, Generic[S]):
         )  # The items in a context should be immutable.
         deepcopied._generate_log = copy(self._generate_log)
         deepcopied._model_options = copy(self._model_options)
-        deepcopied.usage = deepcopy(self.usage) if self.usage else None
-        deepcopied.model = self.model
-        deepcopied.provider = self.provider
+        deepcopied.generation = deepcopy(self.generation)
         return deepcopied
+
+
+class ComputedModelOutputThunk(ModelOutputThunk[S]):
+    """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+    This subclass provides a clear type distinction between thunks that may need awaiting
+    and those that are already computed. It should be returned from synchronous functions
+    and sampling strategies to indicate that no awaiting is needed.
+
+    Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
+    the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+
+    Args:
+        thunk: A fully-computed ``ModelOutputThunk`` whose class will be reassigned.
+    """
+
+    def __new__(cls, thunk: ModelOutputThunk[S]) -> ComputedModelOutputThunk[S]:
+        """Convert the ModelOutputThunk into a ComputedModelOutputThunk."""
+        thunk.__class__ = cls
+        return thunk  # type: ignore[return-value]
+
+    def __init__(self, thunk: ModelOutputThunk[S]) -> None:
+        """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+        Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
+        the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+        """
+        # Call the underlying value. It's already been cast as a ComputedModelOutputThunk, so it's .is_computed() value is always True.
+        if not self._computed:
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+            )
+        if self.value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
+    async def avalue(self) -> str:
+        """Return the value of the thunk. Use .value instead.
+
+        Returns:
+            The computed string value.
+        """
+        assert self.value is not None, "ComputedModelOutputThunk value cannot be None"
+        return self.value
+
+    async def astream(self) -> str:
+        """Cannot astream from ComputedModelOutputThunks. Use .value instead.
+
+        Returns:
+            Never returns; always raises.
+
+        Raises:
+            RuntimeError: Always, because computed thunks do not support streaming.
+        """
+        raise RuntimeError(
+            "Cannot stream from a ComputedModelOutputThunk. "
+            "This thunk is already fully computed and does not support streaming."
+        )
+
+    @property
+    def value(self) -> str:
+        """Gets the value of the block."""
+        return self._underlying_value  # type: ignore
+
+    @value.setter
+    def value(self, v: str):
+        """Sets the value of the block."""
+        self._underlying_value = v
+
+    def is_computed(self) -> Literal[True]:
+        """Returns `True` since thunk is always computed.
+
+        Returns:
+            Always ``True``.
+        """
+        return True
 
 
 @dataclass
@@ -824,8 +1085,16 @@ class Context(abc.ABC):
         ...
 
 
-class AbstractMelleaTool(abc.ABC):
-    """Abstract base class for Mellea Tool.
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class AbstractMelleaTool(abc.ABC, Generic[P, R]):
+    """Abstract base class for Mellea Tool with parameter and return type support.
+
+    Type parameters:
+        P: Parameter specification for the tool's callable (via ParamSpec)
+        R: Return type of the tool
 
     Attributes:
         name (str): The unique name used to identify the tool in JSON descriptions and tool-call dispatch.
@@ -837,7 +1106,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args: Any, **kwargs: Any) -> Any:
+    def run(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Executes the tool with the provided arguments and returns the result.
 
         Args:
@@ -845,7 +1114,7 @@ class AbstractMelleaTool(abc.ABC):
             **kwargs: Keyword arguments forwarded to the tool implementation.
 
         Returns:
-            Any: The result produced by the tool; the concrete type depends on the implementation.
+            R: The result produced by the tool; the concrete type depends on the implementation.
         """
 
     @property

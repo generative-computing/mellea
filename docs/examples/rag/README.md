@@ -5,7 +5,7 @@ This directory contains examples of implementing RAG systems with Mellea.
 ## Files
 
 ### simple_rag_with_filter.py
-A complete RAG pipeline with relevance filtering using generative slots.
+A complete RAG pipeline with relevance filtering using generative stubs.
 
 **Key Features:**
 - Vector embedding with FAISS index
@@ -23,7 +23,7 @@ RAG example specifically for PDF documents.
 - **Relevance Filtering**: Using LLMs to filter retrieved documents
 - **Grounded Generation**: Generating answers based on retrieved context
 - **Multi-Stage Pipeline**: Retrieval → Filtering → Generation
-- **Generative Slots**: Using `@generative` for RAG components
+- **Generative Stubs**: Using `@generative` for RAG components
 
 ## Pipeline Architecture
 

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/integrations/huggingface"
 title: "HuggingFace Transformers"
 description: "Run Mellea on local hardware with LocalHFBackend and HuggingFace Transformers."
 # diataxis: how-to
@@ -23,6 +24,8 @@ pip install 'mellea[hf]'
 ## Basic usage
 
 ```python
+# Requires: mellea[hf]
+# Returns: ModelOutputThunk
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.huggingface import LocalHFBackend
@@ -44,11 +47,13 @@ On first run, `LocalHFBackend` downloads the model weights via the Transformers
 
 ## Device selection
 
-The [`Backend`](../guide/glossary#backend) selects the device automatically: CUDA GPU
+The [`Backend`](../reference/glossary#backend) selects the device automatically: CUDA GPU
 if available, then Apple Silicon MPS, then CPU. To override device selection, use
 `custom_config`:
 
 ```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
 from mellea.backends.huggingface import LocalHFBackend, TransformersTorchConfig
 
 m_backend = LocalHFBackend(
@@ -60,10 +65,12 @@ m_backend = LocalHFBackend(
 ## KV cache
 
 `LocalHFBackend` caches KV blocks across calls by default (`use_caches=True`). This
-speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](../guide/glossary#simplelrucache)
+speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](../reference/glossary#simplelrucache)
 to control capacity, or disable caching entirely for debugging:
 
 ```python
+# Requires: mellea[hf]
+# Returns: MelleaSession
 from mellea.backends.cache import SimpleLRUCache
 
 # Enable with explicit capacity
@@ -73,7 +80,7 @@ m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, cache=SimpleLRU
 m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, use_caches=False)
 ```
 
-See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for full details on marking blocks for caching and how [KV smashing](../guide/glossary#kv-smashing) works.
+See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for full details on marking blocks for caching and how [KV smashing](../reference/glossary#kv-smashing) works.
 
 ## aLoRA adapters
 
@@ -81,10 +88,14 @@ See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for
 adapters — lightweight domain-specific requirement validators that run on local GPU
 hardware. See the aLoRA guide for training and usage.
 
+> **Tip:** For intrinsics without local GPU requirements, Granite Switch models
+> serve pre-embedded adapters via vLLM and the OpenAI backend. See
+> [Intrinsics](../advanced/intrinsics) for details.
+
 ## Vision support
 
 Vision support for `LocalHFBackend` is model-dependent and experimental. Pass a PIL
-image or an [`ImageBlock`](../guide/glossary#imageblock) via `images=[...]` to
+image or an [`ImageBlock`](../reference/glossary#imageblock) via `images=[...]` to
 `instruct()` or `chat()` when using a vision-capable model. Not all models loaded via
 `LocalHFBackend` support image input. See
 [Use Images and Vision Models](../how-to/use-images-and-vision).
@@ -115,5 +126,5 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ---
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration) |
+**See also:** [Backends and Configuration](../how-to/backends-and-configuration) |
 [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)

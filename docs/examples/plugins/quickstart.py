@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Quick Start — your first Mellea plugin in under 30 lines.
 #
@@ -19,7 +19,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logging.getLogger("httpx").setLevel(logging.ERROR)
-logging.getLogger("fancy_logger").setLevel(logging.ERROR)
+logging.getLogger("mellea").setLevel(logging.ERROR)
 log = logging.getLogger("quickstart")
 
 

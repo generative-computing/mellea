@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/advanced/custom-components"
 title: "Building Custom Components"
 description: "Implement the Component Protocol to create reusable, testable generative building blocks."
 # diataxis: how-to
@@ -32,7 +33,7 @@ less boilerplate.
 
 ## The Component Protocol
 
-[`Component`](../guide/glossary#component) is a `Protocol` generic over `S`, the return type produced when the
+[`Component`](../reference/glossary#component) is a `Protocol` generic over `S`, the return type produced when the
 component parses LLM output:
 
 ```python
@@ -43,10 +44,10 @@ The protocol has three required methods and one public method that wraps `_parse
 
 | Method | Signature | Purpose |
 | ------ | --------- | ------- |
-| `parts()` | `-> list[Component \| CBlock]` | Returns child components and [`CBlock`](../guide/glossary#cblock) content blocks |
+| `parts()` | `-> list[Component \| CBlock]` | Returns child components and [`CBlock`](../reference/glossary#cblock) content blocks |
 | `format_for_llm()` | `-> TemplateRepresentation \| str` | Formats the component for LLM consumption |
 | `_parse()` | `(computed: ModelOutputThunk) -> S` | Parses LLM output into the return type `S` |
-| `parse()` | `(computed: ModelOutputThunk) -> S` | Public wrapper — catches exceptions as [`ComponentParseError`](../guide/glossary#componentparseerror) |
+| `parse()` | `(computed: ModelOutputThunk) -> S` | Public wrapper — catches exceptions as [`ComponentParseError`](../reference/glossary#componentparseerror) |
 
 You implement `parts()`, `format_for_llm()`, and `_parse()`. You do not override
 `parse()` — the base implementation calls `_parse()` and wraps any exception in a
@@ -135,7 +136,7 @@ with start_session() as m:
 ## Using TemplateRepresentation for Jinja2-based rendering
 
 For components that need model-specific prompt formatting, return a
-[`TemplateRepresentation`](../guide/glossary#templaterepresentation) from `format_for_llm()` instead of a plain string.
+[`TemplateRepresentation`](../reference/glossary#templaterepresentation) from `format_for_llm()` instead of a plain string.
 `TemplateRepresentation` is a dataclass with these fields:
 
 | Field | Type | Purpose |

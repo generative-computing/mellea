@@ -27,7 +27,7 @@ def import_optional(extra_name: str):
 
     Args:
         extra_name: Package extra to suggest in the install hint
-            (e.g. ``pip install granite_io[extra_name]``).
+            (e.g. ``pip install mellea[extra_name]``).
     """
     try:
         yield
@@ -49,14 +49,21 @@ def nltk_check(feature_name: str):
         feature_name: Name of the feature that requires NLTK, used in the error message.
 
     Raises:
-        ImportError: If the ``nltk`` package is not installed, re-raised with
-            a descriptive message and installation instructions.
+        ImportError: If the ``nltk`` package is not installed or required
+            NLTK data (e.g. ``punkt_tab``) has not been downloaded,
+            re-raised with a descriptive message and installation
+            instructions.
     """
     try:
         yield
     except ImportError as err:
         raise ImportError(
             f"'nltk' package not installed. This package is required for "
-            f"{feature_name} in the 'granite_io' library."
+            f"{feature_name} in the 'mellea' library."
+            f"{_NLTK_INSTALL_INSTRUCTIONS}"
+        ) from err
+    except LookupError as err:
+        raise ImportError(
+            f"NLTK data required for {feature_name} is not installed."
             f"{_NLTK_INSTALL_INSTRUCTIONS}"
         ) from err

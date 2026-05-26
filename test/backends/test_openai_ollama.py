@@ -1,4 +1,3 @@
-# test/rits_backend_tests/test_openai_integration.py
 import asyncio
 import os
 from unittest.mock import patch
@@ -8,11 +7,14 @@ import pydantic
 import pytest
 
 # Mark all tests in this module as requiring Ollama via OpenAI-compatible API
-pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.e2e]
+# NOTE: test_api_key_and_base_url_from_parameters, test_parameter_overrides_env_variable,
+# and test_missing_api_key_raises_error are constructor-only unit tests that don't need
+# Ollama, but pytest has no mechanism to remove inherited module markers per-function.
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.formatters import TemplateFormatter
@@ -23,8 +25,8 @@ from mellea.stdlib.context import ChatContext, SimpleContext
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
     return OpenAIBackend(
-        model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore
-        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name),  # type: ignore
+        model_id=IBM_GRANITE_4_1_3B.ollama_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_1_3B.hf_model_name),  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )
@@ -185,6 +187,10 @@ async def test_async_parallel_requests(m_session) -> None:
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+    assert mot1.generation.streaming is True
+    assert mot1.generation.ttfb_ms is not None
+    assert mot1.generation.ttfb_ms > 0
+
 
 async def test_async_avalue(m_session) -> None:
     mot1, _ = await m_session.backend.generate_from_context(
@@ -195,12 +201,14 @@ async def test_async_avalue(m_session) -> None:
     assert m1_final_val == mot1.value
 
     # Verify telemetry fields are populated
-    assert mot1.usage is not None
-    assert mot1.usage["prompt_tokens"] >= 0
-    assert mot1.usage["completion_tokens"] > 0
-    assert mot1.usage["total_tokens"] > 0
-    assert isinstance(mot1.model, str)
-    assert mot1.provider == "openai"
+    assert mot1.generation.usage is not None
+    assert mot1.generation.usage["prompt_tokens"] >= 0
+    assert mot1.generation.usage["completion_tokens"] > 0
+    assert mot1.generation.usage["total_tokens"] > 0
+    assert isinstance(mot1.generation.model, str)
+    assert mot1.generation.provider == "openai"
+    assert mot1.generation.streaming is False
+    assert mot1.generation.ttfb_ms is None
 
 
 def test_client_cache(backend) -> None:

@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/concepts/instruct-validate-repair"
 title: "The Instruction Model"
 description: "How instruct(), requirements, and the IVR loop work in Mellea."
 # diataxis: explanation
@@ -7,14 +8,16 @@ description: "How instruct(), requirements, and the IVR loop work in Mellea."
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
-`instruct()` is the primary API in Mellea. It builds a structured [`Instruction`](../guide/glossary#component)
+`instruct()` is the primary API in Mellea. It builds a structured [`Instruction`](../reference/glossary#component)
 component — not a raw chat message — with a description, requirements, user variables,
 grounding context, few-shot examples, and images. The instruction is rendered through
-[Jinja2](https://jinja.palletsprojects.com/) templates and run through an [instruct–validate–repair (IVR)](../guide/glossary#ivr-instruct-validate-repair) loop by default.
+[Jinja2](https://jinja.palletsprojects.com/) templates and run through an [instruct–validate–repair (IVR)](../reference/glossary#ivr-instruct-validate-repair) loop by default.
 
 ## Basic `instruct()`
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -23,7 +26,7 @@ print(str(email))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`instruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). Access the result as a string with
+`instruct()` returns a [`ModelOutputThunk`](../reference/glossary#modeloutputthunk). Access the result as a string with
 `str(email)` or via `email.value`.
 
 ## User variables
@@ -32,6 +35,8 @@ Embed dynamic values in your description using `{{double_braces}}`. The descript
 is a Jinja2 template; values are injected at generation time via `user_variables`:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
@@ -60,6 +65,8 @@ Requirements are declarative constraints. They serve two purposes:
 Pass plain strings for LLM-checked requirements:
 
 ```python
+# Requires: mellea
+# Returns: str
 import mellea
 
 m = mellea.start_session()
@@ -76,9 +83,11 @@ print(str(email))
 
 ## Custom validation functions
 
-For deterministic checks, attach a `validation_fn` to a [`Requirement`](../guide/glossary#requirement):
+For deterministic checks, attach a `validation_fn` to a [`Requirement`](../reference/glossary#requirement):
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.core import Requirement
 from mellea.stdlib.requirements import simple_validate
@@ -104,6 +113,8 @@ with a failure reason) into a validation function.
 `req()` and `check()` are concise constructors for `Requirement`:
 
 ```python
+# Requires: mellea
+# Returns: str
 from mellea import start_session
 from mellea.stdlib.requirements import check, req, simple_validate
 
@@ -129,12 +140,14 @@ print(str(email))
 
 ## Sampling strategies and the IVR loop
 
-By default, `instruct()` uses [`RejectionSamplingStrategy`](../guide/glossary#sampling-strategy)`(loop_budget=2)`: it
+By default, `instruct()` uses [`RejectionSamplingStrategy`](../reference/glossary#sampling-strategy)`(loop_budget=2)`: it
 generates once, validates all requirements, and retries up to two times if any fail.
 
 Configure the loop explicitly with `strategy`:
 
 ```python
+# Requires: mellea
+# Returns: SamplingResult
 from mellea import start_session
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -160,7 +173,7 @@ else:
     print(str(result.sample_generations[0].value))
 ```
 
-With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult) instead
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../reference/glossary#samplingresult) instead
 of a `ModelOutputThunk`. This lets you inspect whether validation passed and access
 all intermediate generations.
 
@@ -188,7 +201,7 @@ print(str(answer))
 `grounding_context` maps string keys to document text. The keys are arbitrary
 labels — they appear in the prompt as `[key] = value` so the model can reference
 them by name, but there is no required naming convention (e.g. `"doc0"`, `"annual_report"`,
-`"spec"` all work). See [Working with Data](../guide/working-with-data) for richer
+`"spec"` all work). See [Working with Data](../how-to/working-with-data) for richer
 document handling using MObjects and `RichDocument`.
 
 ## ICL examples
@@ -242,7 +255,7 @@ print(str(m.ctx.last_output()))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-[`ChatContext`](../guide/glossary#context) accumulates turns. `SimpleContext` (the default) discards the previous
+[`ChatContext`](../reference/glossary#context) accumulates turns. `SimpleContext` (the default) discards the previous
 turn on each call.
 
 ## `chat()` vs `instruct()`

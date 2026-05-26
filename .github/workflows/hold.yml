@@ -1,0 +1,22 @@
+# Blocks merge when the "do-not-merge/hold" label is applied to a PR.
+#
+# Thin wrapper around the org-wide reusable workflow at
+# generative-computing/.github. The trigger lives here (so PR/merge_group
+# events are observed in this repo) but all logic is centralized upstream.
+#
+# Uses pull_request_target so the label event from forks also triggers this
+# check. The reusable workflow does NOT check out or execute PR code.
+
+name: "Hold"
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+  merge_group:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  hold:
+    uses: generative-computing/.github/.github/workflows/hold.yml@31ecef85b868eb2a9d7ea3a0efd5c12cb4746fc1 # main

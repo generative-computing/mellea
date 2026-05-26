@@ -16,10 +16,11 @@ from dataclasses import fields
 from typing import Any
 
 import jinja2
+import jinja2.meta
 
 from ..backends.cache import SimpleLRUCache
 from ..backends.model_ids import ModelIdentifier
-from ..core import CBlock, Component, FancyLogger, TemplateRepresentation
+from ..core import CBlock, Component, MelleaLogger, TemplateRepresentation
 from .chat_formatter import ChatFormatter
 
 
@@ -104,12 +105,12 @@ class TemplateFormatter(ChatFormatter):
                         stringified_template_args[key] = self._stringify(val)
 
                     if representation.obj is None:
-                        FancyLogger.get_logger().warning(
+                        MelleaLogger.get_logger().warning(
                             f"template formatter encountered a TemplateRepresentation with no obj when stringifying {c.__class__}; setting obj to {c}"
                         )
                         representation.obj = c
-                    return self._load_template(representation).render(
-                        stringified_template_args
+                    return self._render_representation(
+                        representation, stringified_template_args
                     )
 
             case c if isinstance(c, Mapping):
@@ -127,10 +128,29 @@ class TemplateFormatter(ChatFormatter):
                 return stringified_list
 
             case _:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"formatter encountered an unexpected type in _stringify; using str() on {c.__class__}"
                 )
                 return str(c)
+
+    def _render_representation(
+        self,
+        representation: TemplateRepresentation,
+        stringified_template_args: dict[str, Any],
+    ) -> str:
+        """Load a template for the representation, check for unused keys, and render."""
+        template = self._load_template(representation)
+
+        expected_vars = self._get_expected_variables(template, representation)
+        if expected_vars:
+            unused_keys = set(stringified_template_args.keys()) - expected_vars
+            if unused_keys:
+                MelleaLogger.get_logger().warning(
+                    f"TemplateRepresentation for {representation.obj.__class__.__name__} "
+                    f"provides keys not referenced by template '{template.name}': {sorted(unused_keys)}"
+                )
+
+        return template.render(stringified_template_args)
 
     def print(self, c: Component | CBlock) -> str:
         """Render a component or code block to a string using a Jinja2 template.
@@ -161,7 +181,7 @@ class TemplateFormatter(ChatFormatter):
             return jinja2.Environment().from_string(repr.template)  # type: ignore
 
         if repr.template_order is None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"using template formatter for {repr.obj.__class__.__name__} but no template order was provided, defaulting to class name"
             )
             repr.template_order = ["*"]
@@ -239,6 +259,24 @@ class TemplateFormatter(ChatFormatter):
         if self._use_template_cache and self._template_cache:
             self._template_cache.put(repr.obj.__class__.__name__, tmpl)
         return tmpl
+
+    def _get_expected_variables(
+        self, template: jinja2.Template, representation: TemplateRepresentation
+    ) -> set[str]:
+        """Return the set of externally-expected variable names for a template."""
+        try:
+            if representation.template:
+                source = representation.template
+            else:
+                loader = template.environment.loader
+                assert loader is not None
+                assert template.name is not None
+                source, _, _ = loader.get_source(template.environment, template.name)
+            ast = template.environment.parse(source)
+            return jinja2.meta.find_undeclared_variables(ast)
+        except Exception:
+            # Return an empty set if something goes wrong here.
+            return set()
 
     def _get_template(self, root_path: str, template_name: str) -> str:
         """Attempts to walk the provided directory structure to find the best matching template.

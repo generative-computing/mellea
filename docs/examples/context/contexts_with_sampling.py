@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import start_session

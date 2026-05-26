@@ -4,8 +4,20 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
   merge_group:
+  push:
+    branches: ['release/**']
+  workflow_dispatch:  # used by release.sh for sync-PR CI (anti-loop workaround)
+    inputs:
+      ref:
+        description: 'Branch or ref to run CI against'
+        type: string
+        required: false
+
+permissions: {}
 
 jobs:
   code-checks:
+    permissions:
+      contents: read
     uses: ./.github/workflows/quality.yml
 

@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 """Example showing how to use pre-built HuggingFace smolagents tools with Mellea.
 
 This demonstrates loading existing tools from the smolagents ecosystem,
@@ -23,7 +23,7 @@ try:
     python_tool_hf = PythonInterpreterTool()
 
     # Convert to Mellea tool - now you can use it with Mellea!
-    python_tool = MelleaTool.from_smolagents(python_tool_hf)
+    python_tool: MelleaTool = MelleaTool.from_smolagents(python_tool_hf)
 
     # Use with Mellea session
     m = start_session()

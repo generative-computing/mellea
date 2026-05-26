@@ -10,7 +10,7 @@ from mellea.stdlib.sampling.majority_voting import (
 )
 
 # Mark all tests as requiring Ollama (start_session defaults to Ollama)
-pytestmark = [pytest.mark.ollama, pytest.mark.llm, pytest.mark.qualitative]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e, pytest.mark.qualitative]
 
 
 @pytest.fixture(scope="module")
