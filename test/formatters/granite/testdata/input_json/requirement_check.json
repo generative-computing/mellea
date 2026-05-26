@@ -11,10 +11,6 @@
     {
       "role": "assistant",
       "content": "The square root of 4 is 2."
-    },
-    {
-      "content": "<requirements>: The user's question is not one of the homework questions given in the provided documents.\nPlease verify if the assistant's generation satisfies the user's requirements or not and reply with a binary label accordingly. Respond with a json {\"score\": \"yes\"} if the constraints are satisfied or respond with {\"score\": \"no\"} if the constraints are not satisfied.",
-      "role": "user"
     }
   ],
   "extra_body": {

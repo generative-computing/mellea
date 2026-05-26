@@ -11,6 +11,10 @@
     {
       "content": "Based on the documents, your dog has fleas but your cat does not.",
       "role": "assistant"
+    },
+    {
+      "content": "<certainty>",
+      "role": "user"
     }
   ],
   "extra_body": {

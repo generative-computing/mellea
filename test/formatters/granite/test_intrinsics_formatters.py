@@ -255,6 +255,7 @@ _YAML_JSON_COMBOS_LIST = [
     YamlJsonCombo(
         short_name="requirement_check",
         inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
+        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
         task="requirement-check",
         repo_id="ibm-granite/granitelib-core-r1.0",
         last_validated_commit="6b9a42d5e23364b3aca0ae334fbbea57c510623a",
@@ -262,6 +263,7 @@ _YAML_JSON_COMBOS_LIST = [
     YamlJsonCombo(
         short_name="requirement_check_alora",
         inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
+        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
         task="requirement-check",
         is_alora=True,
         repo_id="ibm-granite/granitelib-core-r1.0",
@@ -500,6 +502,7 @@ def _xfail_if_drifted(cfg: YamlJsonCombo) -> None:
     )
 
 
+@pytest.mark.integration
 def test_no_orphan_files():
     """Check whether there are input files that aren't used by any test."""
     used_json_files = {t.inputs_file for t in _YAML_JSON_COMBOS.values()}
@@ -685,6 +688,7 @@ _CANNED_OUTPUT_MODEL_OUTPUT_DIR = _TEST_DATA_DIR / "test_canned_output/model_out
 _CANNED_OUTPUT_EXPECTED_DIR = _TEST_DATA_DIR / "test_canned_output/expected_result"
 
 
+@pytest.mark.integration
 def test_canned_output(yaml_json_combo_with_lora_model):
     """
     Verify that the output processing for each model works on previous model outputs
@@ -894,6 +898,13 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                 t_json = json.loads(tc.message.content)
                 e_json = json.loads(ec.message.content)
 
+                if "requirement_check" in cfg.short_name:
+                    # The "requirement-check" adapter utilizes a nested dict.
+                    # `pytest.approx` doesn't work on those. Grab the value from
+                    # the dict.
+                    t_json = t_json["requirement_check"]
+                    e_json = e_json["requirement_check"]
+
                 assert t_json == pytest.approx(e_json, abs=0.1)
     except AssertionError as e:
         # Known intermittent failure under Transformers 5.0.
@@ -1025,7 +1036,7 @@ def test_run_ollama(yaml_json_combo_for_ollama):
     int(os.environ.get("CICD", 0)) == 1,
     reason="Don't cause CICD pipelines to fail due to adapter version changes alone.",
 )
-@pytest.mark.huggingface
+@pytest.mark.integration
 def test_adapter_versions_unchanged():
     """Fail when any tracked adapter subpath on Hugging Face has moved past the SHA
     recorded in ``YamlJsonCombo.last_validated_commit``.
