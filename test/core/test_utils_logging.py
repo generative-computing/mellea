@@ -1136,6 +1136,30 @@ class TestConfigureLogging:
         assert fh.backupCount == 3
         _close_and_clear(lg)
 
+    def test_empty_max_bytes_env_falls_back_to_default(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOGS_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOGS_FILE_MAX_BYTES", "")
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert fh.maxBytes == 10_485_760
+        _close_and_clear(lg)
+
+    def test_empty_backup_count_env_falls_back_to_default(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        log_path = str(tmp_path / "mellea.log")
+        monkeypatch.setenv("MELLEA_LOGS_FILE", log_path)
+        monkeypatch.setenv("MELLEA_LOGS_FILE_BACKUP_COUNT", "")
+        lg = self._make_bare_logger()
+        configure_logging(lg)
+        fh = next(h for h in lg.handlers if isinstance(h, RotatingFileHandler))
+        assert fh.backupCount == 5
+        _close_and_clear(lg)
+
     # --- per-handler format ---
 
     def test_file_handler_uses_plain_formatter_by_default(
