@@ -111,6 +111,9 @@ class TestDiscriminatedUnionSchema:
         assert _has_branch(pet, "dog", must_have={"kind", "name", "breed"}), (
             f"Dog branch missing or unresolved: {pet!r}"
         )
+        assert pet.get("description") == "the pet to act on", (
+            f"docstring description lost during flattening: {pet!r}"
+        )
 
     def test_required_union_strips_discriminator_keyword(self):
         """OAS-3 ``discriminator`` is rejected by Ollama / OpenAI strict mode.
