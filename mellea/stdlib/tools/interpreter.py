@@ -636,6 +636,9 @@ def make_execution_environment(
 
     Returns:
         ExecutionEnvironment: Configured environment instance.
+
+    Raises:
+        ValueError: If ``tier`` is not one of the recognised execution tier strings.
     """
     resolved_policy: CapabilityPolicy | None
     match tier:
