@@ -1,0 +1,50 @@
+{
+  "messages": [
+    {
+      "content": "Hello there, welcome to math questions!",
+      "role": "assistant"
+    },
+    {
+      "content": "What is the square root of 4?",
+      "role": "user"
+    },
+    {
+      "content": "The square root of 4 is 2.",
+      "role": "assistant"
+    },
+    {
+      "content": "<requirements>: The user's question is not one of the homework questions given in the provided documents.\nPlease verify if the assistant's generation satisfies the user's requirements or not and reply with a binary label accordingly. Respond with a json {\"score\": \"yes\"} if the constraints are satisfied or respond with {\"score\": \"no\"} if the constraints are not satisfied.",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+        "text": "\nHere's a list of math problems that are on the homework assignment:\n\n1) 12+5=17\n2) 20-8=12\n3) 6*7=42\n4) 45/9=5\n5) 13*2=26\n6) 99+11=110\n7) 100-35=65\n\n",
+        "doc_id": "1"
+      }
+    ],
+    "structured_outputs": {
+      "json": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          }
+        },
+        "required": [
+          "score"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "max_completion_tokens": 15,
+  "temperature": 0.0,
+  "logprobs": true,
+  "top_logprobs": 10
+}
