@@ -31,10 +31,6 @@ from mellea.formatters.granite import (
 )
 from mellea.formatters.granite.base import util as base_util
 from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
-from mellea.formatters.granite.intrinsics.constants import (
-    BASE_MODEL_TO_CANONICAL_NAME,
-    OLD_LAYOUT_REPOS,
-)
 
 
 def _read_file(name):
@@ -424,19 +420,6 @@ def _yaml_json_combo_for_ollama(request: pytest.FixtureRequest) -> YamlJsonCombo
     return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]._resolve_yaml()
 
 
-def _adapter_subpath(cfg: YamlJsonCombo) -> str:
-    """Return the Hugging Face Hub subpath where ``cfg``'s adapter lives.
-
-    Mirrors the layout logic in
-    ``mellea.formatters.granite.intrinsics.util.obtain_lora()``.
-    """
-    model_name = BASE_MODEL_TO_CANONICAL_NAME.get(cfg.base_model_id, cfg.base_model_id)
-    lora_str = "alora" if cfg.is_alora else "lora"
-    if cfg.repo_id in OLD_LAYOUT_REPOS:
-        return f"{cfg.task}/{lora_str}/{model_name}"
-    return f"{cfg.task}/{model_name}/{lora_str}"
-
-
 # The ``functools.cache`` lives on the original function object, so its memoized
 # entries persist for the whole test session. Tests that want to override this
 # function (see ``test_xfail_if_drifted``) monkeypatch the *module attribute*,
@@ -489,7 +472,9 @@ def _xfail_if_drifted(cfg: YamlJsonCombo) -> None:
     if cfg.last_validated_commit is None or cfg.task is None:
         return
 
-    adapter_subpath = _adapter_subpath(cfg)
+    adapter_subpath = intrinsics_util.adapter_subpath(
+        cfg.task, cfg.base_model_id, cfg.repo_id, alora=cfg.is_alora
+    )
     current = _last_commit_for_subpath(cfg.repo_id, adapter_subpath, cfg.revision)
     if current is None or current == cfg.last_validated_commit:
         return
@@ -1059,7 +1044,9 @@ def test_adapter_versions_unchanged():
     for cfg in _YAML_JSON_COMBOS_LIST:
         if cfg.last_validated_commit is None or cfg.task is None:
             continue
-        subpath = _adapter_subpath(cfg)
+        subpath = intrinsics_util.adapter_subpath(
+            cfg.task, cfg.base_model_id, cfg.repo_id, alora=cfg.is_alora
+        )
         current = _last_commit_for_subpath(cfg.repo_id, subpath, cfg.revision)
         if current is None:
             continue
