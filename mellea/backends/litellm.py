@@ -438,7 +438,7 @@ class LiteLLMBackend(FormatterBackend):
         elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
             message_delta = chunk.choices[0].delta
 
-            # Same dual-key probe for streaming deltas (is-None guard, not or).
+            # Same dual-key probe for streaming deltas.
             thinking_chunk = message_delta.get("reasoning_content")
             if thinking_chunk is None:
                 thinking_chunk = message_delta.get("reasoning")

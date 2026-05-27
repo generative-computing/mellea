@@ -57,8 +57,6 @@ def backend() -> LiteLLMBackend:
 
 def _fresh_mot() -> ModelOutputThunk:
     mot: ModelOutputThunk = ModelOutputThunk(None)
-    mot._thinking = ""
-    mot._underlying_value = ""
     mot._meta = {}
     return mot
 
@@ -127,6 +125,31 @@ async def test_processing_non_streaming_no_reasoning(backend: LiteLLMBackend):
     assert mot._underlying_value == "Paris"
 
 
+async def test_processing_non_streaming_empty_reasoning_content_does_not_fall_back(
+    backend: LiteLLMBackend,
+):
+    """Empty-string reasoning_content wins — does not fall back to reasoning key.
+
+    Validates that the is-None guard (not ``or``) is used: an empty-string
+    ``reasoning_content`` chunk is preserved as-is, not silently replaced by the
+    fallback ``reasoning`` value.
+    """
+    mot = _fresh_mot()
+    msg = Message(content="Paris", role="assistant")
+    msg["reasoning_content"] = ""
+    msg["reasoning"] = "should not appear"
+    choice = Choices(finish_reason="stop", index=0, message=msg)
+    chunk = ModelResponse(
+        id="test",
+        choices=[choice],
+        created=0,
+        model="openai/qwen3",
+        object="chat.completion",
+    )
+    await backend.processing(mot, chunk)
+    assert mot._thinking == ""
+
+
 # ---------------------------------------------------------------------------
 # Streaming path
 # ---------------------------------------------------------------------------
@@ -179,3 +202,22 @@ async def test_processing_streaming_no_reasoning(backend: LiteLLMBackend):
     await backend.processing(mot, stream_chunk)
     assert mot._thinking == ""
     assert mot._underlying_value == "Paris"
+
+
+async def test_processing_streaming_empty_reasoning_content_does_not_fall_back(
+    backend: LiteLLMBackend,
+):
+    """Streaming: empty-string reasoning_content wins — does not fall back to reasoning key.
+
+    Validates that the is-None guard (not ``or``) is used in the streaming branch too.
+    """
+    mot = _fresh_mot()
+    delta = Delta(content="")
+    delta["reasoning_content"] = ""
+    delta["reasoning"] = "should not appear"
+    chunk_choice = StreamingChoices(finish_reason=None, index=0, delta=delta)
+    stream_chunk = ModelResponseStream(
+        id="test", choices=[chunk_choice], created=0, model="openai/qwen3"
+    )
+    await backend.processing(mot, stream_chunk)
+    assert mot._thinking == ""
