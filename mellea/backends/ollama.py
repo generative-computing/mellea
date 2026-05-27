@@ -502,6 +502,12 @@ class OllamaModelBackend(FormatterBackend):
 
         Returns:
             list[ModelOutputThunk]: A list of model output thunks, one per action.
+
+        Raises:
+            Exception: Any exception raised by the Ollama client (e.g.,
+                ``ConnectionError``, ``ollama.ResponseError``) propagates
+                directly to the caller. Semantics are all-or-nothing: if any
+                request fails, no thunks are returned.
         """
         if len(actions) > 1:
             MelleaLogger.get_logger().info(
@@ -536,6 +542,8 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 coroutines.append(co)
 
+            # All-or-nothing: first failure raises; remaining in-flight requests
+            # complete but their results are discarded.
             responses = await asyncio.gather(*coroutines)
 
         results = []
