@@ -32,7 +32,7 @@ def _make_backend(template: str) -> LocalHFBackend:
         chat_template = template
 
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
-    b._tokenizer = _FakeTokenizer()
+    object.__setattr__(b, "_tokenizer", _FakeTokenizer())
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
