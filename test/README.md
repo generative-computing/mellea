@@ -1,5 +1,7 @@
 # Mellea Test Suite
 
+> **Test strategy, classification rules, and authoring guide** are in the [Test Strategy](https://generative-computing.github.io/mellea/community/testing-strategy) page. This file covers operational concerns: running tests, model setup, and GPU gotchas.
+
 Test files must be named as `test_*.py` so that pydocstyle ignores them.
 
 ## Running Tests
@@ -121,20 +123,9 @@ Key markers for GPU testing:
 
 ### Resource gating (predicates)
 
-Use predicate functions from `test/predicates.py` for resource gating:
-
-```python
-from test.predicates import require_gpu, require_ram
-
-pytestmark = [pytest.mark.e2e, pytest.mark.huggingface, require_gpu(), require_ram(min_gb=48)]
-```
-
-| Predicate | Use when test needs |
-| --------- | ------------------- |
-| `require_gpu()` | Any GPU (CUDA or MPS) |
-| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
-| `require_ram(min_gb=N)` | N GB+ system RAM |
-| `require_api_key("ENV_VAR")` | Specific API credentials |
+Use predicate functions from `test/predicates.py` for resource gating. See
+[MARKERS_GUIDE.md](MARKERS_GUIDE.md#resource-gating-predicates) for the full
+predicate reference and typical combinations.
 
 > **Deprecated:** The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`,
 > and `requires_gpu_isolation` are deprecated. Existing tests using them still work

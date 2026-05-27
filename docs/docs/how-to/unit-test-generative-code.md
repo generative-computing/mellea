@@ -7,7 +7,7 @@ description: "Write reliable tests for @generative functions using pytest marker
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally, `pytest` installed.
 
-> **Contributing to Mellea itself?** See the [Contributing Guide](../community/contributing-guide#testing)
+> **Contributing to Mellea itself?** See the [Test Strategy](../community/testing-strategy)
 > for Mellea's own test markers, fixtures, and CI setup.
 
 Testing generative code requires you to separate concerns: some assertions are

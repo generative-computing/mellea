@@ -395,7 +395,7 @@ for m in granite4:micro granite4:micro-h deepseek-r1:8b \
 
 ### Test Markers
 
-Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference, including tier definitions, backend markers, resource gates, and auto-skip logic.
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The [Test Strategy](https://generative-computing.github.io/mellea/community/testing-strategy) page covers classification rules, authoring guide, and CI tiers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic).
 
 ### CI/CD Tests
 
