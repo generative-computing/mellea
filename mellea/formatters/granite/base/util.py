@@ -213,8 +213,7 @@ def chat_completion_request_to_transformers_inputs(
             are not installed (the latter only when constrained decoding is used).
         TypeError: If ``tokenizer.apply_chat_template()`` returns an unexpected type.
         ValueError: If padding or end-of-sequence token IDs cannot be determined
-            from the tokenizer, or if a constrained-decoding request is made
-            without the required ``tokenizer``/``ll_tokenizer``/``model`` arguments.
+            from the tokenizer.
     """
     with import_optional("torch"):
         # Third Party
@@ -310,20 +309,13 @@ def chat_completion_request_to_transformers_inputs(
             # Third Party
             import llguidance
             import llguidance.hf
-        if tokenizer is None and ll_tokenizer is None:
-            raise ValueError(
-                "Request specifies constrained decoding, but neither a "
-                "tokenizer nor an ll_tokenizer was passed to this function."
-            )
 
         if ll_tokenizer is None:
             # HF model components disagree on vocab size (resized embeddings, added
             # special tokens, etc.). Pass the maximum so the bitmask covers every
             # token id the model can emit. llguidance defaults to the tokenizer's
             # value when n_vocab is None, which can be smaller than model.vocab_size.
-            n_vocab = max(tokenizer.vocab_size, len(tokenizer))  # type: ignore[union-attr,arg-type]
-            if model is not None:
-                n_vocab = max(n_vocab, model.vocab_size)
+            n_vocab = max(tokenizer.vocab_size, len(tokenizer), model.vocab_size)  # type: ignore[arg-type]
             ll_tokenizer = llguidance.hf.from_tokenizer(tokenizer, n_vocab=n_vocab)  # type: ignore[arg-type]
 
         grammar = llguidance.LLMatcher.grammar_from_json_schema(
@@ -335,12 +327,6 @@ def chat_completion_request_to_transformers_inputs(
         generate_input["logits_processor"] = [logits_processor]  # type: ignore[assignment]
 
         if constrained_decoding_prefix is not None:
-            if tokenizer is None or model is None:
-                raise ValueError(
-                    "constrained_decoding_prefix requires both a tokenizer "
-                    "and a model to be passed to this function; "
-                    f"received tokenizer ({tokenizer}) and model ({model})."
-                )
             # Some models generate boilerplate before getting to the place where the
             # logits processor should activate. Append that boilerplate to the prompt,
             # since the logits processor we just created will
