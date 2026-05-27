@@ -502,6 +502,12 @@ class OllamaModelBackend(FormatterBackend):
 
         Returns:
             list[ModelOutputThunk]: A list of model output thunks, one per action.
+
+        Raises:
+            Exception: Any exception raised by the Ollama client (e.g.,
+                ``ConnectionError``, ``ollama.ResponseError``) propagates
+                directly to the caller. Semantics are all-or-nothing: if any
+                request fails, no thunks are returned.
         """
         if len(actions) > 1:
             MelleaLogger.get_logger().info(
@@ -536,37 +542,29 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 coroutines.append(co)
 
-            responses = await asyncio.gather(*coroutines, return_exceptions=True)
+            # All-or-nothing: first failure raises; remaining in-flight requests
+            # complete but their results are discarded.
+            responses = await asyncio.gather(*coroutines)
 
         results = []
         date = datetime.datetime.now()
         for i, response in enumerate(responses):
-            result = None
-            error = None
-            if isinstance(response, BaseException):
-                MelleaLogger.get_logger().warning(
-                    f"generate_from_raw: request {i} failed with "
-                    f"{type(response).__name__}: {response}"
-                )
-                result = ModelOutputThunk(value="")
-                error = response
-            else:
-                result = ModelOutputThunk(
-                    value=response.response,
-                    meta={
-                        "generate_response": response.model_dump(),
-                        "usage": {
-                            "completion_tokens": response.eval_count,
-                            "prompt_tokens": response.prompt_eval_count,
-                            "total_tokens": (
-                                response.prompt_eval_count + response.eval_count
-                                if response.prompt_eval_count is not None
-                                and response.eval_count is not None
-                                else None
-                            ),
-                        },
+            result = ModelOutputThunk(
+                value=response.response,
+                meta={
+                    "generate_response": response.model_dump(),
+                    "usage": {
+                        "completion_tokens": response.eval_count,
+                        "prompt_tokens": response.prompt_eval_count,
+                        "total_tokens": (
+                            response.prompt_eval_count + response.eval_count
+                            if response.prompt_eval_count is not None
+                            and response.eval_count is not None
+                            else None
+                        ),
                     },
-                )
+                },
+            )
             action = actions[i]
             result.parsed_repr = (
                 action.parse(result) if isinstance(action, Component) else result.value
@@ -584,9 +582,6 @@ class OllamaModelBackend(FormatterBackend):
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
             generate_log.action = action
-
-            if error:
-                generate_log.extra["error"] = error
             result._generate_log = generate_log
 
             results.append(result)
