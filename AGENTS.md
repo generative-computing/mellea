@@ -119,6 +119,8 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | `uv.lock` out of sync | Run `uv sync` |
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
+| DCO failure after empty-commit CI kick | Use `git commit -s --allow-empty` — never hardcode `Signed-off-by`; email must match git config |
+| `git push` / signed commit fails with "agent refused" | 1Password SSH agent is locked — unlock 1Password before retrying |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
