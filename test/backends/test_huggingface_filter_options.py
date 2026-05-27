@@ -242,5 +242,131 @@ def test_filter_chat_template_only_removes_documents(
     assert "do_sample" in result
 
 
+# ---------------------------------------------------------------------------
+# Integration: real Granite tokenizer — verifies the allowlist against the
+# actual production template rather than a hand-crafted synthetic one.
+#
+# Marked huggingface because it reads from the HuggingFace model cache.
+# Skips automatically if the tokenizer is not cached locally.
+# No GPU required — only the tokenizer files are loaded.
+# ---------------------------------------------------------------------------
+
+_GRANITE_MODEL_ID = "ibm-granite/granite-3.3-8b-instruct"
+
+
+def _try_load_granite_tokenizer():
+    """Return the Granite tokenizer if cached locally, else None."""
+    try:
+        from transformers import AutoTokenizer
+
+        return AutoTokenizer.from_pretrained(_GRANITE_MODEL_ID, local_files_only=True)
+    except Exception:
+        return None
+
+
+@pytest.mark.huggingface
+def test_granite_allowlist_includes_known_template_vars() -> None:
+    """Granite's chat template exposes 'think' and 'guardian_config' as Jinja vars.
+
+    This test loads the real tokenizer (tokenizer files only — no GPU, no model
+    weights) and asserts the computed allowlist includes the template-specific
+    options that Mellea passes for Granite models.
+
+    If the allowlist is empty or missing these keys after a transformers upgrade,
+    it means either the Granite template changed or _HF_INTERNAL_TEMPLATE_VARS
+    is now incorrectly excluding something it should not.
+    """
+    tok = _try_load_granite_tokenizer()
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    allowlist = b._chat_template_allowlist
+
+    # These are Granite-specific Jinja variables that must survive the filter.
+    # If either is absent the filter is over-aggressive and will break Granite
+    # think-mode and guardian calls.
+    assert "think" in allowlist, (
+        f"'think' missing from allowlist; got: {sorted(allowlist)}"
+    )
+    assert "guardian_config" in allowlist, (
+        f"'guardian_config' missing from allowlist; got: {sorted(allowlist)}"
+    )
+
+
+@pytest.mark.huggingface
+def test_granite_allowlist_excludes_generate_only_options() -> None:
+    """The Granite template does not reference GenerationConfig param names as Jinja vars.
+
+    This is the integration-level proof that the allowlist approach correctly
+    drops generate-only options for the real production model — and that the
+    approach remains valid after a transformers upgrade.
+
+    Failure here means the Granite template now references a GenerationConfig
+    parameter name as a Jinja variable, which would require revisiting the design.
+    """
+    tok = _try_load_granite_tokenizer()
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    allowlist = b._chat_template_allowlist
+
+    generate_only = [
+        "temperature",
+        "max_new_tokens",
+        "do_sample",
+        "top_k",
+        "top_p",
+        "num_beams",
+        "repetition_penalty",
+        "min_new_tokens",
+        "pad_token_id",
+    ]
+    for key in generate_only:
+        assert key not in allowlist, (
+            f"generate-only key '{key}' appeared in Granite allowlist — "
+            f"the template may now reference it as a Jinja variable"
+        )
+
+
+@pytest.mark.huggingface
+def test_granite_allowlist_excludes_hf_internal_vars() -> None:
+    """HF-internal vars are excluded from the Granite allowlist.
+
+    Verifies that _HF_INTERNAL_TEMPLATE_VARS correctly covers all variables
+    HuggingFace injects for the real production template. If any internal var
+    leaks into the allowlist, forwarding it from model_options would duplicate
+    a kwarg that apply_chat_template already provides, causing a TypeError.
+    """
+    tok = _try_load_granite_tokenizer()
+    if tok is None:
+        pytest.skip(
+            f"{_GRANITE_MODEL_ID} not in local HF cache — run qualitative tests first"
+        )
+
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = tok
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+
+    allowlist = b._chat_template_allowlist
+
+    for var in _HF_INTERNAL_TEMPLATE_VARS:
+        assert var not in allowlist, (
+            f"HF-internal var '{var}' leaked into Granite allowlist — "
+            f"check _HF_INTERNAL_TEMPLATE_VARS against the installed transformers version"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
