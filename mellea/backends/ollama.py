@@ -536,37 +536,27 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 coroutines.append(co)
 
-            responses = await asyncio.gather(*coroutines, return_exceptions=True)
+            responses = await asyncio.gather(*coroutines)
 
         results = []
         date = datetime.datetime.now()
         for i, response in enumerate(responses):
-            result = None
-            error = None
-            if isinstance(response, BaseException):
-                MelleaLogger.get_logger().warning(
-                    f"generate_from_raw: request {i} failed with "
-                    f"{type(response).__name__}: {response}"
-                )
-                result = ModelOutputThunk(value="")
-                error = response
-            else:
-                result = ModelOutputThunk(
-                    value=response.response,
-                    meta={
-                        "generate_response": response.model_dump(),
-                        "usage": {
-                            "completion_tokens": response.eval_count,
-                            "prompt_tokens": response.prompt_eval_count,
-                            "total_tokens": (
-                                response.prompt_eval_count + response.eval_count
-                                if response.prompt_eval_count is not None
-                                and response.eval_count is not None
-                                else None
-                            ),
-                        },
+            result = ModelOutputThunk(
+                value=response.response,
+                meta={
+                    "generate_response": response.model_dump(),
+                    "usage": {
+                        "completion_tokens": response.eval_count,
+                        "prompt_tokens": response.prompt_eval_count,
+                        "total_tokens": (
+                            response.prompt_eval_count + response.eval_count
+                            if response.prompt_eval_count is not None
+                            and response.eval_count is not None
+                            else None
+                        ),
                     },
-                )
+                },
+            )
             action = actions[i]
             result.parsed_repr = (
                 action.parse(result) if isinstance(action, Component) else result.value
@@ -584,9 +574,6 @@ class OllamaModelBackend(FormatterBackend):
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
             generate_log.action = action
-
-            if error:
-                generate_log.extra["error"] = error
             result._generate_log = generate_log
 
             results.append(result)

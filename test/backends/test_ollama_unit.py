@@ -4,14 +4,15 @@ Covers _simplify_and_merge, _make_backend_specific_and_remove, and
 chat_response_delta_merge.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import ollama
 import pytest
 
 from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend, chat_response_delta_merge
-from mellea.core import ModelOutputThunk
+from mellea.core import CBlock, ModelOutputThunk
+from mellea.stdlib.context import SimpleContext
 
 
 def _make_backend(
@@ -199,6 +200,31 @@ def test_timeout_forwarded_to_new_async_clients_per_event_loop():
 
     _, async_kwargs = mock_async_client.call_args
     assert async_kwargs.get("timeout") == 7.0
+
+
+# --- generate_from_raw exception propagation (#597) ---
+
+
+async def test_generate_from_raw_propagates_exception(backend):
+    """Exceptions from individual Ollama requests must propagate to the caller.
+
+    Regression test for #597: previously, exceptions were silently converted to
+    ModelOutputThunk(value="") via asyncio.gather(return_exceptions=True).
+    """
+    error = ConnectionError("ollama server unavailable")
+    mock_async_client = MagicMock()
+    mock_async_client.generate = AsyncMock(side_effect=error)
+
+    with patch.object(
+        type(backend),
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_async_client,
+    ):
+        with pytest.raises(ConnectionError, match="ollama server unavailable"):
+            await backend.generate_from_raw(
+                actions=[CBlock(value="what is 1+1?")], ctx=SimpleContext()
+            )
 
 
 if __name__ == "__main__":
