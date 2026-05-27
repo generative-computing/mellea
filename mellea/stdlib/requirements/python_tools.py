@@ -21,11 +21,7 @@ from mellea.stdlib.tools.interpreter import (
 )
 
 from ...core import Context, MelleaLogger, Requirement, ValidationResult
-from .python_reqs import (
-    PythonExecutionReq,
-    _has_python_code_listing,
-    _python_executes_without_error,
-)
+from .python_reqs import PythonExecutionReq, _has_python_code_listing
 
 logger = MelleaLogger.get_logger()
 
@@ -281,6 +277,10 @@ def python_tool_requirements(
     Factory function that creates a complete set of requirements for validating
     Python code generation, from extraction through execution and output checks.
 
+    Note: OutputSizeLimit requires actual code execution to capture stdout size.
+    Control execution safety via use_sandbox (Docker isolation) or by using
+    untrusted LLM sources only with use_sandbox=True.
+
     Args:
         allowed_imports: Whitelist of importable top-level modules. If None, all
             imports are allowed. Default None.
@@ -293,7 +293,7 @@ def python_tool_requirements(
         list[Requirement]: Requirement instances in validation order:
             1. PythonCodeExtraction
             2. PythonSyntaxValid
-            3. PythonExecutesWithoutError (configured with timeout and sandbox settings)
+            3. PythonExecutionReq (configured with timeout and sandbox settings)
             4. OutputSizeLimit (configured with output_limit_chars)
             5. ImportRestrictions (only included if allowed_imports is provided)
 
