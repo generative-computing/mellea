@@ -6,7 +6,7 @@ sidebarTitle: "Test Strategy"
 
 This document explains how Mellea's test suite is organised, how to classify
 new tests, and what runs in CI. It is aimed at contributors to this repository.
-Sections build on each other — you can stop when you have what you need.
+Sections build on each other; you can stop when you have what you need.
 
 > **Writing tests for your own `@generative` code?** See
 > [Unit Test Generative Code](../how-to/unit-test-generative-code) instead.
@@ -17,14 +17,14 @@ Mellea tests assert **observable contracts**, not implementation details.
 
 - Test the public API surface, not private helpers.
 - Test cross-backend behaviour where it needs to be consistent.
-- A test that passes while the system is broken has negative value — prefer
+- A test that passes while the system is broken has negative value; prefer
   fewer, more honest tests over coverage padding.
 - When a test fails, fix the **code**. Adjusting an assertion to silence a
   failure is almost always wrong; fixing the test is acceptable only if the
   test was never correctly written.
 - All tiers run locally by default. Qualitative tests (assertions on LLM output
-  *content*) are the one tier that CI skips — they use a dedicated marker so
-  non-deterministic checks never block CI.
+  *content*) are the one tier that CI skips, so non-deterministic checks never
+  block CI.
 
 ## Classification
 
@@ -40,7 +40,7 @@ below in order:
 
 ### About backends
 
-Mellea supports multiple **backends** — the providers that actually run language
+Mellea supports multiple **backends**: the providers that actually run language
 models. Which backend a test uses determines its tier, what hardware or
 credentials it needs, and how the test suite skips it automatically.
 
@@ -55,8 +55,8 @@ credentials it needs, and how the test suite skips it automatically.
 | `bedrock` | AWS Bedrock API | AWS credentials |
 
 Tests that use any of these are **e2e** tests. Tests that don't touch a backend
-— pure logic, formatters, schema validation, or the telemetry pipeline — are
-**unit** or **integration** and run on any machine with just Python and the
+(pure logic, formatters, schema validation, or the telemetry pipeline) are
+**unit** or **integration**, and run on any machine with just Python and the
 project dependencies installed.
 
 ### Unit
@@ -99,13 +99,13 @@ component, would this test catch it? If yes → integration. If no → unit.
 
 ### E2E
 
-**Tests against a real backend** — cloud APIs, local servers (Ollama), or
+**Tests against a real backend**: cloud APIs, local servers (Ollama), or
 GPU-loaded models (HuggingFace, vLLM). No mocks on the critical path.
 
 Add `@pytest.mark.e2e` explicitly, always combined with the appropriate backend
-marker (`ollama`, `huggingface`, etc.). Assertions must be **deterministic** —
-structural, type-based, or functional (not assertions on generated text content;
-that's qualitative).
+marker (`ollama`, `huggingface`, etc.). Assertions must be **deterministic**:
+structural, type-based, or functional. Assertions on generated text content
+belong in qualitative tests, not e2e.
 
 ```python
 pytestmark = [pytest.mark.e2e, pytest.mark.ollama]
@@ -117,7 +117,7 @@ def test_structured_output_returns_valid_json(session):
 
 ### Qualitative
 
-**A sub-tier of e2e** — same infrastructure requirements, but assertions check
+**A sub-tier of e2e**: same infrastructure requirements, but assertions check
 **non-deterministic output content** that may vary across model versions or runs.
 
 Add `@pytest.mark.qualitative` per-function (not at module level). The module
@@ -154,7 +154,7 @@ checks structure, types, or functional correctness, it is `e2e`.
 compatibility but must not be used in new tests. Issue
 [#729](https://github.com/generative-computing/mellea/issues/729) tracks
 the ongoing migration of legacy `llm`/`e2e` tests that should be reclassified
-as `integration` — you may encounter these in the existing test suite.
+as `integration`; you may encounter these in the existing test suite.
 
 ## Authoring guide
 
@@ -162,7 +162,8 @@ as `integration` — you may encounter these in the existing test suite.
 
 - File: `test_<module>.py` in a directory mirroring the source (e.g.
   `test/backends/test_ollama.py` for `mellea/backends/ollama.py`).
-- Function: `test_<subject>_<scenario>_<expected>` — reads as a sentence.
+- Function: `test_<subject>_<scenario>_<expected>`, written so the name reads
+  as a sentence.
 - One behavioural claim per test. If a test has `and` in the name, split it.
 
 ### Markers
@@ -254,8 +255,8 @@ PR CI passes `test` explicitly and does not collect `docs/`.
 
 ### Auto-skip behaviour
 
-Tests are automatically skipped when their requirements are not met — no manual
-configuration needed:
+Tests are automatically skipped when their requirements are not met. No manual
+configuration is needed:
 
 - **Ollama tests** skip at *collection time* if port 11434 is not reachable,
   preventing fixture setup errors before the skip decision.
@@ -302,8 +303,9 @@ request and merge group event. For each Python version in the matrix:
 `CICD=1` is set in the workflow environment, which triggers the conftest skip
 for all `qualitative`-marked tests.
 
-Note: `docs/examples/` is **not** collected in PR CI — examples require
-variable model and hardware dependencies not installed in the CI environment.
+Note: `docs/examples/` is **not** collected in PR CI. Examples require
+variable model and hardware dependencies that are not installed in the CI
+environment.
 
 ## Coverage
 
@@ -321,9 +323,9 @@ xdg-open htmlcov/index.html
 
 What is measured: `mellea/` and `cli/`. Test files and `docs/` are excluded.
 
-Coverage runs in PR CI but the reports are not currently uploaded or surfaced
-— the CI job summary shows only pass/fail counts. Uploading artifacts and
-adding trend reporting is tracked in issue
+Coverage runs in PR CI but the reports are not currently uploaded or surfaced;
+the CI job summary shows only pass/fail counts. Uploading artifacts and adding
+trend reporting is tracked in issue
 [#737](https://github.com/generative-computing/mellea/issues/737). There is
 no enforced minimum threshold; use coverage locally to identify untested paths.
 
@@ -353,7 +355,7 @@ Parser: `docs/examples/conftest.py` (`_extract_markers_from_file`).
 
 Backend markers (`ollama`, `openai`, `huggingface`, etc.) identify which
 backend a test needs and drive auto-skip logic. Apply them only to `e2e` and
-`qualitative` tests — unit and integration tests do not use real backends.
+`qualitative` tests; unit and integration tests do not use real backends.
 
 See the full backend marker table and common pattern combinations in
 [test/MARKERS_GUIDE.md](https://github.com/generative-computing/mellea/blob/main/test/MARKERS_GUIDE.md#backend-markers).
