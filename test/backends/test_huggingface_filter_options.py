@@ -187,5 +187,68 @@ def test_generate_kwargs_exclude_chat_template_only(backend: LocalHFBackend) -> 
     assert kwargs.get("do_sample") is True
 
 
+# ---------------------------------------------------------------------------
+# Expanded denylist — sampling, length, and token-ID keys
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("top_k", 50),
+        ("top_p", 0.9),
+        ("typical_p", 0.95),
+        ("repetition_penalty", 1.2),
+        ("no_repeat_ngram_size", 3),
+        ("length_penalty", 1.0),
+        ("num_beams", 4),
+        ("num_beam_groups", 2),
+        ("diversity_penalty", 0.5),
+        ("penalty_alpha", 0.6),
+        ("early_stopping", True),
+        ("min_new_tokens", 10),
+        ("num_return_sequences", 3),
+        ("pad_token_id", 0),
+        ("bos_token_id", 1),
+        ("eos_token_id", 2),
+        ("forced_bos_token_id", 1),
+        ("forced_eos_token_id", 2),
+    ],
+)
+def test_filter_generate_only_removes_expanded_keys(
+    backend: LocalHFBackend, key: str, value: object
+) -> None:
+    """Every key in the extended denylist is stripped from apply_chat_template kwargs."""
+    opts = {key: value, "think": True}
+    result = backend._filter_generate_only_options(opts)
+    assert key not in result
+    assert result["think"] is True
+
+
+def test_filter_generate_only_leaves_template_keys_intact(
+    backend: LocalHFBackend,
+) -> None:
+    """Template-specific keys survive when mixed with every expanded denylist key."""
+    template_keys = {
+        "think": True,
+        "guardian_config": {"harm_categories": []},
+        "add_generation_prompt": True,
+        "documents": [{"text": "hello"}],
+    }
+    generate_keys = {
+        "top_k": 40,
+        "top_p": 0.95,
+        "num_beams": 2,
+        "repetition_penalty": 1.1,
+        "min_new_tokens": 5,
+        "pad_token_id": 0,
+    }
+    result = backend._filter_generate_only_options({**template_keys, **generate_keys})
+    for key in generate_keys:
+        assert key not in result
+    for key, val in template_keys.items():
+        assert result[key] == val
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

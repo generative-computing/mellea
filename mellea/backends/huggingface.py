@@ -1609,10 +1609,34 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Options that should only go to generate(), not apply_chat_template().
         # Keys are Mellea sentinel values or direct passthrough keys, evaluated
         # before _make_backend_specific_and_remove renames them downstream.
+        # Covers the most commonly-used fields from HuggingFace GenerationConfig.
+        # See: https://huggingface.co/docs/transformers/main_classes/text_generation
         generate_only = {
-            ModelOption.TEMPERATURE,  # "temperature" — sampling parameter
+            # Sampling strategy
+            ModelOption.TEMPERATURE,  # "temperature"
+            "do_sample",
+            "top_k",
+            "top_p",
+            "typical_p",
+            "repetition_penalty",
+            "no_repeat_ngram_size",
+            "length_penalty",
+            "num_beams",
+            "num_beam_groups",
+            "diversity_penalty",
+            "penalty_alpha",
+            "early_stopping",
+            # Length constraints
             ModelOption.MAX_NEW_TOKENS,  # sentinel "@@@max_new_tokens@@@"; renamed downstream to "max_new_tokens"
-            "do_sample",  # direct passthrough — sampling flag
+            "min_new_tokens",
+            # Sequence count
+            "num_return_sequences",
+            # Special token IDs
+            "pad_token_id",
+            "bos_token_id",
+            "eos_token_id",
+            "forced_bos_token_id",
+            "forced_eos_token_id",
         }
         return {k: v for k, v in model_options.items() if k not in generate_only}
 
