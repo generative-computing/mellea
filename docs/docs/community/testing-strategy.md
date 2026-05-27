@@ -51,7 +51,7 @@ credentials it needs, and how the test suite skips it automatically.
 | `vllm` | High-throughput inference via vLLM | Local GPU required |
 | `openai` | OpenAI API or any OpenAI-compatible endpoint | API key; some tests point this at Ollama's `/v1` |
 | `watsonx` | IBM Watsonx API | API key + project ID |
-| `litellm` | LiteLLM proxy (wraps other backends) | Depends on underlying backend |
+| `litellm` | LiteLLM unified Python client (wraps other backends) | Depends on underlying backend |
 | `bedrock` | AWS Bedrock API | AWS credentials |
 
 Tests that use any of these are **e2e** tests. Tests that don't touch a backend
@@ -125,15 +125,14 @@ still needs `e2e` and the backend marker. Qualitative tests are included in the
 default local run but skipped in CI (`CICD=1`).
 
 ```python
-# Both tests share the same module-level markers
+# Module already carries e2e + backend markers from the example above
 pytestmark = [pytest.mark.e2e, pytest.mark.ollama]
 
-def test_structured_output_returns_valid_json(session):      # e2e: structural, deterministic
-    assert isinstance(json.loads(result.value), dict)
-
 @pytest.mark.qualitative
-def test_greeting_contains_salutation(session):              # qualitative: content, non-deterministic
-    assert "hello" in result.value.lower()
+def test_greeting_contains_salutation(session):
+    result = session.instruct("Write a greeting")
+    assert "hello" in result.value.lower()    # content check — model could legitimately
+                                              # return "Hi there" and the assertion fails
 ```
 
 **Decision rule:** if swapping the model version could break the assertion
@@ -145,7 +144,7 @@ checks structure, types, or functional correctness, it is `e2e`.
 | Tier | Good candidates | Not appropriate |
 |------|-----------------|-----------------|
 | unit | Formatters, parsers, schema validation, config logic, pure helpers | Anything that calls a real backend |
-| integration | OTel/metrics pipeline, multi-component session wiring, SDK boundary assertions | Tests where all boundaries are mocked |
+| integration | Telemetry pipeline (OTel readers), multi-component session wiring, assertions on what an external SDK actually emitted | Tests where all boundaries are mocked |
 | e2e | Backend protocol correctness, streaming, structured output | Assertions on generated text content |
 | qualitative | Factual accuracy, instruction-following, output style | Deterministic structural checks |
 
@@ -202,8 +201,8 @@ Rules:
 - Do not mock internal project components unless the test is explicitly testing
   the boundary *around* that component.
 - When you must mock a backend for a unit or integration test, mock at the
-  backend protocol boundary (the `generate` / `astream` method), not by
-  patching internal Mellea classes.
+  backend's public method boundary (e.g. `generate_from_chat_context`,
+  `generate_from_raw`), not by patching internal Mellea classes.
 
 ### Assertions
 
@@ -378,13 +377,6 @@ pytestmark = [
 See [test/MARKERS_GUIDE.md — Resource Gating](https://github.com/generative-computing/mellea/blob/main/test/MARKERS_GUIDE.md#resource-gating-predicates)
 for the full predicate reference, typical backend/predicate combinations, and
 removed legacy markers.
-
-### Auto-applied `unit` marker
-
-The `conftest.pytest_collection_modifyitems` hook applies `pytest.mark.unit`
-to every test that carries no explicit granularity marker (`integration`,
-`e2e`, `qualitative`, or the deprecated `llm`). This means `pytest -m unit`
-works without any per-file maintenance burden.
 
 ## See also
 
