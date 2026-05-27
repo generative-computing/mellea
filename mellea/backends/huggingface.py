@@ -748,7 +748,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         input_text = self._tokenizer.apply_chat_template(  # type: ignore
             ctx_as_conversation,
             tools=convert_tools_to_json(tools),  # type: ignore
-            **self._make_backend_specific_and_remove(model_options),
+            **self._make_backend_specific_and_remove(
+                self._filter_generate_only_options(model_options)
+            ),
             tokenize=False,
         )
 
@@ -1030,7 +1032,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
-                **self._make_backend_specific_and_remove(model_options),
+                **self._make_backend_specific_and_remove(
+                    self._filter_generate_only_options(model_options)
+                ),
             ).to(self._device)  # type: ignore
 
             format_kwargs = {}
@@ -1581,6 +1585,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "documents",
         }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
+
+    def _filter_generate_only_options(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Remove options that are only for generate(), not for apply_chat_template().
+
+        Inverse of :meth:`_filter_chat_template_only_options`. Prevents generate-only
+        options from leaking into the Jinja template variable namespace, where they
+        could silently shadow template-defined variables of the same name.
+
+        Args:
+            model_options: the model_options for this call
+
+        Returns:
+            a new dict without generate-specific options
+        """
+        # Options that should only go to generate(), not apply_chat_template().
+        # Keys are Mellea sentinel values or direct passthrough keys, evaluated
+        # before _make_backend_specific_and_remove renames them.
+        generate_only = {
+            ModelOption.TEMPERATURE,  # "temperature" — sampling parameter
+            ModelOption.MAX_NEW_TOKENS,  # "@@@max_new_tokens@@@" — renamed to "max_new_tokens"
+            "do_sample",  # direct passthrough — sampling flag
+        }
+        return {k: v for k, v in model_options.items() if k not in generate_only}
 
     # region Adapter loading, unloading, and utility functions.
     @property

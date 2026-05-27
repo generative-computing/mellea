@@ -568,6 +568,28 @@ async def test_error_during_generate_with_lock(backend) -> None:
     await req_mot.avalue()
 
 
+@pytest.mark.qualitative
+def test_generate_only_options_do_not_break_generation(session) -> None:
+    """Regression: passing generate-only options (temperature, max_new_tokens, do_sample)
+    must not corrupt apply_chat_template and must still produce a valid response.
+
+    Before the fix for issue #1154, these options were splatted directly into the
+    Jinja template's variable namespace, where they could silently shadow template vars.
+    """
+    output = session.chat(
+        "What is 1+1?",
+        model_options={
+            ModelOption.TEMPERATURE: 0.0,
+            ModelOption.MAX_NEW_TOKENS: 64,
+            "do_sample": False,
+        },
+    )
+    assert output is not None
+    assert "2" in output.content, (
+        f"Expected response containing '2' but got: {output.content!r}"
+    )
+
+
 def test_assert_correct_adapters() -> None:
     model = Mock()
 
