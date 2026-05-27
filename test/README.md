@@ -1,6 +1,6 @@
 # Mellea Test Suite
 
-> **Test strategy, classification rules, and authoring guide** are in the [Test Strategy](https://generative-computing.github.io/mellea/community/testing-strategy) page. This file covers operational concerns: running tests, model setup, and GPU gotchas.
+> **Test strategy, classification rules, and authoring guide** are in the [Test Strategy](../docs/docs/community/testing-strategy.md) page. This file covers operational concerns: running tests, model setup, and GPU gotchas.
 
 Test files must be named as `test_*.py` so that pydocstyle ignores them.
 

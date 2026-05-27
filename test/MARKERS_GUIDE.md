@@ -1,6 +1,6 @@
 # Pytest Markers Guide
 
-> **Looking for the big picture?** See the [Test Strategy](https://generative-computing.github.io/mellea/community/testing-strategy) page for philosophy, classification rules, authoring guide, CI tiers, and local workflow. This file is the detailed marker reference.
+> **Looking for the big picture?** See the [Test Strategy](../docs/docs/community/testing-strategy.md) page for philosophy, classification rules, authoring guide, CI tiers, and local workflow. This file is the detailed marker reference.
 
 ## Quick Reference
 

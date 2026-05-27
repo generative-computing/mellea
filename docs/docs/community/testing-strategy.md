@@ -55,7 +55,7 @@ CICD=1 uv run pytest test                      # what CI runs second
 
 PR CI on GitHub Actions covers Ollama-backed tests across Python 3.11/3.12/3.13
 and skips qualitative. GPU-backed e2e (HuggingFace, vLLM) only runs in the
-nightly on Bluevela; if you've changed code in those paths, ask a maintainer
+nightly on the cluster; if you've changed code in those paths, ask a maintainer
 for a nightly run before merge.
 
 ## Philosophy
@@ -360,9 +360,9 @@ for NVIDIA MPS setup.
 |------|---------|---------------|-----------|
 | **Pre-commit** | Every commit (local) | Local hook | ruff, mypy, uv-lock, codespell, markdownlint |
 | **PR CI** | Every push / merge group | GitHub Actions, Ubuntu | `pytest test/` on Python 3.11/3.12/3.13 with Ollama running. `CICD=1` set, so qualitative is skipped. `slow` excluded via `addopts`. |
-| **Nightly** | Scheduled | Bluevela LSF (GPU) | Full `pytest test/` with `--group-by-backend`, Ollama + vLLM, no `CICD=1` so qualitative runs. Failures file an auto-issue (e.g. [#985](https://github.com/generative-computing/mellea/issues/985)). |
-| **On-demand nightly for a PR** | *planned* | Bluevela | Comment-triggered full nightly against a PR branch. Tracked in [#734](https://github.com/generative-computing/mellea/issues/734). |
-| **Pre-release** | *planned* | Bluevela | Nightly suite against a release candidate. Tracked under epic [#726](https://github.com/generative-computing/mellea/issues/726). |
+| **Nightly** | Scheduled | IBM internal LSF cluster (GPU) | Full `pytest test/` with `--group-by-backend`, Ollama + vLLM, no `CICD=1` so qualitative runs. Failures file an auto-issue (e.g. [#985](https://github.com/generative-computing/mellea/issues/985)). |
+| **On-demand nightly for a PR** | *not yet available* | IBM internal LSF cluster | Comment-triggered full nightly against a PR branch. Open as [#734](https://github.com/generative-computing/mellea/issues/734) but not currently being worked on; ask a maintainer with cluster access if you need pre-merge GPU validation. |
+| **Pre-release** | *not yet available* | IBM internal LSF cluster | Nightly suite against a release candidate. Part of epic [#726](https://github.com/generative-computing/mellea/issues/726); no active issue. |
 | **Local dev** | Ad-hoc | Your machine | Any subset — see [Local dev workflow](#local-dev-workflow) and [Scoping a test run](#scoping-a-test-run). |
 
 ### PR CI in detail
@@ -383,7 +383,7 @@ not installed in the GitHub-hosted runners.
 
 ### Nightly in detail
 
-Nightlies run on the Bluevela LSF cluster (GPU-equipped), orchestrated outside
+Nightlies run on the IBM internal LSF cluster (GPU-equipped), orchestrated outside
 this repo by a `nightly.py` driver that ultimately invokes
 [`test/scripts/run_tests_with_ollama_and_vllm.sh`](https://github.com/generative-computing/mellea/blob/main/test/scripts/run_tests_with_ollama_and_vllm.sh).
 The script:
@@ -400,9 +400,10 @@ The script:
 
 When a nightly fails, an issue is filed automatically tagged with the date and
 commit SHA (see [#985](https://github.com/generative-computing/mellea/issues/985)
-for the format). On-demand nightlies for an in-flight PR (#734) are not yet
-available; if you need pre-merge GPU validation today, ask a maintainer with
-Bluevela access.
+for the format). On-demand nightlies for an in-flight PR are not yet available
+([#734](https://github.com/generative-computing/mellea/issues/734) is the open
+issue but is not currently being worked on); if you need pre-merge GPU
+validation today, ask a maintainer with cluster access.
 
 ## Coverage
 
@@ -422,9 +423,10 @@ What is measured: `mellea/` and `cli/`. Test files and `docs/` are excluded.
 
 Coverage runs in PR CI but the reports are not currently uploaded or surfaced;
 the CI job summary shows only pass/fail counts. Uploading artifacts and adding
-trend reporting is tracked in issue
-[#737](https://github.com/generative-computing/mellea/issues/737). There is
-no enforced minimum threshold; use coverage locally to identify untested paths.
+trend reporting is an open gap
+([#737](https://github.com/generative-computing/mellea/issues/737), not
+currently being progressed). There is no enforced minimum threshold; use
+coverage locally to identify untested paths.
 
 ## Examples as tests
 

@@ -320,7 +320,7 @@ as it can corrupt state.
 
 ### Quick Reference
 
-See the [Test Strategy](https://generative-computing.github.io/mellea/community/testing-strategy)
+See the [Test Strategy](docs/docs/community/testing-strategy.md)
 page for classification rules, authoring guide, CI tier map, coverage, and the
 full local workflow reference. Essential commands:
 
@@ -386,7 +386,7 @@ for m in granite4:micro granite4:micro-h deepseek-r1:8b \
 
 ### Test Markers
 
-Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The [Test Strategy](https://generative-computing.github.io/mellea/community/testing-strategy) page covers classification rules, authoring guide, and CI tiers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic).
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The [Test Strategy](docs/docs/community/testing-strategy.md) page covers classification rules, authoring guide, and CI tiers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic).
 
 ### CI/CD Tests
 
@@ -403,7 +403,7 @@ pre-commit run --all-files
 CICD=1 uv run pytest test
 ```
 
-See the [Test Strategy — CI pipeline tiers](https://generative-computing.github.io/mellea/community/testing-strategy#ci-pipeline-tiers)
+See the [Test Strategy — CI pipeline](docs/docs/community/testing-strategy.md#ci-pipeline)
 for the full CI breakdown and planned nightly/pre-release tiers.
 
 ### Timing Expectations
