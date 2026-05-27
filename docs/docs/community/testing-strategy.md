@@ -220,6 +220,32 @@ explicitly with `pytest -m slow`.
 
 ## Local dev workflow
 
+### Scoping a test run
+
+A pytest run can be scoped along four independent axes; combine them as needed.
+
+| Axis | Flag / form | Examples |
+|------|-------------|----------|
+| **By tier** | `-m <marker>` | `-m unit`, `-m integration`, `-m e2e`, `-m qualitative`, `-m slow` |
+| **By backend** | `-m <backend>` | `-m ollama`, `-m huggingface`, `-m "openai or watsonx"` |
+| **By compound expression** | `-m "<expr>"` | `-m "e2e and ollama and not qualitative"`, `-m "not qualitative and not slow"` |
+| **By path / node id** | positional argument | `pytest test/backends/test_ollama.py`, `pytest test/foo.py::test_bar` |
+
+On top of these, **resource gating** narrows the set further at runtime: even
+if a test matches your `-m` expression, it will skip itself if it declares
+`require_gpu`, `require_ram`, `require_api_key`, `require_package`, or
+`require_python` and the host doesn't satisfy it. The skip reasons are
+self-documenting; pass `-rs` to see them. See
+[Backend & resource gating](#backend--resource-gating) for the predicate
+reference.
+
+The `addopts` in `pyproject.toml` adds `-m "not slow"` and coverage flags to
+every invocation, so `slow` tests are always excluded unless you pass `-m slow`
+yourself (which overrides). `qualitative` tests run by default locally and are
+skipped only when `CICD=1` is set.
+
+### Common command lines
+
 ```bash
 # Fast loop — unit + integration + e2e, no qualitative (~2 min)
 uv run pytest -m "not qualitative"
@@ -243,15 +269,19 @@ uv run pytest -rs
 
 # CI mode locally (mirrors what PR CI does)
 CICD=1 uv run pytest test
+
+# Nightly-style local run on a GPU host (Ollama + vLLM, grouped by backend)
+./test/scripts/run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 ```
 
 ### Test collection scope
 
 `pyproject.toml` sets `testpaths = ["test", "docs"]`. When running without an
 explicit path argument, both directories are collected. `docs/examples/` uses
-the opt-in `# pytest:` comment filter — only files that declare themselves
+the opt-in `# pytest:` comment filter; only files that declare themselves
 runnable are executed (see [Examples as tests](#examples-as-tests)).
-PR CI passes `test` explicitly and does not collect `docs/`.
+PR CI passes `test` explicitly and does not collect `docs/`. Nightlies run
+`pytest test/` (also no `docs/`) but otherwise leave the full marker set in.
 
 ### Auto-skip behaviour
 
@@ -269,43 +299,63 @@ Run `pytest -rs` to see the skip reasons for each skipped test.
 ### GPU tests
 
 On machines with a GPU, e2e tests with `huggingface` or `vllm` markers run
-automatically when resources are sufficient. On HPC clusters with
-`EXCLUSIVE_PROCESS` GPU mode, run `test/` and `docs/examples/` in separate
-invocations to avoid CUDA context conflicts. See
-[test/README.md](https://github.com/generative-computing/mellea/blob/main/test/README.md)
+automatically when resources are sufficient. The `--group-by-backend` flag
+(used by nightlies) reorders tests so backends do not interleave; this
+reduces GPU memory fragmentation enough to make full runs viable on shared
+hosts. On HPC clusters with `EXCLUSIVE_PROCESS` GPU mode, run `test/` and
+`docs/examples/` in separate invocations to avoid CUDA context conflicts;
+see [test/README.md](https://github.com/generative-computing/mellea/blob/main/test/README.md)
 for NVIDIA MPS setup.
 
 ## CI pipeline
 
-The table below describes what runs at each stage. **Currently**, only the
-pre-commit and PR CI tiers are implemented. Nightly and pre-release tiers are
-planned as part of epic [#726](https://github.com/generative-computing/mellea/issues/726).
-
-| Tier | Trigger | Budget | What runs |
-|------|---------|--------|-----------|
-| **Pre-commit** | Every commit | < 60 s | ruff, mypy, uv-lock, codespell, markdownlint |
-| **PR CI** | Every push / merge group | ≤ 3 h | pre-commit + `pytest test/` on Python 3.11/3.12/3.13 with Ollama running. `CICD=1` skips qualitative. `slow` tests excluded by default. |
-| **Nightly** | Scheduled — *planned* | ~60 min | Every test, all backends, qualitative included. Tracked in [#733](https://github.com/generative-computing/mellea/issues/733). |
-| **Pre-release** | Manual — *planned* | ~90 min | Nightly suite on release candidate. Tracked in [#733](https://github.com/generative-computing/mellea/issues/733). |
-| **Local dev** | Ad-hoc | varies | Any subset — see [Local dev workflow](#local-dev-workflow) |
+| Tier | Trigger | Where it runs | What runs |
+|------|---------|---------------|-----------|
+| **Pre-commit** | Every commit (local) | Local hook | ruff, mypy, uv-lock, codespell, markdownlint |
+| **PR CI** | Every push / merge group | GitHub Actions, Ubuntu | `pytest test/` on Python 3.11/3.12/3.13 with Ollama running. `CICD=1` set, so qualitative is skipped. `slow` excluded via `addopts`. |
+| **Nightly** | Scheduled | Bluevela LSF (GPU) | Full `pytest test/` with `--group-by-backend`, Ollama + vLLM, no `CICD=1` so qualitative runs. Failures file an auto-issue (e.g. [#985](https://github.com/generative-computing/mellea/issues/985)). |
+| **On-demand nightly for a PR** | *planned* | Bluevela | Comment-triggered full nightly against a PR branch. Tracked in [#734](https://github.com/generative-computing/mellea/issues/734). |
+| **Pre-release** | *planned* | Bluevela | Nightly suite against a release candidate. Tracked under epic [#726](https://github.com/generative-computing/mellea/issues/726). |
+| **Local dev** | Ad-hoc | Your machine | Any subset — see [Local dev workflow](#local-dev-workflow) and [Scoping a test run](#scoping-a-test-run). |
 
 ### PR CI in detail
 
-CI runs `quality.yml`, a reusable workflow invoked by `ci.yml` on every pull
-request and merge group event. For each Python version in the matrix:
+`ci.yml` invokes the reusable `quality.yml` on every pull request and merge
+group event. For each Python version in the matrix:
 
 1. Pre-commit checks (ruff, mypy, uv-lock, codespell, markdownlint).
 2. Ollama installed and served; `granite4:micro` and `granite4:micro-h` pulled.
-3. `uv run -m pytest -v --junit-xml=... test` — runs the `test/` directory only
+3. `uv run -m pytest -v --junit-xml=... test` runs the `test/` directory only
    (not `docs/examples/`). `pyproject.toml` `addopts` excludes `slow`.
-4. Job summary written with pass/fail counts from the JUnit XML.
+4. Job summary lists pass/fail counts from the JUnit XML.
 
 `CICD=1` is set in the workflow environment, which triggers the conftest skip
-for all `qualitative`-marked tests.
+for all `qualitative`-marked tests. `docs/examples/` is **not** collected in
+PR CI; examples require variable model and hardware dependencies that are
+not installed in the GitHub-hosted runners.
 
-Note: `docs/examples/` is **not** collected in PR CI. Examples require
-variable model and hardware dependencies that are not installed in the CI
-environment.
+### Nightly in detail
+
+Nightlies run on the Bluevela LSF cluster (GPU-equipped), orchestrated outside
+this repo by a `nightly.py` driver that ultimately invokes
+[`test/scripts/run_tests_with_ollama_and_vllm.sh`](https://github.com/generative-computing/mellea/blob/main/test/scripts/run_tests_with_ollama_and_vllm.sh).
+The script:
+
+- Starts a local Ollama and pulls `granite4:micro`, `granite4:micro-h`,
+  `granite3.2-vision`.
+- When a CUDA GPU is detected (or `WITH_VLLM=1` is set), starts a local vLLM
+  server with `ibm-granite/granite-4.0-micro` by default.
+- Runs `pytest test/ --group-by-backend -v -s`. The `--group-by-backend` flag
+  reorders tests so all `huggingface`, then `openai`/vLLM, then `ollama`,
+  then API-only backends run as contiguous groups, which dramatically reduces
+  GPU memory fragmentation between backends.
+- Does **not** set `CICD=1`, so qualitative tests *do* run in nightlies.
+
+When a nightly fails, an issue is filed automatically tagged with the date and
+commit SHA (see [#985](https://github.com/generative-computing/mellea/issues/985)
+for the format). On-demand nightlies for an in-flight PR (#734) are not yet
+available; if you need pre-merge GPU validation today, ask a maintainer with
+Bluevela access.
 
 ## Coverage
 
