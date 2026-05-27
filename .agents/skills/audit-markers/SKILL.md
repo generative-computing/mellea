@@ -69,7 +69,8 @@ test actually loads, and report whether the gate is correctly set or too loose.
 
 Read these before auditing — they are the authoritative source for marker conventions:
 
-- **Marker guide:** `test/MARKERS_GUIDE.md`
+- **Test strategy:** `docs/docs/community/testing-strategy.md` — classification decision rules, per-tier definitions, philosophy
+- **Marker guide:** `test/MARKERS_GUIDE.md` — marker tables, common patterns, backend reference
 - **Marker registration:** `test/conftest.py` (`pytest_configure`) and `pyproject.toml` (`[tool.pytest.ini_options]`)
 - **Resource predicates:** `test/predicates.py` (predicate functions for resource gating)
 - **Example marker format:** `docs/examples/conftest.py` (`_extract_markers_from_file`)
