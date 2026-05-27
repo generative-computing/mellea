@@ -71,8 +71,8 @@ async def test_groundedness_e2e_ungrounded_claim(backend, simple_docs):
     )
 
     result = await req.validate(backend, ctx)
-    # Berlin claim is not grounded (not in documents)
-    assert isinstance(result.as_bool(), bool)
+    # Berlin claim is not grounded (not in documents), should return False
+    assert result.as_bool() is False
     assert result.reason is not None
 
 
@@ -95,7 +95,8 @@ async def test_groundedness_e2e_documents_in_message(backend, simple_docs):
     )
 
     result = await req.validate(backend, ctx)
-    assert isinstance(result.as_bool(), bool)
+    # Response is grounded in the provided documents
+    assert result.as_bool() is True
 
 
 @pytest.mark.asyncio
@@ -115,8 +116,8 @@ async def test_groundedness_e2e_multi_message_conversation(backend, simple_docs)
     )
 
     result = await req.validate(backend, ctx)
-    # Only the last assistant message is validated
-    assert isinstance(result.as_bool(), bool)
+    # Only the last assistant message is validated, and it is grounded
+    assert result.as_bool() is True
 
 
 @pytest.mark.asyncio
@@ -165,7 +166,8 @@ async def test_groundedness_e2e_short_factual_response(backend, simple_docs):
     )
 
     result = await req.validate(backend, ctx)
-    assert isinstance(result.as_bool(), bool)
+    # Short factual response grounded in documents
+    assert result.as_bool() is True
 
 
 @pytest.mark.asyncio
@@ -192,6 +194,7 @@ async def test_groundedness_e2e_complex_response(backend, simple_docs):
     )
 
     result = await req.validate(backend, ctx)
+    # Most claims are grounded, but "Both are major European cities" may not be explicitly supported
     assert isinstance(result.as_bool(), bool)
 
 
@@ -215,7 +218,8 @@ async def test_groundedness_e2e_string_documents(backend):
     )
 
     result = await req.validate(backend, ctx)
-    assert isinstance(result.as_bool(), bool)
+    # Response is grounded in the provided string documents
+    assert result.as_bool() is True
 
 
 @pytest.mark.asyncio
@@ -267,4 +271,28 @@ async def test_groundedness_e2e_real_world_rag_scenario(backend):
     )
 
     result = await req.validate(backend, ctx)
-    assert isinstance(result.as_bool(), bool)
+    # Response is fully grounded in the retrieved documents
+    assert result.as_bool() is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
+async def test_groundedness_e2e_citation_not_needed(backend, simple_docs):
+    """End-to-end test: citation not needed when response indicates lack of information."""
+    # When assistant explicitly states it cannot answer, no citation is required
+    # even though documents are provided
+    req = GroundednessRequirement(documents=simple_docs, allow_partial_support=False)
+
+    ctx = (
+        ChatContext()
+        .add(Message("user", "What is the capital of Germany?"))
+        .add(Message("assistant", "I do not have information to answer your question."))
+    )
+
+    result = await req.validate(backend, ctx)
+    # Requirements checker should return True when citation is not needed
+    # (the response does not make factual claims that require grounding)
+    assert result.as_bool() is True
+    assert result.reason is not None
