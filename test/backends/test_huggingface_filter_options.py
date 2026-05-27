@@ -3,7 +3,10 @@
 These tests verify that generate-only options are excluded from apply_chat_template
 kwargs, and that template-only options are excluded from generate() kwargs.
 
-No GPU or real model is required — the filter methods are pure dict operations.
+No GPU or real model is needed to run these tests — the filter methods are pure dict
+operations and the fixture bypasses __init__ entirely. However, torch must be
+importable because importing LocalHFBackend triggers the top-level ``import torch``
+in huggingface.py. Install mellea[hf] to satisfy this requirement.
 """
 
 import pytest
@@ -16,9 +19,15 @@ from mellea.backends.huggingface import LocalHFBackend
 
 @pytest.fixture
 def backend() -> LocalHFBackend:
-    """A LocalHFBackend instance with no model loaded, sufficient for testing filter helpers."""
+    """A LocalHFBackend instance with no model loaded, sufficient for testing filter helpers.
+
+    Uses __new__ to bypass __init__ (which would load model weights). Only
+    from_mellea_model_opts_map is set because that is the sole instance attribute
+    accessed by _filter_generate_only_options, _filter_chat_template_only_options,
+    and _make_backend_specific_and_remove. If any of those methods gains a new
+    self.* dependency, update this fixture.
+    """
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
-    # _make_backend_specific_and_remove needs this map (mirrors __init__)
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 

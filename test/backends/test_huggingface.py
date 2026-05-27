@@ -570,11 +570,14 @@ async def test_error_during_generate_with_lock(backend) -> None:
 
 @pytest.mark.qualitative
 def test_generate_only_options_do_not_break_generation(session) -> None:
-    """Regression: passing generate-only options (temperature, max_new_tokens, do_sample)
-    must not corrupt apply_chat_template and must still produce a valid response.
+    """Non-regression: generation still works when temperature, max_new_tokens, and
+    do_sample are passed as model_options alongside a chat call.
 
-    Before the fix for issue #1154, these options were splatted directly into the
-    Jinja template's variable namespace, where they could silently shadow template vars.
+    Note: this test verifies that the overall generate pipeline is not broken by the
+    filter change, not that the filter itself is exercised end-to-end (the Granite chat
+    template silently ignores unknown kwargs, so a missing filter would still produce
+    the correct answer). Filter correctness is covered by the unit tests in
+    test_huggingface_filter_options.py.
     """
     output = session.chat(
         "What is 1+1?",

@@ -1591,9 +1591,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> dict[str, Any]:
         """Remove options that are only for generate(), not for apply_chat_template().
 
-        Inverse of :meth:`_filter_chat_template_only_options`. Prevents generate-only
-        options from leaking into the Jinja template variable namespace, where they
-        could silently shadow template-defined variables of the same name.
+        Companion to :meth:`_filter_chat_template_only_options` for the opposite
+        direction. Prevents generate-only options from leaking into the Jinja template
+        variable namespace, where they could silently shadow template-defined variables
+        of the same name.
+
+        Note: this method receives model_options after ``_simplify_and_merge`` has run,
+        so user-supplied string keys such as ``"max_new_tokens"`` have already been
+        normalised to their Mellea sentinel equivalents.
 
         Args:
             model_options: the model_options for this call
@@ -1603,10 +1608,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
         # Options that should only go to generate(), not apply_chat_template().
         # Keys are Mellea sentinel values or direct passthrough keys, evaluated
-        # before _make_backend_specific_and_remove renames them.
+        # before _make_backend_specific_and_remove renames them downstream.
         generate_only = {
             ModelOption.TEMPERATURE,  # "temperature" — sampling parameter
-            ModelOption.MAX_NEW_TOKENS,  # "@@@max_new_tokens@@@" — renamed to "max_new_tokens"
+            ModelOption.MAX_NEW_TOKENS,  # sentinel "@@@max_new_tokens@@@"; renamed downstream to "max_new_tokens"
             "do_sample",  # direct passthrough — sampling flag
         }
         return {k: v for k, v in model_options.items() if k not in generate_only}
