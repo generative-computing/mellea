@@ -14,24 +14,24 @@ class ChunkingStrategy(ABC):
     that has not yet reached a chunk boundary is withheld — it is not included in
     the returned list. Each call is stateless and idempotent given the same input.
 
-    **Performance:** ``split()`` is called on every streaming delta, re-scanning
+    **Performance:** `split()` is called on every streaming delta, re-scanning
     the full accumulated text each time (O(n) in total accumulated length per
-    call).  The orchestrator tracks ``prev_chunk_count`` to extract only the new
-    chunks.  This keeps the chunker stateless and removes the need for ``reset()``
+    call).  The orchestrator tracks `prev_chunk_count` to extract only the new
+    chunks.  This keeps the chunker stateless and removes the need for `reset()`
     or deep-copy support, at the cost of re-scanning text already seen.  For
     typical model outputs (a few KB) the cost is negligible; for very long
     streams, a stateful chunker that only processes the new delta would be more
     efficient.
 
-    End-of-stream contract: ``split()`` always withholds the trailing fragment.
+    End-of-stream contract: `split()` always withholds the trailing fragment.
     When the stream terminates, callers are responsible for processing any remainder:
     take the full accumulated text, identify everything after the last returned
     chunk boundary, and handle it appropriately (e.g. pass to a final validator
     or discard).
 
     Note: this ABC operates on text streams only. Multi-modal output (audio
-    segments, image regions) is not supported — the ``accumulated_text: str``
-    signatures on ``split`` and ``flush`` preclude it.
+    segments, image regions) is not supported — the `accumulated_text: str`
+    signatures on `split` and `flush` preclude it.
     """
 
     @abstractmethod
@@ -43,9 +43,9 @@ class ChunkingStrategy(ABC):
                 previously seen tokens and the latest delta.  Implementations
                 that scan this string are O(n) in accumulated length per call.
                 Stateful implementations that only process the new delta are
-                possible but must never mutate state on ``self`` in place —
-                use reassignment (``self._buf = self._buf + [x]``) so that
-                ``copy()``-based cloning in the orchestrator works correctly.
+                possible but must never mutate state on `self` in place —
+                use reassignment (`self._buf = self._buf + [x]`) so that
+                `copy()`-based cloning in the orchestrator works correctly.
 
         Returns:
             A list of complete chunks. If no chunk boundary has been reached yet,
@@ -54,7 +54,7 @@ class ChunkingStrategy(ABC):
         ...
 
     def flush(self, accumulated_text: str) -> list[str]:
-        """Return any trailing fragment that ``split`` withheld.
+        """Return any trailing fragment that `split` withheld.
 
         Called once by the orchestrator after the stream has ended naturally
         (not on early-exit cancellation).  Gives the chunker a chance to
@@ -68,7 +68,7 @@ class ChunkingStrategy(ABC):
             accumulated_text: The full accumulated text at stream end.
 
         Returns:
-            The trailing fragment as ``[fragment]`` if it should be treated
+            The trailing fragment as `[fragment]` if it should be treated
             as a final chunk, or an empty list to discard it.
         """
         _ = accumulated_text
@@ -92,7 +92,7 @@ _PARA_BOUNDARY_END = re.compile(r"\n{2,}$")
 class SentenceChunker(ChunkingStrategy):
     """Splits accumulated text on sentence boundaries.
 
-    Sentence boundaries are detected by ``.``, ``!``, or ``?``, optionally
+    Sentence boundaries are detected by `.`, `!`, or `?`, optionally
     followed by a closing quote (straight or curly) or parenthesis, then
     whitespace. The final sentence is only returned once it is followed by
     whitespace or another sentence — a trailing fragment with no following
@@ -137,9 +137,9 @@ class SentenceChunker(ChunkingStrategy):
         """Return the trailing sentence fragment (if any) as a final chunk.
 
         Trailing whitespace on the fragment is non-semantic for sentence
-        boundaries and is dropped via ``rstrip``.  Leading whitespace is
-        already removed by the loop's ``lstrip`` on each advance, so no
-        ``lstrip`` is needed here.  The result is the fragment's content
+        boundaries and is dropped via `rstrip`.  Leading whitespace is
+        already removed by the loop's `lstrip` on each advance, so no
+        `lstrip` is needed here.  The result is the fragment's content
         only, consistent with how :meth:`split` returns sentences without
         trailing whitespace.
 
@@ -234,11 +234,11 @@ class ParagraphChunker(ChunkingStrategy):
     r"""Splits accumulated text on double-newline paragraph boundaries.
 
     Two or more consecutive newline characters are treated as a paragraph
-    separator. The trailing paragraph fragment (text not yet followed by ``\n\n``)
+    separator. The trailing paragraph fragment (text not yet followed by `\n\n`)
     is withheld.
 
-    Note: only Unix-style ``\n\n`` separators are recognised. CRLF
-    (``\r\n\r\n``) paragraph separators are not supported.
+    Note: only Unix-style `\n\n` separators are recognised. CRLF
+    (`\r\n\r\n`) paragraph separators are not supported.
     """
 
     def split(self, accumulated_text: str) -> list[str]:
@@ -269,7 +269,7 @@ class ParagraphChunker(ChunkingStrategy):
 
         Unlike :class:`SentenceChunker.flush`, the fragment is returned
         byte-for-byte without stripping.  Internal whitespace — including
-        a trailing single ``\n`` — can be semantically meaningful inside
+        a trailing single `\n` — can be semantically meaningful inside
         a paragraph (e.g. a list item or a deliberate line break), and a
         consumer validating paragraph content should see the fragment as
         it was withheld.
@@ -280,7 +280,7 @@ class ParagraphChunker(ChunkingStrategy):
         Returns:
             A single-element list containing the trailing paragraph fragment
             byte-for-byte, or an empty list when the input ends with a
-            paragraph boundary (``\n\n`` or more) or is empty.
+            paragraph boundary (`\n\n` or more) or is empty.
         """
         if not accumulated_text:
             return []

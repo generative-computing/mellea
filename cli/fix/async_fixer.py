@@ -230,9 +230,9 @@ def _has_existing_consumption(following_stmts: list[ast.stmt], var_name: str) ->
     """Check if subsequent statements already consume/await the thunk variable.
 
     Looks for:
-    - ``while not <var>.is_computed(): ...``
-    - ``await <var>.avalue()``
-    - ``await <var>.astream()``
+    - `while not <var>.is_computed(): ...`
+    - `await <var>.avalue()`
+    - `await <var>.astream()`
 
     Recurses into nested blocks (if/for/try/with) via ast.walk.
     """
@@ -287,7 +287,7 @@ def find_fixable_calls(source: str, filepath: Path) -> list[FixLocation]:
         filepath: Path used for error messages and AST filename metadata.
 
     Returns:
-        List of ``FixLocation`` objects describing each call site that should be fixed.
+        List of `FixLocation` objects describing each call site that should be fixed.
     """
     if not source.strip():
         return []
@@ -453,10 +453,10 @@ def fix_file(
     Args:
         filepath: Path to the Python file to fix.
         mode: Fix strategy to apply.
-        dry_run: If ``True``, return locations without modifying the file.
+        dry_run: If `True`, return locations without modifying the file.
 
     Returns:
-        List of ``FixLocation`` objects for each call site found (and optionally fixed).
+        List of `FixLocation` objects for each call site found (and optionally fixed).
     """
     source = filepath.read_text()
     locations = find_fixable_calls(source, filepath)
@@ -515,12 +515,12 @@ def fix_path(path: Path, mode: _FixMode, dry_run: bool = False) -> FixResult:
 
     Args:
         path: File or directory to process. Directories are scanned recursively for
-            ``*.py`` files.
+            `*.py` files.
         mode: Fix strategy to apply.
-        dry_run: If ``True``, report locations without modifying files.
+        dry_run: If `True`, report locations without modifying files.
 
     Returns:
-        Aggregated ``FixResult`` with all fix locations and summary counts.
+        Aggregated `FixResult` with all fix locations and summary counts.
     """
     all_locations: list[FixLocation] = []
     files_affected = 0

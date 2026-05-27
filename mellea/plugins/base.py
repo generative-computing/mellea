@@ -71,13 +71,13 @@ class Plugin:
     def __init_subclass__(
         cls, *, name: str = "", priority: int = 50, **kwargs: Any
     ) -> None:
-        """Set plugin metadata on subclasses that provide a ``name``."""
+        """Set plugin metadata on subclasses that provide a `name`."""
         super().__init_subclass__(**kwargs)
         if name:
             cls._mellea_plugin_meta = PluginMeta(name=name, priority=priority)  # type: ignore[attr-defined]
 
     def __enter__(self) -> Any:
-        """Register this plugin for the duration of a ``with`` block."""
+        """Register this plugin for the duration of a `with` block."""
         return _plugin_cm_enter(self)
 
     def __exit__(
@@ -90,7 +90,7 @@ class Plugin:
         _plugin_cm_exit(self, exc_type, exc_val, exc_tb)
 
     async def __aenter__(self) -> Any:
-        """Async variant — delegates to ``__enter__``."""
+        """Async variant — delegates to `__enter__`."""
         return self.__enter__()
 
     async def __aexit__(
@@ -99,7 +99,7 @@ class Plugin:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Async variant — delegates to ``__exit__``."""
+        """Async variant — delegates to `__exit__`."""
         self.__exit__(exc_type, exc_val, exc_tb)
 
 
@@ -169,9 +169,9 @@ else:
 class MelleaBasePayload(_PayloadBase):  # type: ignore[misc,valid-type]
     """Frozen base — all payloads are immutable by design.
 
-    Plugins must use ``model_copy(update={...})`` to propose modifications
-    and return the copy via ``PluginResult.modified_payload``.  The plugin
-    manager applies the hook's ``HookPayloadPolicy`` to filter changes to
+    Plugins must use `model_copy(update={...})` to propose modifications
+    and return the copy via `PluginResult.modified_payload`.  The plugin
+    manager applies the hook's `HookPayloadPolicy` to filter changes to
     writable fields only.
     """
 
@@ -185,9 +185,9 @@ class MelleaBasePayload(_PayloadBase):  # type: ignore[misc,valid-type]
 class MelleaPlugin(_PluginBase):  # type: ignore[misc,valid-type]
     """Base class for Mellea plugins with lifecycle hooks and typed accessors.
 
-    Use this when you need lifecycle hooks (``initialize``/``shutdown``)
-    or typed context accessors.  For simpler plugins, prefer ``@hook``
-    on standalone functions or ``@plugin`` on plain classes.
+    Use this when you need lifecycle hooks (`initialize`/`shutdown`)
+    or typed context accessors.  For simpler plugins, prefer `@hook`
+    on standalone functions or `@plugin` on plain classes.
 
     Instances support the context manager protocol for temporary activation::
 
@@ -213,7 +213,7 @@ class MelleaPlugin(_PluginBase):  # type: ignore[misc,valid-type]
             context: The plugin context provided by the hook framework.
 
         Returns:
-            The active Backend, or ``None`` if unavailable.
+            The active Backend, or `None` if unavailable.
         """
         return context.global_context.state.get("backend")
 
@@ -224,7 +224,7 @@ class MelleaPlugin(_PluginBase):  # type: ignore[misc,valid-type]
             context: The plugin context provided by the hook framework.
 
         Returns:
-            The active Mellea Context, or ``None`` if unavailable.
+            The active Mellea Context, or `None` if unavailable.
         """
         return context.global_context.state.get("context")
 
@@ -235,7 +235,7 @@ class MelleaPlugin(_PluginBase):  # type: ignore[misc,valid-type]
             context: The plugin context provided by the hook framework.
 
         Returns:
-            The active MelleaSession, or ``None`` if unavailable.
+            The active MelleaSession, or `None` if unavailable.
         """
         return context.global_context.state.get("session")
 
@@ -245,7 +245,7 @@ class MelleaPlugin(_PluginBase):  # type: ignore[misc,valid-type]
         return self._config.config or {}
 
     def __enter__(self) -> MelleaPlugin:
-        """Register this plugin for the duration of a ``with`` block."""
+        """Register this plugin for the duration of a `with` block."""
         if getattr(self, "_scope_id", None) is not None:
             raise RuntimeError(
                 f"MelleaPlugin {self.name!r} is already active as a context manager. "
@@ -270,11 +270,11 @@ class MelleaPlugin(_PluginBase):  # type: ignore[misc,valid-type]
             self._scope_id = None  # type: ignore[assignment]
 
     async def __aenter__(self) -> MelleaPlugin:
-        """Async variant — delegates to the synchronous ``__enter__``."""
+        """Async variant — delegates to the synchronous `__enter__`."""
         return self.__enter__()
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Async variant — delegates to the synchronous ``__exit__``."""
+        """Async variant — delegates to the synchronous `__exit__`."""
         self.__exit__(exc_type, exc_val, exc_tb)
 
 

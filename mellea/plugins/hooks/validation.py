@@ -8,13 +8,13 @@ from mellea.plugins.base import MelleaBasePayload
 
 
 class ValidationPreCheckPayload(MelleaBasePayload):
-    """Payload for ``validation_pre_check`` — before requirement validation.
+    """Payload for `validation_pre_check` — before requirement validation.
 
     Attributes:
-        requirements: List of ``Requirement`` instances to validate (writable).
-        target: The ``CBlock`` being validated, or ``None`` when validating the full context.
+        requirements: List of `Requirement` instances to validate (writable).
+        target: The `CBlock` being validated, or `None` when validating the full context.
 
-        context: The ``Context`` used for validation.
+        context: The `Context` used for validation.
 
         model_options: Dict of model options for backend-based validators (writable).
     """
@@ -26,12 +26,12 @@ class ValidationPreCheckPayload(MelleaBasePayload):
 
 
 class ValidationPostCheckPayload(MelleaBasePayload):
-    """Payload for ``validation_post_check`` — after validation completes.
+    """Payload for `validation_post_check` — after validation completes.
 
     Attributes:
-        requirements: List of ``Requirement`` instances that were evaluated.
-        results: List of ``ValidationResult`` instances (writable).
-        all_validations_passed: ``True`` when every requirement passed (writable).
+        requirements: List of `Requirement` instances that were evaluated.
+        results: List of `ValidationResult` instances (writable).
+        all_validations_passed: `True` when every requirement passed (writable).
         passed_count: Number of requirements that passed.
         failed_count: Number of requirements that failed.
     """

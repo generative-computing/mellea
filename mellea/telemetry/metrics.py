@@ -617,7 +617,7 @@ def classify_error(exc: BaseException) -> str:
         exc: The exception to classify.
 
     Returns:
-        One of the ``ERROR_TYPE_*`` constants.
+        One of the `ERROR_TYPE_*` constants.
     """
     # OpenAI SDK exceptions (optional dependency)
     try:
@@ -698,7 +698,7 @@ def record_error(
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        error_type: Semantic error category (use ``ERROR_TYPE_*`` constants).
+        error_type: Semantic error category (use `ERROR_TYPE_*` constants).
         model: Model identifier (e.g. "gpt-4", "llama2:7b").
         provider: Provider name (e.g. "openai", "ollama").
         exception_class: Python exception class name (e.g. "RateLimitError").
@@ -755,13 +755,13 @@ def record_cost(cost: float, model: str, provider: str) -> None:
     """Record estimated LLM request cost in USD.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
-    Only call this when pricing data is available (i.e., ``compute_cost`` returned
+    Only call this when pricing data is available (i.e., `compute_cost` returned
     a non-None value).
 
     Args:
         cost: Estimated request cost in US dollars.
-        model: Model identifier (e.g. ``"gpt-4o"``, ``"claude-sonnet-4-6"``).
-        provider: Provider name (e.g. ``"openai"``, ``"ollama"``).
+        model: Model identifier (e.g. `"gpt-4o"`, `"claude-sonnet-4-6"`).
+        provider: Provider name (e.g. `"openai"`, `"ollama"`).
 
     Example:
         record_cost(
@@ -827,7 +827,7 @@ def record_sampling_attempt(strategy: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        strategy: Sampling strategy class name (e.g. ``"RejectionSamplingStrategy"``).
+        strategy: Sampling strategy class name (e.g. `"RejectionSamplingStrategy"`).
     """
     if not _METRICS_ENABLED:
         return
@@ -841,8 +841,8 @@ def record_sampling_outcome(strategy: str, success: bool) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        strategy: Sampling strategy class name (e.g. ``"RejectionSamplingStrategy"``).
-        success: ``True`` if at least one attempt passed all requirements.
+        strategy: Sampling strategy class name (e.g. `"RejectionSamplingStrategy"`).
+        success: `True` if at least one attempt passed all requirements.
     """
     if not _METRICS_ENABLED:
         return
@@ -889,7 +889,7 @@ def record_requirement_check(requirement: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        requirement: Requirement class name (e.g. ``"LLMaJRequirement"``).
+        requirement: Requirement class name (e.g. `"LLMaJRequirement"`).
     """
     if not _METRICS_ENABLED:
         return
@@ -903,8 +903,8 @@ def record_requirement_failure(requirement: str, reason: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        requirement: Requirement class name (e.g. ``"LLMaJRequirement"``).
-        reason: Human-readable failure reason from ``ValidationResult.reason``.
+        requirement: Requirement class name (e.g. `"LLMaJRequirement"`).
+        reason: Human-readable failure reason from `ValidationResult.reason`.
     """
     if not _METRICS_ENABLED:
         return
@@ -937,7 +937,7 @@ def record_tool_call(tool: str, status: str) -> None:
 
     Args:
         tool: Name of the tool that was invoked.
-        status: ``"success"`` if the tool executed without error, ``"failure"`` otherwise.
+        status: `"success"` if the tool executed without error, `"failure"` otherwise.
     """
     if not _METRICS_ENABLED:
         return

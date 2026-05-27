@@ -44,22 +44,22 @@ class OllamaModelBackend(FormatterBackend):
 
     Args:
         model_id (str | ModelIdentifier): Ollama model ID. If a
-            ``ModelIdentifier`` is passed, its ``ollama_name`` attribute must
+            `ModelIdentifier` is passed, its `ollama_name` attribute must
             be set.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to ``TemplateFormatter``.
+            Defaults to `TemplateFormatter`.
         base_url (str | None): Ollama server endpoint; defaults to
-            ``env(OLLAMA_HOST)`` or ``http://localhost:11434``.
+            `env(OLLAMA_HOST)` or `http://localhost:11434`.
         model_options (dict | None): Default model options for generation requests.
         timeout (float | None): Request timeout in seconds for the underlying HTTP
-            client. ``None`` (the default) preserves the upstream ``ollama`` SDK
+            client. `None` (the default) preserves the upstream `ollama` SDK
             default. Set this to bound how long a single request will wait when
             the Ollama server is overloaded or stalled.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
-            to Mellea ``ModelOption`` sentinel keys.
-        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption``
+            to Mellea `ModelOption` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea `ModelOption`
             sentinel keys to Ollama-specific option names.
     """
 
@@ -281,9 +281,9 @@ class OllamaModelBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` via the Ollama chat API.
+        """Generate a completion for `action` given `ctx` via the Ollama chat API.
 
-        Delegates to ``generate_from_chat_context``. Only chat contexts are supported.
+        Delegates to `generate_from_chat_context`. Only chat contexts are supported.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -293,12 +293,12 @@ class OllamaModelBackend(FormatterBackend):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         # Start span without auto-closing (will be closed in post_processing)
         span = start_generate_span(self, action, ctx, format, tool_calls)
@@ -334,7 +334,7 @@ class OllamaModelBackend(FormatterBackend):
     ) -> ModelOutputThunk[C]:
         """Generate a new completion from the provided context using this backend's formatter.
 
-        Treats the ``Context`` as a chat history and uses the ``ollama.Client.chat()``
+        Treats the `Context` as a chat history and uses the `ollama.Client.chat()`
         interface to generate a completion. Returns a thunk that lazily resolves
         the model output.
 
@@ -345,7 +345,7 @@ class OllamaModelBackend(FormatterBackend):
             _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
                 structured output decoding.
             model_options (dict | None): Per-call model options.
-            tool_calls (bool): If ``True``, expose available tools and parse responses.
+            tool_calls (bool): If `True`, expose available tools and parse responses.
 
         Returns:
             ModelOutputThunk[C]: A thunk holding the (lazy) model output.
@@ -624,9 +624,9 @@ class OllamaModelBackend(FormatterBackend):
     ):
         """Accumulate text and tool calls from a single Ollama ChatResponse chunk.
 
-        Called for each streaming or non-streaming ``ollama.ChatResponse``. Also
+        Called for each streaming or non-streaming `ollama.ChatResponse`. Also
         extracts tool call requests inline and merges the chunk into the running
-        aggregated response stored in ``mot._meta["chat_response"]``.
+        aggregated response stored in `mot._meta["chat_response"]`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.

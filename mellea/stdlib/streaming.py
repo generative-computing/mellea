@@ -48,11 +48,11 @@ _CHUNKING_ALIASES: dict[str, type[ChunkingStrategy]] = {
 class StreamEvent:
     """Base class for all streaming events emitted by :func:`stream_with_chunking`.
 
-    The ``timestamp`` field is auto-populated at instantiation time; callers
-    do not set it.  Because ``timestamp`` has ``init=False`` it is never part
-    of ``__init__``, so subclasses may declare additional fields in any order
-    without conflict.  Any new ``init=False`` fields on subclasses must also
-    use ``field(..., init=False)``.
+    The `timestamp` field is auto-populated at instantiation time; callers
+    do not set it.  Because `timestamp` has `init=False` it is never part
+    of `__init__`, so subclasses may declare additional fields in any order
+    without conflict.  Any new `init=False` fields on subclasses must also
+    use `field(..., init=False)`.
 
     Attributes:
         timestamp: Unix timestamp (seconds) at the moment the event was created.
@@ -65,14 +65,14 @@ class StreamEvent:
 class ChunkEvent(StreamEvent):
     """Emitted after each validated chunk is delivered to the consumer.
 
-    Fired after all active requirements' ``stream_validate`` calls return
-    non-``"fail"`` for this chunk and the chunk has been placed on the
+    Fired after all active requirements' `stream_validate` calls return
+    non-`"fail"` for this chunk and the chunk has been placed on the
     consumer queue.
 
     Args:
         text: The chunk text that was validated and emitted.
         chunk_index: Zero-based position of this chunk in the stream.
-        attempt: Sampling attempt number (always ``1`` in v1).
+        attempt: Sampling attempt number (always `1` in v1).
     """
 
     text: str
@@ -85,16 +85,16 @@ class QuickCheckEvent(StreamEvent):
     """Emitted after each per-chunk streaming validation batch.
 
     One event per chunk, covering all active requirements in parallel.
-    Not emitted when there are no ``requirements``.
+    Not emitted when there are no `requirements`.
 
     Args:
         chunk_index: Zero-based position of the chunk that was validated.
-        attempt: Sampling attempt number (always ``1`` in v1).
-        passed: ``True`` if all active requirements returned non-``"fail"``
+        attempt: Sampling attempt number (always `1` in v1).
+        passed: `True` if all active requirements returned non-`"fail"`
             for this chunk.
         results: :class:`~mellea.core.requirement.PartialValidationResult`
             from each active requirement, in the same order as the active
-            slice of ``requirements``.
+            slice of `requirements`.
     """
 
     chunk_index: int
@@ -110,10 +110,10 @@ class StreamingDoneEvent(StreamEvent):
     Fired after the regular token stream and any trailing fragment released by
     :meth:`~mellea.stdlib.chunking.ChunkingStrategy.flush` have both been
     processed.  Only emitted on natural completion — not on early exit (a
-    requirement returned ``"fail"``) or on exception.
+    requirement returned `"fail"`) or on exception.
 
     Args:
-        attempt: Sampling attempt number (always ``1`` in v1).
+        attempt: Sampling attempt number (always `1` in v1).
         full_text: Complete accumulated text at stream end.
     """
 
@@ -129,8 +129,8 @@ class FullValidationEvent(StreamEvent):
     and the stream completed naturally.  Not emitted on early exit.
 
     Args:
-        attempt: Sampling attempt number (always ``1`` in v1).
-        passed: ``True`` if all final
+        attempt: Sampling attempt number (always `1` in v1).
+        passed: `True` if all final
             :class:`~mellea.core.requirement.ValidationResult` objects passed.
         results: :class:`~mellea.core.requirement.ValidationResult` from each
             non-failed requirement, in requirement order.
@@ -145,7 +145,7 @@ class FullValidationEvent(StreamEvent):
 class RetryEvent(StreamEvent):
     """Reserved for future use.
 
-    Defined for API completeness — ``RetryEvent`` is not emitted by the
+    Defined for API completeness — `RetryEvent` is not emitted by the
     v1 orchestrator because v1 retry is caller-driven re-invocation of
     :func:`stream_with_chunking`.  When orchestrator-side retry is added,
     this event will fire before each re-attempt.
@@ -164,14 +164,14 @@ class CompletedEvent(StreamEvent):
     """Emitted when the orchestrator exits, including early-exit cases.
 
     Always the last event before :meth:`StreamChunkingResult.events`
-    terminates.  ``success`` reflects :attr:`StreamChunkingResult.completed`.
+    terminates.  `success` reflects :attr:`StreamChunkingResult.completed`.
 
     Args:
-        success: ``True`` if the stream completed normally (no ``"fail"``
-            result and no unhandled exception); ``False`` otherwise.
+        success: `True` if the stream completed normally (no `"fail"`
+            result and no unhandled exception); `False` otherwise.
         full_text: Complete accumulated text.  On early exit or exception,
             reflects whatever was accumulated before cancellation.
-        attempts_used: Number of orchestrator invocations (always ``1`` in v1).
+        attempts_used: Number of orchestrator invocations (always `1` in v1).
     """
 
     success: bool
@@ -185,9 +185,9 @@ class ErrorEvent(StreamEvent):
 
     Args:
         exception_type: Python class name of the exception
-            (e.g. ``"ValueError"``).
+            (e.g. `"ValueError"`).
         detail: String representation of the exception.  If
-            ``cancel_generation()`` also raised during cleanup, the cleanup
+            `cancel_generation()` also raised during cleanup, the cleanup
             error is appended.
     """
 
@@ -218,19 +218,19 @@ class StreamChunkingResult:
         ctx: The generation context returned alongside the MOT.
 
     Attributes:
-        completed: ``False`` if the stream exited early because a requirement
-            returned ``"fail"`` during streaming; ``True`` otherwise.
+        completed: `False` if the stream exited early because a requirement
+            returned `"fail"` during streaming; `True` otherwise.
         full_text: The generated text available after streaming completes.
             On natural completion, the full accumulated text.  On early exit
-            (a requirement returned ``"fail"``), only the validated and emitted
+            (a requirement returned `"fail"`), only the validated and emitted
             portion — i.e. what consumers received via :meth:`astream`.
             Available after :meth:`acomplete` returns.
         final_validations: :class:`~mellea.core.requirement.ValidationResult`
             objects from the final :meth:`~mellea.core.requirement.Requirement.validate`
             calls on all non-failed requirements.  Available after
             :meth:`acomplete` returns.
-        streaming_failures: ``(Requirement, PartialValidationResult)`` pairs
-            for every requirement that returned ``"fail"`` during streaming.
+        streaming_failures: `(Requirement, PartialValidationResult)` pairs
+            for every requirement that returned `"fail"` during streaming.
     """
 
     def __init__(self, mot: ModelOutputThunk, ctx: Context) -> None:
@@ -273,12 +273,12 @@ class StreamChunkingResult:
         Each yielded string is a chunk that has passed per-chunk streaming
         validation (or the stream had no requirements).  Iteration ends when
         all chunks have been yielded, whether the stream completed normally or
-        was cancelled early on a ``"fail"`` result.
+        was cancelled early on a `"fail"` result.
 
         **Single-consumer.** Chunks are delivered via an
         :class:`asyncio.Queue` that this method drains; calling
-        ``astream()`` a second time on the same result blocks indefinitely
-        because the queue is empty and the terminating ``None`` sentinel
+        `astream()` a second time on the same result blocks indefinitely
+        because the queue is empty and the terminating `None` sentinel
         has already been consumed.  If you need the chunks after
         iteration, capture them into a list during the first pass or use
         :attr:`full_text` after :meth:`acomplete`.
@@ -325,19 +325,19 @@ class StreamChunkingResult:
         1. :class:`QuickCheckEvent` / :class:`ChunkEvent` pairs, one per chunk
            (validation fires first; the chunk is released to the consumer only
            after passing).  Includes any trailing fragment released by the
-           chunking strategy's ``flush()`` method.
+           chunking strategy's `flush()` method.
         2. :class:`StreamingDoneEvent` — all chunks (including flush) delivered.
-        3. :class:`FullValidationEvent` — final ``validate()`` calls returned.
+        3. :class:`FullValidationEvent` — final `validate()` calls returned.
         4. :class:`CompletedEvent` — orchestrator is exiting.
 
-        On early exit: :class:`QuickCheckEvent` (``passed=False``) is the
+        On early exit: :class:`QuickCheckEvent` (`passed=False`) is the
         last validation event, followed by :class:`CompletedEvent`.  No
         :class:`StreamingDoneEvent` or :class:`FullValidationEvent` is emitted.
 
         On exception: :class:`ErrorEvent` followed by :class:`CompletedEvent`.
 
         **Single-consumer.**  Events are delivered via a queue that this method
-        drains; calling ``events()`` a second time raises :exc:`RuntimeError`.
+        drains; calling `events()` a second time raises :exc:`RuntimeError`.
 
         Yields:
             StreamEvent: A typed event from the orchestrator.
@@ -346,7 +346,7 @@ class StreamChunkingResult:
             RuntimeError: If called more than once on the same result.
 
         Note:
-            ``events()`` itself never raises from the event stream.  If the
+            `events()` itself never raises from the event stream.  If the
             orchestrator encounters an unhandled exception, an
             :class:`ErrorEvent` is emitted and iteration ends normally.
             Exceptions surface to the caller via :meth:`astream` (as a
@@ -373,8 +373,8 @@ class StreamChunkingResult:
 
         Raises:
             Exception: Propagates the orchestrator exception if :meth:`astream`
-                has not yet consumed it (raise-once — only one of ``astream``
-                or ``acomplete`` raises, whichever drains the failure marker
+                has not yet consumed it (raise-once — only one of `astream`
+                or `acomplete` raises, whichever drains the failure marker
                 first).
             asyncio.CancelledError: If the orchestration task was externally
                 cancelled (e.g. via :func:`asyncio.wait_for` timeout).
@@ -390,10 +390,10 @@ class StreamChunkingResult:
             # Raise-once: a prior call already surfaced the exception.
             if self._exception_surfaced:
                 return
-            # ``task.exception()`` raises CancelledError on a cancelled task
+            # `task.exception()` raises CancelledError on a cancelled task
             # (rather than returning it), so check cancelled status first.
             # This branch covers BaseException paths that bypass the
-            # ``except Exception`` handler in ``_orchestrate_streaming``.
+            # `except Exception` handler in `_orchestrate_streaming`.
             if self._orchestration_task.cancelled():
                 self._exception_surfaced = True
                 raise asyncio.CancelledError()
@@ -406,20 +406,20 @@ class StreamChunkingResult:
     def as_thunk(self) -> ModelOutputThunk[str]:
         """Wrap the output as a computed :class:`~mellea.core.base.ModelOutputThunk`.
 
-        Returns a new thunk with ``value`` set to :attr:`full_text` and
+        Returns a new thunk with `value` set to :attr:`full_text` and
         generation metadata copied from the original MOT.  Safe to call on
-        early-exit results; ``value`` reflects the validated and emitted
+        early-exit results; `value` reflects the validated and emitted
         portion (same as :attr:`full_text` — see its docstring).
 
         Note:
-            On early exit, ``cancel_generation()`` forces the MOT into a
+            On early exit, `cancel_generation()` forces the MOT into a
             computed state without running the backend's
-            ``post_processing()``.  ``value`` and ``streaming`` are
-            reliable.  ``parsed_repr`` is set to the raw text (same as
-            ``value``) — consistent with normal completion for plain-text
+            `post_processing()`.  `value` and `streaming` are
+            reliable.  `parsed_repr` is set to the raw text (same as
+            `value`) — consistent with normal completion for plain-text
             outputs, but for typed outputs the backend-parsed representation
-            will not be available.  Telemetry fields (``generation.usage``,
-            ``generation.ttfb_ms``, etc.) may be ``None`` or reflect the
+            will not be available.  Telemetry fields (`generation.usage`,
+            `generation.ttfb_ms`, etc.) may be `None` or reflect the
             partial state at cancellation time; usage totals are not
             recoverable.
 
@@ -471,8 +471,8 @@ async def _orchestrate_streaming(
         async def _process_chunk(c: str, ci: int) -> bool:
             """Validate *c*, emit events, push to consumer queue.
 
-            Returns ``True`` if a ``"fail"`` was recorded (caller should
-            trigger early exit), ``False`` if the chunk was validated and
+            Returns `True` if a `"fail"` was recorded (caller should
+            trigger early exit), `False` if the chunk was validated and
             emitted successfully.
             """
             active = [
@@ -731,32 +731,32 @@ async def stream_with_chunking(
     chunk in parallel across all requirements.
 
     For each new complete chunk produced by the chunking strategy,
-    ``stream_validate`` is called once per active requirement (in parallel
+    `stream_validate` is called once per active requirement (in parallel
     via :func:`asyncio.gather`), receiving that single chunk.  Multiple
-    chunks produced from one ``astream()`` iteration are validated
-    sequentially in order, so early exit on a ``"fail"`` result prevents
+    chunks produced from one `astream()` iteration are validated
+    sequentially in order, so early exit on a `"fail"` result prevents
     later chunks in the same batch from being validated or emitted to the
     consumer.
 
-    If any requirement returns ``"fail"``, the generation is cancelled
+    If any requirement returns `"fail"`, the generation is cancelled
     immediately (via
     :meth:`~mellea.core.base.ModelOutputThunk.cancel_generation`) and
-    :attr:`StreamChunkingResult.completed` is set to ``False``.  The
+    :attr:`StreamChunkingResult.completed` is set to `False`.  The
     failing chunk is not emitted to the consumer; use
     :attr:`StreamChunkingResult.streaming_failures` to inspect what failed.
 
     When the stream ends naturally, any trailing fragment withheld by the
     chunking strategy (see :meth:`~mellea.stdlib.chunking.ChunkingStrategy.flush`)
-    is released as a final chunk and run through ``stream_validate`` on the
+    is released as a final chunk and run through `stream_validate` on the
     same terms as the regular chunks.  On early exit, the trailing fragment
     is discarded because the generation was cancelled mid-token.
 
-    After the stream ends naturally, ``validate()`` is called on every
-    requirement that did not return ``"fail"`` — both ``"pass"`` and
-    ``"unknown"`` trigger final validation.  On early exit, no ``validate()``
+    After the stream ends naturally, `validate()` is called on every
+    requirement that did not return `"fail"` — both `"pass"` and
+    `"unknown"` trigger final validation.  On early exit, no `validate()`
     call is made; :attr:`StreamChunkingResult.final_validations` remains
-    empty.  Requirements are cloned (``copy(req)``) before backend generation
-    begins, so the originals are never mutated and a raising ``__copy__``
+    empty.  Requirements are cloned (`copy(req)`) before backend generation
+    begins, so the originals are never mutated and a raising `__copy__`
     cannot leak an in-flight backend task.
 
     The orchestrator emits typed :class:`StreamEvent` objects throughout
@@ -764,14 +764,14 @@ async def stream_with_chunking(
     parallel with or instead of :meth:`StreamChunkingResult.astream`.
 
     Requirements that need context beyond the current chunk should
-    accumulate it themselves across ``stream_validate`` calls (e.g.
-    ``self._seen = self._seen + chunk``).  They must not read ``mot.astream()``
+    accumulate it themselves across `stream_validate` calls (e.g.
+    `self._seen = self._seen + chunk`).  They must not read `mot.astream()`
     directly — this orchestrator is the single consumer of the MOT stream.
 
     Note:
         Chunks are emitted to the consumer (via
         :meth:`StreamChunkingResult.astream`) only after every requirement's
-        ``stream_validate`` has returned for that chunk.  A slow validator
+        `stream_validate` has returned for that chunk.  A slow validator
         (for example, one that invokes an LLM) therefore adds latency to
         every chunk — the consumer sees a chunk at most as quickly as the
         slowest active validator.  This trade is deliberate in v1: it
@@ -783,7 +783,7 @@ async def stream_with_chunking(
 
     Note:
         v1 retry is simple re-invocation of this function.  Plugin hooks
-        (``SAMPLING_LOOP_START``, ``SAMPLING_REPAIR``, etc.) do not fire
+        (`SAMPLING_LOOP_START`, `SAMPLING_REPAIR`, etc.) do not fire
         during streaming — use :meth:`StreamChunkingResult.events` for
         observability instead.
 
@@ -792,13 +792,13 @@ async def stream_with_chunking(
         backend: The backend used for generation and final validation.
         ctx: The generation context.
         requirements: Sequence of requirements to validate against each chunk
-            during streaming.  ``None`` disables streaming validation (chunks
-            are still produced; ``validate()`` is not called at stream end).
+            during streaming.  `None` disables streaming validation (chunks
+            are still produced; `validate()` is not called at stream end).
         chunking: Chunking strategy — either a :class:`~mellea.stdlib.chunking.ChunkingStrategy`
-            instance or one of the string aliases ``"sentence"`` (default),
-            ``"word"``, or ``"paragraph"``.
+            instance or one of the string aliases `"sentence"` (default),
+            `"word"`, or `"paragraph"`.
         validation_backend: Optional alternate backend for both
-            ``stream_validate`` and final ``validate`` calls.  When ``None``,
+            `stream_validate` and final `validate` calls.  When `None`,
             *backend* is used for validation.
 
     Returns:
@@ -809,16 +809,16 @@ async def stream_with_chunking(
 
     Raises:
         ValueError: If *chunking* is a string that does not match any known
-            alias (``"sentence"``, ``"word"``, ``"paragraph"``).
+            alias (`"sentence"`, `"word"`, `"paragraph"`).
         RuntimeError: If the backend returns an already-computed
             :class:`~mellea.core.base.ModelOutputThunk` instead of a streaming
             one.  This indicates the backend is not honouring
-            ``ModelOption.STREAM``.
+            `ModelOption.STREAM`.
 
     Note:
-        Any exception raised by ``copy(req)`` on a ``requirements`` entry
+        Any exception raised by `copy(req)` on a `requirements` entry
         propagates to the caller; no backend generation is started in that
-        case.  See :class:`~mellea.core.Requirement` for the ``__copy__``
+        case.  See :class:`~mellea.core.Requirement` for the `__copy__`
         override contract.
     """
     if isinstance(chunking, str):

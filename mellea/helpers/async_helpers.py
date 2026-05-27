@@ -1,9 +1,9 @@
 """Async helper functions for managing concurrent model output thunks.
 
-Provides ``send_to_queue``, which feeds a backend response coroutine or async iterator
-into an ``asyncio.Queue`` (including sentinel and error forwarding); ``wait_for_all_mots``,
-which gathers multiple ``ModelOutputThunk`` computations in a single ``asyncio.gather``
-call; and ``get_current_event_loop``, a safe wrapper that returns ``None`` instead of
+Provides `send_to_queue`, which feeds a backend response coroutine or async iterator
+into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
+which gathers multiple `ModelOutputThunk` computations in a single `asyncio.gather`
+call; and `get_current_event_loop`, a safe wrapper that returns `None` instead of
 raising when no event loop is running. These utilities are used internally by backends
 that operate in async contexts.
 """
@@ -23,7 +23,7 @@ async def send_to_queue(
 
     Args:
         co: A coroutine or async iterator producing the backend response.
-        aqueue: The async queue to send results to. A sentinel ``None`` is appended on
+        aqueue: The async queue to send results to. A sentinel `None` is appended on
             completion; an exception instance is appended on error.
     """
     try:
@@ -57,7 +57,7 @@ async def wait_for_all_mots(mots: list[ModelOutputThunk]) -> None:
     functions, session functions, and top-level mellea functions.
 
     Args:
-        mots: List of ``ModelOutputThunk`` objects to await concurrently.
+        mots: List of `ModelOutputThunk` objects to await concurrently.
     """
     coroutines: list[Coroutine[Any, Any, str]] = []
     for mot in mots:
@@ -70,7 +70,7 @@ def get_current_event_loop() -> None | asyncio.AbstractEventLoop:
     """Get the current event loop without having to catch exceptions.
 
     Returns:
-        The running event loop, or ``None`` if no loop is running.
+        The running event loop, or `None` if no loop is running.
     """
     loop = None
     try:
@@ -113,7 +113,7 @@ class ClientCache:
             key: Integer cache key.
 
         Returns:
-            The cached value, or ``None`` if the key is not present.
+            The cached value, or `None` if the key is not present.
         """
         if key not in self.cache:
             return None

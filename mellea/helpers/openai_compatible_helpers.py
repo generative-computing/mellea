@@ -46,13 +46,13 @@ def extract_model_tool_requests(
     """Extract tool calls from the dict representation of an OpenAI-like chat response object.
 
     Args:
-        tools: Mapping of tool name to ``AbstractMelleaTool`` for lookup.
+        tools: Mapping of tool name to `AbstractMelleaTool` for lookup.
         response: Dict representation of an OpenAI-compatible chat completion message
-            (must contain a ``"message"`` key).
+            (must contain a `"message"` key).
 
     Returns:
-        Mapping of tool name to ``ModelToolCall`` for each requested tool call, or
-        ``None`` if no tool calls were found.
+        Mapping of tool name to `ModelToolCall` for each requested tool call, or
+        `None` if no tool calls were found.
     """
     model_tool_calls: dict[str, ModelToolCall] = {}
     calls = response["message"].get("tool_calls", None)
@@ -85,19 +85,19 @@ def extract_model_tool_requests(
 def chat_completion_delta_merge(
     chunks: list[dict], force_all_tool_calls_separate: bool = False
 ) -> dict:
-    """Merge a list of deltas from ``ChatCompletionChunk``s into a single dict representing the ``ChatCompletion`` choice.
+    """Merge a list of deltas from `ChatCompletionChunk`s into a single dict representing the `ChatCompletion` choice.
 
     Args:
         chunks: The list of dicts that represent the message deltas.
-        force_all_tool_calls_separate: If ``True``, tool calls in separate message
+        force_all_tool_calls_separate: If `True`, tool calls in separate message
             deltas will not be merged even if their index values are the same. Use
             when providers do not return the correct index value for tool calls; all
             tool calls must then be fully populated in a single delta.
 
     Returns:
-        A single merged dict representing the assembled ``ChatCompletion`` choice,
-        with ``finish_reason``, ``index``, and a ``message`` sub-dict containing
-        ``content``, ``role``, and ``tool_calls``.
+        A single merged dict representing the assembled `ChatCompletion` choice,
+        with `finish_reason`, `index`, and a `message` sub-dict containing
+        `content`, `role`, and `tool_calls`.
     """
     merged: dict[str, Any] = dict()
 
@@ -171,17 +171,17 @@ def chat_completion_delta_merge(
 
 
 def message_to_openai_message(msg: Message, formatter: Formatter | None = None) -> dict:
-    """Serialise a Mellea ``Message`` to the format required by OpenAI-compatible API providers.
+    """Serialise a Mellea `Message` to the format required by OpenAI-compatible API providers.
 
     Args:
-        msg: The ``Message`` object to serialise.
+        msg: The `Message` object to serialise.
         formatter: Optional formatter used to render the message content (including
-            documents) through the template system. When ``None``, uses the raw
-            ``msg.content`` string without document rendering.
+            documents) through the template system. When `None`, uses the raw
+            `msg.content` string without document rendering.
 
     Returns:
-        A dict with ``"role"`` and ``"content"`` fields. When the message carries
-        images, ``"content"`` is a list of text and image-URL dicts; otherwise it
+        A dict with `"role"` and `"content"` fields. When the message carries
+        images, `"content"` is a list of text and image-URL dicts; otherwise it
         is a plain string.
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
@@ -218,14 +218,14 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
 
 
 def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
-    """Extract all ``Document`` objects from a list of ``Message`` objects.
+    """Extract all `Document` objects from a list of `Message` objects.
 
     Args:
-        msgs: List of ``Message`` objects whose ``_docs`` attributes are inspected.
+        msgs: List of `Message` objects whose `_docs` attributes are inspected.
 
     Returns:
-        A list of dicts, each with a ``"text"`` key and optional ``"title"`` and
-        ``"doc_id"`` keys, suitable for passing to an OpenAI-compatible RAG API.
+        A list of dicts, each with a `"text"` key and optional `"title"` and
+        `"doc_id"` keys, suitable for passing to an OpenAI-compatible RAG API.
     """
     docs: list[Document] = []
     for message in msgs:
@@ -247,12 +247,12 @@ def build_completion_usage(output: ModelOutputThunk) -> CompletionUsage | None:
     """Build a normalized usage object from a model output, if available.
 
     Args:
-        output: Model output object whose ``generation.usage`` mapping contains
+        output: Model output object whose `generation.usage` mapping contains
             token counts.
 
     Returns:
-        A ``CompletionUsage`` object when usage metadata is present on the
-        output, otherwise ``None``.
+        A `CompletionUsage` object when usage metadata is present on the
+        output, otherwise `None`.
     """
     if output.generation.usage is None:
         return None
@@ -273,10 +273,10 @@ def has_tool_calls(output: ModelOutputThunk) -> bool:
     """Check if a model output has tool calls.
 
     Args:
-        output: Model output thunk that may expose a ``tool_calls`` mapping.
+        output: Model output thunk that may expose a `tool_calls` mapping.
 
     Returns:
-        ``True`` if the output has non-empty tool calls, ``False`` otherwise.
+        `True` if the output has non-empty tool calls, `False` otherwise.
     """
     return (
         hasattr(output, "tool_calls")
@@ -290,11 +290,11 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
     """Build OpenAI-compatible tool calls from a model output, if available.
 
     Args:
-        output: Model output thunk that may expose a ``tool_calls`` mapping.
+        output: Model output thunk that may expose a `tool_calls` mapping.
 
     Returns:
-        List of ``ToolCallDict`` objects when tool calls are present,
-        otherwise ``None``.
+        List of `ToolCallDict` objects when tool calls are present,
+        otherwise `None`.
     """
     if not has_tool_calls(output):
         return None

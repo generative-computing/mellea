@@ -19,14 +19,14 @@ from .intrinsic import Intrinsic
 def _resolve_question(
     question: str | None, context: ChatContext, backend: Backend | None = None
 ) -> tuple[str, ChatContext]:
-    """Return ``(question_text, context_to_use)``.
+    """Return `(question_text, context_to_use)`.
 
-    When *question* is not ``None``, returns it with *context* unchanged.
-    When ``None``, extracts the text from the last turn's ``model_input``
+    When *question* is not `None`, returns it with *context* unchanged.
+    When `None`, extracts the text from the last turn's `model_input`
     and rewinds *context* to before that element.
 
-    Supports ``Message`` (via ``.content``), ``CBlock`` (via ``.value``),
-    and generic ``Component`` types (via ``TemplateFormatter.print()``).
+    Supports `Message` (via `.content`), `CBlock` (via `.value`),
+    and generic `Component` types (via `TemplateFormatter.print()`).
     """
     if question is not None:
         return question, context
@@ -71,10 +71,10 @@ def _resolve_question(
 def _resolve_response(
     response: str | None, context: ChatContext
 ) -> tuple[str, ChatContext]:
-    """Return ``(response_text, context_to_use)``.
+    """Return `(response_text, context_to_use)`.
 
-    When *response* is not ``None``, returns it with *context* unchanged.
-    When ``None``, extracts from the last turn's ``output.value`` and rewinds
+    When *response* is not `None`, returns it with *context* unchanged.
+    When `None`, extracts from the last turn's `output.value` and rewinds
     *context* to before that output.
     """
     if response is not None:

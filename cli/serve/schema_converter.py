@@ -11,41 +11,41 @@ def json_schema_to_pydantic(
     """Convert a practical subset of JSON Schema to a Pydantic model dynamically.
 
     This converter targets the OpenAI-style structured output schemas used by
-    ``m serve``. It intentionally maps JSON Schema features into Python typing
+    `m serve`. It intentionally maps JSON Schema features into Python typing
     and Pydantic model semantics rather than attempting to preserve every JSON
     Schema validation rule exactly.
 
     Supported features:
-    - top-level and nested ``object`` schemas with ``properties`` and ``required``
-    - primitive types: ``string``, ``integer``, ``number``, ``boolean``
-    - arrays via ``type: "array"`` with supported ``items``
-    - string or primitive enums via ``enum``
-    - nullable fields via ``type: ["<type>", "null"]``
-    - local ``$ref`` into ``$defs`` / ``definitions``
-    - simple ``allOf`` merging for object-like schemas
-    - simple ``anyOf`` / ``oneOf`` unions when each branch is representable
-    - boolean and schema-valued ``additionalProperties``
+    - top-level and nested `object` schemas with `properties` and `required`
+    - primitive types: `string`, `integer`, `number`, `boolean`
+    - arrays via `type: "array"` with supported `items`
+    - string or primitive enums via `enum`
+    - nullable fields via `type: ["<type>", "null"]`
+    - local `$ref` into `$defs` / `definitions`
+    - simple `allOf` merging for object-like schemas
+    - simple `anyOf` / `oneOf` unions when each branch is representable
+    - boolean and schema-valued `additionalProperties`
 
     Behavior notes:
-    - ``additionalProperties: false`` maps to ``extra="forbid"``
-    - ``additionalProperties: true`` maps to ``extra="ignore"``
-    - schema-valued ``additionalProperties`` maps to ``dict[str, ValueType]``
+    - `additionalProperties: false` maps to `extra="forbid"`
+    - `additionalProperties: true` maps to `extra="ignore"`
+    - schema-valued `additionalProperties` maps to `dict[str, ValueType]`
       only for open-ended object maps. It cannot be combined with named
-      ``properties`` because that is not representable as a single standard
+      `properties` because that is not representable as a single standard
       Pydantic field shape without custom validators.
-    - sibling keywords next to ``$ref`` are merged over the resolved target,
+    - sibling keywords next to `$ref` are merged over the resolved target,
       matching common JSON Schema practice for OpenAI-compatible schemas
 
-    Still unsupported and will raise ``ValueError``:
+    Still unsupported and will raise `ValueError`:
     - non-local refs
-    - recursive ``$ref`` cycles
+    - recursive `$ref` cycles
     - tuple-style array schemas
-    - object schemas without ``properties`` unless they are pure
-      ``additionalProperties`` maps
+    - object schemas without `properties` unless they are pure
+      `additionalProperties` maps
     - schema constraints beyond representable typing/extra handling
 
     Args:
-        schema: JSON Schema definition (must have top-level ``type: "object"``).
+        schema: JSON Schema definition (must have top-level `type: "object"`).
         model_name: Name for the generated Pydantic model.
 
     Returns:
@@ -105,7 +105,7 @@ def json_schema_to_pydantic(
         )
 
     def _merge_nullable(annotation: Any, is_nullable: bool) -> Any:
-        """Wrap an annotation in ``None`` when the source schema is nullable."""
+        """Wrap an annotation in `None` when the source schema is nullable."""
         if is_nullable:
             return annotation | None
         return annotation
@@ -133,9 +133,9 @@ def json_schema_to_pydantic(
     def _merge_object_schemas(
         schemas: list[dict[str, Any]], path: str
     ) -> dict[str, Any]:
-        """Merge simple object schemas for ``allOf``.
+        """Merge simple object schemas for `allOf`.
 
-        This supports the common OpenAI-compatible case where ``allOf`` is used
+        This supports the common OpenAI-compatible case where `allOf` is used
         to compose object fragments. Conflicting keywords are rejected rather
         than silently guessed.
         """
@@ -201,7 +201,7 @@ def json_schema_to_pydantic(
     def _union_annotation(
         keyword: str, union_schemas: list[dict[str, Any]], path: str
     ) -> Any:
-        """Convert ``anyOf``/``oneOf`` branches into a Python union annotation."""
+        """Convert `anyOf`/`oneOf` branches into a Python union annotation."""
         if not union_schemas:
             raise ValueError(f"{_format_path(path)} {keyword} must not be empty")
 
