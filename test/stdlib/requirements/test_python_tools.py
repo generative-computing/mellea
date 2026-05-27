@@ -334,10 +334,13 @@ class TestPythonToolRequirementsFactory:
 
     def test_factory_default_returns_four_requirements(self):
         """Test factory with defaults returns 4 requirements (no import restrictions)."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
         reqs = python_tool_requirements()
         assert len(reqs) == 4
         assert isinstance(reqs[0], PythonCodeExtraction)
         assert isinstance(reqs[1], PythonSyntaxValid)
+        assert isinstance(reqs[2], PythonExecutionReq)
         assert isinstance(reqs[3], OutputSizeLimit)
 
     def test_factory_with_allowed_imports_returns_five(self):
