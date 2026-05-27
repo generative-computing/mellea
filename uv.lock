@@ -3251,7 +3251,6 @@ all = [
     { name = "trl" },
     { name = "typer" },
     { name = "uvicorn" },
-    { name = "xgrammar" },
 ]
 backends = [
     { name = "accelerate" },
@@ -3265,7 +3264,6 @@ backends = [
     { name = "peft" },
     { name = "transformers" },
     { name = "trl" },
-    { name = "xgrammar" },
 ]
 cli = [
     { name = "typer" },
@@ -3288,7 +3286,6 @@ hf = [
     { name = "peft" },
     { name = "transformers" },
     { name = "trl" },
-    { name = "xgrammar" },
 ]
 hooks = [
     { name = "cpex" },
@@ -3444,7 +3441,6 @@ requires-dist = [
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
     { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'server'" },
-    { name = "xgrammar", marker = "extra == 'hf'", specifier = "==0.1.33" },
 ]
 provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "backends", "hooks", "all"]
 
@@ -7693,47 +7689,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/82/dd/e5176e4b241c9f528402cebb238a36785a628179d7d8b71091154b3e4c9e/wrapt-2.1.2-cp314-cp314t-win_amd64.whl", hash = "sha256:08ffa54146a7559f5b8df4b289b46d963a8e74ed16ba3687f99896101a3990c5", size = 63969, upload-time = "2026-03-06T02:54:39Z" },
     { url = "https://files.pythonhosted.org/packages/5c/99/79f17046cf67e4a95b9987ea129632ba8bcec0bc81f3fb3d19bdb0bd60cd/wrapt-2.1.2-cp314-cp314t-win_arm64.whl", hash = "sha256:72aaa9d0d8e4ed0e2e98019cea47a21f823c9dd4b43c7b77bba6679ffcca6a00", size = 60554, upload-time = "2026-03-06T02:53:14.132Z" },
     { url = "https://files.pythonhosted.org/packages/1a/c7/8528ac2dfa2c1e6708f647df7ae144ead13f0a31146f43c7264b4942bf12/wrapt-2.1.2-py3-none-any.whl", hash = "sha256:b8fd6fa2b2c4e7621808f8c62e8317f4aae56e59721ad933bac5239d913cf0e8", size = 43993, upload-time = "2026-03-06T02:53:12.905Z" },
-]
-
-[[package]]
-name = "xgrammar"
-version = "0.1.33"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pydantic", version = "2.12.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "pydantic", version = "2.13.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
-    { name = "torch" },
-    { name = "transformers" },
-    { name = "triton", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/db/43/e5dfddb1d2a4fccf3e3a88f103e88698cdefc3182f4e169a359ffe1c1794/xgrammar-0.1.33.tar.gz", hash = "sha256:8dbe5fc3d76651ab1fac7a68fc2a118b885fa0ec7189927fb6e0dce0081aea99", size = 2398956, upload-time = "2026-03-27T10:16:36.582Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/df/695172c6e16e3145ebeffadf7045d1b43d874990da19c7519b01c49ef45a/xgrammar-0.1.33-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:b5f0bbabe128ff5c985b77b4315d25f19a3c7247a0847708a4a484ae6214041a", size = 22766437, upload-time = "2026-03-27T10:14:49.587Z" },
-    { url = "https://files.pythonhosted.org/packages/a0/de/14ab62bfa6035d0ad276f10f0795fb957cfafb0e3ebc77e87ef36befc461/xgrammar-0.1.33-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:08c7befefb38c89bf368c26a8e75d00204f03fc303eed61ca570dd3f568d9ead", size = 22703373, upload-time = "2026-03-27T10:14:53.501Z" },
-    { url = "https://files.pythonhosted.org/packages/4b/16/f8297e0e3b468636d8e0190002badfe4a6d8d1c2af295fea2d164e7b5a8a/xgrammar-0.1.33-cp311-cp311-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a5f561e676df8c9e941c7a2f6df9612bbf645bf1fc714b4a9282cf75cff532f8", size = 42132308, upload-time = "2026-03-27T10:14:58.545Z" },
-    { url = "https://files.pythonhosted.org/packages/12/e0/629b892a3810446097635dd1be7e4d977107c42232efb229d70e5c827227/xgrammar-0.1.33-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3bc9151d9f0d05862c253998c533f04c000273f57180fb6a4e3623e321fd47db", size = 42204526, upload-time = "2026-03-27T10:15:03.299Z" },
-    { url = "https://files.pythonhosted.org/packages/29/f5/aee458b54919ef989ca21d4a39721a51b8a3cba37614148b863968ef5c8c/xgrammar-0.1.33-cp311-cp311-win_amd64.whl", hash = "sha256:27f0cf751b9130805c7db745a7abb86f05228d58523d8388b0b970cada6dee0a", size = 7222644, upload-time = "2026-03-27T10:15:06.366Z" },
-    { url = "https://files.pythonhosted.org/packages/2d/5f/9a1ebc9505392ff626b9ba8fca54d46bdba454af80551169676ee5cd27d4/xgrammar-0.1.33-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:16d05f8f9df9852f2055e112adf2ce22440062979bc3dc66869a0b7c2f93eb0a", size = 22765695, upload-time = "2026-03-27T10:15:09.38Z" },
-    { url = "https://files.pythonhosted.org/packages/82/82/7081feb505873238583a003f790b10ce84d66ab3a8e8e244e8c1c4729d70/xgrammar-0.1.33-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:0bb9e0ed6748b8e82d4569be4ebc8c9e60694369295c4fed0ebaa4bab4aa4eb4", size = 22702262, upload-time = "2026-03-27T10:15:12.9Z" },
-    { url = "https://files.pythonhosted.org/packages/4e/04/43d4baca876f5ae1b45897ec30a59801a2da37f16da1fcd85f9555e4c125/xgrammar-0.1.33-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9c803e60d791854c5d1f271ece7e1f34d73c82dd4a8b2a06b7af5331482a78ac", size = 42133168, upload-time = "2026-03-27T10:15:16.994Z" },
-    { url = "https://files.pythonhosted.org/packages/f0/a8/672833a3cff027253793aa999401d8364896ebf396967e475c7a878b895f/xgrammar-0.1.33-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:52b8eaa533282a0efb0835db6998ae72e7b3c7875d7a52e360ffebff9b78c30a", size = 42205803, upload-time = "2026-03-27T10:15:21.599Z" },
-    { url = "https://files.pythonhosted.org/packages/04/38/3fd9f21b101871b4b7f86ee2e15fe6d0cb61a3753f18b391bdee22c74810/xgrammar-0.1.33-cp312-cp312-win_amd64.whl", hash = "sha256:94fea66b41feb28be7e91f95f078986cbc850f42f7adb2d8987634eadf1fb94b", size = 7222161, upload-time = "2026-03-27T10:15:24.636Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/b1/cce9f6d12b9de0db8b86401ea739fe79ac555f3da56e47faa5b874d41e42/xgrammar-0.1.33-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:e5b46b922fb04fd1848198da5273ddc20f16693fba5871bac1837f1c90f59584", size = 22702353, upload-time = "2026-03-27T10:15:27.203Z" },
-    { url = "https://files.pythonhosted.org/packages/6b/55/4d186d4065f645a051be992919c51aaf96cfa8a32f7ecc8512a6e41f969f/xgrammar-0.1.33-cp313-cp313-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f7eec984a20fd54d4c79536d99e2515bac54bd4e1380162fa047f5ff45bdf6d8", size = 42133430, upload-time = "2026-03-27T10:15:31.409Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/ca/db765035b3bb1854bdb833c118e0f09dacc623ce5e867466d63610d635fa/xgrammar-0.1.33-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d705f62d91a3675997a81d09aa371c375d7793ce1021aff7b7ed5a92021c7379", size = 42206830, upload-time = "2026-03-27T10:15:35.574Z" },
-    { url = "https://files.pythonhosted.org/packages/f5/17/635fc8933b35f24d0749fe177209abb5b526c99a2d098abb71c0e601f356/xgrammar-0.1.33-cp313-cp313-win_amd64.whl", hash = "sha256:2c626de8f503858efa28cab099cbb1719c4926af4250e8dea8efddfa2c6b6c91", size = 7222102, upload-time = "2026-03-27T10:15:38.617Z" },
-    { url = "https://files.pythonhosted.org/packages/0e/fd/ec456e86c2d3f1c01addac8123765ee3b77c1aa1c62298f0f0fdf57d5499/xgrammar-0.1.33-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:59b9c3bb8cc0c5c82155cdc4ff0fd9f7b82348346d9e11307d5df2d3cc81eb3b", size = 22765922, upload-time = "2026-03-27T10:15:41.617Z" },
-    { url = "https://files.pythonhosted.org/packages/ac/24/8afe2a6dd42f1d1ac2f702c9fdc757e724f4af4c6eae5508e063acfb70a9/xgrammar-0.1.33-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:a55912a1d7dcd3d2134617083c28cffe97ba4eaafff39bd41ca28a5ffda66073", size = 22702579, upload-time = "2026-03-27T10:15:45.14Z" },
-    { url = "https://files.pythonhosted.org/packages/b0/79/8fbd675aa49b180d0912aeb90fa72dca9bb1f476724f76d3097561cca161/xgrammar-0.1.33-cp314-cp314-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bba458ffe06b3774be3a24eaf58dc217eec3a781ba41340c2eecf76aa9347aa3", size = 42133038, upload-time = "2026-03-27T10:15:48.98Z" },
-    { url = "https://files.pythonhosted.org/packages/fa/c5/64558fd11130624267f788be5d665f898f627b87c6916b523c6e0d4cebf9/xgrammar-0.1.33-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:776a15eaadda463987fba97d8a07b60c262c96353d800fc8639efedb57b7cbbb", size = 42206382, upload-time = "2026-03-27T10:15:53.458Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/37/921445f60d8e8cba7caa006d7583e8a059b07e6d7eb5c9dc150c2219415a/xgrammar-0.1.33-cp314-cp314-win_amd64.whl", hash = "sha256:247dec78e11f5c361f7f3f2bc571574c118fc88045bf13fc792b6432fc32bc68", size = 7312992, upload-time = "2026-03-27T10:15:56.274Z" },
-    { url = "https://files.pythonhosted.org/packages/a2/31/fb51cd12733e53c3832f6cfadf5f958414102c80c477beb8b233bd4324f4/xgrammar-0.1.33-cp314-cp314t-macosx_10_15_x86_64.whl", hash = "sha256:915451b9c86c840e44500782696650ef5535eab87662d748d649f0569d84c322", size = 22768311, upload-time = "2026-03-27T10:15:59.231Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/1e/f3de2066ac889a8b4f4589b617364a07a46aea40097c8e0abd62b61f72a4/xgrammar-0.1.33-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:c98e2c89bb5efa31e5f3648159dc3477dde51bbf3da8138d6b6fdc49c8fddd44", size = 22705773, upload-time = "2026-03-27T10:16:02.918Z" },
-    { url = "https://files.pythonhosted.org/packages/70/fb/523113e066b74428b843e66baed815671faa1dd366a2967b687498aa8cba/xgrammar-0.1.33-cp314-cp314t-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:51e52aef50c2d91122a23ce67f7b187fc6caffa620b7412fd3a5eebb00a29377", size = 42134611, upload-time = "2026-03-27T10:16:07.459Z" },
-    { url = "https://files.pythonhosted.org/packages/c5/07/6ea6bf8efff3c29c07f594f1e8665dc3ed43abdad86a6a27da9a3ddcbbef/xgrammar-0.1.33-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:24cbb91580da8ac6c86de0464339c1ca1899fb0032d604175bdb384c1a13b9b7", size = 42197758, upload-time = "2026-03-27T10:16:12.504Z" },
-    { url = "https://files.pythonhosted.org/packages/e3/05/813842e384723c636ad61b6902117dd689d8c04a8d34e0da91b35fbb9f8b/xgrammar-0.1.33-cp314-cp314t-win_amd64.whl", hash = "sha256:ae8877dc35cbdf07b23ce5584e093cca36ed72ad35798d4ce6ed858cd3b19fea", size = 7317563, upload-time = "2026-03-27T10:16:15.774Z" },
 ]
 
 [[package]]

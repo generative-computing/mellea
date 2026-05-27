@@ -46,7 +46,6 @@ hf = [
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>=4.53.2,<5",
     "trl==0.19.1",
-    "xgrammar==0.1.33", # Necessary for granite_common intrinsics. Pinned due to Issue 990.
     "huggingface-hub>=0.33.4",
 ]
 

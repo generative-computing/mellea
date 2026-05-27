@@ -52,6 +52,7 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters.granite.base.util import _GuidanceLogitsProcessor
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
@@ -202,65 +203,6 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
         torch.cuda.empty_cache()
 
 
-# modified from VLLM v0.9.2 code base
-# https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
-class _GuidanceLogitsProcessor:
-    def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
-        self.grammar = grammar
-        self.vocab_size: int = ll_tokenizer.vocab_size
-        self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
-        self.ll_matchers: list[llguidance.LLMatcher] = []
-        self.bitmasks: list[torch.Tensor] = []
-        self.new_sampling: bool = False
-        self.batch_size: int = -1
-
-    def __call__(
-        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
-    ) -> torch.Tensor:
-        i_batch, _ = batch_input_ids.shape
-        s_batch, _ = batch_scores.shape
-        assert i_batch == s_batch
-
-        # s_batch, s_vocab = batch_scores.shape
-        # assert s_vocab == self.vocab_size
-        #
-        # NOTE: somehow, this does not hold. s_vocab is not same as either of
-        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True) == self.vocab_size == ll_tokenizer.vocab_size
-        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=False)
-
-        if self.batch_size != i_batch:
-            self.batch_size = i_batch
-            self.bitmasks = [
-                llguidance.torch.allocate_token_bitmask(1, self.vocab_size)  # type: ignore[attr-defined]
-                for _ in range(self.batch_size)
-            ]
-
-            self.ll_matchers = [
-                llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
-                for _ in range(self.batch_size)
-            ]
-
-        for input_ids, scores, ll_matcher, bitmask in zip(
-            batch_input_ids, batch_scores, self.ll_matchers, self.bitmasks
-        ):
-            if self.new_sampling and len(input_ids) > 0:
-                ll_matcher.consume_token(  # type: ignore[attr-defined]
-                    input_ids.tolist()[-1]
-                )
-                err = ll_matcher.get_error()  # type: ignore[attr-defined]
-                if err:
-                    MelleaLogger.get_logger().warning("Error in LLMatcher: %s", err)
-
-            llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
-            llguidance.torch.apply_token_bitmask_inplace(
-                scores, bitmask.to(scores.device)
-            )  # type: ignore[attr-defined]
-
-        self.new_sampling = True
-
-        return batch_scores
-
-
 class LocalHFBackend(FormatterBackend, AdapterMixin):
     """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
 
@@ -362,13 +304,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             case _:
                 self._tokenizer, self._model, self._device = custom_config
 
+        # Preemptively fix vocab size discrepancies between the tokenizer and model if needed.
+        n_vocab = max(
+            self._tokenizer.vocab_size, len(self._tokenizer), self._model.vocab_size
+        )
         self._llguidance_tokenizer: llguidance.LLTokenizer = (
-            llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
+            llguidance.hf.from_tokenizer(self._tokenizer, n_vocab=n_vocab)  # type:ignore
         )
         assert (
             self._llguidance_tokenizer.vocab_size
             == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
-        ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
+        ), "vocab size mismatch between llguidance and huggingface tokenizers"
 
         self._use_caches = use_caches
         self._cache = (
@@ -667,7 +613,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         generate_input, other_input = (
             granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
-                rewritten, self._tokenizer, self._model
+                rewritten,
+                self._tokenizer,
+                self._model,
+                ll_tokenizer=self._llguidance_tokenizer,
             )
         )
 
