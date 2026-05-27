@@ -11,6 +11,53 @@ Sections build on each other; you can stop when you have what you need.
 > **Writing tests for your own `@generative` code?** See
 > [Unit Test Generative Code](../how-to/unit-test-generative-code) instead.
 
+## What you need to do
+
+A short version of the rest of this page, for the common cases.
+
+**First-time setup.** Follow the
+[Contributing Guide development setup](contributing-guide#development-setup)
+to install `uv`, sync deps, and install pre-commit hooks. For anything beyond
+unit tests you also need Ollama running locally:
+
+```bash
+ollama serve &
+ollama pull granite4:micro granite4:micro-h
+```
+
+**Running tests during development.**
+
+```bash
+uv run pytest -m "not qualitative"            # ~2 min fast loop
+uv run pytest test/path/to/test_thing.py       # focus on one file
+uv run pytest -rs                              # show why anything skipped
+```
+
+**Adding a new test.**
+
+1. **Classify** it (see [Classification](#classification)). If it doesn't call
+   a real backend or external SDK, it's `unit` and needs no marker.
+2. **Place** the file at `test/<mirror of source path>/test_<module>.py`.
+3. **Mark** it: integration / e2e / qualitative as appropriate; add a backend
+   marker (`ollama`, `huggingface`, …) for e2e/qualitative; add a resource
+   predicate (`require_gpu`, `require_api_key`, …) if it needs hardware or
+   credentials. See [Markers](#markers).
+4. **Reuse fixtures** from the nearest `conftest.py` rather than rolling your
+   own; only `gh_run` and `system_capabilities` are global.
+5. **Run it** locally with `uv run pytest path::test_name -v`.
+
+**Before opening a PR.**
+
+```bash
+uv run pre-commit run --all-files              # what CI runs first
+CICD=1 uv run pytest test                      # what CI runs second
+```
+
+PR CI on GitHub Actions covers Ollama-backed tests across Python 3.11/3.12/3.13
+and skips qualitative. GPU-backed e2e (HuggingFace, vLLM) only runs in the
+nightly on Bluevela; if you've changed code in those paths, ask a maintainer
+for a nightly run before merge.
+
 ## Philosophy
 
 Mellea tests assert **observable contracts**, not implementation details.
