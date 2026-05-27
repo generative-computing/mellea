@@ -376,6 +376,7 @@ class TestGranite32OutputProcessorTransform:
         model_output = f"<tool_call>{json.dumps(tool_json)}"
         cc = self._minimal_cc(tools=[ToolDefinition(name="get_weather")])
         result = proc.transform(model_output, cc)
+        assert result.tool_calls is not None
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].name == "get_weather"
 
