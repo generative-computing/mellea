@@ -4,8 +4,8 @@ from mellea.core import CBlock, Context
 from mellea.stdlib.context import ChatContext, SimpleContext
 
 
-def context_construction(cls: type[Context]):
-    tree0 = cls()
+def context_construction(cls: type[Context], **kwargs):
+    tree0 = cls(**kwargs)
     tree1 = tree0.add(CBlock("abc"))
     assert tree1.previous_node == tree0
 
@@ -15,11 +15,13 @@ def context_construction(cls: type[Context]):
 
 def test_context_construction():
     context_construction(SimpleContext)
+    # ChatContext defaults to compactor=None (no compaction), so the linked-list
+    # shape is identical to the pre-compaction behaviour.
     context_construction(ChatContext)
 
 
-def large_context_construction(cls: type[Context]):
-    root = cls()
+def large_context_construction(cls: type[Context], **kwargs):
+    root = cls(**kwargs)
 
     full_graph: Context = root
     for i in range(1000):
@@ -31,7 +33,9 @@ def large_context_construction(cls: type[Context]):
 
 def test_large_context_construction():
     large_context_construction(SimpleContext)
-    large_context_construction(ChatContext)
+    # ChatContext now applies real compaction at add() time; pass a window
+    # large enough that all 1000 components survive.
+    large_context_construction(ChatContext, window_size=2000)
 
 
 def test_render_view_for_simple_context():
@@ -48,7 +52,9 @@ def test_render_view_for_chat_context():
     ctx = ChatContext(window_size=3)
     for i in range(5):
         ctx = ctx.add(CBlock(f"a {i}"))
-    assert len(ctx.as_list()) == 5, "Adding 5 items to context should result in 5 items"
+    # Compaction is now applied at add() time, so as_list and view_for_generation
+    # both reflect the sliding window of 3.
+    assert len(ctx.as_list()) == 3, "WindowCompactor(3) should keep 3 items"
     assert len(ctx.view_for_generation()) == 3, "Render size should be 3"  # type: ignore
 
 

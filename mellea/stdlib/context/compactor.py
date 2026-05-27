@@ -1,0 +1,427 @@
+"""Generic ``Compactor`` protocol for shrinking a ``Context``.
+
+A ``Compactor`` returns a fresh, compacted copy of a context. Implementations
+must never mutate the input — by convention, every alteration must produce a
+new ``Context`` instance (the base class enforces this via ``from_previous``).
+
+Two usage patterns are supported:
+
+- **Pattern 1 (in ``Context.add``):** A subclass of ``Context`` holds a
+  ``Compactor`` and applies it whenever a new component is appended.
+- **Pattern 2 (manual):** The caller invokes ``compactor.compact(ctx)``
+  directly between turns, e.g. when compaction is exposed to the model as a
+  tool.
+
+See ``docs/examples/context/`` for full usage examples.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
+
+from mellea.core import CBlock, Component, Context, ModelOutputThunk
+from mellea.core.backend import Backend
+
+if TYPE_CHECKING:
+    from mellea.stdlib.context.chat import ChatContext
+
+T = TypeVar("T", bound=Context)
+
+
+# --------------------------------------------------------------------------- #
+# Pin predicates                                                              #
+# --------------------------------------------------------------------------- #
+
+PinPredicate: TypeAlias = Callable[[list[Component | CBlock]], int]
+"""A function that returns the index after the pinned prefix.
+
+Given the full ordered list of context components, a ``PinPredicate``
+returns the integer index ``idx`` such that ``components[:idx]`` is the
+pinned prefix that the compactor must preserve, and ``components[idx:]``
+is the body that compaction acts on.
+
+The shape subsumes both "contiguous role-based prefix" (e.g.
+:func:`pin_system`) and "find the first marker component" styles.
+"""
+
+
+def pin_nothing(components: list[Component | CBlock]) -> int:
+    """A :class:`PinPredicate` that pins nothing — pure body, no protected prefix."""
+    return 0
+
+
+def pin_system(components: list[Component | CBlock]) -> int:
+    """Pin contiguous leading ``Message(role="system")`` components.
+
+    Stops at the first non-system component. A system message that appears
+    later in the conversation is *not* pinned.
+    """
+    from mellea.stdlib.components.chat import Message
+
+    i = 0
+    while i < len(components):
+        c = components[i]
+        if isinstance(c, Message) and c.role == "system":
+            i += 1
+        else:
+            break
+    return i
+
+
+def pin_system_and_initial_user(components: list[Component | CBlock]) -> int:
+    """Pin leading system messages PLUS the first user message that follows.
+
+    Useful when the initial user prompt encodes the goal of the conversation
+    and should survive compaction along with any system instructions.
+    """
+    from mellea.stdlib.components.chat import Message
+
+    i = pin_system(components)
+    if i < len(components):
+        c = components[i]
+        if isinstance(c, Message) and c.role == "user":
+            i += 1
+    return i
+
+
+def _last_usage_tokens(ctx: Context) -> int | None:
+    """Return cumulative token count of the conversation as of the most recent turn.
+
+    Walks ``ctx`` back-to-front looking for a ``ModelOutputThunk`` whose
+    ``generation.usage`` dict has been populated by a backend's
+    ``post_processing``. Returns ``total_tokens`` from that thunk — which,
+    for a chat backend, is ``prompt_tokens`` (size of the full conversation
+    sent to the model) plus ``completion_tokens`` (the model's reply). It
+    is therefore an estimate of the *current* conversation size, not just
+    one call's tokens in isolation.
+
+    Falls back to ``prompt_tokens + completion_tokens`` when ``total_tokens``
+    is missing. Returns ``None`` if no usable token count can be recovered
+    (typical before the first model call completes).
+    """
+    for c in reversed(ctx.as_list()):
+        if isinstance(c, ModelOutputThunk) and c.generation.usage is not None:
+            usage = c.generation.usage
+            total = usage.get("total_tokens")
+            if total is None:
+                pt = usage.get("prompt_tokens") or 0
+                ct = usage.get("completion_tokens") or 0
+                total = pt + ct
+            return total if total and total > 0 else None
+    return None
+
+
+class Compactor(Protocol):
+    """Protocol for objects that compact a ``Context`` into a smaller copy.
+
+    A compactor receives a context and returns a new context that retains only
+    the data the strategy considers worth keeping. Implementations MUST NOT
+    mutate the input context; they must return a fresh instance and copy over
+    any data that should be preserved.
+
+    The protocol is generic in ``T`` (a ``Context`` subtype) so concrete
+    compactors can narrow their input/output type — for example a chat-only
+    compactor declares ``T = ChatContext``.
+
+    The protocol is sync. Compactors that need to perform a backend call
+    (e.g. :class:`LLMSummarizeCompactor`) hide the async work behind the sync
+    method internally — see that class for the strategy used.
+    """
+
+    def compact(self, ctx: T, *, backend: Backend | None = None) -> T:
+        """Return a compacted copy of ``ctx``.
+
+        Args:
+            ctx: The context to compact. Must be left unchanged.
+            backend: Optional backend. Generic compactors that only filter
+                components can ignore it.
+
+        Returns:
+            A new context of the same type as ``ctx`` containing only the
+            retained data.
+        """
+        ...
+
+
+class WindowCompactor:
+    """Retains the last ``size`` body components of a ``ChatContext``.
+
+    Uses ``pin_predicate`` to decide which leading components to preserve as
+    a protected prefix; the size limit is then applied to the body that
+    remains. The total context length after compaction is
+    ``len(prefix) + min(size, body_len)``. ``size`` counts only body
+    components.
+
+    When the body is already at or below ``size``, ``ctx`` is returned
+    unchanged so the original linked-list and ``previous_node`` chain are
+    preserved. The result carries the same ``Compactor`` as the input so
+    subsequent ``add()`` calls keep compacting.
+
+    Args:
+        size (int): Maximum number of most-recent body components to retain.
+            Pinned prefix components do NOT count against this budget.
+            ``size=0`` is a special case that drops the body entirely,
+            keeping only the pinned prefix. Negative values raise
+            :class:`ValueError`.
+        pin_predicate (PinPredicate): Function that decides the prefix
+            boundary. Defaults to :func:`pin_system`, which pins contiguous
+            leading ``Message(role="system")`` components. Pass
+            :func:`pin_nothing` for pure last-N behaviour or any other
+            ``PinPredicate`` (e.g. :func:`pin_system_and_initial_user`).
+    """
+
+    def __init__(self, *, size: int, pin_predicate: PinPredicate = pin_system) -> None:
+        """Initialize with the desired body window size and a pin predicate."""
+        if size < 0:
+            raise ValueError("WindowCompactor size must be non-negative")
+        self.size = size
+        self.pin_predicate = pin_predicate
+
+    def compact(
+        self, ctx: ChatContext, *, backend: Backend | None = None
+    ) -> ChatContext:
+        """Return a copy of ``ctx`` truncated to the last ``size`` body components.
+
+        Args:
+            ctx: The chat context to compact.
+            backend: Unused by this strategy; accepted for protocol compatibility.
+
+        Returns:
+            A new ``ChatContext`` whose history is the pinned prefix plus the
+            last ``size`` body components, carrying ``ctx``'s compactor.
+            Returns ``ctx`` itself if no truncation is required.
+        """
+        full = ctx.as_list()
+        pin_end = self.pin_predicate(full)
+        body_len = len(full) - pin_end
+
+        if body_len <= self.size:
+            return ctx
+
+        from mellea.stdlib.context.chat import _rebuild_chat_context
+
+        keep_body = full[pin_end:][-self.size :] if self.size > 0 else []
+        compacted = full[:pin_end] + keep_body
+        return _rebuild_chat_context(compacted, compactor=ctx._compactor)
+
+
+class ThresholdCompactor:
+    """Wraps an inner ``Compactor``, gating it on the conversation's token size.
+
+    Despite the suffix, this class does not compact directly — it forwards
+    to ``inner.compact`` only when the conversation has grown larger than
+    ``threshold`` tokens; otherwise the input is returned unchanged.
+
+    The token measurement is read off the most recent ``ModelOutputThunk``'s
+    ``generation.usage`` (via :func:`_last_usage_tokens`). Because chat
+    backends report ``prompt_tokens`` as the size of the full history they
+    were given as input, ``total_tokens = prompt_tokens + completion_tokens``
+    on the latest thunk effectively measures *the size of the conversation
+    after that turn*, not just one isolated call. So the gate fires once
+    cumulative context size crosses ``threshold``.
+
+    Caveats:
+
+    - Components appended *after* the last thunk (e.g. a tool response in
+      the same turn) are not yet reflected in the reading — there is a
+      one-turn lag, negligible unless a single tool call adds a very large
+      payload.
+    - When the inner compactor shrinks the context, the *next* model call
+      will produce a smaller ``prompt_tokens``, so the gate will close
+      again. The threshold is not a high-water mark.
+    - Returns the input unchanged if no thunk with usage is found yet
+      (typical before the first model call completes).
+
+    Args:
+        inner (Compactor): The compactor to invoke once the threshold is
+            exceeded.
+        threshold (int): Trigger the inner compactor when the conversation's
+            measured token size (most recent thunk's ``total_tokens``)
+            exceeds this value. ``0`` or negative disables the gate (the
+            inner is never invoked).
+    """
+
+    def __init__(self, inner: Compactor, *, threshold: int) -> None:
+        """Initialize with the inner compactor and token threshold."""
+        self.inner = inner
+        self.threshold = threshold
+
+    def compact(self, ctx: T, *, backend: Backend | None = None) -> T:
+        """Forward to ``inner.compact`` only when ``ctx`` exceeds the threshold.
+
+        Args:
+            ctx: The context to potentially compact.
+            backend: Forwarded to the inner compactor.
+
+        Returns:
+            ``inner.compact(ctx, backend=backend)`` when the recovered token
+            count exceeds ``self.threshold``, otherwise ``ctx`` unchanged.
+        """
+        if self.threshold <= 0:
+            return ctx
+        tokens = _last_usage_tokens(ctx)
+        if tokens is None or tokens <= self.threshold:
+            return ctx
+        return self.inner.compact(ctx, backend=backend)
+
+
+_DEFAULT_SUMMARY_PROMPT = (
+    "You are summarizing a conversation to maintain context within token "
+    "limits.\n\n"
+    "Provide a concise summary that:\n"
+    "- Preserves specific facts, numbers, names, URLs, and key data\n"
+    "- Notes which tools were called and what results were obtained\n"
+    "- Highlights key decisions, findings, and unresolved issues\n"
+    "- Is structured clearly so the conversation can continue seamlessly\n\n"
+    "Conversation to summarize:\n{conversation}"
+)
+
+
+def _run_coro_blocking(coro):  # type: ignore[no-untyped-def]
+    """Run an awaitable to completion regardless of the calling context.
+
+    - Outside any event loop: ``asyncio.run(coro)``.
+    - Inside a running event loop: spawn a worker thread that runs a fresh
+      event loop with ``asyncio.run`` and block until it returns.
+
+    Used by sync compactors that need to call async backend code (e.g.
+    :class:`LLMSummarizeCompactor`). Note that the second branch blocks the
+    calling thread (and, transitively, the running event loop) for the
+    duration of the coroutine — fine for a serial loop like ReACT, but not
+    suitable if other tasks need to make progress concurrently.
+    """
+    import asyncio
+    import concurrent.futures
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+class LLMSummarizeCompactor:
+    """Replace old body components with an LLM-generated summary, keep last ``keep_n`` verbatim.
+
+    Implements the sync :class:`Compactor` protocol. The compactor's body
+    needs to call the (async) backend; that async work is hidden inside the
+    sync ``compact`` method via :func:`_run_coro_blocking`. The pinned
+    prefix (chosen by ``pin_predicate``) is preserved unchanged; body
+    components older than the last ``keep_n`` are flattened into a single
+    ``Message(role="user")`` whose content is a structured summary; the
+    last ``keep_n`` body components are kept verbatim.
+
+    Default ``pin_predicate`` is :func:`pin_nothing`, which means the entire
+    conversation participates in summarisation. For react workflows pass
+    :func:`mellea.stdlib.components.react.pin_react_initiator` so the goal
+    and tool registration survive untouched.
+
+    Args:
+        keep_n (int): Number of recent body components to keep verbatim.
+            ``0`` summarises everything below the prefix.
+        pin_predicate (PinPredicate): Function that decides the prefix
+            boundary. Defaults to :func:`pin_nothing`.
+        prompt_template (str | None): Custom summary prompt. Must contain
+            the literal ``{conversation}`` placeholder, which is filled in
+            with a textual rendering of the body to summarise. Defaults to
+            a generic conversation-summary template.
+    """
+
+    def __init__(
+        self,
+        *,
+        keep_n: int = 5,
+        pin_predicate: PinPredicate = pin_nothing,
+        prompt_template: str | None = None,
+    ) -> None:
+        """Initialize with the recent-body window, pin predicate, and prompt."""
+        if keep_n < 0:
+            raise ValueError("LLMSummarizeCompactor keep_n must be non-negative")
+        template = (
+            prompt_template if prompt_template is not None else _DEFAULT_SUMMARY_PROMPT
+        )
+        if "{conversation}" not in template:
+            raise ValueError(
+                "LLMSummarizeCompactor prompt_template must contain '{conversation}'"
+            )
+        self.keep_n = keep_n
+        self.pin_predicate = pin_predicate
+        self.prompt_template = template
+
+    def compact(
+        self, ctx: ChatContext, *, backend: Backend | None = None
+    ) -> ChatContext:
+        """Return a context with the prefix, an LLM summary, and recent body components.
+
+        Args:
+            ctx: The chat context to compact.
+            backend: Backend used to generate the summary; required.
+
+        Returns:
+            A new ``ChatContext`` containing the prefix, a single summary
+            ``Message`` produced by the backend, and the most-recent
+            ``keep_n`` body components verbatim. Returns ``ctx`` unchanged
+            when the body is already at or below ``keep_n`` in length.
+
+        Raises:
+            ValueError: If ``backend`` is not provided.
+        """
+        if backend is None:
+            raise ValueError("LLMSummarizeCompactor requires a `backend`")
+
+        full = ctx.as_list()
+        pin_end = self.pin_predicate(full)
+        body = full[pin_end:]
+        if len(body) <= self.keep_n:
+            return ctx
+
+        return _run_coro_blocking(self._async_compact(ctx, backend))
+
+    async def _async_compact(self, ctx: ChatContext, backend: Backend) -> ChatContext:
+        """Async core — renders the body, calls the backend, rebuilds the context."""
+        # Lazy imports to keep this module free of mellea.stdlib.components dependencies.
+        from mellea.stdlib import functional as mfuncs
+        from mellea.stdlib.components.chat import Message, ToolMessage
+        from mellea.stdlib.context.chat import _rebuild_chat_context
+        from mellea.stdlib.context.simple import SimpleContext
+
+        full = ctx.as_list()
+        pin_end = self.pin_predicate(full)
+        prefix = full[:pin_end]
+        body = full[pin_end:]
+
+        old = body[: -self.keep_n] if self.keep_n > 0 else body
+        recent = body[-self.keep_n :] if self.keep_n > 0 else []
+
+        # Render `old` to text the LLM can consume.
+        lines: list[str] = []
+        for c in old:
+            if isinstance(c, ToolMessage):
+                lines.append(f"tool ({c.name}): {c.content}")
+            elif isinstance(c, Message):
+                lines.append(f"{c.role}: {c.content}")
+            elif isinstance(c, ModelOutputThunk):
+                lines.append(f"assistant: {c.value}")
+            elif isinstance(c, CBlock):
+                lines.append(str(c))
+            else:
+                lines.append(str(getattr(c, "content", c)))
+
+        prompt = self.prompt_template.format(conversation="\n".join(lines))
+        result, _ = await mfuncs.aact(
+            action=Message(role="user", content=prompt),
+            context=SimpleContext(),
+            backend=backend,
+            requirements=[],
+            strategy=None,
+            await_result=True,
+        )
+
+        summary_message = Message(
+            role="user", content=f"[CONTEXT SUMMARY]\n{result.value or ''}"
+        )
+        compacted = [*prefix, summary_message, *recent]
+        return _rebuild_chat_context(compacted, compactor=ctx._compactor)
