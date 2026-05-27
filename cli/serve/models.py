@@ -58,7 +58,7 @@ class JsonSchemaFormat(BaseModel):
     """JSON Schema definition."""
 
     strict: bool | None = None
-    """Accepted for OpenAI compatibility; currently ignored by ``m serve``."""
+    """Accepted for OpenAI compatibility; currently ignored by `m serve`."""
 
     model_config = {"populate_by_name": True, "serialize_by_alias": True}
 

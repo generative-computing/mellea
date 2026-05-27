@@ -74,7 +74,7 @@ def discard_background_tasks() -> None:
 def has_plugins(hook_type: HookType | None = None) -> bool:
     """Fast check: are plugins configured and available for the given hook type.
 
-    When ``hook_type`` is provided, also checks whether any plugin has
+    When `hook_type` is provided, also checks whether any plugin has
     registered a handler for that specific hook, enabling callers to skip
     payload construction entirely when no plugin subscribes.
 
@@ -82,7 +82,7 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
         hook_type: Optional hook type to check for registered handlers.
 
     Returns:
-        ``True`` if plugins are enabled and (when ``hook_type`` is given)
+        `True` if plugins are enabled and (when `hook_type` is given)
         at least one plugin subscribes to that hook.
     """
     if not _plugins_enabled or _plugin_manager is None:
@@ -99,16 +99,16 @@ def is_internal_tool(tool_name: str) -> bool:
         tool_name: Name of the tool to check.
 
     Returns:
-        ``True`` if the tool is in the internal tools registry.
+        `True` if the tool is in the internal tools registry.
     """
     return tool_name in _INTERNAL_TOOL_NAMES
 
 
 def get_plugin_manager() -> Any | None:
-    """Return the initialized PluginManager, or ``None`` if plugins are not configured.
+    """Return the initialized PluginManager, or `None` if plugins are not configured.
 
     Returns:
-        The singleton ``PluginManager`` instance, or ``None``.
+        The singleton `PluginManager` instance, or `None`.
     """
     return _plugin_manager
 
@@ -117,7 +117,7 @@ def ensure_plugin_manager() -> Any:
     """Lazily initialize the PluginManager if not already created.
 
     Returns:
-        The singleton ``PluginManager`` instance.
+        The singleton `PluginManager` instance.
 
     Raises:
         ImportError: If the ContextForge plugin framework is not installed.
@@ -159,7 +159,7 @@ async def initialize_plugins(
         timeout: Maximum execution time per plugin in seconds.
 
     Returns:
-        The initialized ``PluginManager`` instance.
+        The initialized `PluginManager` instance.
 
     Raises:
         ImportError: If the ContextForge plugin framework is not installed.
@@ -241,23 +241,23 @@ async def invoke_hook(
 ) -> tuple[Any | None, _MelleaBasePayload]:
     """Invoke a hook if plugins are configured.
 
-    Returns ``(result, possibly-modified-payload)``.
-    If plugins are not configured, returns ``(None, original_payload)`` immediately.
+    Returns `(result, possibly-modified-payload)`.
+    If plugins are not configured, returns `(None, original_payload)` immediately.
 
     Three layers of no-op guards ensure zero overhead when plugins are not configured:
-    1. ``_plugins_enabled`` boolean — single pointer dereference
-    2. ``has_hooks_for(hook_type)`` — skips when no plugin subscribes
+    1. `_plugins_enabled` boolean — single pointer dereference
+    2. `has_hooks_for(hook_type)` — skips when no plugin subscribes
     3. Returns immediately when either guard fails
 
     Args:
         hook_type: The hook point to invoke.
         payload: The immutable payload to pass to plugin handlers.
         backend: Optional backend for building the global context.
-        **context_fields: Additional fields passed to ``build_global_context``.
+        **context_fields: Additional fields passed to `build_global_context`.
 
     Returns:
-        A ``(result, payload)`` tuple where *result* is the ``PluginResult``
-        (or ``None`` when no plugins ran) and *payload* is the
+        A `(result, payload)` tuple where *result* is the `PluginResult`
+        (or `None` when no plugins ran) and *payload* is the
         possibly-modified payload.
 
     Raises:

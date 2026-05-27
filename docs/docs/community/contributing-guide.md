@@ -337,7 +337,7 @@ print(m.last_prompt())
 ## Contributing to the docs
 
 Documentation lives in `docs/docs/`. The writing guide at
-[`docs/docs/guide/CONTRIBUTING`](https://github.com/generative-computing/mellea/blob/main/docs/docs/guide/CONTRIBUTING.md) covers conventions, the PR
+[`docs/CONTRIBUTING_DOCS.md`](https://github.com/generative-computing/mellea/blob/main/docs/CONTRIBUTING_DOCS.md) covers conventions, the PR
 checklist, and the review process for documentation contributions. Key points:
 
 - Start body content with H2 — Mintlify renders the frontmatter `title` as the page heading.

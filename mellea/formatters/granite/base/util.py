@@ -34,7 +34,7 @@ def import_optional(extra_name: str):
 
     Args:
         extra_name: Package extra to suggest in the install hint
-            (e.g. ``pip install mellea[extra_name]``).
+            (e.g. `pip install mellea[extra_name]`).
     """
     try:
         yield
@@ -59,7 +59,7 @@ def find_substring_in_text(substring: str, text: str) -> list[dict]:
         text: The string to search within.
 
     Returns:
-        List of dicts with ``begin_idx`` and ``end_idx`` for each match found.
+        List of dicts with `begin_idx` and `end_idx` for each match found.
     """
     span_matches = []
 
@@ -86,18 +86,18 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
     pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
     Workaround powers activate!
 
-    Only works if ``transformers`` and ``peft`` are installed.
+    Only works if `transformers` and `peft` are installed.
 
     Args:
         local_or_remote_path: Local directory path of the LoRA adapter.
 
     Returns:
-        Tuple of ``(model, tokenizer)`` where ``model`` is the loaded LoRA model and
-        ``tokenizer`` is the corresponding HuggingFace tokenizer.
+        Tuple of `(model, tokenizer)` where `model` is the loaded LoRA model and
+        `tokenizer` is the corresponding HuggingFace tokenizer.
 
     Raises:
-        ImportError: If ``peft`` or ``transformers`` packages are not installed.
-        NotImplementedError: If ``local_or_remote_path`` does not exist locally
+        ImportError: If `peft` or `transformers` packages are not installed.
+        NotImplementedError: If `local_or_remote_path` does not exist locally
             (remote loading from the Hugging Face Hub is not yet implemented).
     """
     with import_optional("peft"):
@@ -191,27 +191,27 @@ def chat_completion_request_to_transformers_inputs(
     """Translate an OpenAI-style chat completion request.
 
     Translate an OpenAI-style chat completion request into an input for a Transformers
-    ``generate()`` call.
+    `generate()` call.
 
     Args:
         request: Request as parsed JSON or equivalent dataclass.
         tokenizer: HuggingFace tokenizer.
-        model: HuggingFace model object. Used for ``model.device`` placement and
-            when ``constrained_decoding_prefix`` is set.
+        model: HuggingFace model object. Used for `model.device` placement and
+            when `constrained_decoding_prefix` is set.
         constrained_decoding_prefix: Optional generation prefix to append to the prompt.
-        ll_tokenizer: Pre-built ``llguidance.LLTokenizer``. Only used when the request
+        ll_tokenizer: Pre-built `llguidance.LLTokenizer`. Only used when the request
             uses constrained decoding; if not provided, one is constructed from
-            ``tokenizer``. Pass an existing instance to avoid the construction cost.
+            `tokenizer`. Pass an existing instance to avoid the construction cost.
 
     Returns:
-        Tuple of ``(generate_input, other_input)`` where ``generate_input`` contains
-        kwargs to pass directly to ``generate()`` and ``other_input`` contains
-        additional parameters for ``generate_with_transformers``.
+        Tuple of `(generate_input, other_input)` where `generate_input` contains
+        kwargs to pass directly to `generate()` and `other_input` contains
+        additional parameters for `generate_with_transformers`.
 
     Raises:
-        ImportError: If ``torch``, ``transformers``, or ``llguidance`` packages
+       ImportError: If `torch`, `transformers`, or `llguidance` packages
             are not installed (the latter only when constrained decoding is used).
-        TypeError: If ``tokenizer.apply_chat_template()`` returns an unexpected type.
+        TypeError: If `tokenizer.apply_chat_template()` returns an unexpected type.
         ValueError: If padding or end-of-sequence token IDs cannot be determined
             from the tokenizer.
     """
@@ -376,10 +376,10 @@ def generate_with_transformers(
         tokenizer: HuggingFace tokenizer for the model, required at several stages
             of generation.
         model: Initialized HuggingFace model object.
-        generate_input: Parameters to pass to the ``generate()`` method, usually
-            produced by ``chat_completion_request_to_transformers_inputs()``.
+        generate_input: Parameters to pass to the `generate()` method, usually
+            produced by `chat_completion_request_to_transformers_inputs()`.
         other_input: Additional kwargs produced by
-            ``chat_completion_request_to_transformers_inputs()`` for aspects of the
+            `chat_completion_request_to_transformers_inputs()` for aspects of the
             original request that Transformers APIs don't handle natively.
 
     Returns:

@@ -30,8 +30,8 @@ def get_model_id_str(backend: Any) -> str:
 def get_system_name(backend: Any) -> str:
     """Get the Gen-AI system name from backend.
 
-    Kept for back-compatibility with existing dashboards keyed on ``gen_ai.system``.
-    New code should prefer ``get_provider_name()``.
+    Kept for back-compatibility with existing dashboards keyed on `gen_ai.system`.
+    New code should prefer `get_provider_name()`.
 
     Args:
         backend: Backend instance
@@ -57,8 +57,8 @@ def get_system_name(backend: Any) -> str:
 def get_provider_name(backend: Any) -> str:
     """Get the Gen-AI provider name from backend.
 
-    Returns the value for ``gen_ai.provider.name`` (semconv v1.37.0+), which
-    supersedes the deprecated ``gen_ai.system`` attribute.
+    Returns the value for `gen_ai.provider.name` (semconv v1.37.0+), which
+    supersedes the deprecated `gen_ai.system` attribute.
 
     Args:
         backend: Backend instance
@@ -269,14 +269,14 @@ def record_response_metadata(
 def finalize_backend_span(span: Any, *, error: Exception | None = None) -> None:
     """Close a backend span on the error path, setting error.type and ERROR status.
 
-    Used by the streaming error path in ``ModelOutputThunk.__aiter__`` where a
+    Used by the streaming error path in `ModelOutputThunk.__aiter__` where a
     span may be left open after an exception.  Backends close spans on the
-    success path themselves via ``record_token_usage`` + ``record_response_metadata``
-    + ``end_backend_span``.
+    success path themselves via `record_token_usage` + `record_response_metadata`
+    + `end_backend_span`.
 
     Args:
-        span: The span to finalise (no-op when ``None``).
-        error: Exception to record; sets ERROR status and ``error.type``.
+        span: The span to finalise (no-op when `None`).
+        error: Exception to record; sets ERROR status and `error.type`.
     """
     if span is None:
         return

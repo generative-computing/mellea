@@ -8,13 +8,13 @@ from mellea.plugins.base import MelleaBasePayload
 
 
 class ToolPreInvokePayload(MelleaBasePayload):
-    """Payload for ``tool_pre_invoke`` — before tool/function invocation.
+    """Payload for `tool_pre_invoke` — before tool/function invocation.
 
     Attributes:
-        model_tool_call: The ``ModelToolCall`` about to be executed (writable —
+        model_tool_call: The `ModelToolCall` about to be executed (writable —
             plugins may modify arguments or swap the tool entirely).
-        is_control_flow: ``True`` when this tool is used for framework control
-            flow (e.g. ``final_answer`` in ReAct) rather than data processing.
+        is_control_flow: `True` when this tool is used for framework control
+            flow (e.g. `final_answer` in ReAct) rather than data processing.
             Plugins should check this field to decide whether to act.
     """
 
@@ -23,18 +23,18 @@ class ToolPreInvokePayload(MelleaBasePayload):
 
 
 class ToolPostInvokePayload(MelleaBasePayload):
-    """Payload for ``tool_post_invoke`` — after tool execution.
+    """Payload for `tool_post_invoke` — after tool execution.
 
     Attributes:
-        model_tool_call: The ``ModelToolCall`` that was executed.
+        model_tool_call: The `ModelToolCall` that was executed.
         tool_output: The return value of the tool function (writable —
             plugins may transform the output before it is formatted).
-        tool_message: The ``ToolMessage`` constructed from the output.
+        tool_message: The `ToolMessage` constructed from the output.
         execution_time_ms: Wall-clock time of the tool execution in milliseconds.
-        success: ``True`` if the tool executed without raising an exception.
-        error: The ``Exception`` raised during execution, or ``None`` on success.
-        is_control_flow: ``True`` when this tool is used for framework control
-            flow (e.g. ``final_answer`` in ReAct) rather than data processing.
+        success: `True` if the tool executed without raising an exception.
+        error: The `Exception` raised during execution, or `None` on success.
+        is_control_flow: `True` when this tool is used for framework control
+            flow (e.g. `final_answer` in ReAct) rather than data processing.
             Plugins should check this field to decide whether to act.
     """
 

@@ -106,7 +106,7 @@ def is_application_tracing_enabled() -> bool:
 
     Returns:
         True if application tracing has been enabled via the
-        ``MELLEA_TRACE_APPLICATION`` environment variable.
+        `MELLEA_TRACE_APPLICATION` environment variable.
     """
     return _TRACE_APPLICATION_ENABLED
 
@@ -116,7 +116,7 @@ def is_backend_tracing_enabled() -> bool:
 
     Returns:
         True if backend tracing has been enabled via the
-        ``MELLEA_TRACE_BACKEND`` environment variable.
+        `MELLEA_TRACE_BACKEND` environment variable.
     """
     return _TRACE_BACKEND_ENABLED
 
@@ -128,8 +128,8 @@ def is_content_tracing_enabled() -> bool:
     Enable only in controlled environments.
 
     Returns:
-        True if enabled via ``MELLEA_TRACE_CONTENT`` or
-        ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT``.
+        True if enabled via `MELLEA_TRACE_CONTENT` or
+        `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
     """
     return _TRACE_CONTENT_ENABLED
 
@@ -157,7 +157,7 @@ def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None
         **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise ``None``.
+        The span object if tracing is enabled, otherwise `None`.
     """
     if _TRACE_APPLICATION_ENABLED and _application_tracer is not None:
         with _application_tracer.start_as_current_span(name) as span:  # type: ignore
@@ -180,7 +180,7 @@ def trace_backend(name: str, **attributes: Any) -> Generator[Any, None, None]:
         **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise ``None``.
+        The span object if tracing is enabled, otherwise `None`.
     """
     if _TRACE_BACKEND_ENABLED and _backend_tracer is not None:
         with _backend_tracer.start_as_current_span(name) as span:  # type: ignore
@@ -280,6 +280,22 @@ def set_span_error(span: Any, exception: Exception) -> None:
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))  # type: ignore
 
 
+def set_span_status_error(span: Any, description: str) -> None:
+    """Mark a span as ERROR without recording a phantom exception event.
+
+    Use this for validation failures and other non-exception error conditions
+    where the span should be marked failed but no exception was actually raised.
+    Calling `set_span_error` in these cases would create a misleading recorded
+    exception event in OTEL traces.
+
+    Args:
+        span: The span object (may be None if tracing is disabled)
+        description: Human-readable reason for the failure.
+    """
+    if span is not None and _OTEL_AVAILABLE:
+        span.set_status(trace.Status(trace.StatusCode.ERROR, description))  # type: ignore
+
+
 __all__ = [
     "add_span_event",
     "end_backend_span",
@@ -288,6 +304,7 @@ __all__ = [
     "is_content_tracing_enabled",
     "set_span_attribute",
     "set_span_error",
+    "set_span_status_error",
     "start_backend_span",
     "trace_application",
     "trace_backend",

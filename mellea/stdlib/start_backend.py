@@ -1,4 +1,4 @@
-"""Typed ``start_backend`` with overloaded return types."""
+"""Typed `start_backend` with overloaded return types."""
 
 from __future__ import annotations
 
@@ -24,16 +24,16 @@ def backend_name_to_class(name: str) -> Any:
     """Resolves backend names to Backend classes.
 
     Args:
-        name: Short backend name, e.g. ``"ollama"``, ``"hf"``, ``"openai"``,
-            ``"watsonx"``, or ``"litellm"``.
+        name: Short backend name, e.g. `"ollama"`, `"hf"`, `"openai"`,
+            `"watsonx"`, or `"litellm"`.
 
     Returns:
-        The corresponding ``Backend`` class, or ``None`` if the name is unrecognised.
+        The corresponding `Backend` class, or `None` if the name is unrecognised.
 
     Raises:
         ImportError: If the requested backend has optional dependencies that are
-            not installed (e.g. ``mellea[hf]``, ``mellea[watsonx]``, or
-            ``mellea[litellm]``).
+            not installed (e.g. `mellea[hf]`, `mellea[watsonx]`, or
+            `mellea[litellm]`).
     """
     if name == "ollama":
         from ..backends.ollama import OllamaModelBackend
@@ -80,10 +80,10 @@ def backend_name_to_class(name: str) -> Any:
 def _resolve_context(
     ctx: Context | None, context_type: Literal["simple", "chat"] | None
 ) -> Context:
-    """Resolve a ``Context`` from explicit instance and/or shorthand name.
+    """Resolve a `Context` from explicit instance and/or shorthand name.
 
     Raises:
-        ValueError: If both ``ctx`` and ``context_type`` are provided.
+        ValueError: If both `ctx` and `context_type` are provided.
     """
     if ctx is not None and context_type is not None:
         raise ValueError("Cannot specify both 'ctx' and 'context_type'.")
@@ -321,31 +321,31 @@ def start_backend(
 ) -> tuple[Context, Backend]:
     """Create a context and backend pair without a full session.
 
-    Accepts the same backend/model/context arguments as ``start_session`` but
-    returns the raw ``(Context, Backend)`` tuple for callers that manage their
+    Accepts the same backend/model/context arguments as `start_session` but
+    returns the raw `(Context, Backend)` tuple for callers that manage their
     own inference loop.
 
     Args:
-        backend_name: The backend to use (``"ollama"``, ``"hf"``, ``"openai"``,
-            ``"watsonx"``, or ``"litellm"``).
+        backend_name: The backend to use (`"ollama"`, `"hf"`, `"openai"`,
+            `"watsonx"`, or `"litellm"`).
         model_id: Model identifier or name.
-        ctx: An explicit ``Context`` instance. Mutually exclusive with
-            ``context_type``.
-        context_type: Shorthand for creating a context — ``"simple"`` for
-            ``SimpleContext``, ``"chat"`` for ``ChatContext``. Mutually
-            exclusive with ``ctx``.
+        ctx: An explicit `Context` instance. Mutually exclusive with
+            `context_type`.
+        context_type: Shorthand for creating a context — `"simple"` for
+            `SimpleContext`, `"chat"` for `ChatContext`. Mutually
+            exclusive with `ctx`.
         model_options: Additional model configuration options passed to the
             backend.
         **backend_kwargs: Additional keyword arguments passed to the backend
             constructor.
 
     Returns:
-        Tuple of ``(Context, Backend)`` with types narrowed by ``backend_name``
-        and ``context_type``.
+        Tuple of `(Context, Backend)` with types narrowed by `backend_name`
+        and `context_type`.
 
     Raises:
-        ValueError: If both ``ctx`` and ``context_type`` are provided.
-        Exception: If ``backend_name`` is not recognised.
+        ValueError: If both `ctx` and `context_type` are provided.
+        Exception: If `backend_name` is not recognised.
     """
     resolved_ctx = _resolve_context(ctx, context_type)
     backend_class = backend_name_to_class(backend_name)

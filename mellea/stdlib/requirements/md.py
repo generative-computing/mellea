@@ -32,7 +32,7 @@ def as_markdown_list(ctx: Context) -> list[str] | None:
 
     Returns:
         List of rendered list-item strings if the output is a markdown list,
-        or ``None`` if parsing fails or the output is not a list.
+        or `None` if parsing fails or the output is not a list.
     """
     mistletoe = _get_mistletoe()
     xs = list()

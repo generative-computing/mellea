@@ -23,11 +23,11 @@ def check_answerability(
 
     Args:
         question: Question that the user has posed in response to the last turn in
-            ``context``. When ``None``, the question is extracted from the last
-            user message in ``context``.
+            `context`. When `None`, the question is extracted from the last
+            user message in `context`.
         documents: Document snippets retrieved that may or may not answer the
-            indicated question. Each element may be a ``Document`` or a plain
-            string (automatically wrapped in ``Document``).
+            indicated question. Each element may be a `Document` or a plain
+            string (automatically wrapped in `Document`).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters
             for answerability checks.
@@ -56,13 +56,13 @@ def rewrite_question(
 
     Args:
         question: Question that the user has posed in response to the last turn in
-            ``context``. When ``None``, the question is extracted from the last
-            user message in ``context``.
+            `context`. When `None`, the question is extracted from the last
+            user message in `context`.
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters.
 
     Returns:
-        Rewritten version of ``question``.
+        Rewritten version of `question`.
     """
     question, context = _resolve_question(question, context, backend)
     result_json = call_intrinsic(
@@ -84,11 +84,11 @@ def clarify_query(
     appropriate clarification question if needed.
 
     Args:
-        question: Question that the user has posed. When ``None``, the question
-            is extracted from the last user message in ``context``.
+        question: Question that the user has posed. When `None`, the question
+            is extracted from the last user message in `context`.
         documents: Document snippets retrieved for the question. Each element
-            may be a ``Document`` or a plain string (automatically wrapped in
-            ``Document``).
+            may be a `Document` or a plain string (automatically wrapped in
+            `Document`).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports the adapters that implement
             this intrinsic.
@@ -120,23 +120,23 @@ def find_citations(
     in a potential assistant response to a user question.
 
     Args:
-        response: Potential assistant response. When ``None``, the response is
-            extracted from the last assistant output in ``context``.
-        documents: Documents that were used to generate ``response``. Each element
-            may be a ``Document`` or a plain string. Strings are wrapped in
-            ``Document`` with an auto-generated ``doc_id`` (``"0"``, ``"1"``, ...);
-            for explicit control, pass ``Document`` objects with ``doc_id`` set.
-            ``Document`` objects without ``doc_id`` trigger a warning because the
-            intrinsic uses ``doc_id`` to identify citation sources.
+        response: Potential assistant response. When `None`, the response is
+            extracted from the last assistant output in `context`.
+        documents: Documents that were used to generate `response`. Each element
+            may be a `Document` or a plain string. Strings are wrapped in
+            `Document` with an auto-generated `doc_id` (`"0"`, `"1"`, ...);
+            for explicit control, pass `Document` objects with `doc_id` set.
+            `Document` objects without `doc_id` trigger a warning because the
+            intrinsic uses `doc_id` to identify citation sources.
         context: Context of the dialog between user and assistant at the point where
             the user has just asked a question that will be answered with RAG documents.
         backend: Backend that supports one of the adapters that implements this
             intrinsic.
 
     Returns:
-        List of records with the following fields: ``response_begin``,
-        ``response_end``, ``response_text``, ``citation_doc_id``, ``citation_begin``,
-        ``citation_end``, ``citation_text``. Begin and end offsets are character
+        List of records with the following fields: `response_begin`,
+        `response_end`, `response_text`, `citation_doc_id`, `citation_begin`,
+        `citation_end`, `citation_text`. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
     response, context = _resolve_response(response, context)
@@ -167,10 +167,10 @@ def check_context_relevance(
     question was asked.
 
     Args:
-        question: Question that the user has posed. When ``None``, the question
-            is extracted from the last user message in ``context``.
-        document: A retrieved document snippet. May be a ``Document`` or a plain
-            string (automatically wrapped in ``Document``).
+        question: Question that the user has posed. When `None`, the question
+            is extracted from the last user message in `context`.
+        document: A retrieved document snippet. May be a `Document` or a plain
+            string (automatically wrapped in `Document`).
         context: The chat up to the point where the user asked a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
@@ -207,19 +207,19 @@ def flag_hallucinated_content(
 
     Args:
         response: The assistant's response to the user's question in the last turn
-            of ``context``. When ``None``, the response is extracted from the last
-            assistant output in ``context``.
-        documents: Document snippets that were used to generate ``response``. Each
-            element may be a ``Document`` or a plain string (automatically wrapped
-            in ``Document``).
+            of `context`. When `None`, the response is extracted from the last
+            assistant output in `context`.
+        documents: Document snippets that were used to generate `response`. Each
+            element may be a `Document` or a plain string (automatically wrapped
+            in `Document`).
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
 
     Returns:
-        List of records with the following fields: ``response_begin``,
-        ``response_end``, ``response_text``, ``faithfulness``,
-        ``explanation``.
+        List of records with the following fields: `response_begin`,
+        `response_end`, `response_text`, `faithfulness`,
+        `explanation`.
     """
     response, context = _resolve_response(response, context)
     result_json = call_intrinsic(

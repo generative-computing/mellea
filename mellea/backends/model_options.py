@@ -21,7 +21,7 @@ class ModelOption:
     ```
 
     Attributes:
-        TOOLS (str): Sentinel key for a list or dict of ``MelleaTool`` instances to expose for tool calling.
+        TOOLS (str): Sentinel key for a list or dict of `MelleaTool` instances to expose for tool calling.
         TOOL_CHOICE (str): Key for tool choice strategy (passed through to the backend).
         MAX_NEW_TOKENS (str): Sentinel key for the maximum number of new tokens to generate.
         SYSTEM_PROMPT (str): Sentinel key for the system prompt string.
@@ -30,10 +30,12 @@ class ModelOption:
         THINKING (str): Sentinel key for enabling/configuring reasoning/thinking mode.
         SEED (str): Sentinel key for the random seed for reproducible generation.
         STREAM (str): Sentinel key for enabling streaming responses.
+        STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
+            encountered in the model output, cause generation to halt.
     """
 
     TOOLS = "@@@tools@@@"
-    """Must be a list[MelleaTool] or a dict[str, MelleaTool]. Use ``MelleaTool.from_callable()`` or the ``@tool`` decorator to wrap plain callables."""
+    """Must be a list[MelleaTool] or a dict[str, MelleaTool]. Use `MelleaTool.from_callable()` or the `@tool` decorator to wrap plain callables."""
 
     TOOL_CHOICE = "tool_choice"
     """Controls which tool the model should use. Can be "none", "auto", or a specific tool name."""
@@ -45,10 +47,17 @@ class ModelOption:
     THINKING = "@@@thinking@@@"
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
+    STOP_SEQUENCES = "@@@stop_sequences@@@"
+    """Must be a `list[str]`. Generation halts when the model emits any of these strings.
+
+    Backends translate this to their native parameter (`stop` for OpenAI/Ollama/LiteLLM
+    chat backends, `stop_strings` for HuggingFace, `stop_sequences` for the WatsonX
+    text-generation endpoint).
+    """
 
     @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
-        """Return a new dict with selected keys in ``options`` renamed according to ``from_to``.
+        """Return a new dict with selected keys in `options` renamed according to `from_to`.
 
         Returns a new dict with the keys in `options` replaced with the corresponding value for that key in `from_to`.
 
@@ -120,16 +129,16 @@ class ModelOption:
 
     @staticmethod
     def remove_special_keys(model_options: dict[str, Any]) -> dict[str, Any]:
-        """Return a copy of ``model_options`` with all sentinel-valued keys removed.
+        """Return a copy of `model_options` with all sentinel-valued keys removed.
 
-        Sentinel keys are those whose names start with ``@@@`` (e.g. ``ModelOption.TOOLS``).
+        Sentinel keys are those whose names start with `@@@` (e.g. `ModelOption.TOOLS`).
         These are Mellea-internal keys that must not be forwarded to backend APIs.
 
         Args:
             model_options (dict[str, Any]): A model options dictionary that may contain sentinel keys.
 
         Returns:
-            dict[str, Any]: A new dictionary with all ``@@@``-prefixed keys omitted.
+            dict[str, Any]: A new dictionary with all `@@@`-prefixed keys omitted.
         """
         new_options = {}
         for k, v in model_options.items():
@@ -141,7 +150,7 @@ class ModelOption:
     def merge_model_options(
         persistent_opts: dict[str, Any], overwrite_opts: dict[str, Any] | None
     ) -> dict[str, Any]:
-        """Merge two model-options dicts, with ``overwrite_opts`` taking precedence on conflicts.
+        """Merge two model-options dicts, with `overwrite_opts` taking precedence on conflicts.
 
         Creates a new dict that contains all keys and values from persistent opts and overwrite opts.
         If there are duplicate keys, overwrite opts key value pairs will be used.
@@ -149,7 +158,7 @@ class ModelOption:
         Args:
             persistent_opts (dict[str, Any]): Base model options (lower precedence).
             overwrite_opts (dict[str, Any] | None): Per-call model options that override
-                ``persistent_opts`` on key conflicts; ``None`` is treated as empty.
+                `persistent_opts` on key conflicts; `None` is treated as empty.
 
         Returns:
             dict[str, Any]: A new merged dictionary.

@@ -1,8 +1,13 @@
 name: "Build and publish package"
-# Test comment for a build
+
+# Fires on v* tag push, or via explicit dispatch (release.sh uses this when
+# GITHUB_TOKEN-authored pushes can't auto-trigger). Prereleases are gated on
+# the PUBLISH_PRERELEASES repo variable; finals always publish.
+
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
 
 env:
   UV_FROZEN: "1"
@@ -25,16 +30,38 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - name: Decide whether to publish
+        id: gate
+        env:
+          PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
+        # Read version from pyproject.toml, not github.ref_name: on a manual
+        # workflow_dispatch ref_name is the branch (release/v0.6) and the
+        # prerelease pattern would not match, causing the gate to fail open.
+        run: |
+          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "Resolved version from pyproject.toml: ${VERSION}"
+          if [[ "${VERSION}" == *rc* ]] || [[ "${VERSION}" == *.dev* ]]; then
+            if [ "${PUBLISH_PRERELEASES}" != "true" ]; then
+              echo "Prerelease ${VERSION} with PUBLISH_PRERELEASES=false — skipping PyPI upload"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
       - name: Install uv and set the python version
+        if: steps.gate.outputs.skip != 'true'
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: false
       - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
         run: uv sync --all-extras
       - name: Build package
+        if: steps.gate.outputs.skip != 'true'
         run: uv build
       - name: Publish distribution 📦 to PyPI
+        if: steps.gate.outputs.skip != 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           attestations: true

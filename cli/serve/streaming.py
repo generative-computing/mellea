@@ -44,13 +44,13 @@ async def stream_chat_completion_chunks(
         created: Unix timestamp of when the completion was created.
         stream_options: OpenAI-compatible streaming options. Controls whether
             usage statistics are included in the final chunk via the
-            ``include_usage`` field.
+            `include_usage` field.
         system_fingerprint: Backend configuration fingerprint to include in chunks.
-            Defaults to ``None``.
+            Defaults to `None`.
 
     Yields:
         Server-sent event payload strings representing OpenAI-compatible chat
-        completion chunks, including the terminating ``[DONE]`` event.
+        completion chunks, including the terminating `[DONE]` event.
     """
     try:
         initial_chunk = ChatCompletionChunk(

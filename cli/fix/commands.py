@@ -18,15 +18,15 @@ def fix_async(
 ):
     """Fix async calls for the await_result default change.
 
-    Scans Python source files for ``aact``, ``ainstruct``, and ``aquery`` calls
+    Scans Python source files for `aact`, `ainstruct`, and `aquery` calls
     and applies an automated migration to restore blocking behaviour after the
-    ``await_result`` default changed from ``True`` to ``False``.
+    `await_result` default changed from `True` to `False`.
 
     Prerequisites:
-        Mellea installed (``uv add mellea``).
+        Mellea installed (`uv add mellea`).
 
     Output:
-        Modifies Python source files in place (unless ``--dry-run``). Prints a
+        Modifies Python source files in place (unless `--dry-run`). Prints a
         summary of fixed call sites with file paths and line numbers.
 
     Examples:
@@ -35,7 +35,7 @@ def fix_async(
     Args:
         path: File or directory to scan.
         mode: Fix strategy to apply.
-        dry_run: If ``True``, report locations without modifying files.
+        dry_run: If `True`, report locations without modifying files.
 
     Raises:
         typer.Exit: If *path* does not exist.
@@ -99,14 +99,14 @@ def fix_genslots(
 ):
     """Rewrite genslot imports and class names to genstub equivalents.
 
-    Scans Python source files and replaces deprecated ``GenerativeSlot`` imports
-    and class references with their ``GenerativeStub`` replacements.
+    Scans Python source files and replaces deprecated `GenerativeSlot` imports
+    and class references with their `GenerativeStub` replacements.
 
     Prerequisites:
-        Mellea installed (``uv add mellea``).
+        Mellea installed (`uv add mellea`).
 
     Output:
-        Modifies Python source files in place (unless ``--dry-run``). Prints a
+        Modifies Python source files in place (unless `--dry-run`). Prints a
         summary of rewritten references with file paths and line numbers.
 
     Examples:
@@ -114,7 +114,7 @@ def fix_genslots(
 
     Args:
         path: File or directory to scan.
-        dry_run: If ``True``, report locations without modifying files.
+        dry_run: If `True`, report locations without modifying files.
 
     Raises:
         typer.Exit: If *path* does not exist.

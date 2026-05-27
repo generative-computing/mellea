@@ -1,6 +1,15 @@
+default_install_hook_types: [pre-commit, commit-msg]
 exclude: ^(scratchpad/)
 
 repos:
+  - repo: local
+    hooks:
+      - id: dco-check
+        name: DCO sign-off check
+        entry: "bash -c 'grep -q \"^Signed-off-by: \" \"$1\" || { echo \"Missing Signed-off-by trailer. Use: git commit -s\"; exit 1; }' --"
+        language: system
+        stages: [commit-msg]
+
   - repo: local
     hooks:
       # Moving ruff hooks to the local version allows for different behavior locally and in ci/cd pipelines.

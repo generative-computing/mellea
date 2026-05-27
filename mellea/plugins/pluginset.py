@@ -10,8 +10,8 @@ class PluginSet:
     """A named, composable group of hook functions and plugin instances.
 
     PluginSets are inert containers — they do not register anything themselves.
-    Registration happens when they are passed to ``register()`` or
-    ``start_session(plugins=[...])``.
+    Registration happens when they are passed to `register()` or
+    `start_session(plugins=[...])`.
 
     PluginSets can be nested: a PluginSet can contain other PluginSets.
 
@@ -26,7 +26,7 @@ class PluginSet:
 
     Args:
         name: Human-readable label for this group.
-        items: Hook functions, plugin instances, or nested ``PluginSet`` instances.
+        items: Hook functions, plugin instances, or nested `PluginSet` instances.
         priority: Optional priority override applied to all items in this set.
     """
 
@@ -43,13 +43,13 @@ class PluginSet:
         self._scope_id: str | None = None
 
     def flatten(self) -> list[tuple[Callable | Any, int | None]]:
-        """Recursively flatten nested PluginSets into ``(item, priority_override)`` pairs.
+        """Recursively flatten nested PluginSets into `(item, priority_override)` pairs.
 
         When this set has a priority, it overrides the priorities of all nested
-        items — including items inside nested ``PluginSet`` instances.
+        items — including items inside nested `PluginSet` instances.
 
         Returns:
-            Flattened list of ``(item, priority_override)`` pairs.
+            Flattened list of `(item, priority_override)` pairs.
         """
         result: list[tuple[Callable | Any, int | None]] = []
         for item in self.items:
@@ -66,7 +66,7 @@ class PluginSet:
         return result
 
     def __enter__(self) -> PluginSet:
-        """Register all plugins in this set for the duration of the ``with`` block."""
+        """Register all plugins in this set for the duration of the `with` block."""
         if self._scope_id is not None:
             raise RuntimeError(
                 f"PluginSet {self.name!r} is already active as a context manager. "
@@ -90,11 +90,11 @@ class PluginSet:
             self._scope_id = None
 
     async def __aenter__(self) -> PluginSet:
-        """Async variant — delegates to the synchronous ``__enter__``."""
+        """Async variant — delegates to the synchronous `__enter__`."""
         return self.__enter__()
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Async variant — delegates to the synchronous ``__exit__``."""
+        """Async variant — delegates to the synchronous `__exit__`."""
         self.__exit__(exc_type, exc_val, exc_tb)
 
     def __repr__(self) -> str:  # noqa: D105
