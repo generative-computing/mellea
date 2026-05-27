@@ -203,6 +203,34 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
         torch.cuda.empty_cache()
 
 
+# Variables that HuggingFace injects into the Jinja template namespace automatically.
+# These must be excluded from _chat_template_allowlist because they are provided by
+# apply_chat_template itself — forwarding a model_option with the same name would
+# either cause a "got multiple values for keyword argument" TypeError (for the named-param
+# group) or silently replace a function injected by the Jinja environment (for the globals group).
+#
+# ⚠️  REVIEW NOTE: verify this set against the transformers source whenever upgrading.
+# Named params: transformers.tokenization_utils_base.PreTrainedTokenizerBase.apply_chat_template
+#               (the render_jinja_template call around line 119 in that method)
+# Jinja globals: transformers.utils.chat_template_utils._compile_jinja_template
+#               (the jinja_env.globals assignments near the bottom of that function)
+_HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
+    {
+        # --- Named parameters passed explicitly to render_jinja_template ---
+        # Forwarding these from model_options would cause duplicate-kwarg TypeError.
+        "messages",  # the conversation; always the first positional arg
+        "tools",  # tool schemas; our call sites pass tools=convert_tools_to_json(...) explicitly
+        "add_generation_prompt",  # bool; passed explicitly at the standard-generation call site
+        # --- Jinja environment globals set by _compile_jinja_template ---
+        # find_undeclared_variables cannot see env globals, so these appear as "undeclared"
+        # in templates that reference them and must be excluded manually.
+        "raise_exception",  # callable: raises jinja2.exceptions.TemplateError
+        "strftime_now",  # callable: returns datetime.now().strftime(format)
+    }
+)
+
+
+
 class LocalHFBackend(FormatterBackend, AdapterMixin):
     """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
 
@@ -748,9 +776,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         input_text = self._tokenizer.apply_chat_template(  # type: ignore
             ctx_as_conversation,
             tools=convert_tools_to_json(tools),  # type: ignore
-            **self._make_backend_specific_and_remove(
-                self._filter_generate_only_options(model_options)
-            ),
+            **self._filter_for_chat_template(model_options),
             tokenize=False,
         )
 
@@ -1032,9 +1058,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
-                **self._make_backend_specific_and_remove(
-                    self._filter_generate_only_options(model_options)
-                ),
+                **self._filter_for_chat_template(model_options),
             ).to(self._device)  # type: ignore
 
             format_kwargs = {}
@@ -1586,59 +1610,57 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
-    def _filter_generate_only_options(
-        self, model_options: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Remove options that are only for generate(), not for apply_chat_template().
+    @functools.cached_property
+    def _chat_template_allowlist(self) -> frozenset[str]:
+        """Variable names the tokenizer's chat template can accept from caller-supplied kwargs.
 
-        Companion to :meth:`_filter_chat_template_only_options` for the opposite
-        direction. Prevents generate-only options from leaking into the Jinja template
-        variable namespace, where they could silently shadow template-defined variables
-        of the same name.
+        Parses the Jinja2 template with :func:`jinja2.meta.find_undeclared_variables` to
+        find every variable the template references but does not define itself, then
+        subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables HuggingFace provides
+        automatically). What remains is the exact set of keys a caller may legitimately
+        forward from ``model_options`` to ``apply_chat_template``.
 
-        Note: this method receives model_options after ``_simplify_and_merge`` has run,
-        so user-supplied string keys such as ``"max_new_tokens"`` have already been
-        normalised to their Mellea sentinel equivalents.
-
-        Args:
-            model_options: the model_options for this call
+        This is the self-maintaining alternative to a hand-written denylist: it adapts
+        automatically as the loaded model's Jinja template changes without any manual
+        enumeration of generate()-only option names.
 
         Returns:
-            a new dict without generate-specific options
+            frozenset of kwarg names valid for ``apply_chat_template`` on this tokenizer,
+            minus HF-provided variables. Empty if the tokenizer has no ``chat_template``
+            (``apply_chat_template`` would raise before kwargs matter in that case).
         """
-        # Options that should only go to generate(), not apply_chat_template().
-        # Keys are Mellea sentinel values or direct passthrough keys, evaluated
-        # before _make_backend_specific_and_remove renames them downstream.
-        # Covers the most commonly-used fields from HuggingFace GenerationConfig.
-        # See: https://huggingface.co/docs/transformers/main_classes/text_generation
-        generate_only = {
-            # Sampling strategy
-            ModelOption.TEMPERATURE,  # "temperature"
-            "do_sample",
-            "top_k",
-            "top_p",
-            "typical_p",
-            "repetition_penalty",
-            "no_repeat_ngram_size",
-            "length_penalty",
-            "num_beams",
-            "num_beam_groups",
-            "diversity_penalty",
-            "penalty_alpha",
-            "early_stopping",
-            # Length constraints
-            ModelOption.MAX_NEW_TOKENS,  # sentinel "@@@max_new_tokens@@@"; renamed downstream to "max_new_tokens"
-            "min_new_tokens",
-            # Sequence count
-            "num_return_sequences",
-            # Special token IDs
-            "pad_token_id",
-            "bos_token_id",
-            "eos_token_id",
-            "forced_bos_token_id",
-            "forced_eos_token_id",
+        import jinja2.meta
+
+        template_str = getattr(self._tokenizer, "chat_template", None)
+        if not template_str:
+            return frozenset()
+
+        env = jinja2.Environment()
+        ast = env.parse(template_str)
+        all_vars = jinja2.meta.find_undeclared_variables(ast)
+        return frozenset(all_vars - _HF_INTERNAL_TEMPLATE_VARS)
+
+    def _filter_for_chat_template(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return only the model_options that the chat template can actually consume.
+
+        Renames Mellea sentinels via :meth:`_make_backend_specific_and_remove`, then
+        keeps only keys that appear in :attr:`_chat_template_allowlist` — the set of
+        variables the tokenizer's Jinja template actually references. Generation-only
+        options that the template does not reference are silently dropped, so they
+        cannot pollute the Jinja template variable namespace.
+
+        Args:
+            model_options: raw model options (may contain Mellea sentinel keys)
+
+        Returns:
+            dict of kwargs safe to splat into ``apply_chat_template``
+        """
+        backend_opts = self._make_backend_specific_and_remove(model_options)
+        return {
+            k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }
-        return {k: v for k, v in model_options.items() if k not in generate_only}
 
     # region Adapter loading, unloading, and utility functions.
     @property

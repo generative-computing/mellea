@@ -1,12 +1,15 @@
-"""Unit tests for LocalHFBackend option-filter helpers.
+"""Unit tests for LocalHFBackend chat-template kwarg filtering.
 
-These tests verify that generate-only options are excluded from apply_chat_template
-kwargs, and that template-only options are excluded from generate() kwargs.
+These tests verify that _filter_for_chat_template passes only the variables the
+tokenizer's Jinja template actually references, and that _HF_INTERNAL_TEMPLATE_VARS
+are correctly excluded from the allowlist regardless of whether the template uses them.
 
-No GPU or real model is needed to run these tests — the filter methods are pure dict
-operations and the fixture bypasses __init__ entirely. However, torch must be
-importable because importing LocalHFBackend triggers the top-level ``import torch``
-in huggingface.py. Install mellea[hf] to satisfy this requirement.
+No GPU or real model is needed — the methods under test are pure dict operations that
+happen to read self._tokenizer.chat_template.  The fixture sets that attribute to a
+known Jinja string, bypassing __init__ (and therefore model loading) entirely.
+
+torch must be importable because importing LocalHFBackend triggers the top-level
+``import torch`` in huggingface.py.  Install mellea[hf] to satisfy this requirement.
 """
 
 import pytest
@@ -14,240 +17,229 @@ import pytest
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends import ModelOption
-from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.huggingface import _HF_INTERNAL_TEMPLATE_VARS, LocalHFBackend
 
 
-@pytest.fixture
-def backend() -> LocalHFBackend:
-    """A LocalHFBackend instance with no model loaded, sufficient for testing filter helpers.
+def _make_backend(template: str) -> LocalHFBackend:
+    """Return a LocalHFBackend with __init__ bypassed, wired with a known template.
 
-    Uses __new__ to bypass __init__ (which would load model weights). Only
-    from_mellea_model_opts_map is set because that is the sole instance attribute
-    accessed by _filter_generate_only_options, _filter_chat_template_only_options,
-    and _make_backend_specific_and_remove. If any of those methods gains a new
-    self.* dependency, update this fixture.
+    Only the attributes accessed by _chat_template_allowlist, _filter_for_chat_template,
+    _filter_chat_template_only_options, and _make_backend_specific_and_remove are set.
+    If any of those methods gains a new self.* dependency, update this helper.
     """
+
+    class _FakeTokenizer:
+        chat_template = template
+
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b._tokenizer = _FakeTokenizer()
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
 
 # ---------------------------------------------------------------------------
-# _filter_generate_only_options
+# _HF_INTERNAL_TEMPLATE_VARS — contents are load-bearing; review on each
+# transformers upgrade.  This test makes the expected set explicit so that any
+# unintentional change to the constant is caught immediately.
+# ---------------------------------------------------------------------------
+
+_EXPECTED_INTERNAL_VARS = {
+    # Named parameters wired by apply_chat_template / render_jinja_template
+    "messages",
+    "tools",
+    "add_generation_prompt",
+    # Jinja environment globals from _compile_jinja_template
+    "raise_exception",
+    "strftime_now",
+}
+
+
+def test_hf_internal_template_vars_contents() -> None:
+    """_HF_INTERNAL_TEMPLATE_VARS must contain exactly the expected set.
+
+    This test is intentionally strict: it catches both missing entries (a new HF
+    internal variable not yet excluded) and accidental additions (a variable
+    incorrectly labelled as HF-internal that users might legitimately pass).
+    If transformers changes what it injects, update _HF_INTERNAL_TEMPLATE_VARS
+    AND update _EXPECTED_INTERNAL_VARS here to match.
+    """
+    assert _HF_INTERNAL_TEMPLATE_VARS == _EXPECTED_INTERNAL_VARS
+
+
+# ---------------------------------------------------------------------------
+# _chat_template_allowlist — verify the Jinja AST parsing logic
 # ---------------------------------------------------------------------------
 
 
-def test_filter_generate_only_removes_temperature(backend: LocalHFBackend) -> None:
-    opts = {ModelOption.TEMPERATURE: 0.7, "think": True}
-    result = backend._filter_generate_only_options(opts)
-    assert ModelOption.TEMPERATURE not in result
-    assert "think" in result
+def test_allowlist_includes_template_variables() -> None:
+    """Variables declared in the template appear in the allowlist."""
+    template = "{% for m in messages %}{{ m.role }}: {{ think }}{% endfor %}"
+    b = _make_backend(template)
+    assert "think" in b._chat_template_allowlist
 
 
-def test_filter_generate_only_removes_max_new_tokens(backend: LocalHFBackend) -> None:
-    opts = {ModelOption.MAX_NEW_TOKENS: 256, "guardian_config": {"foo": "bar"}}
-    result = backend._filter_generate_only_options(opts)
-    assert ModelOption.MAX_NEW_TOKENS not in result
-    assert "guardian_config" in result
+def test_allowlist_excludes_hf_internal_vars() -> None:
+    """HF-internal variables are excluded even when the template references them."""
+    # A template that uses every internal variable
+    template = (
+        "{% if raise_exception %}{{ messages }}{% endif %}"
+        "{{ strftime_now('%Y') }}{{ tools }}{{ add_generation_prompt }}"
+    )
+    b = _make_backend(template)
+    for var in _HF_INTERNAL_TEMPLATE_VARS:
+        assert var not in b._chat_template_allowlist, (
+            f"HF-internal var '{var}' leaked into allowlist"
+        )
 
 
-def test_filter_generate_only_removes_do_sample(backend: LocalHFBackend) -> None:
-    opts = {"do_sample": True, "add_generation_prompt": True}
-    result = backend._filter_generate_only_options(opts)
-    assert "do_sample" not in result
-    assert "add_generation_prompt" in result
+def test_allowlist_excludes_generate_only_options() -> None:
+    """Generate-only option names are not in the allowlist of a typical chat template.
+
+    Real HF templates do not reference GenerationConfig parameter names as Jinja
+    variables.  This test uses a realistic (but minimal) template to confirm that
+    common generation options are absent from the computed allowlist.
+    """
+    template = (
+        "{% for message in messages %}"
+        "{{ message.role }}: {{ message.content }}"
+        "{% endfor %}"
+        "{% if think %}Think step by step.{% endif %}"
+    )
+    b = _make_backend(template)
+    generate_only_examples = [
+        "temperature",
+        "max_new_tokens",
+        "do_sample",
+        "top_k",
+        "top_p",
+        "num_beams",
+    ]
+    for key in generate_only_examples:
+        assert key not in b._chat_template_allowlist, (
+            f"generate-only key '{key}' unexpectedly in allowlist"
+        )
 
 
-def test_filter_generate_only_removes_all_three(backend: LocalHFBackend) -> None:
-    opts = {
-        ModelOption.TEMPERATURE: 0.9,
-        ModelOption.MAX_NEW_TOKENS: 128,
-        "do_sample": True,
-        "think": True,
-        "guardian_config": {"key": "val"},
-    }
-    result = backend._filter_generate_only_options(opts)
-    assert ModelOption.TEMPERATURE not in result
-    assert ModelOption.MAX_NEW_TOKENS not in result
-    assert "do_sample" not in result
-    # Template-only keys must survive
+def test_allowlist_empty_for_missing_chat_template() -> None:
+    """No crash and empty allowlist when the tokenizer has no chat_template."""
+    b = _make_backend(None)  # type: ignore[arg-type]
+    assert b._chat_template_allowlist == frozenset()
+
+
+def test_allowlist_is_cached() -> None:
+    """_chat_template_allowlist is computed once and reused (cached_property)."""
+    b = _make_backend("{{ think }}")
+    first = b._chat_template_allowlist
+    second = b._chat_template_allowlist
+    assert first is second
+
+
+# ---------------------------------------------------------------------------
+# _filter_for_chat_template — end-to-end: sentinel renaming + allowlist filter
+# ---------------------------------------------------------------------------
+
+
+def test_filter_for_chat_template_passes_template_vars() -> None:
+    """Variables the template references survive the filter."""
+    template = "{{ think }}{{ guardian_config }}"
+    b = _make_backend(template)
+    result = b._filter_for_chat_template(
+        {"think": True, "guardian_config": {"key": "val"}}
+    )
     assert result["think"] is True
     assert result["guardian_config"] == {"key": "val"}
 
 
-def test_filter_generate_only_empty_input(backend: LocalHFBackend) -> None:
-    assert backend._filter_generate_only_options({}) == {}
+def test_filter_for_chat_template_drops_generate_only() -> None:
+    """Generate-only options not referenced by the template are filtered out."""
+    template = "{% for m in messages %}{{ m.content }}{% endfor %}{{ think }}"
+    b = _make_backend(template)
+    result = b._filter_for_chat_template(
+        {
+            ModelOption.TEMPERATURE: 0.8,
+            ModelOption.MAX_NEW_TOKENS: 200,
+            "do_sample": True,
+            "top_k": 50,
+            "num_beams": 4,
+            "think": True,
+        }
+    )
+    # Template only uses 'think' (messages is HF-internal, excluded from allowlist)
+    assert result == {"think": True}
 
 
-def test_filter_generate_only_passthrough_keys_preserved(
-    backend: LocalHFBackend,
-) -> None:
-    opts = {"some_custom_template_var": 42, "documents": [{"text": "hi"}]}
-    result = backend._filter_generate_only_options(opts)
-    assert result == opts
+def test_filter_for_chat_template_renames_sentinel() -> None:
+    """Mellea sentinels are renamed before the allowlist check.
+
+    If a (hypothetical) template used 'max_new_tokens' as a Jinja variable,
+    _filter_for_chat_template would rename the sentinel and then keep the key.
+    """
+    template = "{{ max_new_tokens }}"  # unusual but valid for testing rename path
+    b = _make_backend(template)
+    result = b._filter_for_chat_template({ModelOption.MAX_NEW_TOKENS: 256})
+    assert result == {"max_new_tokens": 256}
+
+
+def test_filter_for_chat_template_empty_input() -> None:
+    """Empty model_options produces an empty dict."""
+    b = _make_backend("{{ think }}")
+    assert b._filter_for_chat_template({}) == {}
+
+
+def test_filter_for_chat_template_unknown_key_dropped() -> None:
+    """A key that is not in the template is silently dropped."""
+    template = "{{ think }}"
+    b = _make_backend(template)
+    result = b._filter_for_chat_template({"think": True, "not_in_template": 99})
+    assert result == {"think": True}
+    assert "not_in_template" not in result
 
 
 # ---------------------------------------------------------------------------
-# _filter_chat_template_only_options (existing method — regression guard)
+# _filter_chat_template_only_options (pre-existing method — regression guard)
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def plain_backend() -> LocalHFBackend:
+    """Backend fixture without a tokenizer — sufficient for the pre-existing filter."""
+    b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
+    b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+    return b
 
 
 def test_filter_chat_template_only_removes_guardian_config(
-    backend: LocalHFBackend,
+    plain_backend: LocalHFBackend,
 ) -> None:
     opts = {"guardian_config": {"foo": "bar"}, ModelOption.TEMPERATURE: 0.5}
-    result = backend._filter_chat_template_only_options(opts)
+    result = plain_backend._filter_chat_template_only_options(opts)
     assert "guardian_config" not in result
     assert ModelOption.TEMPERATURE in result
 
 
-def test_filter_chat_template_only_removes_think(backend: LocalHFBackend) -> None:
+def test_filter_chat_template_only_removes_think(plain_backend: LocalHFBackend) -> None:
     opts = {"think": True, "max_new_tokens": 64}
-    result = backend._filter_chat_template_only_options(opts)
+    result = plain_backend._filter_chat_template_only_options(opts)
     assert "think" not in result
     assert "max_new_tokens" in result
 
 
 def test_filter_chat_template_only_removes_add_generation_prompt(
-    backend: LocalHFBackend,
+    plain_backend: LocalHFBackend,
 ) -> None:
     opts = {"add_generation_prompt": True, "temperature": 1.0}
-    result = backend._filter_chat_template_only_options(opts)
+    result = plain_backend._filter_chat_template_only_options(opts)
     assert "add_generation_prompt" not in result
     assert "temperature" in result
 
 
-def test_filter_chat_template_only_removes_documents(backend: LocalHFBackend) -> None:
+def test_filter_chat_template_only_removes_documents(
+    plain_backend: LocalHFBackend,
+) -> None:
     opts = {"documents": [{"text": "hello"}], "do_sample": False}
-    result = backend._filter_chat_template_only_options(opts)
+    result = plain_backend._filter_chat_template_only_options(opts)
     assert "documents" not in result
     assert "do_sample" in result
-
-
-# ---------------------------------------------------------------------------
-# Integration: filter_generate_only → _make_backend_specific_and_remove
-# Mirrors the exact chain used at both apply_chat_template call sites.
-# ---------------------------------------------------------------------------
-
-
-def test_apply_chat_template_kwargs_exclude_generate_only(
-    backend: LocalHFBackend,
-) -> None:
-    """Full chain: after filtering and renaming, no generate-only key reaches apply_chat_template."""
-    model_options = {
-        ModelOption.TEMPERATURE: 0.8,
-        ModelOption.MAX_NEW_TOKENS: 200,
-        "do_sample": True,
-        "think": True,
-        "guardian_config": {"harm_categories": []},
-        "add_generation_prompt": True,
-    }
-
-    kwargs = backend._make_backend_specific_and_remove(
-        backend._filter_generate_only_options(model_options)
-    )
-
-    # Generate-only options must not appear
-    assert "temperature" not in kwargs, (
-        "temperature leaked into apply_chat_template kwargs"
-    )
-    assert "max_new_tokens" not in kwargs, (
-        "max_new_tokens leaked into apply_chat_template kwargs"
-    )
-    assert "do_sample" not in kwargs, "do_sample leaked into apply_chat_template kwargs"
-
-    # Template-only options must still be present
-    assert kwargs.get("think") is True
-    assert kwargs.get("guardian_config") == {"harm_categories": []}
-    assert kwargs.get("add_generation_prompt") is True
-
-
-def test_generate_kwargs_exclude_chat_template_only(backend: LocalHFBackend) -> None:
-    """Inverse chain: after filtering template-only keys, none reach generate()."""
-    model_options = {
-        ModelOption.TEMPERATURE: 0.8,
-        ModelOption.MAX_NEW_TOKENS: 200,
-        "do_sample": True,
-        "think": True,
-        "guardian_config": {"harm_categories": []},
-        "add_generation_prompt": True,
-    }
-
-    generate_options = backend._filter_chat_template_only_options(model_options)
-    kwargs = backend._make_backend_specific_and_remove(generate_options)
-
-    # Template-only options must not appear
-    assert "think" not in kwargs
-    assert "guardian_config" not in kwargs
-    assert "add_generation_prompt" not in kwargs
-
-    # Generate-only options must still be present
-    assert kwargs.get("temperature") == 0.8
-    assert kwargs.get("max_new_tokens") == 200
-    assert kwargs.get("do_sample") is True
-
-
-# ---------------------------------------------------------------------------
-# Expanded denylist — sampling, length, and token-ID keys
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "key,value",
-    [
-        ("top_k", 50),
-        ("top_p", 0.9),
-        ("typical_p", 0.95),
-        ("repetition_penalty", 1.2),
-        ("no_repeat_ngram_size", 3),
-        ("length_penalty", 1.0),
-        ("num_beams", 4),
-        ("num_beam_groups", 2),
-        ("diversity_penalty", 0.5),
-        ("penalty_alpha", 0.6),
-        ("early_stopping", True),
-        ("min_new_tokens", 10),
-        ("num_return_sequences", 3),
-        ("pad_token_id", 0),
-        ("bos_token_id", 1),
-        ("eos_token_id", 2),
-        ("forced_bos_token_id", 1),
-        ("forced_eos_token_id", 2),
-    ],
-)
-def test_filter_generate_only_removes_expanded_keys(
-    backend: LocalHFBackend, key: str, value: object
-) -> None:
-    """Every key in the extended denylist is stripped from apply_chat_template kwargs."""
-    opts = {key: value, "think": True}
-    result = backend._filter_generate_only_options(opts)
-    assert key not in result
-    assert result["think"] is True
-
-
-def test_filter_generate_only_leaves_template_keys_intact(
-    backend: LocalHFBackend,
-) -> None:
-    """Template-specific keys survive when mixed with every expanded denylist key."""
-    template_keys = {
-        "think": True,
-        "guardian_config": {"harm_categories": []},
-        "add_generation_prompt": True,
-        "documents": [{"text": "hello"}],
-    }
-    generate_keys = {
-        "top_k": 40,
-        "top_p": 0.95,
-        "num_beams": 2,
-        "repetition_penalty": 1.1,
-        "min_new_tokens": 5,
-        "pad_token_id": 0,
-    }
-    result = backend._filter_generate_only_options({**template_keys, **generate_keys})
-    for key in generate_keys:
-        assert key not in result
-    for key, val in template_keys.items():
-        assert result[key] == val
 
 
 if __name__ == "__main__":
