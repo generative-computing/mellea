@@ -20,7 +20,7 @@ from mellea.backends import ModelOption
 from mellea.backends.huggingface import _HF_INTERNAL_TEMPLATE_VARS, LocalHFBackend
 
 
-def _make_backend(template: str) -> LocalHFBackend:
+def _make_backend(template: object) -> LocalHFBackend:
     """Return a LocalHFBackend with __init__ bypassed, wired with a known template.
 
     Only the attributes accessed by _chat_template_allowlist, _filter_for_chat_template,
@@ -122,7 +122,7 @@ def test_allowlist_excludes_generate_only_options() -> None:
 
 def test_allowlist_empty_for_missing_chat_template() -> None:
     """No crash and empty allowlist when the tokenizer has no chat_template."""
-    b = _make_backend(None)  # type: ignore[arg-type]
+    b = _make_backend(None)
     assert b._chat_template_allowlist == frozenset()
 
 
@@ -132,6 +132,55 @@ def test_allowlist_is_cached() -> None:
     first = b._chat_template_allowlist
     second = b._chat_template_allowlist
     assert first is second
+
+
+def test_allowlist_non_string_template_returns_empty() -> None:
+    """Non-string chat_template (e.g. list of alternates) returns empty frozenset.
+
+    Some tokenizers store chat_template as a list-of-dicts (multiple named templates).
+    apply_chat_template handles that format internally; we must not crash trying to
+    parse it as a Jinja string.
+    """
+    b = _make_backend([{"name": "default", "template": "{{ think }}"}])
+    assert b._chat_template_allowlist == frozenset()
+
+
+def test_allowlist_graceful_on_generation_tag() -> None:
+    """Templates using {% generation %} / {% endgeneration %} return empty frozenset.
+
+    The {% generation %} tag comes from transformers' AssistantTracker extension and
+    is not registered in a plain jinja2.Environment. Parsing must not raise; instead
+    _chat_template_allowlist returns frozenset() so _filter_for_chat_template forwards
+    nothing (safe default) rather than crashing during inference.
+
+    Used by DeepSeek-R1, Qwen3, and other models as of transformers ≥ 4.47.
+    """
+    template = (
+        "{% for message in messages %}"
+        "{% generation %}{{ message.content }}{% endgeneration %}"
+        "{% endfor %}"
+        "{{ think }}"
+    )
+    b = _make_backend(template)
+    assert b._chat_template_allowlist == frozenset()
+
+
+def test_allowlist_break_continue_tags_parsed_correctly() -> None:
+    """Templates using {% break %} / {% continue %} are parsed without error.
+
+    jinja2.ext.loopcontrols must be registered so that {% break %} inside a for
+    loop does not raise TemplateSyntaxError. Variables outside the loop body must
+    still appear in the allowlist.
+    """
+    template = (
+        "{% for message in messages %}"
+        "{% if message.role == 'system' %}{% break %}{% endif %}"
+        "{{ message.content }}"
+        "{% endfor %}"
+        "{% if think %}Think step by step.{% endif %}"
+    )
+    b = _make_backend(template)
+    assert "think" in b._chat_template_allowlist
 
 
 # ---------------------------------------------------------------------------

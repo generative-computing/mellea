@@ -14,6 +14,9 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
+import jinja2
+import jinja2.meta
+
 try:
     import llguidance
     import llguidance.hf
@@ -773,6 +776,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # 3. apply the chat template WITHOUT tokenization.
         # Doing this without tokenization and then gluing together the tokens is necessary because
         # things that KV cache together must tokenize together.
+        # Note: add_generation_prompt is in _HF_INTERNAL_TEMPLATE_VARS, so any
+        # user-supplied value is intentionally dropped by _filter_for_chat_template.
+        # The KV-cache path formats context (not a generation turn), so
+        # add_generation_prompt=False (the HF default) is correct here.
         input_text = self._tokenizer.apply_chat_template(  # type: ignore
             ctx_as_conversation,
             tools=convert_tools_to_json(tools),  # type: ignore
@@ -1629,14 +1636,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             minus HF-provided variables. Empty if the tokenizer has no ``chat_template``
             (``apply_chat_template`` would raise before kwargs matter in that case).
         """
-        import jinja2.meta
-
         template_str = getattr(self._tokenizer, "chat_template", None)
-        if not template_str:
+        if not isinstance(template_str, str) or not template_str:
+            # Non-string (None, list of alternates, dict) or empty — cannot parse.
+            # apply_chat_template handles those formats internally.
             return frozenset()
-
-        env = jinja2.Environment()
-        ast = env.parse(template_str)
+        # loopcontrols enables {% break %} / {% continue %} used in some HF templates.
+        env = jinja2.Environment(extensions=["jinja2.ext.loopcontrols"])
+        try:
+            ast = env.parse(template_str)
+        except jinja2.TemplateSyntaxError:
+            # Templates using unsupported extensions (e.g. {% generation %} from
+            # transformers' AssistantTracker) cannot be parsed with a plain Jinja2
+            # environment. Fall back to forwarding nothing rather than crashing.
+            return frozenset()
         all_vars = jinja2.meta.find_undeclared_variables(ast)
         return frozenset(all_vars - _HF_INTERNAL_TEMPLATE_VARS)
 
