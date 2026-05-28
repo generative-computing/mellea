@@ -435,11 +435,14 @@ class LiteLLMBackend(FormatterBackend):
 
             message = choice.message
 
-            # Sometimes a message doesn't actually have this field.
-            if hasattr(message, "reasoning_content"):
-                thinking_chunk = message.reasoning_content
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            # vLLM exposes the reasoning trace under "reasoning" (not "reasoning_content").
+            # Some OpenAI-compatible servers (e.g. vLLM, SGLang) use this key; older LiteLLM
+            # versions do not remap it. Use is-None guard so an empty-string chunk isn't lost.
+            thinking_chunk = message.get("reasoning_content")
+            if thinking_chunk is None:
+                thinking_chunk = message.get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
@@ -453,11 +456,12 @@ class LiteLLMBackend(FormatterBackend):
         elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
             message_delta = chunk.choices[0].delta
 
-            # Sometimes a delta doesn't actually have this field.
-            if hasattr(message_delta, "reasoning_content"):
-                thinking_chunk = message_delta.reasoning_content
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            # Same dual-key probe for streaming deltas.
+            thinking_chunk = message_delta.get("reasoning_content")
+            if thinking_chunk is None:
+                thinking_chunk = message_delta.get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:
