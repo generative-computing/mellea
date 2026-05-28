@@ -177,7 +177,8 @@ If the model is not calling tools as expected:
 - Verify `ModelOption.TOOLS` is set in the session's model options.
 - Check the tool's docstring — the model uses it to decide when to call the tool.
   A vague or absent docstring leads to poor tool selection.
-- Use `GuardianCheck(GuardianRisk.FUNCTION_CALL)` to detect function call
+- Use `guardian_check(context, backend, criteria="function_call")` from the
+  [Guardian Intrinsics](../how-to/safety-guardrails) to detect function call
   hallucinations.
 
 ---
@@ -212,24 +213,29 @@ nest_asyncio.apply()
 
 ## Guardian / safety validation
 
-### Guardian model not found
+Guardian Intrinsics (`guardian_check()`, `policy_guardrails()`,
+`factuality_detection()`, `factuality_correction()`) require `LocalHFBackend`
+with an IBM Granite model.
+See [Safety Guardrails](../how-to/safety-guardrails) for full usage.
+
+### `guardian_check()` returns unexpected scores
+
+- Double-check the `criteria` argument — use a key from `CRITERIA_BANK` (e.g.
+  `"harm"`, `"groundedness"`) or a free-text criteria string.
+- For groundedness checks, attach source documents via `documents=[Document(...)]`
+  on the `Message("assistant", ...)` in the evaluation context — not as a separate
+  user message.
+- Scores below `0.5` are safe; at or above `0.5` indicates risk detected.
+
+### Deprecated `GuardianCheck` warnings
 
 ```text
-Error: model "granite-guardian-3.2-5b:latest" not found
+DeprecationWarning: GuardianCheck is deprecated as of version 0.4.
+Use the Guardian Intrinsics instead
 ```
 
-Pull a Granite Guardian model:
-
-```bash
-ollama pull granite-guardian-3.2-5b
-```
-
-### Guardian returns unexpected results
-
-- Enable `thinking=True` for more accurate results on ambiguous inputs.
-- Verify you are passing the correct `backend_type` (`"ollama"` or `"huggingface"`).
-- For groundedness checks, ensure `context_text` is the reference document the
-  response should be grounded in.
+Replace `GuardianCheck` / `GuardianRisk` imports with the Guardian Intrinsics API.
+See [Safety Guardrails](../how-to/safety-guardrails) for migration guidance.
 
 ---
 
@@ -245,4 +251,4 @@ ollama pull granite-guardian-3.2-5b
 **See also:**
 [Quick Start](../getting-started/quickstart) |
 [Inference-Time Scaling](../advanced/inference-time-scaling) |
-[Security and Taint Tracking](../advanced/security-and-taint-tracking)
+[Safety Guardrails](../how-to/safety-guardrails)
