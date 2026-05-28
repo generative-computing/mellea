@@ -74,7 +74,11 @@ class PythonSyntaxValid(Requirement):
             )
 
         code = extraction_result.reason
-        assert code is not None
+        if code is None:
+            return ValidationResult(
+                result=False,
+                reason="Code extraction returned None; this should not happen.",
+            )
 
         try:
             ast.parse(code)
@@ -110,9 +114,12 @@ class OutputSizeLimit(Requirement):
 
         Raises:
             ValueError: If limit_chars is not positive.
+            ValueError: If timeout is not positive.
         """
         if limit_chars <= 0:
             raise ValueError(f"limit_chars must be positive, got {limit_chars}")
+        if timeout <= 0:
+            raise ValueError(f"timeout must be positive, got {timeout}")
 
         self.limit_chars = limit_chars
         self.timeout = timeout
@@ -141,7 +148,11 @@ class OutputSizeLimit(Requirement):
             )
 
         code = extraction_result.reason
-        assert code is not None
+        if code is None:
+            return ValidationResult(
+                result=False,
+                reason="Code extraction returned None; this should not happen.",
+            )
 
         try:
             environment: ExecutionEnvironment
@@ -172,6 +183,7 @@ class OutputSizeLimit(Requirement):
                     reason=f"Output size ({output_size} chars) exceeds limit ({self.limit_chars}).",
                 )
         except Exception as e:
+            logger.exception("Unexpected error during output size validation")
             return ValidationResult(
                 result=False, reason=f"Error checking output size: {e!s}"
             )
@@ -220,7 +232,11 @@ class ImportRestrictions(Requirement):
             )
 
         code = extraction_result.reason
-        assert code is not None
+        if code is None:
+            return ValidationResult(
+                result=False,
+                reason="Code extraction returned None; this should not happen.",
+            )
 
         if self.allowed_imports is None:
             return ValidationResult(

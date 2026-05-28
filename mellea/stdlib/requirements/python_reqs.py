@@ -126,7 +126,11 @@ def _python_executes_without_error(
         )
 
     code = extraction_result.reason
-    assert code is not None
+    if code is None:
+        return ValidationResult(
+            result=False,
+            reason="Code extraction returned None; this should not happen.",
+        )
 
     result = environment.execute(code)
     return ValidationResult(

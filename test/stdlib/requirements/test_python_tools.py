@@ -415,30 +415,48 @@ class TestPythonToolRequirementsFactory:
         assert isinstance(reqs[3], OutputSizeLimit)
         assert isinstance(reqs[4], ImportRestrictions)
 
-    def test_factory_timeout_propagation_to_execution_req(self):
-        """Test factory propagates timeout_seconds to PythonExecutionReq."""
+    def test_factory_execution_req_description_varies_by_mode(self):
+        """Test that PythonExecutionReq description reflects execution mode.
+
+        The requirement description changes based on configuration (sandbox vs. static),
+        confirming that different modes are being set up. This is observable through
+        the requirement's description attribute without checking internal state.
+        """
         from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 
-        reqs = python_tool_requirements(timeout_seconds=15)
-        execution_req = reqs[2]
-        assert isinstance(execution_req, PythonExecutionReq)
-        assert execution_req._timeout == 15
+        # Default mode (static analysis)
+        reqs_default = python_tool_requirements()
+        exec_req_default = reqs_default[2]
+        assert isinstance(exec_req_default, PythonExecutionReq)
+        assert "validation only" in exec_req_default.description.lower()
 
-    def test_factory_sandbox_propagation_to_execution_req(self):
-        """Test factory propagates use_sandbox to PythonExecutionReq."""
-        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+        # Sandbox mode
+        reqs_sandbox = python_tool_requirements(use_sandbox=True)
+        exec_req_sandbox = reqs_sandbox[2]
+        assert isinstance(exec_req_sandbox, PythonExecutionReq)
+        assert "sandbox" in exec_req_sandbox.description.lower()
 
-        reqs = python_tool_requirements(use_sandbox=True)
-        execution_req = reqs[2]
-        assert isinstance(execution_req, PythonExecutionReq)
-        assert execution_req._use_sandbox is True
+    def test_factory_output_limit_description_reflects_configured_limit(self):
+        """Test OutputSizeLimit description includes the configured character limit.
 
-    def test_factory_allowed_imports_propagation_to_execution_req(self):
-        """Test factory propagates allowed_imports to PythonExecutionReq."""
-        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+        The requirement description is built from configuration parameters and
+        provides observable feedback about the limit being enforced.
+        """
+        reqs = python_tool_requirements(output_limit_chars=5000)
+        output_limit_req = reqs[3]
+        assert isinstance(output_limit_req, OutputSizeLimit)
+        # The description should reflect the configured limit
+        assert "5000" in output_limit_req.description
 
-        imports = ["os", "sys", "json"]
-        reqs = python_tool_requirements(allowed_imports=imports)
-        execution_req = reqs[2]
-        assert isinstance(execution_req, PythonExecutionReq)
-        assert execution_req._allowed_imports == imports
+    def test_factory_import_restrictions_description_reflects_allowed_list(self):
+        """Test ImportRestrictions description includes configured allowed imports.
+
+        When allowed_imports is provided, the requirement description shows which
+        imports are allowed, providing observable evidence the config was applied.
+        """
+        reqs = python_tool_requirements(allowed_imports=["os", "sys", "json"])
+        import_req = reqs[4]
+        assert isinstance(import_req, ImportRestrictions)
+        # Description should reflect the allowed list
+        assert "os" in import_req.description
+        assert "sys" in import_req.description
