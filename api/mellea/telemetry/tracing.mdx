@@ -1,0 +1,230 @@
+---
+title: "mellea.telemetry.tracing"
+sidebarTitle: "mellea.telemetry.tracing"
+description: "OpenTelemetry tracing instrumentation for Mellea."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+OpenTelemetry tracing instrumentation for Mellea.
+
+
+
+
+
+This module provides two independent trace scopes:
+1. Application Trace (mellea.application) - User-facing operations
+2. Backend Trace (mellea.backend) - LLM backend interactions
+
+Follows OpenTelemetry Gen-AI semantic conventions:
+https://opentelemetry.io/docs/specs/semconv/gen-ai/
+
+Configuration via environment variables:
+- MELLEA_TRACE_APPLICATION: Enable/disable application tracing (default: false)
+- MELLEA_TRACE_BACKEND: Enable/disable backend tracing (default: false)
+- MELLEA_TRACE_CONTENT: Capture prompt/response content in spans (default: false).
+  Content may include PII — enable only in controlled environments.
+  Also recognised: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT (OTel standard).
+- OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for trace export
+- OTEL_SERVICE_NAME: Service name for traces (default: mellea)
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_application_tracing_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L104" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_application_tracing_enabled() -> bool
+```
+
+
+Check if application tracing is enabled.
+
+**Returns:**
+- True if application tracing has been enabled via the
+- `MELLEA_TRACE_APPLICATION` environment variable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_backend_tracing_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L114" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_backend_tracing_enabled() -> bool
+```
+
+
+Check if backend tracing is enabled.
+
+**Returns:**
+- True if backend tracing has been enabled via the
+- `MELLEA_TRACE_BACKEND` environment variable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_content_tracing_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L124" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_content_tracing_enabled() -> bool
+```
+
+
+Check if content capture is enabled.
+
+Content capture records prompt and response text on spans and may contain PII.
+Enable only in controlled environments.
+
+**Returns:**
+- True if enabled via `MELLEA_TRACE_CONTENT` or
+- `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_span_event` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L137" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_span_event(span: Any, name: str, attributes: dict[str, Any] | None = None) -> None
+```
+
+
+Add a named event to a span if the span is not None.
+
+**Args:**
+- `span`: The span object (may be None if tracing is disabled).
+- `name`: Event name.
+- `attributes`: Optional event attributes.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `trace_application` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L152" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+trace_application(name: str, **attributes: Any) -> Generator[Any, None, None]
+```
+
+
+Create an application trace span if application tracing is enabled.
+
+**Args:**
+- `name`: Name of the span.
+- `**attributes`: Additional attributes to add to the span.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `trace_backend` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L173" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+trace_backend(name: str, **attributes: Any) -> Generator[Any, None, None]
+```
+
+
+Create a backend trace span if backend tracing is enabled.
+
+Follows Gen-AI semantic conventions for LLM operations.
+
+**Args:**
+- `name`: Name of the span.
+- `**attributes`: Additional attributes to add to the span.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_backend_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L198" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+start_backend_span(name: str, **attributes: Any) -> Any
+```
+
+
+Start a backend trace span without auto-closing (for async operations).
+
+Use this when you need to manually control span lifecycle, such as for
+async operations where the span should remain open until post-processing.
+
+**Args:**
+- `name`: Name of the span
+- `**attributes`: Additional attributes to add to the span
+
+**Returns:**
+- The span object if tracing is enabled, otherwise None
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `end_backend_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L223" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+end_backend_span(span: Any) -> None
+```
+
+
+End a backend trace span.
+
+**Args:**
+- `span`: The span object to end
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `set_span_attribute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L259" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+set_span_attribute(span: Any, key: str, value: Any) -> None
+```
+
+
+Set an attribute on a span if the span is not None.
+
+**Args:**
+- `span`: The span object (may be None if tracing is disabled)
+- `key`: Attribute key
+- `value`: Attribute value
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `set_span_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L271" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+set_span_error(span: Any, exception: Exception) -> None
+```
+
+
+Record an exception on a span if the span is not None.
+
+**Args:**
+- `span`: The span object (may be None if tracing is disabled)
+- `exception`: The exception to record
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `set_span_status_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0.dev0/mellea/telemetry/tracing.py#L283" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+set_span_status_error(span: Any, description: str) -> None
+```
+
+
+Mark a span as ERROR without recording a phantom exception event.
+
+Use this for validation failures and other non-exception error conditions
+where the span should be marked failed but no exception was actually raised.
+Calling `set_span_error` in these cases would create a misleading recorded
+exception event in OTEL traces.
+
+**Args:**
+- `span`: The span object (may be None if tracing is disabled)
+- `description`: Human-readable reason for the failure.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
