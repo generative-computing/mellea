@@ -568,6 +568,31 @@ async def test_error_during_generate_with_lock(backend) -> None:
     await req_mot.avalue()
 
 
+@pytest.mark.qualitative
+def test_generate_only_options_do_not_break_generation(session) -> None:
+    """Non-regression: generation still works when temperature, max_new_tokens, and
+    do_sample are passed as model_options alongside a chat call.
+
+    Note: this test verifies that the overall generate pipeline is not broken by the
+    filter change, not that the filter itself is exercised end-to-end (the Granite chat
+    template silently ignores unknown kwargs, so a missing filter would still produce
+    the correct answer). Filter correctness is covered by the unit tests in
+    test_huggingface_filter_options.py.
+    """
+    output = session.chat(
+        "What is 1+1?",
+        model_options={
+            ModelOption.TEMPERATURE: 0.0,
+            ModelOption.MAX_NEW_TOKENS: 64,
+            "do_sample": False,
+        },
+    )
+    assert output is not None
+    assert "2" in output.content, (
+        f"Expected response containing '2' but got: {output.content!r}"
+    )
+
+
 def test_assert_correct_adapters() -> None:
     model = Mock()
 
