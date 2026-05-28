@@ -627,6 +627,10 @@
     {
       "source": "/guide/m-decompose",
       "destination": "/how-to/m-decompose"
+    },
+    {
+      "source": "/advanced/security-and-taint-tracking",
+      "destination": "/how-to/safety-guardrails"
     }
   ]
 }

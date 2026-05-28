@@ -60,8 +60,8 @@ model card. Pass the key name as the `criteria` argument:
 | Key | What it detects |
 | --- | --------------- |
 | `"harm"` | Universally harmful content |
-| `"jailbreak"` | Deliberate evasion of AI safeguards |
 | `"social_bias"` | Systemic prejudice against groups |
+| `"jailbreak"` | Deliberate evasion of AI safeguards |
 | `"profanity"` | Offensive or crude language |
 | `"unethical_behavior"` | Fraud, exploitation, or abuse of power |
 | `"violence"` | Content promoting physical harm |

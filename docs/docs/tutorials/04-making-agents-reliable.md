@@ -400,6 +400,10 @@ threshold. The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 `"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
 
+> **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
+> there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
+> criteria string instead — see [Custom criteria](../how-to/safety-guardrails#custom-criteria) in the Guardian how-to guide.
+
 ---
 
 ## Step 5: Running multiple Guardian checks with a shared backend
@@ -476,6 +480,10 @@ for criterion in criteria:
 The available criteria are: `"harm"`, `"jailbreak"`, `"social_bias"`,
 `"profanity"`, `"violence"`, `"unethical_behavior"`, `"groundedness"`,
 `"answer_relevance"`, `"context_relevance"`, and `"function_call"`.
+
+> **Note:** If you were using `GuardianRisk.SEXUAL_CONTENT` from the old API,
+> there is no direct equivalent key in `CRITERIA_BANK`. Use a custom free-text
+> criteria string instead — see [Custom criteria](../how-to/safety-guardrails#custom-criteria) in the Guardian how-to guide.
 
 ---
 

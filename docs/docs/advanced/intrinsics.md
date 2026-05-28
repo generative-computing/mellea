@@ -85,7 +85,8 @@ from mellea.stdlib.components import Document
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+# NOTE: no context_relevance adapter for Granite 4.1 — use granite-4.0-micro
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 context = ChatContext()
 question = "Who is the CEO of Microsoft?"
 document = Document(
