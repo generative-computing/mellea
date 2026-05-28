@@ -5,32 +5,31 @@ LoRA and aLoRA adapters that implement said intrinsics.
 """
 
 import enum
-import re
 
 import pydantic
-
-_REVISION_HEX_RE = re.compile(r"[0-9a-f]{40}")
 
 
 def validate_revision(revision: str) -> str:
     """Validate a HuggingFace revision value.
 
+    Accepts any non-empty string. HuggingFace's ``revision`` parameter takes a
+    branch name, tag, or commit SHA; this validator mirrors that contract.
+    Catalogue entries pin to commit SHAs by convention; that is enforced by
+    review and (optionally) build-time drift checks rather than by this
+    validator.
+
     Args:
-        revision (str): Either a 40-character lowercase hex commit SHA or the
-            literal string ``"main"``.
+        revision (str): Any non-empty string accepted by HuggingFace as a
+            revision (branch name, tag, or commit SHA).
 
     Returns:
         str: The validated revision unchanged.
 
     Raises:
-        ValueError: If ``revision`` is not a 40-char hex SHA or ``"main"``.
+        ValueError: If ``revision`` is empty.
     """
-    if revision == "main":
-        return revision
-    if not _REVISION_HEX_RE.fullmatch(revision):
-        raise ValueError(
-            f"revision must be a 40-char lowercase hex SHA or 'main'; got {revision!r}"
-        )
+    if not revision:
+        raise ValueError("revision must be a non-empty string")
     return revision
 
 
@@ -57,8 +56,9 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
             ``None`` if the same as ``name``.
         repo_id (str): HuggingFace repository where adapters for the intrinsic
             are located.
-        revision (str): HuggingFace commit SHA (40 lowercase hex chars) pinned
-            at catalogue-write time, or ``"main"`` to track the latest commit.
+        revision (str): HuggingFace revision — branch name, tag, or commit SHA.
+            Catalogue entries pin to commit SHAs by convention so loads are
+            reproducible; the validator itself only requires a non-empty string.
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this intrinsic; defaults to
             ``(AdapterType.LORA, AdapterType.ALORA)``.
@@ -75,7 +75,8 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         "intrinsic are located."
     )
     revision: str = pydantic.Field(
-        description="HuggingFace commit SHA (40 lowercase hex chars) or 'main'."
+        description="HuggingFace revision (branch name, tag, or commit SHA). "
+        "Catalogue entries pin to commit SHAs by convention."
     )
     adapter_types: tuple[AdapterType, ...] = pydantic.Field(
         default=(AdapterType.LORA, AdapterType.ALORA),
@@ -107,7 +108,7 @@ _INTRINSICS_CATALOG_ENTRIES = [
         name="context-attribution", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
     ),
     IntriniscsCatalogEntry(
-        name="requirement_check", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
+        name="requirement-check", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
     ),
     IntriniscsCatalogEntry(
         name="uncertainty", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA

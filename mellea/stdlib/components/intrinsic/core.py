@@ -46,7 +46,7 @@ def requirement_check(
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
     """
     result_json = call_intrinsic(
-        "requirement_check", context, backend, kwargs={"requirement": requirement}
+        "requirement-check", context, backend, kwargs={"requirement": requirement}
     )
     return result_json["requirement_check"]["score"]
 

@@ -1,4 +1,4 @@
-"""Tests for IntriniscsCatalogEntry revision field and requirement_check deduplication."""
+"""Tests for IntriniscsCatalogEntry revision field and requirement-check deduplication."""
 
 import pydantic
 import pytest
@@ -11,36 +11,34 @@ from mellea.backends.adapters.catalog import (
 )
 
 _VALID_SHA = "a" * 40
-_SHORT_SHA = "a" * 39
-_LONG_SHA = "a" * 41
-_NONHEX_SHA = "g" * 40
-_UPPER_SHA = "A" * 40
 
 
 def test_catalog_entries_have_revision():
     for name in known_intrinsic_names():
         rev = fetch_intrinsic_metadata(name).revision
-        # Raises ValueError if the entry's revision drifts from the contract.
+        # Raises ValueError if the entry's revision is empty.
         validate_revision(rev)
 
 
-def test_revision_validation_rejects_malformed():
-    for bad in [_SHORT_SHA, _LONG_SHA, _NONHEX_SHA, _UPPER_SHA, "", "HEAD", "latest"]:
-        with pytest.raises(ValueError):
-            validate_revision(bad)
+def test_revision_validation_rejects_empty():
+    with pytest.raises(ValueError):
+        validate_revision("")
 
 
-def test_revision_validation_accepts_valid_sha():
+def test_revision_validation_accepts_sha():
     assert validate_revision(_VALID_SHA) == _VALID_SHA
 
 
-def test_revision_validation_accepts_main_literal():
-    assert validate_revision("main") == "main"
+def test_revision_validation_accepts_branch_and_tag():
+    # HuggingFace's revision parameter takes a branch name, tag, or commit SHA;
+    # the validator mirrors that contract.
+    for rev in ["main", "dev", "v1.0", "release-2026-05"]:
+        assert validate_revision(rev) == rev
 
 
-def test_revision_field_rejects_malformed_via_pydantic():
+def test_revision_field_rejects_empty_via_pydantic():
     with pytest.raises(pydantic.ValidationError):
-        IntriniscsCatalogEntry(name="x", repo_id="org/repo", revision=_SHORT_SHA)
+        IntriniscsCatalogEntry(name="x", repo_id="org/repo", revision="")
 
 
 def test_revision_field_rejects_none_via_pydantic():
@@ -58,14 +56,14 @@ def test_revision_round_trip():
 
 def test_revision_round_trip_via_fetch():
     entry = fetch_intrinsic_metadata("answerability")
-    rev = entry.revision
-    assert rev == "main" or (len(rev) == 40 and rev == rev.lower())
+    assert entry.revision  # non-empty
 
 
 def test_no_duplicate_requirement_check_entry():
     names = known_intrinsic_names()
-    # Only the underscore variant should be present.
-    assert "requirement_check" in names
-    assert "requirement-check" not in names
-    # Exactly one entry with underscore.
-    assert names.count("requirement_check") == 1
+    # Only the hyphen variant should be present — it matches the folder layout
+    # in ibm-granite/granitelib-core-r1.0.
+    assert "requirement-check" in names
+    assert "requirement_check" not in names
+    # Exactly one entry with the hyphen.
+    assert names.count("requirement-check") == 1
