@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/community/building-extensions"
 title: "Building Extensions"
 description: "Create custom components, backends, sampling strategies, and requirements to extend Mellea."
 # diataxis: how-to
@@ -296,7 +295,7 @@ class EchoBackend(Backend):
 ```
 
 The full `Backend` abstract interface is documented in the
-[API reference](/api/mellea/core/backend).
+[API reference](/api).
 
 > **Note:** Production backends handle async streaming, tokenization, and error
 > recovery. Study an existing backend in `mellea/backends/` before implementing

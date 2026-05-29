@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&display=swap');
+
+:root {
+  --ifm-color-primary: #000000;
+  --ifm-color-primary-dark: #1a1a1a;
+  --ifm-color-primary-darker: #2b2b2b;
+  --ifm-color-primary-darkest: #404040;
+  --ifm-color-primary-light: #333333;
+  --ifm-color-primary-lighter: #4d4d4d;
+  --ifm-color-primary-lightest: #666666;
+  --ifm-font-family-base: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --ifm-font-family-monospace: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+  --ifm-code-font-size: 90%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #c5c5c5;
+  --ifm-color-primary-dark: #b0b0b0;
+  --ifm-color-primary-darker: #a0a0a0;
+  --ifm-color-primary-darkest: #888888;
+  --ifm-color-primary-light: #d4d4d4;
+  --ifm-color-primary-lighter: #e0e0e0;
+  --ifm-color-primary-lightest: #f0f0f0;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* Sidebar API badges */
+.menu__link[class*=' api-class']::after {
+  content: 'CLASS';
+  margin-left: 0.4em;
+  font-size: 0.6em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #e8e8e8;
+  color: #444;
+  vertical-align: middle;
+}
+
+[data-theme='dark'] .menu__link[class*=' api-class']::after {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.menu__link[class*=' api-func']::after {
+  content: 'FUNC';
+  margin-left: 0.4em;
+  font-size: 0.6em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #e8e8e8;
+  color: #444;
+  vertical-align: middle;
+}
+
+[data-theme='dark'] .menu__link[class*=' api-func']::after {
+  background: #3a3a3a;
+  color: #ccc;
+}

@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/tutorials/06-streaming-validation"
 title: "Tutorial: Streaming Validation"
 description: "Validate LLM output chunk by chunk as it streams — detect policy violations the moment they appear and cancel generation before invalid content reaches your users."
 # diataxis: tutorial
@@ -21,8 +20,8 @@ By the end you will have covered:
 - Subclassing `ChunkingStrategy` to define a custom split boundary
 - `result.astream()` for consumers that only need the validated chunks
 
-**Prerequisites:** [Tutorial 02](./02-streaming-and-async) (async and streaming),
-[Tutorial 04](./04-making-agents-reliable) (requirements and validation),
+**Prerequisites:** [Tutorial 02](./streaming-and-async) (async and streaming),
+[Tutorial 04](./making-agents-reliable) (requirements and validation),
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -590,7 +589,7 @@ chunker. The built-in chunkers (`WordChunker`, `SentenceChunker`,
 `ParagraphChunker`) are also available as instances if you need to pass one
 explicitly or subclass to override `flush()`.
 
-> **See also:** [`docs/examples/streaming/custom_chunking.py`](../examples/index)
+> **See also:** [`docs/examples/streaming/custom_chunking.py`](/examples)
 > for an annotated version of this pattern with a more detailed `split()`/`flush()`
 > contract walkthrough.
 
@@ -613,4 +612,4 @@ explicitly or subclass to override `flush()`.
 > **See also:**
 > [How-to: Streaming with per-chunk validation](../how-to/use-async-and-streaming#streaming-with-per-chunk-validation) |
 > [Concepts: The Requirements System — Streaming validation](../concepts/requirements-system#streaming-validation) |
-> [Examples: streaming/](../examples/index)
+> [Examples: streaming/](/examples)

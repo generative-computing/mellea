@@ -457,6 +457,14 @@ pyrightconfig.json
 
 # Generated documentation (built by tooling/docs-autogen/)
 docs/docs/api/
+!docs/docs/api/index.md
 docs/docs/api-reference.mdx
 docs/docs/reference/cli.md
 .venv-docs-autogen/
+
+# Docusaurus build artifacts
+docs/node_modules/
+docs/build/
+docs/.docusaurus/
+docs/sidebars.api.generated.ts
+docs/sidebars.api.generated.json

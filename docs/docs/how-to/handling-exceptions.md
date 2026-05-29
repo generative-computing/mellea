@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/handling-exceptions"
 title: "Handling Exceptions and Failures"
 description: "Handle SamplingResult failures, PreconditionException, and parse errors gracefully in Mellea programs."
 # diataxis: how-to

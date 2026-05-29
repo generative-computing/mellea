@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/act-and-aact"
 title: "act() and aact()"
 description: "Work directly with Components using act(), aact(), and the functional API."
 # diataxis: how-to

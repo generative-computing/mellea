@@ -1,11 +1,10 @@
 ---
-canonical: "https://docs.mellea.ai/concepts/mobjects-and-mify"
 title: "MObjects and mify"
 description: "How the @mify decorator turns any Python class into an LLM-queryable object with controlled field and method exposure."
 # diataxis: explanation
 ---
 
-> **Looking to use this in code?** See [Tutorial 05: MIFYing Legacy Code](../tutorials/05-mifying-legacy-code) for a practical walkthrough.
+> **Looking to use this in code?** See [Tutorial 05: MIFYing Legacy Code](../tutorials/mifying-legacy-code) for a practical walkthrough.
 
 Object-oriented programming organizes related data and the methods that operate on it into
 classes. Mellea applies the same principle to LLM interactions: an **MObject** is a Python

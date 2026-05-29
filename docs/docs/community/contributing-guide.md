@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/community/contributing-guide"
 title: "Contributing to Mellea"
 description: "Development setup, coding standards, and PR process for Mellea contributors."
 # diataxis: how-to

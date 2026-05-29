@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/tools-and-agents"
 title: "Tools and Agents"
 description: "Give LLMs access to tools, build ReACT agents, and validate tool call arguments."
 # diataxis: how-to
@@ -317,4 +316,4 @@ for a complete example against the hosted GitHub MCP server.
 
 ---
 
-**See also:** [Tutorial 04: Making Agents Reliable](../tutorials/04-making-agents-reliable) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
+**See also:** [Tutorial 04: Making Agents Reliable](../tutorials/making-agents-reliable) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
