@@ -397,6 +397,10 @@ as it can corrupt state.
 
 ### Quick Reference
 
+See the [Test Strategy](docs/docs/community/testing-strategy.md)
+page for classification rules, authoring guide, CI tier map, coverage, and the
+full local workflow reference. Essential commands:
+
 ```bash
 # Install all dependencies (required for tests)
 uv sync --all-extras --all-groups
@@ -404,24 +408,11 @@ uv sync --all-extras --all-groups
 # Start Ollama (required for most tests)
 ollama serve
 
-# Default: qualitative tests, skip slow tests
+# Default: includes qualitative tests, skips slow tests
 uv run pytest
 
 # Fast tests only (no qualitative, ~2 min)
 uv run pytest -m "not qualitative"
-
-# Unit tests only (self-contained, no services)
-uv run pytest -m unit
-
-# Run only slow tests (>1 min)
-uv run pytest -m slow
-
-# Run specific backend tests
-uv run pytest -m "ollama"
-uv run pytest -m "openai"
-
-# CI/CD mode (skips qualitative tests)
-CICD=1 uv run pytest
 
 # Lint and format
 uv run ruff format .
@@ -471,22 +462,25 @@ for m in granite4.1:3b deepseek-r1:8b \
 
 ### Test Markers
 
-Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference, including tier definitions, backend markers, resource gates, and auto-skip logic.
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The [Test Strategy](docs/docs/community/testing-strategy.md) page covers classification rules, authoring guide, and CI tiers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic).
 
 ### CI/CD Tests
 
 CI runs the following checks on every pull request:
-1. **Pre-commit hooks** (`pre-commit run --all-files`) - Ruff, mypy, uv-lock, codespell
-2. **Test suite** (`CICD=1 uv run pytest`) - Skips qualitative tests for speed
+1. **Pre-commit hooks** (`pre-commit run --all-files`) — ruff, mypy, uv-lock, codespell
+2. **Test suite** — `CICD=1 uv run pytest test` on Python 3.11/3.12/3.13 with Ollama running; skips qualitative tests
 
 To replicate CI locally:
 ```bash
-# Run pre-commit checks (same as CI)
+# Pre-commit checks (same as CI)
 pre-commit run --all-files
 
-# Run tests with CICD flag (same as CI, skips qualitative tests)
-CICD=1 uv run pytest
+# Tests with CICD flag (skips qualitative, matches CI scope)
+CICD=1 uv run pytest test
 ```
+
+See the [Test Strategy — CI pipeline](docs/docs/community/testing-strategy.md#ci-pipeline)
+for the full CI breakdown and planned nightly/pre-release tiers.
 
 ### Timing Expectations
 

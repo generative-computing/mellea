@@ -125,6 +125,7 @@
             "group": "Community",
             "pages": [
               "community/contributing-guide",
+              "community/testing-strategy",
               "community/building-extensions",
               "community/code-of-conduct"
             ]
