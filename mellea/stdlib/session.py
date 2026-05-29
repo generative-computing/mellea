@@ -165,9 +165,11 @@ def start_session(
 
     with trace_application(
         "start_session",
-        backend=backend_name,
-        model_id=model_id_str,
-        context_type=resolved_ctx.__class__.__name__,
+        **{
+            "mellea.backend": backend_name,
+            "mellea.model_id": model_id_str,
+            "mellea.context_type": resolved_ctx.__class__.__name__,
+        },
     ):
         # --- session_pre_init hook ---
         if has_plugins(HookType.SESSION_PRE_INIT):
@@ -278,8 +280,10 @@ class MelleaSession:
         # Start a session span that will last for the entire context manager lifetime
         self._session_span = trace_application(
             "session_context",
-            backend=self.backend.__class__.__name__,
-            context_type=self.ctx.__class__.__name__,
+            **{
+                "mellea.backend": self.backend.__class__.__name__,
+                "mellea.context_type": self.ctx.__class__.__name__,
+            },
         ).__enter__()
         self._context_token = _context_session.set(self)
         # TODO: Migrate telemetry fields from _log_context to with_context() system.

@@ -5,6 +5,8 @@ import datetime
 import functools
 import json
 import os
+import time
+import uuid
 import warnings
 from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import fields
@@ -44,10 +46,6 @@ from ..helpers import (
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -57,6 +55,7 @@ from .tools import (
     convert_tools_to_json,
     validate_tool_arguments,
 )
+from .utils import populate_response_metadata_openai_shape
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -307,9 +306,6 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        )
 
         _model_id_str = str(getattr(self, "model_id", "unknown"))
         with with_context(request_id=generate_request_id(), model_id=_model_id_str):
@@ -320,10 +316,6 @@ class WatsonxAIBackend(FormatterBackend):
                 model_options=model_options,
                 tool_calls=tool_calls,
             )
-
-        # Store span in metadata for post_processing to record telemetry
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
 
         return mot, ctx.add(action).add(mot)
 
@@ -608,24 +600,8 @@ class WatsonxAIBackend(FormatterBackend):
         mot.generation.model = str(self._get_watsonx_model_id())
         mot.generation.provider = "watsonx"
 
-        # Record tracing if span exists
-        span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
-
-            if usage:
-                record_token_usage(span, usage)
-            if response is not None:
-                record_response_metadata(span, response)
-
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up span reference
-            del mot._meta["_telemetry_span"]
+        # Populate response-side metadata for telemetry
+        populate_response_metadata_openai_shape(mot, response)
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -690,20 +666,41 @@ class WatsonxAIBackend(FormatterBackend):
         Returns:
             list[ModelOutputThunk]: A list of model output thunks, one per action.
         """
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            await self.do_generate_walks(list(actions))
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
 
-            if format is not None:
-                MelleaLogger.get_logger().warning(
-                    "WatsonxAI completion api does not accept response format, ignoring it for this request."
-                )
+        await self.do_generate_walks(list(actions))
 
-            model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
+        if format is not None:
+            MelleaLogger.get_logger().warning(
+                "WatsonxAI completion api does not accept response format, ignoring it for this request."
+            )
 
-            prompts = [self.formatter.print(action) for action in actions]
+        gen_id = str(uuid.uuid4())
+        watsonx_model_id = str(self._get_watsonx_model_id())
 
+        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_PRE_CALL,
+                GenerationBatchPreCallPayload(
+                    actions=tuple(actions),
+                    generation_id=gen_id,
+                    format=format,
+                    tool_calls=tool_calls,
+                    num_actions=len(actions),
+                    model=watsonx_model_id,
+                    provider="watsonx",
+                ),
+            )
+
+        model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
+
+        prompts = [self.formatter.print(action) for action in actions]
+
+        _start = time.perf_counter()
+        try:
             responses = await asyncio.to_thread(
                 self._model.generate,
                 prompt=prompts,
@@ -711,21 +708,44 @@ class WatsonxAIBackend(FormatterBackend):
                     model_opts, is_chat_context=False
                 ),
             )
+        except Exception as e:
+            if has_plugins(HookType.GENERATION_BATCH_ERROR):
+                from ..plugins.hooks.generation import GenerationBatchErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_BATCH_ERROR,
+                    GenerationBatchErrorPayload(
+                        generation_id=gen_id,
+                        exception=e,
+                        model=watsonx_model_id,
+                        provider="watsonx",
+                        latency_ms=(time.perf_counter() - _start) * 1000,
+                    ),
+                )
+            raise
+
+        latency_ms = (time.perf_counter() - _start) * 1000
 
         results = []
         date = datetime.datetime.now()
+        # Sum per-request usages into an aggregate for the batch.
+        agg_prompt = 0
+        agg_completion = 0
 
         for i, response in enumerate(responses):
             output = response["results"][0]
+            n_in = output.get("input_token_count", 0) or 0
+            n_out = output.get("generated_token_count", 0) or 0
+            agg_prompt += n_in
+            agg_completion += n_out
             result = ModelOutputThunk(
                 value=output["generated_text"],
                 meta={
                     "oai_completion_response": response["results"][0],
                     "usage": {
-                        "prompt_tokens": output.get("input_token_count", 0),
-                        "completion_tokens": output.get("generated_token_count", 0),
-                        "total_tokens": output.get("input_token_count", 0)
-                        + output.get("generated_token_count", 0),
+                        "prompt_tokens": n_in,
+                        "completion_tokens": n_out,
+                        "total_tokens": n_in + n_out,
                     },
                 },
             )
@@ -750,6 +770,27 @@ class WatsonxAIBackend(FormatterBackend):
             result._generate_log = generate_log
 
             results.append(result)
+
+        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_POST_CALL,
+                GenerationBatchPostCallPayload(
+                    generation_id=gen_id,
+                    model_outputs=results,
+                    usage={
+                        "prompt_tokens": agg_prompt,
+                        "completion_tokens": agg_completion,
+                        "total_tokens": agg_prompt + agg_completion,
+                    }
+                    if (agg_prompt or agg_completion)
+                    else None,
+                    model=watsonx_model_id,
+                    provider="watsonx",
+                    latency_ms=latency_ms,
+                ),
+            )
 
         return results
 

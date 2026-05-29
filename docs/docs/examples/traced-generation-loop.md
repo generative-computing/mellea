@@ -8,17 +8,15 @@ description: "Enable OpenTelemetry tracing for a multi-operation Mellea session 
 This example runs a session that exercises four different Mellea operations —
 `m.instruct()`, a `@generative` classifier, a `@generative` entity extractor,
 and a multi-turn `m.chat()` — while OpenTelemetry instrumentation records each
-step. Two independent trace scopes control what gets recorded: the application
-trace covers Mellea-level operations, and the backend trace covers raw LLM
-calls.
+step. Two trace scopes are populated: the application trace covers Mellea-level
+operations, and the backend trace covers raw LLM calls.
 
 **Source file:** `docs/examples/telemetry/telemetry_example.py`
 
 ## Concepts covered
 
-- The two independent trace scopes: `mellea.application` and `mellea.backend`
-- Controlling tracing with `MELLEA_TRACE_APPLICATION` and
-  `MELLEA_TRACE_BACKEND` environment variables
+- The two trace scopes: `mellea.application` and `mellea.backend`
+- Enabling tracing with `MELLEA_TRACES_ENABLED`
 - Using `start_session()` as a context manager so session lifecycle is spanned
 - Exporting spans to an OTLP endpoint (Jaeger)
 - Using `mellea.stdlib.requirements.req` to attach constraints to `m.instruct()`
@@ -38,24 +36,19 @@ uv sync --all-extras
 
 ## Trace scopes
 
-Mellea defines two independent OpenTelemetry trace scopes.
+Mellea defines two OpenTelemetry trace scopes.
 
-| Scope | Env var | What it records |
-| ----- | ------- | --------------- |
-| Application | `MELLEA_TRACE_APPLICATION` | Session lifecycle, `@generative` calls, `aact`, sampling, requirement validation |
-| Backend | `MELLEA_TRACE_BACKEND` | Raw model generation calls, context-based generation, backend-specific operations |
-
-Both default to `false`. Enable either or both independently depending on what
-you need to observe.
+| Scope | What it records |
+| ----- | --------------- |
+| Application (`mellea.application`) | Session lifecycle, `@generative` calls, `aact`, sampling, requirement validation |
+| Backend (`mellea.backend`) | Raw model generation calls, context-based generation, backend-specific operations |
 
 ### Performance impact
 
 | Configuration | Overhead |
 | ------------- | -------- |
-| Both disabled (default) | Near-zero |
-| Application only | ~1–2 % |
-| Backend only | ~1–2 % |
-| Both enabled | ~2–5 % |
+| Disabled (default) | Near-zero |
+| Enabled | ~2–5 % |
 
 ## Running the example
 
@@ -65,37 +58,20 @@ you need to observe.
 python docs/examples/telemetry/telemetry_example.py
 ```
 
-### Application tracing only
+### Tracing enabled with console output for debugging
 
 ```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=false
-python docs/examples/telemetry/telemetry_example.py
-```
-
-### Backend tracing only
-
-```bash
-export MELLEA_TRACE_APPLICATION=false
-export MELLEA_TRACE_BACKEND=true
-python docs/examples/telemetry/telemetry_example.py
-```
-
-### Both scopes with console output for debugging
-
-```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 python docs/examples/telemetry/telemetry_example.py
 ```
 
 ### Export to an OTLP endpoint (Jaeger)
 
 ```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_OTLP=true
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
 python docs/examples/telemetry/telemetry_example.py
 ```
 
@@ -140,27 +116,23 @@ context.
 ### Session as a context manager and introspection
 
 ```python
+from mellea.telemetry import is_tracing_enabled
+
+
 def main():
     """Run example with telemetry instrumentation."""
     print("=" * 60)
     print("Mellea OpenTelemetry Example")
     print("=" * 60)
 
-    # Check which traces are enabled
-    from mellea.telemetry import (
-        is_application_tracing_enabled,
-        is_backend_tracing_enabled,
-    )
-
-    print(f"Application tracing: {is_application_tracing_enabled()}")
-    print(f"Backend tracing: {is_backend_tracing_enabled()}")
+    print(f"Tracing enabled: {is_tracing_enabled()}")
     print("=" * 60)
 ```
 
-`is_application_tracing_enabled()` and `is_backend_tracing_enabled()` reflect
-the current environment variable state at runtime. Use these guards in your own
-code when you want to conditionally add tracing context (for example, adding
-custom span attributes only when tracing is on).
+`is_tracing_enabled()` reflects the current environment variable state at
+runtime. Use this guard in your own code when you want to conditionally add
+tracing context (for example, adding custom span attributes only when tracing
+is on).
 
 ### Operation 1: instruct with requirements
 
@@ -235,44 +207,35 @@ span.
 ### Full file
 
 ```python
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 """Example demonstrating OpenTelemetry tracing in Mellea.
 
-This example shows how to use the two independent trace scopes:
+This example shows the two trace scopes populated when tracing is enabled:
 1. Application trace - tracks user-facing operations
 2. Backend trace - tracks LLM backend interactions
 
 Run with different configurations:
 
-# Enable only application tracing
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=false
-python telemetry_example.py
-
-# Enable only backend tracing
-export MELLEA_TRACE_APPLICATION=false
-export MELLEA_TRACE_BACKEND=true
-python telemetry_example.py
-
-# Enable both traces
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
+# Enable tracing
+export MELLEA_TRACES_ENABLED=true
 python telemetry_example.py
 
 # Export to OTLP endpoint (e.g., Jaeger)
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_OTLP=true
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
 python telemetry_example.py
 
 # Enable console output for debugging
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 python telemetry_example.py
 """
 
 from mellea import generative, start_session
 from mellea.stdlib.requirements import req
+from mellea.telemetry import is_tracing_enabled
 
 
 @generative
@@ -291,14 +254,7 @@ def main():
     print("Mellea OpenTelemetry Example")
     print("=" * 60)
 
-    # Check which traces are enabled
-    from mellea.telemetry import (
-        is_application_tracing_enabled,
-        is_backend_tracing_enabled,
-    )
-
-    print(f"Application tracing: {is_application_tracing_enabled()}")
-    print(f"Backend tracing: {is_backend_tracing_enabled()}")
+    print(f"Tracing enabled: {is_tracing_enabled()}")
     print("=" * 60)
 
     # Start a session - this will be traced if application tracing is enabled
@@ -337,8 +293,8 @@ def main():
     print("Example complete!")
     print("=" * 60)
     print("\nTrace data has been exported based on your configuration.")
-    print("If OTEL_EXPORTER_OTLP_ENDPOINT is set, check your trace backend.")
-    print("If MELLEA_TRACE_CONSOLE=true, traces are printed above.")
+    print("If OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set, check your trace backend.")
+    print("If MELLEA_TRACES_CONSOLE=true, traces are printed above.")
 
 
 if __name__ == "__main__":
@@ -352,14 +308,14 @@ applicable:
 
 | Attribute | Description |
 | --------- | ----------- |
-| `model_id` | Model identifier used for the call |
-| `backend` | Backend class name (e.g. `OllamaBackend`) |
-| `action_type` | Component type (e.g. `generative`, `instruct`) |
-| `context_size` | Number of context items passed |
-| `has_requirements` | Whether requirements were specified |
-| `strategy_type` | Sampling strategy used |
-| `tool_calls` | Whether tool calling was enabled |
-| `format_type` | Response format class |
+| `mellea.model_id` | Model identifier used for the call |
+| `mellea.backend` | Backend class name (e.g. `OllamaModelBackend`) |
+| `mellea.action_type` | Component type (e.g. `generative`, `instruct`) |
+| `mellea.context_size` | Number of context items passed |
+| `mellea.has_requirements` | Whether requirements were specified |
+| `mellea.strategy_type` | Sampling strategy used |
+| `mellea.tool_calls` | Whether tool calling was enabled |
+| `mellea.format_type` | Response format class |
 
 ## What to try next
 
@@ -367,5 +323,5 @@ applicable:
   backend.
 - See [Tracing](../observability/tracing)
   for attribute schemas and advanced configuration.
-- Add `MELLEA_TRACE_CONSOLE=true` alongside an OTLP endpoint to confirm spans
+- Add `MELLEA_TRACES_CONSOLE=true` alongside an OTLP endpoint to confirm spans
   are generated even when the remote collector is unavailable.

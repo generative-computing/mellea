@@ -38,7 +38,8 @@ python metrics_example.py
 **With OTLP export:**
 ```bash
 export MELLEA_METRICS_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_METRICS_OTLP=true
+export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4317
 python metrics_example.py
 ```
 
@@ -49,36 +50,18 @@ python metrics_example.py
 python telemetry_example.py
 ```
 
-#### With Application Tracing Only
+#### With Tracing Enabled
 
 ```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=false
-python telemetry_example.py
-```
-
-#### With Backend Tracing Only
-
-```bash
-export MELLEA_TRACE_APPLICATION=false
-export MELLEA_TRACE_BACKEND=true
-python telemetry_example.py
-```
-
-#### With Both Traces
-
-```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
+export MELLEA_TRACES_ENABLED=true
 python telemetry_example.py
 ```
 
 #### With Console Output (Debugging)
 
 ```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 python telemetry_example.py
 ```
 
@@ -96,9 +79,9 @@ docker run -d --name jaeger \
 ### 2. Configure Mellea
 
 ```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_OTLP=true
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
 export OTEL_SERVICE_NAME=mellea-example
 ```
 
@@ -133,21 +116,19 @@ Open http://localhost:16686 in your browser and select "mellea-example" service.
 
 Each span includes rich metadata:
 
-- **model_id**: Model identifier
-- **backend**: Backend class name
-- **action_type**: Component type
-- **context_size**: Number of context items
-- **has_requirements**: Whether requirements are specified
-- **strategy_type**: Sampling strategy used
-- **tool_calls**: Whether tool calling is enabled
-- **format_type**: Response format class
+- **mellea.model_id**: Model identifier
+- **mellea.backend**: Backend class name
+- **mellea.action_type**: Component type
+- **mellea.context_size**: Number of context items
+- **mellea.has_requirements**: Whether requirements are specified
+- **mellea.strategy_type**: Sampling strategy used
+- **mellea.tool_calls**: Whether tool calling is enabled
+- **mellea.format_type**: Response format class
 
 ## Performance Impact
 
 - **Disabled (default)**: Near-zero overhead
-- **Application only**: Minimal overhead (~1-2%)
-- **Backend only**: Minimal overhead (~1-2%)
-- **Both enabled**: Low overhead (~2-5%)
+- **Enabled**: Low overhead (~2-5%)
 
 ## Troubleshooting
 

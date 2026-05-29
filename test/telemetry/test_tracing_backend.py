@@ -1,18 +1,21 @@
-"""Unit tests for backend telemetry instrumentation with Gen-AI semantic conventions."""
-
-import asyncio
+"""End-to-end tests for backend tracing with Gen-AI semantic conventions."""
 
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_HYBRID_SMALL
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.plugins.manager import (
+    disable_background_collection,
+    discard_background_tasks,
+    drain_background_tasks,
+    enable_background_collection,
+)
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 
 # Check if OpenTelemetry is available
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
         InMemorySpanExporter,
@@ -29,42 +32,56 @@ pytestmark = [
 ]
 
 
+def _reset_tracing_state() -> None:
+    import mellea.telemetry.tracing as tracing_mod
+
+    tracing_mod._tracer_provider = None
+    tracing_mod._application_tracer = None
+    tracing_mod._backend_tracer = None
+    tracing_mod._setup_tracing()
+
+
 @pytest.fixture(scope="module", autouse=True)
 def setup_telemetry():
-    """Set up telemetry for all tests in this module."""
-    import importlib
-
-    import mellea.telemetry.tracing
-
+    """Enable tracing for all tests in this module."""
     mp = pytest.MonkeyPatch()
-    mp.setenv("MELLEA_TRACE_BACKEND", "true")
-    importlib.reload(mellea.telemetry.tracing)
+    mp.setenv("MELLEA_TRACES_ENABLED", "true")
+    _reset_tracing_state()
 
     yield
 
-    mp.setenv("MELLEA_TRACE_BACKEND", "false")
-    importlib.reload(mellea.telemetry.tracing)
+    mp.undo()
+    _reset_tracing_state()
 
 
 @pytest.fixture
 def span_exporter():
-    """Create an in-memory span exporter for testing."""
-    # Import mellea.telemetry.tracing to ensure it's initialized
+    """Create an in-memory span exporter attached to the tracing module's provider.
+
+    The plugin's post_call/error hooks run in FIRE_AND_FORGET mode, so each
+    test must drain background tasks before asserting on the exporter. We
+    enable collection here and provide a wrapper that drains + flushes on
+    every read.
+    """
     from mellea.telemetry import tracing
 
-    # Get the real tracer provider from mellea.telemetry.tracing module
-    # The global trace.get_tracer_provider() returns a ProxyTracerProvider
+    # Trigger lazy init so the provider exists.
+    tracing.get_backend_tracer()
     provider = tracing._tracer_provider
 
     if provider is None:
         pytest.skip("Telemetry not initialized")
 
-    # Add our in-memory exporter to it
+    enable_background_collection()
+    discard_background_tasks()
+
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
 
     yield exporter
+
     exporter.clear()
+    disable_background_collection()
 
 
 @pytest.mark.asyncio
@@ -79,6 +96,7 @@ async def test_span_duration_captures_async_operation(span_exporter):
         Message(role="assistant", content=""), ctx
     )
     await mot.avalue()  # Wait for async completion
+    await drain_background_tasks()
 
     # Force flush to ensure spans are exported
     trace.get_tracer_provider().force_flush()  # type: ignore
@@ -122,6 +140,7 @@ async def test_context_propagation_parent_child(span_exporter):
             Message(role="assistant", content=""), ctx
         )
         await mot.avalue()  # Wait for async completion
+        await drain_background_tasks()
 
     # Get the recorded spans
     spans = span_exporter.get_finished_spans()
@@ -162,6 +181,7 @@ async def test_token_usage_recorded_after_completion(span_exporter):
         Message(role="assistant", content=""), ctx
     )
     await mot.avalue()  # Wait for async completion
+    await drain_background_tasks()
 
     # Get the recorded span
     spans = span_exporter.get_finished_spans()
@@ -181,9 +201,7 @@ async def test_token_usage_recorded_after_completion(span_exporter):
     attributes = dict(backend_span.attributes)
 
     # Verify Gen-AI attributes are present
-    assert "gen_ai.system" in attributes, "gen_ai.system attribute missing"
-    assert attributes["gen_ai.system"] == "ollama", "Incorrect system name"
-
+    assert attributes.get("gen_ai.provider.name") == "ollama", "Incorrect provider name"
     assert "gen_ai.request.model" in attributes, (
         "gen_ai.request.model attribute missing"
     )
@@ -220,6 +238,7 @@ async def test_span_not_closed_prematurely(span_exporter):
 
     # Now complete the async operation
     await mot.avalue()
+    await drain_background_tasks()
 
     # Now the span should be closed
     spans_after = span_exporter.get_finished_spans()
@@ -251,6 +270,7 @@ async def test_multiple_generations_separate_spans(span_exporter):
         Message(role="assistant", content=""), ctx
     )
     await mot2.avalue()
+    await drain_background_tasks()
 
     # Get the recorded spans
     spans = span_exporter.get_finished_spans()
@@ -284,6 +304,7 @@ async def test_streaming_span_duration(span_exporter):
     # Consume the stream
     await mot.astream()
     await mot.avalue()
+    await drain_background_tasks()
 
     # Get the recorded span
     spans = span_exporter.get_finished_spans()

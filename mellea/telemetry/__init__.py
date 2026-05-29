@@ -10,15 +10,17 @@ Package Structure:
         * Backend traces (mellea.backend): LLM backend interactions
     - metrics: Metrics collection for counters, histograms, and up-down counters
     - logging: Log export via OTLP
-    - backend_instrumentation: Automatic instrumentation for backend operations
 
 Configuration:
     All telemetry features are opt-in via environment variables:
 
     Tracing:
-        - MELLEA_TRACE_APPLICATION: Enable application tracing (default: false)
-        - MELLEA_TRACE_BACKEND: Enable backend tracing (default: false)
-        - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for trace export
+        - MELLEA_TRACES_ENABLED: Enable tracing (default: false)
+        - MELLEA_TRACES_OTLP: Enable OTLP span exporter (default: false)
+        - MELLEA_TRACES_CONSOLE: Print spans to console (default: false)
+        - MELLEA_TRACES_CONTENT: Capture prompt/response content on spans (default: false)
+        - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: Trace-specific OTLP endpoint (optional)
+        - OTEL_EXPORTER_OTLP_ENDPOINT: General OTLP endpoint (fallback)
         - OTEL_SERVICE_NAME: Service name for traces (default: mellea)
 
     Metrics:
@@ -92,26 +94,19 @@ from .metrics import (
 )
 from .pricing import is_pricing_enabled
 from .tracing import (
-    add_span_event,
-    end_backend_span,
-    is_application_tracing_enabled,
-    is_backend_tracing_enabled,
     is_content_tracing_enabled,
+    is_tracing_enabled,
     set_span_attribute,
     set_span_error,
-    start_backend_span,
     trace_application,
-    trace_backend,
 )
 
 __all__ = [
     "MelleaContextFilter",
-    "add_span_event",
     "async_with_context",
     "create_counter",
     "create_histogram",
     "create_up_down_counter",
-    "end_backend_span",
     "generate_request_id",
     "get_current_context",
     "get_model_id",
@@ -119,11 +114,10 @@ __all__ = [
     "get_request_id",
     "get_sampling_iteration",
     "get_session_id",
-    "is_application_tracing_enabled",
-    "is_backend_tracing_enabled",
     "is_content_tracing_enabled",
     "is_metrics_enabled",
     "is_pricing_enabled",
+    "is_tracing_enabled",
     "record_cost",
     "record_error",
     "record_request_duration",
@@ -136,8 +130,6 @@ __all__ = [
     "record_ttfb",
     "set_span_attribute",
     "set_span_error",
-    "start_backend_span",
     "trace_application",
-    "trace_backend",
     "with_context",
 ]

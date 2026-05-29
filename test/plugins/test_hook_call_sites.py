@@ -235,6 +235,163 @@ class TestGenerationHookCallSites:
         assert captured_kwargs["model_options"] == {"temperature": 0.25}
         assert captured_kwargs["tool_calls"] is True
 
+    async def test_generation_id_on_pre_call_payload_is_uuid(self) -> None:
+        """Backend.generate_from_context generates a UUID and puts it on pre_call."""
+        import uuid
+
+        observed: list[Any] = []
+
+        @hook("generation_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        await backend.generate_from_context(CBlock("hi"), MagicMock(spec=Context))
+
+        gen_id = observed[0].generation_id
+        assert gen_id
+        uuid.UUID(gen_id)  # Raises if not a valid UUID
+
+    async def test_generation_id_stashed_on_returned_mot(self) -> None:
+        """The same generation_id is stashed on the returned ModelOutputThunk."""
+        observed: list[Any] = []
+
+        @hook("generation_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        mot, _ = await backend.generate_from_context(
+            CBlock("hi"), MagicMock(spec=Context)
+        )
+
+        assert mot._generation_id == observed[0].generation_id
+
+    async def test_generation_post_call_carries_generation_id(self) -> None:
+        """astream() fires post_call with the MOT's _generation_id."""
+        observed: list[Any] = []
+
+        @hook("generation_post_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = _make_thunk()
+        mot._generation_id = "gid-post-1"
+        await mot._async_queue.put("hello")
+        await mot._async_queue.put(None)
+        await mot.avalue()
+
+        assert observed[0].generation_id == "gid-post-1"
+
+    async def test_generation_error_fires_with_payload(self) -> None:
+        """GENERATION_ERROR fires with the original exception and generation_id."""
+        observed: list[Any] = []
+
+        @hook("generation_error")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = _make_thunk()
+        mot._generation_id = "gid-err-1"
+        error = ConnectionError("server unavailable")
+        await mot._async_queue.put(error)
+
+        with pytest.raises(ConnectionError, match="server unavailable"):
+            await mot.astream()
+
+        assert len(observed) == 1
+        assert observed[0].exception is error
+        assert observed[0].model_output is not None
+        assert observed[0].generation_id == "gid-err-1"
+
+    async def test_cancel_generation_fires_error_with_supplied_exception(self) -> None:
+        """cancel_generation(error=...) fires GENERATION_ERROR with that exception."""
+        observed: list[Any] = []
+
+        @hook("generation_error")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = ModelOutputThunk(value=None)
+        mot._generation_id = "gid-cancel-1"
+        cause = ValueError("validator rejected")
+
+        await mot.cancel_generation(error=cause)
+
+        assert len(observed) == 1
+        assert observed[0].exception is cause
+        assert observed[0].model_output is not None
+        assert observed[0].generation_id == "gid-cancel-1"
+        assert mot._cancelled is True
+
+    async def test_cancel_generation_fires_error_with_default_runtimeerror(
+        self,
+    ) -> None:
+        """cancel_generation() with no error fires GENERATION_ERROR with a generic RuntimeError."""
+        observed: list[Any] = []
+
+        @hook("generation_error")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = ModelOutputThunk(value=None)
+        mot._generation_id = "gid-cancel-2"
+
+        await mot.cancel_generation()
+
+        assert len(observed) == 1
+        assert isinstance(observed[0].exception, RuntimeError)
+        assert "cancelled" in str(observed[0].exception).lower()
+        assert observed[0].generation_id == "gid-cancel-2"
+
+    async def test_generation_error_fires_on_sync_raise_in_generate(self) -> None:
+        """A synchronous raise inside `_generate_from_context` still fires GENERATION_ERROR."""
+        observed_pre: list[Any] = []
+        observed_err: list[Any] = []
+
+        @hook("generation_pre_call")
+        async def pre_recorder(payload: Any, ctx: Any) -> Any:
+            observed_pre.append(payload)
+            return None
+
+        @hook("generation_error")
+        async def err_recorder(payload: Any, ctx: Any) -> Any:
+            observed_err.append(payload)
+            return None
+
+        register(pre_recorder)
+        register(err_recorder)
+
+        class _RaisingBackend(_MockBackend):
+            async def _generate_from_context(self, action, ctx, **kwargs):
+                raise RuntimeError("setup failure")
+
+        backend = _RaisingBackend()
+        with pytest.raises(RuntimeError, match="setup failure"):
+            await backend.generate_from_context(CBlock("hi"), MagicMock(spec=Context))
+
+        assert len(observed_pre) == 1
+        assert len(observed_err) == 1
+        assert observed_err[0].generation_id == observed_pre[0].generation_id
+        assert isinstance(observed_err[0].exception, RuntimeError)
+        assert observed_err[0].model_output is None
+
 
 # ---------------------------------------------------------------------------
 # Component hook call sites

@@ -4,40 +4,31 @@
 
 This example focuses on distributed tracing. For token metrics, see metrics_example.py.
 
-This example shows how to use the two independent trace scopes:
-1. Application trace - tracks user-facing operations
-2. Backend trace - tracks LLM backend interactions
+When tracing is enabled, two scopes are populated:
+1. Application trace (`mellea.application`) - user-facing operations
+2. Backend trace (`mellea.backend`) - LLM backend interactions
 
 Run with different configurations:
 
-# Enable only application tracing
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=false
-python telemetry_example.py
-
-# Enable only backend tracing
-export MELLEA_TRACE_APPLICATION=false
-export MELLEA_TRACE_BACKEND=true
-python telemetry_example.py
-
-# Enable both traces
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
+# Enable tracing
+export MELLEA_TRACES_ENABLED=true
 python telemetry_example.py
 
 # Export to OTLP endpoint (e.g., Jaeger)
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_OTLP=true
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
 python telemetry_example.py
 
 # Enable console output for debugging
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 python telemetry_example.py
 """
 
 from mellea import generative, start_session
 from mellea.stdlib.requirements import req
+from mellea.telemetry import is_tracing_enabled
 
 
 @generative
@@ -56,14 +47,7 @@ def main():
     print("Mellea OpenTelemetry Example")
     print("=" * 60)
 
-    # Check which traces are enabled
-    from mellea.telemetry import (
-        is_application_tracing_enabled,
-        is_backend_tracing_enabled,
-    )
-
-    print(f"Application tracing: {is_application_tracing_enabled()}")
-    print(f"Backend tracing: {is_backend_tracing_enabled()}")
+    print(f"Tracing enabled: {is_tracing_enabled()}")
     print("=" * 60)
 
     # Start a session - this will be traced if application tracing is enabled
@@ -102,8 +86,8 @@ def main():
     print("Example complete!")
     print("=" * 60)
     print("\nTrace data has been exported based on your configuration.")
-    print("If OTEL_EXPORTER_OTLP_ENDPOINT is set, check your trace backend.")
-    print("If MELLEA_TRACE_CONSOLE=true, traces are printed above.")
+    print("If OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set, check your trace backend.")
+    print("If MELLEA_TRACES_CONSOLE=true, traces are printed above.")
 
 
 if __name__ == "__main__":

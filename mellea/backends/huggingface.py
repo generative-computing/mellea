@@ -11,6 +11,8 @@ import datetime
 import functools
 import json
 import threading
+import time
+import uuid
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
@@ -56,10 +58,6 @@ from ..formatters.granite.base.util import _GuidanceLogitsProcessor
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
 from .adapters import (
     AdapterMixin,
@@ -380,10 +378,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes `action` and the new output.
         """
-        span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        )
-
         with with_context(
             request_id=generate_request_id(),
             model_id=str(getattr(self, "model_id", "unknown")),
@@ -433,18 +427,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         model_options=model_opts,
                         tool_calls=tool_calls,
                     )
-                    # Store span for telemetry
-                    if span is not None:
-                        mot._meta["_telemetry_span"] = span
                     return mot, ctx.add(alora_action).add(mot)
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
                     action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
-                # Store span for telemetry
-                if span is not None:
-                    mot._meta["_telemetry_span"] = span
                 return mot, ctx.add(action).add(mot)
 
             mot = await self._generate_from_context_standard(
@@ -454,10 +442,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 model_options=model_opts,
                 tool_calls=tool_calls,
             )
-
-            # Store span in metadata for post_processing to record telemetry
-            if span is not None:
-                mot._meta["_telemetry_span"] = span
 
             return mot, ctx.add(action).add(mot)
 
@@ -1257,8 +1241,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        span = mot._meta.get("_telemetry_span")
-
         # Derive token counts from the output sequences (HF models have no usage object).
         hf_output = mot._meta.get("hf_output")
         n_prompt, n_completion = None, None
@@ -1277,27 +1259,35 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "total_tokens": n_prompt + n_completion,
             }
 
+        # Derive finish reason: "stop" if last token is EOS, "length" if we hit
+        # max_new_tokens. HF has no provider response object; this is synthesised
+        # from local state (sequences + tokenizer.eos_token_id + model_options).
+        if (
+            isinstance(hf_output, GenerateDecoderOnlyOutput)
+            and hf_output.sequences is not None
+        ):
+            try:
+                # Chat path is single-action; sequences[0] is the only sequence.
+                last_token = hf_output.sequences[0][-1].item()
+                eos = self._tokenizer.eos_token_id
+                eos_set = set(eos) if isinstance(eos, list) else {eos}
+                max_new_tokens = mot._model_options.get(ModelOption.MAX_NEW_TOKENS)
+                if last_token in eos_set:
+                    mot.generation.finish_reasons = ["stop"]
+                elif (
+                    max_new_tokens is not None
+                    and n_completion is not None
+                    and n_completion >= max_new_tokens
+                ):
+                    mot.generation.finish_reasons = ["length"]
+            except (IndexError, AttributeError, TypeError) as e:
+                MelleaLogger.get_logger().debug(
+                    f"Could not derive finish_reasons from HF output: {e}"
+                )
+
         # Populate model and provider metadata
         mot.generation.model = self._get_hf_model_id()
         mot.generation.provider = "huggingface"
-
-        # Record tracing if span exists
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
-
-            if isinstance(hf_output, GenerateDecoderOnlyOutput):
-                record_response_metadata(span, hf_output)
-                if mot.generation.usage:
-                    record_token_usage(span, mot.generation.usage)
-
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up span reference
-            del mot._meta["_telemetry_span"]
 
         # When caching is disabled, clear hf_output from meta to free GPU memory.
         # The sequences tensor is on GPU and accumulates if not cleared.
@@ -1382,54 +1372,73 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Returns:
             list[ModelOutputThunk]: A list of model output thunks, one per action.
         """
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            await self.do_generate_walks(list(actions))
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
 
-            if tool_calls:
-                MelleaLogger.get_logger().warning(
-                    "The raw endpoint does not support tool calling at the moment."
-                )
+        await self.do_generate_walks(list(actions))
 
-            if self._model.device.type == "mps":
-                # TODO: Remove this when we are able to update the torch package.
-                #       Test this by ensuring all outputs from this call are populated when running on mps.
-                #       https://github.com/pytorch/pytorch/pull/157727
-                MelleaLogger.get_logger().warning(
-                    "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
-                )
-
-            model_opts = self._simplify_and_merge(model_options)
-            seed = model_opts.get(ModelOption.SEED, None)
-            if seed is not None:
-                set_seed(seed)
-
-            prompts = [self.formatter.print(action) for action in actions]
-
-            # batch-encoding call is deprecated in favor of this
-            inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
-                self._device
+        if tool_calls:
+            MelleaLogger.get_logger().warning(
+                "The raw endpoint does not support tool calling at the moment."
             )
 
-            format_kwargs = {}
-            if format:
-                schema: dict[str, Any] = format.model_json_schema()
-                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults={"whitespace_flexible": False}
-                )
-                logits_processor = _GuidanceLogitsProcessor(
-                    grammar, self._llguidance_tokenizer
-                )
-                format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [logits_processor]
-                )
+        if self._model.device.type == "mps":
+            # TODO: Remove this when we are able to update the torch package.
+            #       Test this by ensuring all outputs from this call are populated when running on mps.
+            #       https://github.com/pytorch/pytorch/pull/157727
+            MelleaLogger.get_logger().warning(
+                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+            )
 
-            generate_kwargs = self._make_backend_specific_and_remove(model_opts)
-            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
-                # transformers' generate() requires a tokenizer to decode stop_strings.
-                generate_kwargs["tokenizer"] = self._tokenizer
+        gen_id = str(uuid.uuid4())
+        hf_model_id = self._get_hf_model_id()
 
+        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_PRE_CALL,
+                GenerationBatchPreCallPayload(
+                    actions=tuple(actions),
+                    generation_id=gen_id,
+                    format=format,
+                    tool_calls=tool_calls,
+                    num_actions=len(actions),
+                    model=hf_model_id,
+                    provider="huggingface",
+                ),
+            )
+
+        model_opts = self._simplify_and_merge(model_options)
+        seed = model_opts.get(ModelOption.SEED, None)
+        if seed is not None:
+            set_seed(seed)
+
+        prompts = [self.formatter.print(action) for action in actions]
+
+        # batch-encoding call is deprecated in favor of this
+        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
+            self._device
+        )
+
+        format_kwargs = {}
+        if format:
+            schema: dict[str, Any] = format.model_json_schema()
+            grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                schema, defaults={"whitespace_flexible": False}
+            )
+            logits_processor = _GuidanceLogitsProcessor(
+                grammar, self._llguidance_tokenizer
+            )
+            format_kwargs["logits_processor"] = LogitsProcessorList([logits_processor])
+
+        generate_kwargs = self._make_backend_specific_and_remove(model_opts)
+        if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+            # transformers' generate() requires a tokenizer to decode stop_strings.
+            generate_kwargs["tokenizer"] = self._tokenizer
+
+        _start = time.perf_counter()
+        try:
             outputs = await asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapter.
@@ -1442,6 +1451,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 **generate_kwargs,
                 **format_kwargs,
             )
+        except Exception as e:
+            if has_plugins(HookType.GENERATION_BATCH_ERROR):
+                from ..plugins.hooks.generation import GenerationBatchErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_BATCH_ERROR,
+                    GenerationBatchErrorPayload(
+                        generation_id=gen_id,
+                        exception=e,
+                        model=hf_model_id,
+                        provider="huggingface",
+                        latency_ms=(time.perf_counter() - _start) * 1000,
+                    ),
+                )
+            raise
+
+        latency_ms = (time.perf_counter() - _start) * 1000
 
         sequences_to_decode = [
             sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
@@ -1453,9 +1479,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         results = []
+        agg_prompt = 0
+        agg_completion = 0
         for i, decoded_result in enumerate(decoded_results):
             n_prompt_tokens = inputs["input_ids"][i].size(0)  # type: ignore
             n_completion_tokens = len(sequences_to_decode[i])
+            agg_prompt += int(n_prompt_tokens)
+            agg_completion += int(n_completion_tokens)
             result = ModelOutputThunk(
                 value=decoded_result,
                 meta={
@@ -1466,6 +1496,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     }
                 },
             )
+
             action = actions[i]
             result.parsed_repr = (
                 action.parse(result) if isinstance(action, Component) else result.value
@@ -1482,6 +1513,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             result._generate_log = generate_log
             results.append(result)
+
+        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_POST_CALL,
+                GenerationBatchPostCallPayload(
+                    generation_id=gen_id,
+                    model_outputs=results,
+                    usage={
+                        "prompt_tokens": agg_prompt,
+                        "completion_tokens": agg_completion,
+                        "total_tokens": agg_prompt + agg_completion,
+                    }
+                    if (agg_prompt or agg_completion)
+                    else None,
+                    model=hf_model_id,
+                    provider="huggingface",
+                    latency_ms=latency_ms,
+                ),
+            )
 
         return results
 

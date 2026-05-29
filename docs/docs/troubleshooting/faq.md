@@ -245,8 +245,8 @@ attributes on the spans.
 For a quick local inspection without a trace backend, enable console tracing:
 
 ```bash
-export MELLEA_TRACE_BACKEND=true
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 python your_script.py
 ```
 

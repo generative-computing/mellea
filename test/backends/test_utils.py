@@ -5,8 +5,13 @@ from dataclasses import dataclass
 import pytest
 
 from mellea.backends.tools import MelleaTool
-from mellea.backends.utils import get_value, to_tool_calls
+from mellea.backends.utils import (
+    get_value,
+    populate_response_metadata_openai_shape,
+    to_tool_calls,
+)
 from mellea.core import ModelToolCall
+from mellea.core.base import GenerationMetadata, ModelOutputThunk
 
 # --- get_value ---
 
@@ -158,6 +163,61 @@ def test_to_chat_with_system_prompt():
     assert result[0]["role"] == "system"
     assert result[0]["content"] == "You are helpful."
     assert len(result) == 3  # system + user context + user action
+
+
+# --- populate_response_metadata_openai_shape ---
+
+
+def _mot_with_generation() -> ModelOutputThunk:
+    mot = ModelOutputThunk("x")
+    mot.generation = GenerationMetadata(model="gpt-4o", provider="openai")
+    return mot
+
+
+@pytest.mark.parametrize(
+    "choices, expected_finish_reasons",
+    [
+        ([{"finish_reason": "stop"}], ["stop"]),
+        ([{"finish_reason": "stop"}, {"finish_reason": "length"}], ["stop", "length"]),
+    ],
+    ids=["single", "multi"],
+)
+def test_populate_response_metadata_full(choices, expected_finish_reasons):
+    """Dict response with valid choices populates all three fields."""
+    mot = _mot_with_generation()
+    populate_response_metadata_openai_shape(
+        mot, {"model": "gpt-4o", "id": "chatcmpl-abc", "choices": choices}
+    )
+    assert mot.generation.response_model == "gpt-4o"
+    assert mot.generation.response_id == "chatcmpl-abc"
+    assert mot.generation.finish_reasons == expected_finish_reasons
+
+
+def test_populate_response_metadata_object_response():
+    """Object responses (not dicts) work — verifies use of get_value, not [] access."""
+    mot = _mot_with_generation()
+    Choice = type("Choice", (), {"finish_reason": "length"})
+    Resp = type("Resp", (), {"model": "gpt-4o", "id": "resp-1", "choices": [Choice()]})
+    populate_response_metadata_openai_shape(mot, Resp())
+    assert mot.generation.response_model == "gpt-4o"
+    assert mot.generation.response_id == "resp-1"
+    assert mot.generation.finish_reasons == ["length"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {"model": "m", "id": "i", "choices": []},
+        {"model": "m", "id": "i", "choices": [{"finish_reason": None}]},
+    ],
+    ids=["none", "empty-choices", "all-none-reasons"],
+)
+def test_populate_response_metadata_finish_reasons_stays_none(response):
+    """No-op or empty extraction leaves finish_reasons as None (NOT [])."""
+    mot = _mot_with_generation()
+    populate_response_metadata_openai_shape(mot, response)
+    assert mot.generation.finish_reasons is None
 
 
 if __name__ == "__main__":

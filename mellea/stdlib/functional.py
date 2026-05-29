@@ -579,12 +579,15 @@ async def aact(
 
     with trace_application(
         "aact",
-        action_type=action.__class__.__name__,
-        has_requirements=requirements is not None and len(requirements) > 0,
-        has_strategy=strategy is not None,
-        strategy_type=strategy.__class__.__name__ if strategy else None,
-        has_format=format is not None,
-        tool_calls=tool_calls,
+        **{
+            "mellea.action_type": action.__class__.__name__,
+            "mellea.has_requirements": requirements is not None
+            and len(requirements) > 0,
+            "mellea.has_strategy": strategy is not None,
+            "mellea.strategy_type": strategy.__class__.__name__ if strategy else None,
+            "mellea.has_format": format is not None,
+            "mellea.tool_calls": tool_calls,
+        },
     ) as span:
         if not silence_context_type_warning and not isinstance(context, SimpleContext):
             MelleaLogger.get_logger().warning(
@@ -685,10 +688,10 @@ async def aact(
                 )
 
             # Add span attributes for the result
-            set_span_attribute(span, "num_generate_logs", len(generate_logs))
+            set_span_attribute(span, "mellea.num_generate_logs", len(generate_logs))
             if sampling_result:
                 set_span_attribute(
-                    span, "sampling_success", bool(sampling_result.result)
+                    span, "mellea.sampling_success", bool(sampling_result.result)
                 )
 
             # Log the model response (truncated for large responses)
@@ -701,10 +704,10 @@ async def aact(
                 # Truncate to 500 chars to avoid overwhelming trace storage
                 if len(response_value) > 500:
                     response_value = response_value[:500] + "..."
-                set_span_attribute(span, "response", response_value)
+                set_span_attribute(span, "mellea.response", response_value)
                 set_span_attribute(
                     span,
-                    "response_length",
+                    "mellea.response_length",
                     len(str(result.value) if hasattr(result, "value") else str(result)),
                 )
             except Exception:
