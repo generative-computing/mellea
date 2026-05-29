@@ -409,7 +409,16 @@ class LLMSummarizeCompactor:
             A new ``ChatContext`` containing the prefix, a single summary
             ``Message`` produced by the backend, and the most-recent
             ``keep_n`` body components verbatim. Returns ``ctx`` unchanged
-            when the body is already at or below ``keep_n`` in length.
+            when the body is already at or below ``keep_n`` in length, or
+            when the backend call fails (see Note).
+
+        Note:
+            Compaction is best-effort: if the backend call raises (rate
+            limit, network error, timeout, etc.) the exception is caught, a
+            warning is logged, and ``ctx`` is returned unchanged. The next
+            ``compact()`` invocation will retry. ``KeyboardInterrupt`` and
+            other ``BaseException``s propagate so users can still interrupt
+            a stuck loop.
         """
         backend = backend or self.default_backend
 
@@ -419,7 +428,19 @@ class LLMSummarizeCompactor:
         if len(body) <= self.keep_n:
             return ctx
 
-        return _run_coro_blocking(self._async_compact(ctx, backend))
+        try:
+            return _run_coro_blocking(self._async_compact(ctx, backend))
+        except Exception as exc:
+            from mellea.core.utils import MelleaLogger
+
+            MelleaLogger.get_logger().warning(
+                "LLMSummarizeCompactor: summarisation backend call failed "
+                "(%s: %s); returning context unchanged. The conversation will "
+                "keep growing until the next successful compaction.",
+                type(exc).__name__,
+                exc,
+            )
+            return ctx
 
     async def _async_compact(self, ctx: ChatContext, backend: Backend) -> ChatContext:
         """Async core — renders the body, calls the backend, rebuilds the context."""

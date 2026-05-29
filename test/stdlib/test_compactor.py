@@ -523,6 +523,48 @@ class TestLLMSummarizeCompactor:
         assert result is ctx
         assert scripted_summary_backend.calls == 0
 
+    def test_backend_failure_returns_ctx_unchanged_and_logs(
+        self, scripted_summary_backend, caplog
+    ):
+        """Compaction is best-effort: backend errors must not propagate."""
+        import logging
+
+        from mellea.core.backend import Backend
+        from mellea.core.base import GenerateLog
+
+        class BrokenBackend(Backend):
+            async def _generate_from_context(
+                self,
+                action,
+                ctx,
+                *,
+                format=None,
+                model_options=None,
+                tool_calls: bool = False,
+            ):
+                raise RuntimeError("simulated rate limit")
+
+            async def generate_from_raw(self, *a, **kw):
+                raise NotImplementedError
+
+        comp = LLMSummarizeCompactor(default_backend=BrokenBackend(), keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+
+        with caplog.at_level(logging.WARNING):
+            result = comp.compact(ctx)
+
+        # ctx returned unchanged — same object, original history intact.
+        assert result is ctx
+        assert [m.content for m in result.as_list()] == ["m0", "m1", "m2", "m3"]
+        # Warning logged with context for debugging.
+        assert any(
+            "summarisation backend call failed" in rec.message
+            and "RuntimeError" in rec.message
+            for rec in caplog.records
+        )
+
     def test_summarises_old_keeps_recent(self, scripted_summary_backend):
         comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=2)
         ctx = ChatContext(window_size=10_000)
