@@ -17,6 +17,15 @@ class ChatContext(Context):
     retained. Compaction is opt-in: pass ``compactor=`` for a custom
     strategy, or ``window_size=`` as sugar for ``WindowCompactor(size=...)``.
 
+    Note:
+        Compaction is now applied at ``add()`` time and persists in the linked
+        list, so ``as_list()`` and ``view_for_generation()`` both reflect the
+        post-compaction history. Earlier versions kept the full history in
+        ``as_list()`` and only windowed the model-facing view, so any caller
+        that used ``len(ctx.as_list())`` as a session-wide interaction count
+        will now silently undercount once the compactor fires. Track turn
+        counts out-of-band (e.g. on the session) if you need them.
+
     Args:
         compactor (InlineCompactor | None): The compactor invoked on every
             ``add``. ``None`` (the default) means no compaction; full history
@@ -84,9 +93,7 @@ class ChatContext(Context):
 
 
 def _rebuild_chat_context(
-    components: list[Component | CBlock],
-    *,
-    compactor: InlineCompactor | None = None,
+    components: list[Component | CBlock], *, compactor: InlineCompactor | None = None
 ) -> ChatContext:
     """Build a fresh ``ChatContext`` linked-list without triggering compaction.
 

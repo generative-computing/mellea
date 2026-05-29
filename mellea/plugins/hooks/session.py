@@ -57,7 +57,10 @@ class SessionCleanupPayload(MelleaBasePayload):
     Attributes:
         context: The `Context` at the time of cleanup (observe-only).
 
-        interaction_count: Number of items in the context at cleanup time.
+        interaction_count: Number of model-interaction turns committed during
+            the session (each ``self.ctx = ...`` assignment in ``MelleaSession``
+            counts as one). Reset to 0 by ``MelleaSession.reset()``. Stable
+            under any context-compaction strategy.
     """
 
     context: Any = None
