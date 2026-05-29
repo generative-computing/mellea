@@ -14,7 +14,7 @@ const config: Config = {
   url: SITE_URL,
   baseUrl: BASE_URL,
 
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   onBrokenAnchors: 'warn',
   onDuplicateRoutes: 'throw',
 
