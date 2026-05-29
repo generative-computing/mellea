@@ -144,7 +144,35 @@ class Compactor(Protocol):
         ...
 
 
-class WindowCompactor:
+class InlineCompactor:
+    """Marker base for compactors safe to attach directly to ``ChatContext``.
+
+    A compactor is "inline-safe" when its ``compact()`` does not call a backend
+    on every ``add()``. ``ChatContext.add()`` invokes ``compact()`` without a
+    backend argument, so any compactor wired into ``ChatContext(compactor=...)``
+    must either avoid backend calls (e.g. :class:`WindowCompactor`) or gate
+    them sparsely (e.g. :class:`ThresholdCompactor`). Compactors that would
+    invoke the backend on every ``add()`` (e.g. :class:`LLMSummarizeCompactor`)
+    must NOT inherit this marker — use them via ``react(compactor=...)`` or
+    by calling ``compact(ctx, backend=...)`` manually instead.
+
+    The marker is purely nominal: opt in by inheriting, opt out by not. Pure
+    structural :class:`Compactor` Protocol satisfaction is not enough.
+
+    Subclasses must override :meth:`compact`; the base implementation raises
+    :class:`NotImplementedError`. Carrying the method signature here lets
+    ``InlineCompactor`` be used as a static type (``ChatContext`` parameters,
+    ``_compactor`` attribute) without losing the ``Compactor`` contract.
+    """
+
+    def compact(
+        self, ctx: ChatContext, *, backend: Backend | None = None
+    ) -> ChatContext:
+        """Subclasses must override this with their concrete strategy."""
+        raise NotImplementedError("InlineCompactor subclasses must implement compact()")
+
+
+class WindowCompactor(InlineCompactor):
     """Retains the last ``size`` body components of a ``ChatContext``.
 
     Uses ``pin_predicate`` to decide which leading components to preserve as
@@ -206,7 +234,7 @@ class WindowCompactor:
         return _rebuild_chat_context(compacted, compactor=ctx._compactor)
 
 
-class ThresholdCompactor:
+class ThresholdCompactor(InlineCompactor):
     """Wraps an inner ``Compactor``, gating it on the conversation's token size.
 
     Despite the suffix, this class does not compact directly — it forwards
@@ -247,7 +275,9 @@ class ThresholdCompactor:
         self.inner = inner
         self.threshold = threshold
 
-    def compact(self, ctx: T, *, backend: Backend | None = None) -> T:
+    def compact(
+        self, ctx: ChatContext, *, backend: Backend | None = None
+    ) -> ChatContext:
         """Forward to ``inner.compact`` only when ``ctx`` exceeds the threshold.
 
         Args:
@@ -319,7 +349,19 @@ class LLMSummarizeCompactor:
     :func:`mellea.stdlib.components.react.pin_react_initiator` so the goal
     and tool registration survive untouched.
 
+    Note:
+        This class does NOT inherit :class:`InlineCompactor`, so it cannot be
+        passed to ``ChatContext(compactor=...)`` directly — that would invoke
+        the backend on every ``add()``. Use via ``react(compactor=...)``,
+        wrap in :class:`ThresholdCompactor` (which gates by token usage), or
+        call ``compact(ctx, backend=...)`` manually.
+
     Args:
+        default_backend (Backend): Backend used by ``compact()`` when the
+            caller does not supply one. Required: ``LLMSummarizeCompactor``
+            cannot do its job without a backend at compaction time. A
+            ``backend=`` kwarg passed to ``compact()`` overrides this default
+            for that call only.
         keep_n (int): Number of recent body components to keep verbatim.
             ``0`` summarises everything below the prefix.
         pin_predicate (PinPredicate): Function that decides the prefix
@@ -333,11 +375,12 @@ class LLMSummarizeCompactor:
     def __init__(
         self,
         *,
+        default_backend: Backend,
         keep_n: int = 5,
         pin_predicate: PinPredicate = pin_nothing,
         prompt_template: str | None = None,
     ) -> None:
-        """Initialize with the recent-body window, pin predicate, and prompt."""
+        """Initialize with a default backend, recent-body window, pin predicate, and prompt."""
         if keep_n < 0:
             raise ValueError("LLMSummarizeCompactor keep_n must be non-negative")
         template = (
@@ -347,6 +390,7 @@ class LLMSummarizeCompactor:
             raise ValueError(
                 "LLMSummarizeCompactor prompt_template must contain '{conversation}'"
             )
+        self.default_backend = default_backend
         self.keep_n = keep_n
         self.pin_predicate = pin_predicate
         self.prompt_template = template
@@ -358,19 +402,16 @@ class LLMSummarizeCompactor:
 
         Args:
             ctx: The chat context to compact.
-            backend: Backend used to generate the summary; required.
+            backend: Backend used to generate the summary. When ``None`` the
+                ``default_backend`` set at construction is used instead.
 
         Returns:
             A new ``ChatContext`` containing the prefix, a single summary
             ``Message`` produced by the backend, and the most-recent
             ``keep_n`` body components verbatim. Returns ``ctx`` unchanged
             when the body is already at or below ``keep_n`` in length.
-
-        Raises:
-            ValueError: If ``backend`` is not provided.
         """
-        if backend is None:
-            raise ValueError("LLMSummarizeCompactor requires a `backend`")
+        backend = backend or self.default_backend
 
         full = ctx.as_list()
         pin_end = self.pin_predicate(full)

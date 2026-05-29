@@ -293,10 +293,20 @@ def test_react_summary_prompt_works_with_llm_summarize_compactor():
     from mellea.stdlib.context import LLMSummarizeCompactor
 
     # Should not raise on construction (template contains {conversation}).
-    LLMSummarizeCompactor(prompt_template=react_summary_prompt(goal="g"))
-    LLMSummarizeCompactor(prompt_template=react_summary_prompt())
+    # Backend value is unused in this validation-only test; any non-None object
+    # satisfies the required default_backend kwarg.
+    backend = object()
     LLMSummarizeCompactor(
-        prompt_template=react_summary_prompt(goal="g", max_tokens_hint=2000)
+        default_backend=backend,  # type: ignore[arg-type]
+        prompt_template=react_summary_prompt(goal="g"),
+    )
+    LLMSummarizeCompactor(
+        default_backend=backend,  # type: ignore[arg-type]
+        prompt_template=react_summary_prompt(),
+    )
+    LLMSummarizeCompactor(
+        default_backend=backend,  # type: ignore[arg-type]
+        prompt_template=react_summary_prompt(goal="g", max_tokens_hint=2000),
     )
 
 
@@ -406,7 +416,9 @@ async def test_react_runs_llm_summarize_compactor():
         backend=backend,
         tools=[search],
         loop_budget=10,
-        compactor=LLMSummarizeCompactor(keep_n=1000, pin_predicate=pin_react_initiator),
+        compactor=LLMSummarizeCompactor(
+            default_backend=backend, keep_n=1000, pin_predicate=pin_react_initiator
+        ),
     )
     assert result.value == "done"
     assert any(isinstance(c, ReactInitiator) for c in ctx.as_list())

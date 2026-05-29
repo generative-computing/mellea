@@ -59,8 +59,7 @@ def pin_react_initiator(components: list[Component | CBlock]) -> int:
 
 
 def react_summary_prompt(
-    goal: str | None = None,
-    max_tokens_hint: int | None = None,
+    goal: str | None = None, max_tokens_hint: int | None = None
 ) -> str:
     """Build a research-flavoured summary prompt for :class:`LLMSummarizeCompactor`.
 
@@ -88,6 +87,7 @@ def react_summary_prompt(
         from mellea.stdlib.context import LLMSummarizeCompactor
 
         compactor = LLMSummarizeCompactor(
+            default_backend=my_backend,
             keep_n=5,
             pin_predicate=pin_react_initiator,
             prompt_template=react_summary_prompt(

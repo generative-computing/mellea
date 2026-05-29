@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from mellea.core import CBlock, Component, Context
 
 if TYPE_CHECKING:
-    from mellea.stdlib.context.compactor import Compactor
+    from mellea.stdlib.context.compactor import InlineCompactor
 
 
 class ChatContext(Context):
@@ -18,28 +18,40 @@ class ChatContext(Context):
     strategy, or ``window_size=`` as sugar for ``WindowCompactor(size=...)``.
 
     Args:
-        compactor (Compactor | None): The compactor invoked on every ``add``.
-            ``None`` (the default) means no compaction; full history is kept.
+        compactor (InlineCompactor | None): The compactor invoked on every
+            ``add``. ``None`` (the default) means no compaction; full history
+            is kept.
         window_size (int | None): Sugar that constructs a
             :class:`WindowCompactor`. Mutually exclusive with ``compactor``.
             ``None`` (the default) means no windowing.
     """
 
     def __init__(
-        self, *, compactor: Compactor | None = None, window_size: int | None = None
+        self,
+        *,
+        compactor: InlineCompactor | None = None,
+        window_size: int | None = None,
     ) -> None:
         """Initialize a ChatContext with an optional compactor."""
         if compactor is not None and window_size is not None:
             raise ValueError(
                 "ChatContext: pass either `compactor` or `window_size`, not both."
             )
+        if compactor is not None:
+            from mellea.stdlib.context.compactor import InlineCompactor
+
+            if not isinstance(compactor, InlineCompactor):
+                raise TypeError(
+                    f"ChatContext requires an InlineCompactor; got "
+                    f"{type(compactor).__name__}. Wrap it in ThresholdCompactor, "
+                    "use via react(compactor=...), or call compact(ctx, ...) "
+                    "manually instead."
+                )
         super().__init__()
         if compactor is None and window_size is not None:
             from mellea.stdlib.context.compactor import WindowCompactor
 
-            self._compactor: Compactor | None = cast(
-                "Compactor", WindowCompactor(size=window_size)
-            )
+            self._compactor: InlineCompactor | None = WindowCompactor(size=window_size)
         else:
             self._compactor = compactor
 
@@ -72,7 +84,9 @@ class ChatContext(Context):
 
 
 def _rebuild_chat_context(
-    components: list[Component | CBlock], *, compactor: Compactor | None = None
+    components: list[Component | CBlock],
+    *,
+    compactor: InlineCompactor | None = None,
 ) -> ChatContext:
     """Build a fresh ``ChatContext`` linked-list without triggering compaction.
 
