@@ -387,8 +387,9 @@ def test_docker_policy_has_expected_defaults():
 
 
 def test_compatibility_matrix_has_all_tiers():
-    """COMPATIBILITY_MATRIX covers all four execution tiers."""
+    """COMPATIBILITY_MATRIX covers all five execution tiers."""
     assert set(COMPATIBILITY_MATRIX.keys()) == {
+        "static",
         "local_unsafe",
         "local",
         "docker_unsafe",
