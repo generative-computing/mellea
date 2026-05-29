@@ -316,10 +316,33 @@ def _run_coro_blocking(coro):  # type: ignore[no-untyped-def]
       event loop with ``asyncio.run`` and block until it returns.
 
     Used by sync compactors that need to call async backend code (e.g.
-    :class:`LLMSummarizeCompactor`). Note that the second branch blocks the
-    calling thread (and, transitively, the running event loop) for the
-    duration of the coroutine — fine for a serial loop like ReACT, but not
-    suitable if other tasks need to make progress concurrently.
+    :class:`LLMSummarizeCompactor`).
+
+    Warning:
+        When called from inside a running event loop (e.g. ``react()``), the
+        second branch above blocks the calling thread — and therefore the
+        loop — for the full duration of the coroutine. **Nothing else on the
+        loop can make progress** while the worker runs: scheduled callbacks,
+        telemetry flushers, cancellation signals, other sessions sharing the
+        loop, periodic keepalives — all are stalled. Acceptable for a
+        strictly serial flow like ReACT (the next iteration cannot start
+        until compaction finishes anyway), but unsafe if the loop has
+        concurrent tasks that need to keep running.
+
+        Backends that hold *per-loop* resources may behave unexpectedly.
+        :class:`httpx.AsyncClient`, for instance, is bound to the event
+        loop on which it was created; the coroutine here runs on a fresh
+        loop inside a worker thread, so any async resource captured in a
+        closure or stored on a backend instance from the outer loop cannot
+        be used directly. The typical symptom is ``RuntimeError: This event
+        loop is already running`` or a hung request.
+
+        The long-term fix is an async variant on the :class:`Compactor`
+        protocol so callers can ``await`` natively instead of bridging
+        through a worker thread. Until then, only invoke compactors that
+        need a backend from contexts where this trade-off is acceptable
+        (typically: inside ``react``, in a manual ``compact()`` call between
+        turns, or from a synchronous script).
     """
     import asyncio
     import concurrent.futures
