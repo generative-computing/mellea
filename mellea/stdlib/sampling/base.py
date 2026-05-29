@@ -15,7 +15,11 @@ Sampling strategies control how Mellea handles validation failures during genera
 """
 
 import abc
+import asyncio
+from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any, Generic
 
 import tqdm
 
@@ -41,30 +45,105 @@ from ..components import Instruction, Message
 from ..context import ChatContext
 
 
+@dataclass
+class _SamplingResultSlice(Generic[S]):
+    """Result of a single generate/validate iteration inside a subsample."""
+
+    success: bool
+    generation: ComputedModelOutputThunk[S]
+    validation: list[tuple[Requirement, ValidationResult]]
+    context: Context
+    action: Component
+
+
+def _get_sampling_result(
+    slices: list[_SamplingResultSlice[S]],
+    select_from_failure: Callable[
+        [
+            list[Component],
+            list[ComputedModelOutputThunk],
+            list[list[tuple[Requirement, ValidationResult]]],
+        ],
+        int,
+    ],
+) -> SamplingResult[S]:
+    """Aggregate per-iteration slices into a SamplingResult.
+
+    Picks the first successful slice as the result; falls back to
+    ``select_from_failure`` over the collected slices when no slice succeeded.
+    """
+    sample_generations: list[ComputedModelOutputThunk] = []
+    sample_validations: list[list[tuple[Requirement, ValidationResult]]] = []
+    sample_actions: list[Component] = []
+    sample_contexts: list[Context] = []
+
+    success = False
+    best_index = -1
+
+    # Iterate over all entries to accumulate them but only take the first success.
+    for i, sample_slice in enumerate(slices):
+        if sample_slice.success and not success:
+            success = True
+            best_index = i
+
+        sample_generations.append(sample_slice.generation)
+        sample_validations.append(sample_slice.validation)
+        sample_actions.append(sample_slice.action)
+        sample_contexts.append(sample_slice.context)
+
+    if not success:
+        best_index = select_from_failure(
+            sample_actions, sample_generations, sample_validations
+        )
+
+    return SamplingResult(
+        result_index=best_index,
+        success=success,
+        sample_generations=sample_generations,
+        sample_validations=sample_validations,
+        sample_actions=sample_actions,
+        sample_contexts=sample_contexts,
+    )
+
+
 class BaseSamplingStrategy(SamplingStrategy):
     """Base class for multiple strategies that reject samples based on given instructions.
 
     Args:
-        loop_budget (int): Maximum number of generate/validate cycles. Must be
-            greater than 0. Defaults to `1`.
+        loop_budget (int): Maximum number of generate/validate cycles per
+            concurrent subsample. Must be greater than 0. Defaults to `1`.
+        concurrency_budget (int): Number of concurrent subsamples. Sampling
+            generates at most `loop_budget * concurrency_budget` requests
+            and stops at the first valid result. Must be greater than 0.
+            Defaults to `1` (no concurrency).
         requirements (list[Requirement] | None): Global requirements evaluated
             on every sample. When set, overrides per-call requirements.
 
+    Examples:
+        - `loop_budget=1`: no repair strategies are used.
+        - `loop_budget=3, concurrency_budget=1`: generate -> repair -> generate -> repair -> final generate.
+        - `loop_budget=2, concurrency_budget=2`: two concurrent subsamples, each with one repair.
+
+    Raises:
+        AssertionError: If `loop_budget < 1` or `concurrency_budget < 1`.
     """
 
     loop_budget: int
+    concurrency_budget: int
 
     def __init__(
-        self, *, loop_budget: int = 1, requirements: list[Requirement] | None = None
+        self,
+        *,
+        loop_budget: int = 1,
+        concurrency_budget: int = 1,
+        requirements: list[Requirement] | None = None,
     ):
-        """Initialize BaseSamplingStrategy with a loop budget and optional global requirements.
-
-        Raises:
-            AssertionError: If loop_budget is not greater than 0.
-        """
+        """Initialize BaseSamplingStrategy with budgets and optional global requirements."""
         assert loop_budget > 0, "Loop budget must be at least 1."
+        assert concurrency_budget > 0, "Concurrency budget must be at least 1."
 
         self.loop_budget = loop_budget
+        self.concurrency_budget = concurrency_budget
         self.requirements = requirements
 
     @staticmethod
@@ -148,11 +227,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         flog = MelleaLogger.get_logger()
 
         with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
-            sampled_results: list[ComputedModelOutputThunk] = []
-            sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-            sampled_actions: list[Component] = []
-            sample_contexts: list[Context] = []
-
             # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
             # flag to determine whether we should show the pbar.
             show_progress = (
@@ -167,8 +241,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             elif requirements is not None:
                 reqs += requirements
             reqs = list(set(reqs))
-
-            loop_count = 0
 
             # --- sampling_loop_start hook ---
             effective_loop_budget = self.loop_budget
@@ -187,205 +259,288 @@ class BaseSamplingStrategy(SamplingStrategy):
                 )
                 effective_loop_budget = start_payload.loop_budget
 
-            loop_budget_range_iterator = (
-                tqdm.tqdm(range(effective_loop_budget))  # type: ignore
+            total_possible_generations = effective_loop_budget * self.concurrency_budget
+            progress_indicator = (
+                tqdm.tqdm(
+                    iterable=range(total_possible_generations),
+                    desc=f"{type(self).__name__}",
+                )
                 if show_progress
-                else range(effective_loop_budget)  # type: ignore
+                else None
             )
 
-            next_action = deepcopy(action)
-            next_context = context
-            for _ in loop_budget_range_iterator:  # type: ignore
-                loop_count += 1
-                if not show_progress:
-                    flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+            # Create `concurrency_budget` concurrent generators that all generate up to the `loop_budget` number of generations.
+            generators: list[AsyncGenerator[_SamplingResultSlice[S], Any]] = [
+                self._subsample_iteration(
+                    subsample_index=idx,
+                    iterations=effective_loop_budget,
+                    action=action,
+                    context=context,
+                    backend=backend,
+                    requirements=reqs,
+                    validation_ctx=validation_ctx,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
+                for idx in range(self.concurrency_budget)
+            ]
 
-                with with_context(sampling_iteration=loop_count):
-                    # run a generation pass
-                    result, result_ctx = await backend.generate_from_context(
-                        next_action,
-                        ctx=next_context,
-                        format=format,
-                        model_options=model_options,
-                        tool_calls=tool_calls,
-                    )
-                    await result.avalue()
-                    result = ComputedModelOutputThunk(result)
+            # Sentinel pushed by each producer when it exhausts its generator.
+            # Lets the consumer detect "all producers done" without racing
+            # queue.get() against a separate completion future.
+            _DONE = object()
 
-                    # Sampling strategies may use different components from the original
-                    # action. This might cause discrepancies in the expected parsed_repr
-                    # type / value. Explicitly overwrite that here.
-                    # TODO: See if there's a more elegant way for this so that each sampling
-                    # strategy doesn't have to re-implement it.
-                    result.parsed_repr = action.parse(result)
+            async def _producer(
+                generator: AsyncGenerator[_SamplingResultSlice, Any],
+                queue: asyncio.Queue[_SamplingResultSlice | object],
+            ) -> None:
+                """Drain an async generator into a shared queue, then signal completion."""
+                try:
+                    async for item in generator:
+                        await queue.put(item)
+                finally:
+                    await queue.put(_DONE)
 
-                    # validation pass
-                    val_scores_co = mfuncs.avalidate(
-                        reqs=reqs,
-                        context=result_ctx,
-                        backend=backend,
-                        output=result,
-                        format=None,
-                        model_options=model_options,
-                        # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
-                    )
-                    val_scores = await val_scores_co
+            # Create the queue that the samples are consumed from.
+            slice_queue: asyncio.Queue[_SamplingResultSlice | object] = asyncio.Queue()
+            producer_tasks = [
+                # Use tasks to push to the queue so that we don't need to explicitly await each generator.
+                asyncio.create_task(_producer(gen, slice_queue))
+                for gen in generators
+            ]
 
-                    # match up reqs with scores
-                    constraint_scores = list(zip(reqs, val_scores))
+            slices: list[_SamplingResultSlice] = []
 
-                    # collect all data
-                    sampled_results.append(result)
-                    sampled_scores.append(constraint_scores)
-                    sampled_actions.append(next_action)
-                    sample_contexts.append(result_ctx)
+            # Keep track of the producers left. It's the easiest way to ensure we don't deadlock
+            # if the producers finish and queue is empty at the same time.
+            remaining_producers = len(producer_tasks)
+            try:
+                while remaining_producers > 0:
+                    item = await slice_queue.get()
 
-                    all_validations_passed = all(bool(s[1]) for s in constraint_scores)
+                    if item is _DONE:
+                        remaining_producers -= 1
+                        continue
 
-                    # --- sampling_iteration hook ---
-                    if has_plugins(HookType.SAMPLING_ITERATION):
-                        from ...plugins.hooks.sampling import SamplingIterationPayload
+                    assert isinstance(item, _SamplingResultSlice)
+                    slices.append(item)
 
-                        iter_payload = SamplingIterationPayload(
-                            strategy_name=type(self).__name__,
-                            iteration=loop_count,
-                            action=next_action,
-                            result=result,
-                            validation_results=constraint_scores,
-                            all_validations_passed=all_validations_passed,
-                            valid_count=sum(1 for s in constraint_scores if bool(s[1])),
-                            total_count=len(constraint_scores),
-                        )
-                        await invoke_hook(
-                            HookType.SAMPLING_ITERATION, iter_payload, backend=backend
-                        )
+                    if progress_indicator is not None:
+                        progress_indicator.update()
 
-                    # if all vals are true -- break and return success
-                    if all_validations_passed:
-                        flog.info("SUCCESS")
-                        assert (
-                            result._generate_log is not None
-                        )  # Cannot be None after generation.
-                        result._generate_log.is_final_result = True
+                    if item.success:
+                        # Found a successful sample. Exit early.
+                        break
+            finally:
+                for t in producer_tasks:
+                    t.cancel()  # No-op if already done / cancelled.
 
-                        # --- sampling_loop_end hook (success) ---
-                        if has_plugins(HookType.SAMPLING_LOOP_END):
-                            from ...plugins.hooks.sampling import SamplingLoopEndPayload
+                # Wait for cancellations to settle so we don't leak tasks.
+                await asyncio.gather(*producer_tasks, return_exceptions=True)
 
-                            end_payload = SamplingLoopEndPayload(
-                                strategy_name=type(self).__name__,
-                                success=True,
-                                iterations_used=loop_count,
-                                final_result=result,
-                                final_action=next_action,
-                                final_context=result_ctx,
-                                all_results=sampled_results,
-                                all_validations=sampled_scores,
-                            )
-                            await invoke_hook(
-                                HookType.SAMPLING_LOOP_END, end_payload, backend=backend
-                            )
+                # Drain anything queued before producers were cancelled.
+                while not slice_queue.empty():
+                    try:
+                        item = slice_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if item is _DONE:
+                        continue
+                    assert isinstance(item, _SamplingResultSlice)
+                    slices.append(item)
+                    if progress_indicator is not None:
+                        progress_indicator.update()
 
-                        # SUCCESS !!!!
-                        return SamplingResult(
-                            result_index=len(sampled_results) - 1,
-                            success=True,
-                            sample_generations=sampled_results,
-                            sample_validations=sampled_scores,
-                            sample_contexts=sample_contexts,
-                            sample_actions=sampled_actions,
-                        )
+                if progress_indicator is not None:
+                    progress_indicator.close()
 
-                    else:
-                        # log partial success and continue
-                        failed = [s for s in constraint_scores if not bool(s[1])]
-                        count_failed = len(failed)
-                        failed_reqs = [
-                            r[0].description
-                            if r[0].description is not None
-                            else "[no description]"
-                            for r in failed
-                        ]
-                        stringify_failed = "\n\t - " + "\n\t - ".join(failed_reqs)
-                        flog.info(
-                            f"FAILED. Valid: {len(constraint_scores) - count_failed}/{len(constraint_scores)}. Failed: {stringify_failed}"
-                        )
-
-                    # If we did not pass all constraints, update the instruction and try again.
-                    next_action, next_context = self.repair(
-                        next_context,
-                        result_ctx,
-                        sampled_actions,
-                        sampled_results,
-                        sampled_scores,
-                    )
-
-                    # --- sampling_repair hook ---
-                    if has_plugins(HookType.SAMPLING_REPAIR):
-                        from ...plugins.hooks.sampling import SamplingRepairPayload
-
-                        repair_payload = SamplingRepairPayload(
-                            repair_type=getattr(
-                                self, "_get_repair_type", lambda: "unknown"
-                            )(),
-                            failed_action=sampled_actions[-1],
-                            failed_result=sampled_results[-1],
-                            failed_validations=sampled_scores[-1],
-                            repair_action=next_action,
-                            repair_context=next_context,
-                            repair_iteration=loop_count,
-                        )
-                        await invoke_hook(
-                            HookType.SAMPLING_REPAIR, repair_payload, backend=backend
-                        )
-
-            flog.info(
-                f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
+            s_result = _get_sampling_result(
+                slices=slices, select_from_failure=self.select_from_failure
             )
 
-            # if no valid result could be determined, find a last resort.
-            best_failed_index = self.select_from_failure(
-                sampled_actions, sampled_results, sampled_scores
-            )
-            assert best_failed_index < len(sampled_results), (
+            if s_result.success:
+                flog.info("Sampling was successful.")
+            else:
+                flog.info(
+                    f"Invoking select_from_failure after {len(s_result.sample_generations)} failed attempts."
+                )
+
+            assert s_result.result_index < len(s_result.sample_generations), (
                 "The select_from_failure method did not return a valid result. It has to selected from failed_results."
             )
+            assert s_result.result._generate_log is not None
+            s_result.result._generate_log.is_final_result = True
 
-            assert (
-                sampled_results[best_failed_index]._generate_log is not None
-            )  # Cannot be None after generation.
-            sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
-
-            # --- sampling_loop_end hook (failure) ---
+            # --- sampling_loop_end hook (success or failure) ---
             if has_plugins(HookType.SAMPLING_LOOP_END):
                 from ...plugins.hooks.sampling import SamplingLoopEndPayload
 
-                _final_ctx = (
-                    sample_contexts[best_failed_index] if sample_contexts else context
-                )
                 end_payload = SamplingLoopEndPayload(
                     strategy_name=type(self).__name__,
-                    success=False,
-                    iterations_used=loop_count,
-                    final_result=sampled_results[best_failed_index],
-                    final_action=sampled_actions[best_failed_index],
-                    final_context=_final_ctx,
-                    failure_reason=f"Budget exhausted after {loop_count} iterations",
-                    all_results=sampled_results,
-                    all_validations=sampled_scores,
+                    success=s_result.success,
+                    iterations_used=len(slices),
+                    final_result=s_result.result,
+                    final_action=s_result.result_action,
+                    final_context=s_result.result_ctx,
+                    all_results=list(s_result.sample_generations),
+                    all_validations=list(s_result.sample_validations),
+                    failure_reason=(
+                        None
+                        if s_result.success
+                        else f"Budget exhausted after {len(slices)} iterations"
+                    ),
                 )
                 await invoke_hook(
                     HookType.SAMPLING_LOOP_END, end_payload, backend=backend
                 )
 
-            return SamplingResult(
-                result_index=best_failed_index,
-                success=False,
-                sample_generations=sampled_results,
-                sample_validations=sampled_scores,
-                sample_actions=sampled_actions,
-                sample_contexts=sample_contexts,
-            )
+            return s_result
+
+    async def _subsample_iteration(
+        self,
+        subsample_index: int,
+        iterations: int,
+        action: Component[S],
+        context: Context,
+        backend: Backend,
+        requirements: list[Requirement],
+        *,
+        validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> AsyncGenerator[_SamplingResultSlice[S], Any]:
+        """Run one concurrent subsample: up to `iterations` generate/validate/repair attempts.
+
+        Yields a :class:`_SamplingResultSlice` per attempt and ends early after the first successful slice.
+        `subsample_index` (0-based) identifies this subsample within the parent `sample()` call; it is used to derive a
+        globally unique iteration counter for telemetry and hooks.
+        """
+        flog = MelleaLogger.get_logger()
+        sampled_results: list[ComputedModelOutputThunk[S]] = []
+        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        sampled_actions: list[Component] = []
+
+        next_action = deepcopy(action)
+        next_context = context
+        for i in range(iterations):
+            # Globally unique across concurrent subsamples in the parent sample() call.
+            current_iteration = subsample_index * iterations + i + 1
+
+            with with_context(sampling_iteration=current_iteration):
+                # run a generation pass
+                result, result_ctx = await backend.generate_from_context(
+                    next_action,
+                    ctx=next_context,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
+                await result.avalue()
+                result = ComputedModelOutputThunk(result)
+
+                # Sampling strategies may use different components from the original
+                # action. This might cause discrepancies in the expected parsed_repr
+                # type / value. Explicitly overwrite that here.
+                # TODO: See if there's a more elegant way for this so that each sampling
+                # strategy doesn't have to re-implement it.
+                result.parsed_repr = action.parse(result)
+
+                # validation pass
+                val_scores_co = mfuncs.avalidate(
+                    reqs=requirements,
+                    context=result_ctx,
+                    backend=backend,
+                    output=result,
+                    format=None,
+                    model_options=model_options,
+                    # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
+                )
+                val_scores = await val_scores_co
+
+                constraint_scores = list(zip(requirements, val_scores))
+                all_validations_passed = all(bool(s[1]) for s in constraint_scores)
+
+                # --- sampling_iteration hook ---
+                if has_plugins(HookType.SAMPLING_ITERATION):
+                    from ...plugins.hooks.sampling import SamplingIterationPayload
+
+                    iter_payload = SamplingIterationPayload(
+                        strategy_name=type(self).__name__,
+                        iteration=current_iteration,
+                        action=next_action,
+                        result=result,
+                        validation_results=constraint_scores,
+                        all_validations_passed=all_validations_passed,
+                        valid_count=sum(1 for s in constraint_scores if bool(s[1])),
+                        total_count=len(constraint_scores),
+                    )
+                    await invoke_hook(
+                        HookType.SAMPLING_ITERATION, iter_payload, backend=backend
+                    )
+
+                if not all_validations_passed:
+                    failed = [s for s in constraint_scores if not bool(s[1])]
+                    failed_reqs = [
+                        r[0].description
+                        if r[0].description is not None
+                        else "[no description]"
+                        for r in failed
+                    ]
+                    stringify_failed = "\n\t - " + "\n\t - ".join(failed_reqs)
+                    flog.info(
+                        f"FAILED. Valid: {len(constraint_scores) - len(failed)}/{len(constraint_scores)}. Failed: {stringify_failed}"
+                    )
+
+                yield _SamplingResultSlice(
+                    success=all_validations_passed,
+                    generation=result,
+                    validation=constraint_scores,
+                    context=result_ctx,
+                    action=next_action,
+                )
+
+                if all_validations_passed:
+                    return
+
+                if i == iterations - 1:
+                    # Final iteration: repair output would be discarded, skip it.
+                    # The generation budget has been exhausted.
+                    return
+
+                # Append failure history before computing the repair so the strategy
+                # sees the most recent failed attempt.
+                sampled_results.append(result)
+                sampled_scores.append(constraint_scores)
+                sampled_actions.append(next_action)
+
+                next_action, next_context = self.repair(
+                    next_context,
+                    result_ctx,
+                    sampled_actions,
+                    sampled_results,
+                    sampled_scores,
+                )
+
+                # --- sampling_repair hook ---
+                if has_plugins(HookType.SAMPLING_REPAIR):
+                    from ...plugins.hooks.sampling import SamplingRepairPayload
+
+                    repair_payload = SamplingRepairPayload(
+                        repair_type=getattr(
+                            self, "_get_repair_type", lambda: "unknown"
+                        )(),
+                        failed_action=sampled_actions[-1],
+                        failed_result=sampled_results[-1],
+                        failed_validations=sampled_scores[-1],
+                        repair_action=next_action,
+                        repair_context=next_context,
+                        repair_iteration=current_iteration,
+                    )
+                    await invoke_hook(
+                        HookType.SAMPLING_REPAIR, repair_payload, backend=backend
+                    )
 
 
 class RejectionSamplingStrategy(BaseSamplingStrategy):
