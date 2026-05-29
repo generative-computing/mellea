@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/tutorials/05-mifying-legacy-code"
 title: "Tutorial: Mifying Legacy Code"
 description: "Add LLM query and transform capabilities to existing Python classes without rewriting them."
 # diataxis: tutorial
@@ -18,7 +17,7 @@ By the end you will have covered:
 - Controlling which fields and methods the LLM sees
 - Using `stringify_func` for custom text representations
 
-**Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
+**Prerequisites:** [Tutorial 01](./your-first-generative-program) complete,
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -285,4 +284,4 @@ modifying their class definitions:
 
 **See also:** [MObjects and mify](../concepts/mobjects-and-mify) |
 [Working with Data](../how-to/working-with-data) |
-[Tutorial 03: Using Generative Stubs](./03-using-generative-stubs)
+[Tutorial 03: Using Generative Stubs](./using-generative-stubs)

@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/watsonx"
 title: "IBM WatsonX"
 description: "Run Mellea with IBM WatsonX AI using the WatsonxAIBackend."
 # diataxis: how-to

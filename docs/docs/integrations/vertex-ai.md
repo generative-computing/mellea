@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/vertex-ai"
 title: "Vertex AI"
 description: "Connect Mellea to Google Vertex AI models via LiteLLM."
 # diataxis: how-to

@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/smolagents"
 title: "smolagents"
 description: "Use HuggingFace smolagents tools inside a Mellea session."
 # diataxis: how-to

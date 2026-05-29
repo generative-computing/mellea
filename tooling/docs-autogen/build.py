@@ -59,6 +59,11 @@ def main():
         action="store_true",
         help="Skip CLI reference page generation",
     )
+    parser.add_argument(
+        "--skip-nav-rebuild",
+        action="store_true",
+        help="Skip step 3 (nav-only rebuild of generate-ast.py). Auto-skipped when docs.json is absent.",
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
@@ -120,23 +125,29 @@ def main():
     # this step re-reads those decorated files so the landing page cards show
     # the full module descriptions rather than the short frontmatter one-liners.
     if not args.skip_generation and not args.skip_decoration:
-        cmd = [
-            sys.executable,
-            str(script_dir / "generate-ast.py"),
-            "--docs-root",
-            str(output_dir.parent),
-            "--nav-only",
-            "--source-dir",
-            str(repo_root),
-        ]
-        print(f"[build.py] Running: {' '.join(cmd)}")
-        result = subprocess.run(cmd, check=False)
-        if result.returncode != 0:
+        docs_json = repo_root / "docs" / "docs" / "docs.json"
+        if args.skip_nav_rebuild or not docs_json.exists():
             print(
-                f"[build.py] ERROR: generate-ast.py (nav-only) failed with code {result.returncode}",
-                file=sys.stderr,
+                "[build.py] Skipping nav rebuild (docs.json not present — Docusaurus mode)"
             )
-            sys.exit(result.returncode)
+        else:
+            cmd = [
+                sys.executable,
+                str(script_dir / "generate-ast.py"),
+                "--docs-root",
+                str(output_dir.parent),
+                "--nav-only",
+                "--source-dir",
+                str(repo_root),
+            ]
+            print(f"[build.py] Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, check=False)
+            if result.returncode != 0:
+                print(
+                    f"[build.py] ERROR: generate-ast.py (nav-only) failed with code {result.returncode}",
+                    file=sys.stderr,
+                )
+                sys.exit(result.returncode)
 
     # Step 4: Generate CLI reference page
     if not args.skip_cli_reference:

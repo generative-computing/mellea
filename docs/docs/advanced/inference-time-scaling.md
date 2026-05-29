@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/advanced/inference-time-scaling"
 title: "Inference-Time Scaling"
 description: "Control how Mellea generates and validates outputs: rejection sampling, SOFAI, budget forcing, and majority voting."
 # diataxis: how-to
