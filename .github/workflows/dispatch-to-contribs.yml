@@ -1,0 +1,59 @@
+name: "Dispatch release event to mellea-contribs"
+
+# Sends a repository_dispatch event to mellea-contribs whenever a stable
+# mellea release is published. The contribs-side worker workflow listens
+# for `mellea-released` events and does the real work (bumps every
+# pyproject.toml's version + mellea>= constraint, opens a PR).
+#
+# This workflow is intentionally tiny — its only job is to dispatch.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Mellea version to dispatch to contribs (manual / recovery)"
+        required: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip pre-releases
+        if: github.event_name == 'release' && github.event.release.prerelease == true
+        run: |
+          echo "Skipping pre-release ${GITHUB_REF}; dispatch only fires on stable releases."
+          echo "SKIP=true" >> $GITHUB_ENV
+
+      - name: Resolve version
+        if: env.SKIP != 'true'
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Dispatching mellea-released event to contribs with version=${VERSION}"
+
+      - name: Mint GitHub App token
+        if: env.SKIP != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CONTRIBS_DISPATCHER_APP_ID }}
+          private-key: ${{ secrets.CONTRIBS_DISPATCHER_PRIVATE_KEY }}
+          owner: generative-computing
+          repositories: mellea-contribs
+
+      - name: Dispatch to mellea-contribs
+        if: env.SKIP != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh api repos/generative-computing/mellea-contribs/dispatches \
+            --method POST \
+            --field event_type=mellea-released \
+            --field 'client_payload[version]=${{ steps.version.outputs.version }}'
