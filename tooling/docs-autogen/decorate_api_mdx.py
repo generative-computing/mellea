@@ -846,8 +846,7 @@ def process_mdx_file(
     text = inject_preamble(text, module_path, docstring_cache)
     text = normalize_rst_backticks(text)
 
-    # Step 3: inject SidebarFix
-    text = inject_sidebar_fix(text)
+    # Step 3: SidebarFix injection disabled (Mintlify-only; site now uses Docusaurus)
 
     # Step 3.5: Wrap bare doctest (>>>) blocks in fenced code blocks.
     # Must run before escape_mdx_syntax so the new fences are processed.
