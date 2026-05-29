@@ -318,7 +318,7 @@ def _add_citation_response_spans(
     return augmented_citation_info
 
 
-def _get_docs_from_citations(docs: str) -> list[dict]:
+def _get_docs_from_citations(docs: str | None) -> list[dict]:
     """Extract documents from citations.
 
     Given a multi-line string with document information per line, extract

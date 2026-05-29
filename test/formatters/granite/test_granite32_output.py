@@ -16,6 +16,7 @@ from mellea.formatters.granite.granite3.granite32.constants import (
 )
 from mellea.formatters.granite.granite3.granite32.output import (
     Granite32OutputProcessor,
+    _add_citation_response_spans,
     _get_docs_from_citations,
     _parse_citations_text,
     _remove_citations_from_response_text,
@@ -66,6 +67,37 @@ class TestParseCitationsText:
         result = _parse_citations_text(text)
         assert len(result) == 1
         assert result[0]["context_text"] == "text without closing quote"
+
+    def test_no_co_tags_warns(self, caplog):
+        """No <co> tags → warning + empty return."""
+        result = _parse_citations_text("some response text without any tags")
+        assert result == []
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("Expected citations but found none" in r.message for r in warnings)
+
+    def test_no_inner_document_pattern_warns(self, caplog):
+        """<co>N</co> present but inner Document regex misses → warning."""
+        result = _parse_citations_text(
+            "<co>1</co> garbage not matching document pattern"
+        )
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "Expected single RegEx match but found none" in r.message for r in warnings
+        )
+        assert result == []
+
+    def test_nested_document_mention_warns(self, caplog):
+        """Citation text with embedded \\nDocument N mention → warning, citation still returned."""
+        text = '<co>1</co> Document 0: "cited text\nDocument 1 additional mention"'
+        result = _parse_citations_text(text)
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "Citation text contains another document mention" in r.message
+            for r in warnings
+        )
+        assert len(result) == 1
+        assert result[0]["citation_id"] == "1"
+        assert result[0]["doc_id"] == "0"
 
 
 # ---------------------------------------------------------------------------
@@ -192,11 +224,81 @@ class TestGetDocsFromCitations:
         text = '<co>1</co> Document abc: "text"'
         result = _get_docs_from_citations(text)
         assert len(result) == 0
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("Unable to retrieve doc id from:" in r.message for r in warnings)
+
+    def test_non_numeric_citation_id_warns(self, caplog):
+        """Non-digit citation id → warning, line skipped."""
+        result = _get_docs_from_citations('<co>abc</co> Document 0: "text"')
+        assert result == []
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "Unable to retrieve citation id from:" in r.message for r in warnings
+        )
 
     def test_missing_colon_skipped(self):
         text = "<co>1</co> Document 0 no colon here"
         result = _get_docs_from_citations(text)
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _add_citation_response_spans
+# ---------------------------------------------------------------------------
+
+
+class TestAddCitationResponseSpans32:
+    """Warning branch coverage for granite32 _add_citation_response_spans."""
+
+    @require_nltk_data()
+    def test_citation_id_not_in_response_warns(self, caplog):
+        """Citation ID absent from response text → warning, spans not added."""
+        citation_info = [{"citation_id": "1", "doc_id": "0", "context_text": "x"}]
+        result = _add_citation_response_spans(
+            citation_info,
+            response_text_with_citations="Hello world.",
+            response_text_without_citations="Hello world.",
+        )
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "Citation ID does not appear in the response text" in r.message
+            for r in warnings
+        )
+        assert len(result) == 1
+        assert "response_begin" not in result[0]
+
+    @require_nltk_data()
+    def test_citation_at_start_of_first_sentence_warns(self, caplog):
+        """Citation tag at position 0 of the first sentence (no prior sentence) → warning."""
+        citation_info = [{"citation_id": "1", "doc_id": "0", "context_text": "x"}]
+        result = _add_citation_response_spans(
+            citation_info,
+            response_text_with_citations="<co>1</co>Hello world.",
+            response_text_without_citations="Hello world.",
+        )
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("Found empty sentence" in r.message for r in warnings)
+        assert len(result) == 1
+        assert "response_begin" not in result[0]
+
+    @require_nltk_data()
+    def test_duplicate_citation_id_warns(self, caplog):
+        """Same citation ID appearing in two sentences → warning on second occurrence."""
+        citation_info = [{"citation_id": "1", "doc_id": "0", "context_text": "x"}]
+        result = _add_citation_response_spans(
+            citation_info,
+            response_text_with_citations=(
+                "First sentence <co>1</co>. Second sentence <co>1</co>."
+            ),
+            response_text_without_citations="First sentence. Second sentence.",
+        )
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "Citation ID appears in more than one response sentences" in r.message
+            for r in warnings
+        )
+        assert len(result) == 1
+        assert "response_begin" in result[0]
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +376,7 @@ class TestGranite32OutputProcessorTransform:
         model_output = f"<tool_call>{json.dumps(tool_json)}"
         cc = self._minimal_cc(tools=[ToolDefinition(name="get_weather")])
         result = proc.transform(model_output, cc)
+        assert result.tool_calls is not None
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].name == "get_weather"
 

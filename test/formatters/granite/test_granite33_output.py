@@ -58,6 +58,13 @@ class TestParseCitationsText33:
         result = _parse_citations_text("")
         assert result == []
 
+    def test_no_citations_found_warns(self, caplog):
+        """No \\d+: pattern → warning + empty return."""
+        result = _parse_citations_text("no numeric patterns here")
+        assert result == []
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("Expected citations but found none" in r.message for r in warnings)
+
 
 # ---------------------------------------------------------------------------
 # _remove_citations_from_response_text
@@ -177,6 +184,22 @@ class TestValidateResponse33:
         _validate_response(text, [{"id": "1"}])
         assert "different number" in caplog.text.lower()
 
+    def test_nested_cite_tags_warns(self, caplog):
+        """Nested CITE_START in response → warning."""
+        nested = f"text {CITE_START}outer {CITE_START}inner{CITE_END}"
+        _validate_response(nested, [])
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("nested" in r.message.lower() for r in warnings)
+
+    def test_count_mismatch_warns(self, caplog):
+        """Citation tag count differs from citation_info length → warning."""
+        response = f'text {CITE_START}{{"document_id": "1"}}{CITE_END}'
+        _validate_response(response, [])  # 1 tag pair, 0 citation_info entries
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "different number of citations" in r.message.lower() for r in warnings
+        )
+
 
 # ---------------------------------------------------------------------------
 # _get_docs_from_citations
@@ -198,6 +221,8 @@ class TestGetDocsFromCitations33:
         text = 'abc: "text"'
         result = _get_docs_from_citations(text)
         assert len(result) == 0
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("Unable to retrieve doc id from:" in r.message for r in warnings)
 
     def test_special_token_lines_ignored(self):
         text = '<|something|>\n1: "Real doc."'
@@ -395,6 +420,7 @@ class TestGranite33OutputProcessorTransform:
         model_output = f"<tool_call>{json.dumps(tool_json)}"
         cc = self._minimal_cc(tools=[ToolDefinition(name="search")])
         result = proc.transform(model_output, cc)
+        assert result.tool_calls is not None
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].name == "search"
 
