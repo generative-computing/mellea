@@ -62,6 +62,46 @@ class TestChatContextDefaults:
         assert ctx._compactor is comp
 
 
+class TestInlineCompactorGuard:
+    """ChatContext only accepts InlineCompactor instances."""
+
+    def test_rejects_llm_summarize_compactor_directly(self, scripted_summary_backend):
+        # Attaching LLMSummarizeCompactor would invoke the backend on every add().
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend)
+        with pytest.raises(TypeError, match="requires an InlineCompactor"):
+            ChatContext(compactor=comp)
+
+    def test_accepts_threshold_wrapping_window(self):
+        # ThresholdCompactor is an InlineCompactor regardless of inner.
+        wrapped = ThresholdCompactor(WindowCompactor(size=5), threshold=1000)
+        ctx = ChatContext(compactor=wrapped)
+        assert ctx._compactor is wrapped
+
+    def test_accepts_threshold_wrapping_llm_summarize(self, scripted_summary_backend):
+        # Wrapped is acceptable: ThresholdCompactor gates inner by token usage,
+        # so backend isn't called on every add(). Inner's default_backend covers
+        # the actual summarisation when the gate trips.
+        wrapped = ThresholdCompactor(
+            LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=2),
+            threshold=1000,
+        )
+        ctx = ChatContext(compactor=wrapped)
+        assert ctx._compactor is wrapped
+
+    def test_accepts_window_compactor(self):
+        comp = WindowCompactor(size=5)
+        ctx = ChatContext(compactor=comp)
+        assert ctx._compactor is comp
+
+    def test_rejects_non_inline_duck_typed_compactor(self):
+        class FakeCompactor:
+            def compact(self, ctx, *, backend=None):
+                return ctx
+
+        with pytest.raises(TypeError, match="requires an InlineCompactor"):
+            ChatContext(compactor=FakeCompactor())  # type: ignore[arg-type]
+
+
 class TestWindowCompactor:
     def test_compact_keeps_last_n(self):
         ctx = ChatContext(window_size=3)
@@ -174,15 +214,15 @@ class TestWindowCompactor:
 
 
 class TestCompactorProtocol:
-    def test_user_class_satisfies_protocol(self):
-        """A plain class with the right method should be a Compactor."""
+    def test_user_class_satisfies_protocol_via_inline_marker(self):
+        """A user class structurally matching Compactor and inheriting InlineCompactor
+        is accepted by ChatContext."""
+        from mellea.stdlib.context import InlineCompactor
 
-        class Identity:
+        class Identity(InlineCompactor):
             def compact(self, ctx, *, backend=None):
                 return ctx
 
-        # structural subtyping check — at runtime this is just isinstance against Protocol
-        # which requires `runtime_checkable` to actually work; instead assert duck-typing.
         c = Identity()
         ctx = ChatContext(compactor=c)
         ctx = ctx.add(_msg(0))
@@ -403,31 +443,78 @@ def scripted_summary_backend():
 
 
 class TestLLMSummarizeCompactor:
-    def test_negative_keep_n_raises(self):
+    def test_negative_keep_n_raises(self, scripted_summary_backend):
         with pytest.raises(ValueError):
-            LLMSummarizeCompactor(keep_n=-1)
+            LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=-1)
 
-    def test_prompt_template_must_have_placeholder(self):
+    def test_prompt_template_must_have_placeholder(self, scripted_summary_backend):
         with pytest.raises(ValueError, match="conversation"):
-            LLMSummarizeCompactor(prompt_template="no placeholder here")
+            LLMSummarizeCompactor(
+                default_backend=scripted_summary_backend,
+                prompt_template="no placeholder here",
+            )
 
-    def test_compact_is_sync(self):
+    def test_default_backend_is_required(self):
+        with pytest.raises(TypeError, match="default_backend"):
+            LLMSummarizeCompactor()  # type: ignore[call-arg]
+
+    def test_compact_is_sync(self, scripted_summary_backend):
         import inspect
 
-        comp = LLMSummarizeCompactor()
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend)
         # Sync from the outside even though the implementation calls async backend code.
         assert not inspect.iscoroutinefunction(comp.compact)
 
-    def test_raises_without_backend(self):
-        comp = LLMSummarizeCompactor()
+    def test_uses_default_backend_when_call_omits_one(self, scripted_summary_backend):
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
         ctx = ChatContext(window_size=10_000)
-        for i in range(3):
+        for i in range(4):
             ctx = ctx.add(_msg(i))
-        with pytest.raises(ValueError, match="backend"):
-            comp.compact(ctx)
+        # No backend kwarg → falls back to default_backend.
+        result = comp.compact(ctx)
+        items = result.as_list()
+        assert "[CONTEXT SUMMARY]" in items[0].content
+        assert scripted_summary_backend.calls == 1
+
+    def test_call_time_backend_overrides_default(self, scripted_summary_backend):
+        from mellea.core.backend import Backend
+        from mellea.core.base import GenerateLog
+
+        class OtherBackend(Backend):
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def _generate_from_context(
+                self,
+                action,
+                ctx,
+                *,
+                format=None,
+                model_options=None,
+                tool_calls: bool = False,
+            ):
+                self.calls += 1
+                mot = ModelOutputThunk(value="OTHER-SUMMARY")
+                mot._generate_log = GenerateLog(is_final_result=True)
+                return mot, ctx.add(action).add(mot)
+
+            async def generate_from_raw(self, *a, **kw):
+                raise NotImplementedError
+
+        other = OtherBackend()
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+        result = comp.compact(ctx, backend=other)
+        items = result.as_list()
+        # Caller-supplied backend wins.
+        assert "OTHER-SUMMARY" in items[0].content
+        assert other.calls == 1
+        assert scripted_summary_backend.calls == 0
 
     def test_short_body_is_noop(self, scripted_summary_backend):
-        comp = LLMSummarizeCompactor(keep_n=5)
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=5)
         ctx = ChatContext(window_size=10_000)
         for i in range(3):
             ctx = ctx.add(_msg(i))
@@ -437,7 +524,7 @@ class TestLLMSummarizeCompactor:
         assert scripted_summary_backend.calls == 0
 
     def test_summarises_old_keeps_recent(self, scripted_summary_backend):
-        comp = LLMSummarizeCompactor(keep_n=2)
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=2)
         ctx = ChatContext(window_size=10_000)
         for i in range(6):
             ctx = ctx.add(_msg(i))
@@ -451,7 +538,9 @@ class TestLLMSummarizeCompactor:
         assert scripted_summary_backend.calls == 1
 
     def test_pin_predicate_preserves_prefix(self, scripted_summary_backend):
-        comp = LLMSummarizeCompactor(keep_n=1, pin_predicate=pin_system)
+        comp = LLMSummarizeCompactor(
+            default_backend=scripted_summary_backend, keep_n=1, pin_predicate=pin_system
+        )
         ctx = ChatContext(window_size=10_000)
         ctx = ctx.add(Message(role="system", content="sys"))
         for i in range(4):
@@ -465,7 +554,7 @@ class TestLLMSummarizeCompactor:
         assert items[2].content == "m3"
 
     def test_does_not_mutate_original(self, scripted_summary_backend):
-        comp = LLMSummarizeCompactor(keep_n=1)
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
         ctx = ChatContext(window_size=10_000)
         for i in range(4):
             ctx = ctx.add(_msg(i))
@@ -473,15 +562,17 @@ class TestLLMSummarizeCompactor:
         comp.compact(ctx, backend=scripted_summary_backend)
         assert [m.content for m in ctx.as_list()] == before
 
-    def test_satisfies_compactor_protocol(self):
-        comp: Compactor = LLMSummarizeCompactor()
+    def test_satisfies_compactor_protocol(self, scripted_summary_backend):
+        comp: Compactor = LLMSummarizeCompactor(
+            default_backend=scripted_summary_backend
+        )
         # Just a typing-level check that the assignment is accepted.
         assert callable(comp.compact)
 
     @pytest.mark.asyncio
     async def test_works_inside_running_event_loop(self, scripted_summary_backend):
         """compact() is callable from within an async function — uses worker thread."""
-        comp = LLMSummarizeCompactor(keep_n=1)
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
         ctx = ChatContext(window_size=10_000)
         for i in range(4):
             ctx = ctx.add(_msg(i))

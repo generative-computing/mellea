@@ -17,6 +17,7 @@ from mellea.core import CBlock, Component, Context, ContextTurn
 from mellea.stdlib.context.chat import ChatContext
 from mellea.stdlib.context.compactor import (
     Compactor,
+    InlineCompactor,
     LLMSummarizeCompactor,
     PinPredicate,
     ThresholdCompactor,
@@ -34,6 +35,7 @@ __all__ = [
     "Component",
     "Context",
     "ContextTurn",
+    "InlineCompactor",
     "LLMSummarizeCompactor",
     "PinPredicate",
     "SimpleContext",

@@ -206,7 +206,9 @@ async def llm_summarize_compaction():
         loop_budget=10,
         # keep_n=1000 → no summarisation triggers in this short script;
         # the example just shows the async compactor is wired correctly.
-        compactor=LLMSummarizeCompactor(keep_n=1000, pin_predicate=pin_react_initiator),
+        compactor=LLMSummarizeCompactor(
+            default_backend=backend, keep_n=1000, pin_predicate=pin_react_initiator
+        ),
     )
     return (result.value, any(isinstance(c, ReactInitiator) for c in ctx.as_list()))
 
