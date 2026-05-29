@@ -119,6 +119,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | `uv.lock` out of sync | Run `uv sync` |
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
+| Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
