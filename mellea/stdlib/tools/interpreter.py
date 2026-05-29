@@ -17,6 +17,7 @@ instances for ReACT or other agentic loops.
 """
 
 import ast
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,7 @@ import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from ...core import MelleaLogger
 from .execution_policy import (
@@ -57,6 +58,8 @@ def _truncate(text: str | None, max_bytes: int | None) -> str | None:
         return text
     marker = _TRUNCATION_MARKER.encode()
     keep = max(0, max_bytes - len(marker))
+    if keep == 0:
+        return encoded[:max_bytes].decode(errors="ignore")
     return encoded[:keep].decode(errors="ignore") + _TRUNCATION_MARKER
 
 
@@ -386,14 +389,6 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         )
         self._session: Any = None  # SandboxSession when open via context manager
         self._container_id: str | None = None  # set after session opens
-        if policy and policy.artifact_export_paths:
-            warnings.warn(
-                "artifact_export_paths is set but this LLMSandboxEnvironment will only "
-                "export artifacts when used as a context manager ('with env:'). "
-                "In one-shot mode (env.execute(...)) artifacts are not exported.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
 
     def _mode(self) -> str:
         return "docker" if self.policy is not None else "docker_unsafe"
@@ -410,9 +405,13 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             lang="python", verbose=False, keep_template=False
         )
         self._session.open()
-        self._container_id = getattr(self._session, "container_id", None) or getattr(
-            self._session, "container", None
-        )
+        _cid = getattr(self._session, "container_id", None)
+        if _cid is None:
+            _fallback = getattr(self._session, "container", None)
+            _cid = (
+                getattr(_fallback, "short_id", None) if _fallback is not None else None
+            )
+        self._container_id = _cid
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -420,8 +419,8 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         if self._session is not None:
             try:
                 self._session.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to close sandbox session: %s", e)
             self._session = None
             self._container_id = None
 
@@ -490,6 +489,15 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             ExecutionResult: Execution outcome with stdout/stderr and success flag,
             or a skipped result on import violation or sandbox error.
         """
+        if self._session is None and self.policy and self.policy.artifact_export_paths:
+            warnings.warn(
+                "artifact_export_paths is set but this LLMSandboxEnvironment will only "
+                "export artifacts when used as a context manager ('with env:'). "
+                "In one-shot mode (env.execute(...)) artifacts are not exported.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
         if self.allowed_imports:
             unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
             if unauthorized:
@@ -541,21 +549,24 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 and self._session is not None
             ):
                 for container_path in self.policy.artifact_export_paths:
-                    host_tmp = Path(tempfile.mkdtemp()) / container_path.name
-                    try:
-                        self.copy_out(str(container_path), host_tmp)
-                        artifacts.append(
-                            Artifact(
-                                path=host_tmp,
-                                size_bytes=host_tmp.stat().st_size
-                                if host_tmp.exists()
-                                else None,
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        staging = Path(tmp_dir) / container_path.name
+                        try:
+                            self.copy_out(str(container_path), staging)
+                            dest = Path(tempfile.gettempdir()) / container_path.name
+                            shutil.copy2(staging, dest)
+                            artifacts.append(
+                                Artifact(
+                                    path=dest,
+                                    size_bytes=dest.stat().st_size
+                                    if dest.exists()
+                                    else None,
+                                )
                             )
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to export artifact %s: %s", container_path, e
-                        )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to export artifact %s: %s", container_path, e
+                            )
 
             return ExecutionResult(
                 success=result.exit_code == 0,
@@ -702,4 +713,4 @@ def local_code_interpreter(code: str) -> ExecutionResult:
         An `ExecutionResult` with stdout, stderr, and a success flag.
     """
     env = make_execution_environment("local_unsafe")
-    return env.execute(code)
+    return env.execute(code, timeout=60)

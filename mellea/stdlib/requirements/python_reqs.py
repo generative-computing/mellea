@@ -168,9 +168,7 @@ class PythonExecutionReq(Requirement):
 
     def __init__(
         self,
-        execution_tier: Literal[
-            "static", "local_unsafe", "local", "docker_unsafe", "docker"
-        ] = "static",
+        execution_tier: ExecutionTier = "static",
         *,
         policy: CapabilityPolicy | None = None,
         allowed_imports: list[str] | None = None,
@@ -180,6 +178,18 @@ class PythonExecutionReq(Requirement):
         use_sandbox: bool = False,
     ):
         """Initialize PythonExecutionReq with an execution tier and optional policy."""
+        # Legacy positional-integer shim: old signature was PythonExecutionReq(timeout: int).
+        if isinstance(execution_tier, int):
+            warnings.warn(
+                "Passing an integer as the first argument to PythonExecutionReq() is "
+                "deprecated. The first parameter is now execution_tier (a string). "
+                "Use PythonExecutionReq(policy=CapabilityPolicy(timeout=N)) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            timeout = execution_tier  # type: ignore[assignment]
+            execution_tier = "static"
+
         # --- Deprecation shims ---
         _local_tiers = ("local_unsafe", "local")
         _docker_tiers = ("docker_unsafe", "docker")
@@ -202,7 +212,12 @@ class PythonExecutionReq(Requirement):
                         stacklevel=2,
                     )
                     if execution_tier == "static":
-                        execution_tier = "local_unsafe"
+                        # Promote to "local" when timeout is also set so the
+                        # timeout shim below can synthesise a policy — "local_unsafe"
+                        # has no policy and would silently discard the timeout value.
+                        execution_tier = (
+                            "local" if timeout is not None else "local_unsafe"
+                        )
 
         if use_sandbox:
             if execution_tier not in _docker_tiers:
@@ -254,16 +269,9 @@ class PythonExecutionReq(Requirement):
         self._policy = policy
         self._allowed_imports = allowed_imports
 
-        if execution_tier == "static":
-            from mellea.stdlib.tools.interpreter import StaticAnalysisEnvironment
-
-            environment: ExecutionEnvironment = StaticAnalysisEnvironment(
-                allowed_imports=allowed_imports
-            )
-        else:
-            environment = make_execution_environment(
-                tier=execution_tier, policy=policy, allowed_imports=allowed_imports
-            )
+        environment: ExecutionEnvironment = make_execution_environment(
+            tier=execution_tier, policy=policy, allowed_imports=allowed_imports
+        )
 
         if execution_tier in ("local_unsafe", "local"):
             logger.warning(

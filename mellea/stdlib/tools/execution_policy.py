@@ -153,6 +153,16 @@ DOCKER_POLICY = CapabilityPolicy(
 
 
 COMPATIBILITY_MATRIX: dict[str, dict[str, bool]] = {
+    "static": {
+        "execute_code": False,
+        "timeout_enforcement": False,
+        "import_allowlist": True,
+        "policy_applied": False,
+        "copy_in": False,
+        "copy_out": False,
+        "package_installation": False,
+        "docker_isolation": False,
+    },
     "local_unsafe": {
         "execute_code": True,
         "timeout_enforcement": True,
