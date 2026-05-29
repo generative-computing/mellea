@@ -258,7 +258,7 @@ class MelleaSession:
         id (str): Unique session UUID assigned at construction.
     """
 
-    ctx: Context
+    # ``ctx`` is exposed as a property below; backing field is ``_ctx``.
 
     def __init__(self, backend: Backend, ctx: Context | None = None):
         """Initialize MelleaSession with a backend and optional conversation context."""
@@ -266,12 +266,32 @@ class MelleaSession:
 
         self.id = str(uuid.uuid4())
         self.backend = backend
-        self.ctx: Context = ctx if ctx is not None else SimpleContext()
+        # Bypass the ctx setter so the initial assignment doesn't count as an
+        # interaction.
+        self._ctx: Context = ctx if ctx is not None else SimpleContext()
+        self._interaction_count: int = 0
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
         self._log_context_token = None
         self._session_span = None
         self._exit_stack: contextlib.ExitStack | None = None
+
+    @property
+    def ctx(self) -> Context:
+        """The session's current conversation context."""
+        return self._ctx
+
+    @ctx.setter
+    def ctx(self, value: Context) -> None:
+        """Replace the context and count this as one interaction.
+
+        Every model-interaction code path in this class assigns to ``self.ctx``
+        with the post-interaction context, so each setter call is exactly one
+        interaction. Lifecycle paths that swap the context wholesale (``reset``)
+        write to ``self._ctx`` directly to bypass this counter.
+        """
+        self._ctx = value
+        self._interaction_count += 1
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -365,7 +385,9 @@ class MelleaSession:
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
-        self.ctx = self.ctx.reset_to_new()
+        # Bypass the setter — a reset is a lifecycle event, not an interaction.
+        self._ctx = self._ctx.reset_to_new()
+        self._interaction_count = 0
 
     def cleanup(self) -> None:
         """Clean up session resources and deregister session-scoped plugins."""
@@ -373,7 +395,7 @@ class MelleaSession:
             from ..plugins.hooks.session import SessionCleanupPayload
 
             payload = SessionCleanupPayload(
-                context=self.ctx, interaction_count=len(self.ctx.as_list())
+                context=self.ctx, interaction_count=self._interaction_count
             )
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_CLEANUP, payload, backend=self.backend)
