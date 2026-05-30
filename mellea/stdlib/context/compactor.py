@@ -379,6 +379,17 @@ class LLMSummarizeCompactor:
         wrap in :class:`ThresholdCompactor` (which gates by token usage), or
         call ``compact(ctx, backend=...)`` manually.
 
+    Note:
+        Summarisation is text-only and lossy for multimodal or heavy-tool
+        sessions. Image and document attachments on ``Message`` components
+        are noted by count only ("[N image(s) attached]") rather than
+        reproduced; ``ModelOutputThunk`` entries that carry only tool calls
+        (``value is None``) render the call name and arguments. If your
+        application depends on faithful preservation of attachments or
+        full tool-call payloads across compaction, prefer
+        :class:`WindowCompactor` (which keeps recent components verbatim)
+        or implement a domain-specific :class:`Compactor`.
+
     Args:
         default_backend (Backend): Backend used by ``compact()`` when the
             caller does not supply one. Required: ``LLMSummarizeCompactor``
@@ -481,19 +492,50 @@ class LLMSummarizeCompactor:
         old = body[: -self.keep_n] if self.keep_n > 0 else body
         recent = body[-self.keep_n :] if self.keep_n > 0 else []
 
-        # Render `old` to text the LLM can consume.
+        # Render `old` to text the LLM can consume. This is intentionally a
+        # text-only rendering: image and document attachments on Messages are
+        # noted as markers (count only) rather than reproduced, and tool-call
+        # arguments are stringified. The summary is lossy for multimodal and
+        # heavy-tool sessions by design — see class docstring.
         lines: list[str] = []
         for c in old:
             if isinstance(c, ToolMessage):
                 lines.append(f"tool ({c.name}): {c.content}")
             elif isinstance(c, Message):
-                lines.append(f"{c.role}: {c.content}")
+                attachments: list[str] = []
+                imgs = getattr(c, "_images", None)
+                if imgs:
+                    attachments.append(f"[{len(imgs)} image(s) attached]")
+                docs = getattr(c, "_docs", None)
+                if docs:
+                    attachments.append(f"[{len(docs)} document(s) attached]")
+                attached = (" " + " ".join(attachments)) if attachments else ""
+                lines.append(f"{c.role}: {c.content}{attached}")
             elif isinstance(c, ModelOutputThunk):
-                lines.append(f"assistant: {c.value}")
+                if c.value:
+                    lines.append(f"assistant: {c.value}")
+                elif c.tool_calls:
+                    rendered = ", ".join(
+                        f"{name}({dict(tc.args)})" for name, tc in c.tool_calls.items()
+                    )
+                    lines.append(f"assistant called tools: {rendered}")
+                else:
+                    lines.append("assistant: <empty>")
             elif isinstance(c, CBlock):
                 lines.append(str(c))
             else:
-                lines.append(str(getattr(c, "content", c)))
+                # Catch-all for ``Component`` subclasses that aren't ``Message``/
+                # ``ToolMessage``/``ModelOutputThunk`` (e.g. ``ReactInitiator``).
+                # Without special handling these would render as the default
+                # ``<… object at 0x…>`` repr and the summary would lose all
+                # information that the entry existed at all. Emit at minimum
+                # the type name plus a ``content`` attribute if present, so
+                # the summariser sees a marker.
+                content = getattr(c, "content", None)
+                if content is not None:
+                    lines.append(f"<{type(c).__name__}: {content}>")
+                else:
+                    lines.append(f"<{type(c).__name__}>")
 
         prompt = self.prompt_template.format(conversation="\n".join(lines))
         result, _ = await mfuncs.aact(
