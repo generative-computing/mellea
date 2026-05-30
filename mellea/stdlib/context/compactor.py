@@ -546,6 +546,10 @@ class LLMSummarizeCompactor:
             requirements=[],
             strategy=None,
             await_result=True,
+            # Internal framework call: silence aact's context-type warning so
+            # it stays quiet if the context argument is later changed to a
+            # non-SimpleContext. Matches react.py's pattern.
+            silence_context_type_warning=True,
         )
 
         summary_message = Message(
