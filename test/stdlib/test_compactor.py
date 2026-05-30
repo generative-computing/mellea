@@ -413,6 +413,7 @@ def scripted_summary_backend():
         def __init__(self, summary: str = "SUMMARY-OF-OLD") -> None:
             self.summary = summary
             self.calls = 0
+            self.last_action_content: str | None = None
 
         async def _generate_from_context(
             self,
@@ -424,6 +425,7 @@ def scripted_summary_backend():
             tool_calls: bool = False,
         ):
             self.calls += 1
+            self.last_action_content = getattr(action, "content", str(action))
             mot = ModelOutputThunk(value=self.summary)
             mot._generate_log = GenerateLog(is_final_result=True)
             return mot, ctx.add(action).add(mot)
@@ -564,6 +566,111 @@ class TestLLMSummarizeCompactor:
             and "RuntimeError" in rec.message
             for rec in caplog.records
         )
+
+    def test_renders_thunk_without_value_using_tool_calls(
+        self, scripted_summary_backend
+    ):
+        """Tool-call-only thunks (value=None) render the call name + args, not 'None'."""
+        from mellea.core.base import ModelToolCall
+
+        # The compactor's rendering only reads ``name``/``args`` off the
+        # ModelToolCall, never invokes ``func`` — pass None to skip
+        # AbstractMelleaTool's abstract-method requirements.
+        tool_call = ModelToolCall(
+            name="search",
+            func=None,  # type: ignore[arg-type]
+            args={"q": "papers"},
+        )
+        thunk = ModelOutputThunk(value=None, tool_calls={"search": tool_call})
+
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(2):
+            ctx = ctx.add(_msg(i))
+        ctx = ctx.add(thunk)
+        ctx = ctx.add(_msg(2))  # so the thunk falls into `old`, not `recent`
+
+        comp.compact(ctx)
+        rendered = scripted_summary_backend.last_action_content
+        assert rendered is not None
+        assert "assistant called tools: search" in rendered
+        assert "'q': 'papers'" in rendered
+        # Old "assistant: None" failure mode must not appear.
+        assert "assistant: None" not in rendered
+
+    def test_renders_thunk_with_no_value_and_no_tool_calls(
+        self, scripted_summary_backend
+    ):
+        """A thunk with neither value nor tool_calls renders as '<empty>', not 'None'."""
+        thunk = ModelOutputThunk(value=None)
+
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(2):
+            ctx = ctx.add(_msg(i))
+        ctx = ctx.add(thunk)
+        ctx = ctx.add(_msg(2))
+
+        comp.compact(ctx)
+        rendered = scripted_summary_backend.last_action_content
+        assert rendered is not None
+        assert "assistant: <empty>" in rendered
+        assert "assistant: None" not in rendered
+
+    def test_catchall_renders_unknown_component_as_typed_marker(
+        self, scripted_summary_backend
+    ):
+        """Component subclasses that aren't Message/ToolMessage/ModelOutputThunk
+        emit a ``<TypeName[: content]>`` marker instead of the default object repr."""
+        from mellea.core import Component
+
+        class _CustomMarker(Component):
+            """Component without a ``content`` attribute."""
+
+            def parts(self):  # type: ignore[override]
+                return []
+
+            def format_for_llm(self):  # type: ignore[override]
+                return ""
+
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        ctx = ctx.add(_CustomMarker())  # in `old`
+        ctx = ctx.add(_msg(0))
+        ctx = ctx.add(_msg(99))  # in `recent`
+
+        comp.compact(ctx)
+        rendered = scripted_summary_backend.last_action_content
+        assert rendered is not None
+        # Type name appears explicitly; raw <object at 0x...> repr does NOT.
+        assert "<_CustomMarker>" in rendered
+        assert "object at 0x" not in rendered
+
+    def test_renders_message_with_attachments_as_markers(
+        self, scripted_summary_backend
+    ):
+        """Image/document attachments are noted by count; their contents are not reproduced."""
+        from mellea.stdlib.components.docs.document import Document
+
+        msg_with_imgs = Message(role="user", content="see these")
+        # Bypass the constructor to inject raw lists; the rendering path reads `_images`/`_docs`.
+        msg_with_imgs._images = ["IMGDATA1", "IMGDATA2"]  # type: ignore[assignment]
+        msg_with_docs = Message(role="user", content="and these")
+        msg_with_docs._docs = [Document(text="doc body")]  # type: ignore[assignment]
+
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        ctx = ctx.add(msg_with_imgs)
+        ctx = ctx.add(msg_with_docs)
+        ctx = ctx.add(_msg(99))  # keeps msg_with_imgs/docs in `old`, this in `recent`
+
+        comp.compact(ctx)
+        rendered = scripted_summary_backend.last_action_content
+        assert rendered is not None
+        assert "[2 image(s) attached]" in rendered
+        assert "[1 document(s) attached]" in rendered
+        # Image bytes are NOT in the rendered prompt.
+        assert "IMGDATA1" not in rendered
 
     def test_summarises_old_keeps_recent(self, scripted_summary_backend):
         comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=2)
