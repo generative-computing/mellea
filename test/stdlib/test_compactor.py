@@ -601,7 +601,8 @@ class TestLLMSummarizeCompactor:
     def test_renders_thunk_with_no_value_and_no_tool_calls(
         self, scripted_summary_backend
     ):
-        """A thunk with neither value nor tool_calls renders as '<empty>', not 'None'."""
+        """A thunk with neither value nor tool_calls is skipped entirely — no
+        '<empty>' marker, no 'assistant: None'."""
         thunk = ModelOutputThunk(value=None)
 
         comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
@@ -614,8 +615,11 @@ class TestLLMSummarizeCompactor:
         comp.compact(ctx)
         rendered = scripted_summary_backend.last_action_content
         assert rendered is not None
-        assert "assistant: <empty>" in rendered
+        assert "<empty>" not in rendered
         assert "assistant: None" not in rendered
+        # The other turns still made it into the prompt.
+        assert "user: m0" in rendered
+        assert "user: m1" in rendered
 
     def test_catchall_renders_unknown_component_as_typed_marker(
         self, scripted_summary_backend

@@ -519,8 +519,9 @@ class LLMSummarizeCompactor:
                         f"{name}({dict(tc.args)})" for name, tc in c.tool_calls.items()
                     )
                     lines.append(f"assistant called tools: {rendered}")
-                else:
-                    lines.append("assistant: <empty>")
+                # else: thunk with neither value nor tool_calls is skipped —
+                # nothing useful to summarise and a literal "<empty>" marker
+                # tends to show up verbatim in the resulting summary.
             elif isinstance(c, CBlock):
                 lines.append(str(c))
             else:
