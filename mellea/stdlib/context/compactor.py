@@ -404,6 +404,13 @@ class LLMSummarizeCompactor:
             the literal ``{conversation}`` placeholder, which is filled in
             with a textual rendering of the body to summarise. Defaults to
             a generic conversation-summary template.
+        model_options (dict | None): Forwarded to ``mfuncs.aact`` for the
+            summarisation call. Use this to set a real ``max_tokens`` budget
+            (most local backends default to 256-512, which silently truncates
+            long summaries) or any other backend-specific knob. Note:
+            :func:`react_summary_prompt`'s ``max_tokens_hint`` adds only a
+            soft prompt-side nudge; pair it with ``model_options={"max_tokens": N}``
+            for hard enforcement.
     """
 
     def __init__(
@@ -413,8 +420,9 @@ class LLMSummarizeCompactor:
         keep_n: int = 5,
         pin_predicate: PinPredicate = pin_nothing,
         prompt_template: str | None = None,
+        model_options: dict | None = None,
     ) -> None:
-        """Initialize with a default backend, recent-body window, pin predicate, and prompt."""
+        """Initialize with a default backend, recent-body window, pin predicate, prompt, and model options."""
         if keep_n < 0:
             raise ValueError("LLMSummarizeCompactor keep_n must be non-negative")
         template = (
@@ -428,6 +436,7 @@ class LLMSummarizeCompactor:
         self.keep_n = keep_n
         self.pin_predicate = pin_predicate
         self.prompt_template = template
+        self.model_options = model_options
 
     def compact(
         self, ctx: ChatContext, *, backend: Backend | None = None
@@ -545,6 +554,7 @@ class LLMSummarizeCompactor:
             backend=backend,
             requirements=[],
             strategy=None,
+            model_options=self.model_options,
             await_result=True,
             # Internal framework call: silence aact's context-type warning so
             # it stays quiet if the context argument is later changed to a
