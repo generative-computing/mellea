@@ -414,6 +414,7 @@ def scripted_summary_backend():
             self.summary = summary
             self.calls = 0
             self.last_action_content: str | None = None
+            self.last_model_options: dict | None = None
 
         async def _generate_from_context(
             self,
@@ -426,6 +427,7 @@ def scripted_summary_backend():
         ):
             self.calls += 1
             self.last_action_content = getattr(action, "content", str(action))
+            self.last_model_options = model_options
             mot = ModelOutputThunk(value=self.summary)
             mot._generate_log = GenerateLog(is_final_result=True)
             return mot, ctx.add(action).add(mot)
@@ -675,6 +677,32 @@ class TestLLMSummarizeCompactor:
         assert "[1 document(s) attached]" in rendered
         # Image bytes are NOT in the rendered prompt.
         assert "IMGDATA1" not in rendered
+
+    def test_model_options_forwarded_to_backend(self, scripted_summary_backend):
+        """model_options set at construction reach the backend's generate call."""
+        comp = LLMSummarizeCompactor(
+            default_backend=scripted_summary_backend,
+            keep_n=1,
+            model_options={"max_tokens": 4096, "temperature": 0.0},
+        )
+        ctx = ChatContext(window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+        comp.compact(ctx)
+        assert scripted_summary_backend.last_model_options == {
+            "max_tokens": 4096,
+            "temperature": 0.0,
+        }
+
+    def test_model_options_default_is_empty(self, scripted_summary_backend):
+        """When model_options is not set, the backend receives no caller-supplied
+        options (falsy: None or {}); upstream defaults govern."""
+        comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+        comp.compact(ctx)
+        assert not scripted_summary_backend.last_model_options
 
     def test_summarises_old_keeps_recent(self, scripted_summary_backend):
         comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=2)
