@@ -4,16 +4,18 @@ description: "A Python library for writing reliable generative programs."
 displayed_sidebar: docsSidebar
 ---
 
-![Mellea mascot](/images/mellea_draft_logo_300.png)
-
-Mellea helps you manage the unreliable part of every AI-powered pipeline: the LLM call itself.
-It replaces ad-hoc prompt chains and brittle agents with structured
-*generative programs* — Python code where LLM calls are first-class operations
-governed by type annotations, requirement verifiers, and principled repair loops.
-
-```bash
-uv pip install mellea
-```
+<div style={{display:'flex', alignItems:'center', gap:'2rem', marginBottom:'1.5rem'}}>
+  <img src="/images/mellea_draft_logo_300.png" alt="Mellea mascot" style={{width:'120px', flexShrink:0}} />
+  <div>
+    <p style={{fontSize:'1.1rem', marginBottom:'0.75rem'}}>
+      Mellea helps you manage the unreliable part of every AI-powered pipeline: the LLM call itself.
+      It replaces ad-hoc prompt chains and brittle agents with structured
+      <em>generative programs</em> — Python code where LLM calls are first-class operations
+      governed by type annotations, requirement verifiers, and principled repair loops.
+    </p>
+    <code style={{background:'var(--ifm-code-background)', padding:'0.3rem 0.6rem', borderRadius:'4px', fontSize:'0.9rem'}}>uv pip install mellea</code>
+  </div>
+</div>
 
 <CardGroup cols={2}>
   <Card title="Get started" icon="rocket" href="/getting-started/installation">
