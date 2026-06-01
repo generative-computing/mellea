@@ -1,4 +1,4 @@
-"""Concrete ``Context`` implementations and the ``Compactor`` protocol.
+"""Concrete `Context` implementations and the `Compactor` protocol.
 
 Provides:
 
@@ -6,11 +6,11 @@ Provides:
   optional sliding window).
 - :class:`SimpleContext` — stateless, single-turn exchange (no prior history is
   passed to the model).
-- :class:`Compactor` — generic protocol for shrinking any ``Context`` subtype.
+- :class:`Compactor` — generic protocol for shrinking any `Context` subtype.
 
 The names :class:`Context`, :class:`ContextTurn`, :class:`CBlock`, and
 :class:`Component` are re-exported from :mod:`mellea.core` for the convenience
-of callers that import them via ``mellea.stdlib.context``.
+of callers that import them via `mellea.stdlib.context`.
 """
 
 from mellea.core import CBlock, Component, Context, ContextTurn

@@ -15,13 +15,13 @@ class SimpleContext(Context):
             c (Component | CBlock): The component or content block to record.
 
         Returns:
-            SimpleContext: A new ``SimpleContext`` containing only the added entry;
+            SimpleContext: A new `SimpleContext` containing only the added entry;
             prior history is not retained.
         """
         return SimpleContext.from_previous(self, c)
 
     def view_for_generation(self) -> list[Component | CBlock] | None:
-        """Return an empty list, since ``SimpleContext`` does not pass history to the model.
+        """Return an empty list, since `SimpleContext` does not pass history to the model.
 
         Each call to the model is treated as a stateless, independent exchange.
         No prior turns are forwarded.
