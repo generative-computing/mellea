@@ -91,7 +91,9 @@ def is_meaningful_body_line(line: str) -> bool:
     return True
 
 
-def find_docs_json(cli_path: str | None, search_root: Path | None = None) -> Path:
+def find_docs_json(
+    cli_path: str | None, search_root: Path | None = None
+) -> Path | None:
     if cli_path:
         p = Path(cli_path)
         if not p.is_absolute():
@@ -110,10 +112,11 @@ def find_docs_json(cli_path: str | None, search_root: Path | None = None) -> Pat
     for c in candidates:
         if c.exists():
             return c
-    raise FileNotFoundError(
-        f"Could not locate docs.json under {root}. "
-        "Pass --docs-json explicitly, e.g. --docs-json docs/docs/docs.json"
+    print(
+        f"[generate-ast.py] docs.json not found under {root} — skipping nav merge (Docusaurus mode).",
+        flush=True,
     )
+    return None
 
 
 def merge_api_reference_into_docs_json(
@@ -540,6 +543,13 @@ def move_api_to_docs_root(target_docs_root: Path) -> Path:
         raise RuntimeError(f"Staging API dir not found: {STAGING_API_DIR}")
 
     if target_api_dir.exists():
+        # Preserve static seed files (e.g. index.md) that live in the root of
+        # the target api dir but are not produced by the pipeline.
+        for seed_file in target_api_dir.glob("*.md"):
+            dest = STAGING_API_DIR / seed_file.name
+            if not dest.exists():
+                shutil.copy2(seed_file, dest)
+                print(f"   💾 Preserving seed file: {seed_file.name}", flush=True)
         print(f"   🧹 Deleting existing target api dir: {target_api_dir}", flush=True)
         shutil.rmtree(target_api_dir)
 
@@ -699,7 +709,12 @@ def _collect_module_entries(
                 preamble = docstring_cache.get(module_path, "")
             else:
                 preamble = _read_body_preamble(index_mdx)
-            href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
+            # Directory-index files (stem == parent dir name) are served at the
+            # directory route, not at /<dir>/<filename>.
+            if index_mdx.stem == child.name:
+                href = f"api/{pkg}/{child.name}"
+            else:
+                href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
             entries.append((child.name, desc, preamble, href))
         elif child.suffix == ".mdx":
             module_path = f"{pkg}.{child.stem}"
@@ -810,7 +825,7 @@ def _load_docstring_cache(source_root: Path | None = None) -> dict[str, str]:
 
 
 def build_and_merge_navigation(
-    docs_json_path: Path,
+    docs_json_path: Path | None,
     api_dir: Path,
     docs_root: Path,
     docstring_cache: dict[str, str] | None = None,
@@ -821,6 +836,12 @@ def build_and_merge_navigation(
     )
     generate_landing_page(api_dir, docs_root, docstring_cache)
     api_tab = build_api_reference_tab_object(api_dir, docs_root)
+    if docs_json_path is None:
+        print(
+            "[generate-ast.py] Skipping docs.json merge — no docs.json present (Docusaurus mode).",
+            flush=True,
+        )
+        return
     merge_api_reference_into_docs_json(docs_json_path, api_tab)
 
 
@@ -864,11 +885,12 @@ def main() -> None:
     source_root = Path(args.source_dir).resolve() if args.source_dir else REPO_ROOT
 
     docs_json_path = find_docs_json(args.docs_json, search_root=source_root)
-    docs_root = (
-        Path(args.docs_root).resolve()
-        if args.docs_root
-        else docs_json_path.parent.resolve()
-    )
+    if args.docs_root:
+        docs_root = Path(args.docs_root).resolve()
+    elif docs_json_path is not None:
+        docs_root = docs_json_path.parent.resolve()
+    else:
+        docs_root = (source_root / "docs" / "docs").resolve()
 
     # --nav-only: skip all MDX generation; just rebuild landing page + nav
     if args.nav_only:

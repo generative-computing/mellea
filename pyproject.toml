@@ -222,6 +222,14 @@ help = "Generate the CLI reference page (docs/docs/reference/cli.md) from Typer 
 shell = "rm -f docs/docs/reference/cli.md"
 help = "Remove the generated CLI reference page."
 
+[tool.poe.tasks.docs-dev]
+shell = "cd docs && npm run start"
+help = "Start the Docusaurus dev server (http://localhost:3000)"
+
+[tool.poe.tasks.docs-build]
+shell = "cd docs && DOCS_BASE_URL=/mellea/ npm run build"
+help = "Build the Docusaurus site for fork preview (baseUrl: /mellea/)"
+
 # -----------------------------
 # Ruff - Linting and Formatting
 # -----------------------------
@@ -317,7 +325,7 @@ ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,W
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
-skip = 'requirements.txt,uv.lock,CHANGELOG.md,test/formatters/granite/testdata/test_canned_output/model_output/*.json'
+skip = 'requirements.txt,uv.lock,CHANGELOG.md,test/formatters/granite/testdata/test_canned_output/model_output/*.json,docs/package-lock.json'
 
 # -----------------------------
 # Pytest - Testing Framework

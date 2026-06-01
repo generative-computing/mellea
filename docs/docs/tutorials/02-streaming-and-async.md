@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/tutorials/02-streaming-and-async"
 title: "Tutorial: Streaming and Async"
 description: "Make LLM calls non-blocking, stream tokens as they arrive, and process batches concurrently."
 # diataxis: tutorial
@@ -16,7 +15,7 @@ By the end you will have covered:
 - `wait_for_all_mots` for fan-out concurrent generation
 - Context behaviour with concurrent async calls
 
-**Prerequisites:** [Tutorial 01](./01-your-first-generative-program) complete,
+**Prerequisites:** [Tutorial 01](./your-first-generative-program) complete,
 `pip install mellea`, Ollama running locally with `granite4.1:3b` downloaded.
 
 ---
@@ -314,4 +313,4 @@ For parallel generation, keep the default `SimpleContext`.
 ---
 
 **See also:** [Async and Streaming](../how-to/use-async-and-streaming) (full API reference) |
-[Tutorial 03: Using Generative Stubs](./03-using-generative-stubs)
+[Tutorial 03: Using Generative Stubs](./using-generative-stubs)

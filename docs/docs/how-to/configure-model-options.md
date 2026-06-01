@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/configure-model-options"
 title: "Configure model options"
 description: "Set temperature, seed, max tokens, system prompts, and other backend parameters at session level or per call."
 # diataxis: how-to

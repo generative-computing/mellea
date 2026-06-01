@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/safety-guardrails"
 title: "Safety Guardrails"
 description: "Use Guardian Intrinsics to detect harmful, biased, ungrounded, or policy-violating content in LLM outputs."
 # diataxis: how-to
@@ -340,4 +339,4 @@ Guardian functions also do not emit `mellea.requirement` metrics — see
 > [`factuality_correction.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_correction.py),
 > and [`policy_guardrails.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/policy_guardrails.py).
 
-**See also:** [Intrinsics](../advanced/intrinsics) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters) | [Tutorial: Making Agents Reliable](../tutorials/04-making-agents-reliable)
+**See also:** [Intrinsics](../advanced/intrinsics) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters) | [Tutorial: Making Agents Reliable](../tutorials/making-agents-reliable)

@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/observability/telemetry"
 title: "Telemetry"
 description: "Add OpenTelemetry tracing, metrics, and logging to Mellea programs."
 # diataxis: how-to

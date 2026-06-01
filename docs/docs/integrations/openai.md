@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/openai"
 title: "OpenAI and OpenAI-Compatible APIs"
 description: "Use Mellea with OpenAI's API and any OpenAI-compatible endpoint — LM Studio, vLLM, Anthropic, and more."
 # diataxis: how-to

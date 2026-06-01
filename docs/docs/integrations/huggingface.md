@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/huggingface"
 title: "HuggingFace Transformers"
 description: "Run Mellea on local hardware with LocalHFBackend and HuggingFace Transformers."
 # diataxis: how-to

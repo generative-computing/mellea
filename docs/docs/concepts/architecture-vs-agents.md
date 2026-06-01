@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/concepts/architecture-vs-agents"
 title: "Mellea vs Orchestration Frameworks"
 description: "What makes Mellea different from LangChain, smolagents, and other agent frameworks — and how they work together."
 # diataxis: explanation

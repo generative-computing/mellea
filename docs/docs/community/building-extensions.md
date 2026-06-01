@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/community/building-extensions"
 title: "Building Extensions"
 description: "Create custom components, backends, sampling strategies, and requirements to extend Mellea."
 # diataxis: how-to
