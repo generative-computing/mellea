@@ -6,15 +6,30 @@ if (!version) {
   process.exit(1);
 }
 
-const path = 'docs/docusaurus.config.ts';
-const src = readFileSync(path, 'utf8');
-const next = src.replace(
+const configPath = 'docs/docusaurus.config.ts';
+let src = readFileSync(configPath, 'utf8');
+
+// Update lastVersion to the new release tag
+const updated = src.replace(
   /lastVersion:\s*'[^']*',/,
   `lastVersion: '${version}',`,
 );
-if (next === src) {
-  console.error(`error: lastVersion line not found in ${path}`);
+if (updated === src) {
+  console.error(`error: lastVersion line not found in ${configPath}`);
   process.exit(1);
 }
-writeFileSync(path, next);
-console.log(`Set lastVersion to '${version}' in ${path}`);
+src = updated;
+
+// Add path: 'main' to the current version block if not already present.
+// This is a one-time insertion needed once a snapshot version exists as the
+// default — before the first snapshot, current IS the default and needs no path.
+if (!src.includes("path: 'main'")) {
+  src = src.replace(
+    /label: 'main \(unreleased\)',/,
+    "label: 'main (unreleased)',\n              path: 'main',",
+  );
+  console.log("Added path: 'main' to versions.current");
+}
+
+writeFileSync(configPath, src);
+console.log(`Set lastVersion to '${version}' in ${configPath}`);

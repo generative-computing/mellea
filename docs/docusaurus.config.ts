@@ -40,7 +40,8 @@ const config: Config = {
           versions: {
             current: {
               label: 'main (unreleased)',
-              path: 'main',
+              // path is added by the release pipeline (set-last-version.mjs) on
+              // first final release, once a snapshot version exists as the default
               banner: 'unreleased',
             },
           },
