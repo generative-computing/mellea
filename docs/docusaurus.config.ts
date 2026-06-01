@@ -164,16 +164,6 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md',
-          label: 'Contribution Guide',
-          position: 'right',
-        },
-        {
-          href: 'https://github.com/generative-computing/mellea/issues',
-          label: 'Support',
-          position: 'right',
-        },
-        {
           href: 'https://github.com/generative-computing/mellea',
           label: 'GitHub',
           position: 'right',
