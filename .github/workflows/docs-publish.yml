@@ -132,6 +132,7 @@ jobs:
       # -- Build Docusaurus site -----------------------------------------------
 
       - name: Build Docusaurus site
+        id: build_site
         run: npm run build
         working-directory: docs
         env:
@@ -160,14 +161,16 @@ jobs:
       - name: Write job summary
         if: always()
         run: |
-          echo "## Docs Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Markdownlint | ${{ steps.markdownlint.outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| API Coverage | ${{ steps.audit_coverage.outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docstring Quality | ${{ steps.quality_gate.outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docusaurus Build | ${{ steps.build_site.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Docs Build Summary"
+            echo ""
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            echo "| Markdownlint | ${{ steps.markdownlint.outcome }} |"
+            echo "| API Coverage | ${{ steps.audit_coverage.outcome }} |"
+            echo "| Docstring Quality | ${{ steps.quality_gate.outcome }} |"
+            echo "| Docusaurus Build | ${{ steps.build_site.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
   # Deploy to GitHub Pages
@@ -261,15 +264,14 @@ jobs:
       - name: Write deploy summary
         if: always()
         run: |
-          REPO="${GITHUB_REPOSITORY}"
-          SHA="${GITHUB_SHA}"
-          BASE="${DOCS_BASE_URL}"
-          echo "## Docs Deploy" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
-          echo "|-|-|" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | \`gh-pages\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Source | \`${SHA:0:7}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Base URL | \`${BASE}\` |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Docs Deploy"
+            echo ""
+            echo "| | |"
+            echo "|-|-|"
+            echo "| Branch | \`gh-pages\` |"
+            echo "| Source | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Base URL | \`${DOCS_BASE_URL}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           DOCS_BASE_URL: ${{ env.DOCS_BASE_URL }}
