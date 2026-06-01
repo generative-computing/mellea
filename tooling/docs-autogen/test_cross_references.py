@@ -58,6 +58,58 @@ def test_add_cross_references():
     print("✅ add_cross_references test passed (no errors)")
 
 
+def test_directory_index_same_dir_link():
+    """Cross-refs from a directory-index file prefix the dir name."""
+    # backends/backends.mdx is served at /api/mellea/backends (not /backends/backends).
+    # A link to the sibling backends/backend.mdx must include the dir name so it
+    # resolves from the parent URL base /api/mellea/.
+    symbol_cache = {"FormatterBackend": "mellea.backends.backend"}
+    content = "Uses `FormatterBackend` as the base."
+    result = add_cross_references(
+        content, "mellea.backends.backends", Path("."), symbol_cache=symbol_cache
+    )
+    assert "backends/backend#class-formatterbackend" in result, (
+        f"Expected 'backends/backend#class-formatterbackend' in: {result}"
+    )
+    print("✅ directory-index same-dir link test passed")
+
+
+def test_regular_file_same_dir_link():
+    """Cross-refs from a regular file in the same directory use bare filename."""
+    symbol_cache = {"FormatterBackend": "mellea.backends.backend"}
+    content = "Uses `FormatterBackend` as the base."
+    result = add_cross_references(
+        content, "mellea.backends.model_ids", Path("."), symbol_cache=symbol_cache
+    )
+    # model_ids.mdx is at /api/mellea/backends/model_ids — same dir as backend.mdx
+    assert "backend#class-formatterbackend" in result, (
+        f"Expected 'backend#class-formatterbackend' in: {result}"
+    )
+    # Must NOT have the directory prefix (that would add an extra level)
+    assert "backends/backend#" not in result, (
+        f"Should not have 'backends/backend#' in: {result}"
+    )
+    print("✅ regular-file same-dir link test passed")
+
+
+def test_directory_index_cross_package_link():
+    """Cross-refs from a directory-index file to a different package adjust levels."""
+    # core/core.mdx is at /api/mellea/core (dir-index).
+    # Link to stdlib/session.mdx should be 'stdlib/session' (not '../stdlib/session').
+    symbol_cache = {"Session": "mellea.stdlib.session"}
+    content = "Uses `Session`."
+    result = add_cross_references(
+        content, "mellea.core.core", Path("."), symbol_cache=symbol_cache
+    )
+    assert "stdlib/session#class-session" in result, (
+        f"Expected 'stdlib/session#class-session' in: {result}"
+    )
+    assert "../stdlib/session" not in result, (
+        f"Should not have '../stdlib/session' in: {result}"
+    )
+    print("✅ directory-index cross-package link test passed")
+
+
 if __name__ == "__main__":
     print("Testing cross-reference functions...")
     print("=" * 60)
@@ -65,6 +117,12 @@ if __name__ == "__main__":
     test_extract_type_references()
     print()
     test_add_cross_references()
+    print()
+    test_directory_index_same_dir_link()
+    print()
+    test_regular_file_same_dir_link()
+    print()
+    test_directory_index_cross_package_link()
 
     print("=" * 60)
     print("All tests passed!")
