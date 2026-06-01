@@ -131,8 +131,10 @@ fi
 
 # Dispatch follow-on workflows directly (GITHUB_TOKEN-authored release/tag
 # events don't auto-trigger).
+# Note: docs-publish.yml is NOT dispatched here for finals — the snapshot-docs
+# job in publish-release.yml commits versioned docs to main, which triggers
+# docs-publish.yml automatically via the docs/** path filter.
 gh workflow run pypi.yml --ref "${TARGET_TAG_NAME}"
-gh workflow run docs-publish.yml --field "release_tag=${TARGET_TAG_NAME}"
 
 if [ "${RELEASE_BRANCH}" = "main" ]; then
     echo "Published ${TARGET_TAG_NAME} from main — skipping changelog sync PR"
