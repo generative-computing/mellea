@@ -35,6 +35,15 @@ const config: Config = {
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
+          includeCurrentVersion: true,
+          lastVersion: 'current',
+          versions: {
+            current: {
+              label: 'main (unreleased)',
+              path: 'main',
+              banner: 'unreleased',
+            },
+          },
         } satisfies DocsOptions,
         blog: false,
         theme: {
@@ -161,6 +170,10 @@ const config: Config = {
         {
           href: 'https://github.com/generative-computing/mellea/discussions',
           label: 'Community',
+          position: 'right',
+        },
+        {
+          type: 'docsVersionDropdown',
           position: 'right',
         },
         {

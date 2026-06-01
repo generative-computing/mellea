@@ -47,7 +47,12 @@ against `release/vX.Y`.
 - `bump_type`: `final`
 
 After this runs: `vX.Y.0` is tagged, the GitHub Release exists, the PyPI
-upload is done, and docs/production has been redeployed.
+upload is done, and docs versioning is updated automatically. The
+`snapshot-docs` job commits `versioned_docs/version-X.Y.0/` to `main` and
+sets that version as the default. This commit triggers `docs-publish.yml`,
+which redeploys production. Visitors land on `vX.Y.0` docs by default;
+the version dropdown lets them switch to `main` (unreleased) or any prior
+snapshot. No manual docs step is required.
 
 ### 4. Sync the changelog back to main
 
@@ -71,6 +76,9 @@ Run [Publish release](https://github.com/generative-computing/mellea/actions/wor
 against `release/vX.Y`.
 
 - `bump_type`: `patch-final`
+
+As with a minor final, `snapshot-docs` runs automatically and docs are
+redeployed with the patch as the new default version.
 
 > Patch rc iteration (`bump_type: patch-rc`) is currently a no-op for the
 > same reason as minor rc iteration; see [rc cycling](#rc-cycling).
@@ -189,15 +197,21 @@ and break `git checkout v0.4.2` semantics. Old `release/v0.3`,
 
 ## Docs behavior by release type
 
-Docs publishing (`docs-publish.yml`) deploys to `docs/production` only when
-a published GitHub Release is the latest final by semver, so older-branch
-patches don't overwrite production docs.
+For finals and patch-finals, the `snapshot-docs` job in `publish-release.yml`
+commits a versioned snapshot of `main`'s docs to `main` immediately after the
+GitHub Release is created. This commit triggers `docs-publish.yml` via the
+`docs/**` path filter, which deploys production with the new version as the
+default. Visitors see the released docs by default; a version dropdown in the
+navbar lets them switch to `main` (unreleased) or any prior snapshot.
 
-| Release type | docs/production | docs/staging |
-|--------------|-----------------|--------------|
+`docs-publish.yml` only deploys to production when the triggering release is the
+latest final by semver, so older-branch patches don't overwrite production docs.
+
+| Release type | docs/production default version | Dropdown includes |
+|--------------|----------------------------------|-------------------|
 | RC (`v0.6.0rc0`) | unchanged | unchanged |
-| Final X.Y release (`v0.6.0`) | deployed | (main-push rebuilds as usual) |
-| Patch on latest X.Y (`v0.6.1` after `v0.6.0`) | deployed | unchanged |
+| Final X.Y release (`v0.6.0`) | `v0.6.0` | `v0.6.0`, prior snapshots, `main` |
+| Patch on latest X.Y (`v0.6.1` after `v0.6.0`) | `v0.6.1` | all snapshots, `main` |
 | Patch on older X.Y (`v0.5.1` after `v0.6.0`) | unchanged | unchanged |
 
 ## RC cycling
