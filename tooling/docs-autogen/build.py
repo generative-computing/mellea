@@ -28,8 +28,20 @@ def read_project_version(repo_root: Path) -> str:
 
 
 def normalize_version(version: str) -> str:
-    """Strip pre-release suffixes for GitHub source links."""
-    return version.split("-")[0]
+    """Return the git ref for GitHub source links.
+
+    Final releases (X.Y.Z) return the bare version string (e.g. "0.6.0"); the
+    caller adds the "v" prefix when constructing the tag URL.
+
+    Pre-releases (.devN, rcN, .aN, .bN) and any other non-final form return
+    "main" so that source links point to the live branch rather than a
+    non-existent tag.
+    """
+    import re
+
+    if re.match(r"^\d+\.\d+\.\d+$", version):
+        return version  # final release — tag exists
+    return "main"  # dev / rc / alpha / beta — no stable tag
 
 
 def main():
