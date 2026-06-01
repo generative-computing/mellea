@@ -188,11 +188,12 @@ const config: Config = {
       style: 'dark',
       links: [
         {
+          title: 'Community',
           items: [
             {label: 'Blog', href: 'https://generative-computing.github.io/blog/'},
-            {label: 'Community', href: 'https://github.com/generative-computing/mellea/discussions'},
-            {label: 'Contribution Guide', href: 'https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md'},
-            {label: 'Support', href: 'https://github.com/generative-computing/mellea/issues'},
+            {label: 'Discussions', href: 'https://github.com/generative-computing/mellea/discussions'},
+            {label: 'Contributing', href: 'https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md'},
+            {label: 'Issues', href: 'https://github.com/generative-computing/mellea/issues'},
             {label: 'GitHub', href: 'https://github.com/generative-computing/mellea'},
           ],
         },

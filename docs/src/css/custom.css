@@ -51,6 +51,18 @@ article {
   max-width: 48rem;
 }
 
+/* Footer — always on dark bg (#0d1117) regardless of page colour mode */
+.footer__links,
+.footer__link-item,
+.footer__copyright {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.footer__link-item:hover {
+  color: #ffffff;
+  text-decoration: none;
+}
+
 /* Code blocks */
 pre code {
   font-size: 0.85rem;
