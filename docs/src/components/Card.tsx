@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from '@docusaurus/Link';
 
 interface CardProps {
   title?: string;
@@ -7,7 +8,7 @@ interface CardProps {
   children?: React.ReactNode;
 }
 
-export default function Card({title, href, children}: CardProps): JSX.Element {
+export default function Card({title, href, children}: CardProps): React.ReactElement {
   const content = (
     <div style={{
       border: '1px solid var(--ifm-color-emphasis-300)',
@@ -23,7 +24,7 @@ export default function Card({title, href, children}: CardProps): JSX.Element {
   );
 
   if (href) {
-    return <a href={href} style={{textDecoration: 'none'}}>{content}</a>;
+    return <Link to={href} style={{textDecoration: 'none'}}>{content}</Link>;
   }
   return content;
 }

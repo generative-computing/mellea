@@ -5,7 +5,7 @@ interface CardGroupProps {
   children?: React.ReactNode;
 }
 
-export default function CardGroup({cols = 2, children}: CardGroupProps): JSX.Element {
+export default function CardGroup({cols = 2, children}: CardGroupProps): React.ReactElement {
   return (
     <div style={{
       display: 'grid',
