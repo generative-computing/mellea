@@ -1,3 +1,4 @@
+import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import type {Options as DocsOptions} from '@docusaurus/plugin-content-docs';
@@ -202,6 +203,8 @@ const config: Config = {
       maxHeadingLevel: 4,
     },
     prism: {
+      theme: prismThemes.github,
+      darkTheme: prismThemes.dracula,
       additionalLanguages: ['python', 'bash', 'yaml', 'json'],
     },
   } satisfies Preset.ThemeConfig,

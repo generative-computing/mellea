@@ -11,6 +11,9 @@
   --ifm-font-family-base: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --ifm-font-family-monospace: 'IBM Plex Mono', 'SFMono-Regular', monospace;
   --ifm-code-font-size: 90%;
+  --ifm-line-height-base: 1.7;
+  --ifm-navbar-height: 3.5rem;
+  --ifm-navbar-shadow: none;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 }
 
@@ -22,7 +25,36 @@
   --ifm-color-primary-light: #d4d4d4;
   --ifm-color-primary-lighter: #e0e0e0;
   --ifm-color-primary-lightest: #f0f0f0;
+  --ifm-background-color: #111827;
+  --ifm-background-surface-color: #1a2234;
+  --ifm-navbar-background-color: #111827;
+  --ifm-footer-background-color: #0d1117;
   --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* Navbar */
+.navbar {
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+}
+
+/* Sidebar section headers */
+.menu__list-item-collapsible .menu__link {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ifm-color-emphasis-600);
+}
+
+/* Content */
+article {
+  max-width: 48rem;
+}
+
+/* Code blocks */
+pre code {
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 
 /* Sidebar API badges */
