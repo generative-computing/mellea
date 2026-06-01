@@ -8,12 +8,15 @@ raising when no event loop is running. These utilities are used internally by ba
 that operate in async contexts.
 """
 
+from __future__ import annotations
+
 import asyncio
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..core import ModelOutputThunk
+if TYPE_CHECKING:
+    from ..core import ModelOutputThunk
 
 
 async def send_to_queue(
