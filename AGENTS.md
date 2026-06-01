@@ -119,6 +119,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | `uv.lock` out of sync | Run `uv sync` |
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
+| GitHub Actions workflow injection warning | Never use `${{ expression }}` directly in `run:` commands. Always pass via `env:` → `run: echo "$MY_VAR"` with `env: MY_VAR: ${{ expression }}`. Applies to job outputs, `inputs.*`, `github.event.*`, etc. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
