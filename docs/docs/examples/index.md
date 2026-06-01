@@ -61,8 +61,8 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
-| `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
-| `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
+| `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails.md): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
+| `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails.md) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
 
 ### Integration and deployment
 
