@@ -77,7 +77,7 @@ def inject_sidebar_fix(mdx_text: str) -> str:
 
 
 def fix_source_links(content: str, version: str) -> str:
-    """Fix GitHub source links to use a versioned tag instead of blob/main.
+    """Fix GitHub source links to use the correct git ref.
 
     Handles both output formats from mdxify:
     - HTML anchor: <a href="https://github.com/OWNER/REPO/blob/main/PATH">
@@ -85,11 +85,17 @@ def fix_source_links(content: str, version: str) -> str:
 
     Args:
         content: MDX file content
-        version: Package version (e.g., "0.5.0")
+        version: Git ref for source links — either a final version number
+            (e.g. "0.5.0", becomes "v0.5.0" in the URL) or "main" for
+            pre-release / dev builds where no stable tag exists.
 
     Returns:
-        Content with blob/main replaced by blob/v{version}
+        Content with the branch/tag component of every GitHub blob URL
+        replaced by the appropriate ref.
     """
+    # Version tags get a "v" prefix; named branches (main) are used as-is.
+    ref = f"v{version}" if re.match(r"^\d", version) else version
+
     # HTML href format (used by current mdxify output):
     # <a href="https://github.com/OWNER/REPO/blob/BRANCH/PATH" ...>
     html_pattern = r'href="(https://github\.com/([^/]+)/([^/]+)/blob/)[^/]+/([^"]+)"'
@@ -97,7 +103,7 @@ def fix_source_links(content: str, version: str) -> str:
     def replace_html(match):
         base = match.group(1)  # https://github.com/OWNER/REPO/blob/
         path = match.group(4)
-        return f'href="{base}v{version}/{path}"'
+        return f'href="{base}{ref}/{path}"'
 
     content = re.sub(html_pattern, replace_html, content)
 
@@ -110,7 +116,7 @@ def fix_source_links(content: str, version: str) -> str:
     def replace_md(match):
         base = match.group(1)
         path = match.group(4)
-        return f"[View source]({base}v{version}/{path})"
+        return f"[View source]({base}{ref}/{path})"
 
     content = re.sub(md_pattern, replace_md, content)
 
