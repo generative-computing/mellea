@@ -120,6 +120,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 | Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
+| GitHub Actions workflow injection warning | Never use `${{ expression }}` directly in `run:` commands. Always pass via `env:` → `run: echo "$MY_VAR"` with `env: MY_VAR: ${{ expression }}`. Applies to job outputs, `inputs.*`, `github.event.*`, etc. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
