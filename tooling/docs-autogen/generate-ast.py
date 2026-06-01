@@ -543,6 +543,13 @@ def move_api_to_docs_root(target_docs_root: Path) -> Path:
         raise RuntimeError(f"Staging API dir not found: {STAGING_API_DIR}")
 
     if target_api_dir.exists():
+        # Preserve static seed files (e.g. index.md) that live in the root of
+        # the target api dir but are not produced by the pipeline.
+        for seed_file in target_api_dir.glob("*.md"):
+            dest = STAGING_API_DIR / seed_file.name
+            if not dest.exists():
+                shutil.copy2(seed_file, dest)
+                print(f"   💾 Preserving seed file: {seed_file.name}", flush=True)
         print(f"   🧹 Deleting existing target api dir: {target_api_dir}", flush=True)
         shutil.rmtree(target_api_dir)
 
@@ -702,7 +709,12 @@ def _collect_module_entries(
                 preamble = docstring_cache.get(module_path, "")
             else:
                 preamble = _read_body_preamble(index_mdx)
-            href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
+            # Directory-index files (stem == parent dir name) are served at the
+            # directory route, not at /<dir>/<filename>.
+            if index_mdx.stem == child.name:
+                href = f"api/{pkg}/{child.name}"
+            else:
+                href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
             entries.append((child.name, desc, preamble, href))
         elif child.suffix == ".mdx":
             module_path = f"{pkg}.{child.stem}"

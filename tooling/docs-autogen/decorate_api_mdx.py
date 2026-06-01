@@ -380,9 +380,15 @@ def label_heading(line: str, current_section: str | None) -> str:
 
     span = CLASS_SPAN if kind == "class" else FUNC_SPAN
 
+    # Add explicit heading ID so Docusaurus anchors match cross-reference links.
+    # Without this, Docusaurus strips the JSX span text and generates "#name"
+    # instead of "#class-name", breaking all links that target "#class-name".
+    anchor_id = f"class-{name.lower()}" if kind == "class" else f"{name.lower()}"
+    id_suffix = f" {{#{anchor_id}}}"
+
     if rest:
-        return f"{hashes} {span} `{name}`{rest}"
-    return f"{hashes} {span} `{name}`"
+        return f"{hashes} {span} `{name}`{rest}{id_suffix}"
+    return f"{hashes} {span} `{name}`{id_suffix}"
 
 
 def line_has_pill(line: str) -> bool:
@@ -627,6 +633,16 @@ def build_symbol_cache(source_dir: Path) -> dict[str, str]:
                 # outside the package (e.g. `from dataclasses import dataclass`).
                 # Skip these — they're not mellea symbols.
                 continue
+            # Only include classes: TypeAliases and other attributes do not get
+            # class headings in the generated MDX, so linking to them produces
+            # broken anchors.
+            try:
+                kind = member.kind
+                kind_str = kind.value if hasattr(kind, "value") else str(kind).lower()
+                if "class" not in kind_str:
+                    continue
+            except Exception:
+                continue
             parts = canonical.split(".")
             if len(parts) > 1:
                 cache[symbol_name] = ".".join(parts[:-1])
@@ -694,43 +710,55 @@ def add_cross_references(
         if target_module and target_module != module_path:
             resolved[ref] = target_module
 
+    current_parts = module_path.split(".")
+    # A directory-index file has the same name as its parent directory
+    # (e.g. backends/backends.mdx → module path mellea.backends.backends).
+    # Docusaurus serves it at /api/mellea/backends (not /backends/backends),
+    # so its effective URL base is one level higher than a regular file.
+    is_directory_index = (
+        len(current_parts) >= 2 and current_parts[-1] == current_parts[-2]
+    )
+
+    def _build_rel_path(target_parts: list[str]) -> str:
+        """Build a relative URL from the current page to target_parts."""
+        common = 0
+        for i in range(min(len(current_parts), len(target_parts))):
+            if current_parts[i] == target_parts[i]:
+                common += 1
+            else:
+                break
+
+        # Number of directory levels to go up from the current file's directory.
+        # current_parts[-1] is the filename, so exclude it.
+        up_levels = len(current_parts) - common - 1
+
+        if is_directory_index:
+            # The URL base is one level higher than the module path implies.
+            # Reduce up_levels by 1 to compensate; if it goes negative, we need
+            # to prefix with the current directory name instead.
+            adjusted = up_levels - 1
+            if adjusted < 0:
+                # Same directory in module terms — prefix with the dir name so
+                # relative link descends into it from the parent URL base.
+                return current_parts[-1] + "/" + "/".join(target_parts[common:])
+            elif adjusted == 0:
+                return "/".join(target_parts[common:])
+            else:
+                return "../" * adjusted + "/".join(target_parts[common:])
+        else:
+            if up_levels == 0:
+                return target_parts[-1]
+            return "../" * up_levels + "/".join(target_parts[common:])
+
     # Replace backtick references with links
     # Example: `Backend` -> [`Backend`](../core/backend#class-backend)
     def replace_ref(match):
         symbol = match.group(1)
         if symbol in resolved:
             target_module = resolved[symbol]
-            # Calculate relative path
-            # module_path is like "mellea.core.formatter" (the current file)
-            # target_module is like "mellea.core.base" (the target file)
-            current_parts = module_path.split(".")
             target_parts = target_module.split(".")
-
-            # Find common prefix
-            common = 0
-            for i in range(min(len(current_parts), len(target_parts))):
-                if current_parts[i] == target_parts[i]:
-                    common += 1
-                else:
-                    break
-
-            # Build relative path
-            # We need to go up from the current file's directory, not from the file itself
-            # current_parts[-1] is the file name, so we exclude it
-            up_levels = (
-                len(current_parts) - common - 1
-            )  # -1 because we're in a file, not a dir
-
-            # If we're in the same directory (e.g., both in mellea.core), up_levels will be 0
-            # and we just need the target file name
-            if up_levels == 0:
-                rel_path = target_parts[-1]  # Just the filename in same directory
-            else:
-                rel_path = "../" * up_levels + "/".join(target_parts[common:])
-
-            # Generate anchor
+            rel_path = _build_rel_path(target_parts)
             anchor = mintlify_anchor(f"class {symbol}")
-
             return f"[`{symbol}`]({rel_path}#{anchor})"
         return match.group(0)
 
@@ -738,31 +766,12 @@ def add_cross_references(
     # Pattern: [`Symbol`](path#anchor)
     def fix_existing_link(match):
         symbol = match.group(1)
-        # old_path = match.group(2)  # Not needed, we recalculate
         anchor = match.group(3)
 
         if symbol in resolved:
             target_module = resolved[symbol]
-            current_parts = module_path.split(".")
             target_parts = target_module.split(".")
-
-            # Find common prefix
-            common = 0
-            for i in range(min(len(current_parts), len(target_parts))):
-                if current_parts[i] == target_parts[i]:
-                    common += 1
-                else:
-                    break
-
-            # Build relative path
-            up_levels = len(current_parts) - common - 1
-
-            if up_levels == 0:
-                rel_path = target_parts[-1]
-            else:
-                rel_path = "../" * up_levels + "/".join(target_parts[common:])
-
-            # Keep the existing anchor
+            rel_path = _build_rel_path(target_parts)
             return f"[`{symbol}`]({rel_path}#{anchor})"
         return match.group(0)
 

@@ -261,7 +261,7 @@ def run(
         m decompose run --out-dir ./output --input-file tasks.txt
 
     See Also:
-        guide: guide/m-decompose
+        guide: how-to/m-decompose
         guide: how-to/refactor-prompts-with-cli
 
     Args:
