@@ -233,7 +233,6 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 )
 
 
-
 class LocalHFBackend(FormatterBackend, AdapterMixin):
     """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
 
