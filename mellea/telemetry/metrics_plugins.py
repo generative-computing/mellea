@@ -16,12 +16,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mellea.core.base import GenerationMetadata
 from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
 from mellea.plugins.types import PluginMode
 
 if TYPE_CHECKING:
+    from mellea.core.base import GenerationMetadata
     from mellea.plugins.hooks.generation import (
         GenerationErrorPayload,
         GenerationPostCallPayload,
@@ -124,6 +124,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
             payload: Contains the exception and the ModelOutputThunk at the time of the error.
             context: Plugin context (unused).
         """
+        from mellea.core.base import GenerationMetadata
         from mellea.telemetry.metrics import classify_error, record_error
 
         gen = (
