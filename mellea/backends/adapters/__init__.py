@@ -19,11 +19,11 @@ from .adapter import (
     fetch_intrinsic_metadata,
     get_adapter_for_intrinsic,
 )
+from .capabilities import KNOWN_CAPABILITIES
 from .catalog import validate_revision
-from .roles import KNOWN_ROLES
 
 __all__ = [
-    "KNOWN_ROLES",
+    "KNOWN_CAPABILITIES",
     "Adapter",
     "AdapterMixin",
     "AdapterSchemaMismatchError",

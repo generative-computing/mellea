@@ -2,7 +2,7 @@
 
 Introduces the composable ``Adapter`` dataclass and its three parts:
 
-- :class:`Identity` — name, adapter_type, optional role
+- :class:`Identity` — name, adapter_type, optional capability
 - :class:`IOContract` — ABC for prompt building and output parsing
 - :class:`WeightsBinding` — pluggable ABC for weights lifecycle management
 
@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ...core import Component
-from .roles import KNOWN_ROLES
+from .capabilities import KNOWN_CAPABILITIES
 
 _PHASE_2_NOT_IMPLEMENTED = (
     "{cls} is a Phase 0 stub; implementation lands in Epic #929 Phase 2."
@@ -61,18 +61,19 @@ class AdapterSchemaMismatchError(Exception):
 
 @dataclass(frozen=True)
 class Identity:
-    """Identifies an adapter by name, type, and optional role.
+    """Identifies an adapter by name, type, and optional capability.
 
     Attributes:
         name (str): Human-readable adapter name.
         adapter_type (Literal["lora", "alora"]): The LoRA variant.
-        role (str | None): Advisory role string; emits :class:`UserWarning`
-            when not in :data:`~mellea.backends.adapters.roles.KNOWN_ROLES`.
+        capability (str | None): Advisory capability string; emits
+            :class:`UserWarning` when not in
+            :data:`~mellea.backends.adapters.capabilities.KNOWN_CAPABILITIES`.
     """
 
     name: str
     adapter_type: Literal["lora", "alora"]
-    role: str | None = None
+    capability: str | None = None
 
     def __post_init__(self) -> None:
         # Literal[...] is a static-only constraint; mypy enforces it but Python
@@ -81,10 +82,10 @@ class Identity:
             raise ValueError(
                 f"adapter_type must be 'lora' or 'alora', got {self.adapter_type!r}"
             )
-        if self.role is not None and self.role not in KNOWN_ROLES:
+        if self.capability is not None and self.capability not in KNOWN_CAPABILITIES:
             warnings.warn(
-                f"Role {self.role!r} is not in the KNOWN_ROLES registry. "
-                "This may indicate a typo or an unregistered role.",
+                f"Capability {self.capability!r} is not in the KNOWN_CAPABILITIES "
+                "registry. This may indicate a typo or an unregistered capability.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -247,7 +248,7 @@ class Adapter:
     :class:`WeightsBinding` into a single, inspectable object.
 
     Attributes:
-        identity (Identity): Name, type, and role for this adapter.
+        identity (Identity): Name, type, and capability for this adapter.
         io_contract (IOContract): Prompt builder and output parser.
         weights (WeightsBinding): Pluggable weights lifecycle handler.
     """

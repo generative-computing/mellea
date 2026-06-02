@@ -7,7 +7,7 @@ import warnings
 import pytest
 
 from mellea.backends.adapters import (
-    KNOWN_ROLES,
+    KNOWN_CAPABILITIES,
     Adapter,
     AdapterSchemaMismatchError,
     EmbeddedBinding,
@@ -155,24 +155,25 @@ def test_adapter_schema_mismatch_error_pickles():
     assert str(restored) == str(err)
 
 
-def test_known_roles_importable():
-    assert isinstance(KNOWN_ROLES, frozenset)
-    assert "answerability" in KNOWN_ROLES
+def test_known_capabilities_importable():
+    assert isinstance(KNOWN_CAPABILITIES, frozenset)
+    assert "answerability" in KNOWN_CAPABILITIES
 
 
-def test_identity_known_role_no_warning():
-    # Tight scope: only treat UserWarning from the role registry as a failure.
+def test_identity_known_capability_no_warning():
+    # Tight scope: only treat UserWarning from the capability registry as a failure.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        Identity(name="a", adapter_type="lora", role="answerability")
-    role_warnings = [
+        Identity(name="a", adapter_type="lora", capability="answerability")
+    capability_warnings = [
         w
         for w in caught
-        if issubclass(w.category, UserWarning) and "KNOWN_ROLES" in str(w.message)
+        if issubclass(w.category, UserWarning)
+        and "KNOWN_CAPABILITIES" in str(w.message)
     ]
-    assert role_warnings == []
+    assert capability_warnings == []
 
 
-def test_identity_unknown_role_warns():
-    with pytest.warns(UserWarning, match="not in the KNOWN_ROLES"):
-        Identity(name="a", adapter_type="lora", role="unknown-role")
+def test_identity_unknown_capability_warns():
+    with pytest.warns(UserWarning, match="not in the KNOWN_CAPABILITIES"):
+        Identity(name="a", adapter_type="lora", capability="unknown-capability")
