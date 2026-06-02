@@ -19,8 +19,8 @@ class GenerationPreCallPayload(MelleaBasePayload):
         model_options: Dict of model options (writable — plugins may adjust temperature, etc.).
         format: Optional `BaseModel` subclass for constrained decoding (writable).
         tool_calls: Whether tool calls are enabled for this generation (writable).
-        generation_id: Correlation identifier set by the firing site so the same
-            request can be tracked across pre/post/error hooks. `None` when
+        generation_id: Mellea-side hook correlation ID, distinct from the
+            provider-assigned `GenerationMetadata.response_id`. `None` when
             the firing site does not generate one.
     """
 
@@ -46,9 +46,10 @@ class GenerationPostCallPayload(MelleaBasePayload):
         model_output: The fully-computed `ModelOutputThunk`.
         latency_ms: Elapsed milliseconds from the `generate_from_context` call
             to when the value was fully materialized.
-        generation_id: Correlation identifier matching the corresponding
-            pre_call payload's `generation_id` for the same request, or
-            `None` when the firing site did not generate one.
+        generation_id: Mellea-side hook correlation ID matching the
+            corresponding pre_call payload, distinct from the provider-assigned
+            `GenerationMetadata.response_id`. `None` when the firing site did
+            not generate one.
     """
 
     prompt: str | list[dict[str, Any]] = ""
@@ -68,9 +69,10 @@ class GenerationErrorPayload(MelleaBasePayload):
         model_output: The `ModelOutputThunk` at the time of the error. `model`
             and `provider` are set when the backend set them early (before the
             async task); otherwise they are `None`.
-        generation_id: Correlation identifier matching the corresponding
-            pre_call payload's `generation_id` for the same request, or
-            `None` when the firing site did not generate one.
+        generation_id: Mellea-side hook correlation ID matching the
+            corresponding pre_call payload, distinct from the provider-assigned
+            `GenerationMetadata.response_id`. `None` when the firing site did
+            not generate one.
     """
 
     exception: BaseException

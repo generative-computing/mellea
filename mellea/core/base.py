@@ -398,6 +398,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._start: datetime.datetime | None = None
         self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
+        # Mellea-side hook correlation ID; distinct from the provider-assigned
+        # `GenerationMetadata.response_id`.
         self._generation_id: str | None = None
 
     def _record_ttfb(self) -> None:

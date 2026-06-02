@@ -1259,9 +1259,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "total_tokens": n_prompt + n_completion,
             }
 
-        # Derive finish reason: "stop" if last token is EOS, "length" if we hit
-        # max_new_tokens. HF has no provider response object; this is synthesised
-        # from local state (sequences + tokenizer.eos_token_id + model_options).
+        # Derive finish reason: "stop" if last token is EOS or the output ends
+        # with a configured stop string, "length" if we hit max_new_tokens. HF
+        # has no provider response object; this is synthesised from local state
+        # (sequences + tokenizer.eos_token_id + model_options).
         if (
             isinstance(hf_output, GenerateDecoderOnlyOutput)
             and hf_output.sequences is not None
@@ -1272,7 +1273,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 eos = self._tokenizer.eos_token_id
                 eos_set = set(eos) if isinstance(eos, list) else {eos}
                 max_new_tokens = mot._model_options.get(ModelOption.MAX_NEW_TOKENS)
-                if last_token in eos_set:
+                stop_strings = mot._model_options.get(ModelOption.STOP_SEQUENCES) or []
+                ends_with_stop_string = isinstance(mot.value, str) and any(
+                    mot.value.endswith(s) for s in stop_strings
+                )
+                if last_token in eos_set or ends_with_stop_string:
                     mot.generation.finish_reasons = ["stop"]
                 elif (
                     max_new_tokens is not None

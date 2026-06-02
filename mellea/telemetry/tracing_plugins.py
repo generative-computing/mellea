@@ -46,7 +46,11 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
     async def on_pre_call(
         self, payload: GenerationPreCallPayload, context: dict[str, Any]
     ) -> None:
-        """Start a backend chat span for this generation."""
+        """Start a backend chat span for this generation.
+
+        SEQUENTIAL (not FIRE_AND_FORGET) so the span is on the OTel context
+        before the backend call, letting nested instrumentation parent under it.
+        """
         if not payload.generation_id:
             return
         action = payload.action
