@@ -19,7 +19,15 @@ def mock_ollama_backend():
 
         def test_something(mock_ollama_backend):
             backend = mock_ollama_backend(model_options={ModelOption.MAX_NEW_TOKENS: 5})
-            backend._async_client.chat = AsyncMock(return_value=canned_response)
+            # _async_client is an event-loop-keyed property; instance assignment won't
+            # override it for tests that call through _run_async_in_thread.  Patch at
+            # the class level instead:
+            mock_async = MagicMock()
+            mock_async.chat = AsyncMock(return_value=canned_response)
+            with patch.object(
+                type(backend), "_async_client", new_callable=PropertyMock, return_value=mock_async
+            ):
+                yield MelleaSession(backend)
     """
 
     def _make(

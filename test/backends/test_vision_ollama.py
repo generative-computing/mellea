@@ -133,6 +133,7 @@ def test_image_block_in_instruction(
 
 
 def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Image):
+    image_block = ImageBlock.from_pil_image(pil_image)
     ct = mocked_session.chat(
         "Is this image mainly blue? Answer yes or no.", images=[pil_image]
     )
@@ -144,7 +145,7 @@ def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Ima
     assert isinstance(last_action, Message)
     assert last_action.images is not None  # type: ignore[union-attr]
     assert len(last_action.images) > 0  # type: ignore[union-attr]
-    assert last_action.images[0] == ImageBlock.from_pil_image(pil_image).value  # type: ignore[union-attr]
+    assert last_action.images[0] == image_block.value  # type: ignore[union-attr]
 
     lp = turn.output._generate_log.prompt  # type: ignore[union-attr]
     assert isinstance(lp, list)
@@ -155,7 +156,7 @@ def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Ima
     image_list = prompt_msg.get("images")
     assert isinstance(image_list, list)
     assert len(image_list) == 1
-    assert image_list[0] == str(ImageBlock.from_pil_image(pil_image))
+    assert image_list[0] == str(image_block)
 
 
 # ── Tier 3: Dormant live e2e ──────────────────────────────────────────────────
@@ -189,8 +190,6 @@ def _ollama_vision_model_available() -> bool:
 
 @pytest.fixture
 def vision_session():
-    pytest.skip(_SKIP_REASON)  # remove once granite-vision-4.1 lands on Ollama (#1187)
-
     if not _ollama_vision_model_available():
         pytest.skip(_SKIP_REASON)
 
