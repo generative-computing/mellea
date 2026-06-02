@@ -149,6 +149,8 @@ const config: Config = {
         alt: 'Mellea',
         src: 'logo/logo-light.svg',
         srcDark: 'logo/logo-dark.svg',
+        href: 'https://mellea.ai',
+        target: '_self',
       },
       items: [
         {
