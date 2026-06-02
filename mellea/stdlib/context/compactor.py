@@ -459,9 +459,12 @@ class LLMSummarizeCompactor:
             Compaction is best-effort: if the backend call raises (rate
             limit, network error, timeout, etc.) the exception is caught, a
             warning is logged, and `ctx` is returned unchanged. The next
-            `compact()` invocation will retry. `KeyboardInterrupt` and
-            other `BaseException`s propagate so users can still interrupt
-            a stuck loop.
+            `compact()` invocation will retry. Programming-error classes
+            (`TypeError`, `AttributeError`, `AssertionError`, `LookupError`
+            — which covers `KeyError` and `IndexError`) propagate so genuine
+            bugs surface instead of being silently masked as "backend
+            failure". `KeyboardInterrupt` and other `BaseException`s also
+            propagate so users can still interrupt a stuck loop.
         """
         backend = backend or self.default_backend
 
@@ -473,6 +476,8 @@ class LLMSummarizeCompactor:
 
         try:
             return _run_coro_blocking(self._async_compact(ctx, backend))
+        except (TypeError, AttributeError, AssertionError, LookupError):
+            raise
         except Exception as exc:
             from mellea.core.utils import MelleaLogger
 

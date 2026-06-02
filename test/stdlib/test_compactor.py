@@ -569,6 +569,66 @@ class TestLLMSummarizeCompactor:
             for rec in caplog.records
         )
 
+    def test_programming_errors_propagate(self):
+        """Bugs (TypeError/AttributeError/etc.) must not be swallowed as 'backend failure'."""
+        from mellea.core.backend import Backend
+
+        class BuggyBackend(Backend):
+            async def _generate_from_context(
+                self,
+                action,
+                ctx,
+                *,
+                format=None,
+                model_options=None,
+                tool_calls: bool = False,
+            ):
+                raise TypeError("simulated programming bug")
+
+            async def generate_from_raw(self, *a, **kw):
+                raise NotImplementedError
+
+        comp = LLMSummarizeCompactor(default_backend=BuggyBackend(), keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+
+        with pytest.raises(TypeError, match="simulated programming bug"):
+            comp.compact(ctx)
+
+    def test_base_exceptions_propagate(self):
+        """KeyboardInterrupt and other BaseExceptions must not be caught.
+
+        The narrow re-raise list and the broad `except Exception` both miss
+        BaseException subclasses by design — guards Ctrl-C and async
+        cancellation from being silently swallowed across the
+        _run_coro_blocking thread bridge.
+        """
+        from mellea.core.backend import Backend
+
+        class InterruptingBackend(Backend):
+            async def _generate_from_context(
+                self,
+                action,
+                ctx,
+                *,
+                format=None,
+                model_options=None,
+                tool_calls: bool = False,
+            ):
+                raise KeyboardInterrupt("simulated Ctrl-C")
+
+            async def generate_from_raw(self, *a, **kw):
+                raise NotImplementedError
+
+        comp = LLMSummarizeCompactor(default_backend=InterruptingBackend(), keep_n=1)
+        ctx = ChatContext(window_size=10_000)
+        for i in range(4):
+            ctx = ctx.add(_msg(i))
+
+        with pytest.raises(KeyboardInterrupt, match="simulated Ctrl-C"):
+            comp.compact(ctx)
+
     def test_renders_thunk_without_value_using_tool_calls(
         self, scripted_summary_backend
     ):
