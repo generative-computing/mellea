@@ -96,6 +96,20 @@ class OutputSizeLimit(Requirement):
     the configured character limit. Useful for preventing excessive logging
     or infinite output loops.
 
+    ⚠️ **Performance & Correctness Warning**: When used in a requirement bundle
+    (e.g., via python_tool_requirements()), this requirement re-executes the code
+    even if PythonExecutionReq already executed it earlier in the pipeline.
+    This doubles the execution cost for Docker-isolated code and doubles the
+    attack surface for untrusted inputs.
+
+    For code with side effects (file writes, network calls, non-deterministic
+    output), the two executions may produce different results, making the
+    requirement validation results potentially inconsistent.
+
+    To avoid double execution: (1) use OutputSizeLimit as a standalone requirement,
+    or (2) extract and measure output separately, or (3) implement execution
+    result caching at the Context level.
+
     Args:
         limit_chars: Maximum allowed output size in characters. Defaults to 10,000.
         timeout: Maximum execution time in seconds. Defaults to 5.
@@ -196,6 +210,19 @@ class ImportRestrictions(Requirement):
     and validates them against an optional allowlist. If an empty list is
     provided, all imports are blocked. If None is provided, all imports are accepted.
 
+    ⚠️ **Not a Security Boundary**: This is a static AST-based guidance check,
+    not a security control. It only detects static import statements (``import x``
+    and ``from x import y``) and does NOT detect dynamic imports such as:
+    - ``__import__("subprocess")``
+    - ``importlib.import_module("socket")``
+    - ``exec("import urllib")``
+    - ``eval("import os")``
+
+    For real isolation from untrusted code, combine this requirement with
+    ``execution_tier="docker"`` and a restrictive ``CapabilityPolicy``.
+    The execution environment sandbox provides the actual security boundary,
+    not the import allowlist.
+
     Args:
         allowed_imports: List of module names that are allowed to be imported.
             If None, all imports are accepted. If an empty list, all imports are blocked.
@@ -292,6 +319,11 @@ def python_tool_requirements(
 
     Factory function that creates a complete set of requirements for validating
     Python code generation, from extraction through execution and output checks.
+
+    ⚠️ **Performance Note**: OutputSizeLimit in this bundle re-executes the code
+    after PythonExecutionReq has already executed it, doubling the cost for
+    sandboxed execution and doubling the attack surface. See OutputSizeLimit
+    class docstring for details and workarounds.
 
     Note: OutputSizeLimit requires actual code execution to capture stdout size.
     Control execution safety via use_sandbox (Docker isolation) or by using
