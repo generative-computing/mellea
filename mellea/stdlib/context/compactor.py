@@ -22,6 +22,10 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
 
 from mellea.core import CBlock, Component, Context, ModelOutputThunk
 from mellea.core.backend import Backend
+from mellea.core.utils import MelleaLogger
+from mellea.stdlib.components.chat import Message, ToolMessage
+from mellea.stdlib.context.chat import _rebuild_chat_context
+from mellea.stdlib.context.simple import SimpleContext
 
 if TYPE_CHECKING:
     from mellea.stdlib.context.chat import ChatContext
@@ -57,8 +61,6 @@ def pin_system(components: list[Component | CBlock]) -> int:
     Stops at the first non-system component. A system message that appears
     later in the conversation is *not* pinned.
     """
-    from mellea.stdlib.components.chat import Message
-
     i = 0
     while i < len(components):
         c = components[i]
@@ -75,8 +77,6 @@ def pin_system_and_initial_user(components: list[Component | CBlock]) -> int:
     Useful when the initial user prompt encodes the goal of the conversation
     and should survive compaction along with any system instructions.
     """
-    from mellea.stdlib.components.chat import Message
-
     i = pin_system(components)
     if i < len(components):
         c = components[i]
@@ -226,8 +226,6 @@ class WindowCompactor(InlineCompactor):
 
         if body_len <= self.size:
             return ctx
-
-        from mellea.stdlib.context.chat import _rebuild_chat_context
 
         keep_body = full[pin_end:][-self.size :] if self.size > 0 else []
         compacted = full[:pin_end] + keep_body
@@ -479,8 +477,6 @@ class LLMSummarizeCompactor:
         except (TypeError, AttributeError, AssertionError, LookupError):
             raise
         except Exception as exc:
-            from mellea.core.utils import MelleaLogger
-
             MelleaLogger.get_logger().warning(
                 "LLMSummarizeCompactor: summarisation backend call failed "
                 "(%s: %s); returning context unchanged. The conversation will "
@@ -492,11 +488,9 @@ class LLMSummarizeCompactor:
 
     async def _async_compact(self, ctx: ChatContext, backend: Backend) -> ChatContext:
         """Async core — renders the body, calls the backend, rebuilds the context."""
-        # Lazy imports to keep this module free of mellea.stdlib.components dependencies.
+        # mfuncs has to stay lazy: mellea.stdlib.functional imports SimpleContext
+        # via the context package init, which re-exports from this module.
         from mellea.stdlib import functional as mfuncs
-        from mellea.stdlib.components.chat import Message, ToolMessage
-        from mellea.stdlib.context.chat import _rebuild_chat_context
-        from mellea.stdlib.context.simple import SimpleContext
 
         full = ctx.as_list()
         pin_end = self.pin_predicate(full)
