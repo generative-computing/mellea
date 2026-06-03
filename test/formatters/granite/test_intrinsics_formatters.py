@@ -21,6 +21,7 @@ import requests
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 import yaml
+from huggingface_hub.errors import LocalEntryNotFoundError
 
 # First Party
 from mellea.formatters.granite import (
@@ -146,12 +147,15 @@ class YamlJsonCombo(pydantic.BaseModel):
         object. Called at fixture creation (execution time) to prevent collection time errors.
         """
         if not self.yaml_file:
-            self.yaml_file = intrinsics_util.obtain_io_yaml(
-                self.task,
-                self.base_model_id,
-                self.repo_id,
-                revision=self.revision,  # type: ignore
-            )
+            try:
+                self.yaml_file = intrinsics_util.obtain_io_yaml(
+                    self.task,
+                    self.base_model_id,
+                    self.repo_id,
+                    revision=self.revision,  # type: ignore
+                )
+            except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
+                pytest.skip(f"HuggingFace Hub not accessible: {type(e).__name__}: {e}")
         return self
 
 
@@ -533,9 +537,12 @@ def test_read_yaml():
     IntrinsicsRewriter(config_file=_INPUT_YAML_DIR / "answerability.yaml")
 
     # Read from Hugging Face hub.
-    local_path = intrinsics_util.obtain_io_yaml(
-        "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
-    )
+    try:
+        local_path = intrinsics_util.obtain_io_yaml(
+            "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
+        )
+    except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
+        pytest.skip(f"HuggingFace Hub not accessible: {type(e).__name__}: {e}")
     IntrinsicsRewriter(config_file=local_path)
 
 

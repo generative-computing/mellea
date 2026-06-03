@@ -14,6 +14,9 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
+import jinja2
+import jinja2.meta
+
 try:
     import llguidance
     import llguidance.hf
@@ -201,6 +204,33 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
+
+# Variables that HuggingFace injects into the Jinja template namespace automatically.
+# These must be excluded from _chat_template_allowlist because they are provided by
+# apply_chat_template itself — forwarding a model_option with the same name would
+# either cause a "got multiple values for keyword argument" TypeError (for the named-param
+# group) or silently replace a function injected by the Jinja environment (for the globals group).
+#
+# ⚠️  REVIEW NOTE: verify this set against the transformers source whenever upgrading.
+# Named params: transformers.tokenization_utils_base.PreTrainedTokenizerBase.apply_chat_template
+#               (the render_jinja_template call around line 119 in that method)
+# Jinja globals: transformers.utils.chat_template_utils._compile_jinja_template
+#               (the jinja_env.globals assignments near the bottom of that function)
+_HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
+    {
+        # --- Named parameters passed explicitly to render_jinja_template ---
+        # Forwarding these from model_options would cause duplicate-kwarg TypeError.
+        "messages",  # the conversation; always the first positional arg
+        "tools",  # tool schemas; our call sites pass tools=convert_tools_to_json(...) explicitly
+        "add_generation_prompt",  # bool; passed explicitly at the standard-generation call site
+        # --- Jinja environment globals set by _compile_jinja_template ---
+        # find_undeclared_variables cannot see env globals, so these appear as "undeclared"
+        # in templates that reference them and must be excluded manually.
+        "raise_exception",  # callable: raises jinja2.exceptions.TemplateError
+        "strftime_now",  # callable: returns datetime.now().strftime(format)
+    }
+)
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -745,10 +775,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # 3. apply the chat template WITHOUT tokenization.
         # Doing this without tokenization and then gluing together the tokens is necessary because
         # things that KV cache together must tokenize together.
+        # Note: add_generation_prompt is in _HF_INTERNAL_TEMPLATE_VARS, so any
+        # user-supplied value is intentionally dropped by _filter_for_chat_template.
+        # The KV-cache path formats context (not a generation turn), so
+        # add_generation_prompt=False (the HF default) is correct here.
         input_text = self._tokenizer.apply_chat_template(  # type: ignore
             ctx_as_conversation,
             tools=convert_tools_to_json(tools),  # type: ignore
-            **self._make_backend_specific_and_remove(model_options),
+            **self._filter_for_chat_template(model_options),
             tokenize=False,
         )
 
@@ -1030,7 +1064,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
-                **self._make_backend_specific_and_remove(model_options),
+                **self._filter_for_chat_template(model_options),
             ).to(self._device)  # type: ignore
 
             format_kwargs = {}
@@ -1581,6 +1615,78 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "documents",
         }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
+
+    @functools.cached_property
+    def _chat_template_allowlist(self) -> frozenset[str]:
+        """Variable names the tokenizer's chat template can accept from caller-supplied kwargs.
+
+        Parses the Jinja2 template with :func:`jinja2.meta.find_undeclared_variables` to
+        find every variable the template references but does not define itself, then
+        subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables HuggingFace provides
+        automatically). What remains is the exact set of keys a caller may legitimately
+        forward from ``model_options`` to ``apply_chat_template``.
+
+        This is the self-maintaining alternative to a hand-written denylist: it adapts
+        automatically as the loaded model's Jinja template changes without any manual
+        enumeration of generate()-only option names.
+
+        Returns:
+            frozenset of kwarg names valid for ``apply_chat_template`` on this tokenizer,
+            minus HF-provided variables. Empty if the tokenizer has no ``chat_template``
+            (``apply_chat_template`` would raise before kwargs matter in that case).
+        """
+        template_str = getattr(self._tokenizer, "chat_template", None)
+        if not isinstance(template_str, str) or not template_str:
+            # Non-string (None, list of alternates, dict) or empty — cannot parse.
+            # apply_chat_template handles those formats internally.
+            if template_str is not None and template_str:
+                # A non-empty, non-string value (e.g. list of alternates, dict) means
+                # we cannot inspect the template's variable names.  Any caller-supplied
+                # model_options that the template would have accepted are silently dropped.
+                MelleaLogger.get_logger().warning(
+                    f"Chat template for {self._hf_model_id} is not a plain string "
+                    f"(got {type(template_str).__name__}); cannot inspect variable names. "
+                    "model_options kwargs will not be forwarded to apply_chat_template."
+                )
+            return frozenset()
+        # loopcontrols enables {% break %} / {% continue %} used in some HF templates.
+        env = jinja2.Environment(extensions=["jinja2.ext.loopcontrols"])
+        try:
+            ast = env.parse(template_str)
+        except jinja2.TemplateSyntaxError as e:
+            # Templates using unsupported extensions (e.g. {% generation %} from
+            # transformers' AssistantTracker) cannot be parsed with a plain Jinja2
+            # environment. Fall back to forwarding nothing rather than crashing.
+            MelleaLogger.get_logger().warning(
+                f"Could not parse chat template for {self._hf_model_id} ({e}); "
+                "forwarding no model_options to apply_chat_template. "
+                "Template-referenced kwargs (think, guardian_config, etc.) will be ignored."
+            )
+            return frozenset()
+        all_vars = jinja2.meta.find_undeclared_variables(ast)
+        return frozenset(all_vars - _HF_INTERNAL_TEMPLATE_VARS)
+
+    def _filter_for_chat_template(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return only the model_options that the chat template can actually consume.
+
+        Renames Mellea sentinels via :meth:`_make_backend_specific_and_remove`, then
+        keeps only keys that appear in :attr:`_chat_template_allowlist` — the set of
+        variables the tokenizer's Jinja template actually references. Generation-only
+        options that the template does not reference are silently dropped, so they
+        cannot pollute the Jinja template variable namespace.
+
+        Args:
+            model_options: raw model options (may contain Mellea sentinel keys)
+
+        Returns:
+            dict of kwargs safe to splat into ``apply_chat_template``
+        """
+        backend_opts = self._make_backend_specific_and_remove(model_options)
+        return {
+            k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
+        }
 
     # region Adapter loading, unloading, and utility functions.
     @property
