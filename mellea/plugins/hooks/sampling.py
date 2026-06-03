@@ -32,7 +32,8 @@ class SamplingIterationPayload(MelleaBasePayload):
 
     Attributes:
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
-        iteration: 1-based iteration number within the sampling loop.
+        iteration: 1-based iteration number within the sampling loop. There is no guarantee that
+            iteration will be monotonically increasing when concurrency is enabled.
         action: The `Component` used for this attempt.
 
         result: The `ModelOutputThunk` produced by this attempt.
@@ -82,7 +83,8 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     Attributes:
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         success: `True` if at least one attempt passed all requirements.
-        iterations_used: Total number of iterations the loop executed.
+        iterations_used: Total number of iterations the executed. For concurrent sampling, this
+            corresponds to the loop_budget * concurrency budget.
         final_result: The selected `ModelOutputThunk` (best success or best failure).
         final_action: The `Component` that produced `final_result`.
 

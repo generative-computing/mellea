@@ -116,6 +116,9 @@ class BaseSamplingStrategy(SamplingStrategy):
             generates at most `loop_budget * concurrency_budget` requests
             and stops at the first valid result. Must be greater than 0.
             Defaults to `1` (no concurrency).
+            When allowing concurrency, number of generations may substantially increase
+            (potentially causing rate-limiting issues depending on the provider)
+            and the returned order of results will no longer be deterministic.
         requirements (list[Requirement] | None): Global requirements evaluated
             on every sample. When set, overrides per-call requirements.
 
@@ -259,6 +262,15 @@ class BaseSamplingStrategy(SamplingStrategy):
                 )
                 effective_loop_budget = start_payload.loop_budget
 
+            # Hooks can override loop_budget but bypass the constructor's
+            # validation; reject non-positive values up front so the failure
+            # mode is a clear error rather than an empty-slices AssertionError.
+            if effective_loop_budget < 1:
+                raise ValueError(
+                    f"SAMPLING_LOOP_START hook returned non-positive loop_budget="
+                    f"{effective_loop_budget}; must be >= 1."
+                )
+
             total_possible_generations = effective_loop_budget * self.concurrency_budget
             progress_indicator = (
                 tqdm.tqdm(
@@ -311,6 +323,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             ]
 
             slices: list[_SamplingResultSlice] = []
+            producer_results: list[Any] = []
 
             # Keep track of the producers left. It's the easiest way to ensure we don't deadlock
             # if the producers finish and queue is empty at the same time.
@@ -337,7 +350,11 @@ class BaseSamplingStrategy(SamplingStrategy):
                     t.cancel()  # No-op if already done / cancelled.
 
                 # Wait for cancellations to settle so we don't leak tasks.
-                await asyncio.gather(*producer_tasks, return_exceptions=True)
+                # Capture results so we can surface backend errors that would
+                # otherwise be swallowed when no slices made it through.
+                producer_results = await asyncio.gather(
+                    *producer_tasks, return_exceptions=True
+                )
 
                 # Drain anything queued before producers were cancelled.
                 while not slice_queue.empty():
@@ -354,6 +371,16 @@ class BaseSamplingStrategy(SamplingStrategy):
 
                 if progress_indicator is not None:
                     progress_indicator.close()
+
+            # If no slices made it through, surface the first non-cancellation
+            # exception from a producer rather than letting the empty-slices
+            # state crash later in SamplingResult with a misleading assertion.
+            if not slices:
+                for r in producer_results:
+                    if isinstance(r, BaseException) and not isinstance(
+                        r, asyncio.CancelledError
+                    ):
+                        raise r
 
             s_result = _get_sampling_result(
                 slices=slices, select_from_failure=self.select_from_failure
@@ -662,6 +689,9 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Always returns the last index. The last message from the model will always be returned if all results are failures.
+
+        If utilizing concurrency, this will always be the last turn of one of the multi-turn samples; but there is no guarantee
+        of which concurrent sampling it will be from.
 
         Args:
             sampled_actions: List of actions that have been executed (without success).

@@ -496,6 +496,45 @@ class TestSamplingHookCallSites:
         )
         assert observed[0].loop_budget == 3
 
+    @pytest.mark.parametrize("bad_budget", [0, -1])
+    async def test_sampling_loop_start_rejects_non_positive_loop_budget(
+        self, bad_budget: int
+    ) -> None:
+        """A SAMPLING_LOOP_START hook that returns loop_budget < 1 must raise ValueError.
+
+        The constructor enforces loop_budget >= 1 but a hook can override it
+        post-construction; without explicit validation this collapses
+        total_possible_generations to 0, no slices are produced, and the user
+        sees an opaque AssertionError from SamplingResult.__init__ instead of
+        a clear cause.
+        """
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+
+        @hook("sampling_loop_start")
+        async def shrink_budget(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(update={"loop_budget": bad_budget}),
+            )
+
+        register(shrink_budget)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        with pytest.raises(ValueError, match="non-positive loop_budget"):
+            await strategy.sample(
+                Instruction("Bad budget test"),
+                context=ctx,
+                backend=backend,
+                requirements=[],
+                format=None,
+                model_options=None,
+                tool_calls=False,
+                show_progress=False,
+            )
+
     async def test_sampling_iteration_fires_once_per_loop_iteration(self) -> None:
         """SAMPLING_ITERATION fires once per loop iteration."""
         from mellea.stdlib.components import Instruction

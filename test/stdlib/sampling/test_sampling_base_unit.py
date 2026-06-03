@@ -132,10 +132,6 @@ def mocked_context_backend():
     return backend
 
 
-# Module-level counter used by the "every 5th call passes" requirement below.
-_validation_counter = 0
-
-
 async def test_rejection_sampling_with_concurrency_early_success(
     mocked_context_backend,
 ):
@@ -144,13 +140,12 @@ async def test_rejection_sampling_with_concurrency_early_success(
     Validation passes only on every 5th call, so the 5th request succeeds
     and the strategy must stop before exhausting the 9-request budget.
     """
-    global _validation_counter
-    _validation_counter = 0
+    validation_counter = 0
 
     def sometimes_pass(_ctx: Context) -> ValidationResult:
-        global _validation_counter
-        _validation_counter += 1
-        return ValidationResult(_validation_counter % 5 == 0)
+        nonlocal validation_counter
+        validation_counter += 1
+        return ValidationResult(validation_counter % 5 == 0)
 
     sometimes_pass_req = Requirement("sometimes_pass", validation_fn=sometimes_pass)
 
@@ -334,6 +329,118 @@ async def test_early_success_does_not_lose_in_flight_slices(mocked_context_backe
     assert len(result.sample_generations) >= 1, (
         "the winning slice must be retained even after producer cancellation"
     )
+
+
+# --- Backend errors are surfaced, not swallowed ---
+
+
+async def test_backend_exception_is_reraised_when_no_slices():
+    """A backend generation error should propagate when no generate request was successful."""
+
+    class _BackendGenerateException(RuntimeError):
+        pass
+
+    backend = Mock()
+
+    async def raising_generate(*_args, **_kwargs):
+        raise _BackendGenerateException("backend failed")
+
+    backend.generate_from_context = raising_generate
+
+    always_pass = Requirement(
+        "always_pass", validation_fn=lambda _ctx: ValidationResult(result=True)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=1, concurrency_budget=1)
+
+    with pytest.raises(_BackendGenerateException, match="backend failed"):
+        await strategy.sample(
+            action=Instruction(description=""),
+            context=ChatContext(),
+            backend=backend,
+            requirements=[always_pass],
+        )
+
+
+async def test_backend_exception_with_concurrency_propagates():
+    """With concurrency_budget > 1, a backend error in every subsample still propagates."""
+
+    class _BackendGenerateException(RuntimeError):
+        pass
+
+    backend = Mock()
+
+    async def raising_generate(*_args, **_kwargs):
+        raise _BackendGenerateException("concurrent boom")
+
+    backend.generate_from_context = raising_generate
+
+    always_pass = Requirement(
+        "always_pass", validation_fn=lambda _ctx: ValidationResult(result=True)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=2, concurrency_budget=3)
+
+    with pytest.raises(_BackendGenerateException, match="concurrent boom"):
+        await strategy.sample(
+            action=Instruction(description=""),
+            context=ChatContext(),
+            backend=backend,
+            requirements=[always_pass],
+        )
+
+
+async def test_backend_exception_does_not_mask_concurrent_success():
+    """If one subsample raises but another produces a successful slice, sample()
+    should return the success rather than re-raising.
+
+    The re-raise path only fires when no slices made it through; a real success
+    from a sibling subsample must not be masked by a peer's backend error.
+    """
+
+    class _BackendGenerateException(RuntimeError):
+        pass
+
+    call_count = 0
+    backend = Mock()
+
+    async def sometimes_raising_generate(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        # First call raises; subsequent calls return a normal successful generation.
+        # Sleep a touch so the raising producer has a chance to fail before the
+        # other subsample yields its slice.
+        if call_count == 1:
+            await asyncio.sleep(0.01)
+            raise _BackendGenerateException("first call failed")
+        await asyncio.sleep(0.05)
+        action = args[0] if args else kwargs["action"]
+        ctx = kwargs["ctx"]
+        output = ModelOutputThunk("mocked")
+        output._generate_log = GenerateLog()
+        return output, ctx.add(action).add(output)
+
+    backend.generate_from_context = sometimes_raising_generate
+
+    always_pass = Requirement(
+        "always_pass", validation_fn=lambda _ctx: ValidationResult(result=True)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=1, concurrency_budget=3)
+
+    try:
+        result = await strategy.sample(
+            action=Instruction(description=""),
+            context=ChatContext(),
+            backend=backend,
+            requirements=[always_pass],
+        )
+    except _BackendGenerateException:
+        pytest.fail(
+            "subsample peer raised an exception and prevented a successful sample from being returned"
+        )
+
+    assert result.success is True, (
+        "subsample peer raised an exception and prevented result from being successful"
+    )
+    assert len(result.sample_generations) >= 1
 
 
 if __name__ == "__main__":
