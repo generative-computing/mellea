@@ -18,10 +18,10 @@ import openai
 import pydantic
 import pytest
 import requests
-from huggingface_hub.errors import LocalEntryNotFoundError
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 import yaml
+from huggingface_hub.errors import LocalEntryNotFoundError
 
 # First Party
 from mellea.formatters.granite import (
