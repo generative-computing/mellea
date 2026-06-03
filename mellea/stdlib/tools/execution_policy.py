@@ -70,6 +70,10 @@ class CapabilityPolicy:
             disables truncation.  Enforced.
         artifact_export_paths (list[Path]): Paths inside the container/environment
             to copy out after execution as :class:`Artifact` objects.  Enforced.
+        packages (list[str]): Python packages to install (via ``pip install``) before
+            execution.  Enforced — the runtime installs packages prior to executing
+            user code.  Local tiers use ``uv pip install`` / ``python -m pip``; Docker
+            tiers run ``pip install`` inside the container.  Defaults to ``[]``.
     """
 
     filesystem_read_roots: list[Path] | None = None
@@ -82,6 +86,7 @@ class CapabilityPolicy:
     stdout_max_bytes: int | None = None
     stderr_max_bytes: int | None = None
     artifact_export_paths: list[Path] = field(default_factory=list)
+    packages: list[str] = field(default_factory=list)
 
     # True  = this policy value is actively enforced by the runtime.
     # False = this policy value is declarative only (honest gap).
@@ -95,6 +100,7 @@ class CapabilityPolicy:
     ENFORCED_stdout_max_bytes: ClassVar[bool] = True
     ENFORCED_stderr_max_bytes: ClassVar[bool] = True
     ENFORCED_artifact_export_paths: ClassVar[bool] = True
+    ENFORCED_packages: ClassVar[bool] = True
 
     def unenforced_capabilities(self) -> list[str]:
         """Return capability names that are declared but not enforced at runtime.
@@ -170,7 +176,7 @@ COMPATIBILITY_MATRIX: dict[str, dict[str, bool]] = {
         "policy_applied": False,
         "copy_in": False,
         "copy_out": False,
-        "package_installation": False,
+        "package_installation": True,
         "docker_isolation": False,
     },
     "local": {
@@ -180,7 +186,7 @@ COMPATIBILITY_MATRIX: dict[str, dict[str, bool]] = {
         "policy_applied": True,
         "copy_in": False,
         "copy_out": False,
-        "package_installation": False,
+        "package_installation": True,
         "docker_isolation": False,
     },
     "docker_unsafe": {

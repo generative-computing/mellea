@@ -369,16 +369,18 @@ def test_capability_policy_unenforced_returns_expected_fields():
     assert "package_installation" in unenforced
     assert "subprocess_execution" in unenforced
     assert "env_var_access" in unenforced
+    assert "packages" not in unenforced
 
 
 def test_capability_policy_enforced_returns_expected_fields():
-    """timeout, stdout_max_bytes, stderr_max_bytes, and artifact_export_paths are enforced."""
+    """timeout, stdout_max_bytes, stderr_max_bytes, artifact_export_paths, and packages are enforced."""
     policy = CapabilityPolicy()
     enforced = policy.enforced_capabilities()
     assert "timeout" in enforced
     assert "stdout_max_bytes" in enforced
     assert "stderr_max_bytes" in enforced
     assert "artifact_export_paths" in enforced
+    assert "packages" in enforced
 
 
 def test_capability_policy_enforced_and_unenforced_are_disjoint():
