@@ -14,6 +14,7 @@ The requirement pipeline validates code in this order:
 
 import ast
 
+from mellea.stdlib.tools.execution_policy import CapabilityPolicy, ExecutionTier
 from mellea.stdlib.tools.interpreter import (
     ExecutionEnvironment,
     LLMSandboxEnvironment,
@@ -112,32 +113,30 @@ class OutputSizeLimit(Requirement):
 
     Args:
         limit_chars: Maximum allowed output size in characters. Defaults to 10,000.
-        timeout: Maximum execution time in seconds. Defaults to 5.
-        use_sandbox: Use llm-sandbox for Docker-isolated execution. Defaults to False.
+        execution_tier: Execution environment tier. Defaults to ``"static"``
+            (no execution; output limit not enforced).
+        policy: Optional CapabilityPolicy to override tier defaults.
         allowed_imports: Whitelist of importable top-level modules. None allows all.
     """
 
     def __init__(
         self,
         limit_chars: int = 10_000,
-        timeout: int = 5,
-        use_sandbox: bool = False,
+        execution_tier: ExecutionTier = "static",
+        policy: CapabilityPolicy | None = None,
         allowed_imports: list[str] | None = None,
     ) -> None:
         """Initialize OutputSizeLimit requirement.
 
         Raises:
             ValueError: If limit_chars is not positive.
-            ValueError: If timeout is not positive.
         """
         if limit_chars <= 0:
             raise ValueError(f"limit_chars must be positive, got {limit_chars}")
-        if timeout <= 0:
-            raise ValueError(f"timeout must be positive, got {timeout}")
 
         self.limit_chars = limit_chars
-        self.timeout = timeout
-        self.use_sandbox = use_sandbox
+        self.execution_tier = execution_tier
+        self.policy = policy
         self.allowed_imports = allowed_imports
         super().__init__(
             description=f"Output does not exceed {limit_chars} characters.",
@@ -154,6 +153,12 @@ class OutputSizeLimit(Requirement):
         Returns:
             ValidationResult with pass/fail and output size details.
         """
+        if self.execution_tier == "static":
+            return ValidationResult(
+                result=True,
+                reason="Output size check skipped (static analysis tier; no execution).",
+            )
+
         extraction_result = _has_python_code_listing(ctx)
         if not extraction_result.as_bool():
             return ValidationResult(
@@ -170,14 +175,15 @@ class OutputSizeLimit(Requirement):
 
         try:
             environment: ExecutionEnvironment
-            if self.use_sandbox:
+            if self.execution_tier in ("docker", "docker_unsafe"):
                 environment = LLMSandboxEnvironment(
                     allowed_imports=self.allowed_imports
                 )
             else:
                 environment = UnsafeEnvironment(allowed_imports=self.allowed_imports)
 
-            exec_result = environment.execute(code, timeout=self.timeout)
+            timeout = self.policy.timeout if self.policy else 30
+            exec_result = environment.execute(code, timeout=timeout)
             if not exec_result.success:
                 return ValidationResult(
                     result=False,
@@ -376,18 +382,21 @@ def python_tool_requirements(
             f"output_limit_chars must be positive, got {output_limit_chars}"
         )
 
+    execution_tier: ExecutionTier = "docker" if use_sandbox else "local_unsafe"
+    policy = CapabilityPolicy(timeout=timeout_seconds)
+
     reqs: list[Requirement] = [
         PythonCodeExtraction(),
         PythonSyntaxValid(),
         PythonExecutionReq(
-            timeout=timeout_seconds,
+            execution_tier=execution_tier,
+            policy=policy,
             allowed_imports=allowed_imports,
-            use_sandbox=use_sandbox,
         ),
         OutputSizeLimit(
             limit_chars=output_limit_chars,
-            timeout=timeout_seconds,
-            use_sandbox=use_sandbox,
+            execution_tier=execution_tier,
+            policy=policy,
             allowed_imports=allowed_imports,
         ),
     ]
