@@ -206,49 +206,13 @@ git commit -n -m "wip: intermediate work"
 
 ## Testing
 
-### Test markers
+The full test guide lives in
+[`test/README.md`](https://github.com/generative-computing/mellea/blob/main/test/README.md)
+in the repository — classification rules, marker reference (tier definitions,
+backend matrix, resource predicates), authoring guide, CI pipeline, and
+GPU/Ollama operational notes.
 
-Tests use a four-tier granularity system. Every test belongs to exactly one tier:
-
-| Tier | When to use | How to apply |
-| ---- | ----------- | ------------ |
-| `unit` | Self-contained, no services, no I/O | Auto-applied — never write `@pytest.mark.unit` |
-| `integration` | Real SDK/library boundary or multi-component wiring | `@pytest.mark.integration` |
-| `e2e` | Real backends (Ollama, APIs, GPU models), deterministic assertions | `@pytest.mark.e2e` + backend marker(s) |
-| `qualitative` | Subset of e2e with non-deterministic output assertions | `@pytest.mark.qualitative` per-function, `e2e` + backend at module level |
-
-**Backend markers** (only for e2e/qualitative tests):
-
-| Marker | Backend | Resources |
-| ------ | ------- | --------- |
-| `ollama` | Ollama (port 11434) | Local, light (~2–4 GB RAM) |
-| `openai` | OpenAI API or compatible | API calls (may use Ollama `/v1`) |
-| `watsonx` | Watsonx API | API calls, requires credentials |
-| `huggingface` | HuggingFace transformers | Local, GPU required |
-| `litellm` | LiteLLM (wraps other backends) | Depends on underlying backend |
-| `bedrock` | AWS Bedrock | API calls, requires credentials |
-
-**Resource predicates** (from `test/predicates.py`, for e2e/qualitative tests):
-
-| Predicate | Use when test needs |
-| --------- | ------------------- |
-| `require_gpu()` | Any GPU (CUDA or MPS) |
-| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
-| `require_ram(min_gb=N)` | N GB+ system RAM |
-| `require_api_key("ENV_VAR")` | Specific API credentials |
-| `require_package("pkg")` | Optional dependency |
-| `require_python((3, 11))` | Minimum Python version |
-
-**Other markers:**
-
-| Marker | Purpose |
-| ------ | ------- |
-| `slow` | Tests taking >1 minute (excluded by default) |
-| `qualitative` | Non-deterministic output (skipped when `CICD=1`) |
-
-For more information, see our [Markers Guide](https://github.com/generative-computing/mellea/blob/main/test/MARKERS_GUIDE.md).
-
-### Running tests
+Essential commands:
 
 ```bash
 # Install all dependencies (required for tests)
@@ -257,43 +221,15 @@ uv sync --all-extras --all-groups
 # Start Ollama (required for most tests)
 ollama serve
 
-# Default: runs qualitative tests, skips slow tests
-uv run pytest
-
 # Fast tests only (no qualitative, ~2 min)
 uv run pytest -m "not qualitative"
 
-# Run only slow tests (>5 min)
-uv run pytest -m slow
+# Default: includes qualitative, skips slow
+uv run pytest
 
-# Run specific backend tests
-uv run pytest -m "ollama"
-uv run pytest -m "openai"
-
-# Run unit tests only (no backends needed)
-uv run pytest -m unit
-
-# CI/CD mode (skips qualitative tests)
-CICD=1 uv run pytest
-```
-
-### Timing expectations
-
-| Run | Duration |
-| --- | -------- |
-| Fast tests (`-m "not qualitative"`) | ~2 minutes |
-| Default (qualitative, no slow) | Several minutes |
-| Slow tests (`-m slow`) | More than 1 minute |
-| Pre-commit hooks | 1–5 minutes |
-
-### Replicate CI locally
-
-```bash
-# Run pre-commit checks (same as CI)
+# Replicate CI locally
 pre-commit run --all-files
-
-# Run tests with CICD flag (same as CI, skips qualitative tests)
-CICD=1 uv run pytest
+CICD=1 uv run pytest test
 ```
 
 ## Pull request process
