@@ -9,7 +9,7 @@ from mellea.stdlib.requirements.python_tools import (
     OutputSizeLimit,
     PythonCodeExtraction,
     PythonSyntaxValid,
-    python_tool_requirements,
+    python_code_generation_requirements,
 )
 
 
@@ -182,7 +182,7 @@ class TestOutputSizeLimit:
 
     def test_output_within_limit(self):
         """Test validation when output stays within limit."""
-        req = OutputSizeLimit(limit_chars=1000)
+        req = OutputSizeLimit(limit_chars=1000, execution_tier="local_unsafe")
         code = """```python
 print("Hello, World!")
 ```"""
@@ -202,6 +202,85 @@ print("Hello, World! This is a long message.")
         # Should fail: output is more than 10 chars
         assert result.as_bool() is False
         assert "exceeds" in (result.reason or "").lower()
+
+
+class TestPythonExecutionReqWithOutputLimit:
+    """Tests for PythonExecutionReq with max_output_chars parameter."""
+
+    def test_execution_req_with_output_limit_passes_small_output(self):
+        """Test PythonExecutionReq with max_output_chars passes when output is small."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        req = PythonExecutionReq(execution_tier="local_unsafe", max_output_chars=1000)
+        ctx = from_model("```python\nprint('hello')\n```")
+        result = req.validation_fn(ctx)
+        assert result.as_bool() is True
+
+    def test_execution_req_with_output_limit_fails_large_output(self):
+        """Test PythonExecutionReq with max_output_chars fails when output exceeds limit."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        req = PythonExecutionReq(execution_tier="local_unsafe", max_output_chars=50)
+        # Generate output larger than 50 chars
+        ctx = from_model("```python\nprint('x' * 100)\n```")
+        result = req.validation_fn(ctx)
+        assert result.as_bool() is False
+        assert "Output size" in (result.reason or "")
+        assert "exceeds" in (result.reason or "").lower()
+
+    def test_execution_req_without_output_limit(self):
+        """Test PythonExecutionReq without max_output_chars ignores output size."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        req = PythonExecutionReq(
+            execution_tier="local_unsafe",
+            max_output_chars=None,  # No limit
+        )
+        # Generate large output
+        ctx = from_model("```python\nprint('x' * 10000)\n```")
+        result = req.validation_fn(ctx)
+        # Should pass because output size is not checked
+        assert result.as_bool() is True
+
+    def test_execution_req_output_limit_static_tier_skipped(self):
+        """Test PythonExecutionReq static tier skips output check even if max_output_chars set."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        req = PythonExecutionReq(
+            execution_tier="static",
+            max_output_chars=100,  # Set but ignored in static tier
+        )
+        # Generate output that would exceed limit
+        ctx = from_model("```python\nprint('x' * 1000)\n```")
+        result = req.validation_fn(ctx)
+        # Static tier skips execution, so output check is also skipped
+        assert result.as_bool() is True
+
+    def test_execution_req_invalid_max_output_chars(self):
+        """Test PythonExecutionReq raises ValueError for invalid max_output_chars."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        with pytest.raises(ValueError, match="max_output_chars must be positive"):
+            PythonExecutionReq(execution_tier="local_unsafe", max_output_chars=0)
+
+        with pytest.raises(ValueError, match="max_output_chars must be positive"):
+            PythonExecutionReq(execution_tier="local_unsafe", max_output_chars=-100)
+
+    def test_execution_req_description_includes_output_limit(self):
+        """Test PythonExecutionReq description includes output limit when set."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        req = PythonExecutionReq(execution_tier="local_unsafe", max_output_chars=5000)
+        # Description should include the output limit for non-static tiers
+        assert "5000" in req.description
+
+    def test_execution_req_description_no_limit_static_tier(self):
+        """Test PythonExecutionReq description excludes output limit info for static tier."""
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        req = PythonExecutionReq(execution_tier="static", max_output_chars=5000)
+        # Static tier should not mention output limit in description since it doesn't execute
+        assert "Output limit" not in req.description
 
 
 class TestImportRestrictions:
@@ -330,90 +409,106 @@ print("relative import")
 
 
 class TestPythonToolRequirementsFactory:
-    """Tests for python_tool_requirements() factory function."""
+    """Tests for python_code_generation_requirements() factory function."""
 
     def test_factory_default_returns_four_requirements(self):
-        """Test factory with defaults returns 4 requirements (no import restrictions)."""
-        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+        """Test factory with defaults returns 4 requirements (including NoImportRestrictions).
 
-        reqs = python_tool_requirements()
+        The factory always returns 4 requirements: the last is either
+        ImportRestrictions (if allowed_imports is provided) or NoImportRestrictions
+        (if allowed_imports is None), providing semantic clarity in the bundle.
+        """
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+        from mellea.stdlib.requirements.python_tools import NoImportRestrictions
+
+        reqs = python_code_generation_requirements()
         assert len(reqs) == 4
         assert isinstance(reqs[0], PythonCodeExtraction)
         assert isinstance(reqs[1], PythonSyntaxValid)
         assert isinstance(reqs[2], PythonExecutionReq)
-        assert isinstance(reqs[3], OutputSizeLimit)
+        assert isinstance(reqs[3], NoImportRestrictions)
 
-    def test_factory_with_allowed_imports_returns_five(self):
-        """Test factory with allowed_imports returns 5 requirements."""
-        reqs = python_tool_requirements(allowed_imports=["os", "sys"])
-        assert len(reqs) == 5
-        assert isinstance(reqs[4], ImportRestrictions)
+    def test_factory_with_allowed_imports_returns_four(self):
+        """Test factory with allowed_imports returns 4 requirements with ImportRestrictions."""
+        reqs = python_code_generation_requirements(allowed_imports=["os", "sys"])
+        assert len(reqs) == 4
+        assert isinstance(reqs[3], ImportRestrictions)
 
     def test_factory_parameter_propagation_output_limit(self):
-        """Test factory propagates output_limit_chars to OutputSizeLimit."""
-        reqs = python_tool_requirements(output_limit_chars=5000)
-        output_limit_req = reqs[3]
-        assert isinstance(output_limit_req, OutputSizeLimit)
-        assert output_limit_req.limit_chars == 5000
+        """Test factory propagates output_limit_chars to PythonExecutionReq.
+
+        Output limit is now merged into PythonExecutionReq via max_output_chars,
+        eliminating double execution. This test verifies the parameter reaches
+        the execution requirement.
+        """
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        reqs = python_code_generation_requirements(output_limit_chars=5000)
+        exec_req = reqs[2]
+        assert isinstance(exec_req, PythonExecutionReq)
+        assert exec_req._max_output_chars == 5000
 
     def test_factory_parameter_propagation_imports(self):
         """Test factory propagates allowed_imports to ImportRestrictions."""
         imports = ["os", "sys", "json"]
-        reqs = python_tool_requirements(allowed_imports=imports)
-        import_req = reqs[4]
+        reqs = python_code_generation_requirements(allowed_imports=imports)
+        import_req = reqs[3]
         assert isinstance(import_req, ImportRestrictions)
         assert import_req.allowed_imports == imports
 
     def test_factory_timeout_parameter(self):
         """Test factory accepts and uses timeout_seconds parameter."""
-        reqs = python_tool_requirements(timeout_seconds=10)
+        reqs = python_code_generation_requirements(timeout_seconds=10)
         assert len(reqs) == 4
 
     def test_factory_sandbox_parameter(self):
         """Test factory accepts and uses use_sandbox parameter."""
-        reqs = python_tool_requirements(use_sandbox=True)
+        reqs = python_code_generation_requirements(use_sandbox=True)
         assert len(reqs) == 4
 
     def test_factory_all_parameters(self):
         """Test factory with all parameters configured."""
-        reqs = python_tool_requirements(
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        reqs = python_code_generation_requirements(
             allowed_imports=["os", "sys"],
             output_limit_chars=8000,
             timeout_seconds=15,
             use_sandbox=True,
         )
-        assert len(reqs) == 5
-        assert isinstance(reqs[3], OutputSizeLimit)
-        assert reqs[3].limit_chars == 8000
-        assert isinstance(reqs[4], ImportRestrictions)
+        assert len(reqs) == 4
+        exec_req = reqs[2]
+        assert isinstance(exec_req, PythonExecutionReq)
+        assert exec_req._max_output_chars == 8000
+        assert isinstance(reqs[3], ImportRestrictions)
 
     def test_factory_invalid_timeout(self):
         """Test factory with invalid timeout raises ValueError."""
         with pytest.raises(ValueError, match="timeout_seconds must be positive"):
-            python_tool_requirements(timeout_seconds=0)
+            python_code_generation_requirements(timeout_seconds=0)
 
         with pytest.raises(ValueError, match="timeout_seconds must be positive"):
-            python_tool_requirements(timeout_seconds=-5)
+            python_code_generation_requirements(timeout_seconds=-5)
 
     def test_factory_invalid_output_limit(self):
         """Test factory with invalid output_limit raises ValueError."""
         with pytest.raises(ValueError, match="output_limit_chars must be positive"):
-            python_tool_requirements(output_limit_chars=0)
+            python_code_generation_requirements(output_limit_chars=0)
 
         with pytest.raises(ValueError, match="output_limit_chars must be positive"):
-            python_tool_requirements(output_limit_chars=-1000)
+            python_code_generation_requirements(output_limit_chars=-1000)
 
     def test_factory_requirement_order(self):
         """Test factory returns requirements in correct validation order."""
         from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 
-        reqs = python_tool_requirements(allowed_imports=["os"])
+        reqs = python_code_generation_requirements(allowed_imports=["os"])
 
+        assert len(reqs) == 4
         assert isinstance(reqs[0], PythonCodeExtraction)
         assert isinstance(reqs[1], PythonSyntaxValid)
         assert isinstance(reqs[2], PythonExecutionReq)
-        assert isinstance(reqs[3], OutputSizeLimit)
-        assert isinstance(reqs[4], ImportRestrictions)
+        assert isinstance(reqs[3], ImportRestrictions)
 
     def test_factory_execution_req_description_varies_by_mode(self):
         """Test that PythonExecutionReq description reflects execution mode.
@@ -425,28 +520,32 @@ class TestPythonToolRequirementsFactory:
         from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 
         # Default mode (static analysis)
-        reqs_default = python_tool_requirements()
+        reqs_default = python_code_generation_requirements()
         exec_req_default = reqs_default[2]
         assert isinstance(exec_req_default, PythonExecutionReq)
         assert "validation only" in exec_req_default.description.lower()
 
         # Sandbox mode
-        reqs_sandbox = python_tool_requirements(use_sandbox=True)
+        reqs_sandbox = python_code_generation_requirements(use_sandbox=True)
         exec_req_sandbox = reqs_sandbox[2]
         assert isinstance(exec_req_sandbox, PythonExecutionReq)
         assert "sandbox" in exec_req_sandbox.description.lower()
 
     def test_factory_output_limit_description_reflects_configured_limit(self):
-        """Test OutputSizeLimit description includes the configured character limit.
+        """Test PythonExecutionReq description includes output limit when configured.
 
         The requirement description is built from configuration parameters and
         provides observable feedback about the limit being enforced.
         """
-        reqs = python_tool_requirements(output_limit_chars=5000)
-        output_limit_req = reqs[3]
-        assert isinstance(output_limit_req, OutputSizeLimit)
-        # The description should reflect the configured limit
-        assert "5000" in output_limit_req.description
+        from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+
+        reqs = python_code_generation_requirements(
+            output_limit_chars=5000, use_sandbox=True
+        )
+        exec_req = reqs[2]
+        assert isinstance(exec_req, PythonExecutionReq)
+        # The description should reflect the configured output limit (only for non-static tiers)
+        assert "5000" in exec_req.description
 
     def test_factory_import_restrictions_description_reflects_allowed_list(self):
         """Test ImportRestrictions description includes configured allowed imports.
@@ -454,8 +553,10 @@ class TestPythonToolRequirementsFactory:
         When allowed_imports is provided, the requirement description shows which
         imports are allowed, providing observable evidence the config was applied.
         """
-        reqs = python_tool_requirements(allowed_imports=["os", "sys", "json"])
-        import_req = reqs[4]
+        reqs = python_code_generation_requirements(
+            allowed_imports=["os", "sys", "json"]
+        )
+        import_req = reqs[3]
         assert isinstance(import_req, ImportRestrictions)
         # Description should reflect the allowed list
         assert "os" in import_req.description

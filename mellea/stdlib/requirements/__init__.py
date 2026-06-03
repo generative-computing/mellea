@@ -5,10 +5,11 @@ from .md import as_markdown_list, is_markdown_list, is_markdown_table
 from .python_reqs import PythonExecutionReq
 from .python_tools import (
     ImportRestrictions,
+    NoImportRestrictions,
     OutputSizeLimit,
     PythonCodeExtraction,
     PythonSyntaxValid,
-    python_tool_requirements,
+    python_code_generation_requirements,
 )
 from .rag import GroundednessRequirement
 from .requirement import (
@@ -27,6 +28,7 @@ __all__ = [
     "GroundednessRequirement",
     "ImportRestrictions",
     "LLMaJRequirement",
+    "NoImportRestrictions",
     "OutputSizeLimit",
     "PythonCodeExtraction",
     "PythonExecutionReq",
@@ -38,7 +40,7 @@ __all__ = [
     "default_output_to_bool",
     "is_markdown_list",
     "is_markdown_table",
-    "python_tool_requirements",
+    "python_code_generation_requirements",
     "req",
     "reqify",
     "requirement_check_to_bool",
