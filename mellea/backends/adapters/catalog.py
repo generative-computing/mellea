@@ -26,7 +26,7 @@ def validate_revision(revision: str) -> str:
         str: The validated revision unchanged.
 
     Raises:
-        ValueError: If ``revision`` is empty.
+        ValueError: If `revision` is empty.
     """
     if not revision:
         raise ValueError("revision must be a non-empty string")
@@ -59,6 +59,9 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         revision (str): HuggingFace revision — branch name, tag, or commit SHA.
             Catalogue entries pin to commit SHAs by convention so loads are
             reproducible; the validator itself only requires a non-empty string.
+            Note: this field is stored in the catalogue but not yet forwarded to
+            the HuggingFace download call; wiring it through is deferred to a
+            subsequent phase of the adapter-lifecycle epic (#929).
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this intrinsic; defaults to
             ``(AdapterType.LORA, AdapterType.ALORA)``.
