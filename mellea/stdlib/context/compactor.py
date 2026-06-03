@@ -473,7 +473,9 @@ class LLMSummarizeCompactor:
             return ctx
 
         try:
-            return _run_coro_blocking(self._async_compact(ctx, backend))
+            return _run_coro_blocking(
+                self._async_compact(ctx, backend, full, pin_end)
+            )
         except (TypeError, AttributeError, AssertionError, LookupError):
             raise
         except Exception as exc:
@@ -486,14 +488,23 @@ class LLMSummarizeCompactor:
             )
             return ctx
 
-    async def _async_compact(self, ctx: ChatContext, backend: Backend) -> ChatContext:
-        """Async core — renders the body, calls the backend, rebuilds the context."""
+    async def _async_compact(
+        self,
+        ctx: ChatContext,
+        backend: Backend,
+        full: list[Component | CBlock],
+        pin_end: int,
+    ) -> ChatContext:
+        """Async core — renders the body, calls the backend, rebuilds the context.
+
+        `full` and `pin_end` are passed in by `compact()` to avoid re-running
+        `ctx.as_list()` and `self.pin_predicate(full)` after the early-return
+        check.
+        """
         # mfuncs has to stay lazy: mellea.stdlib.functional imports SimpleContext
         # via the context package init, which re-exports from this module.
         from mellea.stdlib import functional as mfuncs
 
-        full = ctx.as_list()
-        pin_end = self.pin_predicate(full)
         prefix = full[:pin_end]
         body = full[pin_end:]
 
