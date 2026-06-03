@@ -155,7 +155,7 @@ class YamlJsonCombo(pydantic.BaseModel):
                     revision=self.revision,  # type: ignore
                 )
             except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
-                pytest.skip(f"HuggingFace Hub not accessible: {e}")
+                pytest.skip(f"HuggingFace Hub not accessible: {type(e).__name__}: {e}")
         return self
 
 
@@ -542,7 +542,7 @@ def test_read_yaml():
             "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
         )
     except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
-        pytest.skip(f"HuggingFace Hub not accessible: {e}")
+        pytest.skip(f"HuggingFace Hub not accessible: {type(e).__name__}: {e}")
     IntrinsicsRewriter(config_file=local_path)
 
 
