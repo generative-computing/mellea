@@ -26,7 +26,7 @@ def validate_revision(revision: str) -> str:
         str: The validated revision unchanged.
 
     Raises:
-        ValueError: If `revision` is empty.
+        ValueError: If `revision` is empty or whitespace-only.
     """
     if not revision.strip():
         raise ValueError("revision must be a non-empty string")
