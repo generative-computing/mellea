@@ -308,10 +308,10 @@ def _tier_label(tier: str, policy: CapabilityPolicy | None) -> str:
             return f"local execution with policy (timeout: {effective}s)"
         case "docker_unsafe":
             effective = timeout if timeout is not None else DOCKER_POLICY.timeout
-            return f"docker execution, no policy (timeout: {effective}s)"
+            return f"sandbox execution, no policy (timeout: {effective}s)"
         case "docker":
             effective = timeout if timeout is not None else DOCKER_POLICY.timeout
-            return f"docker execution with policy (timeout: {effective}s)"
+            return f"sandbox execution with policy (timeout: {effective}s)"
         case _:
             return tier
 

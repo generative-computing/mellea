@@ -193,7 +193,7 @@ print("Hello, World!")
 
     def test_output_exceeds_limit(self):
         """Test validation when output exceeds limit."""
-        req = OutputSizeLimit(limit_chars=10)
+        req = OutputSizeLimit(limit_chars=10, execution_tier="local_unsafe")
         code = """```python
 print("Hello, World! This is a long message.")
 ```"""

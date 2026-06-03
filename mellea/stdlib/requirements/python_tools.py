@@ -382,8 +382,12 @@ def python_tool_requirements(
             f"output_limit_chars must be positive, got {output_limit_chars}"
         )
 
-    execution_tier: ExecutionTier = "docker" if use_sandbox else "local_unsafe"
-    policy = CapabilityPolicy(timeout=timeout_seconds)
+    execution_tier: ExecutionTier = "docker" if use_sandbox else "static"
+    policy = (
+        None
+        if execution_tier == "static"
+        else CapabilityPolicy(timeout=timeout_seconds)
+    )
 
     reqs: list[Requirement] = [
         PythonCodeExtraction(),
