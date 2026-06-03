@@ -69,7 +69,8 @@ test actually loads, and report whether the gate is correctly set or too loose.
 
 Read these before auditing — they are the authoritative source for marker conventions:
 
-- **Marker guide:** `test/MARKERS_GUIDE.md`
+- **Test strategy:** `test/README.md` — classification decision rules, per-tier definitions, philosophy, authoring guide, CI pipeline
+- **Marker guide:** `test/README.md` — marker tables, common patterns, backend reference (sections: Backend markers, Resource predicates, Common patterns)
 - **Marker registration:** `test/conftest.py` (`pytest_configure`) and `pyproject.toml` (`[tool.pytest.ini_options]`)
 - **Resource predicates:** `test/predicates.py` (predicate functions for resource gating)
 - **Example marker format:** `docs/examples/conftest.py` (`_extract_markers_from_file`)
@@ -362,7 +363,7 @@ When asking, present the test code and your reasoning so the user can make an in
 
 # Part 2: Project-Specific Rules
 
-Read `test/MARKERS_GUIDE.md` for the full marker reference (marker tables,
+Read `test/README.md` for the full marker reference (marker tables,
 resource gates, auto-skip logic, common patterns). This section covers only
 the **code analysis heuristics** the skill needs to classify tests — things
 that require reading the test source code rather than looking up a table.
@@ -448,7 +449,9 @@ Backend: `huggingface`. Tier: e2e.
 ```
 test_func(m_session) → m_session(backend) → backend(vllm_process) → vllm_process spawns subprocess
 ```
-Backend: `vllm` (via OpenAI client). Tier: e2e.
+Backend: `openai` plus `vllm` (vLLM runs behind an OpenAI-compatible server; the
+`vllm` marker is the selection axis and drives GPU gating for `# pytest: vllm`
+examples). Tier: e2e.
 
 **Pattern 4 — OpenAI-via-Ollama (e2e, dual markers):**
 ```
@@ -662,7 +665,7 @@ Read `test/predicates.py` for the available predicates. Expected patterns:
 Typical combinations for backends:
 
 - `huggingface` → `require_gpu(min_vram_gb=N)` (compute N from model params)
-- `vllm` → `require_gpu(min_vram_gb=N)` (compute N from model params)
+- vLLM (`openai` + `vllm` markers) → `require_gpu(min_vram_gb=N)` (compute N from model params)
 - `watsonx` → `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")`
 - `openai` → `require_api_key("OPENAI_API_KEY")` only for real OpenAI (not Ollama-compat)
 
@@ -848,18 +851,18 @@ in the `pytestmark` list or decorator.
 Check that every backend used in test files has a registered marker.
 The project's backend registry is `BACKEND_MARKERS` in `test/conftest.py`
 (single source of truth). Markers must also appear in `pyproject.toml`
-`[tool.pytest.ini_options].markers` and in `test/MARKERS_GUIDE.md`.
+`[tool.pytest.ini_options].markers` and in `test/test/README.md`.
 
 For each backend constructor or `start_session(backend_name=...)` call
 found during classification, verify:
 
 1. A marker exists in `BACKEND_MARKERS` for that backend.
 2. The marker appears in `pyproject.toml`.
-3. The marker appears in the MARKERS_GUIDE.md backend table.
+3. The marker appears in the test/README.md backend table.
 
 If a backend is used in tests but has no registered marker, flag it as
 a **missing backend marker** issue and add it to the registry, pyproject.toml,
-and MARKERS_GUIDE.md (same apply/confirm rules as other fixes in Step 4).
+and test/README.md (same apply/confirm rules as other fixes in Step 4).
 
 ## Step 6 — Flag infrastructure notes
 
@@ -896,7 +899,7 @@ flag as a blocker, don't silently re-add:
 - **Backend marker registry:** `BACKEND_MARKERS` dict in `test/conftest.py` is
   the single source of truth for backend markers. `pytest_configure` iterates
   over it. New backends are added by inserting one entry into the dict.
-  `pyproject.toml` and `test/MARKERS_GUIDE.md` must stay in sync manually.
+  `pyproject.toml` and `test/test/README.md` must stay in sync manually.
 - **Resource predicates:** `test/predicates.py` provides `require_gpu`,
   `require_ram`, `require_api_key`, `require_package`,
   `require_python`.
