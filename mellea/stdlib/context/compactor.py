@@ -468,8 +468,8 @@ class LLMSummarizeCompactor:
 
         full = ctx.as_list()
         pin_end = self.pin_predicate(full)
-        body = full[pin_end:]
-        if len(body) <= self.keep_n:
+        body_len = len(full) - pin_end
+        if body_len <= self.keep_n:
             return ctx
 
         try:
