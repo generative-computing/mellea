@@ -60,6 +60,7 @@ def test_lora_only_entry(monkeypatch):
     fake_entry = catalog.IntriniscsCatalogEntry(
         name="query_clarification",
         repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="main",
         adapter_types=(AdapterType.LORA,),
     )
     monkeypatch.setattr(

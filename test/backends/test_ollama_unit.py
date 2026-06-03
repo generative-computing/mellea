@@ -1,10 +1,11 @@
 """Unit tests for Ollama backend pure-logic helpers — no Ollama server required.
 
 Covers _simplify_and_merge, _make_backend_specific_and_remove,
-chat_response_delta_merge, and generate_from_raw exception propagation.
+chat_response_delta_merge, timeout wiring, and generate_from_raw
+empty-response handling (#599).
 """
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import ollama
 import pytest
@@ -189,54 +190,106 @@ def test_timeout_forwarded_to_new_async_clients_per_event_loop(mock_ollama_backe
     assert async_kwargs.get("timeout") == 7.0
 
 
-# --- generate_from_raw exception propagation (#597) ---
+# --- generate_from_raw empty-response handling (#599) ---
 
 
-async def test_generate_from_raw_propagates_exception(backend):
-    """Exceptions from individual Ollama requests must propagate to the caller.
+async def test_generate_from_raw_empty_response_soft_fails(mock_ollama_backend) -> None:
+    """Empty done Ollama response soft-fails instead of raising.
 
-    Regression test for #597: previously, exceptions were silently converted to
-    ModelOutputThunk(value="") via asyncio.gather(return_exceptions=True).
+    The result list must have the same length as the input actions so that
+    sibling results from the same gather call are not discarded. The failing
+    slot must have value="" and carry the RuntimeError in generate_log.extra["error"].
     """
-    error = ConnectionError("ollama server unavailable")
-    mock_async_client = MagicMock()
-    mock_async_client.generate = AsyncMock(side_effect=error)
+    backend = mock_ollama_backend()
+    empty = ollama.GenerateResponse(response="", done=True)
 
-    with patch.object(
-        type(backend),
-        "_async_client",
-        new_callable=PropertyMock,
-        return_value=mock_async_client,
+    with (
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
+        patch(
+            "mellea.backends.ollama.asyncio.gather", new=AsyncMock(return_value=[empty])
+        ),
     ):
-        with pytest.raises(ConnectionError, match="ollama server unavailable"):
-            await backend.generate_from_raw(
-                actions=[CBlock(value="what is 1+1?")], ctx=SimpleContext()
-            )
+        results = await backend.generate_from_raw(
+            actions=[CBlock("What is 1+1?")], ctx=SimpleContext()
+        )
+
+    assert len(results) == 1, (
+        "result list must match action count even on empty response"
+    )
+    assert results[0].value == "", "empty-response slot should have value=''"
+    log = results[0]._generate_log
+    assert log is not None
+    assert log.extra is not None
+    err = log.extra.get("error")
+    assert isinstance(err, RuntimeError), (
+        f"expected RuntimeError in generate_log, got {err!r}"
+    )
+    assert "599" in str(err), "error message should reference issue #599"
+    assert "16326" in str(err), "error message should reference upstream Ollama issue"
 
 
-async def test_generate_from_raw_multi_action_fail_fast(backend):
-    """Any failure in a multi-action batch raises immediately; no partial results.
+async def test_generate_from_raw_thinking_response_not_flagged(
+    mock_ollama_backend,
+) -> None:
+    """A thinking-model response with response="" and non-empty thinking is not an error.
 
-    Documents the all-or-nothing batch semantics introduced by #597. Previously
-    the failed slot was silently replaced with ModelOutputThunk(value="") and
-    the caller received a partial list. Now the first exception propagates and
-    the caller receives nothing.
+    Thinking models legitimately return an empty response string alongside a non-empty
+    thinking field — this must not be treated as an empty-response soft-fail.
     """
-    mock_async_client = MagicMock()
-    mock_async_client.generate = AsyncMock(
-        side_effect=ConnectionError("request failed")
+    backend = mock_ollama_backend()
+    thinking_response = ollama.GenerateResponse(
+        response="", thinking="Let me work this out...", done=True
     )
 
-    with patch.object(
-        type(backend),
-        "_async_client",
-        new_callable=PropertyMock,
-        return_value=mock_async_client,
+    with (
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
+        patch(
+            "mellea.backends.ollama.asyncio.gather",
+            new=AsyncMock(return_value=[thinking_response]),
+        ),
     ):
-        with pytest.raises(ConnectionError):
-            await backend.generate_from_raw(
-                actions=[CBlock("a"), CBlock("b"), CBlock("c")], ctx=SimpleContext()
-            )
+        results = await backend.generate_from_raw(
+            actions=[CBlock("What is 1+1?")], ctx=SimpleContext()
+        )
+
+    assert len(results) == 1
+    log = results[0]._generate_log
+    assert log is not None
+    assert log.extra is not None
+    assert log.extra.get("error") is None, (
+        "thinking-only response should not be flagged as a model-load race"
+    )
+
+
+async def test_generate_from_raw_preserves_sibling_results_on_empty(
+    mock_ollama_backend,
+) -> None:
+    """One empty response in a batch of three does not discard the other two results."""
+    backend = mock_ollama_backend()
+    good = ollama.GenerateResponse(
+        response="2", done=True, eval_count=1, prompt_eval_count=5
+    )
+    empty = ollama.GenerateResponse(response="", done=True)
+
+    with (
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
+        patch(
+            "mellea.backends.ollama.asyncio.gather",
+            new=AsyncMock(return_value=[good, empty, good]),
+        ),
+    ):
+        results = await backend.generate_from_raw(
+            actions=[CBlock("q1"), CBlock("q2"), CBlock("q3")], ctx=SimpleContext()
+        )
+
+    assert len(results) == 3, "all three slots should be returned"
+    assert results[0].value == "2"
+    assert results[1].value == ""
+    log1 = results[1]._generate_log
+    assert log1 is not None
+    assert log1.extra is not None
+    assert log1.extra.get("error") is not None
+    assert results[2].value == "2"
 
 
 if __name__ == "__main__":
