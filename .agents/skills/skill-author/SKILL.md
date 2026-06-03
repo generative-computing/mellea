@@ -134,7 +134,7 @@ After frontmatter, write clear markdown instructions the agent follows:
   "Check if markers are correct" is worse than "Compare the test's assertions
   to the qualitative decision rule in section 3."
 - **Reference project files.** Point to docs, configs, and examples by relative
-  path so the agent can read them. E.g. "See `test/MARKERS_GUIDE.md` for the
+  path so the agent can read them. E.g. "See `test/README.md` for the
   full marker taxonomy."
 - **Declare scope boundaries.** State what the skill does NOT do. E.g. "This
   skill does not modify conftest.py — flag infrastructure issues as notes."

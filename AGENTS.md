@@ -49,7 +49,7 @@ uv run mypy .                         # Type check
 ## 3. Test Markers
 Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The `unit` marker is auto-applied by conftest — never write it explicitly. The `llm` marker is deprecated; use `e2e` instead.
 
-See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
+See **[test/README.md](test/README.md)** for classification rules, authoring guide, marker reference, CI tier map, and local workflow.
 
 **Examples in `docs/examples/`** are opt-in — unlike `test/` files (auto-collected, default `unit`), examples require an explicit `# pytest:` comment to be collected. Files without this comment are silently ignored (they won't appear in skip summaries either). This is because examples have variable dependencies and limited setup:
 ```python
@@ -119,6 +119,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | `uv.lock` out of sync | Run `uv sync` |
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
+| Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
@@ -133,6 +134,8 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
    Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
 
 ## 11. Writing Tests
+
+See **[test/README.md — Authoring guide](test/README.md#authoring-guide)** for the full authoring guide (naming, fixture discipline, mock discipline, assertion style).
 
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
