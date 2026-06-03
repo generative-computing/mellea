@@ -18,6 +18,7 @@ import openai
 import pydantic
 import pytest
 import requests
+from huggingface_hub.errors import LocalEntryNotFoundError
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 import yaml
@@ -146,12 +147,15 @@ class YamlJsonCombo(pydantic.BaseModel):
         object. Called at fixture creation (execution time) to prevent collection time errors.
         """
         if not self.yaml_file:
-            self.yaml_file = intrinsics_util.obtain_io_yaml(
-                self.task,
-                self.base_model_id,
-                self.repo_id,
-                revision=self.revision,  # type: ignore
-            )
+            try:
+                self.yaml_file = intrinsics_util.obtain_io_yaml(
+                    self.task,
+                    self.base_model_id,
+                    self.repo_id,
+                    revision=self.revision,  # type: ignore
+                )
+            except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
+                pytest.skip(f"HuggingFace Hub not accessible: {e}")
         return self
 
 
