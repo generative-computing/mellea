@@ -96,9 +96,8 @@ def _rebuild_chat_context(
 ) -> ChatContext:
     """Build a fresh `ChatContext` linked-list without triggering compaction.
 
-    Used by `WindowCompactor` (and any future compactors that need to rebuild
-    a chat history). Manual node construction sidesteps `ChatContext.add` so
-    compactors don't recurse during their own work.
+    Manual node construction sidesteps `ChatContext.add` so compactors don't
+    recurse into their own compactor while rebuilding history.
 
     Args:
         components: Components to materialise as the new context, in order.
