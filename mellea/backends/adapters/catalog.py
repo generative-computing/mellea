@@ -28,7 +28,7 @@ def validate_revision(revision: str) -> str:
     Raises:
         ValueError: If `revision` is empty.
     """
-    if not revision:
+    if not revision.strip():
         raise ValueError("revision must be a non-empty string")
     return revision
 
@@ -92,8 +92,6 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         return validate_revision(v)
 
 
-# Mellea will update which repositories are linked as new ones come online. The original
-# repos are on an older layout that will be changed.
 _RAG_REPO = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO = "ibm-granite/granitelib-core-r1.0"
 _GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"

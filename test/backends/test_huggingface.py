@@ -54,9 +54,10 @@ def backend():
     """Shared HuggingFace backend for all tests in this module.
 
     Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    The "requirement-check" intrinsic only has adapters for Granite 3.3 models.
-    Granite 4 adapters are not yet available.
-    Other intrinsics are not affected by this issue.
+    Note: as of #1135, the "requirement-check" intrinsic catalogue entry points to
+    granitelib-core-r1.0 (granite-4.x adapters). Tests that exercise requirement-check
+    against this granite-3.3 backend will fail once revision pinning is wired through
+    in phase-2.2 (#1141). Other intrinsics are not affected.
     """
     backend = LocalHFBackend(
         model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)

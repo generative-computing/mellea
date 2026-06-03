@@ -25,6 +25,11 @@ def test_revision_validation_rejects_empty():
         validate_revision("")
 
 
+def test_revision_validation_rejects_whitespace():
+    with pytest.raises(ValueError):
+        validate_revision("   ")
+
+
 def test_revision_validation_accepts_sha():
     assert validate_revision(_VALID_SHA) == _VALID_SHA
 
