@@ -18,13 +18,12 @@ class ChatContext(Context):
     strategy, or `window_size=` as sugar for `WindowCompactor(size=...)`.
 
     Note:
-        Compaction is now applied at `add()` time and persists in the linked
+        Compaction is applied at `add()` time and persists in the linked
         list, so `as_list()` and `view_for_generation()` both reflect the
-        post-compaction history. Earlier versions kept the full history in
-        `as_list()` and only windowed the model-facing view, so any caller
-        that used `len(ctx.as_list())` as a session-wide interaction count
-        will now silently undercount once the compactor fires. Track turn
-        counts out-of-band (e.g. on the session) if you need them.
+        post-compaction history. Callers that use `len(ctx.as_list())` as a
+        session-wide interaction count will silently undercount once the
+        compactor fires — track turn counts out-of-band (e.g. on the
+        session) if you need them.
 
     Args:
         compactor (InlineCompactor | None): The compactor invoked on every
@@ -82,7 +81,7 @@ class ChatContext(Context):
     def view_for_generation(self) -> list[Component | CBlock] | None:
         """Return the components to forward to the model.
 
-        Compaction is now applied at `add` time (Pattern 1), so this just
+        Compaction is applied at `add` time (Pattern 1), so this just
         returns the linear history. `None` is returned when the underlying
         history is non-linear.
 
