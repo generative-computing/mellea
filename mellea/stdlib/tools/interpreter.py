@@ -278,6 +278,18 @@ class UnsafeEnvironment(ExecutionEnvironment):
     No container isolation.  Use ``policy`` to declare (but not enforce)
     capabilities; ``timeout`` and stdout/stderr truncation from ``policy``
     are actively enforced.
+
+    Args:
+        allowed_imports (list[str] | None): Allowlist of top-level module names
+            that generated code may import.  ``None`` disables the import check.
+        policy (CapabilityPolicy | None): Capability policy for this environment.
+            ``None`` means no policy is applied.
+        working_directory (str | None): Directory to use as cwd during execution.
+            ``None`` means use the process default.
+        _installed_packages (set[str] | None): Shared set to persist the install
+            cache across multiple ``execute()`` calls.  ``None`` creates a fresh set.
+        _tier (str | None): Explicit tier name reported by ``_mode()``.  ``None``
+            infers the tier from policy presence.
     """
 
     def __init__(
