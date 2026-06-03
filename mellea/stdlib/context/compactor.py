@@ -61,14 +61,10 @@ def pin_system(components: list[Component | CBlock]) -> int:
     Stops at the first non-system component. A system message that appears
     later in the conversation is *not* pinned.
     """
-    i = 0
-    while i < len(components):
-        c = components[i]
-        if isinstance(c, Message) and c.role == "system":
-            i += 1
-        else:
-            break
-    return i
+    for i, c in enumerate(components):
+        if not (isinstance(c, Message) and c.role == "system"):
+            return i
+    return len(components)
 
 
 def pin_system_and_initial_user(components: list[Component | CBlock]) -> int:
