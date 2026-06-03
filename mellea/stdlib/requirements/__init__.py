@@ -1,10 +1,7 @@
 """Module for working with Requirements."""
 
-# Import from core for ergonomics.
-from ...core import Requirement, ValidationResult, default_output_to_bool
 from .md import as_markdown_list, is_markdown_list, is_markdown_table
 from .python_reqs import PythonExecutionReq
-from .rag import GroundednessRequirement
 from .python_tools import (
     ImportRestrictions,
     OutputSizeLimit,
@@ -12,6 +9,7 @@ from .python_tools import (
     PythonSyntaxValid,
     python_tool_requirements,
 )
+from .rag import GroundednessRequirement
 from .requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -22,6 +20,9 @@ from .requirement import (
     simple_validate,
 )
 from .tool_reqs import tool_arg_validator, uses_tool
+
+# Import from core for ergonomics.
+from ...core import Requirement, ValidationResult, default_output_to_bool
 
 __all__ = [
     "ALoraRequirement",
