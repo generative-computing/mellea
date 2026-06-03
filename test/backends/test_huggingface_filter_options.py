@@ -12,6 +12,8 @@ torch must be importable because importing LocalHFBackend triggers the top-level
 ``import torch`` in huggingface.py.  Install mellea[hf] to satisfy this requirement.
 """
 
+import logging
+
 import pytest
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
@@ -33,6 +35,7 @@ def _make_backend(template: object) -> LocalHFBackend:
 
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
+    b._hf_model_id = "test-org/test-model"
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
@@ -163,6 +166,52 @@ def test_allowlist_graceful_on_generation_tag() -> None:
     )
     b = _make_backend(template)
     assert b._chat_template_allowlist == frozenset()
+
+
+def test_allowlist_warns_on_generation_tag(caplog: pytest.LogCaptureFixture) -> None:
+    """A warning is emitted when the template cannot be parsed due to unknown tags.
+
+    Callers passing model_options (e.g. think=True) to a DeepSeek-R1/Qwen3 model
+    would otherwise see their options silently dropped with no diagnostic.
+    """
+    template = (
+        "{% for message in messages %}"
+        "{% generation %}{{ message.content }}{% endgeneration %}"
+        "{% endfor %}"
+        "{{ think }}"
+    )
+    b = _make_backend(template)
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        _ = b._chat_template_allowlist
+    assert any("Could not parse chat template" in r.message for r in caplog.records)
+    assert any("test-org/test-model" in r.message for r in caplog.records)
+
+
+def test_allowlist_warns_on_non_string_template(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A warning is emitted when chat_template is a list or dict (not a plain string).
+
+    Some tokenizers store multiple named templates as a list-of-dicts.  The warning
+    tells the caller that their model_options will not be forwarded.
+    """
+    b = _make_backend([{"name": "default", "template": "{{ think }}"}])
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        _ = b._chat_template_allowlist
+    assert any("not a plain string" in r.message for r in caplog.records)
+
+
+def test_allowlist_no_warning_for_none_template(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """No warning is emitted when chat_template is None (model has no chat template).
+
+    A missing chat_template is normal and expected for base models — no diagnostic needed.
+    """
+    b = _make_backend(None)
+    with caplog.at_level(logging.WARNING, logger="mellea"):
+        _ = b._chat_template_allowlist
+    assert not any("chat template" in r.message.lower() for r in caplog.records)
 
 
 def test_allowlist_break_continue_tags_parsed_correctly() -> None:

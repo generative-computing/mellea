@@ -1639,15 +1639,29 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if not isinstance(template_str, str) or not template_str:
             # Non-string (None, list of alternates, dict) or empty — cannot parse.
             # apply_chat_template handles those formats internally.
+            if template_str is not None and template_str:
+                # A non-empty, non-string value (e.g. list of alternates, dict) means
+                # we cannot inspect the template's variable names.  Any caller-supplied
+                # model_options that the template would have accepted are silently dropped.
+                MelleaLogger.get_logger().warning(
+                    f"Chat template for {self._hf_model_id} is not a plain string "
+                    f"(got {type(template_str).__name__}); cannot inspect variable names. "
+                    "model_options kwargs will not be forwarded to apply_chat_template."
+                )
             return frozenset()
         # loopcontrols enables {% break %} / {% continue %} used in some HF templates.
         env = jinja2.Environment(extensions=["jinja2.ext.loopcontrols"])
         try:
             ast = env.parse(template_str)
-        except jinja2.TemplateSyntaxError:
+        except jinja2.TemplateSyntaxError as e:
             # Templates using unsupported extensions (e.g. {% generation %} from
             # transformers' AssistantTracker) cannot be parsed with a plain Jinja2
             # environment. Fall back to forwarding nothing rather than crashing.
+            MelleaLogger.get_logger().warning(
+                f"Could not parse chat template for {self._hf_model_id} ({e}); "
+                "forwarding no model_options to apply_chat_template. "
+                "Template-referenced kwargs (think, guardian_config, etc.) will be ignored."
+            )
             return frozenset()
         all_vars = jinja2.meta.find_undeclared_variables(ast)
         return frozenset(all_vars - _HF_INTERNAL_TEMPLATE_VARS)
