@@ -15,25 +15,10 @@ from mellea.core import CBlock, ModelOutputThunk
 from mellea.stdlib.context import SimpleContext
 
 
-def _make_backend(
-    model_options: dict | None = None, timeout: float | None = None
-) -> OllamaModelBackend:
-    """Return an OllamaModelBackend with all network calls patched."""
-    with (
-        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
-        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
-        patch("mellea.backends.ollama.ollama.Client", return_value=MagicMock()),
-        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
-    ):
-        return OllamaModelBackend(
-            model_id="granite3.3:8b", model_options=model_options, timeout=timeout
-        )
-
-
 @pytest.fixture
-def backend():
+def backend(mock_ollama_backend):
     """Return an OllamaModelBackend with no pre-set model options."""
-    return _make_backend()
+    return mock_ollama_backend(model_id="granite3.3:8b")
 
 
 # --- Map consistency ---
@@ -73,9 +58,11 @@ def test_simplify_and_merge_remaps_num_predict(backend):
     assert result[ModelOption.MAX_NEW_TOKENS] == 128
 
 
-def test_simplify_and_merge_per_call_overrides_backend():
+def test_simplify_and_merge_per_call_overrides_backend(mock_ollama_backend):
     # Backend sets num_predict=128; per-call value of 256 must win.
-    b = _make_backend(model_options={"num_predict": 128})
+    b = mock_ollama_backend(
+        model_id="granite3.3:8b", model_options={"num_predict": 128}
+    )
     result = b._simplify_and_merge({"num_predict": 256})
     assert result[ModelOption.MAX_NEW_TOKENS] == 256
 
@@ -189,9 +176,9 @@ def test_timeout_forwarded_to_sync_and_async_clients():
     assert async_kwargs.get("timeout") == 12.5
 
 
-def test_timeout_forwarded_to_new_async_clients_per_event_loop():
+def test_timeout_forwarded_to_new_async_clients_per_event_loop(mock_ollama_backend):
     """Newly created AsyncClients (one per event loop) must inherit the timeout."""
-    backend = _make_backend(timeout=7.0)
+    backend = mock_ollama_backend(model_id="granite3.3:8b", timeout=7.0)
     with patch(
         "mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()
     ) as mock_async_client:
