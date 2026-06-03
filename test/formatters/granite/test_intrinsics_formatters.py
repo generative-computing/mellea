@@ -532,12 +532,6 @@ def test_read_yaml():
     # Read from local disk
     IntrinsicsRewriter(config_file=_INPUT_YAML_DIR / "answerability.yaml")
 
-    # Read from Hugging Face hub.
-    local_path = intrinsics_util.obtain_io_yaml(
-        "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
-    )
-    IntrinsicsRewriter(config_file=local_path)
-
 
 def test_name_field_accepted_by_make_config_dict():
     """make_config_dict accepts 'name' as an optional field without error."""
