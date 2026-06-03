@@ -193,14 +193,14 @@ def test_timeout_forwarded_to_new_async_clients_per_event_loop(mock_ollama_backe
 # --- generate_from_raw empty-response handling (#599) ---
 
 
-async def test_generate_from_raw_empty_response_soft_fails() -> None:
+async def test_generate_from_raw_empty_response_soft_fails(mock_ollama_backend) -> None:
     """Empty done Ollama response soft-fails instead of raising.
 
     The result list must have the same length as the input actions so that
     sibling results from the same gather call are not discarded. The failing
     slot must have value="" and carry the RuntimeError in generate_log.extra["error"].
     """
-    backend = _make_backend()
+    backend = mock_ollama_backend()
     empty = ollama.GenerateResponse(response="", done=True)
 
     with (
@@ -228,13 +228,15 @@ async def test_generate_from_raw_empty_response_soft_fails() -> None:
     assert "16326" in str(err), "error message should reference upstream Ollama issue"
 
 
-async def test_generate_from_raw_thinking_response_not_flagged() -> None:
+async def test_generate_from_raw_thinking_response_not_flagged(
+    mock_ollama_backend,
+) -> None:
     """A thinking-model response with response="" and non-empty thinking is not an error.
 
     Thinking models legitimately return an empty response string alongside a non-empty
     thinking field — this must not be treated as an empty-response soft-fail.
     """
-    backend = _make_backend()
+    backend = mock_ollama_backend()
     thinking_response = ollama.GenerateResponse(
         response="", thinking="Let me work this out...", done=True
     )
@@ -259,9 +261,11 @@ async def test_generate_from_raw_thinking_response_not_flagged() -> None:
     )
 
 
-async def test_generate_from_raw_preserves_sibling_results_on_empty() -> None:
+async def test_generate_from_raw_preserves_sibling_results_on_empty(
+    mock_ollama_backend,
+) -> None:
     """One empty response in a batch of three does not discard the other two results."""
-    backend = _make_backend()
+    backend = mock_ollama_backend()
     good = ollama.GenerateResponse(
         response="2", done=True, eval_count=1, prompt_eval_count=5
     )
