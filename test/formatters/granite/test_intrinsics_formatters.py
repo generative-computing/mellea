@@ -537,9 +537,12 @@ def test_read_yaml():
     IntrinsicsRewriter(config_file=_INPUT_YAML_DIR / "answerability.yaml")
 
     # Read from Hugging Face hub.
-    local_path = intrinsics_util.obtain_io_yaml(
-        "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
-    )
+    try:
+        local_path = intrinsics_util.obtain_io_yaml(
+            "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
+        )
+    except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
+        pytest.skip(f"HuggingFace Hub not accessible: {e}")
     IntrinsicsRewriter(config_file=local_path)
 
 
