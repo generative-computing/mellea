@@ -507,6 +507,7 @@ class OllamaModelBackend(FormatterBackend):
                 soft-fails: it has ``value=""``, with the ``RuntimeError`` stored
                 at ``thunk._generate_log.extra["error"]`` and the serialized
                 response dict at ``thunk._generate_log.extra["empty_response"]``.
+                Other actions in the batch are unaffected.
 
         Note:
             Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
