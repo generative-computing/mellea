@@ -502,13 +502,17 @@ class OllamaModelBackend(FormatterBackend):
 
         Returns:
             list[ModelOutputThunk]: A list of model output thunks, one per action.
-                If Ollama returns an empty done response (``response=""``, ``done=True``,
-                no thinking content) for an action, the corresponding thunk has
-                ``value=""``; the ``RuntimeError`` is stashed at
-                ``thunk._generate_log.extra["error"]`` and the raw response at
-                ``thunk._generate_log.extra["empty_response"]``. Other Ollama client
-                exceptions (e.g. ``ConnectionError``, ``ollama.ResponseError``)
-                propagate to the caller — no thunks are returned on such failure.
+                If Ollama returns an empty done response (``response=""``,
+                ``done=True``, no thinking content) for an action, that thunk
+                soft-fails: it has ``value=""``, with the ``RuntimeError`` stored
+                at ``thunk._generate_log.extra["error"]`` and the serialized
+                response dict at ``thunk._generate_log.extra["empty_response"]``.
+
+        Note:
+            Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
+            request raises (e.g. ``ollama.ResponseError`` or a connection error),
+            that exception propagates to the caller and no list is returned, even
+            for requests that completed successfully.
         """
         if len(actions) > 1:
             MelleaLogger.get_logger().info(
