@@ -221,3 +221,174 @@ async def test_processing_streaming_empty_reasoning_content_does_not_fall_back(
     )
     await backend.processing(mot, stream_chunk)
     assert mot._thinking == ""
+
+
+# ---------------------------------------------------------------------------
+# Parameter-passing tests (mock litellm.acompletion — no server required)
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_response() -> ModelResponse:
+    """Minimal non-streaming ModelResponse that survives processing() and post_processing()."""
+    msg = Message(content="ok", role="assistant")
+    choice = Choices(finish_reason="stop", index=0, message=msg)
+    return ModelResponse(
+        id="test",
+        choices=[choice],
+        created=0,
+        model="hosted_vllm/qwen3",
+        object="chat.completion",
+        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    )
+
+
+@pytest.fixture()
+def chat_backend() -> LiteLLMBackend:
+    return LiteLLMBackend(
+        model_id="hosted_vllm/qwen3", base_url="http://localhost:9997"
+    )
+
+
+async def _call_and_capture(backend: LiteLLMBackend, model_options: dict) -> dict:
+    """Call _generate_from_chat_context_standard with mocked litellm.acompletion.
+
+    Returns the kwargs dict that litellm.acompletion was called with.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from mellea.core import CBlock
+    from mellea.stdlib.components import Message as MelleaMessage
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(MelleaMessage("user", "Hello"))
+    action = CBlock(value="Test")
+    mock_response = _make_mock_response()
+
+    with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acomplete:
+        mock_acomplete.return_value = mock_response
+        mot = await backend._generate_from_chat_context_standard(
+            action, ctx, model_options=model_options
+        )
+        await mot.avalue()
+
+    assert mock_acomplete.called, "litellm.acompletion was never called"
+    return mock_acomplete.call_args.kwargs
+
+
+async def test_thinking_true_sets_reasoning_effort_and_enable_thinking(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """THINKING=True sets reasoning_effort='medium' AND extra_body.chat_template_kwargs.enable_thinking=True."""
+    from mellea.backends import ModelOption
+
+    kwargs = await _call_and_capture(chat_backend, {ModelOption.THINKING: True})
+
+    assert kwargs.get("reasoning_effort") == "medium", (
+        "reasoning_effort should be 'medium' for THINKING=True"
+    )
+    assert (
+        kwargs.get("extra_body", {})
+        .get("chat_template_kwargs", {})
+        .get("enable_thinking")
+        is True
+    ), "extra_body.chat_template_kwargs.enable_thinking should be True"
+
+
+async def test_thinking_false_omits_reasoning_effort_and_sets_disable(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """THINKING=False: reasoning_effort absent, extra_body.chat_template_kwargs.enable_thinking=False."""
+    from mellea.backends import ModelOption
+
+    kwargs = await _call_and_capture(chat_backend, {ModelOption.THINKING: False})
+
+    assert "reasoning_effort" not in kwargs, (
+        "reasoning_effort must not be sent for THINKING=False (invalid value)"
+    )
+    assert (
+        kwargs.get("extra_body", {})
+        .get("chat_template_kwargs", {})
+        .get("enable_thinking")
+        is False
+    ), "extra_body.chat_template_kwargs.enable_thinking should be False"
+
+
+async def test_thinking_string_sets_only_reasoning_effort(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """THINKING='high' sets reasoning_effort='high' but does NOT set extra_body.enable_thinking."""
+    from mellea.backends import ModelOption
+
+    kwargs = await _call_and_capture(chat_backend, {ModelOption.THINKING: "high"})
+
+    assert kwargs.get("reasoning_effort") == "high", (
+        "reasoning_effort should be 'high' for THINKING='high'"
+    )
+    assert "enable_thinking" not in kwargs.get("extra_body", {}).get(
+        "chat_template_kwargs", {}
+    ), "enable_thinking must not be set for string THINKING values"
+
+
+async def test_thinking_unset_sends_neither(chat_backend: LiteLLMBackend) -> None:
+    """No THINKING option: neither reasoning_effort nor extra_body.enable_thinking is sent."""
+    kwargs = await _call_and_capture(chat_backend, {})
+
+    assert "reasoning_effort" not in kwargs, (
+        "reasoning_effort should not be present when THINKING is not set"
+    )
+    assert "enable_thinking" not in kwargs.get("extra_body", {}).get(
+        "chat_template_kwargs", {}
+    ), "enable_thinking should not be present when THINKING is not set"
+
+
+async def test_api_base_passed_to_litellm(chat_backend: LiteLLMBackend) -> None:
+    """api_base is forwarded to litellm.acompletion matching the backend's base_url."""
+    kwargs = await _call_and_capture(chat_backend, {})
+
+    assert kwargs.get("api_base") == "http://localhost:9997", (
+        "api_base must equal the backend base_url"
+    )
+
+
+async def test_thinking_true_with_user_extra_body_merged(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """THINKING=True + user extra_body: enable_thinking and user keys both survive in extra_body."""
+    from mellea.backends import ModelOption
+
+    kwargs = await _call_and_capture(
+        chat_backend,
+        {ModelOption.THINKING: True, "extra_body": {"guided_json": {"type": "string"}}},
+    )
+
+    eb = kwargs.get("extra_body", {})
+    assert eb.get("chat_template_kwargs", {}).get("enable_thinking") is True, (
+        "enable_thinking must survive the merge with user-supplied extra_body"
+    )
+    assert eb.get("guided_json") == {"type": "string"}, (
+        "user-supplied extra_body keys must be preserved alongside enable_thinking"
+    )
+    assert kwargs.get("reasoning_effort") == "medium"
+
+
+async def test_thinking_true_with_user_chat_template_kwargs_deep_merged(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """THINKING=True + user extra_body.chat_template_kwargs: both enable_thinking and user CTK keys survive."""
+    from mellea.backends import ModelOption
+
+    kwargs = await _call_and_capture(
+        chat_backend,
+        {
+            ModelOption.THINKING: True,
+            "extra_body": {"chat_template_kwargs": {"adapter_name": "my-adapter"}},
+        },
+    )
+
+    ctk = kwargs.get("extra_body", {}).get("chat_template_kwargs", {})
+    assert ctk.get("enable_thinking") is True, (
+        "enable_thinking must survive when user also supplies chat_template_kwargs"
+    )
+    assert ctk.get("adapter_name") == "my-adapter", (
+        "user-supplied chat_template_kwargs keys must be preserved"
+    )

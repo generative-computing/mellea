@@ -341,16 +341,50 @@ class LiteLLMBackend(FormatterBackend):
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
 
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3/Gemma4 (bool toggle)
+        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level, or True → "medium")
+        # Both are set for True so each server picks up whichever it understands.
+        # NOTE: don't pass reasoning_effort=False — it is invalid; absence disables reasoning.
         thinking = model_opts.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            # OpenAI uses strings for its reasoning levels.
-            thinking = "medium"
+        original_thinking = thinking  # preserve raw caller value for the generate log
+        reasoning_params: dict[str, Any] = {}
+        if thinking is not None:
+            if type(thinking) is bool:
+                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+                ctk: dict[str, Any] = ctk_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                ctk_body["chat_template_kwargs"] = ctk
+                extra_params["extra_body"] = ctk_body
+                if thinking:
+                    reasoning_params["reasoning_effort"] = "medium"
+                # False: do not send reasoning_effort — absent param disables reasoning;
+                # passing False would be invalid.
+            else:
+                reasoning_params["reasoning_effort"] = thinking
 
         # Append tool call information if applicable.
         tools = self._extract_tools(action, _format, model_opts, tool_calls, ctx)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        # Merge any user-supplied extra_body from model_specific_options so there is
+        # a single extra_body source in extra_params (two spread dicts with the same
+        # key would raise TypeError at call time).
+        # Deep-merge chat_template_kwargs so enable_thinking (set above) and any
+        # user-supplied chat_template_kwargs keys both survive.
+        user_extra_body = model_specific_options.pop("extra_body", None)
+        if user_extra_body:
+            eb = extra_params.get("extra_body") or {}
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
+            eb.update(user_extra_body)
+            if user_ctk:
+                eb["chat_template_kwargs"] = {
+                    **eb.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
+            extra_params["extra_body"] = eb
 
         if self._has_potential_event_loop_errors():
             MelleaLogger.get_logger().warning(
@@ -363,9 +397,10 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            reasoning_effort=thinking,  # type: ignore
+            api_base=self._base_url,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
             **extra_params,
+            **reasoning_params,  # type: ignore
             **model_specific_options,
         )
 
@@ -382,7 +417,7 @@ class LiteLLMBackend(FormatterBackend):
             self.post_processing,
             conversation=conversation,
             tools=tools,
-            thinking=thinking,
+            thinking=original_thinking,
             _format=_format,
         )
 
@@ -682,7 +717,10 @@ class LiteLLMBackend(FormatterBackend):
             prompts = [self.formatter.print(action) for action in actions]
 
             completion_response = await litellm.atext_completion(
-                model=self._model_id, prompt=prompts, **model_specific_options
+                model=self._model_id,
+                prompt=prompts,
+                api_base=self._base_url,
+                **model_specific_options,
             )
 
         # Necessary for type checker.
