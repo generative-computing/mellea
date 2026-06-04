@@ -16,6 +16,7 @@ from mellea.plugins.manager import (
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
+from test.conftest import hf_skip
 from test.predicates import require_api_key, require_gpu
 
 # Check if OpenTelemetry is available
@@ -72,10 +73,11 @@ def hf_metrics_backend(gh_run):
     from mellea.backends.cache import SimpleLRUCache
     from mellea.backends.huggingface import LocalHFBackend
 
-    backend = LocalHFBackend(
-        model_id=IBM_GRANITE_4_1_3B.hf_model_name,  # type: ignore
-        cache=SimpleLRUCache(5),
-    )
+    with hf_skip():
+        backend = LocalHFBackend(
+            model_id=IBM_GRANITE_4_1_3B.hf_model_name,  # type: ignore
+            cache=SimpleLRUCache(5),
+        )
 
     yield backend
 

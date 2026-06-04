@@ -19,7 +19,6 @@ import requests
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 import yaml
-from huggingface_hub.errors import LocalEntryNotFoundError
 
 # First Party
 from mellea.backends.adapters import catalog as adapter_catalog
@@ -31,6 +30,7 @@ from mellea.formatters.granite import (
 )
 from mellea.formatters.granite.base import util as base_util
 from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
+from test.conftest import hf_skip
 
 
 def _read_file(name):
@@ -163,15 +163,13 @@ class YamlJsonCombo(pydantic.BaseModel):
         object. Called at fixture creation (execution time) to prevent collection time errors.
         """
         if not self.yaml_file:
-            try:
+            with hf_skip():
                 self.yaml_file = intrinsics_util.obtain_io_yaml(
                     self.task,
                     self.base_model_id,
                     self.repo_id,
                     revision=self.revision,  # type: ignore
                 )
-            except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
-                pytest.skip(f"HuggingFace Hub not accessible: {type(e).__name__}: {e}")
         return self
 
 
@@ -465,17 +463,14 @@ def test_read_yaml():
     # Read from local disk
     IntrinsicsRewriter(config_file=_INPUT_YAML_DIR / "answerability.yaml")
 
-    # Read from Hugging Face hub. Pinning to the per-repo SHA avoids a Hub
-    # metadata round-trip on every run (susceptible to 429 rate-limiting).
-    try:
+    # Read from Hugging Face hub.
+    with hf_skip():
         local_path = intrinsics_util.obtain_io_yaml(
             "answerability",
             "granite-4.0-micro",
             _RAG_INTRINSICS_REPO_NAME,
             revision=_REPO_PINNED_SHAS[_RAG_INTRINSICS_REPO_NAME],
         )
-    except (LocalEntryNotFoundError, requests.exceptions.RequestException) as e:
-        pytest.skip(f"HuggingFace Hub not accessible: {type(e).__name__}: {e}")
     IntrinsicsRewriter(config_file=local_path)
 
 

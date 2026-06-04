@@ -6,13 +6,15 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.rag import GroundednessRequirement
+from test.conftest import hf_skip
 from test.predicates import require_gpu
 
 
 @pytest.fixture(scope="session")
 def backend():
     """Provide HuggingFace backend for tests (session-scoped to avoid OOM)."""
-    return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+    with hf_skip():
+        return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
 
 @pytest.fixture
