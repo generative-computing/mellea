@@ -348,7 +348,9 @@ def update_frontmatter_metadata() -> None:
         preserved = []
         for line in front_lines:
             k = line.strip()
-            if k.startswith(("title:", "sidebarTitle:", "description:")):
+            if k.startswith(
+                ("title:", "sidebarTitle:", "sidebar_label:", "description:")
+            ):
                 continue
             preserved.append(line)
 
@@ -362,7 +364,7 @@ def update_frontmatter_metadata() -> None:
 
         new_front = ["---"]
         new_front.append(f"title: {yaml_quote(title_value)}")
-        new_front.append(f"sidebarTitle: {yaml_quote(title_value)}")
+        new_front.append(f"sidebar_label: {yaml_quote(title_value)}")
         if desc_value:
             new_front.append(f"description: {yaml_quote(desc_value)}")
         new_front.extend(preserved)

@@ -36,6 +36,7 @@ const config: Config = {
           showLastUpdateTime: true,
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
           includeCurrentVersion: true,
+          // set-last-version.mjs matches these lines with exact regexes — do not reformat
           lastVersion: 'current',
           versions: {
             current: {
@@ -121,6 +122,12 @@ const config: Config = {
           {from: '/guide/act-and-aact', to: '/how-to/act-and-aact'},
           {from: '/guide/m-decompose', to: '/how-to/m-decompose'},
           {from: '/advanced/security-and-taint-tracking', to: '/how-to/safety-guardrails'},
+          {from: '/tutorials/01-your-first-generative-program', to: '/tutorials/your-first-generative-program'},
+          {from: '/tutorials/02-streaming-and-async', to: '/tutorials/streaming-and-async'},
+          {from: '/tutorials/03-using-generative-stubs', to: '/tutorials/using-generative-stubs'},
+          {from: '/tutorials/04-making-agents-reliable', to: '/tutorials/making-agents-reliable'},
+          {from: '/tutorials/05-mifying-legacy-code', to: '/tutorials/mifying-legacy-code'},
+          {from: '/tutorials/06-streaming-validation', to: '/tutorials/streaming-validation'},
         ],
       } satisfies RedirectOptions,
     ],
@@ -144,13 +151,11 @@ const config: Config = {
       {name: 'description', content: 'Build predictable AI without guesswork'},
     ],
     navbar: {
-      title: 'Mellea',
+      title: '',
       logo: {
         alt: 'Mellea',
         src: 'logo/logo-light.svg',
         srcDark: 'logo/logo-dark.svg',
-        href: 'https://mellea.ai',
-        target: '_self',
       },
       items: [
         {
@@ -166,7 +171,7 @@ const config: Config = {
           label: 'API Reference',
         },
         {
-          href: 'https://generative-computing.github.io/blog/',
+          href: 'https://mellea.ai/blogs/',
           label: 'Blog',
           position: 'right',
         },
@@ -184,21 +189,21 @@ const config: Config = {
           label: 'GitHub',
           position: 'right',
         },
+        {
+          href: 'https://mellea.ai',
+          label: 'mellea.ai',
+          position: 'right',
+        },
       ],
     },
     footer: {
       style: 'dark',
       links: [
-        {
-          title: 'Community',
-          items: [
-            {label: 'Blog', href: 'https://generative-computing.github.io/blog/'},
-            {label: 'Discussions', href: 'https://github.com/generative-computing/mellea/discussions'},
-            {label: 'Contributing', href: 'https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md'},
-            {label: 'Issues', href: 'https://github.com/generative-computing/mellea/issues'},
-            {label: 'GitHub', href: 'https://github.com/generative-computing/mellea'},
-          ],
-        },
+        {label: 'Blog', href: 'https://mellea.ai/blogs/'},
+        {label: 'Discussions', href: 'https://github.com/generative-computing/mellea/discussions'},
+        {label: 'Contributing', href: 'https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md'},
+        {label: 'Issues', href: 'https://github.com/generative-computing/mellea/issues'},
+        {label: 'GitHub', href: 'https://github.com/generative-computing/mellea'},
       ],
       copyright: `Copyright © ${new Date().getFullYear()} Mellea Contributors.`,
     },

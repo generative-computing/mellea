@@ -105,3 +105,25 @@ pre code {
   background: #3a3a3a;
   color: #ccc;
 }
+
+/* TOC active-heading: left accent bar + bolder colour (mirrors Mintlify) */
+.table-of-contents__link--active {
+  border-left: 2px solid var(--ifm-color-primary);
+  padding-left: 0.4rem;
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+}
+
+/* API headings: inline GitHub source icon — de-superscript and scale to text size */
+article h2 sup,
+article h3 sup,
+article h4 sup {
+  vertical-align: middle;
+  font-size: 1em;
+}
+article h2 sup svg,
+article h3 sup svg,
+article h4 sup svg {
+  width: 0.9em;
+  height: 0.9em;
+}
