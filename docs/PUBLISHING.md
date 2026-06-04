@@ -106,18 +106,10 @@ Docusaurus versioning is integrated into the release pipeline:
 - **Version dropdown** in the navbar lets users switch between released
   versions and `main (unreleased)`.
 
-**Bootstrap (one-time, after merge):** before the first final release fires
-the automatic pipeline, manually create the first snapshot so the version
-dropdown is populated:
-
-```bash
-cd docs && npm run docusaurus -- docs:version X.Y.Z
-# (X.Y.Z = current latest released tag)
-```
-
-Commit the resulting `versioned_docs/`, `versioned_sidebars/`,
-`versions.json`, and the `lastVersion` edit in `docusaurus.config.ts`
-to `main`.
+No manual bootstrap is needed — the first final release run triggers
+`snapshot-docs` automatically, which creates the initial snapshot and
+updates `lastVersion`. Until the first final release, the site shows only
+`main (unreleased)` in the version dropdown, which is correct.
 
 ## Local development
 
