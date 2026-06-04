@@ -1,6 +1,5 @@
 """Implementations of tools."""
 
-
 from .execution_policy import (
     COMPATIBILITY_MATRIX,
     DOCKER_POLICY,
@@ -19,32 +18,24 @@ from .interpreter import (
     local_code_interpreter,
     make_execution_environment,
 )
-from .shell import (
-    BashEnvironment,
-    LLMSandboxBashEnvironment,
-    StaticBashEnvironment,
-    bash_executor,
-)
+from .shell import BashEnvironment, StaticBashEnvironment, bash_executor
 
 __all__ = [
-    "BashEnvironment",
     "COMPATIBILITY_MATRIX",
     "DOCKER_POLICY",
     "LOCAL_POLICY",
     "Artifact",
+    "BashEnvironment",
     "CapabilityPolicy",
     "ExecutionEnvironment",
     "ExecutionResult",
     "ExecutionTier",
-    "LLMSandboxBashEnvironment",
     "LLMSandboxEnvironment",
-    "BashEnvironment",
-    "StaticBashEnvironment",
     "StaticAnalysisEnvironment",
+    "StaticBashEnvironment",
     "UnsafeEnvironment",
     "bash_executor",
     "code_interpreter",
     "local_code_interpreter",
     "make_execution_environment",
-    "unsafe_local_bash_executor",
 ]
