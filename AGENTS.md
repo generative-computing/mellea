@@ -151,12 +151,12 @@ If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md).
 Key rules that differ from typical Markdown habits:
 
-- **No H1 in the body** — Mintlify renders the frontmatter `title` automatically;
+- **No H1 in the body** — Docusaurus renders the frontmatter `title` automatically;
   a body `# Heading` produces a duplicate title in the published site
 - **No `.md` extensions in internal links** — use `../concepts/requirements-system`,
   not `../concepts/requirements-system.md`
 - **Frontmatter required** — every page needs `title` and `description`; add
-  `sidebarTitle` if the title is long
+  `sidebar_label` if the title is long
 - **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix
   all warnings before committing a doc page
 - **Verified code only** — every code example must be checked against the current
