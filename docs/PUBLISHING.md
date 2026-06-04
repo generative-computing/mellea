@@ -74,6 +74,9 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
 
 3. **Validate** — multiple checks run:
    - **Markdownlint** on static `.md` docs (soft-fail)
+   - **API validation** — `validate.py` checks anchor collisions within
+     generated API pages and RST double-backtick notation in docstrings
+     (soft-fail; these are gaps not caught by Docusaurus itself)
    - **API coverage audit** — warns if < 80% of public symbols are
      documented (soft-fail)
    - **Docstring quality gate** — fails if any public function with a

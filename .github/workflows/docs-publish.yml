@@ -110,6 +110,14 @@ jobs:
 
       # -- Validate generated API docs -----------------------------------------
 
+      - name: Validate generated API docs
+        id: validate_api
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/validate.py docs/docs/api 2>&1 \
+            | tee /tmp/validate_api.log
+        continue-on-error: true
+
       - name: Audit API coverage
         id: audit_coverage
         run: |
@@ -167,6 +175,7 @@ jobs:
             echo "| Check | Result |"
             echo "|-------|--------|"
             echo "| Markdownlint | ${{ steps.markdownlint.outcome }} |"
+            echo "| API Validation | ${{ steps.validate_api.outcome }} |"
             echo "| API Coverage | ${{ steps.audit_coverage.outcome }} |"
             echo "| Docstring Quality | ${{ steps.quality_gate.outcome }} |"
             echo "| Docusaurus Build | ${{ steps.build_site.outcome }} |"
