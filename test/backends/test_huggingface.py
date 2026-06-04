@@ -47,6 +47,7 @@ from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from test.conftest import hf_skip
 
 
 @pytest.fixture(scope="module")
@@ -59,15 +60,16 @@ def backend():
     against this granite-3.3 backend will fail once revision pinning is wired through
     in phase-2.2 (#1141). Other intrinsics are not affected.
     """
-    backend = LocalHFBackend(
-        model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
-    )
-    backend.add_adapter(
-        IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
-    )
-    backend.add_adapter(
-        IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
-    )
+    with hf_skip():
+        backend = LocalHFBackend(
+            model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
+        )
+        backend.add_adapter(
+            IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
+        )
+        backend.add_adapter(
+            IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
+        )
     yield backend
 
     from test.conftest import cleanup_gpu_backend

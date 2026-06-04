@@ -9,16 +9,15 @@ from mellea.core.base import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.rag import GroundednessRequirement
+from test.conftest import hf_skip
 from test.predicates import require_gpu
 
 
 @pytest.fixture
 def backend():
     """Provide HuggingFace backend for tests."""
-    try:
+    with hf_skip():
         return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-    except Exception as e:
-        pytest.skip(f"HuggingFace Hub or network unavailable — {e}")
 
 
 @pytest.fixture

@@ -17,7 +17,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.components.intrinsic._util import call_intrinsic
 from mellea.stdlib.context import ChatContext
-from test.conftest import cleanup_gpu_backend
+from test.conftest import cleanup_gpu_backend, hf_skip
 from test.predicates import require_gpu
 from test.stdlib.components.intrinsic.test_rag import (
     _read_input_json as _read_rag_input_json,
@@ -48,7 +48,8 @@ def _backend():
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id=BASE_MODEL)
+    with hf_skip():
+        backend_ = LocalHFBackend(model_id=BASE_MODEL)
     yield backend_
 
     # Code after yield is cleanup code.
