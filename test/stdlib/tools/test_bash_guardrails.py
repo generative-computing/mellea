@@ -569,10 +569,11 @@ class TestBashAuditTrail:
         trail.clear()
 
         # Create a controlled set of violations with specific severity levels:
-        # DangerousCommandPattern: HIGH severity
+        # sudo: CRITICAL (from COMMAND_RULES)
+        # chfn: MEDIUM (from COMMAND_RULES)
         # ShellOperatorPattern: HIGH severity
-        check_all_patterns(["sudo", "ls"])  # DangerousCommandPattern, HIGH
-        check_all_patterns(["sudo", "whoami"])  # DangerousCommandPattern, HIGH
+        check_all_patterns(["sudo", "ls"])  # DangerousCommandPattern, CRITICAL
+        check_all_patterns(["chfn", "user"])  # DangerousCommandPattern, MEDIUM
         check_all_patterns(["echo", "|", "grep"])  # ShellOperatorPattern, HIGH
         check_all_patterns(["cat", ">>", "file"])  # ShellOperatorPattern, HIGH
 
@@ -593,16 +594,16 @@ class TestBashAuditTrail:
         )
 
         # Test 2: Dual filter with AND logic
-        # Both conditions must match: DangerousCommandPattern AND HIGH severity
-        high_dangerous = trail.get_violations(
-            pattern="DangerousCommandPattern", severity="HIGH"
+        # Both conditions must match: DangerousCommandPattern AND CRITICAL severity
+        critical_dangerous = trail.get_violations(
+            pattern="DangerousCommandPattern", severity="CRITICAL"
         )
-        assert len(high_dangerous) == 2, (
-            f"Expected 2 HIGH DangerousCommandPattern violations, got {len(high_dangerous)}"
+        assert len(critical_dangerous) == 1, (
+            f"Expected 1 CRITICAL DangerousCommandPattern violation (sudo), got {len(critical_dangerous)}"
         )
-        for v in high_dangerous:
+        for v in critical_dangerous:
             assert v.pattern == "DangerousCommandPattern"
-            assert v.severity == "HIGH"
+            assert v.severity == "CRITICAL"
 
         # Verify reverse: ShellOperatorPattern with HIGH severity (should also be 2)
         high_shell_ops = trail.get_violations(
@@ -616,24 +617,27 @@ class TestBashAuditTrail:
             assert v.severity == "HIGH"
 
         # Test 3: Dual filter with no matches (AND logic prevents false positives)
-        # DangerousCommandPattern with CRITICAL severity should return empty
-        no_match = trail.get_violations(
-            pattern="DangerousCommandPattern", severity="CRITICAL"
+        # DangerousCommandPattern with MEDIUM severity should match only chfn
+        medium_dangerous = trail.get_violations(
+            pattern="DangerousCommandPattern", severity="MEDIUM"
         )
-        assert len(no_match) == 0, (
-            f"Expected 0 DangerousCommandPattern violations with CRITICAL severity, got {len(no_match)}"
+        assert len(medium_dangerous) == 1, (
+            f"Expected 1 MEDIUM DangerousCommandPattern violation (chfn), got {len(medium_dangerous)}"
         )
+        for v in medium_dangerous:
+            assert v.pattern == "DangerousCommandPattern"
+            assert v.severity == "MEDIUM"
 
         # Test 4: Multiple filters simultaneously (both pattern and severity)
         # Demonstrate that AND semantics work: combining two criteria is stricter
         all_with_severity = trail.get_violations(severity="HIGH")
-        assert len(all_with_severity) == 4, (
-            f"Expected all 4 violations to have HIGH severity, got {len(all_with_severity)}"
+        assert len(all_with_severity) == 2, (
+            f"Expected 2 HIGH violations (the 2 shell operators), got {len(all_with_severity)}"
         )
 
         pattern_and_severity = trail.get_violations(
-            pattern="DangerousCommandPattern", severity="HIGH"
+            pattern="ShellOperatorPattern", severity="HIGH"
         )
-        assert len(pattern_and_severity) < len(all_with_severity), (
-            "Dual filter should return subset of single filter"
+        assert len(pattern_and_severity) == 2, (
+            "Should match both shell operators with HIGH severity"
         )

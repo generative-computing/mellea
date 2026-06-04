@@ -37,6 +37,7 @@ class DangerousCommandPattern(BashSecurityPattern):
     Uses COMMAND_RULES from _bash_guardrails for authoritative definitions.
     """
 
+    # Default fallback for patterns without specific per-command metadata
     category = "dangerous_command"
     severity = "HIGH"
 
@@ -56,6 +57,25 @@ class DangerousCommandPattern(BashSecurityPattern):
                 return True, f"Command '{cmd}' is not allowed"
 
         return False, ""
+
+    def get_metadata(self, argv: list[str]) -> tuple[str, str]:
+        """Get category and severity for a dangerous command.
+
+        Args:
+            argv: Tokenized command arguments.
+
+        Returns:
+            Tuple of (category, severity) strings from COMMAND_RULES.
+        """
+        if not argv:
+            return "unknown", "MEDIUM"
+
+        cmd = argv[0].split("/")[-1]
+        if cmd in COMMAND_RULES:
+            rule = COMMAND_RULES[cmd]
+            return rule.category.value, rule.severity.value.upper()
+
+        return "unknown", "MEDIUM"
 
 
 class ShellOperatorPattern(BashSecurityPattern):
@@ -245,8 +265,12 @@ def check_all_patterns(
         is_dangerous, reason = pattern.check(argv)
         if is_dangerous:
             pattern_name = type(pattern).__name__
-            category = getattr(pattern, "category", "unknown")
-            severity = getattr(pattern, "severity", "MEDIUM")
+            # Use per-command metadata if available (e.g., from COMMAND_RULES)
+            if hasattr(pattern, "get_metadata"):
+                category, severity = pattern.get_metadata(argv)
+            else:
+                category = getattr(pattern, "category", "unknown")
+                severity = getattr(pattern, "severity", "MEDIUM")
             record_bash_violation(
                 command=" ".join(argv),
                 argv=argv,
