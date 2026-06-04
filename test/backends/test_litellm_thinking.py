@@ -272,7 +272,7 @@ async def _call_and_capture(backend: LiteLLMBackend, model_options: dict) -> dic
         await mot.avalue()
 
     assert mock_acomplete.called, "litellm.acompletion was never called"
-    return mock_acomplete.call_args.kwargs
+    return dict(mock_acomplete.call_args.kwargs)
 
 
 async def test_thinking_true_sets_reasoning_effort_and_enable_thinking(
