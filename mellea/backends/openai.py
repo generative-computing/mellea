@@ -934,6 +934,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
 
+        # Build the final backend-specific params and merge any user-supplied
+        # extra_body into extra_params so there is a single extra_body source.
+        # Two spreads each containing extra_body raises TypeError at call time.
+        backend_specific = self._make_backend_specific_and_remove(
+            model_opts, is_chat_context=ctx.is_chat_context
+        )
+        user_extra_body = backend_specific.pop("extra_body", None)
+        if user_extra_body:
+            eb = extra_params.get("extra_body") or {}
+            eb.update(user_extra_body)
+            extra_params["extra_body"] = eb
+
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
         ] = self._async_client.chat.completions.create(
@@ -943,9 +955,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **extra_params,
             **reasoning_params,  # type: ignore
-            **self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=ctx.is_chat_context
-            ),
+            **backend_specific,
         )  # type: ignore
 
         output = ModelOutputThunk(None)
@@ -1070,8 +1080,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             conversation (list[dict]): The chat conversation sent to the model,
                 used for logging.
-            thinking: The reasoning effort level passed to the model, or `None`
-                if reasoning mode was not enabled.
+            thinking: The reasoning value passed to the model: a string level
+                (``"low"``, ``"medium"``, ``"high"``) for explicit effort strings,
+                ``True``/``False`` for the bool toggle, or ``None`` if reasoning
+                was not enabled.
             seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """

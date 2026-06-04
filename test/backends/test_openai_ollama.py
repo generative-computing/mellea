@@ -312,6 +312,29 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
             is False
         )
 
+    # Test 5: THINKING=True + user-supplied extra_body merges without TypeError
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"),
+            ctx,
+            model_options={
+                ModelOption.THINKING: True,
+                "extra_body": {"guided_json": {"type": "string"}},
+            },
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        eb = call_kwargs.get("extra_body", {})
+        assert eb.get("chat_template_kwargs", {}).get("enable_thinking") is True, (
+            "enable_thinking must survive the merge"
+        )
+        assert eb.get("guided_json") == {"type": "string"}, (
+            "user-supplied extra_body keys must be preserved alongside enable_thinking"
+        )
+        assert call_kwargs.get("reasoning_effort") == "medium"
+
 
 def test_api_key_and_base_url_from_parameters() -> None:
     """Test that API key and base URL can be set via parameters."""
