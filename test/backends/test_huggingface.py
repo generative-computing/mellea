@@ -65,7 +65,9 @@ def backend():
             model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
         )
         backend.add_adapter(
-            IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
+            IntrinsicAdapter(
+                "requirement-check", base_model_name=backend.base_model_name
+            )
         )
         backend.add_adapter(
             IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
