@@ -335,6 +335,29 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
         )
         assert call_kwargs.get("reasoning_effort") == "medium"
 
+    # Test 6: THINKING=True + user extra_body containing chat_template_kwargs must
+    # deep-merge — not clobber the backend-set enable_thinking.
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"),
+            ctx,
+            model_options={
+                ModelOption.THINKING: True,
+                "extra_body": {"chat_template_kwargs": {"adapter_name": "foo"}},
+            },
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        ctk = call_kwargs.get("extra_body", {}).get("chat_template_kwargs", {})
+        assert ctk.get("enable_thinking") is True, (
+            "backend-set enable_thinking must survive a user chat_template_kwargs merge"
+        )
+        assert ctk.get("adapter_name") == "foo", (
+            "user chat_template_kwargs keys must be preserved alongside enable_thinking"
+        )
+
 
 def test_api_key_and_base_url_from_parameters() -> None:
     """Test that API key and base URL can be set via parameters."""

@@ -942,8 +942,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         user_extra_body = backend_specific.pop("extra_body", None)
         if user_extra_body:
-            eb = extra_params.get("extra_body") or {}
+            user_extra_body = dict(
+                user_extra_body
+            )  # shallow copy so .pop() below doesn't mutate the caller's dict
+            eb = dict(extra_params.get("extra_body") or {})
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
             eb.update(user_extra_body)
+            if user_ctk is not None:
+                eb["chat_template_kwargs"] = {
+                    **eb.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
             extra_params["extra_body"] = eb
 
         chat_response: Coroutine[
