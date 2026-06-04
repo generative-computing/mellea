@@ -165,7 +165,13 @@ class InlineCompactor:
     def compact(
         self, ctx: ChatContext, *, backend: Backend | None = None
     ) -> ChatContext:
-        """Subclasses must override this with their concrete strategy."""
+        """Subclasses must override this with their concrete strategy.
+
+        Raises:
+            NotImplementedError: Always — `InlineCompactor` is a marker base
+                class; concrete subclasses are expected to provide their own
+                `compact()` implementation.
+        """
         raise NotImplementedError("InlineCompactor subclasses must implement compact()")
 
 
