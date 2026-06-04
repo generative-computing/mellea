@@ -2,6 +2,7 @@
 
 :root {
   --ifm-color-primary: #000000;
+  --ifm-container-width-xl: 1440px;
   --ifm-color-primary-dark: #1a1a1a;
   --ifm-color-primary-darker: #2b2b2b;
   --ifm-color-primary-darkest: #404040;
