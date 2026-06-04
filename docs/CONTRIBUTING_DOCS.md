@@ -1,6 +1,6 @@
 # Contributing to the Mellea docs
 
-Writing conventions, review process, and PR checklist for pages under `docs/docs/`. This is a repo-level contributor guide for editing the Mintlify source — it is not a published docs page. The user-facing contributing guide is at [`docs/docs/community/contributing-guide.md`](docs/community/contributing-guide.md).
+Writing conventions, review process, and PR checklist for pages under `docs/docs/`. This is a repo-level contributor guide for editing the Docusaurus source — it is not a published docs page. The user-facing contributing guide is at [`docs/docs/community/contributing-guide.md`](docs/community/contributing-guide.md).
 
 ---
 
@@ -40,7 +40,7 @@ description: "Install Mellea and run your first generative program in minutes."
 ---
 ```
 
-`sidebarTitle` is optional — add only when `title` is too long for the nav sidebar.
+`sidebar_label` is optional — add only when `title` is too long for the nav sidebar.
 
 The `# diataxis:` comment is for contributors; it is not rendered to readers.
 
@@ -84,7 +84,7 @@ two pages — the explanation should cover *why*, the how-to should cover *how*.
 
 ## Headings
 
-- No H1 — Mintlify renders the frontmatter `title` as the page heading automatically. Start body content with H2.
+- No H1 — Docusaurus renders the frontmatter `title` as the page heading automatically. Start body content with H2.
 - H2 = major sections; H3 = subsections. Never skip heading levels.
 - Sentence case: "Working with data", not "Working With Data".
 
@@ -168,11 +168,11 @@ State only what is genuinely required for that specific page.
 
 ## Links
 
-- Within guide: relative — `./tools-and-agents.md`
+- Within guide: relative, **no `.md` extension** — `./tools-and-agents`, not `./tools-and-agents.md`. Docusaurus strips extensions from doc IDs; including `.md` produces a broken link warning in CI.
 - API reference: from docs root — `../../api/mellea/stdlib/session`
 - External: descriptive text — `[Ollama](https://ollama.ai)` — no bare URLs.
 
-Verify before merge: relative links resolve, absolute URLs return HTTP 200.
+Verify before merge: relative links resolve (the Docusaurus build enforces this with `onBrokenLinks: 'throw'`), absolute URLs return HTTP 200.
 
 ---
 
@@ -271,7 +271,7 @@ Target 300–600 lines. Split if >800. If a page is hard to read in one sitting 
 
 ## Navigation footer
 
-Mintlify renders previous/next page links automatically from the nav order in `docs.json` — do not add these manually. Add a `**See also:**` block at the end of each page for non-sequential cross-links:
+Docusaurus renders previous/next page links automatically from the sidebar order in `sidebars.ts` — do not add these manually. Add a `**See also:**` block at the end of each page for non-sequential cross-links:
 
 ```markdown
 ---
@@ -293,7 +293,15 @@ Mintlify renders previous/next page links automatically from the nav order in `d
 
 ## Versioning
 
-No version tags on individual features yet — incomplete tagging misleads readers. Tracked separately in issue #557.
+Docusaurus versioning is integrated into the release pipeline (closes #557). On each final release, `publish-release.yml` automatically snapshots the current docs as a numbered version. A version dropdown in the navbar lets readers switch between the latest release, prior releases, and `main (unreleased)`.
+
+For pages documenting features that don't yet exist in any released version, use a callout:
+
+```markdown
+> **Coming soon:** Planned for a future release.
+```
+
+Do not use per-feature version tags in prose — incomplete tagging misleads readers.
 
 ---
 
@@ -478,9 +486,16 @@ in their **See also** footer:
 ## Local preview
 
 ```bash
-cd docs/docs
-mintlify dev
+cd docs
+npm ci       # first time only
+npm run start
 # Site available at http://localhost:3000
+```
+
+Generated API docs (`docs/docs/api/`) are gitignored and must be regenerated separately before they appear in the local preview:
+
+```bash
+uv run poe apidocs   # from repo root
 ```
 
 ---
@@ -515,15 +530,15 @@ npx markdownlint-cli2 "docs/docs/**/*.md"
 - [ ] All code blocks have language tags.
 - [ ] All code and inline fragments verified against current Mellea source.
 - [ ] No real API keys or credentials.
-- [ ] All relative links resolve; external links checked.
+- [ ] All relative links use no `.md` extension; external links checked.
 - [ ] US English throughout, including code comments.
 - [ ] `markdownlint` passes with zero warnings.
 - [ ] New glossary terms added to `glossary.md`.
 - [ ] Mellea-specific terms linked to `glossary.md` on first use (see "Glossary and terminology" section).
-- [ ] `**See also:**` footer present with relevant cross-links (Mintlify generates prev/next automatically).
-- [ ] `docs.json` updated if new page added; old MDX page removed from nav if replaced.
+- [ ] `**See also:**` footer present with relevant cross-links (Docusaurus generates prev/next from `sidebars.ts` automatically).
+- [ ] `sidebars.ts` updated if new page added; removed pages deleted from sidebar too.
 - [ ] `index.mdx` landing page cards reviewed — add a card if the new page is a major entry point (key pattern, integration, or prominent how-to); keep total cards per section to ≤ 8.
-- [ ] Previewed locally with `mintlify dev`.
+- [ ] Previewed locally with `cd docs && npm run start`.
 - [ ] Non-deterministic LLM output noted.
 - [ ] Backend-specific code blocks flagged with `> **Backend note:**`.
 - [ ] No visible TODO placeholders — missing content tracked as GitHub issues.
