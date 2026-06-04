@@ -445,7 +445,7 @@ async def test_reasoning_effort_from_io_yaml_only():
 
 
 async def test_reasoning_effort_bool_true():
-    """THINKING: True is normalized to reasoning_effort='medium'."""
+    """THINKING: True sets reasoning_effort='medium' and chat_template_kwargs.enable_thinking=True."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
     ctx = _make_context()
     mock_create = AsyncMock(return_value=_simple_chat_completion())
@@ -470,6 +470,40 @@ async def test_reasoning_effort_bool_true():
 
     call_kwargs = mock_create.call_args
     assert call_kwargs.kwargs.get("reasoning_effort") == "medium"
+    extra_body = call_kwargs.kwargs.get("extra_body", {})
+    assert extra_body.get("chat_template_kwargs", {}).get("enable_thinking") is True
+
+
+async def test_reasoning_effort_bool_false():
+    """THINKING: False sets chat_template_kwargs.enable_thinking=False; no reasoning_effort."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={ModelOption.THINKING: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args
+    assert "reasoning_effort" not in call_kwargs.kwargs, (
+        "reasoning_effort must not be sent for THINKING=False (invalid for OpenAI)"
+    )
+    extra_body = call_kwargs.kwargs.get("extra_body", {})
+    assert extra_body.get("chat_template_kwargs", {}).get("enable_thinking") is False
 
 
 async def test_tools_passed_to_api():
