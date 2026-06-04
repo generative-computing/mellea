@@ -66,8 +66,12 @@ class LiteLLMBackend(FormatterBackend):
             `"<provider>/<model_creator>/<model_name>"`.
         formatter (ChatFormatter | None): Formatter for rendering components.
             Defaults to `TemplateFormatter`.
-        base_url (str | None): Base URL for the LLM API endpoint; defaults to
-            the Ollama local endpoint.
+        base_url (str | None): Base URL for the LLM API endpoint. When set,
+            forwarded as ``api_base`` to LiteLLM. When ``None`` (default),
+            LiteLLM infers the endpoint from the model prefix (e.g.
+            ``ollama_chat/`` → localhost:11434, ``anthropic/`` → Anthropic API).
+            Use ``None`` for cloud providers; set explicitly for local servers
+            such as vLLM or a non-default Ollama port.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
@@ -81,7 +85,7 @@ class LiteLLMBackend(FormatterBackend):
         self,
         model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
         formatter: ChatFormatter | None = None,
-        base_url: str | None = "http://localhost:11434",
+        base_url: str | None = None,
         model_options: dict | None = None,
     ):
         """Initialize a LiteLLM-compatible backend for the given model ID and endpoint."""
@@ -98,10 +102,13 @@ class LiteLLMBackend(FormatterBackend):
         assert isinstance(model_id, str), "Model ID must be a string."
         self._model_id = model_id
 
-        if base_url is None:
-            self._base_url = "http://localhost:11434/v1"  # ollama
-        else:
-            self._base_url = base_url
+        # _explicit_base_url tracks whether the caller provided a base_url.
+        # api_base is only forwarded to litellm when explicit — otherwise litellm
+        # infers the endpoint from the model prefix (correct for cloud providers).
+        self._explicit_base_url = base_url is not None
+        self._base_url = (
+            base_url if base_url is not None else "http://localhost:11434/v1"
+        )
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -394,6 +401,12 @@ class LiteLLMBackend(FormatterBackend):
         # user-supplied value doesn't collide with the positional api_base kwarg;
         # let the user's value take precedence over the backend default.
         user_api_base = model_specific_options.pop("api_base", None)
+        # Only forward api_base when the caller explicitly set a base_url (or model_options
+        # contains one). Sending the default localhost URL to a cloud provider (Anthropic,
+        # Watsonx, etc.) would override LiteLLM's provider-default endpoint inference.
+        resolved_api_base = user_api_base or (
+            self._base_url if self._explicit_base_url else None
+        )
 
         if self._has_potential_event_loop_errors():
             MelleaLogger.get_logger().warning(
@@ -406,7 +419,7 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            api_base=user_api_base or self._base_url,
+            api_base=resolved_api_base,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
             **extra_params,
             **reasoning_params,  # type: ignore
@@ -729,7 +742,8 @@ class LiteLLMBackend(FormatterBackend):
             completion_response = await litellm.atext_completion(
                 model=self._model_id,
                 prompt=prompts,
-                api_base=user_api_base_raw or self._base_url,
+                api_base=user_api_base_raw
+                or (self._base_url if self._explicit_base_url else None),
                 **model_specific_options,
             )
 

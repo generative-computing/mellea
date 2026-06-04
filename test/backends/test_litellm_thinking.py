@@ -397,13 +397,24 @@ async def test_thinking_true_with_user_chat_template_kwargs_deep_merged(
 async def test_user_api_base_in_model_options_takes_precedence(
     chat_backend: LiteLLMBackend,
 ) -> None:
-    """api_base in model_options must win over backend default and not cause a TypeError."""
+    """api_base in model_options must win over backend base_url and not cause a TypeError."""
     kwargs = await _call_and_capture(
         chat_backend, {"api_base": "http://custom:1234/v1"}
     )
 
     assert kwargs.get("api_base") == "http://custom:1234/v1", (
         "user-supplied api_base in model_options must take precedence over backend base_url"
+    )
+
+
+async def test_no_api_base_forwarded_when_base_url_not_set() -> None:
+    """Backend constructed without base_url must not forward api_base (cloud-provider safety)."""
+    backend = LiteLLMBackend(model_id="anthropic/claude-3-5-sonnet-20241022")
+    kwargs = await _call_and_capture(backend, {})
+
+    assert kwargs.get("api_base") is None, (
+        "api_base must not be forwarded for cloud providers with default base_url — "
+        "LiteLLM must infer the endpoint from the model prefix"
     )
 
 
