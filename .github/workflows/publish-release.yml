@@ -60,6 +60,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/quality.yml
+    secrets:
+      HF_TOKEN_READ_PUBLIC_ONLY: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}
   pre-release-check:
     permissions:
       contents: read

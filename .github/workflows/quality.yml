@@ -33,13 +33,12 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-    env:
-      # The GitHub secret HF_TOKEN_READ_PUBLIC_ONLY must be a READ-ONLY token on public
-      # repositories: same-repo PR runs have access to this secret, so a write-scope
-      # token could be exfiltrated by a malicious workflow change. We expose it as the
-      # env var HF_TOKEN because that is the name huggingface_hub picks up automatically.
-      # Rotate via repo Settings -> Secrets and variables.
-      HF_TOKEN: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}  # zizmor: ignore[secrets-outside-env]
+    # The GitHub secret HF_TOKEN_READ_PUBLIC_ONLY must be a READ-ONLY token on public
+    # repositories: same-repo PR runs have access to this secret, so a write-scope
+    # token could be exfiltrated by a malicious workflow change. It is exposed as the
+    # env var HF_TOKEN (the name huggingface_hub picks up automatically) only on the
+    # specific steps that need it, to limit exposure to unrelated steps like the
+    # Ollama installer. Rotate via repo Settings -> Secrets and variables.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -60,12 +59,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-extras --group dev
       - name: Check HF_TOKEN
+        continue-on-error: true
+        env:
+          # read-only public-repo HF token; environment gating not warranted
+          HF_TOKEN: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}  # zizmor: ignore[secrets-outside-env]
         run: |
           if [ -z "${HF_TOKEN:-}" ]; then
             echo "::warning::HF_TOKEN is NOT set — Hugging Face Hub calls will be anonymous."
             exit 0
           fi
           echo "HF_TOKEN is set; verifying with the Hugging Face Hub API..."
+          {
           uv run python - <<'PY'
           import os, sys
           try:
@@ -80,6 +84,7 @@ jobs:
           except Exception as e:
               print(f"::warning::HF_TOKEN is set but verification failed — token may be invalid or expired: {e}")
           PY
+          } || echo "::warning::HF_TOKEN verification step could not run."
       - name: Check style and run tests
         id: precommit
         run: uv run pre-commit run --all-files
@@ -97,6 +102,9 @@ jobs:
           ollama pull granite4.1:3b
       - name: Run Tests
         id: tests
+        env:
+          # read-only public-repo HF token; environment gating not warranted
+          HF_TOKEN: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}  # zizmor: ignore[secrets-outside-env]
         run: uv run -m pytest -v --junit-xml=/tmp/pytest-results.xml test
       - name: Send failure message tests
         if: failure() # This step will only run if a previous step failed
