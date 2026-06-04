@@ -5,7 +5,6 @@
 # Standard
 import os
 import pathlib
-import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -19,21 +18,6 @@ except ImportError as e:
         "The granite retrievers module requires extra dependencies. "
         'Please install them with: pip install "mellea[granite_retriever]"'
     ) from e
-
-_RETRYABLE_HTTP_CODES = (429, 500, 502, 503, 504)
-
-
-def _urlretrieve_with_retry(url: str, target: str, max_attempts: int = 3) -> None:
-    """Download *url* to *target*, retrying on transient HTTP errors (429, 5xx)."""
-    for attempt in range(1, max_attempts + 1):
-        try:
-            urllib.request.urlretrieve(url, target)
-            return
-        except urllib.error.HTTPError as exc:
-            if exc.code in _RETRYABLE_HTTP_CODES and attempt < max_attempts:
-                time.sleep(2**attempt)
-                continue
-            raise
 
 
 def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
@@ -49,8 +33,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
 
     Raises:
         ValueError: If `corpus_name` is not one of the supported corpus names.
-        urllib.error.HTTPError: On transient HTTP errors (429, 5xx) after all
-            retry attempts are exhausted.
+        urllib.error.HTTPError: On any HTTP error downloading the corpus file.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -62,7 +45,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
             f"https://github.com/IBM/mt-rag-benchmark/raw/refs/heads/main/"
             f"corpora/{corpus_name}.jsonl.zip"
         )
-        _urlretrieve_with_retry(source_url, str(target_file))
+        urllib.request.urlretrieve(source_url, str(target_file))
     return target_file
 
 
@@ -134,8 +117,8 @@ def download_mtrag_embeddings(
         ValueError: If `corpus_name` is not one of the supported corpus names, or
             if no precomputed embeddings are found for the given corpus and embedding
             model combination.
-        urllib.error.HTTPError: On transient HTTP errors (429, 5xx) after all
-            retry attempts are exhausted.
+        urllib.error.HTTPError: On any HTTP error other than 404 (which signals
+            end-of-parts).
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -156,7 +139,7 @@ def download_mtrag_embeddings(
         )
         target_file = target_root / parquet_file_name
         try:
-            _urlretrieve_with_retry(source_url, str(target_file))
+            urllib.request.urlretrieve(source_url, str(target_file))
             part_num += 1
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
