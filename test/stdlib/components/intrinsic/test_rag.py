@@ -15,6 +15,7 @@ from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
+from test.conftest import hf_skip
 from test.predicates import require_gpu
 
 # Skip entire module in CI since all 7 tests are qualitative
@@ -42,7 +43,8 @@ def _backend():
     torch.set_num_threads(4)
 
     # No adapters for hybrid version.
-    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_1_3B.hf_model_name)
+    with hf_skip():
+        backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_1_3B.hf_model_name)
     yield backend_
 
     from test.conftest import cleanup_gpu_backend
@@ -57,7 +59,8 @@ def _backend_4_0():
     torch.set_num_threads(4)
 
     # No adapters for hybrid version.
-    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)
+    with hf_skip():
+        backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)
     yield backend_
 
     from test.conftest import cleanup_gpu_backend
