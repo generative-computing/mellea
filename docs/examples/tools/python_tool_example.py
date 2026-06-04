@@ -1,4 +1,4 @@
-# pytest: e2e, qualitative
+# pytest: e2e, slow
 """Examples for python_tool() — arithmetic, CSV summary, and matplotlib plot.
 
 Each example uses the ``local_unsafe`` tier so no Docker daemon is required.

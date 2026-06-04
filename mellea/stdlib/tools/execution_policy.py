@@ -2,19 +2,19 @@
 
 Four execution tiers are available, selectable by intent rather than by class name:
 
-- ``"local_unsafe"``  — subprocess in the current Python env, no policy applied.
-- ``"local"``         — subprocess in the current Python env, policy declared and partially enforced.
-- ``"docker_unsafe"`` — Docker-isolated execution via llm-sandbox, no policy applied.
-- ``"docker"``        — Docker-isolated execution via llm-sandbox, policy declared and partially enforced.
+- `"local_unsafe"`  — subprocess in the current Python env, no policy applied.
+- `"local"`         — subprocess in the current Python env, policy declared and partially enforced.
+- `"docker_unsafe"` — Docker-isolated execution via llm-sandbox, no policy applied.
+- `"docker"`        — Docker-isolated execution via llm-sandbox, policy declared and partially enforced.
 
-``CapabilityPolicy`` declares what a code execution environment is *allowed* to do.
-Enforcement is honest: each capability has a companion ``ENFORCED_*`` class attribute
+`CapabilityPolicy` declares what a code execution environment is *allowed* to do.
+Enforcement is honest: each capability has a companion `ENFORCED_*` class attribute
 indicating whether the declared value is actively enforced at runtime or is informational
 only.
 
-``Artifact`` represents a file produced by execution and exported from the environment.
+`Artifact` represents a file produced by execution and exported from the environment.
 
-``COMPATIBILITY_MATRIX`` records which capabilities each tier supports.
+`COMPATIBILITY_MATRIX` records which capabilities each tier supports.
 """
 
 from dataclasses import dataclass, field
@@ -30,9 +30,9 @@ class Artifact:
 
     Args:
         path (Path): Absolute path on the host where the artifact was written.
-        size_bytes (int | None): File size in bytes, or ``None`` if unknown.
-        content_type (str | None): MIME type or informal label (e.g. ``"text/csv"``,
-            ``"image/png"``), or ``None`` if undetermined.
+        size_bytes (int | None): File size in bytes, or `None` if unknown.
+        content_type (str | None): MIME type or informal label (e.g. `"text/csv"`,
+            `"image/png"`), or `None` if undetermined.
     """
 
     path: Path
@@ -46,17 +46,17 @@ class CapabilityPolicy:
 
     The enforcement gap — the difference between what is *declared* and what is
     *actively enforced at runtime* — is made explicit through per-field
-    ``ENFORCED_*`` class attributes.  Callers and UX layers can read these to
+    `ENFORCED_*` class attributes.  Callers and UX layers can read these to
     decide whether to prompt the user ("allow once / allow always") or display
     a warning.
 
     Args:
         filesystem_read_roots (list[Path] | None): Host paths the environment may
-            read.  ``None`` means unrestricted.  Declared only — not enforced.
+            read.  `None` means unrestricted.  Declared only — not enforced.
         filesystem_write_roots (list[Path] | None): Host paths the environment may
-            write.  ``None`` means unrestricted.  Declared only — not enforced.
+            write.  `None` means unrestricted.  Declared only — not enforced.
         network_access (bool): Whether outbound network connections are allowed.
-            Defaults to ``False``.  Declared only — not enforced.
+            Defaults to `False`.  Declared only — not enforced.
         package_installation (bool): Whether the environment may install packages.
             Declared only — not enforced.
         subprocess_execution (bool): Whether spawning child processes is allowed.
@@ -64,16 +64,19 @@ class CapabilityPolicy:
         env_var_access (bool): Whether environment variables are readable.
             Declared only — not enforced.
         timeout (int): Wall-clock seconds before execution is killed.  Enforced.
-        stdout_max_bytes (int | None): Truncate stdout to this byte count; ``None``
+        stdout_max_bytes (int | None): Truncate stdout to this byte count; `None`
             disables truncation.  Enforced.
-        stderr_max_bytes (int | None): Truncate stderr to this byte count; ``None``
+        stderr_max_bytes (int | None): Truncate stderr to this byte count; `None`
             disables truncation.  Enforced.
         artifact_export_paths (list[Path]): Paths inside the container/environment
-            to copy out after execution as :class:`Artifact` objects.  Enforced.
-        packages (list[str]): Python packages to install (via ``pip install``) before
+            to copy out after execution as `Artifact` objects.  Enforced.
+        packages (list[str]): Python packages to install (via `pip install`) before
             execution.  Enforced — the runtime installs packages prior to executing
-            user code.  Local tiers use ``uv pip install`` / ``python -m pip``; Docker
-            tiers run ``pip install`` inside the container.  Defaults to ``[]``.
+            user code and aborts with a skipped `ExecutionResult` if installation
+            fails.  Failed packages are not retried on subsequent calls (clear
+            `_failed_packages` on the environment to force a retry).  Local tiers
+            use `uv pip install` / `python -m pip`; Docker tiers run
+            `pip install` inside the container.  Defaults to `[]`.
     """
 
     filesystem_read_roots: list[Path] | None = None

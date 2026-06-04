@@ -1,7 +1,9 @@
 """Tests for python_tool() factory and related helpers."""
 
+import subprocess
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -172,10 +174,11 @@ def test_timed_out_code_returns_no_artifacts(tmp_path: Path):
     assert result.artifacts == []
 
 
-def test_execution_mode_local_unsafe_with_packages():
-    """python_tool(tier='local_unsafe', packages=...) must report execution_mode='local_unsafe'."""
-    tool = python_tool(tier="local_unsafe", packages=["sys"])
-    result = tool.run(code="print('ok')")
+def test_execution_mode_local_unsafe_unaffected_by_packages():
+    """packages= must not override execution_mode; local_unsafe tier should be reported regardless."""
+    tool = python_tool(tier="local_unsafe", packages=["fakepkg"])
+    with patch.object(_interpreter_mod, "_install_packages", return_value=True):
+        result = tool.run(code="print('ok')")
     assert result.execution_mode == "local_unsafe"
 
 
@@ -196,10 +199,12 @@ def test_packages_empty_list_does_not_crash():
 
 def test_packages_deduplication():
     """Overlapping packages in policy.packages and packages= are deduplicated."""
-    policy = CapabilityPolicy(timeout=30, packages=["sys"])
-    tool = python_tool(packages=["sys"], policy=policy)
-    result = tool.run(code="import sys; print(sys.version_info.major)")
+    policy = CapabilityPolicy(timeout=30, packages=["fakepkg"])
+    with patch.object(_interpreter_mod, "_install_packages", return_value=True):
+        tool = python_tool(packages=["fakepkg"], policy=policy)
+        result = tool.run(code="print('ok')")
     assert result.success
+    assert result.stdout == "ok"
 
 
 def test_policy_override():
@@ -210,14 +215,13 @@ def test_policy_override():
 
 
 def test_packages_merged_into_policy():
-    # packages kwarg should not prevent normal execution; verify the tool runs.
+    """packages= is merged into an existing policy without breaking execution."""
     policy = CapabilityPolicy(timeout=30)
-    # Use a package that's guaranteed present (sys) to verify policy merging
-    # doesn't break execution — actual install tested in test_package_install (slow).
-    tool = python_tool(packages=["sys"], policy=policy)
-    result = tool.run(code="import sys; print(sys.version_info.major)")
+    with patch.object(_interpreter_mod, "_install_packages", return_value=True):
+        tool = python_tool(packages=["fakepkg"], policy=policy)
+        result = tool.run(code="print('ok')")
     assert result.success
-    assert result.stdout is not None and result.stdout.strip().isdigit()
+    assert result.stdout == "ok"
 
 
 @pytest.mark.slow
@@ -269,18 +273,28 @@ def test_backwards_compat_local_code_interpreter_deprecation():
 
 
 def test_install_falls_back_to_pip_when_uv_absent():
-    """When _UV is None (uv not on PATH), _install_packages falls back to python -m pip."""
-    original = _interpreter_mod._UV
+    """When _UV is None (uv not on PATH), _install_packages uses python -m pip."""
+
+    captured: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        captured.append(cmd)
+
+        r = subprocess.CompletedProcess(cmd, returncode=0, stdout=b"", stderr=b"")
+        return r
+
+    original_uv = _interpreter_mod._UV
     try:
         _interpreter_mod._UV = None
-        # sys (stdlib) is always available — this exercises the pip fallback path
-        # without actually installing anything new.
-        tool = python_tool(packages=["sys"])
-        result = tool.run(code="import sys; print(sys.version_info.major)")
-        assert result.success
-        assert result.stdout is not None and result.stdout.strip().isdigit()
+        with patch("subprocess.run", side_effect=fake_run):
+            _interpreter_mod._install_packages(["fakepkg"])
     finally:
-        _interpreter_mod._UV = original
+        _interpreter_mod._UV = original_uv
+
+    assert captured, "subprocess.run was not called"
+    assert captured[0][0] != "uv", "expected pip fallback, got uv"
+    assert captured[0][1] == "-m"
+    assert captured[0][2] == "pip"
 
 
 # region _needs_matplotlib_preamble unit tests
@@ -425,10 +439,22 @@ def test_docker_tier_artifact_dir_emits_warning(tmp_path: Path):
 
 def test_packages_empty_list_does_not_create_policy():
     """packages=[] must not construct a CapabilityPolicy for local_unsafe."""
-    tool = python_tool(tier="local_unsafe", packages=[])
-    result = tool.run(code="print('ok')")
-    assert result.success
-    assert result.execution_mode == "local_unsafe"
+    captured_envs: list[_interpreter_mod.ExecutionEnvironment] = []
+    original_make = _interpreter_mod.make_execution_environment
+
+    def capturing_make(*args, **kwargs):
+        env = original_make(*args, **kwargs)
+        captured_envs.append(env)
+        return env
+
+    with patch.object(
+        _interpreter_mod, "make_execution_environment", side_effect=capturing_make
+    ):
+        tool = python_tool(tier="local_unsafe", packages=[])
+        tool.run(code="print('ok')")
+
+    assert captured_envs, "make_execution_environment was not called"
+    assert captured_envs[0].policy is None
 
 
 # endregion
