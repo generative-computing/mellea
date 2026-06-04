@@ -472,6 +472,11 @@ async def test_reasoning_effort_bool_true():
     assert call_kwargs.kwargs.get("reasoning_effort") == "medium"
     extra_body = call_kwargs.kwargs.get("extra_body", {})
     assert extra_body.get("chat_template_kwargs", {}).get("enable_thinking") is True
+    # adapter_name must survive the merge — the THINKING block must not clobber it.
+    assert (
+        extra_body.get("chat_template_kwargs", {}).get("adapter_name")
+        == "answerability"
+    )
 
 
 async def test_reasoning_effort_bool_false():
@@ -504,6 +509,11 @@ async def test_reasoning_effort_bool_false():
     )
     extra_body = call_kwargs.kwargs.get("extra_body", {})
     assert extra_body.get("chat_template_kwargs", {}).get("enable_thinking") is False
+    # adapter_name must survive the merge — the THINKING block must not clobber it.
+    assert (
+        extra_body.get("chat_template_kwargs", {}).get("adapter_name")
+        == "answerability"
+    )
 
 
 async def test_tools_passed_to_api():
