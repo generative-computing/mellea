@@ -153,8 +153,10 @@ Key rules that differ from typical Markdown habits:
 
 - **No H1 in the body** — Docusaurus renders the frontmatter `title` automatically;
   a body `# Heading` produces a duplicate title in the published site
-- **No `.md` extensions in internal links** — use `../concepts/requirements-system`,
-  not `../concepts/requirements-system.md`
+- **Use `.md` extensions in relative cross-doc links** — use `../concepts/requirements-system.md`,
+  not `../concepts/requirements-system`. Docusaurus treats links with `.md` as doc
+  cross-references (baseUrl-aware); links without `.md` are treated as raw URL paths
+  and fail the broken-link check when the site is built with a non-root `baseUrl`.
 - **Frontmatter required** — every page needs `title` and `description`; add
   `sidebar_label` if the title is long
 - **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix

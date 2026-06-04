@@ -168,7 +168,7 @@ State only what is genuinely required for that specific page.
 
 ## Links
 
-- Within guide: relative, **no `.md` extension** — `./tools-and-agents`, not `./tools-and-agents.md`. Docusaurus strips extensions from doc IDs; including `.md` produces a broken link warning in CI.
+- Within guide: relative, **include the `.md` extension** — `./tools-and-agents.md`, not `./tools-and-agents`. Without `.md`, Docusaurus treats the link as a raw URL path; it resolves incorrectly on deployments with a non-root `baseUrl` and fails `onBrokenLinks: 'throw'`.
 - API reference: from docs root — `../../api/mellea/stdlib/session`
 - External: descriptive text — `[Ollama](https://ollama.ai)` — no bare URLs.
 
@@ -530,7 +530,7 @@ npx markdownlint-cli2 "docs/docs/**/*.md"
 - [ ] All code blocks have language tags.
 - [ ] All code and inline fragments verified against current Mellea source.
 - [ ] No real API keys or credentials.
-- [ ] All relative links use no `.md` extension; external links checked.
+- [ ] All relative cross-doc links include `.md` extension; external links checked.
 - [ ] US English throughout, including code comments.
 - [ ] `markdownlint` passes with zero warnings.
 - [ ] New glossary terms added to `glossary.md`.
