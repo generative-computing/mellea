@@ -30,6 +30,14 @@ class TruncateOldest(InlineCompactor):
     so it can be wired directly into `ChatContext`. Each `add()`
     removes the oldest item then appends — net result: the context
     never grows.
+
+    Note:
+        `items[1:]` drops index 0 unconditionally, so a leading system
+        message gets evicted on the first compaction. This is intentional
+        for the smallest-possible-example shape; for the more common
+        "keep the system prompt, drop oldest body" behaviour use
+        :class:`mellea.stdlib.context.WindowCompactor` with the
+        :func:`mellea.stdlib.context.pin_system` predicate instead.
     """
 
     def compact(self, ctx, *, backend=None):
