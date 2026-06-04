@@ -15,7 +15,10 @@ from test.predicates import require_gpu
 @pytest.fixture
 def backend():
     """Provide HuggingFace backend for tests."""
-    return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+    try:
+        return LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+    except Exception as e:
+        pytest.skip(f"HuggingFace Hub or network unavailable — {e}")
 
 
 @pytest.fixture
