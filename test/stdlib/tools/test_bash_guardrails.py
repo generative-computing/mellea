@@ -296,6 +296,51 @@ class TestDestructiveRmPattern:
         assert is_dangerous is False
 
 
+class TestPatternCategoryAndSeverity:
+    """Tests that all patterns have category and severity attributes for audit logging."""
+
+    def test_all_patterns_have_category(self) -> None:
+        """Every pattern should have a category attribute."""
+        for pattern in SECURITY_PATTERNS:
+            assert hasattr(pattern, "category"), (
+                f"{type(pattern).__name__} missing category attribute"
+            )
+            assert isinstance(pattern.category, str) and len(pattern.category) > 0, (
+                f"{type(pattern).__name__} has invalid category"
+            )
+
+    def test_all_patterns_have_severity(self) -> None:
+        """Every pattern should have a severity attribute."""
+        for pattern in SECURITY_PATTERNS:
+            assert hasattr(pattern, "severity"), (
+                f"{type(pattern).__name__} missing severity attribute"
+            )
+            assert isinstance(pattern.severity, str) and len(pattern.severity) > 0, (
+                f"{type(pattern).__name__} has invalid severity"
+            )
+
+    def test_violation_audit_uses_pattern_metadata(self) -> None:
+        """Violations should record pattern category and severity in audit trail."""
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        # This should trigger DangerousCommandPattern with category and severity
+        check_all_patterns(["sudo", "ls"])
+
+        violations = trail.get_violations()
+        assert len(violations) == 1
+
+        v = violations[0]
+        assert v.category != "unknown", (
+            "Violation should have category from pattern, not 'unknown'"
+        )
+        assert v.severity != "MEDIUM", (
+            "DangerousCommandPattern violation should use pattern severity, not default"
+        )
+
+
 class TestPatternRegistry:
     """Tests for SECURITY_PATTERNS registry and composition."""
 
@@ -398,7 +443,7 @@ class TestBashAuditTrail:
         violations = trail.get_violations()
         v = violations[0]
         assert v.command == "rm -rf /"
-        assert v.severity in ("HIGH", "MEDIUM")
+        assert v.severity in ("HIGH", "CRITICAL")
         assert v.reason
         assert v.timestamp > 0
 
@@ -507,4 +552,88 @@ class TestBashAuditTrail:
         # because the iterator would skip elements after removal
         assert len(dangerous_only) + len(shell_ops) + len(destructive) >= 3, (
             "Filtering incomplete: expected at least 3 violations across 3 patterns"
+        )
+
+    def test_get_violations_exact_count_with_dual_filters(self) -> None:
+        """Verify exact violation counts with combined filters.
+
+        Regression test: asserts exact counts (not >= checks) with two
+        simultaneous filter criteria. Exercises AND logic to ensure filters
+        don't degenerate to OR semantics. With the iterate-and-remove bug,
+        filtering would return incomplete results when multiple criteria
+        were combined.
+        """
+        from mellea.stdlib.tools._bash_audit import BashAuditTrail
+
+        trail = BashAuditTrail.get_instance()
+        trail.clear()
+
+        # Create a controlled set of violations with specific severity levels:
+        # DangerousCommandPattern: HIGH severity
+        # ShellOperatorPattern: HIGH severity
+        check_all_patterns(["sudo", "ls"])  # DangerousCommandPattern, HIGH
+        check_all_patterns(["sudo", "whoami"])  # DangerousCommandPattern, HIGH
+        check_all_patterns(["echo", "|", "grep"])  # ShellOperatorPattern, HIGH
+        check_all_patterns(["cat", ">>", "file"])  # ShellOperatorPattern, HIGH
+
+        all_violations = trail.get_violations()
+        assert len(all_violations) == 4, (
+            f"Expected exactly 4 violations, got {len(all_violations)}"
+        )
+
+        # Test 1: Single filter (baseline) with exact counts
+        dangerous = trail.get_violations(pattern="DangerousCommandPattern")
+        assert len(dangerous) == 2, (
+            f"Expected exactly 2 DangerousCommandPattern violations, got {len(dangerous)}"
+        )
+
+        shell_ops = trail.get_violations(pattern="ShellOperatorPattern")
+        assert len(shell_ops) == 2, (
+            f"Expected exactly 2 ShellOperatorPattern violations, got {len(shell_ops)}"
+        )
+
+        # Test 2: Dual filter with AND logic
+        # Both conditions must match: DangerousCommandPattern AND HIGH severity
+        high_dangerous = trail.get_violations(
+            pattern="DangerousCommandPattern", severity="HIGH"
+        )
+        assert len(high_dangerous) == 2, (
+            f"Expected 2 HIGH DangerousCommandPattern violations, got {len(high_dangerous)}"
+        )
+        for v in high_dangerous:
+            assert v.pattern == "DangerousCommandPattern"
+            assert v.severity == "HIGH"
+
+        # Verify reverse: ShellOperatorPattern with HIGH severity (should also be 2)
+        high_shell_ops = trail.get_violations(
+            pattern="ShellOperatorPattern", severity="HIGH"
+        )
+        assert len(high_shell_ops) == 2, (
+            f"Expected 2 HIGH ShellOperatorPattern violations, got {len(high_shell_ops)}"
+        )
+        for v in high_shell_ops:
+            assert v.pattern == "ShellOperatorPattern"
+            assert v.severity == "HIGH"
+
+        # Test 3: Dual filter with no matches (AND logic prevents false positives)
+        # DangerousCommandPattern with CRITICAL severity should return empty
+        no_match = trail.get_violations(
+            pattern="DangerousCommandPattern", severity="CRITICAL"
+        )
+        assert len(no_match) == 0, (
+            f"Expected 0 DangerousCommandPattern violations with CRITICAL severity, got {len(no_match)}"
+        )
+
+        # Test 4: Multiple filters simultaneously (both pattern and severity)
+        # Demonstrate that AND semantics work: combining two criteria is stricter
+        all_with_severity = trail.get_violations(severity="HIGH")
+        assert len(all_with_severity) == 4, (
+            f"Expected all 4 violations to have HIGH severity, got {len(all_with_severity)}"
+        )
+
+        pattern_and_severity = trail.get_violations(
+            pattern="DangerousCommandPattern", severity="HIGH"
+        )
+        assert len(pattern_and_severity) < len(all_with_severity), (
+            "Dual filter should return subset of single filter"
         )

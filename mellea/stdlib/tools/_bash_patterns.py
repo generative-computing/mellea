@@ -37,6 +37,9 @@ class DangerousCommandPattern(BashSecurityPattern):
     Uses COMMAND_RULES from _bash_guardrails for authoritative definitions.
     """
 
+    category = "dangerous_command"
+    severity = "HIGH"
+
     def check(self, argv: list[str]) -> tuple[bool, str]:
         """Check if command is in the dangerous commands list."""
         if not argv:
@@ -61,6 +64,9 @@ class ShellOperatorPattern(BashSecurityPattern):
     These operators require shell interpretation and can enable complex attacks.
     Detected after shlex.split(), so they appear as standalone tokens or prefixes.
     """
+
+    category = "shell_operator"
+    severity = "HIGH"
 
     def check(self, argv: list[str]) -> tuple[bool, str]:
         """Check for shell operators in argv."""
@@ -96,6 +102,9 @@ class CommandSubstitutionPattern(BashSecurityPattern):
     These patterns allow arbitrary code execution and bypass argv parsing.
     """
 
+    category = "code_execution"
+    severity = "CRITICAL"
+
     def check(self, argv: list[str]) -> tuple[bool, str]:
         """Check for command substitution patterns."""
         if not argv:
@@ -115,6 +124,9 @@ class CodeExecutionPattern(BashSecurityPattern):
 
     These flags cause interpreters to treat arguments as source code, bypassing argv parsing.
     """
+
+    category = "code_execution"
+    severity = "CRITICAL"
 
     def check(self, argv: list[str]) -> tuple[bool, str]:
         """Check for interpreter indirection (code execution flags)."""
@@ -154,6 +166,9 @@ class DestructiveGitPattern(BashSecurityPattern):
     These operations have high regret cost (lost commits, data loss).
     """
 
+    category = "destructive"
+    severity = "HIGH"
+
     def check(self, argv: list[str]) -> tuple[bool, str]:
         """Check for destructive git operations."""
         if not argv or argv[0].split("/")[-1] != "git":
@@ -184,6 +199,9 @@ class DestructiveRmPattern(BashSecurityPattern):
 
     Recursive deletion is the highest-regret operation for filesystem safety.
     """
+
+    category = "destructive"
+    severity = "HIGH"
 
     def check(self, argv: list[str]) -> tuple[bool, str]:
         """Check for destructive rm patterns."""
