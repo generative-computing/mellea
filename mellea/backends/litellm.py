@@ -374,17 +374,26 @@ class LiteLLMBackend(FormatterBackend):
         # key would raise TypeError at call time).
         # Deep-merge chat_template_kwargs so enable_thinking (set above) and any
         # user-supplied chat_template_kwargs keys both survive.
+        # Copy before mutating — model_specific_options holds references into the
+        # caller's dict; popping from the originals would silently corrupt reused
+        # model_options on the next call.
         user_extra_body = model_specific_options.pop("extra_body", None)
         if user_extra_body:
-            eb = extra_params.get("extra_body") or {}
+            user_extra_body = dict(user_extra_body)
+            eb = dict(extra_params.get("extra_body") or {})
             user_ctk = user_extra_body.pop("chat_template_kwargs", None)
             eb.update(user_extra_body)
-            if user_ctk:
+            if user_ctk is not None:
                 eb["chat_template_kwargs"] = {
                     **eb.get("chat_template_kwargs", {}),
                     **user_ctk,
                 }
             extra_params["extra_body"] = eb
+
+        # Pop api_base from model_specific_options before the call so an explicit
+        # user-supplied value doesn't collide with the positional api_base kwarg;
+        # let the user's value take precedence over the backend default.
+        user_api_base = model_specific_options.pop("api_base", None)
 
         if self._has_potential_event_loop_errors():
             MelleaLogger.get_logger().warning(
@@ -397,7 +406,7 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            api_base=self._base_url,
+            api_base=user_api_base or self._base_url,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
             **extra_params,
             **reasoning_params,  # type: ignore
@@ -716,10 +725,11 @@ class LiteLLMBackend(FormatterBackend):
 
             prompts = [self.formatter.print(action) for action in actions]
 
+            user_api_base_raw = model_specific_options.pop("api_base", None)
             completion_response = await litellm.atext_completion(
                 model=self._model_id,
                 prompt=prompts,
-                api_base=self._base_url,
+                api_base=user_api_base_raw or self._base_url,
                 **model_specific_options,
             )
 

@@ -392,3 +392,40 @@ async def test_thinking_true_with_user_chat_template_kwargs_deep_merged(
     assert ctk.get("adapter_name") == "my-adapter", (
         "user-supplied chat_template_kwargs keys must be preserved"
     )
+
+
+async def test_user_api_base_in_model_options_takes_precedence(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """api_base in model_options must win over backend default and not cause a TypeError."""
+    kwargs = await _call_and_capture(
+        chat_backend, {"api_base": "http://custom:1234/v1"}
+    )
+
+    assert kwargs.get("api_base") == "http://custom:1234/v1", (
+        "user-supplied api_base in model_options must take precedence over backend base_url"
+    )
+
+
+async def test_extra_body_mutation_does_not_corrupt_caller_dict(
+    chat_backend: LiteLLMBackend,
+) -> None:
+    """Reusing a model_options dict across two calls must not lose chat_template_kwargs."""
+    from mellea.backends import ModelOption
+
+    model_opts = {
+        ModelOption.THINKING: True,
+        "extra_body": {"chat_template_kwargs": {"adapter_name": "persistent"}},
+    }
+
+    kwargs1 = await _call_and_capture(chat_backend, model_opts)
+    kwargs2 = await _call_and_capture(chat_backend, model_opts)
+
+    for call_n, kwargs in enumerate((kwargs1, kwargs2), start=1):
+        ctk = kwargs.get("extra_body", {}).get("chat_template_kwargs", {})
+        assert ctk.get("adapter_name") == "persistent", (
+            f"call {call_n}: adapter_name silently lost — caller dict was mutated"
+        )
+        assert ctk.get("enable_thinking") is True, (
+            f"call {call_n}: enable_thinking missing"
+        )
