@@ -149,7 +149,8 @@ def test_safe_mode_syntax_error():
 
 def test_safe_mode_no_execution():
     """Test that safe mode doesn't execute code (even infinite loops)."""
-    req = PythonExecutionReq(timeout=1)
+    with pytest.warns(DeprecationWarning, match="no effect on the static tier"):
+        req = PythonExecutionReq(timeout=1)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is True  # Should pass because it's not actually executed
 
@@ -161,14 +162,18 @@ def test_safe_mode_no_execution():
 
 def test_unsafe_execution_valid():
     """Test unsafe execution with valid code."""
-    req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
+    assert len(record) >= 2  # allow_unsafe_execution and timeout warnings
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
 
 
 def test_unsafe_execution_runtime_error():
     """Test unsafe execution with runtime error."""
-    req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
+    assert len(record) >= 2  # allow_unsafe_execution and timeout warnings
     result = req.validation_fn(RUNTIME_ERROR_CTX)
     assert result.as_bool() is False
     assert "error" in result.reason.lower()  # type: ignore
@@ -176,7 +181,9 @@ def test_unsafe_execution_runtime_error():
 
 def test_unsafe_execution_timeout():
     """Test unsafe execution with timeout."""
-    req = PythonExecutionReq(allow_unsafe_execution=True, timeout=1)
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(allow_unsafe_execution=True, timeout=1)
+    assert len(record) >= 2  # allow_unsafe_execution and timeout warnings
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is False
     assert "timed out" in result.reason.lower()  # type: ignore
@@ -184,7 +191,8 @@ def test_unsafe_execution_timeout():
 
 def test_unsafe_execution_syntax_error():
     """Test unsafe execution with syntax error."""
-    req = PythonExecutionReq(allow_unsafe_execution=True)
+    with pytest.warns(DeprecationWarning, match="allow_unsafe_execution is deprecated"):
+        req = PythonExecutionReq(allow_unsafe_execution=True)
     result = req.validation_fn(SYNTAX_ERROR_CTX)
     assert result.as_bool() is False
 
@@ -196,7 +204,10 @@ def test_unsafe_execution_syntax_error():
 
 def test_import_restrictions_block_forbidden():
     """Test that import restrictions block forbidden imports."""
-    req = PythonExecutionReq(allow_unsafe_execution=True, allowed_imports=["os", "sys"])
+    with pytest.warns(DeprecationWarning, match="allow_unsafe_execution is deprecated"):
+        req = PythonExecutionReq(
+            allow_unsafe_execution=True, allowed_imports=["os", "sys"]
+        )
     result = req.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
     assert result.as_bool() is False
     assert "Unauthorized imports" in result.reason  # type: ignore
@@ -204,9 +215,10 @@ def test_import_restrictions_block_forbidden():
 
 def test_import_restrictions_allow_permitted():
     """Test that import restrictions allow permitted imports."""
-    req = PythonExecutionReq(
-        allow_unsafe_execution=True, allowed_imports=["os", "sys", "pathlib"]
-    )
+    with pytest.warns(DeprecationWarning, match="allow_unsafe_execution is deprecated"):
+        req = PythonExecutionReq(
+            allow_unsafe_execution=True, allowed_imports=["os", "sys", "pathlib"]
+        )
     result = req.validation_fn(PYTHON_WITH_IMPORTS_CTX)
     assert result.as_bool() is True
 
@@ -230,7 +242,9 @@ def test_import_restrictions_with_safe_mode():
 )
 def test_sandbox_execution_valid():
     """Test sandbox execution with valid code."""
-    req = PythonExecutionReq(use_sandbox=True, timeout=10)
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(use_sandbox=True, timeout=10)
+    assert len(record) >= 2  # use_sandbox and timeout warnings
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
 
@@ -241,9 +255,11 @@ def test_sandbox_execution_valid():
 )
 def test_sandbox_execution_with_imports():
     """Test sandbox execution with allowed imports."""
-    req = PythonExecutionReq(
-        use_sandbox=True, allowed_imports=["os", "sys", "pathlib"], timeout=10
-    )
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(
+            use_sandbox=True, allowed_imports=["os", "sys", "pathlib"], timeout=10
+        )
+    assert len(record) >= 2  # use_sandbox and timeout warnings
     result = req.validation_fn(PYTHON_WITH_IMPORTS_CTX)
     assert result.as_bool() is True
 
@@ -254,7 +270,9 @@ def test_sandbox_execution_with_imports():
 )
 def test_sandbox_execution_timeout():
     """Test sandbox execution timeout."""
-    req = PythonExecutionReq(use_sandbox=True, timeout=2)
+    with pytest.warns(DeprecationWarning) as record:
+        req = PythonExecutionReq(use_sandbox=True, timeout=2)
+    assert len(record) >= 2  # use_sandbox and timeout warnings
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is False
 
@@ -262,7 +280,8 @@ def test_sandbox_execution_timeout():
 def test_sandbox_without_llm_sandbox_installed():
     """Test graceful handling when llm-sandbox is not available."""
     # This test will pass even if llm-sandbox is installed, but tests the error handling
-    req = PythonExecutionReq(use_sandbox=True)
+    with pytest.warns(DeprecationWarning, match="use_sandbox is deprecated"):
+        req = PythonExecutionReq(use_sandbox=True)
     # We can't easily test this without mocking, but the error handling is in the code
     assert req is not None
 
@@ -281,7 +300,7 @@ def test_description_updates_based_on_mode():
     assert "local execution" in local_req.description  # type: ignore
 
     docker_req = PythonExecutionReq("docker")
-    assert "docker execution" in docker_req.description  # type: ignore
+    assert "sandbox execution" in docker_req.description  # type: ignore
     assert "timeout" in docker_req.description  # type: ignore
 
 
