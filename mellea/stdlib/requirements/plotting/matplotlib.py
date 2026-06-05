@@ -9,7 +9,10 @@ import ast
 from mellea.core import Context, Requirement, ValidationResult
 from mellea.stdlib.requirements.python_reqs import _has_python_code_listing
 
-# Matplotlib backends suitable for headless (non-interactive) execution
+# Matplotlib backends suitable for headless (non-interactive) execution.
+# Includes standard raster (Agg, Cairo), vector (pdf, svg, pgf), notebook (nbAgg),
+# and GR backend (module://gr.matplotlib.backend_gr) which is a high-performance
+# graphics library that works in headless environments.
 HEADLESS_BACKENDS = {
     "Agg",
     "Cairo",
@@ -286,7 +289,7 @@ class PlotDependenciesAvailable(Requirement):
         """Validate that required plotting dependencies are available.
 
         Args:
-            ctx: Context containing model output.
+            ctx: Context (unused, requirement checks environment not code).
 
         Returns:
             ValidationResult with pass/fail and dependency details.
@@ -294,13 +297,6 @@ class PlotDependenciesAvailable(Requirement):
         Raises:
             ImportError: If matplotlib or numpy cannot be imported.
         """
-        code = _extract_code(ctx)
-        if code is None:
-            return ValidationResult(
-                result=False, reason="Could not extract code for dependency validation."
-            )
-
-        # Check if matplotlib and numpy can be imported
         for module_name in ["matplotlib", "numpy"]:
             try:
                 __import__(module_name)

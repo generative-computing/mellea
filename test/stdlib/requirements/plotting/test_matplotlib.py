@@ -300,32 +300,15 @@ class TestPlotFileSaved:
 class TestPlotDependenciesAvailable:
     """Tests for PlotDependenciesAvailable requirement."""
 
-    def test_valid_matplotlib_and_numpy_imported(self):
-        """Test pass when both matplotlib and numpy are imported."""
+    def test_valid_dependencies_available(self):
+        """Test pass when matplotlib and numpy are available."""
         req = PlotDependenciesAvailable()
+        # Context is unused since requirement checks environment, not code
         ctx = from_model(CODE_WITH_MATPLOTLIB_IMPORT)
         result = req.validation_fn(ctx)
 
         assert result.as_bool() is True
         assert "dependencies available" in (result.reason or "").lower()
-
-    def test_valid_pyplot_and_numpy_imported(self):
-        """Test pass when pyplot and numpy are imported."""
-        req = PlotDependenciesAvailable()
-        ctx = from_model(CODE_WITH_MATPLOTLIB_PYPLOT_IMPORT)
-        result = req.validation_fn(ctx)
-
-        assert result.as_bool() is True
-        assert "dependencies available" in (result.reason or "").lower()
-
-    def test_no_code_blocks(self):
-        """Test fail when no code blocks present."""
-        req = PlotDependenciesAvailable()
-        ctx = from_model("Just some text, no code.")
-        result = req.validation_fn(ctx)
-
-        assert result.as_bool() is False
-        assert "could not extract" in (result.reason or "").lower()
 
     def test_requirement_description(self):
         """Test requirement has appropriate description."""
@@ -333,42 +316,25 @@ class TestPlotDependenciesAvailable:
         assert "matplotlib" in req.description.lower()
         assert "numpy" in req.description.lower()
 
-    def test_syntax_error_in_code(self):
-        """Test fail when code has syntax errors."""
-        req = PlotDependenciesAvailable()
-        invalid_code = """```python
-        import matplotlib
-        def broken_function(
-            print("no closing paren")
-        ```"""
-        ctx = from_model(invalid_code)
-        result = req.validation_fn(ctx)
-
-        # Should return False because we can't extract code
-        assert result.as_bool() is False
-
 
 class TestMatplotlibHeadlessBackendEdgeCases:
     """Edge case tests for MatplotlibHeadlessBackend."""
 
     def test_backend_case_sensitivity(self):
         """Test that backend names are matched case-sensitively."""
-        # This test checks that 'agg' (lowercase) may or may not match 'Agg'
-        # The implementation uses exact string matching, so 'agg' would fail
+        # Matplotlib backend names are case-sensitive in the API.
+        # Only 'Agg' is valid, not 'agg' (lowercase).
         code_lowercase = """```python
-        import matplotlib
-        matplotlib.use('agg')
-        import matplotlib.pyplot as plt
-        ```"""
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
+```"""
         req = MatplotlibHeadlessBackend()
         ctx = from_model(code_lowercase)
         result = req.validation_fn(ctx)
-        # The current implementation is case-sensitive, so lowercase 'agg' should fail
-        # unless we normalize it (which we don't currently do)
-        # This documents the behavior
-        assert (
-            result.as_bool() is False or result.as_bool() is True
-        )  # Either is acceptable
+        # Backend name matching is case-sensitive, so 'agg' should fail
+        assert result.as_bool() is False
+        assert "not headless" in (result.reason or "").lower()
 
     def test_matplotlib_use_with_variable(self):
         """Test that matplotlib.use() with variable backend is not detected."""
