@@ -111,12 +111,20 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
 
 def _python_executes_without_error(
-    ctx: Context, environment: ExecutionEnvironment
+    ctx: Context, environment: ExecutionEnvironment, max_output_chars: int | None = None
 ) -> ValidationResult:
     """Validate that Python code executes without raising exceptions.
 
-    First extracts the highest-scoring Python code block from the context,
-    then validates/executes it using the given environment.
+    Optionally enforces that captured output stays within size limit.
+
+    Args:
+        ctx: Context containing model output with code blocks.
+        environment: Execution environment (static, local, or docker).
+        max_output_chars: Maximum allowed stdout size in characters.
+            None = no size check. Defaults to None.
+
+    Returns:
+        ValidationResult with execution success and optional output size details.
     """
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
@@ -126,16 +134,36 @@ def _python_executes_without_error(
         )
 
     code = extraction_result.reason
-    assert code is not None
+    if code is None:
+        return ValidationResult(
+            result=False,
+            reason="Code extraction returned None; this should not happen.",
+        )
 
     result = environment.execute(code)
-    return ValidationResult(
-        result=result.success, reason=result.to_validationresult_reason()
-    )
+
+    if not result.success:
+        return ValidationResult(
+            result=False, reason=result.to_validationresult_reason()
+        )
+
+    if max_output_chars is not None:
+        output_size = len(result.stdout or "")
+        if output_size > max_output_chars:
+            return ValidationResult(
+                result=False,
+                reason=f"Output size ({output_size} chars) exceeds limit ({max_output_chars}). "
+                f"Code execution succeeded, but output validation failed.",
+            )
+
+    return ValidationResult(result=True, reason=result.to_validationresult_reason())
 
 
 class PythonExecutionReq(Requirement):
     """Verifies that Python code runs without raising exceptions.
+
+    Optionally validates that captured stdout does not exceed a size limit,
+    eliminating the double-execution cost of separate OutputSizeLimit checks.
 
     Extracts the highest-scoring Python code block from the model's last output
     and validates or executes it according to the configured execution tier.
@@ -155,6 +183,11 @@ class PythonExecutionReq(Requirement):
             Ignored for ``"static"`` and unsafe tiers unless explicitly provided.
         allowed_imports (list[str] | None): Allowlist of importable top-level
             modules.  ``None`` allows any import.
+        max_output_chars (int | None): Maximum allowed stdout size in characters.
+            None = no size check (default). When set, adds output size validation
+            in the same execution pass, avoiding the double-execution cost of using
+            OutputSizeLimit. Only enforced for tiers that execute code (local_unsafe,
+            local, docker_unsafe, docker); static tier skips output check.
         timeout (int | None): Deprecated.  Pass ``policy=CapabilityPolicy(timeout=N)``
             instead.  When provided, overrides the policy timeout.
         allow_unsafe_execution (bool): Deprecated.  Use
@@ -172,6 +205,7 @@ class PythonExecutionReq(Requirement):
         *,
         policy: CapabilityPolicy | None = None,
         allowed_imports: list[str] | None = None,
+        max_output_chars: int | None = None,
         # Deprecated kwargs — kept for backward compatibility
         timeout: int | None = None,
         allow_unsafe_execution: bool = False,
@@ -265,9 +299,15 @@ class PythonExecutionReq(Requirement):
                 else:
                     policy = dataclasses.replace(policy, timeout=timeout)
 
+        if max_output_chars is not None and max_output_chars <= 0:
+            raise ValueError(
+                f"max_output_chars must be positive, got {max_output_chars}"
+            )
+
         self._tier = execution_tier
         self._policy = policy
         self._allowed_imports = allowed_imports
+        self._max_output_chars = max_output_chars
 
         environment: ExecutionEnvironment = make_execution_environment(
             tier=execution_tier, policy=policy, allowed_imports=allowed_imports
@@ -281,9 +321,15 @@ class PythonExecutionReq(Requirement):
 
         tier_label = _tier_label(execution_tier, policy)
 
+        output_note = ""
+        if max_output_chars is not None and execution_tier != "static":
+            output_note = f" Output limit: {max_output_chars} chars."
+
         super().__init__(
-            description=f"The Python code should execute without errors ({tier_label}).",
-            validation_fn=lambda ctx: _python_executes_without_error(ctx, environment),
+            description=f"The Python code should execute without errors ({tier_label}).{output_note}",
+            validation_fn=lambda ctx: _python_executes_without_error(
+                ctx, environment, max_output_chars=self._max_output_chars
+            ),
             check_only=True,
         )
 
@@ -304,10 +350,10 @@ def _tier_label(tier: str, policy: CapabilityPolicy | None) -> str:
             return f"local execution with policy (timeout: {effective}s)"
         case "docker_unsafe":
             effective = timeout if timeout is not None else DOCKER_POLICY.timeout
-            return f"docker execution, no policy (timeout: {effective}s)"
+            return f"sandbox execution, no policy (timeout: {effective}s)"
         case "docker":
             effective = timeout if timeout is not None else DOCKER_POLICY.timeout
-            return f"docker execution with policy (timeout: {effective}s)"
+            return f"sandbox execution with policy (timeout: {effective}s)"
         case _:
             return tier
 

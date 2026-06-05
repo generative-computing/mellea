@@ -11,6 +11,7 @@ from docling_core.types.doc.document import DoclingDocument
 import mellea
 from mellea.core import TemplateRepresentation
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
+from test.conftest import hf_skip
 from test.predicates import require_gpu
 
 pytestmark = pytest.mark.integration
@@ -20,9 +21,10 @@ pytestmark = pytest.mark.integration
 def rd() -> RichDocument:
     # Use a specific document so we can test some of the functionality
     # related to extracting and transforming text.
-    return RichDocument.from_document_file(
-        "https://arxiv.org/pdf/1906.04043", do_ocr=False
-    )
+    with hf_skip():
+        return RichDocument.from_document_file(
+            "https://arxiv.org/pdf/1906.04043", do_ocr=False
+        )
 
 
 def test_richdocument_basics(rd: RichDocument):

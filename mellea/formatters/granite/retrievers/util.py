@@ -33,6 +33,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
 
     Raises:
         ValueError: If `corpus_name` is not one of the supported corpus names.
+        urllib.error.HTTPError: On any HTTP error downloading the corpus file.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -44,7 +45,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
             f"https://github.com/IBM/mt-rag-benchmark/raw/refs/heads/main/"
             f"corpora/{corpus_name}.jsonl.zip"
         )
-        urllib.request.urlretrieve(source_url, target_file)
+        urllib.request.urlretrieve(source_url, str(target_file))
     return target_file
 
 
@@ -99,7 +100,9 @@ def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
     return t
 
 
-def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir: str):
+def download_mtrag_embeddings(
+    embedding_name: str, corpus_name: str, target_dir: str
+) -> None:
     """Download precomputed embeddings for a corpus in the MTRAG benchmark.
 
     Args:
@@ -114,6 +117,8 @@ def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir:
         ValueError: If `corpus_name` is not one of the supported corpus names, or
             if no precomputed embeddings are found for the given corpus and embedding
             model combination.
+        urllib.error.HTTPError: On any HTTP error other than 404 (which signals
+            end-of-parts).
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -134,11 +139,13 @@ def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir:
         )
         target_file = target_root / parquet_file_name
         try:
-            urllib.request.urlretrieve(source_url, target_file)
+            urllib.request.urlretrieve(source_url, str(target_file))
             part_num += 1
-        except urllib.error.HTTPError:
-            # Found all the parts; flow through
-            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                # Found all the parts; flow through
+                break
+            raise  # 429/5xx propagate rather than silently truncating
 
     if part_num == 1:
         raise ValueError(

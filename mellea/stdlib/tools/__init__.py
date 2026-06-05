@@ -17,6 +17,7 @@ from .interpreter import (
     code_interpreter,
     local_code_interpreter,
     make_execution_environment,
+    python_tool,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "code_interpreter",
     "local_code_interpreter",
     "make_execution_environment",
+    "python_tool",
 ]

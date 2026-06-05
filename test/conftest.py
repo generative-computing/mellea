@@ -1,3 +1,4 @@
+import contextlib
 import gc
 import os
 import subprocess
@@ -8,6 +9,30 @@ import pytest
 import requests
 
 from mellea.core import MelleaLogger
+
+# ============================================================================
+# HuggingFace Hub Skip Helper
+# ============================================================================
+
+
+@contextlib.contextmanager
+def hf_skip():
+    """Skip the current test/fixture when a HuggingFace Hub call fails.
+
+    Catches OSError (covers HfHubHTTPError, LocalEntryNotFoundError, and
+    transformers-wrapped Hub errors) plus requests network errors.  Use this
+    in every fixture that downloads model weights or YAML files from the Hub
+    so a 429 or transient network blip results in a clean skip rather than an
+    ERROR that masks unrelated failures.
+    """
+    try:
+        yield
+    except (OSError, requests.exceptions.RequestException) as e:
+        pytest.skip(
+            f"HuggingFace Hub not accessible: {type(e).__name__}: {e}",
+            allow_module_level=True,
+        )
+
 
 # Try to import optional dependencies for system detection
 try:

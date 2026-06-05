@@ -1,15 +1,17 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
+from __future__ import annotations
+
 import json
 import uuid
-from typing import Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
-from ..backends.tools import validate_tool_arguments
-from ..core import Formatter, MelleaLogger, ModelToolCall
-from ..core.base import AbstractMelleaTool, ModelOutputThunk
-from ..stdlib.components import Document, Message
+if TYPE_CHECKING:
+    from ..core import Formatter, ModelToolCall
+    from ..core.base import AbstractMelleaTool, ModelOutputThunk
+    from ..stdlib.components import Document, Message
 
 
 class ToolCallFunction(TypedDict):
@@ -54,6 +56,9 @@ def extract_model_tool_requests(
         Mapping of tool name to `ModelToolCall` for each requested tool call, or
         `None` if no tool calls were found.
     """
+    from ..backends.tools import validate_tool_arguments
+    from ..core import MelleaLogger, ModelToolCall
+
     model_tool_calls: dict[str, ModelToolCall] = {}
     calls = response["message"].get("tool_calls", None)
     if calls:

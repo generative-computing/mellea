@@ -617,7 +617,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Extract temperature and apply it to the rewritten request so that
         # chat_completion_request_to_transformers_inputs handles the
         # do_sample/temperature logic correctly.
-        temperature = model_options.pop(ModelOption.TEMPERATURE, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
         if temperature is not None:
             rewritten = rewritten.model_copy(update={"temperature": temperature})
 
@@ -639,6 +639,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # We don't update other_input since those inputs are specific to `generate_with_transformers`
         # and not covered by model options.
         user_params = self._make_backend_specific_and_remove(model_options)
+        if temperature == 0.0:
+            # Preserve the formatter's greedy do_sample=False setup; temperature=0 is invalid once sampling is enabled.
+            user_params.pop("temperature", None)
         if "stop_strings" in user_params and "tokenizer" not in user_params:
             user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
@@ -1642,16 +1645,36 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
+        If the caller supplied a ``SEED`` or a non-zero ``TEMPERATURE`` but did
+        not explicitly set ``do_sample``, ``do_sample`` is forced to ``True`` so
+        the underlying transformers ``generate`` call respects those parameters
+        (they are silently ignored under the default greedy ``do_sample=False``).
+
+        An explicit ``TEMPERATURE`` of ``0.0`` always means greedy decoding and
+        suppresses this override even when a seed is set — pairing
+        ``do_sample=True`` with ``temperature=0`` would crash transformers
+        ("temperature has to be a strictly positive float").
+
         Args:
             model_options: the model_options for this call
 
         Returns:
             a new dict
         """
+        seed = model_options.get(ModelOption.SEED, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
-        return ModelOption.remove_special_keys(backend_specific)
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+        temp_allows_sampling = temperature is None or temperature != 0.0
+        if (
+            "do_sample" not in backend_specific
+            and temp_allows_sampling
+            and (seed is not None or temperature is not None)
+        ):
+            backend_specific["do_sample"] = True
+        return backend_specific
 
     def _filter_chat_template_only_options(
         self, model_options: dict[str, Any]

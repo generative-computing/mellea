@@ -566,32 +566,6 @@ def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
     ttfb_hist.record(ttfb_s, attributes)
 
 
-# Auto-register metrics plugins when metrics are enabled
-if _OTEL_AVAILABLE and _METRICS_ENABLED:
-    try:
-        from mellea.plugins.registry import register
-        from mellea.telemetry.metrics_plugins import _METRICS_PLUGIN_CLASSES
-
-        for _plugin_cls in _METRICS_PLUGIN_CLASSES:
-            try:
-                register(_plugin_cls())
-            except ValueError as e:
-                # Already registered (expected during module reloads in tests)
-                warnings.warn(
-                    f"{_plugin_cls.__name__} already registered: {e}",
-                    UserWarning,
-                    stacklevel=2,
-                )
-    except ImportError:
-        warnings.warn(
-            "Metrics are enabled but the plugin framework is not installed. "
-            "Token usage and latency metrics will not be recorded automatically. "
-            "Install with: pip install mellea[telemetry]",
-            UserWarning,
-            stacklevel=2,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Error counters
 # ---------------------------------------------------------------------------
@@ -944,6 +918,32 @@ def record_tool_call(tool: str, status: str) -> None:
 
     counter = _get_tool_calls_counter()
     counter.add(1, {"tool": tool, "status": status})
+
+
+# Auto-register metrics plugins when metrics are enabled
+if _OTEL_AVAILABLE and _METRICS_ENABLED:
+    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK, register
+    from mellea.telemetry.metrics_plugins import _METRICS_PLUGIN_CLASSES
+
+    if not _HAS_PLUGIN_FRAMEWORK:
+        warnings.warn(
+            "Metrics are enabled but the plugin framework is not installed. "
+            "Token usage and latency metrics will not be recorded automatically. "
+            "Install with: pip install mellea[telemetry]",
+            UserWarning,
+            stacklevel=2,
+        )
+    else:
+        for _plugin_cls in _METRICS_PLUGIN_CLASSES:
+            try:
+                register(_plugin_cls())
+            except ValueError as e:
+                # Already registered (expected during module reloads in tests)
+                warnings.warn(
+                    f"{_plugin_cls.__name__} already registered: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
 
 __all__ = [
