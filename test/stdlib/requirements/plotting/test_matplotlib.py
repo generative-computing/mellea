@@ -349,6 +349,7 @@ matplotlib.use(backend)
         result = req.validation_fn(ctx)
         # Variable arguments are not detected, so this should fail
         assert result.as_bool() is False
+        assert "non-literal" in (result.reason or "").lower()
 
     def test_multiple_matplotlib_use_calls(self):
         """Test that the validator uses the first matplotlib.use() call with a literal argument, regardless of whether it is headless."""

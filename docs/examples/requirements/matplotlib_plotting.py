@@ -5,10 +5,7 @@ This example demonstrates how to use MatplotlibHeadlessBackend, PlotFileSaved,
 and PlotDependenciesAvailable requirements to validate code that generates plots.
 """
 
-import mellea.stdlib.functional as mfuncs
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
-from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.plotting import (
     MatplotlibHeadlessBackend,
