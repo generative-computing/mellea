@@ -11,7 +11,7 @@ Demonstrates how to use matplotlib-specific requirements to validate code that g
 - Validating headless backend configuration (Agg, Cairo, pdf, etc.)
 - Ensuring plots are explicitly saved to files
 - Checking that required dependencies (matplotlib, numpy) are available
-- Multiple code patterns: `plt.savefig()`, `fig.savefig()`, `ax.savefig()`
+- Multiple code patterns: `plt.savefig()`, `fig.savefig()`
 - Supporting both positional and keyword arguments
 
 **Examples Included:**
@@ -52,7 +52,6 @@ print(result.as_bool())  # True
 - `Agg` — Raster output (most common)
 - `Cairo` — Vector output with Cairo
 - `pdf`, `svg`, `pgf` — File formats
-- `nbAgg` — Jupyter notebooks
 - `module://gr.matplotlib.backend_gr` — GR graphics library
 
 ## PlotFileSaved
@@ -81,7 +80,6 @@ print(result.as_bool())  # True
 ### Supported Patterns
 - `plt.savefig('/tmp/plot.png')`
 - `fig.savefig('/tmp/plot.png')`
-- `ax.savefig('/tmp/plot.png')`
 - Keyword arguments: `fig.savefig(fname='/tmp/plot.png', dpi=300)`
 
 ## PlotDependenciesAvailable

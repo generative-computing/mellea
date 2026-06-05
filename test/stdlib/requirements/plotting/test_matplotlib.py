@@ -351,7 +351,7 @@ matplotlib.use(backend)
         assert result.as_bool() is False
 
     def test_multiple_matplotlib_use_calls(self):
-        """Test with multiple matplotlib.use() calls (should pass with first headless)."""
+        """Test that the validator uses the first matplotlib.use() call with a literal argument, regardless of whether it is headless."""
         code_multi = """```python
 import matplotlib
 matplotlib.use('Agg')
@@ -361,7 +361,7 @@ matplotlib.use('TkAgg')
         req = MatplotlibHeadlessBackend()
         ctx = from_model(code_multi)
         result = req.validation_fn(ctx)
-        # Should pass with first valid headless backend found
+        # Passes: 'Agg' is the first literal use() arg found — note that at runtime matplotlib would apply 'TkAgg' (the last call)
         assert result.as_bool() is True
 
 
@@ -398,10 +398,10 @@ plt.savefig('/tmp/plot.jpg')
         code_filename = """```python
 import matplotlib.pyplot as plt
 fig, ax = plt.subplots()
-fig.savefig(filename='/tmp/plot.png')
+fig.savefig(fname='/tmp/plot.png')
 ```"""
         req = PlotFileSaved(output_path="/tmp/plot.png")
         ctx = from_model(code_filename)
         result = req.validation_fn(ctx)
-        # Both 'fname' and 'filename' keyword args should work
+        # fname= is the correct keyword; savefig has no 'filename' parameter
         assert result.as_bool() is True

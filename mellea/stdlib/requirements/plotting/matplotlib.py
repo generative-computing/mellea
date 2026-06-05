@@ -10,7 +10,7 @@ from mellea.core import Context, Requirement, ValidationResult
 from mellea.stdlib.requirements.python_reqs import _has_python_code_listing
 
 # Matplotlib backends suitable for headless (non-interactive) execution.
-# Includes standard raster (Agg, Cairo), vector (pdf, svg, pgf), notebook (nbAgg),
+# Includes standard raster (Agg, Cairo), vector (pdf, svg, pgf),
 # and GR backend (module://gr.matplotlib.backend_gr) which is a high-performance
 # graphics library that works in headless environments.
 HEADLESS_BACKENDS = {
@@ -19,7 +19,6 @@ HEADLESS_BACKENDS = {
     "pdf",
     "svg",
     "pgf",
-    "nbAgg",
     "module://gr.matplotlib.backend_gr",
 }
 
@@ -123,7 +122,6 @@ def _is_savefig_call(node: ast.Call) -> bool:
     Detects:
     - plt.savefig(...)
     - fig.savefig(...)
-    - ax.savefig(...)
     - Any expression.savefig(...)
 
     Args:
