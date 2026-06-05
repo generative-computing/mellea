@@ -23,6 +23,15 @@ email_v1 = m.instruct(
     strategy=RejectionSamplingStrategy(loop_budget=3),
 )
 
+# Additionally, you could run 3 concurrent subsamples — stopping as soon as one
+# passes validation. This cuts wall-clock latency but multiplies request count,
+# which can trigger rate limits on paid backends.
+# email_v1 = m.instruct(
+#     "Write an email to invite all interns to the office party.",
+#     requirements=["be formal", word_limit_req],
+#     strategy=RejectionSamplingStrategy(loop_budget=1, concurrency_budget=3),
+# )
+
 # print result
 print(f"***** email ****\n{w(email_v1)}\n*******")
 

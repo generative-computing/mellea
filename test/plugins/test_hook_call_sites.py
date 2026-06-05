@@ -28,8 +28,11 @@ from mellea.core.base import (
     GenerateType,
     ModelOutputThunk,
 )
+from mellea.core.requirement import Requirement, ValidationResult
 from mellea.plugins import HookType, PluginResult, hook, register
+from mellea.stdlib.components import Instruction
 from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
 # ---------------------------------------------------------------------------
 # Mock backend (module-level so it can be used as a class in session tests)
@@ -493,6 +496,45 @@ class TestSamplingHookCallSites:
         )
         assert observed[0].loop_budget == 3
 
+    @pytest.mark.parametrize("bad_budget", [0, -1])
+    async def test_sampling_loop_start_rejects_non_positive_loop_budget(
+        self, bad_budget: int
+    ) -> None:
+        """A SAMPLING_LOOP_START hook that returns loop_budget < 1 must raise ValueError.
+
+        The constructor enforces loop_budget >= 1 but a hook can override it
+        post-construction; without explicit validation this collapses
+        total_possible_generations to 0, no slices are produced, and the user
+        sees an opaque AssertionError from SamplingResult.__init__ instead of
+        a clear cause.
+        """
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+
+        @hook("sampling_loop_start")
+        async def shrink_budget(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(update={"loop_budget": bad_budget}),
+            )
+
+        register(shrink_budget)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        with pytest.raises(ValueError, match="non-positive loop_budget"):
+            await strategy.sample(
+                Instruction("Bad budget test"),
+                context=ctx,
+                backend=backend,
+                requirements=[],
+                format=None,
+                model_options=None,
+                tool_calls=False,
+                show_progress=False,
+            )
+
     async def test_sampling_iteration_fires_once_per_loop_iteration(self) -> None:
         """SAMPLING_ITERATION fires once per loop iteration."""
         from mellea.stdlib.components import Instruction
@@ -524,6 +566,54 @@ class TestSamplingHookCallSites:
         assert len(observed) == 1
         assert observed[0].iteration == 1
         assert observed[0].all_validations_passed is True  # no requirements → all pass
+
+    async def test_sampling_iteration_ids_unique_under_concurrency(self) -> None:
+        """Each generate/validate of the base sampling strategy should report a unique `iteration` to the sampling iteration hook.
+
+        With `concurrency_budget=3, loop_budget=2`, six generations run; their `SAMPLING_ITERATION`
+        payloads must carry six distinct `iteration` values (computed as `subsample_index * loop_budget + i + 1`),
+        not three duplicated `{1, 2}` pairs.
+        """
+
+        observed: list[int] = []
+
+        @hook("sampling_iteration")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload.iteration)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        loop_budget = 2
+        concurrency_budget = 3
+        strategy = RejectionSamplingStrategy(
+            loop_budget=loop_budget, concurrency_budget=concurrency_budget
+        )
+
+        await strategy.sample(
+            Instruction("Concurrency iteration id test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        expected = set(range(1, loop_budget * concurrency_budget + 1))
+        assert set(observed) == expected, (
+            f"iteration ids should be {sorted(expected)} (one per generation, unique "
+            f"across subsamples), got {sorted(observed)}"
+        )
 
     async def test_sampling_loop_end_fires_on_success_path(self) -> None:
         """SAMPLING_LOOP_END fires with success=True when sampling succeeds."""
@@ -663,6 +753,82 @@ class TestSamplingHookCallSites:
             show_progress=False,
         )
         assert order == ["loop_start", "iteration", "loop_end"]
+
+    async def test_sampling_repair_skipped_on_final_iteration(self) -> None:
+        """SAMPLING_REPAIR fires only between iterations, never after the last one.
+
+        With loop_budget=N and all-failing requirements, repair runs N-1 times:
+        once after each failed attempt that has a successor, but not after the
+        final attempt (its repair output would be discarded).
+        """
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        loop_budget = 3
+        strategy = RejectionSamplingStrategy(loop_budget=loop_budget)
+
+        await strategy.sample(
+            Instruction("Repair-skip test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert len(observed) == loop_budget - 1, (
+            f"repair should fire N-1 times for N iterations, got {len(observed)}"
+        )
+
+    async def test_sampling_repair_not_fired_when_loop_budget_is_one(self) -> None:
+        """With loop_budget=1, SAMPLING_REPAIR must never fire even on validation failure."""
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(result=False),
+        )
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        await strategy.sample(
+            Instruction("Single-iteration test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert observed == [], (
+            "loop_budget=1 should never invoke repair (no next iteration to feed)"
+        )
 
 
 # ---------------------------------------------------------------------------
