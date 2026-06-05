@@ -155,7 +155,12 @@ class YamlJsonCombo(pydantic.BaseModel):
         coalesce all per-test snapshot_download calls into one materialization
         per repo per pytest session.
         """
-        return _REPO_PINNED_SHAS[self.repo_id]
+        try:
+            return _REPO_PINNED_SHAS[self.repo_id]
+        except KeyError:
+            raise KeyError(
+                f"No pinned SHA for repo {self.repo_id!r}; add one to _REPO_PINNED_SHAS"
+            ) from None
 
     def _resolve_yaml(self):
         """
