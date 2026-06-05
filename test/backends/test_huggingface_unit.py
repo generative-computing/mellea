@@ -77,6 +77,7 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._added_adapters = {}
     stub_backend._tokenizer = object()
     stub_backend._model = object()
+    stub_backend._llguidance_tokenizer = object()
     stub_backend._get_hf_model_id = lambda: "stub-model"
     stub_backend._make_backend_specific_and_remove = lambda opts: (
         LocalHFBackend._make_backend_specific_and_remove(stub_backend, opts)
@@ -136,7 +137,7 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
     adapter = _make_intrinsic_adapter_stub()
     captured = {}
 
-    def fake_transformers_inputs(rewritten, tokenizer, model):
+    def fake_transformers_inputs(rewritten, tokenizer, model, ll_tokenizer=None):
         assert rewritten.temperature == 0.0
         generate_input = {"input_tokens": object(), "do_sample": False}
         captured["generate_input"] = generate_input
