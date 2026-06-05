@@ -115,16 +115,10 @@ pre code {
   font-weight: 600;
 }
 
-/* API headings: inline GitHub source icon — de-superscript and scale to text size */
+/* API headings: inline GitHub source icon — de-superscript; size set via em inline style */
 article h2 sup,
 article h3 sup,
 article h4 sup {
   vertical-align: middle;
   font-size: 1em;
-}
-article h2 sup svg,
-article h3 sup svg,
-article h4 sup svg {
-  width: 0.9em;
-  height: 0.9em;
 }

@@ -312,6 +312,11 @@ disable_error_code = [
     "import-not-found",
 ]
 
+[[tool.mypy.overrides]]
+# cpex is a private optional dependency not available in all environments
+module = "cpex.*"
+ignore_missing_imports = true
+
 
 # -----------------------------
 # Codespell - Spell Checking

@@ -11,6 +11,7 @@ generate-ast.py (step 1).  Run via build.py or directly:
 
 Decoration passes (applied in order per file):
 1. fix_source_links      — correct GitHub blob URLs to versioned tags
+1b. normalize_icon_size  — replace mdxify's hardcoded 14px icon style with em units
 2. inject_preamble       — add per-module introductory text
 3. inject_sidebar_fix    — insert SidebarFix Mintlify component
 4. escape_mdx_syntax     — escape {{ }} in code blocks so MDX doesn't treat them as JSX
@@ -121,6 +122,32 @@ def fix_source_links(content: str, version: str) -> str:
     content = re.sub(md_pattern, replace_md, content)
 
     return content
+
+
+# =========================
+# Icon size normalisation
+# =========================
+
+_ICON_PX_RE = re.compile(
+    r'(<Icon\b[^>]*\bstyle=")width:\s*\d+px;\s*height:\s*\d+px;("[^>]*/?>)'
+)
+
+
+def normalize_icon_size(content: str) -> str:
+    """Replace mdxify's hardcoded pixel icon sizes with em units.
+
+    mdxify emits ``style="width: 14px; height: 14px;"`` on source-link Icon
+    components.  Inline styles take priority over the stylesheet, so the icon
+    renders at a fixed 14 px regardless of heading level.  Swapping to ``em``
+    units lets the icon scale with the surrounding heading font-size.
+
+    Args:
+        content: MDX file content.
+
+    Returns:
+        Content with pixel icon dimensions replaced by ``0.85em``.
+    """
+    return _ICON_PX_RE.sub(r"\g<1>width: 0.85em; height: 0.85em;\g<2>", content)
 
 
 # =========================
@@ -855,6 +882,9 @@ def process_mdx_file(
 
     # Step 1: Fix GitHub source links
     text = fix_source_links(text, version)
+
+    # Step 1b: Replace mdxify's hardcoded 14px icon sizes with em units
+    text = normalize_icon_size(text)
 
     # Step 2: Inject preamble (docstring cache text may also contain RST notation;
     # inject_preamble runs after normalize so the injected text needs a second pass)
