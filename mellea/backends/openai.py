@@ -684,8 +684,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
         # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
         # Both are set for True so the right server picks up whichever it understands.
-        thinking = model_options.get(ModelOption.THINKING, None)
-        if thinking is not None:
+        thinking = model_options.get(ModelOption.THINKING)
+        if thinking is not None:  # False is a valid value — cannot use `if thinking`
             if type(thinking) is bool:
                 ctk = extra_body.get("chat_template_kwargs", {}) or {}
                 ctk["enable_thinking"] = thinking
@@ -914,9 +914,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
         # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
         # NOTE: don't pass reasoning_effort to non-reasoning models (e.g. gpt-4o).
-        thinking = model_opts.get(ModelOption.THINKING, None)
+        thinking = model_opts.get(ModelOption.THINKING)
         reasoning_params: dict[str, Any] = {}
-        if thinking is not None:
+        if thinking is not None:  # False is a valid value — cannot use `if thinking`
             if type(thinking) is bool:
                 ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
                 ctk = ctk_body.get("chat_template_kwargs", {}) or {}
