@@ -1,31 +1,39 @@
 """Code interpreter tool and execution environments for agentic workflows.
 
-Provides ``ExecutionResult`` (capturing stdout, stderr, exit code, artifacts, and
-optional static analysis output) and three concrete ``ExecutionEnvironment``
+Provides `ExecutionResult` (capturing stdout, stderr, exit code, artifacts, and
+optional static analysis output) and three concrete `ExecutionEnvironment`
 implementations:
 
-- ``StaticAnalysisEnvironment`` — parse and import-check only, no execution.
-- ``UnsafeEnvironment`` — subprocess execution in the current Python environment.
-- ``LLMSandboxEnvironment`` — Docker-isolated execution via ``llm-sandbox``, with
-  ``copy_in`` / ``copy_out`` support via ``docker cp``.
+- `StaticAnalysisEnvironment` — parse and import-check only, no execution.
+- `UnsafeEnvironment` — subprocess execution in the current Python environment.
+- `LLMSandboxEnvironment` — Docker-isolated execution via `llm-sandbox`, with
+  `copy_in` / `copy_out` support via `docker cp`.
 
-Use :func:`make_execution_environment` to select an environment by tier name
-(``"local_unsafe"``, ``"local"``, ``"docker_unsafe"``, ``"docker"``) rather than
-constructing classes directly.  The top-level :func:`code_interpreter` and
-:func:`local_code_interpreter` functions are ready to be wrapped as ``MelleaTool``
+Use `make_execution_environment` to select an environment by tier name
+(`"local_unsafe"`, `"local"`, `"docker_unsafe"`, `"docker"`) rather than
+constructing classes directly.  The top-level `code_interpreter` and
+`local_code_interpreter` functions are ready to be wrapped as `MelleaTool`
 instances for ReACT or other agentic loops.
 """
 
+from __future__ import annotations
+
 import ast
+import mimetypes
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import warnings
+import weakref
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ...backends.tools import MelleaTool
 
 from ...core import MelleaLogger
 from .execution_policy import (
@@ -38,6 +46,9 @@ from .execution_policy import (
 
 logger = MelleaLogger.get_logger()
 
+# Resolved once at import time so every _install_packages() call avoids a PATH scan.
+_UV: str | None = shutil.which("uv")
+
 _TRUNCATION_MARKER = "... [truncated]"
 
 
@@ -46,10 +57,10 @@ def _truncate(text: str | None, max_bytes: int | None) -> str | None:
 
     Args:
         text (str | None): The text to truncate.
-        max_bytes (int | None): Maximum byte length.  ``None`` disables truncation.
+        max_bytes (int | None): Maximum byte length.  `None` disables truncation.
 
     Returns:
-        str | None: Original text, truncated text with marker, or ``None``.
+        str | None: Original text, truncated text with marker, or `None`.
     """
     if text is None or max_bytes is None:
         return text
@@ -68,11 +79,11 @@ class ExecutionResult:
     """Result of code execution.
 
     Code execution can be aborted prior to spinning up an interpreter (e.g., if
-    prohibited imports are used).  In these cases, ``success`` is ``False`` and
-    ``skipped`` is ``True``.
+    prohibited imports are used).  In these cases, `success` is `False` and
+    `skipped` is `True`.
 
-    If code is executed, ``success`` is ``True`` iff the exit code is 0, and
-    ``stdout`` / ``stderr`` are non-``None``.
+    If code is executed, `success` is `True` iff the exit code is 0, and
+    `stdout` / `stderr` are non-`None`.
 
     Args:
         success (bool): `True` if execution succeeded (exit code 0 or
@@ -85,16 +96,16 @@ class ExecutionResult:
         skip_message (str | None): Explanation of why execution was skipped.
         analysis_result (Any | None): Optional payload from static-analysis
             environments.
-        exit_code (int | None): Raw process exit code, or ``None`` if not
+        exit_code (int | None): Raw process exit code, or `None` if not
             available (skipped or static analysis).
-        timed_out (bool): ``True`` when execution was killed due to timeout.
+        timed_out (bool): `True` when execution was killed due to timeout.
         artifacts (list[Artifact]): Files exported from the execution environment
             after execution.
         execution_mode (str): Tier name used for this execution
-            (``"local_unsafe"``, ``"local"``, ``"docker_unsafe"``, ``"docker"``,
-            ``"static"``, or ``"unknown"``).
+            (`"local_unsafe"`, `"local"`, `"docker_unsafe"`, `"docker"`,
+            `"static"`, or `"unknown"`).
         working_directory (str | None): The working directory used for execution,
-            or ``None`` if the default was used or not applicable.
+            or `None` if the default was used or not applicable.
     """
 
     success: bool
@@ -138,12 +149,12 @@ class ExecutionEnvironment(ABC):
 
     Args:
         allowed_imports (list[str] | None): Allowlist of top-level module names
-            that generated code may import.  ``None`` disables the import check.
+            that generated code may import.  `None` disables the import check.
         policy (CapabilityPolicy | None): Capability policy for this environment.
-            ``None`` means no policy is applied (unsafe tiers).
+            `None` means no policy is applied (unsafe tiers).
         working_directory (str | None): Directory to use as cwd during execution.
-            ``None`` means use the process default.  Only honoured by environments
-            that spawn subprocesses (``UnsafeEnvironment``); ignored otherwise.
+            `None` means use the process default.  Only honoured by environments
+            that spawn subprocesses (`UnsafeEnvironment`); ignored otherwise.
     """
 
     def __init__(
@@ -164,7 +175,7 @@ class ExecutionEnvironment(ABC):
         Args:
             code (str): The Python source code to execute.
             timeout (int | None): Maximum seconds to allow the code to run.
-                When ``None``, the environment's policy timeout is used, or a
+                When `None`, the environment's policy timeout is used, or a
                 built-in default if no policy is set.
 
         Returns:
@@ -265,10 +276,52 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
 class UnsafeEnvironment(ExecutionEnvironment):
     """Environment that executes code directly via subprocess.
 
-    No container isolation.  Use ``policy`` to declare (but not enforce)
-    capabilities; ``timeout`` and stdout/stderr truncation from ``policy``
+    No container isolation.  Use `policy` to declare (but not enforce)
+    capabilities; `timeout` and stdout/stderr truncation from `policy`
     are actively enforced.
+
+    Args:
+        allowed_imports (list[str] | None): Allowlist of top-level module names
+            that generated code may import.  `None` disables the import check.
+        policy (CapabilityPolicy | None): Capability policy for this environment.
+            `None` means no policy is applied.
+        working_directory (str | None): Directory to use as cwd during execution.
+            `None` means use the process default.
+        installed_packages (set[str] | None): Shared set to persist the install
+            cache across multiple `execute()` calls.  `None` creates a fresh set.
+        failed_packages (set[str] | None): Shared set of package names whose
+            installation has already failed.  Packages in this set are skipped on
+            subsequent calls; clear the set to allow a retry.  `None` creates a
+            fresh set.
+        tier (str | None): Tier name reported in `ExecutionResult.execution_mode`.
+            `None` infers the tier from policy presence (`"local"` when a policy
+            is set, `"local_unsafe"` otherwise).  Prefer passing an explicit value
+            rather than relying on inference; `make_execution_environment` always
+            supplies one.
     """
+
+    def __init__(
+        self,
+        allowed_imports: list[str] | None = None,
+        policy: CapabilityPolicy | None = None,
+        working_directory: str | None = None,
+        installed_packages: set[str] | None = None,
+        failed_packages: set[str] | None = None,
+        tier: str | None = None,
+    ) -> None:
+        """Initialize the unsafe subprocess environment with optional install caches and tier override."""
+        super().__init__(
+            allowed_imports=allowed_imports,
+            policy=policy,
+            working_directory=working_directory,
+        )
+        self._installed_packages: set[str] = (
+            installed_packages if installed_packages is not None else set()
+        )
+        self._failed_packages: set[str] = (
+            failed_packages if failed_packages is not None else set()
+        )
+        self._tier: str | None = tier
 
     def execute(self, code: str, timeout: int | None = None) -> ExecutionResult:
         """Execute code with subprocess after checking imports.
@@ -276,7 +329,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
         Args:
             code (str): The Python source code to execute.
             timeout (int | None): Maximum seconds before the subprocess is killed.
-                Falls back to ``policy.timeout`` if set, then to 30 s.
+                Falls back to `policy.timeout` if set, then to 30 s.
 
         Returns:
             ExecutionResult: Execution outcome with captured stdout/stderr and
@@ -294,10 +347,37 @@ class UnsafeEnvironment(ExecutionEnvironment):
                     execution_mode=self._mode(),
                 )
 
+        if self.policy and self.policy.packages:
+            pending = [
+                p
+                for p in self.policy.packages
+                if p not in self._installed_packages and p not in self._failed_packages
+            ]
+            if pending:
+                if _install_packages(pending):
+                    self._installed_packages.update(pending)
+                else:
+                    self._failed_packages.update(pending)
+                    return ExecutionResult(
+                        success=False,
+                        stdout=None,
+                        stderr=None,
+                        skipped=True,
+                        skip_message=f"Package installation failed: {', '.join(pending)}",
+                        execution_mode=self._mode(),
+                    )
+
         resolved_timeout = self._resolve_timeout(timeout)
-        return self._execute_subprocess(code, resolved_timeout)
+        result = self._execute_subprocess(code, resolved_timeout)
+
+        if self.working_directory and result.success:
+            result.artifacts = _scan_artifacts(Path(self.working_directory))
+
+        return result
 
     def _mode(self) -> str:
+        if self._tier is not None:
+            return self._tier
         return "local" if self.policy is not None else "local_unsafe"
 
     def _execute_subprocess(self, code: str, timeout: int) -> ExecutionResult:
@@ -358,21 +438,33 @@ class UnsafeEnvironment(ExecutionEnvironment):
 
 
 class LLMSandboxEnvironment(ExecutionEnvironment):
-    """Docker-isolated execution environment via ``llm-sandbox``.
+    """Docker-isolated execution environment via `llm-sandbox`.
 
-    Supports :meth:`copy_in` and :meth:`copy_out` via ``docker cp``.  Both
-    methods require the environment to be used as a context manager so that a
-    single container session persists across calls.
+    Supports `copy_in` and `copy_out` via `docker cp`.  Both methods require
+    the environment to be used as a context manager so that a single container
+    session persists across calls.
 
-    When used without a context manager, :meth:`execute` opens and closes a
-    fresh container per call (one-shot mode), which is sufficient when file I/O
-    is not needed.
+    When used without a context manager, `execute` opens and closes a fresh
+    container per call (one-shot mode), which is sufficient when file I/O is
+    not needed.
 
     Args:
         allowed_imports (list[str] | None): Allowlist of importable top-level
-            modules.  ``None`` allows any import.
-        policy (CapabilityPolicy | None): Capability policy.  ``None`` means
-            no policy is applied (``docker_unsafe`` tier).
+            modules.  `None` allows any import.
+        policy (CapabilityPolicy | None): Capability policy.  `None` means
+            no policy is applied (`docker_unsafe` tier).
+        working_directory (str | None): Ignored for Docker tiers; present for
+            interface compatibility with `ExecutionEnvironment`.
+        installed_packages (set[str] | None): Shared set to persist the install
+            cache across multiple `execute()` calls.  `None` creates a fresh set.
+        failed_packages (set[str] | None): Shared set of package names whose
+            installation has already failed.  Packages in this set are skipped on
+            subsequent calls; clear the set to allow a retry.  `None` creates a
+            fresh set.
+        tier (str | None): Tier name reported in `ExecutionResult.execution_mode`.
+            `None` infers the tier from policy presence (`"docker"` when a policy
+            is set, `"docker_unsafe"` otherwise).  Prefer passing an explicit value;
+            `make_execution_environment` always supplies one.
     """
 
     def __init__(
@@ -380,8 +472,11 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         allowed_imports: list[str] | None = None,
         policy: CapabilityPolicy | None = None,
         working_directory: str | None = None,
+        installed_packages: set[str] | None = None,
+        failed_packages: set[str] | None = None,
+        tier: str | None = None,
     ):
-        """Initialize with an optional import allowlist, capability policy, and working directory."""
+        """Initialize the Docker sandbox environment with optional install caches and tier override."""
         super().__init__(
             allowed_imports=allowed_imports,
             policy=policy,
@@ -389,11 +484,20 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         )
         self._session: Any = None  # SandboxSession when open via context manager
         self._container_id: str | None = None  # set after session opens
+        self._installed_packages: set[str] = (
+            installed_packages if installed_packages is not None else set()
+        )
+        self._failed_packages: set[str] = (
+            failed_packages if failed_packages is not None else set()
+        )
+        self._tier: str | None = tier
 
     def _mode(self) -> str:
+        if self._tier is not None:
+            return self._tier
         return "docker" if self.policy is not None else "docker_unsafe"
 
-    def __enter__(self) -> "LLMSandboxEnvironment":
+    def __enter__(self) -> LLMSandboxEnvironment:
         """Open the Docker session for use across multiple calls."""
         try:
             from llm_sandbox import SandboxSession
@@ -425,7 +529,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             self._container_id = None
 
     def copy_in(self, host_path: Path, container_path: str) -> None:
-        """Copy a file from the host into the running Docker container via ``docker cp``.
+        """Copy a file from the host into the running Docker container via `docker cp`.
 
         Args:
             host_path (Path): Absolute path on the host filesystem.
@@ -434,7 +538,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         Raises:
             RuntimeError: If the environment is not open as a context manager.
             RuntimeError: If the container ID cannot be determined.
-            subprocess.CalledProcessError: If ``docker cp`` fails.
+            subprocess.CalledProcessError: If `docker cp` fails.
         """
         container_id = self._require_container_id()
         subprocess.run(
@@ -444,7 +548,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         )
 
     def copy_out(self, container_path: str, host_path: Path) -> None:
-        """Copy a file from the running Docker container to the host via ``docker cp``.
+        """Copy a file from the running Docker container to the host via `docker cp`.
 
         Args:
             container_path (str): Source path inside the container.
@@ -453,7 +557,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         Raises:
             RuntimeError: If the environment is not open as a context manager.
             RuntimeError: If the container ID cannot be determined.
-            subprocess.CalledProcessError: If ``docker cp`` fails.
+            subprocess.CalledProcessError: If `docker cp` fails.
         """
         container_id = self._require_container_id()
         subprocess.run(
@@ -474,6 +578,62 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             )
         return self._container_id
 
+    def _install_packages_in_session(self, session: Any) -> bool:
+        """Install any pending packages inside the container via pip.
+
+        Only installs packages not already in `_installed_packages`.  Updates
+        the cache on success so repeated `execute()` calls don't reinstall.
+
+        Args:
+            session: An open `SandboxSession` instance to run pip inside.
+
+        Returns:
+            bool: `True` if all pending packages installed successfully (or there
+            were none to install), `False` if installation failed.
+        """
+        if not (self.policy and self.policy.packages):
+            return True
+        pending = [
+            p
+            for p in self.policy.packages
+            if p not in self._installed_packages and p not in self._failed_packages
+        ]
+        if not pending:
+            return True
+        # session.run() executes Python code, so invoke pip via subprocess inside
+        # the container rather than as a bare shell command.  Use repr() to
+        # embed each package specifier safely — this prevents code injection via
+        # crafted package names containing quotes or other Python metacharacters.
+        pkg_repr_list = repr(
+            pending
+        )  # e.g. ['numpy', 'pandas'] → "['numpy', 'pandas']"
+        pip_code = (
+            f"import subprocess, sys\n"
+            f"r = subprocess.run([sys.executable, '-m', 'pip', 'install', *{pkg_repr_list}],"
+            f" capture_output=True)\n"
+            f"print(r.stdout.decode(errors='replace'))\n"
+            f"raise SystemExit(r.returncode)\n"
+        )
+        try:
+            result = session.run(pip_code)
+            if result.exit_code == 0:
+                self._installed_packages.update(pending)
+                return True
+            else:
+                self._failed_packages.update(pending)
+                logger.warning(
+                    "pip install failed inside container for %s: %s",
+                    pending,
+                    result.stderr.strip() if result.stderr else "",
+                )
+                return False
+        except Exception as e:
+            self._failed_packages.update(pending)
+            logger.warning(
+                "Unexpected error installing packages %s in container: %s", pending, e
+            )
+            return False
+
     def execute(self, code: str, timeout: int | None = None) -> ExecutionResult:
         """Execute code in a Docker container.
 
@@ -483,7 +643,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         Args:
             code (str): The Python source code to execute.
             timeout (int | None): Maximum seconds to allow the sandboxed process to
-                run.  Falls back to ``policy.timeout`` if set, then to 60 s.
+                run.  Falls back to `policy.timeout` if set, then to 60 s.
 
         Returns:
             ExecutionResult: Execution outcome with stdout/stderr and success flag,
@@ -526,11 +686,43 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
 
         try:
             if self._session is not None:
+                # Persistent session: container is reused across calls, so the
+                # install cache correctly reflects what is already in the container.
+                if not self._install_packages_in_session(self._session):
+                    return ExecutionResult(
+                        success=False,
+                        stdout=None,
+                        stderr=None,
+                        skipped=True,
+                        skip_message=f"Package installation failed: {', '.join(self._failed_packages)}",
+                        execution_mode=self._mode(),
+                    )
                 result = self._session.run(code, timeout=resolved_timeout)
             else:
+                # One-shot mode: a fresh container is created for every execute()
+                # call.  We must NOT consult the shared _installed_packages cache
+                # here — packages installed in a previous container are gone.  Use
+                # a throwaway local cache so _install_packages_in_session only
+                # skips duplicates within this single call.
                 with SandboxSession(
                     lang="python", verbose=False, keep_template=False
                 ) as session:
+                    saved_cache = self._installed_packages
+                    self._installed_packages = set()
+                    install_ok = True
+                    try:
+                        install_ok = self._install_packages_in_session(session)
+                    finally:
+                        self._installed_packages = saved_cache
+                    if not install_ok:
+                        return ExecutionResult(
+                            success=False,
+                            stdout=None,
+                            stderr=None,
+                            skipped=True,
+                            skip_message=f"Package installation failed: {', '.join(self._failed_packages)}",
+                            execution_mode=self._mode(),
+                        )
                     result = session.run(code, timeout=resolved_timeout)
 
             stdout = _truncate(
@@ -625,31 +817,42 @@ def make_execution_environment(
     policy: CapabilityPolicy | None = None,
     allowed_imports: list[str] | None = None,
     working_directory: str | None = None,
+    _install_cache: set[str] | None = None,
+    _failed_cache: set[str] | None = None,
 ) -> ExecutionEnvironment:
     """Create an :class:`ExecutionEnvironment` for the given tier.
 
-    The ``policy`` argument overrides the tier's default policy.  For unsafe
-    tiers (``"local_unsafe"``, ``"docker_unsafe"``) the policy defaults to
-    ``None`` — pass an explicit policy to add declaration without changing the
+    The `policy` argument overrides the tier's default policy.  For unsafe
+    tiers (`"local_unsafe"`, `"docker_unsafe"`) the policy defaults to
+    `None` — pass an explicit policy to add declaration without changing the
     tier.
 
     Args:
-        tier (ExecutionTier): One of ``"static"``, ``"local_unsafe"``, ``"local"``,
-            ``"docker_unsafe"``, or ``"docker"``.
+        tier (ExecutionTier): One of `"static"`, `"local_unsafe"`, `"local"`,
+            `"docker_unsafe"`, or `"docker"`.
         policy (CapabilityPolicy | None): Override the tier's default policy.
-            ``None`` uses the tier default (``LOCAL_POLICY`` / ``DOCKER_POLICY``
-            for policy tiers; ``None`` for unsafe tiers).
+            `None` uses the tier default (`LOCAL_POLICY` / `DOCKER_POLICY`
+            for policy tiers; `None` for unsafe tiers).
         allowed_imports (list[str] | None): Allowlist of importable top-level
-            modules.  ``None`` allows any import.
+            modules.  `None` allows any import.
         working_directory (str | None): Directory to use as cwd during execution.
-            Only honoured by ``UnsafeEnvironment`` (local tiers); ignored for
+            Only honoured by `UnsafeEnvironment` (local tiers); ignored for
             Docker and static tiers.
+        _install_cache (set[str] | None): Shared set of already-installed package
+            names.  When provided, the environment will not reinstall packages
+            already present in the set, and will add newly installed packages to
+            it.  Pass the same set across multiple `make_execution_environment`
+            calls to avoid redundant installs within one tool lifetime.
+        _failed_cache (set[str] | None): Shared set of package names whose
+            installation has already failed.  Packages in this set are skipped
+            on subsequent calls; clear the set to allow a retry.  Pass the same
+            set as `_install_cache` to persist failure state across calls.
 
     Returns:
         ExecutionEnvironment: Configured environment instance.
 
     Raises:
-        ValueError: If ``tier`` is not one of the recognised execution tier strings.
+        ValueError: If `tier` is not one of the recognised execution tier strings.
     """
     resolved_policy: CapabilityPolicy | None
     match tier:
@@ -661,6 +864,9 @@ def make_execution_environment(
                 allowed_imports=allowed_imports,
                 policy=resolved_policy,
                 working_directory=working_directory,
+                installed_packages=_install_cache,
+                failed_packages=_failed_cache,
+                tier="local_unsafe",
             )
         case "local":
             resolved_policy = policy if policy is not None else LOCAL_POLICY
@@ -668,6 +874,9 @@ def make_execution_environment(
                 allowed_imports=allowed_imports,
                 policy=resolved_policy,
                 working_directory=working_directory,
+                installed_packages=_install_cache,
+                failed_packages=_failed_cache,
+                tier="local",
             )
         case "docker_unsafe":
             resolved_policy = policy  # None by default — no policy
@@ -675,6 +884,9 @@ def make_execution_environment(
                 allowed_imports=allowed_imports,
                 policy=resolved_policy,
                 working_directory=working_directory,
+                installed_packages=_install_cache,
+                failed_packages=_failed_cache,
+                tier="docker_unsafe",
             )
         case "docker":
             resolved_policy = policy if policy is not None else DOCKER_POLICY
@@ -682,6 +894,9 @@ def make_execution_environment(
                 allowed_imports=allowed_imports,
                 policy=resolved_policy,
                 working_directory=working_directory,
+                installed_packages=_install_cache,
+                failed_packages=_failed_cache,
+                tier="docker",
             )
         case _:
             raise ValueError(
@@ -690,8 +905,305 @@ def make_execution_environment(
             )
 
 
+_INSTALL_TIMEOUT_SECONDS = 120
+
+
+def _validate_package_names(packages: list[str]) -> None:
+    """Raise ValueError for any obviously invalid package specifier.
+
+    Rejects empty strings and flag-style arguments (leading `-`) that would
+    be passed directly to pip/uv.  Does not attempt full PEP 508 validation.
+
+    Args:
+        packages (list[str]): Package specifiers to validate.
+
+    Raises:
+        ValueError: If any specifier is empty or starts with `-`.
+    """
+    for spec in packages:
+        if not spec or not spec.strip():
+            raise ValueError(
+                f"Invalid package specifier {spec!r}: specifiers must be non-empty strings."
+            )
+        if spec.lstrip().startswith("-"):
+            raise ValueError(
+                f"Invalid package specifier {spec!r}: flag-style arguments (starting with '-') "
+                "are not allowed.  Pass pip flags via a CapabilityPolicy or configure your "
+                "package index separately."
+            )
+
+
+def _install_packages(packages: list[str]) -> bool:
+    """Install packages before execution.
+
+    Prefers `uv pip install` when uv is on PATH (typical in uv-managed
+    venvs where `python -m pip` is unavailable); falls back to
+    `sys.executable -m pip` otherwise.  Logs failures but does not abort.
+
+    Args:
+        packages (list[str]): Package specifiers to install.
+
+    Returns:
+        bool: `True` if installation succeeded, `False` if it failed.
+    """
+    # Pass --python so uv installs into the same interpreter the subprocess will use,
+    # not whatever venv uv happens to resolve in CI or nested environments.
+    cmd = (
+        [_UV, "pip", "install", "--python", sys.executable, *packages]
+        if _UV
+        else [sys.executable, "-m", "pip", "install", *packages]
+    )
+    try:
+        subprocess.run(
+            cmd, capture_output=True, check=True, timeout=_INSTALL_TIMEOUT_SECONDS
+        )
+        return True
+    except subprocess.TimeoutExpired:
+        logger.warning(
+            "Package install timed out after %ds for %s",
+            _INSTALL_TIMEOUT_SECONDS,
+            packages,
+        )
+        return False
+    except subprocess.CalledProcessError as e:
+        logger.warning(
+            "Package install failed for %s: %s",
+            packages,
+            e.stderr.decode(errors="replace"),
+        )
+        return False
+    except Exception as e:
+        logger.warning("Unexpected error installing packages %s: %s", packages, e)
+        return False
+
+
+def _scan_artifacts(directory: Path) -> list[Artifact]:
+    """Scan a directory recursively and return an Artifact for each regular file found.
+
+    Walks the full subtree so files written to subdirectories (e.g.
+    `./output/fig.png`) are included.  Entries are sorted for stable ordering.
+
+    Args:
+        directory (Path): Root directory to scan for output files.
+
+    Returns:
+        list[Artifact]: One entry per regular file, with size_bytes and inferred
+        content_type.
+    """
+    artifacts: list[Artifact] = []
+    try:
+        entries = sorted(directory.rglob("*"))
+    except Exception as e:
+        logger.warning("Failed to scan artifact directory %s: %s", directory, e)
+        return artifacts
+    for path in entries:
+        try:
+            st = path.stat()
+            if stat.S_ISREG(st.st_mode):
+                content_type, _ = mimetypes.guess_type(str(path))
+                artifacts.append(
+                    Artifact(
+                        path=path, size_bytes=st.st_size, content_type=content_type
+                    )
+                )
+        except Exception as e:
+            logger.warning("Failed to stat artifact %s: %s", path, e)
+    return artifacts
+
+
+_MATPLOTLIB_AGG_PREAMBLE = "import matplotlib; matplotlib.use('Agg')\n"
+
+
+def _needs_matplotlib_preamble(code: str) -> bool:
+    """Return True if code imports matplotlib (so Agg backend should be pre-configured)."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(alias.name.split(".")[0] == "matplotlib" for alias in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.module.split(".")[0] == "matplotlib":
+                return True
+    return False
+
+
+_DOCKER_TIERS: frozenset[str] = frozenset({"docker", "docker_unsafe"})
+
+
+def python_tool(
+    tier: ExecutionTier = "local_unsafe",
+    packages: list[str] | None = None,
+    artifact_dir: Path | None = None,
+    policy: CapabilityPolicy | None = None,
+    allowed_imports: list[str] | None = None,
+    name: str = "python",
+    suppress_agg: bool = False,
+) -> MelleaTool:
+    """Create a configurable Python execution tool that returns structured artifacts.
+
+    The returned `MelleaTool` wraps a callable with signature
+    `run_python(code: str) -> ExecutionResult`.  It can be passed directly to
+    `ModelOption.TOOLS` in agentic ReACT loops.
+
+    For **local tiers** (`"local_unsafe"`, `"local"`), files written to
+    `artifact_dir` (or to the per-call tempdir when `artifact_dir` is `None`)
+    are surfaced as `Artifact` objects on the returned `ExecutionResult`.  Only
+    files produced by a **successful** execution (exit code 0) are included.
+
+    Note:
+        **Docker tiers** (`"docker"`, `"docker_unsafe"`) do not support
+        artifact scanning.  `artifact_dir` is ignored for these tiers and
+        `result.artifacts` is always `[]`.  A `RuntimeWarning` is emitted if
+        `artifact_dir` is passed with a docker tier.
+
+    When the executed code imports `matplotlib`, `matplotlib.use('Agg')` is
+    injected automatically as a preamble so plots are written to files rather
+    than attempting interactive display.  Pass `suppress_agg=True` to disable
+    this injection (e.g. when the code sets its own backend explicitly).
+
+    Args:
+        tier (ExecutionTier): Execution tier — one of `"static"`,
+            `"local_unsafe"`, `"local"`, `"docker_unsafe"`, or
+            `"docker"`.  Defaults to `"local_unsafe"`.
+        packages (list[str] | None): Python packages to pre-install via
+            `pip install` before the first execution.  Ignored for the
+            `"static"` tier.  `None` or `[]` means no installs.
+            Each specifier must be a non-empty string and must not begin
+            with `-` (flag-style arguments are rejected); PEP 508 specifiers
+            such as `pkg @ git+https://...` are accepted.  Strings are
+            passed directly to pip/uv — callers are responsible for trusting
+            their content as if invoking `pip install` themselves.
+            Not thread-safe: the shared install/failed caches are mutated
+            without a lock, so concurrent `run_python` calls on the same
+            tool instance may race on first install.
+        artifact_dir (Path | None): Directory where the executed code should
+            write output files.  A per-call tempdir is used when `None`;
+            that tempdir is kept alive as long as the returned
+            `ExecutionResult` holds artifacts, and cleaned up immediately
+            when no artifacts are produced.  Ignored for docker tiers.
+        policy (CapabilityPolicy | None): Override the tier's default
+            `CapabilityPolicy`.  When `packages` is also provided, those
+            packages are merged into this policy.
+        allowed_imports (list[str] | None): Allowlist of importable top-level
+            modules.  `None` disables the import check.
+        name (str): Tool name exposed to the model.  Defaults to `"python"`.
+        suppress_agg (bool): When `True`, skip the automatic
+            `matplotlib.use('Agg')` preamble injection.  Use this when the
+            executed code sets its own matplotlib backend.  Defaults to
+            `False`.
+
+    Returns:
+        MelleaTool: A configured tool ready for use in `ModelOption.TOOLS`.
+
+    Raises:
+        ImportError: If `MelleaTool` cannot be imported (should not happen in
+            a normal mellea installation).
+        ValueError: If any entry in `packages` is empty or begins with `-`.
+
+    Example::
+
+        from mellea.stdlib.tools import python_tool
+
+        tool = python_tool(packages=["matplotlib", "numpy"])
+        result = tool.run(code="import numpy as np; print(np.sqrt(4))")
+        print(result.stdout)   # "2.0"
+        print(result.artifacts)  # files written during execution
+    """
+    from ...backends.tools import MelleaTool
+
+    effective_policy: CapabilityPolicy | None = policy
+
+    if packages:  # None and [] both mean "no installs requested"
+        _validate_package_names(packages)
+        if effective_policy is None:
+            effective_policy = CapabilityPolicy(
+                package_installation=True, packages=list(packages)
+            )
+        else:
+            # Merge, deduplicate (preserving order), and ensure the flag is set.
+            seen: set[str] = set()
+            merged: list[str] = []
+            for p in list(effective_policy.packages) + list(packages):
+                if p not in seen:
+                    seen.add(p)
+                    merged.append(p)
+            effective_policy = replace(
+                effective_policy, package_installation=True, packages=merged
+            )
+
+    # Shared caches — persist across all run_python() calls on this tool instance
+    # so packages are only installed once per tool lifetime, not per call.
+    # Clear _failed_cache to force a retry of previously failed installs.
+    _install_cache: set[str] = set()
+    _failed_cache: set[str] = set()
+
+    if tier in _DOCKER_TIERS and artifact_dir is not None:
+        warnings.warn(
+            f"artifact_dir is ignored for the {tier!r} tier — "
+            "LLMSandboxEnvironment does not scan the container filesystem for "
+            "artifacts.  result.artifacts will always be [].  "
+            "Use a local tier to surface output files as structured artifacts.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    def run_python(code: str) -> ExecutionResult:
+        """Execute Python code and return the result with any output artifacts."""
+        patched_code = (
+            (_MATPLOTLIB_AGG_PREAMBLE if _needs_matplotlib_preamble(code) else "")
+            if not suppress_agg
+            else ""
+        ) + code
+
+        if artifact_dir is not None:
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            env = make_execution_environment(
+                tier,
+                policy=effective_policy,
+                allowed_imports=allowed_imports,
+                working_directory=str(artifact_dir),
+                _install_cache=_install_cache,
+                _failed_cache=_failed_cache,
+            )
+            return env.execute(patched_code)
+
+        # No caller-supplied artifact_dir.  Create a per-call tempdir; clean it
+        # up immediately when no artifacts were produced, or attach a finalizer
+        # so it is removed when the result (and therefore its artifacts) is GC'd.
+        tmp_dir = Path(tempfile.mkdtemp())
+        try:
+            env = make_execution_environment(
+                tier,
+                policy=effective_policy,
+                allowed_imports=allowed_imports,
+                working_directory=str(tmp_dir),
+                _install_cache=_install_cache,
+                _failed_cache=_failed_cache,
+            )
+            result = env.execute(patched_code)
+        except Exception:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise
+        if not result.artifacts:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        else:
+            weakref.finalize(result, shutil.rmtree, tmp_dir, True)
+        return result
+
+    return MelleaTool.from_callable(run_python, name=name)
+
+
 def code_interpreter(code: str) -> ExecutionResult:
     """Execute Python code in a Docker sandbox (docker_unsafe tier).
+
+    .. deprecated::
+        Use :func:`python_tool` instead::
+
+            from mellea.stdlib.tools import python_tool
+            result = python_tool(tier="docker_unsafe").run(code=code)
 
     Args:
         code: The Python code to execute.
@@ -699,6 +1211,12 @@ def code_interpreter(code: str) -> ExecutionResult:
     Returns:
         An `ExecutionResult` with stdout, stderr, and a success flag.
     """
+    warnings.warn(
+        "code_interpreter() is deprecated and will be removed in a future release. "
+        "Use python_tool(tier='docker_unsafe') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     env = make_execution_environment("docker_unsafe")
     return env.execute(code)
 
@@ -706,11 +1224,23 @@ def code_interpreter(code: str) -> ExecutionResult:
 def local_code_interpreter(code: str) -> ExecutionResult:
     """Execute Python code in the current process environment (local_unsafe tier).
 
+    .. deprecated::
+        Use :func:`python_tool` instead::
+
+            from mellea.stdlib.tools import python_tool
+            result = python_tool(tier="local_unsafe").run(code=code)
+
     Args:
         code: The Python code to execute.
 
     Returns:
         An `ExecutionResult` with stdout, stderr, and a success flag.
     """
+    warnings.warn(
+        "local_code_interpreter() is deprecated and will be removed in a future release. "
+        "Use python_tool(tier='local_unsafe') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     env = make_execution_environment("local_unsafe")
     return env.execute(code, timeout=60)
