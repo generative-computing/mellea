@@ -258,12 +258,12 @@ async def test_multi_turn_strategy_with_concurrency(mocked_context_backend):
 
 
 def test_loop_budget_must_be_positive():
-    with pytest.raises(AssertionError, match="Loop budget"):
+    with pytest.raises(ValueError, match="Loop budget"):
         RejectionSamplingStrategy(loop_budget=0)
 
 
 def test_concurrency_budget_must_be_positive():
-    with pytest.raises(AssertionError, match="Concurrency budget"):
+    with pytest.raises(ValueError, match="Concurrency budget"):
         RejectionSamplingStrategy(concurrency_budget=0)
 
 

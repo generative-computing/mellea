@@ -83,8 +83,9 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     Attributes:
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         success: `True` if at least one attempt passed all requirements.
-        iterations_used: Total number of iterations the executed. For concurrent sampling, this
-            corresponds to the loop_budget * concurrency budget.
+        iterations_used: Total number of sampling iterations that completed. With concurrency
+            enabled, this may be less than `loop_budget * concurrency_budget` if the strategy
+            exits early after a successful result.
         final_result: The selected `ModelOutputThunk` (best success or best failure).
         final_action: The `Component` that produced `final_result`.
 

@@ -128,7 +128,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         - `loop_budget=2, concurrency_budget=2`: two concurrent subsamples, each with one repair.
 
     Raises:
-        AssertionError: If `loop_budget < 1` or `concurrency_budget < 1`.
+        ValueError: If `loop_budget < 1` or `concurrency_budget < 1`.
     """
 
     loop_budget: int
@@ -142,8 +142,10 @@ class BaseSamplingStrategy(SamplingStrategy):
         requirements: list[Requirement] | None = None,
     ):
         """Initialize BaseSamplingStrategy with budgets and optional global requirements."""
-        assert loop_budget > 0, "Loop budget must be at least 1."
-        assert concurrency_budget > 0, "Concurrency budget must be at least 1."
+        if loop_budget < 1:
+            raise ValueError("Loop budget must be at least 1.")
+        if concurrency_budget < 1:
+            raise ValueError("Concurrency budget must be at least 1.")
 
         self.loop_budget = loop_budget
         self.concurrency_budget = concurrency_budget
@@ -224,6 +226,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
+            ValueError: If a `SAMPLING_LOOP_START` hook returns a non-positive `loop_budget`.
         """
         validation_ctx = validation_ctx if validation_ctx is not None else context
 
@@ -375,6 +378,12 @@ class BaseSamplingStrategy(SamplingStrategy):
             # If no slices made it through, surface the first non-cancellation
             # exception from a producer rather than letting the empty-slices
             # state crash later in SamplingResult with a misleading assertion.
+            for r in producer_results:
+                if isinstance(r, BaseException) and not isinstance(
+                    r, asyncio.CancelledError
+                ):
+                    flog.warning("A concurrent subsample raised an exception: %s", r)
+
             if not slices:
                 for r in producer_results:
                     if isinstance(r, BaseException) and not isinstance(
@@ -394,7 +403,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 )
 
             assert s_result.result_index < len(s_result.sample_generations), (
-                "The select_from_failure method did not return a valid result. It has to selected from failed_results."
+                "The select_from_failure method did not return a valid result. It must return an index into failed_results."
             )
             assert s_result.result._generate_log is not None
             s_result.result._generate_log.is_final_result = True

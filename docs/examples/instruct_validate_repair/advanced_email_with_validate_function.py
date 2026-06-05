@@ -23,9 +23,9 @@ email_v1 = m.instruct(
     strategy=RejectionSamplingStrategy(loop_budget=3),
 )
 
-# Additionally, you could specify 3 concurrent requests.
-# This will potentially result in wasted samples and a high-number of
-# requests due to concurrent validation as well.
+# Additionally, you could run 3 concurrent subsamples — stopping as soon as one
+# passes validation. This cuts wall-clock latency but multiplies request count,
+# which can trigger rate limits on paid backends.
 # email_v1 = m.instruct(
 #     "Write an email to invite all interns to the office party.",
 #     requirements=["be formal", word_limit_req],
