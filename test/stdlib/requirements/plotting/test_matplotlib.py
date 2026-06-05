@@ -340,10 +340,10 @@ import matplotlib.pyplot as plt
     def test_matplotlib_use_with_variable(self):
         """Test that matplotlib.use() with variable backend is not detected."""
         code_with_var = """```python
-        import matplotlib
-        backend = 'Agg'
-        matplotlib.use(backend)
-        ```"""
+import matplotlib
+backend = 'Agg'
+matplotlib.use(backend)
+```"""
         req = MatplotlibHeadlessBackend()
         ctx = from_model(code_with_var)
         result = req.validation_fn(ctx)
@@ -371,10 +371,10 @@ class TestPlotFileSavedEdgeCases:
     def test_savefig_with_variable_path(self):
         """Test that savefig() with variable path is not detected."""
         code_with_var = """```python
-        import matplotlib.pyplot as plt
-        output_path = '/tmp/plot.png'
-        plt.savefig(output_path)
-        ```"""
+import matplotlib.pyplot as plt
+output_path = '/tmp/plot.png'
+plt.savefig(output_path)
+```"""
         req = PlotFileSaved(output_path="/tmp/plot.png")
         ctx = from_model(code_with_var)
         result = req.validation_fn(ctx)
@@ -384,9 +384,9 @@ class TestPlotFileSavedEdgeCases:
     def test_different_output_extensions(self):
         """Test that exact path matching is required."""
         code_jpg = """```python
-        import matplotlib.pyplot as plt
-        plt.savefig('/tmp/plot.jpg')
-        ```"""
+import matplotlib.pyplot as plt
+plt.savefig('/tmp/plot.jpg')
+```"""
         req = PlotFileSaved(output_path="/tmp/plot.png")
         ctx = from_model(code_jpg)
         result = req.validation_fn(ctx)

@@ -73,6 +73,26 @@ def _extract_backend_name(node: ast.Call) -> str | None:
     return None
 
 
+def _matplotlib_use_call_exists(code: str) -> bool:
+    """Check if matplotlib.use() is called in the code.
+
+    Args:
+        code: Python code to analyze.
+
+    Returns:
+        True if any matplotlib.use() call exists, False otherwise.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _is_matplotlib_use_call(node):
+            return True
+    return False
+
+
 def _find_matplotlib_use_backend(code: str) -> str | None:
     """Find the backend name in matplotlib.use() call within code.
 
@@ -80,7 +100,9 @@ def _find_matplotlib_use_backend(code: str) -> str | None:
         code: Python code to analyze.
 
     Returns:
-        Backend name if found, None otherwise.
+        Backend name if found as a literal string, None otherwise.
+        Returns None both when matplotlib.use() is absent and when it's called
+        with a non-literal argument (e.g., matplotlib.use(BACKEND_VAR)).
     """
     try:
         tree = ast.parse(code)
@@ -133,10 +155,13 @@ def _output_path_in_savefig_args(node: ast.Call, output_path: str) -> bool:
 
     # Check keyword arguments (e.g., fname="path", filename="path")
     for keyword in node.keywords:
-        if isinstance(keyword.value, ast.Constant) and isinstance(
-            keyword.value.value, str
+        if keyword.arg in ("fname", "filename") and isinstance(
+            keyword.value, ast.Constant
         ):
-            if keyword.value.value == output_path:
+            if (
+                isinstance(keyword.value.value, str)
+                and keyword.value.value == output_path
+            ):
                 return True
     return False
 
@@ -169,9 +194,6 @@ class MatplotlibHeadlessBackend(Requirement):
     Matplotlib must be explicitly configured with a headless backend (e.g., 'Agg')
     via matplotlib.use() before importing pyplot. Interactive backends like 'TkAgg'
     will fail because they require a display server.
-
-    Raises:
-        None — validation failure returns ValidationResult with False result.
     """
 
     def __init__(self) -> None:
@@ -200,6 +222,11 @@ class MatplotlibHeadlessBackend(Requirement):
 
         backend = _find_matplotlib_use_backend(code)
         if backend is None:
+            if _matplotlib_use_call_exists(code):
+                return ValidationResult(
+                    result=False,
+                    reason="matplotlib.use() called with a non-literal argument; backend cannot be statically verified. Use a literal string like matplotlib.use('Agg').",
+                )
             return ValidationResult(
                 result=False,
                 reason="No matplotlib.use() call found. Add matplotlib.use('Agg') before importing pyplot.",
@@ -268,9 +295,6 @@ class PlotDependenciesAvailable(Requirement):
 
     Both matplotlib and numpy must be available in the execution environment.
     This requirement checks import availability but does not execute code.
-
-    Raises:
-        ImportError: If matplotlib or numpy cannot be imported.
     """
 
     def __init__(self) -> None:
@@ -289,18 +313,16 @@ class PlotDependenciesAvailable(Requirement):
 
         Returns:
             ValidationResult with pass/fail and dependency details.
-
-        Raises:
-            ImportError: If matplotlib or numpy cannot be imported.
         """
         for module_name in ["matplotlib", "numpy"]:
             try:
                 __import__(module_name)
-            except ImportError as e:
-                raise ImportError(
-                    f"Missing dependency: {module_name}. "
-                    f"Install with: pip install {module_name}"
-                ) from e
+            except ImportError:
+                return ValidationResult(
+                    result=False,
+                    reason=f"Missing dependency: {module_name}. "
+                    f"Install with: pip install {module_name}",
+                )
 
         return ValidationResult(
             result=True, reason="All dependencies available (matplotlib, numpy)."

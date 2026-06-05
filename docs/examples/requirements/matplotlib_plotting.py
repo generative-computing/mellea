@@ -1,4 +1,4 @@
-# pytest: integration, qualitative
+# pytest: unit
 """Examples for matplotlib-specific requirements validation.
 
 This example demonstrates how to use MatplotlibHeadlessBackend, PlotFileSaved,
