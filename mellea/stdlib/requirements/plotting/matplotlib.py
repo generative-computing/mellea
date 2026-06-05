@@ -228,11 +228,7 @@ class PlotFileSaved(Requirement):
     """
 
     def __init__(self, output_path: str) -> None:
-        """Initialize PlotFileSaved requirement.
-
-        Args:
-            output_path: Expected file path for plot output.
-        """
+        """Initialize PlotFileSaved requirement."""
         self.output_path = output_path
         super().__init__(
             description=f"Plot is explicitly saved to file using savefig('{output_path}').",
