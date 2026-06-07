@@ -434,7 +434,7 @@ class StreamChunkingResult:
                 "as_thunk accessed before acomplete() — await acomplete() first"
             )
         thunk = ModelOutputThunk(value=self.full_text)
-        thunk._cancelled = self._mot._cancelled
+        thunk._cancelled = self._mot.cancelled
         thunk.generation = copy(self._mot.generation)
         thunk.parsed_repr = thunk.value  # type: ignore[assignment]
         return thunk
