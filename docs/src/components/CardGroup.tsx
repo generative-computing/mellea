@@ -1,6 +1,7 @@
 import React from 'react';
 
 interface CardGroupProps {
+  cols?: number; // accepted for Mintlify MDX compat; layout uses CSS auto-fit
   children?: React.ReactNode;
 }
 

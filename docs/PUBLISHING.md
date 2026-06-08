@@ -101,8 +101,9 @@ Docusaurus versioning is integrated into the release pipeline:
 - **On each final release** (`publish-release.yml` with `bump_type: final`
   or `patch-final`): the `snapshot-docs` job runs
   `docusaurus docs:version X.Y.Z`, commits `versioned_docs/version-X.Y.Z/`
-  to `main`, and pushes. That push triggers `docs-publish.yml` via the
-  `docs/**` path filter, deploying production with the new default version.
+  to `main`, and explicitly dispatches `docs-publish.yml` via
+  `workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow
+  run, so the dispatch is explicit rather than relying on a path filter.)
 - **Version dropdown** in the navbar lets users switch between released
   versions and `main (unreleased)`.
 

@@ -167,17 +167,23 @@ jobs:
 
       - name: Write job summary
         if: always()
+        env:
+          MARKDOWNLINT_OUTCOME: ${{ steps.markdownlint.outcome }}
+          VALIDATE_API_OUTCOME: ${{ steps.validate_api.outcome }}
+          AUDIT_COVERAGE_OUTCOME: ${{ steps.audit_coverage.outcome }}
+          QUALITY_GATE_OUTCOME: ${{ steps.quality_gate.outcome }}
+          BUILD_SITE_OUTCOME: ${{ steps.build_site.outcome }}
         run: |
           {
             echo "## Docs Build Summary"
             echo ""
             echo "| Check | Result |"
             echo "|-------|--------|"
-            echo "| Markdownlint | ${{ steps.markdownlint.outcome }} |"
-            echo "| API Validation | ${{ steps.validate_api.outcome }} |"
-            echo "| API Coverage | ${{ steps.audit_coverage.outcome }} |"
-            echo "| Docstring Quality | ${{ steps.quality_gate.outcome }} |"
-            echo "| Docusaurus Build | ${{ steps.build_site.outcome }} |"
+            echo "| Markdownlint | ${MARKDOWNLINT_OUTCOME} |"
+            echo "| API Validation | ${VALIDATE_API_OUTCOME} |"
+            echo "| API Coverage | ${AUDIT_COVERAGE_OUTCOME} |"
+            echo "| Docstring Quality | ${QUALITY_GATE_OUTCOME} |"
+            echo "| Docusaurus Build | ${BUILD_SITE_OUTCOME} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------

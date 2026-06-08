@@ -3,7 +3,7 @@ import Link from '@docusaurus/Link';
 
 interface CardProps {
   title?: string;
-  icon?: string;
+  icon?: string; // accepted for Mintlify MDX compat; not rendered
   href?: string;
   children?: React.ReactNode;
 }

@@ -199,9 +199,10 @@ and break `git checkout v0.4.2` semantics. Old `release/v0.3`,
 
 For finals and patch-finals, the `snapshot-docs` job in `publish-release.yml`
 commits a versioned snapshot of `main`'s docs to `main` immediately after the
-GitHub Release is created. This commit triggers `docs-publish.yml` via the
-`docs/**` path filter, which deploys production with the new version as the
-default. Visitors see the released docs by default; a version dropdown in the
+GitHub Release is created, then explicitly dispatches `docs-publish.yml` via
+`workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow run,
+so the dispatch is explicit.) This deploys production with the new version as
+the default. Visitors see the released docs by default; a version dropdown in the
 navbar lets them switch to `main` (unreleased) or any prior snapshot.
 
 `docs-publish.yml` only deploys to production when the triggering release is the

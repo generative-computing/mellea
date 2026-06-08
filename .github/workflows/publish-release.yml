@@ -153,6 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -185,3 +186,11 @@ jobs:
           git add docs/versioned_docs docs/versioned_sidebars docs/versions.json docs/docusaurus.config.ts
           git commit -m "docs: snapshot ${VERSION}"
           git push origin main
+      - name: Trigger docs deploy from snapshot
+        # A GITHUB_TOKEN push does not trigger workflow runs by design, so we
+        # dispatch docs-publish.yml explicitly. workflow_dispatch is exempt from
+        # the no-re-trigger rule.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
+        run: gh workflow run docs-publish.yml --ref main --field release_tag="v${VERSION}"

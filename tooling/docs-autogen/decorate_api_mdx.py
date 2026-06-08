@@ -13,7 +13,7 @@ Decoration passes (applied in order per file):
 1. fix_source_links      — correct GitHub blob URLs to versioned tags
 1b. normalize_icon_size  — replace mdxify's hardcoded 14px icon style with em units
 2. inject_preamble       — add per-module introductory text
-3. inject_sidebar_fix    — insert SidebarFix Mintlify component
+3. wrap_doctest_blocks   — wrap bare >>> blocks in fenced code blocks
 4. escape_mdx_syntax     — escape {{ }} in code blocks so MDX doesn't treat them as JSX
 5. add_cross_references  — linkify type names to their definition pages
 6. decorate_mdx_body     — add CLASS/FUNC pills and visual dividers to headings
@@ -28,48 +28,7 @@ import argparse
 import re
 from pathlib import Path
 
-# =========================
-# SidebarFix injection
-# =========================
-
 FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.S)
-
-# Canonical Mintlify docs-root absolute import (this is what worked for you)
-SIDEBAR_IMPORT_LINE = 'import { SidebarFix } from "/snippets/SidebarFix.mdx";'
-SIDEBAR_RENDER_LINE = "<SidebarFix />"
-
-IMPORT_RE = re.compile(
-    r'(?m)^\s*import\s+\{\s*SidebarFix\s*\}\s+from\s+["\']\/snippets\/SidebarFix\.mdx["\']\s*;?\s*$'
-)
-RENDER_RE = re.compile(
-    r"(?m)^\s*<\s*SidebarFix\s*\/\s*>\s*$|^\s*<\s*SidebarFix\s*>\s*<\/\s*SidebarFix\s*>\s*$"
-)
-
-SIDEBAR_BLOCK = SIDEBAR_IMPORT_LINE + "\n\n" + SIDEBAR_RENDER_LINE + "\n\n"
-
-
-def inject_sidebar_fix(mdx_text: str) -> str:
-    """Insert SidebarFix import + render right after frontmatter (or at top if none)."""
-    has_import = bool(IMPORT_RE.search(mdx_text))
-    has_render = bool(RENDER_RE.search(mdx_text))
-    if has_import and has_render:
-        return mdx_text
-
-    # Normalize: remove any partial remnants and add canonical block
-    mdx_text = IMPORT_RE.sub("", mdx_text)
-    mdx_text = RENDER_RE.sub("", mdx_text)
-
-    m = FRONTMATTER_RE.match(mdx_text)
-    if m:
-        insert_at = m.end()
-        return (
-            mdx_text[:insert_at]
-            + "\n"
-            + SIDEBAR_BLOCK
-            + mdx_text[insert_at:].lstrip("\n")
-        )
-
-    return SIDEBAR_BLOCK + mdx_text.lstrip("\n")
 
 
 # =========================
@@ -674,7 +633,7 @@ def build_symbol_cache(source_dir: Path) -> dict[str, str]:
                 kind_str = kind.value if hasattr(kind, "value") else str(kind).lower()
                 if "class" not in kind_str:
                     continue
-            except Exception:
+            except (AttributeError, ValueError):
                 continue
             parts = canonical.split(".")
             if len(parts) > 1:

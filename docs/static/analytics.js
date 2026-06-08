@@ -1,5 +1,4 @@
-// IBM Analytics setup for Mintlify
-// Configure this script as a custom JS file in your Mintlify settings
+// IBM Analytics — loaded via scripts: in docusaurus.config.ts
 
 (function() {
   // Only run in production or when explicitly enabled
