@@ -45,6 +45,14 @@ import matplotlib.pyplot as plt
 plt.plot([1, 2, 3])
 ```"""
 
+CODE_WITH_HEADLESS_AGG_KEYWORD = """```python
+import matplotlib
+matplotlib.use(backend='Agg')
+import matplotlib.pyplot as plt
+
+plt.plot([1, 2, 3], [1, 2, 3])
+```"""
+
 CODE_WITH_INTERACTIVE_TKAGG = """```python
 import matplotlib
 matplotlib.use('TkAgg')
@@ -174,6 +182,15 @@ class TestMatplotlibHeadlessBackend:
 
         assert result.as_bool() is True
         assert "pdf" in (result.reason or "")
+
+    def test_valid_agg_backend_as_keyword(self):
+        """Test pass with Agg backend specified as keyword argument."""
+        req = MatplotlibHeadlessBackend()
+        ctx = from_model(CODE_WITH_HEADLESS_AGG_KEYWORD)
+        result = req.validation_fn(ctx)
+
+        assert result.as_bool() is True
+        assert "Agg" in (result.reason or "")
 
     def test_invalid_interactive_tkagg_backend(self):
         """Test fail with interactive TkAgg backend."""
@@ -321,10 +338,11 @@ class TestPlotDependenciesAvailable:
 class TestMatplotlibHeadlessBackendEdgeCases:
     """Edge case tests for MatplotlibHeadlessBackend."""
 
-    def test_backend_case_sensitivity(self):
-        """Test that backend names are matched case-sensitively."""
-        # Matplotlib backend names are case-sensitive in the API.
-        # Only 'Agg' is valid, not 'agg' (lowercase).
+    def test_backend_case_insensitive(self):
+        """Test that backend names are matched case-insensitively, consistent with matplotlib's runtime behaviour.
+
+        Matplotlib normalises backend names at runtime — 'agg' and 'Agg' select the same backend.
+        """
         code_lowercase = """```python
 import matplotlib
 matplotlib.use('agg')
@@ -333,9 +351,34 @@ import matplotlib.pyplot as plt
         req = MatplotlibHeadlessBackend()
         ctx = from_model(code_lowercase)
         result = req.validation_fn(ctx)
-        # Backend name matching is case-sensitive, so 'agg' should fail
-        assert result.as_bool() is False
-        assert "not headless" in (result.reason or "").lower()
+        assert result.as_bool() is True
+        assert "agg" in (result.reason or "").lower()
+
+    def test_cairo_lowercase_backend(self):
+        """Test that lowercase 'cairo' is accepted and mapped to canonical 'Cairo'."""
+        code_lowercase = """```python
+import matplotlib
+matplotlib.use('cairo')
+import matplotlib.pyplot as plt
+```"""
+        req = MatplotlibHeadlessBackend()
+        ctx = from_model(code_lowercase)
+        result = req.validation_fn(ctx)
+        assert result.as_bool() is True
+        assert "Cairo" in (result.reason or "")
+
+    def test_svg_lowercase_backend(self):
+        """Test that lowercase 'svg' is accepted."""
+        code_lowercase = """```python
+import matplotlib
+matplotlib.use('svg')
+import matplotlib.pyplot as plt
+```"""
+        req = MatplotlibHeadlessBackend()
+        ctx = from_model(code_lowercase)
+        result = req.validation_fn(ctx)
+        assert result.as_bool() is True
+        assert "svg" in (result.reason or "").lower()
 
     def test_matplotlib_use_with_variable(self):
         """Test that matplotlib.use() with variable backend is not detected."""

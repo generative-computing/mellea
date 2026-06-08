@@ -63,12 +63,19 @@ def _extract_backend_name(node: ast.Call) -> str | None:
     Returns:
         Backend name as string, or None if not found or not a literal string.
     """
-    if not node.args:
+    if node.args:
+        first_arg = node.args[0]
+        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+            return first_arg.value
         return None
 
-    first_arg = node.args[0]
-    if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
-        return first_arg.value
+    for keyword in node.keywords:
+        if (
+            keyword.arg == "backend"
+            and isinstance(keyword.value, ast.Constant)
+            and isinstance(keyword.value.value, str)
+        ):
+            return keyword.value.value
     return None
 
 
@@ -230,9 +237,11 @@ class MatplotlibHeadlessBackend(Requirement):
                 reason="No matplotlib.use() call found. Add matplotlib.use('Agg') before importing pyplot.",
             )
 
-        if backend in HEADLESS_BACKENDS:
+        canonical = {b.lower(): b for b in HEADLESS_BACKENDS}
+        if backend.lower() in canonical:
             return ValidationResult(
-                result=True, reason=f"Headless backend configured: {backend}"
+                result=True,
+                reason=f"Headless backend configured: {canonical[backend.lower()]}",
             )
 
         return ValidationResult(
