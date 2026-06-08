@@ -180,6 +180,7 @@ To preview the deployed site from a non-main branch:
 | `tooling/docs-autogen/decorate_api_mdx.py` | Decoration + escaping |
 | `tooling/docs-autogen/generate_cli_reference.py` | CLI reference page generator |
 | `tooling/docs-autogen/audit_coverage.py` | Coverage + quality audit |
+| `tooling/docs-autogen/validate.py` | Anchor / RST-syntax validation |
 | `tooling/docs-autogen/README.md` | Detailed tooling docs |
 | `docs/docusaurus.config.ts` | Docusaurus config (redirects, nav, plugins) |
 | `docs/sidebars.ts` | Sidebar structure for docs and API reference |

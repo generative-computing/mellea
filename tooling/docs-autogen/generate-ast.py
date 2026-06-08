@@ -731,14 +731,14 @@ def _collect_module_entries(
 
 
 def generate_landing_page(
-    api_dir: Path, docs_root: Path, docstring_cache: dict[str, str] | None = None
+    api_dir: Path, docstring_cache: dict[str, str] | None = None
 ) -> None:
-    """Generate api-reference.mdx as a landing page for the API Reference tab.
+    """Generate api/index.md as the landing page for the API Reference tab.
 
     Scans the generated api/ directory structure to produce an up-to-date
     overview of every top-level module, rendered as a prose list with links.
-    The file is written to docs_root so Mintlify serves it when the user
-    clicks the API Reference tab.
+    Written to api_dir/index.md so the Docusaurus apiSidebar serves it as
+    the first page when the user clicks the API Reference navbar tab.
 
     When docstring_cache is provided, package descriptions are sourced directly
     from __init__ module docstrings (standard Python practice) rather than
@@ -776,7 +776,7 @@ workflows.
     content += "\n## CLI (`m`)\n\n"
     content += "See the [CLI Reference](/reference/cli) page.\n"
 
-    out_path = docs_root / "api-reference.mdx"
+    out_path = api_dir / "index.md"
     safe_write_text(out_path, content)
     print(f"✅ Generated landing page: {out_path}", flush=True)
 
@@ -836,7 +836,7 @@ def build_and_merge_navigation(
     print(
         "🛠️ Building API Reference navigation and merging into docs.json...", flush=True
     )
-    generate_landing_page(api_dir, docs_root, docstring_cache)
+    generate_landing_page(api_dir, docstring_cache)
     api_tab = build_api_reference_tab_object(api_dir, docs_root)
     if docs_json_path is None:
         print(

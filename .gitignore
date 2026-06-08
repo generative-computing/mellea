@@ -455,10 +455,12 @@ pyrightconfig.json
 .claude/*
 !.claude/settings.json
 
+# FastEmbed model caches (downloaded at runtime, not for version control)
+.fastembed_cache/
+docs/.fastembed_cache/
+
 # Generated documentation (built by tooling/docs-autogen/)
 docs/docs/api/
-!docs/docs/api/index.md
-docs/docs/api-reference.mdx
 docs/docs/reference/cli.md
 .venv-docs-autogen/
 
