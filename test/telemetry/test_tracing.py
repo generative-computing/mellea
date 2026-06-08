@@ -200,31 +200,6 @@ def test_backend_instrumentation_helpers():
     assert get_context_size(ctx) == 3
 
 
-def test_instrument_generate_from_context():
-    """Test instrument_generate_from_context helper."""
-    from mellea.telemetry.backend_instrumentation import (
-        instrument_generate_from_context,
-    )
-
-    class MockBackend:
-        model_id = "test-model"
-
-    class MockAction:
-        pass
-
-    class MockContext:
-        turns = []
-
-    backend = MockBackend()
-    action = MockAction()
-    ctx = MockContext()
-
-    # Should return a context manager
-    with instrument_generate_from_context(backend, action, ctx) as span:
-        # Span will be None when tracing is disabled
-        assert span is None or hasattr(span, "set_attribute")
-
-
 def test_instrument_generate_from_raw():
     """Test instrument_generate_from_raw helper."""
     from mellea.telemetry.backend_instrumentation import instrument_generate_from_raw

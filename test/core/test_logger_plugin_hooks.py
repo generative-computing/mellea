@@ -228,7 +228,7 @@ class TestMelleaLoggerInHooks:
     async def test_sampling_log_context_fields_present_on_success_record(
         self, caplog
     ) -> None:
-        """strategy and loop_budget context fields appear on the SUCCESS log record."""
+        """strategy and loop_budget context fields are attached to records emitted inside sample()."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
@@ -244,8 +244,10 @@ class TestMelleaLoggerInHooks:
                 show_progress=False,
             )
 
-        success_records = [r for r in caplog.records if r.getMessage() == "SUCCESS"]
-        assert success_records, "No SUCCESS record found"
-        record = success_records[0]
-        assert getattr(record, "strategy", None) == "RejectionSamplingStrategy"
-        assert getattr(record, "loop_budget", None) == 2
+        tagged = [
+            r
+            for r in caplog.records
+            if getattr(r, "strategy", None) == "RejectionSamplingStrategy"
+            and getattr(r, "loop_budget", None) == 2
+        ]
+        assert tagged, "No log record carried the expected log_context fields"

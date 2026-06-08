@@ -309,7 +309,7 @@ asyncio.run(main())
 Read the contributing guide first:
 
 ```bash
-cat docs/docs/guide/CONTRIBUTING.md
+cat docs/CONTRIBUTING_DOCS.md
 ```
 
 The short version:

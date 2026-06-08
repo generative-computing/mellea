@@ -21,6 +21,7 @@ torch = pytest.importorskip("torch", reason="torch not installed — install mel
 import yaml
 
 # First Party
+from mellea.backends.adapters import catalog as adapter_catalog
 from mellea.formatters.granite import (
     ChatCompletion,
     ChatCompletionResponse,
@@ -29,6 +30,7 @@ from mellea.formatters.granite import (
 )
 from mellea.formatters.granite.base import util as base_util
 from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
+from test.conftest import hf_skip
 
 
 def _read_file(name):
@@ -43,8 +45,23 @@ _TEST_OUTPUT_DIR = pathlib.Path(os.path.dirname(__file__)) / "test_output"
 # Location from which our tests download adapters and YAML files
 _RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
+_RAG_GPT_OSS_REPO_NAME = "ibm-granite/granitelib-rag-gpt-oss-r1.0"
 
 _DEFAULT_BASE_MODEL = "ibm-granite/granite-4.1-3b"
+
+# Single pinned commit SHA per intrinsic repo. Every combo for a given repo
+# downloads against this revision, so huggingface_hub's content-addressed
+# cache coalesces all per-test snapshot_download calls into one materialization
+# per repo per pytest session. SHAs for the RAG and Core repos come from
+# `mellea.backends.adapters.catalog` so this test stays in lockstep with the
+# rest of the library; the gpt-oss repo isn't in the catalog yet, so it's
+# pinned locally. Bump these when `test_adapter_versions_unchanged` fails
+# and the new adapter contents have been re-validated locally.
+_REPO_PINNED_SHAS: dict[str, str] = {
+    _RAG_INTRINSICS_REPO_NAME: adapter_catalog._RAG_SHA,
+    _CORE_R1_REPO_NAME: adapter_catalog._CORE_R1_SHA,
+    _RAG_GPT_OSS_REPO_NAME: "5a2976bc7cdb580e56186ebc29d6b3a6595a88d0",
+}
 
 
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
@@ -125,11 +142,25 @@ class YamlJsonCombo(pydantic.BaseModel):
     repo_id: str = _RAG_INTRINSICS_REPO_NAME
     """Repo on Hugging Face Hub from which the adapter for this intrinsic should be
     loaded."""
-    revision: str = "main"
-    """Revision or branch of the Hugging Face `repo_id`."""
     base_model_id: str = _DEFAULT_BASE_MODEL
     """Base model on which the target adapter was trained. Should be small enough to
     run on the CI server."""
+
+    @property
+    def revision(self) -> str:
+        """Pinned commit SHA for this combo's repo.
+
+        Resolved from ``_REPO_PINNED_SHAS`` so every combo for a given repo
+        downloads against the same revision, letting huggingface_hub's cache
+        coalesce all per-test snapshot_download calls into one materialization
+        per repo per pytest session.
+        """
+        try:
+            return _REPO_PINNED_SHAS[self.repo_id]
+        except KeyError:
+            raise KeyError(
+                f"No pinned SHA for repo {self.repo_id!r}; add one to _REPO_PINNED_SHAS"
+            ) from None
 
     def _resolve_yaml(self):
         """
@@ -137,12 +168,13 @@ class YamlJsonCombo(pydantic.BaseModel):
         object. Called at fixture creation (execution time) to prevent collection time errors.
         """
         if not self.yaml_file:
-            self.yaml_file = intrinsics_util.obtain_io_yaml(
-                self.task,
-                self.base_model_id,
-                self.repo_id,
-                revision=self.revision,  # type: ignore
-            )
+            with hf_skip():
+                self.yaml_file = intrinsics_util.obtain_io_yaml(
+                    self.task,
+                    self.base_model_id,
+                    self.repo_id,
+                    revision=self.revision,  # type: ignore
+                )
         return self
 
 
@@ -223,38 +255,65 @@ _YAML_JSON_COMBOS_LIST = [
         short_name="context-attribution",
         inputs_file=_INPUT_JSON_DIR / "context-attribution.json",
         task="context-attribution",
-        repo_id="ibm-granite/granitelib-core-r1.0",
-        revision="c9c189f5ad0b2890660397070613fda46d6ceb80",
-        # No Granite 4.1 version of this adapter at the selected Git commit
+        repo_id=_CORE_R1_REPO_NAME,
+        # No Granite 4.1 version of this adapter
         base_model_id="ibm-granite/granite-4.0-micro",
+    ),
+    YamlJsonCombo(
+        short_name="requirement_check",
+        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
+        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
+        task="requirement-check",
+        repo_id=_CORE_R1_REPO_NAME,
+    ),
+    YamlJsonCombo(
+        short_name="requirement_check_alora",
+        inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
+        arguments_file=_INPUT_ARGS_DIR / "requirement_check.json",
+        task="requirement-check",
+        is_alora=True,
+        repo_id=_CORE_R1_REPO_NAME,
+    ),
+    YamlJsonCombo(
+        short_name="uncertainty",
+        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
+        task="uncertainty",
+        repo_id=_CORE_R1_REPO_NAME,
+    ),
+    YamlJsonCombo(
+        short_name="uncertainty_alora",
+        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
+        task="uncertainty",
+        is_alora=True,
+        repo_id=_CORE_R1_REPO_NAME,
     ),
     # gpt-oss-20b intrinsics (canned output tests only, no inference)
     YamlJsonCombo(
         short_name="gpt_oss_answerability",
         inputs_file=_INPUT_JSON_DIR / "answerable.json",
         task="answerability",
-        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
+        repo_id=_RAG_GPT_OSS_REPO_NAME,
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
-        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
+        repo_id=_RAG_GPT_OSS_REPO_NAME,
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_hallucination_detection",
         inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
         task="hallucination_detection",
-        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
+        repo_id=_RAG_GPT_OSS_REPO_NAME,
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_query_rewrite",
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
-        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
+        repo_id=_RAG_GPT_OSS_REPO_NAME,
         base_model_id="openai/gpt-oss-20b",
     ),
 ]
@@ -364,6 +423,7 @@ def _yaml_json_combo_for_ollama(request: pytest.FixtureRequest) -> YamlJsonCombo
     return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]._resolve_yaml()
 
 
+@pytest.mark.integration
 def test_no_orphan_files():
     """Check whether there are input files that aren't used by any test."""
     used_json_files = {t.inputs_file for t in _YAML_JSON_COMBOS.values()}
@@ -409,9 +469,13 @@ def test_read_yaml():
     IntrinsicsRewriter(config_file=_INPUT_YAML_DIR / "answerability.yaml")
 
     # Read from Hugging Face hub.
-    local_path = intrinsics_util.obtain_io_yaml(
-        "answerability", "granite-4.0-micro", _RAG_INTRINSICS_REPO_NAME
-    )
+    with hf_skip():
+        local_path = intrinsics_util.obtain_io_yaml(
+            "answerability",
+            "granite-4.0-micro",
+            _RAG_INTRINSICS_REPO_NAME,
+            revision=_REPO_PINNED_SHAS[_RAG_INTRINSICS_REPO_NAME],
+        )
     IntrinsicsRewriter(config_file=local_path)
 
 
@@ -548,6 +612,7 @@ _CANNED_OUTPUT_MODEL_OUTPUT_DIR = _TEST_DATA_DIR / "test_canned_output/model_out
 _CANNED_OUTPUT_EXPECTED_DIR = _TEST_DATA_DIR / "test_canned_output/expected_result"
 
 
+@pytest.mark.integration
 def test_canned_output(yaml_json_combo_with_lora_model):
     """
     Verify that the output processing for each model works on previous model outputs
@@ -755,6 +820,13 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                 t_json = json.loads(tc.message.content)
                 e_json = json.loads(ec.message.content)
 
+                if "requirement_check" in cfg.short_name:
+                    # The "requirement-check" adapter utilizes a nested dict.
+                    # `pytest.approx` doesn't work on those. Grab the value from
+                    # the dict.
+                    t_json = t_json["requirement_check"]
+                    e_json = e_json["requirement_check"]
+
                 assert t_json == pytest.approx(e_json, abs=0.1)
     except AssertionError as e:
         # Known intermittent failure under Transformers 5.0.
@@ -767,7 +839,10 @@ def test_run_ollama(yaml_json_combo_for_ollama):
     """
     Run the target model end-to-end with a mock Ollama backend.
     """
-    cfg = yaml_json_combo_for_ollama
+    # The combos in _YAML_JSON_COMBOS_LIST are module-scoped singletons reused
+    # across tests, so we copy before doing the Ollama-specific base-model-id
+    # swap below.
+    cfg = yaml_json_combo_for_ollama.model_copy()
 
     # Change base model id to Ollama's version
     if cfg.base_model_id == "ibm-granite/granite-4.0-micro":
@@ -873,3 +948,53 @@ def test_run_ollama(yaml_json_combo_for_ollama):
                     print(f"   {t_json=}")
                     print(f"   {e_json=}")
                 assert t_json == pytest.approx(e_json, abs=0.1)
+
+
+@pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1,
+    reason="Don't cause CICD pipelines to fail due to adapter version changes alone.",
+)
+@pytest.mark.integration
+def test_adapter_versions_unchanged():
+    """Fail when `main` for any pinned intrinsic repo has moved past its
+    recorded SHA in `_REPO_PINNED_SHAS`.
+
+    Asks Hugging Face for the current repo-level commit SHA on `main` and
+    compares against the pin. A drift means upstream has new commits — they
+    may be functional (adapter weights, `io.yaml`) or cosmetic (README,
+    images). To triage:
+
+    - Bump the pin in `_REPO_PINNED_SHAS` (or, for the RAG and Core repos,
+      in `mellea.backends.adapters.catalog`) to the new SHA.
+    - Run the canned-input/output tests; regenerate canned outputs if they
+      fail and verify the new outputs are correct before committing.
+
+    Silently tolerates network/auth failures so this test doesn't false-fail
+    when run offline. Skipped on CI to avoid unrelated upstream changes
+    breaking PR builds.
+    """
+    # Third Party
+    import huggingface_hub
+
+    api = huggingface_hub.HfApi()
+    drifts: list[tuple[str, str, str]] = []
+    for repo_id, pinned_sha in _REPO_PINNED_SHAS.items():
+        try:
+            current = api.repo_info(repo_id, revision="main").sha
+        except Exception:
+            # Offline / auth missing — degrade gracefully.
+            continue
+        if current is None or current == pinned_sha:
+            continue
+        drifts.append((repo_id, pinned_sha, current))
+    if drifts:
+        msg_lines = ["Pinned adapter repos have drifted from main:"]
+        for repo, old, new in drifts:
+            msg_lines.append(f"  {repo}: {old[:8]} -> {new[:8]}")
+        msg_lines.append(
+            "\nVerify the new commit's adapter contents pass the canned-input/"
+            "output tests locally, regenerate canned outputs if needed, then "
+            "bump the SHA in _REPO_PINNED_SHAS (or in "
+            "mellea.backends.adapters.catalog for repos sourced from there)."
+        )
+        pytest.fail("\n".join(msg_lines))

@@ -1,7 +1,7 @@
-"""``Instruction`` component for instruct/validate/repair loops.
+"""`Instruction` component for instruct/validate/repair loops.
 
-``Instruction`` is the primary component type used with ``MelleaSession.instruct``. It
-packages a task ``description``, a list of ``Requirement`` constraints, optional
+`Instruction` is the primary component type used with `MelleaSession.instruct`. It
+packages a task `description`, a list of `Requirement` constraints, optional
 in-context-learning examples, a grounding context dict, user variables for Jinja2
 template interpolation, and output/input prefix overrides into a single renderable
 unit. The session's sampling strategy evaluates each requirement against the model's
@@ -39,7 +39,7 @@ class Instruction(Component[str]):
             to all string parameters.
         prefix (str | CBlock | None): A prefix prepended before the model's generation.
         output_prefix (str | CBlock | None): A prefix prepended to the model's output token
-            stream (currently unsupported; must be ``None``).
+            stream (currently unsupported; must be `None`).
         images (list[ImageBlock] | None): Images to include in the prompt.
 
     Attributes:
@@ -217,8 +217,8 @@ class Instruction(Component[str]):
                 describing which requirements failed and why.
 
         Returns:
-            Instruction: A new ``Instruction`` identical to this one but with
-            ``_repair_string`` set to ``repair_string``.
+            Instruction: A new `Instruction` identical to this one but with
+            `_repair_string` set to `repair_string`.
         """
         res = deepcopy(self)
         res._repair_string = repair_string

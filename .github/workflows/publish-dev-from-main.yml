@@ -1,0 +1,81 @@
+name: "Publish dev release from main"
+
+# Iterates main's .devN counter and (optionally) publishes a development
+# release. Intended for ad-hoc / case-by-case dev tags — e.g. when a
+# contributor wants a tagged snapshot of main for debugging or external
+# testing. Only tags and the .devN counter advance unless
+# PUBLISH_PRERELEASES=true on the repo, in which case a GitHub release +
+# PyPI upload happen too.
+#
+# See RELEASE.md for the full release-process documentation.
+
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+env:
+  UV_FROZEN: "1"
+  CICD: 1
+
+jobs:
+  guard:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "${REF_NAME}" != "main" ]; then
+            echo "error: publish-dev-from-main must run against main; got ${REF_NAME}"
+            exit 2
+          fi
+  publish:
+    environment: auto-release
+    permissions:
+      contents: write     # push tag + bump commit to main
+      actions: write      # release.sh dispatches pypi.yml after tagging
+    needs: [guard]
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --only-dev
+      - name: Configure git user
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      # Publish-then-increment: first tag/release main's current .devN, then
+      # advance pyproject to .dev(N+1) so the next dispatch is set up. This
+      # makes "dev release main as it is right now" match the pyproject state
+      # the operator sees when inspecting the branch.
+      - name: Publish current .devN
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: main
+          ALLOW_MAIN_RELEASE: "1"
+          CHGLOG_FILE: CHANGELOG.md
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
+        run: ./.github/scripts/release.sh
+        shell: bash
+      - name: Advance .devN counter on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          uv run --no-sync python .github/scripts/bump_version.py --mode dev
+          git push origin main

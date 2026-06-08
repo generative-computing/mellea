@@ -49,7 +49,7 @@ uv run mypy .                         # Type check
 ## 3. Test Markers
 Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The `unit` marker is auto-applied by conftest — never write it explicitly. The `llm` marker is deprecated; use `e2e` instead.
 
-See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
+See **[test/README.md](test/README.md)** for classification rules, authoring guide, marker reference, CI tier map, and local workflow.
 
 **Examples in `docs/examples/`** are opt-in — unlike `test/` files (auto-collected, default `unit`), examples require an explicit `# pytest:` comment to be collected. Files without this comment are silently ignored (they won't appear in skip summaries either). This is because examples have variable dependencies and limited setup:
 ```python
@@ -88,7 +88,7 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
-- **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`. Test the generator: `uv run pytest tooling/docs-autogen/test_cli_reference.py -v`. Full pipeline docs: [`tooling/docs-autogen/README.md`](tooling/docs-autogen/README.md).
+- **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`. Test the generator: `uv run pytest tooling/docs-autogen/test_cli_reference.py -v`. Full pipeline docs: [`tooling/docs-autogen/README.md`](tooling/docs-autogen/README.md).
 - **Backend telemetry fields**: All backends must populate `mot.generation.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.generation.model` (str), and `mot.generation.provider` (str) in their `post_processing()` method. These fields live on `mot.generation`, a `GenerationMetadata` dataclass. `mot.generation.streaming` (bool) and `mot.generation.ttfb_ms` (float | None) are set automatically in `astream()` — backends do not need to set them. Metrics are automatically recorded by `TokenMetricsPlugin`, `LatencyMetricsPlugin`, and `ErrorMetricsPlugin` — don't add manual `record_token_usage_metrics()`, `record_request_duration()`, or `record_error()` calls.
 
 ## 6. Commits & Hooks
@@ -119,6 +119,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | `uv.lock` out of sync | Run `uv sync` |
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
+| Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
@@ -126,8 +127,15 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
+6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), run the docstring quality gate before pushing:
+   ```bash
+   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100 --orphans
+   ```
+   Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
 
 ## 11. Writing Tests
+
+See **[test/README.md — Authoring guide](test/README.md#authoring-guide)** for the full authoring guide (naming, fixture discipline, mock discipline, assertion style).
 
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
@@ -139,7 +147,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 ## 12. Writing Docs
 
 If you are modifying or creating pages under `docs/docs/`, follow the writing
-conventions in [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md).
+conventions in [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md).
 Key rules that differ from typical Markdown habits:
 
 - **No H1 in the body** — Mintlify renders the frontmatter `title` automatically;
@@ -179,7 +187,7 @@ Intrinsics are specialized LoRA adapters that add task-specific capabilities (RA
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant; returns a string label (e.g. `'relevant'`, `'partially relevant'`, `'irrelevant'`). **Granite 4.0 only — no adapter for Granite 4.1.** Use `ibm-granite/granite-4.0-micro` as the backend. |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python

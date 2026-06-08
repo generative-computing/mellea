@@ -14,6 +14,9 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, cast, overload
 
+import jinja2
+import jinja2.meta
+
 try:
     import llguidance
     import llguidance.hf
@@ -22,6 +25,10 @@ try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.cache_utils import DynamicCache
     from transformers.generation.logits_process import LogitsProcessorList
+    from transformers.generation.stopping_criteria import (
+        StoppingCriteria,
+        StoppingCriteriaList,
+    )
     from transformers.generation.streamers import AsyncTextIteratorStreamer
     from transformers.generation.utils import GenerateDecoderOnlyOutput
     from transformers.modeling_utils import PreTrainedModel
@@ -48,6 +55,7 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
+from ..formatters.granite.base.util import _GuidanceLogitsProcessor
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
@@ -74,6 +82,45 @@ from .tools import (
 )
 from .utils import to_chat, to_tool_calls
 
+
+class _EventStoppingCriteria(StoppingCriteria):
+    """StoppingCriteria that signals the model to stop when a threading.Event is set.
+
+    Used by LocalHFBackend to implement cooperative cancellation: when
+    `cancel_generation` is called, it sets the backing event via
+    `_cancel_hook` before cancelling the asyncio task, giving the HF
+    `model.generate` thread a chance to exit cleanly rather than running
+    to completion.
+    """
+
+    def __init__(self, event: threading.Event) -> None:
+        self._event = event
+
+    def __call__(self, input_ids: Any, scores: Any, **kwargs: Any) -> bool:  # type: ignore[override]
+        return self._event.is_set()
+
+
+def _install_cancel_stopping_criteria(
+    generate_options: dict[str, Any], streaming_kwargs: dict[str, Any]
+) -> threading.Event:
+    """Wire a cooperative-cancel event into the generate call's stopping criteria.
+
+    Pops any caller-supplied `stopping_criteria` from *generate_options* (to
+    avoid passing it twice via both `**generate_options` and
+    `**streaming_kwargs`), prepends an :class:`_EventStoppingCriteria` backed
+    by a fresh `threading.Event`, and stores the merged list in
+    *streaming_kwargs*.  Returns the event so the caller can arm
+    `output._cancel_hook = event.set`.
+    """
+    cancel_event = threading.Event()
+    user_sc = generate_options.pop("stopping_criteria", None)
+    streaming_kwargs["stopping_criteria"] = StoppingCriteriaList(
+        [_EventStoppingCriteria(cancel_event)]
+        + (list(user_sc) if user_sc is not None else [])
+    )
+    return cancel_event
+
+
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
@@ -87,25 +134,25 @@ format: None = None  # typing this variable in order to shadow the global format
 class HFAloraCacheInfo:
     """A dataclass for holding a KV cache and associated generation metadata.
 
-    Used by ``LocalHFBackend`` to store intermediate model state that can be
+    Used by `LocalHFBackend` to store intermediate model state that can be
     reused across generation requests via an LRU cache.
 
     Args:
-        kv_cache (DynamicCache | None): The HuggingFace ``DynamicCache`` holding
-            precomputed key/value tensors, or ``None`` if not available.
+        kv_cache (DynamicCache | None): The HuggingFace `DynamicCache` holding
+            precomputed key/value tensors, or `None` if not available.
         merged_token_ids (Any): Token IDs corresponding to the cached prefix.
         merged_attention (Any): Attention mask for the cached prefix tokens.
         q_end (int): Index of the last prompt token in the merged token sequence;
-            defaults to ``-1``.
+            defaults to `-1`.
         scores (Any): Optional logit scores from the generation step; defaults to
-            ``None``.
+            `None`.
 
     Attributes:
         kv_cache (DynamicCache | None): The cached key/value tensors.
         merged_token_ids (Any): Token IDs for the cached prefix.
         merged_attention (Any): Attention mask for the cached prefix.
         q_end (int): End index of the prompt portion in merged token IDs.
-        scores (Any): Logit scores from generation, or ``None``.
+        scores (Any): Logit scores from generation, or `None`.
     """
 
     kv_cache: DynamicCache | None
@@ -159,63 +206,36 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
         torch.cuda.empty_cache()
 
 
-# modified from VLLM v0.9.2 code base
-# https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
-class _GuidanceLogitsProcessor:
-    def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
-        self.grammar = grammar
-        self.vocab_size: int = ll_tokenizer.vocab_size
-        self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
-        self.ll_matchers: list[llguidance.LLMatcher] = []
-        self.bitmasks: list[torch.Tensor] = []
-        self.new_sampling: bool = False
-        self.batch_size: int = -1
-
-    def __call__(
-        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
-    ) -> torch.Tensor:
-        i_batch, _ = batch_input_ids.shape
-        s_batch, _ = batch_scores.shape
-        assert i_batch == s_batch
-
-        # s_batch, s_vocab = batch_scores.shape
-        # assert s_vocab == self.vocab_size
-        #
-        # NOTE: somehow, this does not hold. s_vocab is not same as either of
-        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True) == self.vocab_size == ll_tokenizer.vocab_size
-        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=False)
-
-        if self.batch_size != i_batch:
-            self.batch_size = i_batch
-            self.bitmasks = [
-                llguidance.torch.allocate_token_bitmask(1, self.vocab_size)  # type: ignore[attr-defined]
-                for _ in range(self.batch_size)
-            ]
-
-            self.ll_matchers = [
-                llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
-                for _ in range(self.batch_size)
-            ]
-
-        for input_ids, scores, ll_matcher, bitmask in zip(
-            batch_input_ids, batch_scores, self.ll_matchers, self.bitmasks
-        ):
-            if self.new_sampling and len(input_ids) > 0:
-                ll_matcher.consume_token(  # type: ignore[attr-defined]
-                    input_ids.tolist()[-1]
-                )
-                err = ll_matcher.get_error()  # type: ignore[attr-defined]
-                if err:
-                    MelleaLogger.get_logger().warning("Error in LLMatcher: %s", err)
-
-            llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
-            llguidance.torch.apply_token_bitmask_inplace(
-                scores, bitmask.to(scores.device)
-            )  # type: ignore[attr-defined]
-
-        self.new_sampling = True
-
-        return batch_scores
+# Variables that HuggingFace injects into the Jinja template namespace automatically.
+# These must be excluded from _chat_template_allowlist because they are provided by
+# apply_chat_template itself — forwarding a model_option with the same name would
+# either cause a "got multiple values for keyword argument" TypeError (for the named-param
+# group) or silently replace a function injected by the Jinja environment (for the globals group).
+#
+# ⚠️  REVIEW NOTE: verify this set against the transformers source whenever upgrading.
+# Namespace vars: transformers.utils.chat_template_utils.render_jinja_template
+#                 (the compiled_template.render(...) call — every kwarg there becomes
+#                 a Jinja variable and must be excluded from the allowlist)
+# Jinja globals: transformers.utils.chat_template_utils._cached_compile_jinja_template
+#                (the jinja_env.globals[...] assignments near the bottom)
+_HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
+    {
+        # --- Variables injected into the Jinja namespace by render_jinja_template ---
+        # These come from `compiled_template.render(messages=chat, tools=..., documents=...,
+        # add_generation_prompt=..., **kwargs)` in transformers' chat_template_utils.
+        # Forwarding any of these from model_options to apply_chat_template would
+        # cause a duplicate-kwarg TypeError or silently shadow the value HF supplies.
+        "messages",  # the conversation; HF binds `chat` to this name in render()
+        "tools",  # tool schemas; our call sites pass tools=convert_tools_to_json(...) explicitly
+        "documents",  # RAG documents; injected even when None
+        "add_generation_prompt",  # bool; passed explicitly at the standard-generation call site
+        # --- Jinja environment globals set by _compile_jinja_template ---
+        # find_undeclared_variables cannot see env globals, so these appear as "undeclared"
+        # in templates that reference them and must be excluded manually.
+        "raise_exception",  # callable: raises jinja2.exceptions.TemplateError
+        "strftime_now",  # callable: returns datetime.now().strftime(format)
+    }
+)
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -227,22 +247,22 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     Args:
         model_id (str | ModelIdentifier): Used to load the model and tokenizer via
-            HuggingFace ``Auto*`` classes.
+            HuggingFace `Auto*` classes.
         formatter (ChatFormatter | None): Formatter for rendering components into
-            prompts. Defaults to ``TemplateFormatter``.
-        use_caches (bool): If ``False``, KV caching is disabled even if a ``Cache``
+            prompts. Defaults to `TemplateFormatter`.
+        use_caches (bool): If `False`, KV caching is disabled even if a `Cache`
             is provided.
         cache (Cache | None): Caching strategy; defaults to
-            ``SimpleLRUCache(0, on_evict=_cleanup_kv_cache)``.
+            `SimpleLRUCache(0, on_evict=_cleanup_kv_cache)`.
         custom_config (TransformersTorchConfig | None): Override for
-            tokenizer/model/device; if provided, ``model_id`` is not used for loading.
-        default_to_constraint_checking_alora (bool): If ``False``, aLoRA constraint
+            tokenizer/model/device; if provided, `model_id` is not used for loading.
+        default_to_constraint_checking_alora (bool): If `False`, aLoRA constraint
             checking is deactivated; mainly for benchmarking and debugging.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from HF-specific option names to
-            Mellea ``ModelOption`` sentinel keys.
+            Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map (dict): Mapping from Mellea sentinel keys to
             HF-specific option names.
     """
@@ -275,6 +295,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop_strings": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -282,7 +303,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+        self.from_mellea_model_opts_map = {
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            ModelOption.STOP_SEQUENCES: "stop_strings",
+        }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
@@ -315,13 +339,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             case _:
                 self._tokenizer, self._model, self._device = custom_config
 
+        # Preemptively fix vocab size discrepancies between the tokenizer and model if needed.
+        n_vocab = max(
+            self._tokenizer.vocab_size, len(self._tokenizer), self._model.vocab_size
+        )
         self._llguidance_tokenizer: llguidance.LLTokenizer = (
-            llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
+            llguidance.hf.from_tokenizer(self._tokenizer, n_vocab=n_vocab)  # type:ignore
         )
         assert (
             self._llguidance_tokenizer.vocab_size
             == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
-        ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
+        ), "vocab size mismatch between llguidance and huggingface tokenizers"
 
         self._use_caches = use_caches
         self._cache = (
@@ -340,8 +368,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     def _get_hf_model_id(self) -> str:
         """Return the HuggingFace model name as a string.
 
-        Returns the ``hf_model_name`` attribute when a ``ModelIdentifier`` is
-        provided, otherwise casts ``model_id`` to ``str``.
+        Returns the `hf_model_name` attribute when a `ModelIdentifier` is
+        provided, otherwise casts `model_id` to `str`.
         """
         if hasattr(self.model_id, "hf_model_name"):
             return str(self.model_id.hf_model_name)  # type: ignore
@@ -367,9 +395,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` using the HuggingFace model.
+        """Generate a completion for `action` given `ctx` using the HuggingFace model.
 
-        Automatically routes ``Requirement`` and ``Intrinsic`` actions to their
+        Automatically routes `Requirement` and `Intrinsic` actions to their
         corresponding aLoRA adapters when available.
 
         Args:
@@ -380,12 +408,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 structured/constrained output decoding via llguidance.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
@@ -505,7 +533,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Generate a completion for an intrinsic action using an adapter.
 
         Applies the intrinsic's I/O rewriter to transform the conversation,
-        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        injects `intrinsic_name` into `chat_template_kwargs` so that the
         Granite Switch chat template activates the correct adapter, and
         post-processes the model output through the intrinsic's result
         processor.
@@ -518,7 +546,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             action (Intrinsic): The intrinsic component to execute.
             ctx (Context): The current generation context (must be a chat context).
             model_options (dict[str, Any]): Merged model options for this call.
-            tool_calls (bool): If ``True``, expose available tools to the model
+            tool_calls (bool): If `True`, expose available tools to the model
                 and parse tool-call responses.
 
         Returns:
@@ -610,7 +638,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Extract temperature and apply it to the rewritten request so that
         # chat_completion_request_to_transformers_inputs handles the
         # do_sample/temperature logic correctly.
-        temperature = model_options.pop(ModelOption.TEMPERATURE, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
         if temperature is not None:
             rewritten = rewritten.model_copy(update={"temperature": temperature})
 
@@ -620,7 +648,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         generate_input, other_input = (
             granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
-                rewritten, self._tokenizer, self._model
+                rewritten,
+                self._tokenizer,
+                self._model,
+                ll_tokenizer=self._llguidance_tokenizer,
             )
         )
 
@@ -629,6 +660,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # We don't update other_input since those inputs are specific to `generate_with_transformers`
         # and not covered by model options.
         user_params = self._make_backend_specific_and_remove(model_options)
+        if temperature == 0.0:
+            # Preserve the formatter's greedy do_sample=False setup; temperature=0 is invalid once sampling is enabled.
+            user_params.pop("temperature", None)
+        if "stop_strings" in user_params and "tokenizer" not in user_params:
+            user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
 
         chat_response = asyncio.to_thread(
@@ -747,10 +783,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # 3. apply the chat template WITHOUT tokenization.
         # Doing this without tokenization and then gluing together the tokens is necessary because
         # things that KV cache together must tokenize together.
+        # Note: add_generation_prompt is in _HF_INTERNAL_TEMPLATE_VARS, so any
+        # user-supplied value is intentionally dropped by _filter_for_chat_template.
+        # The KV-cache path formats context (not a generation turn), so
+        # add_generation_prompt=False (the HF default) is correct here.
         input_text = self._tokenizer.apply_chat_template(  # type: ignore
             ctx_as_conversation,
             tools=convert_tools_to_json(tools),  # type: ignore
-            **self._make_backend_specific_and_remove(model_options),
+            **self._filter_for_chat_template(model_options),
             tokenize=False,
         )
 
@@ -892,6 +932,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
             linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
             _input_text, input_ids, merged_cache, attention_mask = (
@@ -902,6 +951,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     tools=tools,
                 )
             )
+
+            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
 
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
@@ -914,12 +968,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=attention_mask.to(self._device),
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(generate_options),
+                **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -1014,7 +1072,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
-                **self._make_backend_specific_and_remove(model_options),
+                **self._filter_for_chat_template(model_options),
             ).to(self._device)  # type: ignore
 
             format_kwargs = {}
@@ -1055,6 +1113,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
+            # Only install cooperative-cancel plumbing on the streaming path.
+            # Non-streaming calls have no orchestrator calling cancel_generation(),
+            # so the hook would be dead code and the StoppingCriteria would silently
+            # wrap any user-supplied stopping_criteria on every decode step.
+            if stream:
+                _cancel_event = _install_cancel_stopping_criteria(
+                    generate_options, streaming_kwargs
+                )
+
+            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -1064,12 +1136,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=input_ids["attention_mask"],
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
-                **self._make_backend_specific_and_remove(generate_options),
+                **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
 
             output = ModelOutputThunk(None)
+            # Arm the cancel hook before creating tasks so a cancel racing
+            # task creation still finds the hook set.
+            if stream:
+                output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
@@ -1127,8 +1203,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Accumulate decoded text from a streaming chunk or full generation output.
 
         For streaming responses the chunk is an already-decoded string from
-        ``AsyncTextIteratorStreamer``; for non-streaming it is a
-        ``GenerateDecoderOnlyOutput`` that is decoded here.
+        `AsyncTextIteratorStreamer`; for non-streaming it is a
+        `GenerateDecoderOnlyOutput` that is decoded here.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -1182,7 +1258,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 class used during generation, if any.
             tool_calls (bool): Whether tool calling was enabled for this request.
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
-            seed: The random seed used during generation, or ``None``.
+            seed: The random seed used during generation, or `None`.
             input_ids: The prompt token IDs; used to compute token counts and for
                 KV cache bookkeeping.
         """
@@ -1352,7 +1428,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Generate completions for multiple actions without chat templating.
 
         Passes formatted prompt strings directly to the HuggingFace model's
-        ``generate`` method as a batch. Tool calling is not supported.
+        `generate` method as a batch. Tool calling is not supported.
 
         Args:
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
@@ -1408,6 +1484,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     [logits_processor]
                 )
 
+            generate_kwargs = self._make_backend_specific_and_remove(model_opts)
+            if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
+                # transformers' generate() requires a tokenizer to decode stop_strings.
+                generate_kwargs["tokenizer"] = self._tokenizer
+
             outputs = await asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapter.
@@ -1417,7 +1498,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(model_opts),
+                **generate_kwargs,
                 **format_kwargs,
             )
 
@@ -1465,20 +1546,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     # region cache management
     def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
-        """Retrieve a cached ``HFAloraCacheInfo`` entry by its key.
+        """Retrieve a cached `HFAloraCacheInfo` entry by its key.
 
         Args:
             id (str | int): The cache key to look up.
 
         Returns:
-            HFAloraCacheInfo | None: The cached entry, or ``None`` if not found.
+            HFAloraCacheInfo | None: The cached entry, or `None` if not found.
         """
         v = self._cache.get(id)
         assert v is None or type(v) is HFAloraCacheInfo
         return v
 
     def cache_put(self, id: str | int, v: HFAloraCacheInfo):
-        """Store an ``HFAloraCacheInfo`` entry in the cache under the given key.
+        """Store an `HFAloraCacheInfo` entry in the cache under the given key.
 
         Args:
             id (str | int): The cache key to store the entry under.
@@ -1519,14 +1600,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         generate_call_model_opts = ModelOption.replace_keys(
             model_options, self.to_mellea_model_opts_map
         )
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any]
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
+
+        If the caller supplied a ``SEED`` or a non-zero ``TEMPERATURE`` but did
+        not explicitly set ``do_sample``, ``do_sample`` is forced to ``True`` so
+        the underlying transformers ``generate`` call respects those parameters
+        (they are silently ignored under the default greedy ``do_sample=False``).
+
+        An explicit ``TEMPERATURE`` of ``0.0`` always means greedy decoding and
+        suppresses this override even when a seed is set — pairing
+        ``do_sample=True`` with ``temperature=0`` would crash transformers
+        ("temperature has to be a strictly positive float").
 
         Args:
             model_options: the model_options for this call
@@ -1534,10 +1626,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Returns:
             a new dict
         """
+        seed = model_options.get(ModelOption.SEED, None)
+        temperature = model_options.get(ModelOption.TEMPERATURE, None)
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
-        return ModelOption.remove_special_keys(backend_specific)
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+        temp_allows_sampling = temperature is None or temperature != 0.0
+        if (
+            "do_sample" not in backend_specific
+            and temp_allows_sampling
+            and (seed is not None or temperature is not None)
+        ):
+            backend_specific["do_sample"] = True
+        return backend_specific
 
     def _filter_chat_template_only_options(
         self, model_options: dict[str, Any]
@@ -1559,6 +1661,78 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
+    @functools.cached_property
+    def _chat_template_allowlist(self) -> frozenset[str]:
+        """Variable names the tokenizer's chat template can accept from caller-supplied kwargs.
+
+        Parses the Jinja2 template with :func:`jinja2.meta.find_undeclared_variables` to
+        find every variable the template references but does not define itself, then
+        subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables HuggingFace provides
+        automatically). What remains is the exact set of keys a caller may legitimately
+        forward from ``model_options`` to ``apply_chat_template``.
+
+        This is the self-maintaining alternative to a hand-written denylist: it adapts
+        automatically as the loaded model's Jinja template changes without any manual
+        enumeration of generate()-only option names.
+
+        Returns:
+            frozenset of kwarg names valid for ``apply_chat_template`` on this tokenizer,
+            minus HF-provided variables. Empty if the tokenizer has no ``chat_template``
+            (``apply_chat_template`` would raise before kwargs matter in that case).
+        """
+        template_str = getattr(self._tokenizer, "chat_template", None)
+        if not isinstance(template_str, str) or not template_str:
+            # Non-string (None, list of alternates, dict) or empty — cannot parse.
+            # apply_chat_template handles those formats internally.
+            if template_str is not None and template_str:
+                # A non-empty, non-string value (e.g. list of alternates, dict) means
+                # we cannot inspect the template's variable names.  Any caller-supplied
+                # model_options that the template would have accepted are silently dropped.
+                MelleaLogger.get_logger().warning(
+                    f"Chat template for {self._hf_model_id} is not a plain string "
+                    f"(got {type(template_str).__name__}); cannot inspect variable names. "
+                    "model_options kwargs will not be forwarded to apply_chat_template."
+                )
+            return frozenset()
+        # loopcontrols enables {% break %} / {% continue %} used in some HF templates.
+        env = jinja2.Environment(extensions=["jinja2.ext.loopcontrols"])
+        try:
+            ast = env.parse(template_str)
+        except jinja2.TemplateSyntaxError as e:
+            # Templates using unsupported extensions (e.g. {% generation %} from
+            # transformers' AssistantTracker) cannot be parsed with a plain Jinja2
+            # environment. Fall back to forwarding nothing rather than crashing.
+            MelleaLogger.get_logger().warning(
+                f"Could not parse chat template for {self._hf_model_id} ({e}); "
+                "forwarding no model_options to apply_chat_template. "
+                "Template-referenced kwargs (think, guardian_config, etc.) will be ignored."
+            )
+            return frozenset()
+        all_vars = jinja2.meta.find_undeclared_variables(ast)
+        return frozenset(all_vars - _HF_INTERNAL_TEMPLATE_VARS)
+
+    def _filter_for_chat_template(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return only the model_options that the chat template can actually consume.
+
+        Renames Mellea sentinels via :meth:`_make_backend_specific_and_remove`, then
+        keeps only keys that appear in :attr:`_chat_template_allowlist` — the set of
+        variables the tokenizer's Jinja template actually references. Generation-only
+        options that the template does not reference are silently dropped, so they
+        cannot pollute the Jinja template variable namespace.
+
+        Args:
+            model_options: raw model options (may contain Mellea sentinel keys)
+
+        Returns:
+            dict of kwargs safe to splat into ``apply_chat_template``
+        """
+        backend_opts = self._make_backend_specific_and_remove(model_options)
+        return {
+            k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
+        }
+
     # region Adapter loading, unloading, and utility functions.
     @property
     def base_model_name(self):
@@ -1568,7 +1742,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     def add_adapter(self, adapter: LocalHFAdapter):
         """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
 
-        Downloads the adapter weights (via ``adapter.get_local_hf_path``) and records
+        Downloads the adapter weights (via `adapter.get_local_hf_path`) and records
         the adapter in the backend's registry. The adapter must not already be
         registered with a different backend.
 
@@ -1576,7 +1750,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             adapter (LocalHFAdapter): The adapter to register with this backend.
 
         Raises:
-            Exception: If ``adapter`` has already been added to a different backend.
+            Exception: If `adapter` has already been added to a different backend.
         """
         if adapter.backend is not None:
             if adapter.backend is self:
@@ -1602,12 +1776,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     def load_adapter(self, adapter_qualified_name: str):
         """Load a previously registered adapter into the underlying HuggingFace model.
 
-        The adapter must have been registered via ``add_adapter`` first. Do not call
+        The adapter must have been registered via `add_adapter` first. Do not call
         this method while generation requests are in progress.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the adapter
-                to load (i.e. ``"<name>_<adapter_type>"``)
+            adapter_qualified_name (str): The `adapter.qualified_name` of the adapter
+                to load (i.e. `"<name>_<adapter_type>"`)
 
         Raises:
             ValueError: If no adapter with the given qualified name has been added to
@@ -1647,7 +1821,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         method returns without error.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the adapter
+            adapter_qualified_name (str): The `adapter.qualified_name` of the adapter
                 to unload.
         """
         # Check if the backend knows about this adapter.
@@ -1667,8 +1841,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """List the qualified names of all adapters currently loaded in this backend.
 
         Returns:
-            list[str]: Qualified adapter names (i.e. ``adapter.qualified_name``) for
-                all adapters that have been loaded via ``load_adapter``.
+            list[str]: Qualified adapter names (i.e. `adapter.qualified_name`) for
+                all adapters that have been loaded via `load_adapter`.
         """
         return list(self._loaded_adapters.keys())
 

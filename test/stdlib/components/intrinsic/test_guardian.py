@@ -14,7 +14,7 @@ from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
-from test.conftest import cleanup_gpu_backend
+from test.conftest import cleanup_gpu_backend, hf_skip
 from test.predicates import require_gpu
 
 # Skip entire module in CI since all tests are qualitative
@@ -37,7 +37,8 @@ def _backend():
     """Backend used by the tests in this file. Module-scoped to avoid reloading the model for each test."""
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
+    with hf_skip():
+        backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
     yield backend_
 
     cleanup_gpu_backend(backend_, "test_guardian")
@@ -74,14 +75,14 @@ def test_guardian_check_harm(backend):
 
     # First call triggers adapter loading
     result = guardian.guardian_check(
-        context, backend, criteria="harm", target_role="user"
+        context, backend, criteria="harm", scoring_schema="user_prompt"
     )
     assert isinstance(result, float)
     assert 0.7 <= result <= 1.0, f"Expected high risk score, got {result}"
 
     # Second call hits a different code path from the first one
     result = guardian.guardian_check(
-        context, backend, criteria="harm", target_role="user"
+        context, backend, criteria="harm", scoring_schema="user_prompt"
     )
     assert isinstance(result, float)
     assert 0.7 <= result <= 1.0, f"Expected high risk score, got {result}"

@@ -1,11 +1,11 @@
 """Utilities for detecting and classifying the target inference server.
 
-Defines the ``_ServerType`` enum (``LOCALHOST``, ``OPENAI``, ``REMOTE_VLLM``,
-``UNKNOWN``) and ``_server_type``, which classifies a URL by hostname. Also provides
-``is_vllm_server_with_structured_output``, which probes a server's ``/version``
-endpoint to determine whether it supports the ``structured_outputs`` parameter
+Defines the `_ServerType` enum (`LOCALHOST`, `OPENAI`, `REMOTE_VLLM`,
+`UNKNOWN`) and `_server_type`, which classifies a URL by hostname. Also provides
+`is_vllm_server_with_structured_output`, which probes a server's `/version`
+endpoint to determine whether it supports the `structured_outputs` parameter
 introduced in vLLM ≥ 0.12.0. Used by the OpenAI-compatible backend to choose between
-``guided_json`` and ``structured_outputs`` request formats.
+`guided_json` and `structured_outputs` request formats.
 """
 
 import json

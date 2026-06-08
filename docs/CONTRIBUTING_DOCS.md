@@ -1,12 +1,6 @@
----
-title: "Contributing to the Mellea docs"
-description: "Writing conventions, review process, and PR checklist for Mellea guide pages."
-# diataxis: reference
----
-
 # Contributing to the Mellea docs
 
-This file is the authoritative writing guide for `docs/docs/guide/`. It is linked from the root `CONTRIBUTING.md` and is also accessible on the published docs site.
+Writing conventions, review process, and PR checklist for pages under `docs/docs/`. This is a repo-level contributor guide for editing the Mintlify source — it is not a published docs page. The user-facing contributing guide is at [`docs/docs/community/contributing-guide.md`](docs/community/contributing-guide.md).
 
 ---
 
@@ -208,7 +202,8 @@ Terms that **must** be linked on first use wherever they appear in guide pages (
 | `ReAct` | `#react` |
 | `RichDocument` | `#richdocument` |
 | `LiteLLM` / `LiteLLMBackend` | `#litellm--litellmbackend` |
-| `GuardianCheck` / `GuardianRisk` | `#guardiancheck` |
+| `guardian_check()` / `CRITERIA_BANK` | `#guardian_check` / `#criteria_bank` |
+| `GuardianCheck` / `GuardianRisk` *(deprecated)* | `#guardiancheck` / `#guardianrisk` |
 | `m decompose` | `#m-decompose` |
 
 Linking within the **glossary page itself** is not required (the glossary is the definition source).
@@ -358,7 +353,7 @@ so when an `Attributes:` section is present it must exactly match the declared f
 The CI audit will fail on phantom fields (documented but not declared) and undocumented
 fields (declared but missing from `Attributes:`).
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full validation workflow.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full validation workflow.
 
 ### CI docstring checks reference
 
@@ -492,17 +487,17 @@ mintlify dev
 
 ## Linting
 
-All guide pages must pass `markdownlint` with zero warnings **per page before moving on**. Config: `docs/docs/guide/.markdownlint.json`.
+All pages under `docs/docs/` must pass `markdownlint` with zero warnings **per page before moving on**.
 
 ```bash
-markdownlint docs/docs/guide/your-page.md
+npx markdownlint-cli2 "docs/docs/**/*.md"
 ```
 
 ---
 
 ## Images
 
-- Store in `docs/docs/guide/images/`, relative paths, always include alt text.
+- Store in `docs/docs/images/` (or a section-local `images/` subdir), relative paths, always include alt text.
 - Prefer text or code over images where possible.
 
 ---

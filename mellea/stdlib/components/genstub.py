@@ -68,9 +68,9 @@ class FunctionDict(TypedDict):
     """Return Type for a Function Component.
 
     Attributes:
-        name (str): The function's ``__name__``.
+        name (str): The function's `__name__`.
         signature (str): The function's parameter signature as a string.
-        docstring (str | None): The function's docstring, or ``None`` if absent.
+        docstring (str | None): The function's docstring, or `None` if absent.
     """
 
     name: str
@@ -116,9 +116,9 @@ class Argument:
 
 
 class Arguments(CBlock):
-    """A ``CBlock`` that renders a list of ``Argument`` objects as human-readable text.
+    """A `CBlock` that renders a list of `Argument` objects as human-readable text.
 
-    Each argument is formatted as ``"- name: value  (type: annotation)"`` and the
+    Each argument is formatted as `"- name: value  (type: annotation)"` and the
     items are newline-joined into a single string suitable for inclusion in a prompt.
 
     Args:
@@ -185,10 +185,10 @@ class PreconditionException(Exception):
 
 
 class Function(Generic[P, R]):
-    """Wraps a callable with its introspected ``FunctionDict`` metadata.
+    """Wraps a callable with its introspected `FunctionDict` metadata.
 
     Stores the original callable alongside its name, signature, and docstring
-    as produced by ``describe_function``, so generative stubs can render them
+    as produced by `describe_function`, so generative stubs can render them
     into prompts without re-inspecting the function each time.
 
     Args:
@@ -318,11 +318,11 @@ _disallowed_param_names = [field.name for field in fields(ExtractedArgs())]
 
 
 class GenerativeStub(Component[R], Generic[P, R]):
-    """Abstract base class for AI-powered function wrappers produced by ``@generative``.
+    """Abstract base class for AI-powered function wrappers produced by `@generative`.
 
-    A ``GenerativeStub`` wraps a callable and uses an LLM to generate its output.
-    Subclasses (``SyncGenerativeStub``, ``AsyncGenerativeStub``) implement
-    ``__call__`` for synchronous and asynchronous invocation respectively.
+    A `GenerativeStub` wraps a callable and uses an LLM to generate its output.
+    Subclasses (`SyncGenerativeStub`, `AsyncGenerativeStub`) implement
+    `__call__` for synchronous and asynchronous invocation respectively.
     The function's signature, docstring, and type hints are rendered into a prompt
     so the LLM can imitate the function's intended behaviour.
 
@@ -374,9 +374,9 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         Args:
             args: Positional arguments; the first must be either a
-                ``MelleaSession`` or a ``Context`` instance.
+                `MelleaSession` or a `Context` instance.
             kwargs: Keyword arguments for both the generative stub machinery
-                (e.g. ``m``, ``context``, ``backend``, ``requirements``) and the
+                (e.g. `m`, `context`, `backend`, `requirements`) and the
                 wrapped function's own parameters.
 
         Returns:
@@ -485,13 +485,13 @@ class GenerativeStub(Component[R], Generic[P, R]):
     def format_for_llm(self) -> TemplateRepresentation:
         """Format this generative stub for the language model.
 
-        Builds a ``TemplateRepresentation`` containing the function metadata
+        Builds a `TemplateRepresentation` containing the function metadata
         (name, signature, docstring), the bound arguments, and any requirement
         descriptions.
 
         Returns:
             TemplateRepresentation: The formatted representation ready for the
-            ``Formatter`` to render into a prompt.
+            `Formatter` to render into a prompt.
         """
         return TemplateRepresentation(
             obj=self,
@@ -524,9 +524,9 @@ class GenerativeStub(Component[R], Generic[P, R]):
 class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
     """A synchronous generative stub that blocks until the LLM response is ready.
 
-    Returned by ``@generative`` when the decorated function is not a coroutine.
-    ``__call__`` returns the parsed result directly (when a session is passed) or a
-    ``(result, context)`` tuple (when a context and backend are passed).
+    Returned by `@generative` when the decorated function is not a coroutine.
+    `__call__` returns the parsed result directly (when a session is passed) or a
+    `(result, context)` tuple (when a context and backend are passed).
     """
 
     @overload

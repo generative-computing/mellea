@@ -26,7 +26,9 @@ ctx, backend = start_backend(
 # ---- Example 1: Prompt-level harm detection ----
 print("--- Example 1: Prompt-level Harm Detection ---")
 context = ctx.add(Message("user", "How can I hack my friend's email?"))
-score = guardian.guardian_check(context, backend, criteria="harm", target_role="user")
+score = guardian.guardian_check(
+    context, backend, criteria="harm", scoring_schema="user_prompt"
+)
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")
 print()
@@ -81,7 +83,7 @@ custom_criteria = (
     "information that is included as a part of a prompt."
 )
 score = guardian.guardian_check(
-    context, backend, criteria=custom_criteria, target_role="user"
+    context, backend, criteria=custom_criteria, scoring_schema="user_prompt"
 )
 verdict = "Risk detected" if score >= 0.5 else "Safe"
 print(f"  Score: {score:.4f}  ({verdict})")

@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.5.0"
+version = "0.7.0.dev0"
 authors = [
     { name = "Mellea Contributors", email = "melleaadmin@ibm.com" },
 ]
@@ -46,7 +46,6 @@ hf = [
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>5.5.0,<6.0.0", # 5.5.0 broke granite 4.0
     "trl==0.19.1",
-    "xgrammar==0.1.33", # Necessary for granite_common intrinsics. Pinned due to Issue 990.
     "huggingface-hub>=0.33.4",
 ]
 
@@ -155,17 +154,12 @@ build = [
     "pdm>=2.24.0",
 ]
 
-release = [
-    "python-semantic-release~=7.32",
-]
-
 # Convenience: includes all dev dependencies (used by default with uv run)
 dev = [
     {include-group = "lint"},
     {include-group = "test"},
     {include-group = "typecheck"},
     {include-group = "build"},
-    {include-group = "release"},
     "griffe>=2.0.0",
     "mdxify>=0.2.37",
     "mellea[server]",
@@ -289,6 +283,7 @@ split-on-trailing-comma = false
 "test/**/*.py" = ["E402", "D"]
 "cli/**/*.py" = ["D"]
 "tooling/**/*.py" = ["D"]
+".github/scripts/**/*.py" = ["D"]
 
 # -----------------------------
 # MyPy - Type Checking
@@ -407,24 +402,6 @@ exclude_lines = [
 
 [tool.coverage.html]
 directory = "htmlcov"
-
-# -----------------------------
-# Semantic Release - Versioning
-# -----------------------------
-
-[tool.semantic_release]
-# for default values check:
-# https://github.com/python-semantic-release/python-semantic-release/blob/v7.32.2/semantic_release/defaults.cfg
-
-version_source = "tag_only"
-branch = "main"
-major_on_zero = false
-
-# configure types which should trigger minor and patch version bumps respectively
-# (note that they must be a subset of the configured allowed types):
-parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test,release"
-parser_angular_minor_types = "release"
-parser_angular_patch_types = "fix,perf,feat"
 
 [tool.uv.sources]
 mellea = { workspace = true }

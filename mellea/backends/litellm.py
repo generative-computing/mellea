@@ -63,17 +63,21 @@ class LiteLLMBackend(FormatterBackend):
 
     Args:
         model_id (str): The LiteLLM model identifier string; typically
-            ``"<provider>/<model_creator>/<model_name>"``.
+            `"<provider>/<model_creator>/<model_name>"`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to ``TemplateFormatter``.
-        base_url (str | None): Base URL for the LLM API endpoint; defaults to
-            the Ollama local endpoint.
+            Defaults to `TemplateFormatter`.
+        base_url (str | None): Base URL for the LLM API endpoint. When set,
+            forwarded as ``api_base`` to LiteLLM. When ``None`` (default),
+            LiteLLM infers the endpoint from the model prefix (e.g.
+            ``ollama_chat/`` → localhost:11434, ``anthropic/`` → Anthropic API).
+            Use ``None`` for cloud providers; set explicitly for local servers
+            such as vLLM or a non-default Ollama port.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
-            Mellea ``ModelOption`` sentinel keys.
-        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption`` sentinel
+            Mellea `ModelOption` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea `ModelOption` sentinel
             keys to backend-specific option names.
     """
 
@@ -81,7 +85,7 @@ class LiteLLMBackend(FormatterBackend):
         self,
         model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
         formatter: ChatFormatter | None = None,
-        base_url: str | None = "http://localhost:11434",
+        base_url: str | None = None,
         model_options: dict | None = None,
     ):
         """Initialize a LiteLLM-compatible backend for the given model ID and endpoint."""
@@ -98,10 +102,13 @@ class LiteLLMBackend(FormatterBackend):
         assert isinstance(model_id, str), "Model ID must be a string."
         self._model_id = model_id
 
-        if base_url is None:
-            self._base_url = "http://localhost:11434/v1"  # ollama
-        else:
-            self._base_url = base_url
+        # _explicit_base_url tracks whether the caller provided a base_url.
+        # api_base is only forwarded to litellm when explicit — otherwise litellm
+        # infers the endpoint from the model prefix (correct for cloud providers).
+        self._explicit_base_url = base_url is not None
+        self._base_url = (
+            base_url if base_url is not None else "http://localhost:11434/v1"
+        )
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -116,6 +123,7 @@ class LiteLLMBackend(FormatterBackend):
             "tools": ModelOption.TOOLS,
             "functions": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -127,6 +135,7 @@ class LiteLLMBackend(FormatterBackend):
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
             ModelOption.STREAM: "stream",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
         self._past_event_loops: set[int] = set()
@@ -140,10 +149,10 @@ class LiteLLMBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` via the LiteLLM chat API.
+        """Generate a completion for `action` given `ctx` via the LiteLLM chat API.
 
-        Delegates to ``_generate_from_chat_context_standard``. Only chat contexts are
-        supported; raises ``NotImplementedError`` otherwise.
+        Delegates to `_generate_from_chat_context_standard`. Only chat contexts are
+        supported; raises `NotImplementedError` otherwise.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -153,12 +162,12 @@ class LiteLLMBackend(FormatterBackend):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
@@ -211,9 +220,10 @@ class LiteLLMBackend(FormatterBackend):
         generate_call_model_opts = ModelOption.replace_keys(
             model_options, self.to_mellea_model_opts_map
         )
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any]
@@ -338,16 +348,65 @@ class LiteLLMBackend(FormatterBackend):
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
 
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3/Gemma4 (bool toggle)
+        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level, or True → "medium")
+        # Both are set for True so each server picks up whichever it understands.
+        # NOTE: don't pass reasoning_effort=False — it is invalid; absence disables reasoning.
         thinking = model_opts.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            # OpenAI uses strings for its reasoning levels.
-            thinking = "medium"
+        original_thinking = thinking  # preserve raw caller value for the generate log
+        reasoning_params: dict[str, Any] = {}
+        if thinking is not None:
+            if type(thinking) is bool:
+                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+                ctk: dict[str, Any] = ctk_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                ctk_body["chat_template_kwargs"] = ctk
+                extra_params["extra_body"] = ctk_body
+                if thinking:
+                    reasoning_params["reasoning_effort"] = "medium"
+                # False: do not send reasoning_effort — absent param disables reasoning;
+                # passing False would be invalid.
+            else:
+                reasoning_params["reasoning_effort"] = thinking
 
         # Append tool call information if applicable.
         tools = self._extract_tools(action, _format, model_opts, tool_calls, ctx)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        # Merge any user-supplied extra_body from model_specific_options so there is
+        # a single extra_body source in extra_params (two spread dicts with the same
+        # key would raise TypeError at call time).
+        # Deep-merge chat_template_kwargs so enable_thinking (set above) and any
+        # user-supplied chat_template_kwargs keys both survive.
+        # Copy before mutating — model_specific_options holds references into the
+        # caller's dict; popping from the originals would silently corrupt reused
+        # model_options on the next call.
+        user_extra_body = model_specific_options.pop("extra_body", None)
+        if user_extra_body:
+            user_extra_body = dict(user_extra_body)
+            eb = dict(extra_params.get("extra_body") or {})
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
+            eb.update(user_extra_body)
+            if user_ctk is not None:
+                eb["chat_template_kwargs"] = {
+                    **eb.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
+            extra_params["extra_body"] = eb
+
+        # Pop api_base from model_specific_options before the call so an explicit
+        # user-supplied value doesn't collide with the positional api_base kwarg;
+        # let the user's value take precedence over the backend default.
+        user_api_base = model_specific_options.pop("api_base", None)
+        # Only forward api_base when the caller explicitly set a base_url (or model_options
+        # contains one). Sending the default localhost URL to a cloud provider (Anthropic,
+        # Watsonx, etc.) would override LiteLLM's provider-default endpoint inference.
+        resolved_api_base = user_api_base or (
+            self._base_url if self._explicit_base_url else None
+        )
 
         if self._has_potential_event_loop_errors():
             MelleaLogger.get_logger().warning(
@@ -360,9 +419,10 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            reasoning_effort=thinking,  # type: ignore
+            api_base=resolved_api_base,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
             **extra_params,
+            **reasoning_params,  # type: ignore
             **model_specific_options,
         )
 
@@ -379,7 +439,7 @@ class LiteLLMBackend(FormatterBackend):
             self.post_processing,
             conversation=conversation,
             tools=tools,
-            thinking=thinking,
+            thinking=original_thinking,
             _format=_format,
         )
 
@@ -410,9 +470,9 @@ class LiteLLMBackend(FormatterBackend):
     ):
         """Accumulate content and thinking tokens from a single LiteLLM response chunk.
 
-        Called during generation for each ``ModelResponse`` (non-streaming) or
-        ``ModelResponseStream`` chunk (streaming). Tool call parsing is deferred to
-        ``post_processing``.
+        Called during generation for each `ModelResponse` (non-streaming) or
+        `ModelResponseStream` chunk (streaming). Tool call parsing is deferred to
+        `post_processing`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -432,11 +492,14 @@ class LiteLLMBackend(FormatterBackend):
 
             message = choice.message
 
-            # Sometimes a message doesn't actually have this field.
-            if hasattr(message, "reasoning_content"):
-                thinking_chunk = message.reasoning_content
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            # vLLM exposes the reasoning trace under "reasoning" (not "reasoning_content").
+            # Some OpenAI-compatible servers (e.g. vLLM, SGLang) use this key; older LiteLLM
+            # versions do not remap it. Use is-None guard so an empty-string chunk isn't lost.
+            thinking_chunk = message.get("reasoning_content")
+            if thinking_chunk is None:
+                thinking_chunk = message.get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
@@ -450,11 +513,12 @@ class LiteLLMBackend(FormatterBackend):
         elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
             message_delta = chunk.choices[0].delta
 
-            # Sometimes a delta doesn't actually have this field.
-            if hasattr(message_delta, "reasoning_content"):
-                thinking_chunk = message_delta.reasoning_content
-                if thinking_chunk is not None:
-                    mot._thinking += thinking_chunk
+            # Same dual-key probe for streaming deltas.
+            thinking_chunk = message_delta.get("reasoning_content")
+            if thinking_chunk is None:
+                thinking_chunk = message_delta.get("reasoning")
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:
@@ -490,7 +554,7 @@ class LiteLLMBackend(FormatterBackend):
                 used for logging.
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             thinking: The thinking/reasoning effort level passed to the model, or
-                ``None`` if reasoning mode was not enabled.
+                `None` if reasoning mode was not enabled.
             _format: The structured output format class used during generation, if any.
         """
         # Reconstruct the chat_response from chunks if streamed.
@@ -638,7 +702,7 @@ class LiteLLMBackend(FormatterBackend):
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
             ctx (Context): The current generation context.
             format (type[BaseModelSubclass] | None): Optional Pydantic model for
-                structured output; passed as ``guided_json`` in the request body.
+                structured output; passed as `guided_json` in the request body.
             model_options (dict | None): Per-call model options.
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
@@ -674,8 +738,13 @@ class LiteLLMBackend(FormatterBackend):
 
             prompts = [self.formatter.print(action) for action in actions]
 
+            user_api_base_raw = model_specific_options.pop("api_base", None)
             completion_response = await litellm.atext_completion(
-                model=self._model_id, prompt=prompts, **model_specific_options
+                model=self._model_id,
+                prompt=prompts,
+                api_base=user_api_base_raw
+                or (self._base_url if self._explicit_base_url else None),
+                **model_specific_options,
             )
 
         # Necessary for type checker.

@@ -94,6 +94,16 @@ def test_model_option_replace_with_conflicts():
     assert ModelOption.TOOLS in processed_model_opts
 
 
+def test_model_option_sentinels_are_unique():
+    """All ``@@@``-prefixed sentinel values on ModelOption must be distinct."""
+    sentinel_values = [
+        v
+        for v in vars(ModelOption).values()
+        if isinstance(v, str) and v.startswith("@@@")
+    ]
+    assert len(sentinel_values) == len(set(sentinel_values))
+
+
 def test_model_option_merge():
     default_model_opts = {
         ModelOption.CONTEXT_WINDOW: 3,

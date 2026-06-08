@@ -6,15 +6,15 @@ inside a Mellea agent.
 
 Two-step workflow:
 
-1. ``discover_mcp_tools`` — inspect a server's tools without instantiating them.
-2. ``MCPToolSpec.as_mellea_tool`` — build a callable ``MelleaTool`` from a spec.
+1. `discover_mcp_tools` — inspect a server's tools without instantiating them.
+2. `MCPToolSpec.as_mellea_tool` — build a callable `MelleaTool` from a spec.
 
-Connection helpers (``http_connection``, ``sse_connection``, ``stdio_connection``)
+Connection helpers (`http_connection`, `sse_connection`, `stdio_connection`)
 produce the config dicts fed into the functions above.
 
 Each tool invocation opens its own short-lived MCP session, so no session
 lifetime management is required by the caller. Async MCP calls are executed on
-Mellea's shared background event loop via ``_run_async_in_thread``.
+Mellea's shared background event loop via `_run_async_in_thread`.
 """
 
 import asyncio
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 class MCPToolSpec:
     """Metadata for a single tool from an MCP server.
 
-    Holds everything needed to inspect or instantiate a ``MelleaTool`` without
+    Holds everything needed to inspect or instantiate a `MelleaTool` without
     keeping a live session open.
 
     Args:
@@ -59,8 +59,8 @@ class MCPToolSpec:
         description (str): Human-readable description from the server.
         input_schema (dict[str, Any]): OpenAI-compatible parameters schema dict.
         connection (dict[str, Any]): Transport config dict returned by one of the
-            connection helpers (``http_connection``, ``sse_connection``,
-            ``stdio_connection``).
+            connection helpers (`http_connection`, `sse_connection`,
+            `stdio_connection`).
     """
 
     def __init__(
@@ -77,16 +77,16 @@ class MCPToolSpec:
         self._connection = connection
 
     def as_mellea_tool(self) -> MelleaTool:
-        """Create a callable ``MelleaTool`` from this spec.
+        """Create a callable `MelleaTool` from this spec.
 
-        The returned tool opens a fresh MCP session per call. For ``stdio``
+        The returned tool opens a fresh MCP session per call. For `stdio`
         transport this means a new subprocess is spawned on every tool
-        invocation; prefer ``streamable_http`` or ``sse`` for
+        invocation; prefer `streamable_http` or `sse` for
         performance-sensitive use.
 
         Returns:
-            A ``MelleaTool`` instance ready to pass via ``ModelOption.TOOLS``
-            or to an agent loop like ``react()``.
+            A `MelleaTool` instance ready to pass via `ModelOption.TOOLS`
+            or to an agent loop like `react()`.
         """
         return MelleaTool(
             self.name,
@@ -109,17 +109,17 @@ class MCPToolSpec:
 async def discover_mcp_tools(connection: dict[str, Any]) -> list[MCPToolSpec]:
     """Discover all tools on an MCP server and return their metadata.
 
-    Opens a single session, calls ``list_tools()``, then closes. No
-    ``MelleaTool`` objects are instantiated — callers can inspect and filter
-    the returned specs before calling ``MCPToolSpec.as_mellea_tool``.
+    Opens a single session, calls `list_tools()`, then closes. No
+    `MelleaTool` objects are instantiated — callers can inspect and filter
+    the returned specs before calling `MCPToolSpec.as_mellea_tool`.
 
     Args:
         connection: Transport config dict. Build it with one of the connection
-            helpers rather than constructing it by hand: ``http_connection``,
-            ``sse_connection``, ``stdio_connection``.
+            helpers rather than constructing it by hand: `http_connection`,
+            `sse_connection`, `stdio_connection`.
 
     Returns:
-        List of ``MCPToolSpec`` objects, one per tool on the server.
+        List of `MCPToolSpec` objects, one per tool on the server.
     """
     async with _open_session(connection) as session:
         result = await session.list_tools()
@@ -146,13 +146,13 @@ def http_connection(
 
     Args:
         url: MCP server URL.
-        api_key: Sets ``Authorization: Bearer <api_key>``.
-        headers: Additional headers, merged after ``api_key``.
+        api_key: Sets `Authorization: Bearer <api_key>`.
+        headers: Additional headers, merged after `api_key`.
         connect_timeout: Seconds to wait for TCP connection (default 30).
         read_timeout: Seconds to wait for a response (default 300).
 
     Returns:
-        Connection dict ready to pass to ``discover_mcp_tools``.
+        Connection dict ready to pass to `discover_mcp_tools`.
     """
     h: dict[str, str] = {}
     if api_key:
@@ -180,13 +180,13 @@ def sse_connection(
 
     Args:
         url: MCP server URL.
-        api_key: Sets ``Authorization: Bearer <api_key>``.
-        headers: Additional headers, merged after ``api_key``.
+        api_key: Sets `Authorization: Bearer <api_key>`.
+        headers: Additional headers, merged after `api_key`.
         connect_timeout: Seconds to wait for TCP connection (default 30).
         read_timeout: Seconds to wait for a response (default 300).
 
     Returns:
-        Connection dict ready to pass to ``discover_mcp_tools``.
+        Connection dict ready to pass to `discover_mcp_tools`.
     """
     h: dict[str, str] = {}
     if api_key:
@@ -212,13 +212,13 @@ def stdio_connection(
     """Build a stdio connection config.
 
     Args:
-        command: Executable to run (e.g. ``"gh"``).
-        args: Command-line arguments (e.g. ``["mcp", "serve"]``).
+        command: Executable to run (e.g. `"gh"`).
+        args: Command-line arguments (e.g. `["mcp", "serve"]`).
         env: Environment variables for the subprocess.
         timeout: Total seconds allowed for a tool call to complete (default 300).
 
     Returns:
-        Connection dict ready to pass to ``discover_mcp_tools``.
+        Connection dict ready to pass to `discover_mcp_tools`.
     """
     conn: dict[str, Any] = {
         "transport": "stdio",
@@ -335,8 +335,8 @@ def _make_sync_call(connection: dict[str, Any], tool_name: str) -> Callable[...,
     """Build a sync wrapper around an async MCP tool invocation.
 
     Runs the async call on Mellea's shared background event loop via
-    ``_run_async_in_thread``. MCP servers expect absent fields rather than
-    explicit ``null`` values, so ``None`` kwargs are stripped before the call.
+    `_run_async_in_thread`. MCP servers expect absent fields rather than
+    explicit `null` values, so `None` kwargs are stripped before the call.
     """
 
     def sync_call(**kwargs: Any) -> str:

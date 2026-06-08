@@ -2,11 +2,13 @@ import asyncio
 import json
 from typing import Annotated
 
+import ollama as _ollama
 import pydantic
 import pytest
 
 from mellea import start_session
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import CBlock, Requirement
 from mellea.stdlib.context import SimpleContext
@@ -14,6 +16,30 @@ from mellea.stdlib.requirements import simple_validate
 
 # Mark all tests in this module as requiring Ollama
 pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_model_warm() -> None:
+    """Warm up the default model before tests run in this module.
+
+    The conftest warms models when transitioning *into* the ollama test group, but
+    that warm-up does not fire when this file is run in isolation (e.g.
+    ``pytest test/backends/test_ollama.py``). Without this fixture the first test
+    in such a run fires concurrent requests against a cold model, triggering the
+    Ollama load-race that returns empty responses (see #599 and
+    https://github.com/ollama/ollama/issues/16326).
+
+    ``keep_alive=-1`` pins the model in memory until the conftest module-boundary
+    eviction fires at the end of this test file.
+    """
+    _model = IBM_GRANITE_4_1_3B.ollama_name
+    assert _model is not None  # IBM_GRANITE_4_1_3B always has ollama_name set
+    try:
+        _ollama.generate(
+            model=_model, prompt="hi", options={"num_predict": 1}, keep_alive=-1
+        )
+    except Exception:
+        pass  # best-effort; per-test failures will be clearer than a fixture abort
 
 
 @pytest.fixture(scope="function")
@@ -101,15 +127,9 @@ def test_format(session) -> None:
     # assert email.to.email_address.endswith("example.com")
 
 
-@pytest.mark.xfail(
-    strict=False, reason="Ollama intermittently returns empty responses for raw prompts"
-)
 @pytest.mark.qualitative
 @pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
-    # Note capital letter "W" at the beginning of each prompt. This capital letter is
-    # very important to the ollama version of Granite 4.0 micro, the current default
-    # model for Mellea.
     prompts = ["What is 1+1?", "What is 2+2?", "What is 3+3?", "What is 4+4?"]
 
     results = await session.backend.generate_from_raw(
@@ -247,6 +267,24 @@ def test_client_cache(session) -> None:
     fourth_client = asyncio.run(get_client_async())
     assert fourth_client in backend._client_cache.cache.values()
     assert len(backend._client_cache.cache.values()) == 2
+
+
+@pytest.mark.qualitative
+def test_stop_sequences(session) -> None:
+    """Generation should halt before any of the configured stop strings appears."""
+    stop = "STOP_HERE_MARKER"
+    result = session.instruct(
+        "Count from 1 to 20, separated by spaces. After 20, write 'STOP_HERE_MARKER' "
+        "and then keep counting to 30.",
+        model_options={
+            ModelOption.STOP_SEQUENCES: [stop],
+            ModelOption.MAX_NEW_TOKENS: 200,
+        },
+    )
+    # Ollama strips the stop string from the returned text, so it should not appear.
+    assert stop not in result.value, (
+        f"stop sequence leaked into output: {result.value!r}"
+    )
 
 
 if __name__ == "__main__":

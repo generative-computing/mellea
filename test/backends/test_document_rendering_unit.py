@@ -291,6 +291,10 @@ async def test_huggingface_renders_documents_in_prompt():
         mock_llg.hf.from_tokenizer.return_value = MagicMock(vocab_size=32000)
         mock_tokenizer._tokenizer = MagicMock()
         mock_tokenizer._tokenizer.get_vocab_size.return_value = 32000
+        # Needed for the n_vocab preemptive check in LocalHFBackend.__init__
+        mock_tokenizer.vocab_size = 32000
+        mock_tokenizer.__len__ = MagicMock(return_value=32000)
+        mock_model.vocab_size = 32000
 
         from mellea.backends.huggingface import LocalHFBackend
 

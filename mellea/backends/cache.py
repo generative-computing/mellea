@@ -1,9 +1,9 @@
 """Cache abstractions and implementations for model state.
 
-Defines the abstract ``Cache`` interface with ``put``, ``get``, and
-``current_size`` methods, and provides a concrete ``SimpleLRUCache`` that evicts
+Defines the abstract `Cache` interface with `put`, `get`, and
+`current_size` methods, and provides a concrete `SimpleLRUCache` that evicts
 the least-recently-used entry when capacity is exceeded — optionally calling an
-``on_evict`` callback (e.g. to free GPU memory). Used by local HuggingFace backends
+`on_evict` callback (e.g. to free GPU memory). Used by local HuggingFace backends
 to store and reuse KV cache state across requests.
 """
 
@@ -40,7 +40,7 @@ class Cache(abc.ABC):
             key (str | int): The cache key to look up.
 
         Returns:
-            Any | None: The cached value, or ``None`` if ``key`` has no cached entry.
+            Any | None: The cached value, or `None` if `key` has no cached entry.
         """
         ...
 
@@ -58,7 +58,7 @@ class SimpleLRUCache(Cache):
     """A simple `LRU <https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)>`_ cache.
 
     Evicts the least-recently-used entry when capacity is exceeded, optionally
-    invoking an ``on_evict`` callback (e.g. to free GPU memory). Used by local
+    invoking an `on_evict` callback (e.g. to free GPU memory). Used by local
     HuggingFace backends to store and reuse KV cache state across requests.
 
     Args:
@@ -92,7 +92,7 @@ class SimpleLRUCache(Cache):
             key (str | int): The cache key to look up.
 
         Returns:
-            Any | None: The cached value, or ``None`` if ``key`` is not present.
+            Any | None: The cached value, or `None` if `key` is not present.
         """
         if key not in self.cache:
             return None
@@ -106,7 +106,7 @@ class SimpleLRUCache(Cache):
         """Insert or update a value in the cache.
 
         If the cache is at capacity and the key is new, the least-recently-used
-        entry is evicted first, invoking the ``on_evict`` callback if set.
+        entry is evicted first, invoking the `on_evict` callback if set.
 
         Args:
             key (str | int): The cache key to store the value under.

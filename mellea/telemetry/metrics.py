@@ -566,32 +566,6 @@ def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
     ttfb_hist.record(ttfb_s, attributes)
 
 
-# Auto-register metrics plugins when metrics are enabled
-if _OTEL_AVAILABLE and _METRICS_ENABLED:
-    try:
-        from mellea.plugins.registry import register
-        from mellea.telemetry.metrics_plugins import _METRICS_PLUGIN_CLASSES
-
-        for _plugin_cls in _METRICS_PLUGIN_CLASSES:
-            try:
-                register(_plugin_cls())
-            except ValueError as e:
-                # Already registered (expected during module reloads in tests)
-                warnings.warn(
-                    f"{_plugin_cls.__name__} already registered: {e}",
-                    UserWarning,
-                    stacklevel=2,
-                )
-    except ImportError:
-        warnings.warn(
-            "Metrics are enabled but the plugin framework is not installed. "
-            "Token usage and latency metrics will not be recorded automatically. "
-            "Install with: pip install mellea[telemetry]",
-            UserWarning,
-            stacklevel=2,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Error counters
 # ---------------------------------------------------------------------------
@@ -617,7 +591,7 @@ def classify_error(exc: BaseException) -> str:
         exc: The exception to classify.
 
     Returns:
-        One of the ``ERROR_TYPE_*`` constants.
+        One of the `ERROR_TYPE_*` constants.
     """
     # OpenAI SDK exceptions (optional dependency)
     try:
@@ -698,7 +672,7 @@ def record_error(
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        error_type: Semantic error category (use ``ERROR_TYPE_*`` constants).
+        error_type: Semantic error category (use `ERROR_TYPE_*` constants).
         model: Model identifier (e.g. "gpt-4", "llama2:7b").
         provider: Provider name (e.g. "openai", "ollama").
         exception_class: Python exception class name (e.g. "RateLimitError").
@@ -755,13 +729,13 @@ def record_cost(cost: float, model: str, provider: str) -> None:
     """Record estimated LLM request cost in USD.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
-    Only call this when pricing data is available (i.e., ``compute_cost`` returned
+    Only call this when pricing data is available (i.e., `compute_cost` returned
     a non-None value).
 
     Args:
         cost: Estimated request cost in US dollars.
-        model: Model identifier (e.g. ``"gpt-4o"``, ``"claude-sonnet-4-6"``).
-        provider: Provider name (e.g. ``"openai"``, ``"ollama"``).
+        model: Model identifier (e.g. `"gpt-4o"`, `"claude-sonnet-4-6"`).
+        provider: Provider name (e.g. `"openai"`, `"ollama"`).
 
     Example:
         record_cost(
@@ -827,7 +801,7 @@ def record_sampling_attempt(strategy: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        strategy: Sampling strategy class name (e.g. ``"RejectionSamplingStrategy"``).
+        strategy: Sampling strategy class name (e.g. `"RejectionSamplingStrategy"`).
     """
     if not _METRICS_ENABLED:
         return
@@ -841,8 +815,8 @@ def record_sampling_outcome(strategy: str, success: bool) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        strategy: Sampling strategy class name (e.g. ``"RejectionSamplingStrategy"``).
-        success: ``True`` if at least one attempt passed all requirements.
+        strategy: Sampling strategy class name (e.g. `"RejectionSamplingStrategy"`).
+        success: `True` if at least one attempt passed all requirements.
     """
     if not _METRICS_ENABLED:
         return
@@ -889,7 +863,7 @@ def record_requirement_check(requirement: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        requirement: Requirement class name (e.g. ``"LLMaJRequirement"``).
+        requirement: Requirement class name (e.g. `"LLMaJRequirement"`).
     """
     if not _METRICS_ENABLED:
         return
@@ -903,8 +877,8 @@ def record_requirement_failure(requirement: str, reason: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        requirement: Requirement class name (e.g. ``"LLMaJRequirement"``).
-        reason: Human-readable failure reason from ``ValidationResult.reason``.
+        requirement: Requirement class name (e.g. `"LLMaJRequirement"`).
+        reason: Human-readable failure reason from `ValidationResult.reason`.
     """
     if not _METRICS_ENABLED:
         return
@@ -937,13 +911,39 @@ def record_tool_call(tool: str, status: str) -> None:
 
     Args:
         tool: Name of the tool that was invoked.
-        status: ``"success"`` if the tool executed without error, ``"failure"`` otherwise.
+        status: `"success"` if the tool executed without error, `"failure"` otherwise.
     """
     if not _METRICS_ENABLED:
         return
 
     counter = _get_tool_calls_counter()
     counter.add(1, {"tool": tool, "status": status})
+
+
+# Auto-register metrics plugins when metrics are enabled
+if _OTEL_AVAILABLE and _METRICS_ENABLED:
+    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK, register
+    from mellea.telemetry.metrics_plugins import _METRICS_PLUGIN_CLASSES
+
+    if not _HAS_PLUGIN_FRAMEWORK:
+        warnings.warn(
+            "Metrics are enabled but the plugin framework is not installed. "
+            "Token usage and latency metrics will not be recorded automatically. "
+            "Install with: pip install mellea[telemetry]",
+            UserWarning,
+            stacklevel=2,
+        )
+    else:
+        for _plugin_cls in _METRICS_PLUGIN_CLASSES:
+            try:
+                register(_plugin_cls())
+            except ValueError as e:
+                # Already registered (expected during module reloads in tests)
+                warnings.warn(
+                    f"{_plugin_cls.__name__} already registered: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
 
 __all__ = [

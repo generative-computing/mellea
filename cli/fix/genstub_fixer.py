@@ -1,11 +1,11 @@
 """Line-based detection and rewriting of old genslot imports and class names.
 
 Targets:
-- ``from mellea.stdlib.components.genslot import ...`` → ``genstub``
-- ``import mellea.stdlib.components.genslot [as ...]`` → ``genstub``
-- ``from mellea.stdlib.components import genslot [as ...]`` → ``genstub``
-- ``from .genslot import ...`` (relative imports) → ``genstub``
-- ``GenerativeSlot`` → ``GenerativeStub`` (and Sync/Async variants)
+- `from mellea.stdlib.components.genslot import ...` → `genstub`
+- `import mellea.stdlib.components.genslot [as ...]` → `genstub`
+- `from mellea.stdlib.components import genslot [as ...]` → `genstub`
+- `from .genslot import ...` (relative imports) → `genstub`
+- `GenerativeSlot` → `GenerativeStub` (and Sync/Async variants)
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 # Directories to skip during traversal.
 SKIP_DIRS = {"__pycache__", ".git", ".venv", "node_modules"}
 
-# Ordered longest-first so ``SyncGenerativeSlot`` is replaced before ``GenerativeSlot``.
+# Ordered longest-first so `SyncGenerativeSlot` is replaced before `GenerativeSlot`.
 _CLASS_RENAMES: list[tuple[str, str]] = [
     ("AsyncGenerativeSlot", "AsyncGenerativeStub"),
     ("SyncGenerativeSlot", "SyncGenerativeStub"),
@@ -118,7 +118,7 @@ def find_genslot_refs(source: str, filepath: Path) -> list[GenStubFixLocation]:
 
     Args:
         source: Python source text.
-        filepath: Used for the ``filepath`` field in returned locations.
+        filepath: Used for the `filepath` field in returned locations.
 
     Returns:
         List of locations that would be changed.
@@ -140,7 +140,7 @@ def fix_genslot_file(
 
     Args:
         filepath: Path to the Python file to fix.
-        dry_run: If ``True``, return locations without modifying the file.
+        dry_run: If `True`, return locations without modifying the file.
 
     Returns:
         List of locations found (and optionally fixed).
@@ -165,7 +165,7 @@ def fix_genslot_path(path: Path, *, dry_run: bool = False) -> GenStubFixResult:
 
     Args:
         path: File or directory to process.
-        dry_run: If ``True``, report locations without modifying files.
+        dry_run: If `True`, report locations without modifying files.
 
     Returns:
         Aggregated result with all fix locations and summary counts.

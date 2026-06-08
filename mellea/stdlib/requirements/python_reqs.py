@@ -1,12 +1,19 @@
 """Requirements for Python code generation validation."""
 
+import dataclasses
+import warnings
 from collections.abc import Callable
+from typing import Literal
 
+from mellea.stdlib.tools.execution_policy import (
+    DOCKER_POLICY,
+    LOCAL_POLICY,
+    CapabilityPolicy,
+    ExecutionTier,
+)
 from mellea.stdlib.tools.interpreter import (
     ExecutionEnvironment,
-    LLMSandboxEnvironment,
-    StaticAnalysisEnvironment,
-    UnsafeEnvironment,
+    make_execution_environment,
 )
 
 from ...core import Context, MelleaLogger, Requirement, ValidationResult
@@ -69,11 +76,11 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
     # Look for code blocks with python specifier
     import re
 
-    # Pattern for ```python ... ``` blocks
-    python_blocks = re.findall(r"```python\s*\n(.*?)\n```", content, re.DOTALL)
+    # Pattern for ``python ... `` blocks
+    python_blocks = re.findall(r"``python\s*\n(.*?)\n``", content, re.DOTALL)
 
     # Pattern for generic ``` blocks
-    generic_blocks = re.findall(r"```\s*\n(.*?)\n```", content, re.DOTALL)
+    generic_blocks = re.findall(r"``\s*\n(.*?)\n``", content, re.DOTALL)
 
     all_blocks = []
 
@@ -104,16 +111,20 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
 
 def _python_executes_without_error(
-    ctx: Context,
-    timeout: int = 5,
-    allow_unsafe: bool = False,
-    allowed_imports: list[str] | None = None,
-    use_sandbox: bool = False,
+    ctx: Context, environment: ExecutionEnvironment, max_output_chars: int | None = None
 ) -> ValidationResult:
     """Validate that Python code executes without raising exceptions.
 
-    First extracts the highest-scoring Python code block from the context,
-    then validates/executes it based on the specified execution mode.
+    Optionally enforces that captured output stays within size limit.
+
+    Args:
+        ctx: Context containing model output with code blocks.
+        environment: Execution environment (static, local, or docker).
+        max_output_chars: Maximum allowed stdout size in characters.
+            None = no size check. Defaults to None.
+
+    Returns:
+        ValidationResult with execution success and optional output size details.
     """
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
@@ -123,84 +134,228 @@ def _python_executes_without_error(
         )
 
     code = extraction_result.reason
-    assert code is not None
+    if code is None:
+        return ValidationResult(
+            result=False,
+            reason="Code extraction returned None; this should not happen.",
+        )
 
-    environment: ExecutionEnvironment
-    if use_sandbox:
-        environment = LLMSandboxEnvironment(allowed_imports=allowed_imports)
-    elif allow_unsafe:
-        environment = UnsafeEnvironment(allowed_imports=allowed_imports)
-    else:
-        environment = StaticAnalysisEnvironment(allowed_imports=allowed_imports)
+    result = environment.execute(code)
 
-    result = environment.execute(code, timeout)
-    return ValidationResult(
-        result=result.success, reason=result.to_validationresult_reason()
-    )
+    if not result.success:
+        return ValidationResult(
+            result=False, reason=result.to_validationresult_reason()
+        )
+
+    if max_output_chars is not None:
+        output_size = len(result.stdout or "")
+        if output_size > max_output_chars:
+            return ValidationResult(
+                result=False,
+                reason=f"Output size ({output_size} chars) exceeds limit ({max_output_chars}). "
+                f"Code execution succeeded, but output validation failed.",
+            )
+
+    return ValidationResult(result=True, reason=result.to_validationresult_reason())
 
 
 class PythonExecutionReq(Requirement):
     """Verifies that Python code runs without raising exceptions.
 
+    Optionally validates that captured stdout does not exceed a size limit,
+    eliminating the double-execution cost of separate OutputSizeLimit checks.
+
     Extracts the highest-scoring Python code block from the model's last output
-    and validates or executes it according to the configured execution mode.
+    and validates or executes it according to the configured execution tier.
+
+    Use ``execution_tier`` to select behavior by intent:
+
+    - ``"static"`` (default) — parse and import-check only, no execution.
+    - ``"local_unsafe"`` — subprocess execution, no policy restrictions.
+    - ``"local"`` — subprocess execution with a declared capability policy.
+    - ``"docker_unsafe"`` — Docker-isolated execution, no policy restrictions.
+    - ``"docker"`` — Docker-isolated execution with a declared capability policy.
 
     Args:
-        timeout (int): Maximum seconds to allow code to run. Defaults to ``5``.
-        allow_unsafe_execution (bool): If ``True``, execute code directly with
-            subprocess. Use only with trusted sources.
+        execution_tier (str): One of ``"static"``, ``"local_unsafe"``, ``"local"``,
+            ``"docker_unsafe"``, or ``"docker"``.  Defaults to ``"static"``.
+        policy (CapabilityPolicy | None): Override the tier's default policy.
+            Ignored for ``"static"`` and unsafe tiers unless explicitly provided.
         allowed_imports (list[str] | None): Allowlist of importable top-level
-            modules. ``None`` allows any import.
-        use_sandbox (bool): If ``True``, use ``llm-sandbox`` for Docker-based
-            isolated execution.
+            modules.  ``None`` allows any import.
+        max_output_chars (int | None): Maximum allowed stdout size in characters.
+            None = no size check (default). When set, adds output size validation
+            in the same execution pass, avoiding the double-execution cost of using
+            OutputSizeLimit. Only enforced for tiers that execute code (local_unsafe,
+            local, docker_unsafe, docker); static tier skips output check.
+        timeout (int | None): Deprecated.  Pass ``policy=CapabilityPolicy(timeout=N)``
+            instead.  When provided, overrides the policy timeout.
+        allow_unsafe_execution (bool): Deprecated.  Use
+            ``execution_tier="local_unsafe"`` instead.
+        use_sandbox (bool): Deprecated.  Use ``execution_tier="docker"`` instead.
 
     Attributes:
         validation_fn (Callable[[Context], ValidationResult]): The validation
-            function attached to this requirement; always non-``None``.
+            function attached to this requirement; always non-`None`.
     """
 
     def __init__(
         self,
-        timeout: int = 5,
-        allow_unsafe_execution: bool = False,
+        execution_tier: ExecutionTier = "static",
+        *,
+        policy: CapabilityPolicy | None = None,
         allowed_imports: list[str] | None = None,
+        max_output_chars: int | None = None,
+        # Deprecated kwargs — kept for backward compatibility
+        timeout: int | None = None,
+        allow_unsafe_execution: bool = False,
         use_sandbox: bool = False,
     ):
-        """Initialize PythonExecutionReq with execution mode, timeout, and import allowlist settings."""
-        self._timeout = timeout
-        self._allow_unsafe = allow_unsafe_execution
-        self._allowed_imports = allowed_imports
-        self._use_sandbox = use_sandbox
+        """Initialize PythonExecutionReq with an execution tier and optional policy."""
+        # Legacy positional-integer shim: old signature was PythonExecutionReq(timeout: int).
+        if isinstance(execution_tier, int):
+            warnings.warn(
+                "Passing an integer as the first argument to PythonExecutionReq() is "
+                "deprecated. The first parameter is now execution_tier (a string). "
+                "Use PythonExecutionReq(policy=CapabilityPolicy(timeout=N)) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            timeout = execution_tier  # type: ignore[assignment]
+            execution_tier = "static"
 
-        if allow_unsafe_execution and not use_sandbox:
-            logger.warning(
-                "⚠️ UNSAFE: Executing untrusted code directly. Only use with trusted sources!"
+        # --- Deprecation shims ---
+        _local_tiers = ("local_unsafe", "local")
+        _docker_tiers = ("docker_unsafe", "docker")
+
+        if allow_unsafe_execution:
+            if execution_tier not in _local_tiers:
+                if execution_tier in _docker_tiers:
+                    # Caller is already on a docker tier — warn but don't downgrade.
+                    warnings.warn(
+                        f"allow_unsafe_execution is deprecated and has no effect when "
+                        f"execution_tier='{execution_tier}' is already set. "
+                        "Remove the flag.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        "allow_unsafe_execution is deprecated. Use execution_tier='local_unsafe' instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    if execution_tier == "static":
+                        # Promote to "local" when timeout is also set so the
+                        # timeout shim below can synthesise a policy — "local_unsafe"
+                        # has no policy and would silently discard the timeout value.
+                        execution_tier = (
+                            "local" if timeout is not None else "local_unsafe"
+                        )
+
+        if use_sandbox:
+            if execution_tier not in _docker_tiers:
+                # Only warn and promote when the flag actually changes something.
+                warnings.warn(
+                    "use_sandbox is deprecated. Use execution_tier='docker' instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if execution_tier in ("static", "local_unsafe", "local"):
+                    execution_tier = "docker"
+            elif execution_tier == "docker_unsafe":
+                # Already in Docker but without a policy — nudge toward 'docker'.
+                warnings.warn(
+                    "use_sandbox is deprecated. Use execution_tier='docker' (with policy) "
+                    "instead of 'docker_unsafe' for capability enforcement.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+        if timeout is not None:
+            if execution_tier == "static":
+                warnings.warn(
+                    "timeout has no effect on the static tier (no code is executed).",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+            elif execution_tier in ("local_unsafe", "docker_unsafe"):
+                warnings.warn(
+                    f"timeout is ignored for the '{execution_tier}' tier (no policy is applied). "
+                    "Use execution_tier='local' or 'docker' with policy=CapabilityPolicy(timeout=N) "
+                    "to enforce a custom timeout.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+            else:
+                warnings.warn(
+                    "timeout is deprecated. Pass policy=CapabilityPolicy(timeout=N) instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if policy is None:
+                    base = DOCKER_POLICY if execution_tier == "docker" else LOCAL_POLICY
+                    policy = dataclasses.replace(base, timeout=timeout)
+                else:
+                    policy = dataclasses.replace(policy, timeout=timeout)
+
+        if max_output_chars is not None and max_output_chars <= 0:
+            raise ValueError(
+                f"max_output_chars must be positive, got {max_output_chars}"
             )
 
-        if use_sandbox and allow_unsafe_execution:
-            execution_mode = f"sandbox execution (timeout: {timeout}s)"
-        elif allow_unsafe_execution:
-            execution_mode = f"unsafe execution (timeout: {timeout}s)"
-        elif use_sandbox:
-            execution_mode = f"sandbox execution (timeout: {timeout}s)"
-        else:
-            execution_mode = "validation only"
+        self._tier = execution_tier
+        self._policy = policy
+        self._allowed_imports = allowed_imports
+        self._max_output_chars = max_output_chars
+
+        environment: ExecutionEnvironment = make_execution_environment(
+            tier=execution_tier, policy=policy, allowed_imports=allowed_imports
+        )
+
+        if execution_tier in ("local_unsafe", "local"):
+            logger.warning(
+                "⚠️ UNSAFE: Executing untrusted code without container isolation. "
+                "Only use with trusted sources!"
+            )
+
+        tier_label = _tier_label(execution_tier, policy)
+
+        output_note = ""
+        if max_output_chars is not None and execution_tier != "static":
+            output_note = f" Output limit: {max_output_chars} chars."
 
         super().__init__(
-            description=f"The Python code should execute without errors ({execution_mode}).",
+            description=f"The Python code should execute without errors ({tier_label}).{output_note}",
             validation_fn=lambda ctx: _python_executes_without_error(
-                ctx,
-                self._timeout,
-                self._allow_unsafe,
-                self._allowed_imports,
-                self._use_sandbox,
+                ctx, environment, max_output_chars=self._max_output_chars
             ),
             check_only=True,
         )
 
-        # Add type hint to validation_fn here. It's always set for this requirement.
         self.validation_fn: Callable[[Context], ValidationResult]
         assert self.validation_fn is not None
+
+
+def _tier_label(tier: str, policy: CapabilityPolicy | None) -> str:
+    timeout = policy.timeout if policy is not None else None
+    match tier:
+        case "static":
+            return "validation only"
+        case "local_unsafe":
+            effective = timeout if timeout is not None else LOCAL_POLICY.timeout
+            return f"local execution, no policy (timeout: {effective}s)"
+        case "local":
+            effective = timeout if timeout is not None else LOCAL_POLICY.timeout
+            return f"local execution with policy (timeout: {effective}s)"
+        case "docker_unsafe":
+            effective = timeout if timeout is not None else DOCKER_POLICY.timeout
+            return f"sandbox execution, no policy (timeout: {effective}s)"
+        case "docker":
+            effective = timeout if timeout is not None else DOCKER_POLICY.timeout
+            return f"sandbox execution with policy (timeout: {effective}s)"
+        case _:
+            return tier
 
 
 # endregion

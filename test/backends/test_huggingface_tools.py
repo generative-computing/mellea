@@ -25,14 +25,16 @@ from mellea.backends import ModelOption
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.context import ChatContext
+from test.conftest import hf_skip
 
 
 @pytest.fixture(scope="module")
 def backend():
     """Shared HuggingFace backend for all tests in this module."""
-    backend = LocalHFBackend(
-        model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B, cache=SimpleLRUCache(5)
-    )
+    with hf_skip():
+        backend = LocalHFBackend(
+            model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B, cache=SimpleLRUCache(5)
+        )
     # add_granite_aloras(backend)
     yield backend
 

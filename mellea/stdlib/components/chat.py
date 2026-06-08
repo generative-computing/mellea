@@ -1,11 +1,11 @@
-"""Chat primitives: the ``Message`` and ``ToolMessage`` components.
+"""Chat primitives: the `Message` and `ToolMessage` components.
 
-Defines ``Message``, the ``Component`` subtype used to represent a single turn in a
-chat history with a ``role`` (``user``, ``assistant``, ``system``, or ``tool``),
-text ``content``, and optional ``images`` and ``documents`` attachments. Also provides
-``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments), and
-utilities for converting a ``Context`` into a flat list of ``Message`` objects:
-``as_chat_history`` (strict typing) and ``as_generic_chat_history`` (flexible with
+Defines `Message`, the `Component` subtype used to represent a single turn in a
+chat history with a `role` (`user`, `assistant`, `system`, or `tool`),
+text `content`, and optional `images` and `documents` attachments. Also provides
+`ToolMessage` (a `Message` subclass that carries the tool name and arguments), and
+utilities for converting a `Context` into a flat list of `Message` objects:
+`as_chat_history` (strict typing) and `as_generic_chat_history` (flexible with
 configurable formatter).
 """
 
@@ -31,8 +31,8 @@ class Message(Component["Message"]):
     """A single Message in a Chat history.
 
     Args:
-        role (str): The role that this message came from (e.g., ``"user"``,
-            ``"assistant"``).
+        role (str): The role that this message came from (e.g., `"user"`,
+            `"assistant"`).
         content (str): The content of the message.
         images (list[ImageBlock] | None): Optional images associated with the
             message.
@@ -40,8 +40,8 @@ class Message(Component["Message"]):
             the message.
 
     Attributes:
-        Role (type): Type alias for the allowed role literals: ``"system"``,
-            ``"user"``, ``"assistant"``, or ``"tool"``.
+        Role (type): Type alias for the allowed role literals: `"system"`,
+            `"user"`, `"assistant"`, or `"tool"`.
     """
 
     Role = Literal["system", "user", "assistant", "tool"]
@@ -189,17 +189,17 @@ class ToolMessage(Message):
     """Adds the name field for function name.
 
     Args:
-        role (str): The role of this message; most backends use ``"tool"``.
+        role (str): The role of this message; most backends use `"tool"`.
         content (str): The content of the message; should be a stringified
-            version of ``tool_output``.
+            version of `tool_output`.
         tool_output (Any): The output of the tool or function call.
         name (str): The name of the tool or function that was called.
         args (Mapping[str, Any]): The arguments passed to the tool.
-        tool (ModelToolCall): The ``ModelToolCall`` representation.
+        tool (ModelToolCall): The `ModelToolCall` representation.
 
     Attributes:
         arguments (Mapping[str, Any]): The arguments that were passed to the
-            tool; stored from the ``args`` constructor parameter.
+            tool; stored from the `args` constructor parameter.
     """
 
     def __init__(
@@ -227,17 +227,17 @@ def as_chat_history(ctx: Context) -> list[Message]:
     """Returns a list of Messages corresponding to a Context.
 
     Args:
-        ctx: A linear ``Context`` whose entries are ``Message`` or ``ModelOutputThunk``
-            objects with ``Message`` parsed representations.
+        ctx: A linear `Context` whose entries are `Message` or `ModelOutputThunk`
+            objects with `Message` parsed representations.
 
     Returns:
-        List of ``Message`` objects in conversation order.
+        List of `Message` objects in conversation order.
 
     Raises:
         ValueError: If the context history is non-linear and cannot be cast to a
             flat list.
         AssertionError: If any entry in the context cannot be converted to a
-            ``Message``.
+            `Message`.
     """
 
     def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message | None:
@@ -279,27 +279,27 @@ def as_generic_chat_history(
 ) -> list[Message]:
     """Returns a list of Messages corresponding to a Context, with flexible type handling.
 
-    This function is more permissive than ``as_chat_history()``, allowing arbitrary
+    This function is more permissive than `as_chat_history()`, allowing arbitrary
     component types. Unknown types are converted to strings using a configurable
     formatter, making it suitable for general-purpose use where context composition
     may be heterogeneous.
 
     The formatter is applied to:
-    - ``ModelOutputThunk`` with non-Message ``parsed_repr``
-    - ``CBlock`` subclasses (subclasses only; plain ``CBlock`` is stringified)
+    - `ModelOutputThunk` with non-Message `parsed_repr`
+    - `CBlock` subclasses (subclasses only; plain `CBlock` is stringified)
     - Other unknown component types
 
-    Existing ``Message`` objects are preserved as-is; their content is not formatted.
+    Existing `Message` objects are preserved as-is; their content is not formatted.
     This design preserves Message fidelity while providing an escape hatch for unknown types.
 
     Args:
-        ctx: A linear ``Context`` that may contain ``Message``, ``ModelOutputThunk``,
-            or other ``Component`` types.
+        ctx: A linear `Context` that may contain `Message`, `ModelOutputThunk`,
+            or other `Component` types.
         formatter: Optional callable that converts unknown types to strings.
-            Defaults to ``_default_formatter`` which logs a warning and stringifies.
+            Defaults to `_default_formatter` which logs a warning and stringifies.
 
     Returns:
-        List of ``Message`` objects in conversation order.
+        List of `Message` objects in conversation order.
 
     Raises:
         ValueError: If the context history is non-linear and cannot be cast to a

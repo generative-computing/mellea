@@ -1,0 +1,147 @@
+name: "Publish release"
+
+# Publishes a release from a release/v* branch. Operator picks a bump_type
+# to advance the version (rc, final, patch-rc, patch-final) or re-publish
+# whatever is currently in pyproject.toml (none). See RELEASE.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: >-
+          How to advance the version before publishing. Use `rc` throughout a
+          minor cycle, `patch-rc` throughout a patch cycle, `final` /
+          `patch-final` to promote an rc, or `none` to republish the
+          pyproject version as-is.
+        type: choice
+        options:
+          - rc
+          - final
+          - patch-rc
+          - patch-final
+          - none
+        required: true
+        default: rc
+      force_release:
+        description: 'Force release even if previous checks fail.'
+        type: boolean
+        required: false
+        default: false
+      allow_main_release:
+        description: 'Override the main-branch guard. Leave unchecked.'
+        type: boolean
+        required: false
+        default: false
+
+permissions: {}
+
+env:
+  UV_FROZEN: "1"
+  CICD: 1
+
+jobs:
+  guard:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to release from main
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          ALLOW: ${{ inputs.allow_main_release }}
+        run: |
+          if [ "${REF_NAME}" = "main" ] && [ "${ALLOW}" != "true" ]; then
+            echo "error: refusing to release from main."
+            echo "Dispatch this workflow against a release/v* branch instead."
+            echo "See RELEASE.md for the release-branch workflow."
+            exit 2
+          fi
+  code-checks:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/quality.yml
+    secrets:
+      HF_TOKEN_READ_PUBLIC_ONLY: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}
+  pre-release-check:
+    permissions:
+      contents: read
+    needs: [guard]
+    runs-on: ubuntu-latest
+    outputs:
+      TARGET_TAG_V: ${{ steps.version_check.outputs.TRGT_VERSION }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --only-dev
+      - name: Compute target version
+        id: version_check
+        env:
+          BUMP_TYPE: ${{ inputs.bump_type }}
+        run: |
+          if [ "${BUMP_TYPE}" = "none" ]; then
+            TRGT_VERSION=$(uvx --from=toml-cli toml get --toml-path=pyproject.toml project.version)
+          else
+            TRGT_VERSION=$(uv run --no-sync python .github/scripts/bump_version.py \
+                --mode "${BUMP_TYPE}" --dry-run)
+          fi
+          echo "TRGT_VERSION=${TRGT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Target version: ${TRGT_VERSION}"
+  release:
+    permissions:
+      contents: write        # push tags, branches, commits
+      pull-requests: write   # release.sh opens changelog sync PR for finals
+      actions: write         # release.sh dispatches pypi.yml and docs-publish.yml
+    needs: [guard, code-checks, pre-release-check]
+    # Run only if a target version was computed AND (previous jobs succeeded
+    # OR the operator set force_release).
+    if: >-
+        ${{ needs.pre-release-check.outputs.TARGET_TAG_V != '' &&
+        ( success() || inputs.force_release ) }}
+    environment: auto-release
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --only-dev
+      - name: Configure git user
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      - name: Bump version on release branch
+        if: inputs.bump_type != 'none'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BUMP_TYPE: ${{ inputs.bump_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          uv run --no-sync python .github/scripts/bump_version.py --mode "${BUMP_TYPE}"
+          git push origin "${REF_NAME}"
+      - name: Run release script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          ALLOW_MAIN_RELEASE: ${{ inputs.allow_main_release && '1' || '0' }}
+          CHGLOG_FILE: CHANGELOG.md
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
+        run: ./.github/scripts/release.sh
+        shell: bash

@@ -58,13 +58,13 @@ def eval_run(
     aggregated results to a file.
 
     Prerequisites:
-        Mellea installed (``uv add mellea``). At least one inference backend
+        Mellea installed (`uv add mellea`). At least one inference backend
         available (Ollama by default). A separate judge backend/model is
         recommended but optional (defaults to the generation backend).
 
     Output:
-        Writes evaluation results to ``<output-path>.<output-format>`` (default
-        ``eval_results.json``). The file contains per-test-case scores, judge
+        Writes evaluation results to `<output-path>.<output-format>` (default
+        `eval_results.json`). The file contains per-test-case scores, judge
         verdicts, and aggregate statistics.
 
     Examples:
@@ -76,15 +76,15 @@ def eval_run(
     Args:
         test_files: Paths to JSON/JSONL files containing test cases.
         backend: Generation backend name.
-        model: Generation model name, or ``None`` for the default.
+        model: Generation model name, or `None` for the default.
         max_gen_tokens: Maximum tokens to generate for each response.
-        judge_backend: Judge backend name, or ``None`` to reuse the generation
+        judge_backend: Judge backend name, or `None` to reuse the generation
             backend.
-        judge_model: Judge model name, or ``None`` for the default.
+        judge_model: Judge model name, or `None` for the default.
         max_judge_tokens: Maximum tokens for the judge model's output.
         output_path: File path prefix for the results file.
-        output_format: Output format -- ``"json"`` or ``"jsonl"``.
-        continue_on_error: If ``True``, skip failed tests instead of raising.
+        output_format: Output format -- `"json"` or `"jsonl"`.
+        continue_on_error: If `True`, skip failed tests instead of raising.
     """
     from cli.eval.runner import run_evaluations
 

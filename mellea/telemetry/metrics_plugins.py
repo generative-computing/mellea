@@ -16,12 +16,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mellea.core.base import GenerationMetadata
 from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
 from mellea.plugins.types import PluginMode
 
 if TYPE_CHECKING:
+    from mellea.core.base import GenerationMetadata
     from mellea.plugins.hooks.generation import (
         GenerationErrorPayload,
         GenerationPostCallPayload,
@@ -111,7 +111,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
     """Records LLM error counts from generation errors.
 
     This plugin hooks into the generation_error event to classify exceptions
-    by semantic error type and increment the ``mellea.llm.errors`` counter.
+    by semantic error type and increment the `mellea.llm.errors` counter.
     """
 
     @hook("generation_error", mode=PluginMode.FIRE_AND_FORGET)
@@ -124,6 +124,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
             payload: Contains the exception and the ModelOutputThunk at the time of the error.
             context: Plugin context (unused).
         """
+        from mellea.core.base import GenerationMetadata
         from mellea.telemetry.metrics import classify_error, record_error
 
         gen = (
@@ -188,8 +189,8 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
 class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
     """Records sampling loop attempt and outcome metrics.
 
-    Hooks into ``sampling_iteration`` to count attempts per strategy and
-    ``sampling_loop_end`` to count successes and failures.
+    Hooks into `sampling_iteration` to count attempts per strategy and
+    `sampling_loop_end` to count successes and failures.
     """
 
     @hook("sampling_iteration", mode=PluginMode.FIRE_AND_FORGET)
@@ -224,7 +225,7 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
 class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
     """Records requirement validation check and failure metrics.
 
-    Hooks into ``validation_post_check`` to count checks and failures per
+    Hooks into `validation_post_check` to count checks and failures per
     requirement type after each validation batch.
     """
 
@@ -258,7 +259,7 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
 class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=56):
     """Records tool invocation metrics.
 
-    Hooks into ``tool_post_invoke`` to count tool calls by name and success/failure status.
+    Hooks into `tool_post_invoke` to count tool calls by name and success/failure status.
     """
 
     @hook("tool_post_invoke", mode=PluginMode.FIRE_AND_FORGET)

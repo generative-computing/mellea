@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"requirement_check\": {\"score\": 0.2185103906492881}}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

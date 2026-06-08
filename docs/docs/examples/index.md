@@ -33,6 +33,7 @@ to run.
 | `context/` | Context inspection, sampling with context trees, parallel context branches |
 | `sessions/` | Custom session types and backend selection |
 | `async/` | How to utilize basic async capabilities |
+| `streaming/` | `stream_with_chunking()` with per-chunk validation, typed event vocabulary, early-exit on fail |
 
 ### Data and documents
 
@@ -61,7 +62,8 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
-| `safety/` | `GuardianCheck` for harm, jailbreak, profanity, social bias, violence, and groundedness; shared backend pattern |
+| `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
+| `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
 
 ### Integration and deployment
 
@@ -78,7 +80,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `aLora/` | Training aLoRA adapters for fast constraint checking; performance optimisation |
-| `intrinsics/` | Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks |
+| `intrinsics/` | *(Non-Guardian)* Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks. For Guardian safety functions see [Safety and validation](#safety-and-validation) above |
 | `granite-switch/` | Running intrinsics via OpenAI backend with Granite Switch embedded adapters |
 | `sofai/` | Two-tier sampling: fast-model iteration with escalation to a slow model; cost optimisation |
 

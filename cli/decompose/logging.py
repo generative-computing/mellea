@@ -58,7 +58,7 @@ def get_logger(name: str) -> logging.Logger:
         name: Logger name, typically a module or component identifier.
 
     Returns:
-        A configured ``logging.Logger`` instance.
+        A configured `logging.Logger` instance.
     """
     return logging.getLogger(name)
 

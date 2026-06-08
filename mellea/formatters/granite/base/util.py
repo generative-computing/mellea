@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING
 # Third Party
 import pydantic
 
+from ....core.utils import MelleaLogger
+
 if TYPE_CHECKING:
+    import llguidance
+    import torch
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
@@ -30,7 +34,7 @@ def import_optional(extra_name: str):
 
     Args:
         extra_name: Package extra to suggest in the install hint
-            (e.g. ``pip install mellea[extra_name]``).
+            (e.g. `pip install mellea[extra_name]`).
     """
     try:
         yield
@@ -55,7 +59,7 @@ def find_substring_in_text(substring: str, text: str) -> list[dict]:
         text: The string to search within.
 
     Returns:
-        List of dicts with ``begin_idx`` and ``end_idx`` for each match found.
+        List of dicts with `begin_idx` and `end_idx` for each match found.
     """
     span_matches = []
 
@@ -82,18 +86,18 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
     pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
     Workaround powers activate!
 
-    Only works if ``transformers`` and ``peft`` are installed.
+    Only works if `transformers` and `peft` are installed.
 
     Args:
         local_or_remote_path: Local directory path of the LoRA adapter.
 
     Returns:
-        Tuple of ``(model, tokenizer)`` where ``model`` is the loaded LoRA model and
-        ``tokenizer`` is the corresponding HuggingFace tokenizer.
+        Tuple of `(model, tokenizer)` where `model` is the loaded LoRA model and
+        `tokenizer` is the corresponding HuggingFace tokenizer.
 
     Raises:
-        ImportError: If ``peft`` or ``transformers`` packages are not installed.
-        NotImplementedError: If ``local_or_remote_path`` does not exist locally
+        ImportError: If `peft` or `transformers` packages are not installed.
+        NotImplementedError: If `local_or_remote_path` does not exist locally
             (remote loading from the Hugging Face Hub is not yet implemented).
     """
     with import_optional("peft"):
@@ -112,37 +116,104 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
     return model, tokenizer
 
 
+class _GuidanceLogitsProcessor:
+    """A HuggingFace logits processor that enforces an llguidance grammar."""
+
+    # Modified from VLLM v0.9.2 code base
+    # https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
+
+    def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
+        """Initialize the processor with a compiled grammar and an llguidance tokenizer."""
+        with import_optional("llguidance"):
+            # Callers will have already had to import llguidance. Ensure it here.
+            import llguidance
+            import llguidance.torch
+
+        self.grammar = grammar
+        self.vocab_size: int = ll_tokenizer.vocab_size
+        self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
+        self.ll_matchers: list[llguidance.LLMatcher] = []
+        self.bitmasks: list[torch.Tensor] = []
+        self.new_sampling: bool = False
+        self.batch_size: int = -1
+
+    def __call__(
+        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
+    ) -> torch.Tensor:
+        """Apply the grammar's allowed-token bitmask to ``batch_scores`` in place."""
+        # Guaranteed to be imported by class __init__.
+        import llguidance
+        import llguidance.torch
+
+        i_batch, _ = batch_input_ids.shape
+        s_batch, _ = batch_scores.shape
+        if i_batch != s_batch:
+            raise RuntimeError(
+                f"batch size mismatch: input_ids={i_batch}, scores={s_batch}"
+            )
+
+        if self.batch_size != i_batch:
+            self.batch_size = i_batch
+            self.bitmasks = [
+                llguidance.torch.allocate_token_bitmask(1, self.vocab_size)  # type: ignore[attr-defined]
+                for _ in range(self.batch_size)
+            ]
+            self.ll_matchers = [
+                llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
+                for _ in range(self.batch_size)
+            ]
+
+        for input_ids, scores, ll_matcher, bitmask in zip(
+            batch_input_ids, batch_scores, self.ll_matchers, self.bitmasks
+        ):
+            if self.new_sampling and len(input_ids) > 0:
+                ll_matcher.consume_token(input_ids.tolist()[-1])  # type: ignore[attr-defined]
+                err = ll_matcher.get_error()  # type: ignore[attr-defined]
+                if err:
+                    MelleaLogger.get_logger().warning("Error in LLMatcher: %s", err)
+
+            llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
+            llguidance.torch.apply_token_bitmask_inplace(  # type: ignore[attr-defined]
+                scores, bitmask.to(scores.device)
+            )
+
+        self.new_sampling = True
+        return batch_scores
+
+
 def chat_completion_request_to_transformers_inputs(
     request: dict,
-    tokenizer: PreTrainedTokenizerBase | None = None,
-    model: PreTrainedModel | None = None,
+    tokenizer: PreTrainedTokenizerBase,
+    model: PreTrainedModel,
     constrained_decoding_prefix: str | None = None,
+    ll_tokenizer: llguidance.LLTokenizer | None = None,
 ) -> tuple[dict, dict]:
     """Translate an OpenAI-style chat completion request.
 
     Translate an OpenAI-style chat completion request into an input for a Transformers
-    ``generate()`` call.
+    `generate()` call.
 
     Args:
         request: Request as parsed JSON or equivalent dataclass.
-        tokenizer: HuggingFace tokenizer for the model. Only required if the request
-            uses constrained decoding.
-        model: HuggingFace model object. Only required if the request uses constrained
-            decoding.
+        tokenizer: HuggingFace tokenizer.
+        model: HuggingFace model object. Used for `model.device` placement and
+            when `constrained_decoding_prefix` is set.
         constrained_decoding_prefix: Optional generation prefix to append to the prompt.
+        ll_tokenizer: Pre-built `llguidance.LLTokenizer`. Only used when the request
+            uses constrained decoding; if not provided, one is constructed from
+            `tokenizer`. Pass an existing instance to avoid the construction cost.
 
     Returns:
-        Tuple of ``(generate_input, other_input)`` where ``generate_input`` contains
-        kwargs to pass directly to ``generate()`` and ``other_input`` contains
-        additional parameters for ``generate_with_transformers``.
+        Tuple of `(generate_input, other_input)` where `generate_input` contains
+        kwargs to pass directly to `generate()` and `other_input` contains
+        additional parameters for `generate_with_transformers`.
 
     Raises:
-        ImportError: If ``torch``, ``transformers``, or ``xgrammar`` packages
+       ImportError: If `torch`, `transformers`, or `llguidance` packages
             are not installed (the latter only when constrained decoding is used).
-        TypeError: If ``tokenizer.apply_chat_template()`` returns an unexpected type.
+        TypeError: If `tokenizer.apply_chat_template()` returns an unexpected type.
         ValueError: If padding or end-of-sequence token IDs cannot be determined
-            from the tokenizer, or if a constrained-decoding request is made
-            without passing a ``tokenizer`` or ``model`` argument.
+            from the tokenizer.
     """
     with import_optional("torch"):
         # Third Party
@@ -191,7 +262,7 @@ def chat_completion_request_to_transformers_inputs(
 
     # generate() will fail with many different creative error messages if tokens aren't
     # on the right device.
-    input_tokens = input_tokens.to(model.device)  # type: ignore[union-attr]
+    input_tokens = input_tokens.to(model.device)
     generate_input["input_tokens"] = input_tokens
 
     # The generate() method sometimes needs to know what is the integer ID
@@ -234,33 +305,23 @@ def chat_completion_request_to_transformers_inputs(
     ):
         # Constrained decoding in Hugging Face requires using a third-party library
         # to create a callback function to be invoked from inside generate()
-        with import_optional("xgrammar"):
+        with import_optional("llguidance"):
             # Third Party
-            import xgrammar as xgr  # type: ignore[import-not-found]
-        if tokenizer is None:
-            raise ValueError(
-                "Request specifies constrained decoding, but no "
-                "tokenizer object was passed to this function."
-            )
-        if model is None:
-            raise ValueError(
-                "Request specifies constrained decoding, but no "
-                "tokenizer object was passed to this function."
-            )
+            import llguidance
+            import llguidance.hf
 
-        # Different parts of a Hugging Face model will have different opinions about
-        # the number of tokens in the tokenizer's vocabulary, because of course they do.
-        # Gather together all the possibilities and pick the biggest one.
-        vocab_size = max(tokenizer.vocab_size, len(tokenizer), model.vocab_size)
+        if ll_tokenizer is None:
+            # HF model components disagree on vocab size (resized embeddings, added
+            # special tokens, etc.). Pass the maximum so the bitmask covers every
+            # token id the model can emit. llguidance defaults to the tokenizer's
+            # value when n_vocab is None, which can be smaller than model.vocab_size.
+            n_vocab = max(tokenizer.vocab_size, len(tokenizer), model.vocab_size)  # type: ignore[arg-type]
+            ll_tokenizer = llguidance.hf.from_tokenizer(tokenizer, n_vocab=n_vocab)  # type: ignore[arg-type]
 
-        tokenizer_info = xgr.TokenizerInfo.from_huggingface(
-            tokenizer, vocab_size=vocab_size
-        )
-        grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-        compiled_grammar = grammar_compiler.compile_json_schema(
+        grammar = llguidance.LLMatcher.grammar_from_json_schema(
             request["extra_body"]["structured_outputs"]["json"]
         )
-        logits_processor = xgr.contrib.hf.LogitsProcessor(compiled_grammar)
+        logits_processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
 
         # The "logits_processor" argument to generate() must be a list.
         generate_input["logits_processor"] = [logits_processor]  # type: ignore[assignment]
@@ -315,10 +376,10 @@ def generate_with_transformers(
         tokenizer: HuggingFace tokenizer for the model, required at several stages
             of generation.
         model: Initialized HuggingFace model object.
-        generate_input: Parameters to pass to the ``generate()`` method, usually
-            produced by ``chat_completion_request_to_transformers_inputs()``.
+        generate_input: Parameters to pass to the `generate()` method, usually
+            produced by `chat_completion_request_to_transformers_inputs()`.
         other_input: Additional kwargs produced by
-            ``chat_completion_request_to_transformers_inputs()`` for aspects of the
+            `chat_completion_request_to_transformers_inputs()` for aspects of the
             original request that Transformers APIs don't handle natively.
 
     Returns:

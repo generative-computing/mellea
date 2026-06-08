@@ -1,8 +1,8 @@
-"""``Document`` component for grounding model inputs with text passages.
+"""`Document` component for grounding model inputs with text passages.
 
-``Document`` wraps a text passage with an optional ``title`` and ``doc_id``, and
+`Document` wraps a text passage with an optional `title` and `doc_id`, and
 renders them inline as a formatted citation string for the model. Documents are
-typically attached to a ``Message`` via its ``documents`` parameter, enabling
+typically attached to a `Message` via its `documents` parameter, enabling
 retrieval-augmented generation (RAG) workflows.
 """
 
@@ -15,7 +15,7 @@ from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 class Document(Component[str]):
     """A text passage with optional metadata for grounding model inputs.
 
-    Documents are typically attached to a ``Message`` via its ``documents``
+    Documents are typically attached to a `Message` via its `documents`
     parameter to enable retrieval-augmented generation (RAG) workflows.
 
     Args:
@@ -36,13 +36,13 @@ class Document(Component[str]):
 
         Returns:
             list[Component | CBlock]: An empty list by default since the base
-            ``Document`` class has no constituent parts. Subclasses may override
+            `Document` class has no constituent parts. Subclasses may override
             this method to return meaningful parts.
         """
         return []
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Formats the `Document` as a ``TemplateRepresentation``.
+        """Formats the `Document` as a `TemplateRepresentation`.
 
         Returns: a TemplateRepresentation with text, title, and doc_id args.
         """
@@ -68,7 +68,7 @@ def _coerce_to_documents(
         documents: Strings, Document objects, a mix, or None.
         auto_doc_id: When True, assign sequential string doc_id values
             ("0", "1", ...) to Documents created from strings and warn about
-            existing Document objects that have no ``doc_id`` set.
+            existing Document objects that have no `doc_id` set.
 
     Returns:
         A list of Document objects, or None if the input was None.

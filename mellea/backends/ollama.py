@@ -28,7 +28,6 @@ from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
     start_generate_span,
 )
@@ -52,6 +51,10 @@ class OllamaModelBackend(FormatterBackend):
         base_url (str | None): Ollama server endpoint; defaults to
             ``env(OLLAMA_HOST)`` or ``http://localhost:11434``.
         model_options (dict | None): Default model options for generation requests.
+        timeout (float | None): Request timeout in seconds for the underlying HTTP
+            client. ``None`` (the default) preserves the upstream ``ollama`` SDK
+            default. Set this to bound how long a single request will wait when
+            the Ollama server is overloaded or stalled.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
@@ -66,6 +69,7 @@ class OllamaModelBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
+        timeout: float | None = None,
     ):
         """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
@@ -82,7 +86,12 @@ class OllamaModelBackend(FormatterBackend):
 
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
-        self._client = ollama.Client(base_url)
+        self._timeout = timeout
+        client_kwargs: dict[str, Any] = {}
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
+        self._client_kwargs = client_kwargs
+        self._client = ollama.Client(base_url, **client_kwargs)
 
         self._client_cache = ClientCache(2)
 
@@ -108,6 +117,7 @@ class OllamaModelBackend(FormatterBackend):
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
+            "stop": ModelOption.STOP_SEQUENCES,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -119,6 +129,7 @@ class OllamaModelBackend(FormatterBackend):
             ModelOption.CONTEXT_WINDOW: "num_ctx",
             ModelOption.MAX_NEW_TOKENS: "num_predict",
             ModelOption.SEED: "seed",
+            ModelOption.STOP_SEQUENCES: "stop",
         }
 
     def _get_ollama_model_id(self) -> str:
@@ -208,7 +219,7 @@ class OllamaModelBackend(FormatterBackend):
 
         _async_client = self._client_cache.get(key)
         if _async_client is None:
-            _async_client = ollama.AsyncClient(self._base_url)
+            _async_client = ollama.AsyncClient(self._base_url, **self._client_kwargs)
             self._client_cache.put(key, _async_client)
         return _async_client
 
@@ -240,9 +251,10 @@ class OllamaModelBackend(FormatterBackend):
         generate_call_model_opts = ModelOption.replace_keys(
             model_options, self.to_mellea_model_opts_map
         )
-        return ModelOption.merge_model_options(
+        merged = ModelOption.merge_model_options(
             backend_model_opts, generate_call_model_opts
         )
+        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any]
@@ -490,6 +502,18 @@ class OllamaModelBackend(FormatterBackend):
 
         Returns:
             list[ModelOutputThunk]: A list of model output thunks, one per action.
+                If Ollama returns an empty done response (``response=""``,
+                ``done=True``, no thinking content) for an action, that thunk
+                soft-fails: it has ``value=""``, with the ``RuntimeError`` stored
+                at ``thunk._generate_log.extra["error"]`` and the serialized
+                response dict at ``thunk._generate_log.extra["empty_response"]``.
+                Other actions in the batch are unaffected.
+
+        Note:
+            Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
+            request raises (e.g. ``ollama.ResponseError`` or a connection error),
+            that exception propagates to the caller and no list is returned, even
+            for requests that completed successfully.
         """
         if len(actions) > 1:
             MelleaLogger.get_logger().info(
@@ -524,20 +548,29 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 coroutines.append(co)
 
-            responses = await asyncio.gather(*coroutines, return_exceptions=True)
+            # All-or-nothing: first failure raises; remaining in-flight requests
+            # complete but their results are discarded.
+            responses = await asyncio.gather(*coroutines)
 
         results = []
         date = datetime.datetime.now()
         for i, response in enumerate(responses):
             result = None
             error = None
-            if isinstance(response, BaseException):
-                MelleaLogger.get_logger().warning(
-                    f"generate_from_raw: request {i} failed with "
-                    f"{type(response).__name__}: {response}"
+            if response.done and not response.response and not response.thinking:
+                # Empty done response with no thinking content. Commonly caused by the
+                # Ollama model-load race (#599) but can also occur on an early stop or
+                # stop-sequence hit.
+                empty_err = RuntimeError(
+                    f"generate_from_raw: request {i} returned an empty response from Ollama "
+                    "(response='', done=True). This commonly occurs when the model is still "
+                    "loading, but can also indicate an early stop or stop-sequence hit. "
+                    "See https://github.com/generative-computing/mellea/issues/599 "
+                    "and https://github.com/ollama/ollama/issues/16326"
                 )
+                MelleaLogger.get_logger().warning(str(empty_err))
                 result = ModelOutputThunk(value="")
-                error = response
+                error = empty_err
             else:
                 result = ModelOutputThunk(
                     value=response.response,
@@ -575,6 +608,7 @@ class OllamaModelBackend(FormatterBackend):
 
             if error:
                 generate_log.extra["error"] = error
+                generate_log.extra["empty_response"] = response.model_dump()
             result._generate_log = generate_log
 
             results.append(result)

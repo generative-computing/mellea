@@ -35,7 +35,8 @@
               "tutorials/02-streaming-and-async",
               "tutorials/03-using-generative-stubs",
               "tutorials/04-making-agents-reliable",
-              "tutorials/05-mifying-legacy-code"
+              "tutorials/05-mifying-legacy-code",
+              "tutorials/06-streaming-validation"
             ]
           },
           {
@@ -68,6 +69,7 @@
               "how-to/configure-model-options",
               "how-to/use-images-and-vision",
               "how-to/build-a-rag-pipeline",
+              "how-to/safety-guardrails",
               "how-to/refactor-prompts-with-cli",
               "how-to/unit-test-generative-code",
               "how-to/handling-exceptions"
@@ -114,7 +116,6 @@
               "advanced/lora-and-alora-adapters",
               "advanced/prefix-caching-and-kv-blocks",
               "advanced/inference-time-scaling",
-              "advanced/security-and-taint-tracking",
               "advanced/mellea-core-internals",
               "advanced/template-formatting",
               "advanced/custom-components"
@@ -465,7 +466,7 @@
     },
     {
       "source": "/core-concept/contribution-guide",
-      "destination": "/guide/CONTRIBUTING"
+      "destination": "/community/contributing-guide"
     },
     {
       "source": "/core-concept/prompt-engineering",
@@ -482,10 +483,6 @@
     {
       "source": "/integrations/langchain-and-smolagents",
       "destination": "/integrations/langchain"
-    },
-    {
-      "source": "/how-to/safety-guardrails",
-      "destination": "/advanced/security-and-taint-tracking"
     },
     {
       "source": "/dev/constrained-decoding",
@@ -630,6 +627,10 @@
     {
       "source": "/guide/m-decompose",
       "destination": "/how-to/m-decompose"
+    },
+    {
+      "source": "/advanced/security-and-taint-tracking",
+      "destination": "/how-to/safety-guardrails"
     }
   ]
 }

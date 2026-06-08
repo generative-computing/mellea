@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
 
-from cli.serve.app import make_chat_endpoint, validation_exception_handler
+from cli.serve.app import app, make_chat_endpoint, validation_exception_handler
 from cli.serve.models import (
     ChatCompletion,
     ChatCompletionRequest,
@@ -43,6 +43,28 @@ def sample_request():
         temperature=0.7,
         max_tokens=100,
     )
+
+
+class TestHealthCheckEndpoint:
+    """Tests for the health check endpoint."""
+
+    @pytest.fixture(scope="class")
+    def client(self, request) -> TestClient:
+        """Set up the test client."""
+
+        # /health is registered at module-load time — TestClient(app) is correct here
+        return TestClient(app)
+
+    def test_health_check(self, client: TestClient):
+        """Test that /health GET endpoint returns 200 with correct JSON response."""
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "pass"}
+
+    def test_health_check_rejects_post(self, client: TestClient):
+        """Test that /health POST endpoint returns 405"""
+        assert client.post("/health").status_code == 405
 
 
 class TestChatEndpoint:
@@ -722,8 +744,6 @@ class TestResponseFormat:
     @pytest.mark.asyncio
     async def test_json_schema_missing_schema_field(self, mock_module):
         """Test that json_schema without schema field raises ValidationError."""
-        from pydantic import ValidationError
-
         # Should raise ValidationError when creating ResponseFormat
         with pytest.raises(ValidationError) as exc_info:
             ResponseFormat(

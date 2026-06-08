@@ -25,14 +25,15 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
 
     Args:
         target_dir: Location where the file should be written if not already present.
-        corpus_name: Should be one of ``"cloud"``, ``"clapnq"``, ``"fiqa"``,
-            or ``"govt"``.
+        corpus_name: Should be one of `"cloud"`, `"clapnq"`, `"fiqa"`,
+            or `"govt"`.
 
     Returns:
         Path to the downloaded (or cached) file.
 
     Raises:
-        ValueError: If ``corpus_name`` is not one of the supported corpus names.
+        ValueError: If `corpus_name` is not one of the supported corpus names.
+        urllib.error.HTTPError: On any HTTP error downloading the corpus file.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -44,7 +45,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
             f"https://github.com/IBM/mt-rag-benchmark/raw/refs/heads/main/"
             f"corpora/{corpus_name}.jsonl.zip"
         )
-        urllib.request.urlretrieve(source_url, target_file)
+        urllib.request.urlretrieve(source_url, str(target_file))
     return target_file
 
 
@@ -59,10 +60,10 @@ def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
 
     Returns:
         Documents from the corpus as a PyArrow table, with schema
-        ``["id", "url", "title", "text"]``.
+        `["id", "url", "title", "text"]`.
 
     Raises:
-        TypeError: If the ID column cannot be identified or if no ``text`` column
+        TypeError: If the ID column cannot be identified or if no `text` column
             is present in the corpus file.
     """
     if not isinstance(corpus_file, pathlib.Path):
@@ -99,21 +100,25 @@ def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
     return t
 
 
-def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir: str):
+def download_mtrag_embeddings(
+    embedding_name: str, corpus_name: str, target_dir: str
+) -> None:
     """Download precomputed embeddings for a corpus in the MTRAG benchmark.
 
     Args:
         embedding_name: Name of the SentenceTransformers embedding model used to
             create the embeddings.
-        corpus_name: Should be one of ``"cloud"``, ``"clapnq"``, ``"fiqa"``,
-            or ``"govt"``.
-        target_dir: Location where Parquet files named ``"part_001.parquet"``,
-            ``"part_002.parquet"``, etc. will be written.
+        corpus_name: Should be one of `"cloud"`, `"clapnq"`, `"fiqa"`,
+            or `"govt"`.
+        target_dir: Location where Parquet files named `"part_001.parquet"`,
+            `"part_002.parquet"`, etc. will be written.
 
     Raises:
-        ValueError: If ``corpus_name`` is not one of the supported corpus names, or
+        ValueError: If `corpus_name` is not one of the supported corpus names, or
             if no precomputed embeddings are found for the given corpus and embedding
             model combination.
+        urllib.error.HTTPError: On any HTTP error other than 404 (which signals
+            end-of-parts).
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -134,11 +139,13 @@ def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir:
         )
         target_file = target_root / parquet_file_name
         try:
-            urllib.request.urlretrieve(source_url, target_file)
+            urllib.request.urlretrieve(source_url, str(target_file))
             part_num += 1
-        except urllib.error.HTTPError:
-            # Found all the parts; flow through
-            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                # Found all the parts; flow through
+                break
+            raise  # 429/5xx propagate rather than silently truncating
 
     if part_num == 1:
         raise ValueError(

@@ -27,4 +27,4 @@ The site is available at <http://localhost:3000>.
 ## Contributing
 
 See [CONTRIBUTING.md](https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md) for the general contribution guide and
-[guide/CONTRIBUTING.md](guide/CONTRIBUTING.md) for documentation writing conventions.
+[CONTRIBUTING_DOCS.md](https://github.com/generative-computing/mellea/blob/main/docs/CONTRIBUTING_DOCS.md) for documentation writing conventions.

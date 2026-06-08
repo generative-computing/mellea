@@ -25,7 +25,7 @@ def list_mantle_models(region: str | None = None) -> list:
     """Return all models available at a bedrock-mantle endpoint.
 
     Args:
-        region: AWS region name (e.g. ``"us-east-1"``), or ``None`` to use the
+        region: AWS region name (e.g. `"us-east-1"`), or `None` to use the
             default region.
 
     Returns:
@@ -43,10 +43,10 @@ def stringify_mantle_model_ids(region: str | None = None) -> str:
     """Return a human-readable list of all models available at the mantle endpoint for an AWS region.
 
     Args:
-        region: AWS region name, or ``None`` to use the default region.
+        region: AWS region name, or `None` to use the default region.
 
     Returns:
-        Newline-separated string of model IDs prefixed with ``" * "``.
+        Newline-separated string of model IDs prefixed with `" * "`.
     """
     models = list_mantle_models()
     model_names = "\n * ".join([str(m.id) for m in models])
@@ -60,19 +60,19 @@ def create_bedrock_mantle_backend(
 
     Args:
         model_id (ModelIdentifier | str): The model to use, either as a
-            ``ModelIdentifier`` (which must have a ``bedrock_name``) or a raw
+            `ModelIdentifier` (which must have a `bedrock_name`) or a raw
             Bedrock model ID string.
-        region (str | None): AWS region name, or ``None`` to use the default
-            region (``"us-east-1"``).
+        region (str | None): AWS region name, or `None` to use the default
+            region (`"us-east-1"`).
 
     Returns:
-        OpenAIBackend: An ``OpenAIBackend`` configured to call the specified model
+        OpenAIBackend: An `OpenAIBackend` configured to call the specified model
             via AWS Bedrock Mantle.
 
     Raises:
-        Exception: If ``model_id`` is a ``ModelIdentifier`` with no ``bedrock_name``
+        Exception: If `model_id` is a `ModelIdentifier` with no `bedrock_name`
             set.
-        AssertionError: If the ``AWS_BEARER_TOKEN_BEDROCK`` environment variable is
+        AssertionError: If the `AWS_BEARER_TOKEN_BEDROCK` environment variable is
             not set.
         Exception: If the specified model is not available in the target region.
     """

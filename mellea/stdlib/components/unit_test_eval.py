@@ -13,8 +13,8 @@ class Message(BaseModel):
     """Schema for a message in the test data.
 
     Attributes:
-        role (str): The role of the message sender (e.g. ``"user"`` or
-            ``"assistant"``).
+        role (str): The role of the message sender (e.g. `"user"` or
+            `"assistant"`).
         content (str): The text content of the message.
     """
 
@@ -59,7 +59,7 @@ class TestData(BaseModel):
         """Validate that the examples list is not empty.
 
         Args:
-            v (list[Example]): The value of the ``examples`` field being
+            v (list[Example]): The value of the `examples` field being
                 validated.
 
         Returns:
@@ -82,7 +82,7 @@ class TestBasedEval(Component[str]):
         instructions (str): Evaluation guidelines used by the judge model.
         inputs (list[str]): The input texts for each example.
         targets (list[list[str]] | None): Expected target strings for each
-            input. ``None`` is treated as an empty list.
+            input. `None` is treated as an empty list.
         test_id (str | None): Optional unique identifier for this test.
         input_ids (list[str] | None): Optional identifiers for each input.
 
@@ -112,7 +112,7 @@ class TestBasedEval(Component[str]):
 
         Returns:
             list[Component | CBlock]: Always an empty list; the component
-            renders entirely via ``format_for_llm``.
+            renders entirely via `format_for_llm`.
         """
         return []
 
@@ -122,7 +122,7 @@ class TestBasedEval(Component[str]):
         Returns:
             TemplateRepresentation: A template representation containing the
             judge context (input, prediction, target, guidelines) set by
-            ``set_judge_context``, or an empty args dict if no context has
+            `set_judge_context`, or an empty args dict if no context has
             been set yet.
         """
         return TemplateRepresentation(
@@ -144,7 +144,7 @@ class TestBasedEval(Component[str]):
             input_text (str): The original input text shown to the model.
             prediction (str): The model's generated output to evaluate.
             targets_for_input (list[str]): Reference target strings for this
-                input. An empty list results in ``"N/A"`` as the target text.
+                input. An empty list results in `"N/A"` as the target text.
         """
         if len(targets_for_input) == 0:  # no reference
             target_text = "N/A"
@@ -164,19 +164,19 @@ class TestBasedEval(Component[str]):
 
     @classmethod
     def from_json_file(cls, filepath: str) -> list["TestBasedEval"]:
-        """Load test evaluations from a JSON file, returning one ``TestBasedEval`` per unit test.
+        """Load test evaluations from a JSON file, returning one `TestBasedEval` per unit test.
 
         Args:
             filepath (str): Path to a JSON file containing one test-data object
                 or a JSON array of test-data objects.
 
         Returns:
-            list[TestBasedEval]: A list of ``TestBasedEval`` instances, one for
+            list[TestBasedEval]: A list of `TestBasedEval` instances, one for
             each object found in the file.
 
         Raises:
             ValueError: If any test-data object in the file does not conform to
-                the ``TestData`` schema.
+                the `TestData` schema.
         """
         path = Path(filepath)
 
