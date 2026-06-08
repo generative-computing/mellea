@@ -100,14 +100,20 @@ For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution)
 
 ## 7. AI Attribution
 
-Commits require a Signed-off-by trailer from the human author (added by running `git commit -s`). AI agents must not add a Signed-off-by in the tool's own name — instead, always add an `Assisted-by:` trailer to the commit footer:
+Commits require a Signed-off-by trailer from the human author. When an AI agent
+makes commits on the human's behalf (i.e. the human is directing the work), the
+agent must include **both** trailers — the human's Signed-off-by and an Assisted-by:
 
 ```text
+Signed-off-by: Human Name <email>
 Assisted-by: Claude Code
-Assisted-by: IBM Bob
 ```
 
-Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
+Do **not** add a Signed-off-by in the tool's own name. Use the tool's common name
+for `Assisted-by:` (e.g., Claude Code, IBM Bob, GitHub Copilot, Cursor, etc.).
+
+If the human is committing themselves (not via agent), they add `Signed-off-by`
+with `git commit -s` and the agent trailer is not needed.
 
 ## 8. Timing
 > **Don't cancel**: `pytest` (full) and `pre-commit --all-files` may take minutes. Canceling mid-run can corrupt state.
