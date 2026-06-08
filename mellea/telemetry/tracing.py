@@ -32,7 +32,6 @@ from importlib.metadata import version
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from opentelemetry.context import Context, Token
     from opentelemetry.trace import Span
 
 try:
@@ -220,7 +219,7 @@ def get_backend_tracer() -> Any:
     return _backend_tracer
 
 
-_in_flight_spans: dict[str, tuple[Span, Token[Context]]] = {}
+_in_flight_spans: dict[str, Span] = {}
 
 
 def start_backend_span(
@@ -284,31 +283,9 @@ def start_backend_span(
         span.set_attribute("mellea.tool_calls_enabled", tool_calls_enabled)
     set_conversation_id(span)
 
-    token = otel_context.attach(trace.set_span_in_context(span))
-    _in_flight_spans[generation_id] = (span, token)
+    otel_context.attach(trace.set_span_in_context(span))
+    _in_flight_spans[generation_id] = span
     return span
-
-
-def _detach_token(token: Token[Context] | None) -> None:
-    """Detach an OTel context token, tolerating cross-task detachment.
-
-    If the post_call/error hook fires from a task other than the one that
-    called `start_backend_span`, the token's Context belongs to a different
-    task and `detach` raises ValueError. The span still ends correctly; the
-    only consequence is the originating task briefly retains its context
-    entry until the task ends.
-    """
-    if token is None:
-        return
-    try:
-        otel_context.detach(token)
-    except ValueError as e:
-        from mellea.core.utils import MelleaLogger
-
-        MelleaLogger.get_logger().debug(
-            f"OTel context detach failed (token from a different task or "
-            f"already detached): {e}. Span lifecycle is unaffected."
-        )
 
 
 def finish_backend_span_success(
@@ -339,10 +316,9 @@ def finish_backend_span_success(
         set_usage_attrs,
     )
 
-    entry = _in_flight_spans.pop(generation_id, None)
-    if entry is None:
+    span = _in_flight_spans.pop(generation_id, None)
+    if span is None:
         return
-    span, token = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -351,7 +327,6 @@ def finish_backend_span_success(
         if mot is not None and gen is not None:
             set_mellea_attrs(span, mot, gen)
     finally:
-        _detach_token(token)
         span.end()
 
 
@@ -373,10 +348,9 @@ def finish_backend_span_error(
     """
     from mellea.telemetry._tracing_setters import set_request_attrs
 
-    entry = _in_flight_spans.pop(generation_id, None)
-    if entry is None:
+    span = _in_flight_spans.pop(generation_id, None)
+    if span is None:
         return
-    span, token = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -384,7 +358,6 @@ def finish_backend_span_error(
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
         span.set_attribute("error.type", type(exception).__name__)
     finally:
-        _detach_token(token)
         span.end()
 
 

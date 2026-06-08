@@ -187,8 +187,8 @@ async def test_concurrent_generations_do_not_collide(plugin, enabled_tracing):
 
     assert "A" in tracing._in_flight_spans
     assert "B" in tracing._in_flight_spans
-    assert tracing._in_flight_spans["A"][0] is fake_span_a
-    assert tracing._in_flight_spans["B"][0] is fake_span_b
+    assert tracing._in_flight_spans["A"] is fake_span_a
+    assert tracing._in_flight_spans["B"] is fake_span_b
 
     mot_b = ModelOutputThunk("b")
     mot_b.generation = GenerationMetadata(model="m", provider="p")
@@ -531,9 +531,7 @@ async def test_nested_span_during_call_parents_under_backend_span(
     )
     await plugin.on_pre_call(pre, {})
 
-    backend_span_id = (
-        tracing._in_flight_spans["active-gid"][0].get_span_context().span_id
-    )
+    backend_span_id = tracing._in_flight_spans["active-gid"].get_span_context().span_id
 
     nested_tracer = tracing._tracer_provider.get_tracer("test-nested")
     with nested_tracer.start_as_current_span("nested-caller-task"):
