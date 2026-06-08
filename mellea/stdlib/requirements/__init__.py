@@ -2,6 +2,11 @@
 
 from ...core import Requirement, ValidationResult, default_output_to_bool
 from .md import as_markdown_list, is_markdown_list, is_markdown_table
+from .plotting import (
+    MatplotlibHeadlessBackend,
+    PlotDependenciesAvailable,
+    PlotFileSaved,
+)
 from .python_reqs import PythonExecutionReq
 from .python_tools import (
     ImportRestrictions,
@@ -28,8 +33,11 @@ __all__ = [
     "GroundednessRequirement",
     "ImportRestrictions",
     "LLMaJRequirement",
+    "MatplotlibHeadlessBackend",
     "NoImportRestrictions",
     "OutputSizeLimit",
+    "PlotDependenciesAvailable",
+    "PlotFileSaved",
     "PythonCodeExtraction",
     "PythonExecutionReq",
     "PythonSyntaxValid",
