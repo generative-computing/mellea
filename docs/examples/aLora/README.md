@@ -114,5 +114,45 @@ backend = LocalHFBackend(
 backend.add_adapter(StemboltAdapter(base_model_name="granite-4.1-3b"))
 ```
 
-A full example of how to use this adapter as a requirement is found in `101_example.py`
+## Example Files
+
+### 101_example.py
+Basic example of using a trained aLoRA adapter as a requirement.
+
+Demonstrates:
+- Loading a custom adapter
+- Using adapter with requirements
+- Validating adapter output
+
+### 102_example.py
+Advanced example with multiple adapters and composition.
+
+Demonstrates:
+- Combining multiple adapters
+- Adapter composition patterns
+- Complex validation scenarios
+
+### make_training_data.py
+Utility for preparing training datasets for adapter training.
+
+Demonstrates:
+- Dataset format preparation
+- Data validation
+- Preprocessing for training
+
+### stembolts_intrinsic.py
+Example custom intrinsic adapter implementation.
+
+Demonstrates:
+- Custom adapter class definition
+- Integration with backend
+- Production usage patterns
+
+### example_readme_generator.py
+Programmatic README generation for adapters.
+
+Demonstrates:
+- Auto-generating adapter documentation
+- Using the `m alora add-readme` command programmatically
+- Documenting custom adapters
 

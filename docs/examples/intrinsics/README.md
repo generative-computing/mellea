@@ -77,6 +77,91 @@ see [`../granite-switch/`](../granite-switch/).
 - **requirement_check**: Validate requirements (used by ALoraRequirement)
 - **uncertainty**: Estimate certainty about answering a question
 
+## Example Files
+
+### RAG Intrinsics
+
+```bash
+uv run answerability.py
+```
+Demonstrates checking if documents can answer a question.
+
+```bash
+uv run citations.py
+```
+Demonstrates extracting and validating citations from responses.
+
+```bash
+uv run context_attribution.py
+```
+Demonstrates identifying which context sentences influenced the response.
+
+```bash
+uv run context_relevance.py
+```
+Demonstrates assessing the relevance of documents to a query.
+
+```bash
+uv run hallucination_detection.py
+```
+Demonstrates detecting potentially hallucinated content.
+
+```bash
+uv run query_clarification.py
+```
+Demonstrates generating clarification requests when needed.
+
+```bash
+uv run query_rewrite.py
+```
+Demonstrates rewriting queries for better retrieval.
+
+### Core Intrinsics
+
+```bash
+uv run requirement_check.py
+```
+Demonstrates validating requirements against model outputs.
+
+```bash
+uv run uncertainty.py
+```
+Demonstrates assessing model certainty about its response.
+
+```bash
+uv run context_attribution.py
+```
+Demonstrates finding context citations for responses.
+
+### Guardian Intrinsics
+
+```bash
+uv run factuality_detection.py
+```
+Demonstrates detecting factually incorrect statements.
+
+```bash
+uv run factuality_correction.py
+```
+Demonstrates automatically correcting factual errors.
+
+```bash
+uv run guardian_core.py
+```
+Demonstrates comprehensive safety checks (harm, bias, groundedness).
+
+```bash
+uv run policy_guardrails.py
+```
+Demonstrates checking compliance with policies.
+
+### Comprehensive Example
+
+```bash
+uv run intrinsics.py
+```
+Full example showing multiple intrinsics working together in a RAG pipeline.
+
 ## Architecture
 ![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
 

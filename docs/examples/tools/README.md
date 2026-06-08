@@ -22,6 +22,38 @@ Shows how to use pre-built tools from HuggingFace's smolagents library.
 - Converting to Mellea tools with `MelleaTool.from_smolagents()`
 - Using tools from the HuggingFace ecosystem
 
+### python_tool_example.py
+Demonstrates creating and using custom Python tools with Mellea.
+
+**Key Features:**
+- Defining custom tool functions
+- Tool registration and discovery
+- Integrating custom tools with LLM calls
+
+### tool_decorator_example.py
+Shows how to use the `@tool` decorator for tool definition.
+
+**Key Features:**
+- Decorator-based tool creation
+- Automatic argument parsing from type hints
+- Tool documentation generation
+
+### python_plotting_repair_debug.py
+Debug example for code generation and repair focusing on matplotlib plotting.
+
+**Key Features:**
+- Plot generation from requirements
+- Debugging generated code
+- Repair strategies for failed plots
+
+### python_plotting_repair_openai.py
+Plotting repair example using OpenAI backend.
+
+**Key Features:**
+- Using OpenAI models for code generation
+- Cross-backend compatibility
+- Plot generation and validation
+
 ## Concepts Demonstrated
 
 - **Tool Definition**: Creating tools for LLM use
