@@ -947,7 +947,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )  # shallow copy so .pop() below doesn't mutate the caller's dict
             eb = dict(extra_params.get("extra_body") or {})
             user_ctk = user_extra_body.pop("chat_template_kwargs", None)
-            eb.update(user_extra_body)
+            eb.update(
+                user_extra_body
+            )  # shallow merge is safe: chat_template_kwargs is the only nested dict key the rewriter writes, and it is deep-merged separately below
             if user_ctk is not None:
                 eb["chat_template_kwargs"] = {
                     **eb.get("chat_template_kwargs", {}),
