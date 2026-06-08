@@ -2,15 +2,99 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, model_validator
 
+from mellea.core import ImageBlock
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
 
+class TextContent(BaseModel):
+    """Text content in a multimodal message."""
+
+    type: Literal["text"]
+    text: str
+
+
+class ImageUrlContent(BaseModel):
+    """Image URL content in a multimodal message.
+
+    Supports both data URIs (base64-encoded images) and HTTP(S) URLs.
+    """
+
+    type: Literal["image_url"]
+    image_url: dict[str, str]
+    """Image URL object containing 'url' key and optional 'detail' key."""
+
+
+# Union type for all content types
+MessageContent = TextContent | ImageUrlContent
+
+
 class ChatMessage(BaseModel):
+    """Chat message with support for text-only or multimodal content.
+
+    The content field can be:
+    - A string (text-only, backward compatible)
+    - None (for messages without content)
+    - A list of content objects (multimodal: text, images)
+    """
+
     role: Literal["system", "user", "assistant", "tool", "function"]
-    content: str | None = None
+    content: str | list[MessageContent] | None = None
     name: str | None = None
     tool_call_id: str | None = None
     function_call: dict[str, Any] | None = None  # For function/tool messages
+
+    def get_text_content(self) -> str:
+        """Extract text content from message, handling both string and multimodal formats.
+
+        Returns:
+            Concatenated text from all TextContent items, or empty string if no text.
+            Images are ignored (handled separately via extraction utilities).
+        """
+        if isinstance(self.content, str):
+            return self.content
+        elif isinstance(self.content, list):
+            return " ".join(
+                item.text for item in self.content if isinstance(item, TextContent)
+            )
+        return ""
+
+    def get_image_urls(self) -> list[str]:
+        """Extract image URLs from message content.
+
+        Returns:
+            List of image URL strings from all ImageUrlContent items.
+            Empty list if content is a string or contains no images.
+        """
+        if not isinstance(self.content, list):
+            return []
+        urls = []
+        for item in self.content:
+            if isinstance(item, ImageUrlContent):
+                url = item.image_url.get("url")
+                if url:
+                    urls.append(url)
+        return urls
+
+    def get_image_blocks(self) -> list[ImageBlock]:
+        """Extract ImageBlocks from message content.
+
+        Returns:
+            List of ImageBlocks from all ImageUrlContent items.
+            Empty list if content is a string or contains no images.
+        """
+        image_urls = self.get_image_urls()
+        image_blocks: list[ImageBlock] = []
+        for url in image_urls:
+            try:
+                image_blocks.append(ImageBlock(url))
+            except AssertionError as e:
+                # Raise ValueError for invalid URLs so the client gets a clear 400 error
+                # rather than silently processing a request without the expected images
+                raise ValueError(
+                    f"Invalid image URL: {url[:100]}{'...' if len(url) > 100 else ''}. "
+                    f"Error: {e}"
+                ) from e
+        return image_blocks
 
 
 class FunctionParameters(RootModel[dict[str, Any]]):

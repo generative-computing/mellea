@@ -39,6 +39,27 @@ from .tools import add_tools_from_context_actions, add_tools_from_model_options
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
+def _strip_data_uri_prefix(images: list[str]) -> list[str]:
+    """Strip data URI prefix from base64 image strings for Ollama.
+
+    Ollama expects raw base64 strings without the 'data:image/...;base64,' prefix.
+    This function removes the prefix if present, leaving just the base64 data.
+
+    Args:
+        images: List of base64 image strings, potentially with data URI prefixes.
+
+    Returns:
+        List of base64 strings with data URI prefixes removed.
+    """
+    stripped = []
+    for img in images:
+        # Check if the string has a data URI prefix and remove it
+        if "data:" in img and "base64," in img:
+            img = img.split("base64,")[1]
+        stripped.append(img)
+    return stripped
+
+
 class OllamaModelBackend(FormatterBackend):
     """A model that uses the Ollama Python SDK for local inference.
 
@@ -384,7 +405,11 @@ class OllamaModelBackend(FormatterBackend):
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
         conversation.extend(
             [
-                {"role": m.role, "content": self.formatter.print(m), "images": m.images}
+                {
+                    "role": m.role,
+                    "content": self.formatter.print(m),
+                    "images": _strip_data_uri_prefix(m.images) if m.images else None,
+                }
                 for m in messages
             ]
         )

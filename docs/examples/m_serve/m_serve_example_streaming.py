@@ -24,7 +24,7 @@ async def serve(
     for streaming requests.
     """
     del requirements
-    message = input[-1].content or ""
+    message = input[-1].get_text_content()
     is_streaming = bool((model_options or {}).get(ModelOption.STREAM, False))
 
     if is_streaming:
