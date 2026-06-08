@@ -941,15 +941,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_opts, is_chat_context=ctx.is_chat_context
         )
         user_extra_body = backend_specific.pop("extra_body", None)
-        if user_extra_body:
-            user_extra_body = dict(
-                user_extra_body
-            )  # shallow copy so .pop() below doesn't mutate the caller's dict
+        if user_extra_body is not None:
+            # shallow copy so .pop() below doesn't mutate the caller's dict
+            user_extra_body = dict(user_extra_body)
             eb = dict(extra_params.get("extra_body") or {})
             user_ctk = user_extra_body.pop("chat_template_kwargs", None)
-            eb.update(
-                user_extra_body
-            )  # shallow merge is safe: chat_template_kwargs is the only nested dict key the rewriter writes, and it is deep-merged separately below
+            # shallow merge is safe: chat_template_kwargs is the only nested dict
+            # key Mellea writes into extra_body; it is deep-merged separately below
+            eb.update(user_extra_body)
             if user_ctk is not None:
                 eb["chat_template_kwargs"] = {
                     **eb.get("chat_template_kwargs", {}),
