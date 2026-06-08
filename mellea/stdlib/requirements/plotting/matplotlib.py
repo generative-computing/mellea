@@ -334,3 +334,51 @@ class PlotDependenciesAvailable(Requirement):
         return ValidationResult(
             result=True, reason="All dependencies available (matplotlib, numpy)."
         )
+
+
+def python_plotting_requirements(output_path: str) -> list[Requirement]:
+    """Bundle matplotlib-specific requirements for plotting code validation.
+
+    Factory function that creates a complete set of requirements for validating
+    matplotlib plotting code, ensuring proper headless backend configuration,
+    file output, and dependency availability.
+
+    Args:
+        output_path: File path where the plot should be saved (e.g., '/tmp/plot.png').
+            This path must match the savefig() call in the generated code.
+
+    Returns:
+        list[Requirement]: Three requirements in validation order:
+            1. MatplotlibHeadlessBackend — validates headless backend configuration
+            2. PlotFileSaved — validates plot is saved to the specified output_path
+            3. PlotDependenciesAvailable — validates matplotlib and numpy are available
+
+    Raises:
+        TypeError: If output_path is not a string.
+        ValueError: If output_path is empty.
+
+    Examples:
+        >>> output_path = "/tmp/plot.png"
+        >>> reqs = python_plotting_requirements(output_path=output_path)
+        >>> len(reqs)
+        3
+        >>> isinstance(reqs[0], MatplotlibHeadlessBackend)
+        True
+        >>> isinstance(reqs[1], PlotFileSaved)
+        True
+        >>> isinstance(reqs[2], PlotDependenciesAvailable)
+        True
+    """
+    if not isinstance(output_path, str):
+        raise TypeError(
+            f"output_path must be a string, got {type(output_path).__name__}"
+        )
+
+    if not output_path.strip():
+        raise ValueError("output_path cannot be empty")
+
+    return [
+        MatplotlibHeadlessBackend(),
+        PlotFileSaved(output_path=output_path),
+        PlotDependenciesAvailable(),
+    ]

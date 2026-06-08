@@ -2,12 +2,13 @@
 
 import pytest
 
-from mellea.core import Context, ModelOutputThunk
+from mellea.core import Context, ModelOutputThunk, Requirement
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.plotting import (
     MatplotlibHeadlessBackend,
     PlotDependenciesAvailable,
     PlotFileSaved,
+    python_plotting_requirements,
 )
 
 
@@ -449,3 +450,88 @@ fig.savefig(fname='/tmp/plot.png')
         result = req.validation_fn(ctx)
         # fname= is the correct keyword; savefig has no 'filename' parameter
         assert result.as_bool() is True
+
+
+class TestPythonPlottingRequirementsFactory:
+    """Tests for python_plotting_requirements factory function."""
+
+    def test_factory_returns_list_of_requirements(self):
+        """Test that factory returns a list of three Requirement instances."""
+        output_path = "/tmp/plot.png"
+        reqs = python_plotting_requirements(output_path=output_path)
+
+        assert isinstance(reqs, list)
+        assert len(reqs) == 3
+        assert all(isinstance(r, Requirement) for r in reqs)
+
+    def test_factory_returns_correct_requirement_order(self):
+        """Test requirements are in expected order."""
+        output_path = "/tmp/plot.png"
+        reqs = python_plotting_requirements(output_path=output_path)
+
+        assert isinstance(reqs[0], MatplotlibHeadlessBackend)
+        assert isinstance(reqs[1], PlotFileSaved)
+        assert isinstance(reqs[2], PlotDependenciesAvailable)
+
+    def test_factory_propagates_output_path(self):
+        """Test that output_path is correctly passed to PlotFileSaved."""
+        output_path = "/output/my_plot.png"
+        reqs = python_plotting_requirements(output_path=output_path)
+
+        plot_saved_req = reqs[1]
+        assert isinstance(plot_saved_req, PlotFileSaved)
+        assert plot_saved_req.output_path == output_path
+        assert output_path in plot_saved_req.description
+
+    def test_factory_with_different_paths(self):
+        """Test factory works with various output path formats."""
+        test_paths = [
+            "/tmp/plot.png",
+            "/output/figures/chart.svg",
+            "plot.pdf",
+            "/var/tmp/matplotlib_output.jpg",
+        ]
+
+        for path in test_paths:
+            reqs = python_plotting_requirements(output_path=path)
+            assert len(reqs) == 3
+            assert reqs[1].output_path == path
+
+    def test_factory_raises_on_non_string_path(self):
+        """Test that factory raises TypeError for non-string output_path."""
+        with pytest.raises(TypeError):
+            python_plotting_requirements(output_path=123)
+
+        with pytest.raises(TypeError):
+            python_plotting_requirements(output_path=None)
+
+        with pytest.raises(TypeError):
+            python_plotting_requirements(output_path=["/tmp/plot.png"])
+
+    def test_factory_raises_on_empty_path(self):
+        """Test that factory raises ValueError for empty output_path."""
+        with pytest.raises(ValueError):
+            python_plotting_requirements(output_path="")
+
+        with pytest.raises(ValueError):
+            python_plotting_requirements(output_path="   ")
+
+    def test_factory_can_be_unpacked(self):
+        """Test that factory result can be unpacked like in usage examples."""
+        output_path = "/tmp/plot.png"
+        reqs = python_plotting_requirements(output_path=output_path)
+
+        # Verify unpacking pattern works
+        unpacked = [*reqs]
+        assert len(unpacked) == 3
+        assert unpacked == reqs
+
+    def test_factory_requirements_are_independent_instances(self):
+        """Test that multiple factory calls create independent requirement instances."""
+        reqs1 = python_plotting_requirements(output_path="/tmp/plot1.png")
+        reqs2 = python_plotting_requirements(output_path="/tmp/plot2.png")
+
+        # Different instances
+        assert reqs1[1] is not reqs2[1]
+        # But different output paths
+        assert reqs1[1].output_path != reqs2[1].output_path
