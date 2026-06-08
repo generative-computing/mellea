@@ -98,6 +98,7 @@ from .tracing import (
     is_tracing_enabled,
     set_span_attribute,
     set_span_error,
+    set_span_status_error,
     trace_application,
 )
 
@@ -130,6 +131,7 @@ __all__ = [
     "record_ttfb",
     "set_span_attribute",
     "set_span_error",
+    "set_span_status_error",
     "trace_application",
     "with_context",
 ]

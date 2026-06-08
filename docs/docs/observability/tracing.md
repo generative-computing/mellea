@@ -202,20 +202,6 @@ export MELLEA_TRACES_CONSOLE=true
 uv run python docs/examples/telemetry/telemetry_example.py
 ```
 
-## Disabling tracing
-
-Tracing is disabled by default. If you have set `MELLEA_TRACES_ENABLED`
-globally and need to turn tracing off for a test run or performance
-measurement, unset it or set it to `false`:
-
-```bash
-export MELLEA_TRACES_ENABLED=false
-python your_script.py
-```
-
-> **Tip:** In pytest, use `monkeypatch.setenv` to control tracing per-test —
-> see `test/telemetry/test_tracing.py` for the canonical pattern.
-
 ---
 
 **See also:**

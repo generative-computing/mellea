@@ -276,6 +276,8 @@ def start_backend_span(
         span.set_attribute("mellea.num_actions", num_actions)
     if has_format is not None:
         span.set_attribute("mellea.has_format", has_format)
+        if has_format:
+            span.set_attribute("gen_ai.output.type", "json_schema")
     if format_type is not None:
         span.set_attribute("mellea.format_type", format_type)
     if tool_calls_enabled is not None:
@@ -369,8 +371,6 @@ def finish_backend_span_error(
         exception: The exception raised by the backend.
         gen: Optional `GenerationMetadata` for refreshing request attrs.
     """
-    if not _OTEL_AVAILABLE:
-        return
     from mellea.telemetry._tracing_setters import set_request_attrs
 
     entry = _in_flight_spans.pop(generation_id, None)

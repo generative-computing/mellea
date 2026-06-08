@@ -292,6 +292,8 @@ async def test_pre_call_emits_request_side_mellea_attrs(plugin, enabled_tracing)
     assert attrs["mellea.has_format"] is True
     assert attrs["mellea.format_type"] == "_DummyFormat"
     assert attrs["mellea.tool_calls_enabled"] is True
+    # OTel GenAI semconv attribute for structured output
+    assert attrs["gen_ai.output.type"] == "json_schema"
 
 
 @pytest.mark.asyncio
@@ -315,6 +317,7 @@ async def test_pre_call_omits_format_type_when_no_format(plugin, enabled_tracing
     assert attrs["mellea.has_format"] is False
     assert "mellea.format_type" not in attrs
     assert attrs["mellea.tool_calls_enabled"] is False
+    assert "gen_ai.output.type" not in attrs
 
 
 @pytest.mark.asyncio
