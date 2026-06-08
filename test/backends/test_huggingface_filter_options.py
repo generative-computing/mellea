@@ -47,9 +47,10 @@ def _make_backend(template: object) -> LocalHFBackend:
 # ---------------------------------------------------------------------------
 
 _EXPECTED_INTERNAL_VARS = {
-    # Named parameters wired by apply_chat_template / render_jinja_template
+    # Variables bound in the Jinja namespace by render_jinja_template (transformers v5+)
     "messages",
     "tools",
+    "documents",
     "add_generation_prompt",
     # Jinja environment globals from _compile_jinja_template
     "raise_exception",

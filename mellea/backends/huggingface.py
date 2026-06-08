@@ -12,7 +12,7 @@ import functools
 import json
 import threading
 from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, overload
+from typing import Any, cast, overload
 
 import jinja2
 import jinja2.meta
@@ -32,7 +32,7 @@ try:
     from transformers.generation.streamers import AsyncTextIteratorStreamer
     from transformers.generation.utils import GenerateDecoderOnlyOutput
     from transformers.modeling_utils import PreTrainedModel
-    from transformers.tokenization_utils import PreTrainedTokenizer
+    from transformers.tokenization_utils_base import PreTrainedTokenizerBase
     from transformers.trainer_utils import set_seed
 except ImportError as e:
     raise ImportError(
@@ -125,7 +125,7 @@ def _install_cancel_stopping_criteria(
 
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
 """
-TransformersTorchConfig = tuple[PreTrainedTokenizer, PreTrainedModel, torch.device]
+TransformersTorchConfig = tuple[PreTrainedTokenizerBase, PreTrainedModel, torch.device]
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -213,16 +213,21 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
 # group) or silently replace a function injected by the Jinja environment (for the globals group).
 #
 # ⚠️  REVIEW NOTE: verify this set against the transformers source whenever upgrading.
-# Named params: transformers.tokenization_utils_base.PreTrainedTokenizerBase.apply_chat_template
-#               (the render_jinja_template call around line 119 in that method)
-# Jinja globals: transformers.utils.chat_template_utils._compile_jinja_template
-#               (the jinja_env.globals assignments near the bottom of that function)
+# Namespace vars: transformers.utils.chat_template_utils.render_jinja_template
+#                 (the compiled_template.render(...) call — every kwarg there becomes
+#                 a Jinja variable and must be excluded from the allowlist)
+# Jinja globals: transformers.utils.chat_template_utils._cached_compile_jinja_template
+#                (the jinja_env.globals[...] assignments near the bottom)
 _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
     {
-        # --- Named parameters passed explicitly to render_jinja_template ---
-        # Forwarding these from model_options would cause duplicate-kwarg TypeError.
-        "messages",  # the conversation; always the first positional arg
+        # --- Variables injected into the Jinja namespace by render_jinja_template ---
+        # These come from `compiled_template.render(messages=chat, tools=..., documents=...,
+        # add_generation_prompt=..., **kwargs)` in transformers' chat_template_utils.
+        # Forwarding any of these from model_options to apply_chat_template would
+        # cause a duplicate-kwarg TypeError or silently shadow the value HF supplies.
+        "messages",  # the conversation; HF binds `chat` to this name in render()
         "tools",  # tool schemas; our call sites pass tools=convert_tools_to_json(...) explicitly
+        "documents",  # RAG documents; injected even when None
         "add_generation_prompt",  # bool; passed explicitly at the standard-generation call site
         # --- Jinja environment globals set by _compile_jinja_template ---
         # find_undeclared_variables cannot see env globals, so these appear as "undeclared"
@@ -328,8 +333,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                     self._hf_model_id, device_map=str(self._device), torch_dtype="auto"
                 )
-                self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-                    self._hf_model_id
+                self._tokenizer: PreTrainedTokenizerBase = (
+                    AutoTokenizer.from_pretrained(self._hf_model_id)
                 )
             case _:
                 self._tokenizer, self._model, self._device = custom_config
@@ -844,7 +849,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             [toks["attention_mask"] for toks in tok_parts], dim=1
         )
         assert input_ids.shape == attention_mask.shape
-        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
+        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches_v5(dc_parts)
         # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
         # rewind merged cache by 1 for safety.
         merged_cache.crop(-1)  # type: ignore
@@ -1127,7 +1132,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "",  # Empty for no adapters.
                 self._model.generate,  # type: ignore
                 # Passed as args/kwargs to generate.
-                input_ids,
+                inputs=input_ids["input_ids"],
+                attention_mask=input_ids["attention_mask"],
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **generate_kwargs,
@@ -1207,6 +1213,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs used for decoding; required to slice off
                 the prompt portion from the generated sequences.
         """
+        input_ids_tensor = (
+            input_ids if isinstance(input_ids, torch.Tensor) else input_ids["input_ids"]
+        )
+
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -1217,8 +1227,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
             mot._meta["hf_output"] = chunk
-            mot._underlying_value += self._tokenizer.decode(
-                chunk.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
+            mot._underlying_value += cast(
+                str,
+                self._tokenizer.decode(
+                    chunk.sequences[0, input_ids_tensor.shape[1] :],
+                    skip_special_tokens=True,
+                ),
             )
 
     async def post_processing(
@@ -1272,7 +1286,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
-                q_end=len(input_ids[0]),  # type: ignore
+                q_end=(
+                    input_ids
+                    if isinstance(input_ids, torch.Tensor)
+                    else input_ids["input_ids"]
+                ).shape[1],
                 scores=hf_output.scores,
             )
 
@@ -1302,7 +1320,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
                 if input_ids is not None and hf_output.sequences is not None:
-                    n_prompt = input_ids.shape[1]
+                    n_prompt = (
+                        input_ids
+                        if isinstance(input_ids, torch.Tensor)
+                        else input_ids["input_ids"]
+                    ).shape[1]
                     n_completion = hf_output.sequences[0].shape[0] - n_prompt
             except Exception:
                 pass
@@ -1772,14 +1794,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         try:
-            adapter_kwargs = {}
-
-            # Peft tries to stringify the device. If it's mps, it gets stringified as "mps:0" which causes
-            # an error when loading with safetensors.torch.load_file. Force the device as a string "mps" to fix.
-            if self._device == torch.device("mps"):
-                adapter_kwargs["device"] = "mps"
+            # v5: adapter_kwargs is forwarded to download_kwargs only; device is
+            # derived automatically from self.device, so we don't pass it here —
+            # find_adapter_config_file() no longer accepts a 'device' argument.
             self._model.load_adapter(
-                adapter.path, adapter.qualified_name, adapter_kwargs=adapter_kwargs
+                adapter.path, adapter.qualified_name, adapter_kwargs={}
             )
         except ValueError as e:
             # If it's just that it's already loaded, ignore it.

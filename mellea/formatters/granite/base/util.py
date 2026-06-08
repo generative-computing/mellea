@@ -389,13 +389,11 @@ def generate_with_transformers(
         # Third Party
         import torch
 
-    # Input tokens must be passed to generate() as a positional argument, not a named
-    # argument.
     input_tokens = generate_input["input_tokens"]
     generate_input = generate_input.copy()
     del generate_input["input_tokens"]
 
-    generate_result = model.generate(input_tokens, **generate_input)  # type: ignore[operator]
+    generate_result = model.generate(inputs=input_tokens, **generate_input)  # type: ignore[operator]
 
     # Result is a a 2D tensor of shape (num responses, prompt + max generated tokens)
     # containing tokens, plus a tuple of <max generated tokens> tensors of shape
@@ -462,6 +460,7 @@ def generate_with_transformers(
                 all_logprobs[token_ix][response_tokens[token_ix]].item()
                 for token_ix in range(len(response_tokens))
             ]
+            assert isinstance(response_string, str)
             token_strings = [response_string[begin:end] for begin, end in token_offsets]
             token_bytes = [list(s.encode("utf-8")) for s in token_strings]
 
@@ -474,8 +473,8 @@ def generate_with_transformers(
                     torch.nan_to_num(all_logprobs, float("-inf")),
                     other_input["top_logprobs"],
                 )
-                top_k_token_strs = [
-                    [tokenizer.decode(t) for t in row_i] for row_i in top_k_indices
+                top_k_token_strs: list[list[str]] = [
+                    [str(tokenizer.decode(t)) for t in row_i] for row_i in top_k_indices
                 ]
                 top_logprobs = [
                     [

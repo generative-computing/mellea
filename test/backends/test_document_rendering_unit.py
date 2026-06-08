@@ -253,15 +253,21 @@ async def test_watsonx_renders_documents_in_prompt():
 async def test_huggingface_renders_documents_in_prompt():
     """HuggingFace backend includes rendered documents in the chat template input."""
     import torch
+    from transformers import BatchEncoding
     from transformers.generation.utils import GenerateDecoderOnlyOutput
 
     mock_tokenizer = MagicMock()
     mock_model = MagicMock()
     mock_device = torch.device("cpu")
 
-    # apply_chat_template returns input_ids tensor
-    fake_input_ids = torch.tensor([[1, 2, 3, 4, 5]])
-    mock_tokenizer.apply_chat_template = MagicMock(return_value=fake_input_ids)
+    # apply_chat_template returns a BatchEncoding (v5 behavior with return_dict=True)
+    fake_batch = BatchEncoding(
+        {
+            "input_ids": torch.tensor([[1, 2, 3, 4, 5]]),
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 1]]),
+        }
+    )
+    mock_tokenizer.apply_chat_template = MagicMock(return_value=fake_batch)
 
     # model.generate returns a real GenerateDecoderOnlyOutput (not a MagicMock)
     # to avoid AsyncIterator detection in send_to_queue
