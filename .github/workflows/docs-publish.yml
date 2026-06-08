@@ -14,6 +14,9 @@ on:
       - "tooling/docs-autogen/**"
       - ".github/workflows/docs-publish.yml"
 
+  # Fires for manually-created GitHub Releases only. Automated releases use
+  # GITHUB_TOKEN, which cannot trigger new workflow runs — those are handled
+  # by an explicit workflow_dispatch from the snapshot-docs job instead.
   release:
     types: [published]
 

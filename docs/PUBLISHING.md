@@ -144,9 +144,6 @@ uv run python tooling/docs-autogen/audit_coverage.py \
 # Audit docstring quality only (via poe alias)
 uv run poe apidocs-quality
 
-# Find orphan MDX files not in navigation
-uv run poe apidocs-orphans
-
 # Full Docusaurus build (catches broken links)
 cd docs && npm run build
 ```
