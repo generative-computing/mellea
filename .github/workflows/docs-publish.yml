@@ -266,6 +266,7 @@ jobs:
           publish_branch: gh-pages
           publish_dir: docs-site/
           force_orphan: true
+          cname: ${{ github.repository == 'generative-computing/mellea' && 'docs.mellea.ai' || '' }}
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: |
