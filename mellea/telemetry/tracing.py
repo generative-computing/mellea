@@ -126,10 +126,9 @@ def _register_tracing_plugins() -> None:
     if _plugins_registered:
         return
 
-    try:
-        from mellea.plugins.registry import register
-        from mellea.telemetry.tracing_plugins import _TRACING_PLUGIN_CLASSES
-    except ImportError:
+    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK, register
+
+    if not _HAS_PLUGIN_FRAMEWORK:
         warnings.warn(
             "Tracing is enabled but the plugin framework is not installed. "
             "Backend spans will not be emitted automatically. "
@@ -138,6 +137,8 @@ def _register_tracing_plugins() -> None:
             stacklevel=2,
         )
         return
+
+    from mellea.telemetry.tracing_plugins import _TRACING_PLUGIN_CLASSES
 
     for plugin_cls in _TRACING_PLUGIN_CLASSES:
         try:

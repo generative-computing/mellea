@@ -14,11 +14,6 @@ from typing import TYPE_CHECKING, Any
 from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
 from mellea.plugins.types import PluginMode
-from mellea.telemetry.tracing import (
-    finish_backend_span_error,
-    finish_backend_span_success,
-    start_backend_span,
-)
 
 if TYPE_CHECKING:
     from mellea.plugins.hooks.generation import (
@@ -53,6 +48,8 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         """
         if not payload.generation_id:
             return
+        from mellea.telemetry.tracing import start_backend_span
+
         action = payload.action
         fmt = payload.format
         start_backend_span(
@@ -73,6 +70,8 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         """Add usage / mellea attrs and end the chat span."""
         if not payload.generation_id:
             return
+        from mellea.telemetry.tracing import finish_backend_span_success
+
         mot = payload.model_output
         gen = mot.generation
         finish_backend_span_success(
@@ -86,6 +85,8 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         """Set ERROR status and end the chat span."""
         if not payload.generation_id:
             return
+        from mellea.telemetry.tracing import finish_backend_span_error
+
         mot = payload.model_output
         gen = mot.generation if mot is not None else None
         finish_backend_span_error(
@@ -104,6 +105,8 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         """Start a backend text_completion span for the whole batch."""
         if not payload.generation_id:
             return
+        from mellea.telemetry.tracing import start_backend_span
+
         fmt = payload.format
         start_backend_span(
             "text_completion",
@@ -123,6 +126,8 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         """Add aggregate usage attrs and end the batch span."""
         if not payload.generation_id:
             return
+        from mellea.telemetry.tracing import finish_backend_span_success
+
         finish_backend_span_success(
             payload.generation_id,
             operation="text_completion",
@@ -138,6 +143,8 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         """Set ERROR status and end the batch span."""
         if not payload.generation_id:
             return
+        from mellea.telemetry.tracing import finish_backend_span_error
+
         finish_backend_span_error(
             payload.generation_id,
             operation="text_completion",
