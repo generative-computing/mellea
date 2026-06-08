@@ -28,12 +28,6 @@ Type-safe, composable LLM functions using the `@generative` decorator.
 - Function composition
 - Type-constrained outputs
 
-**[generative_slots/](generative_slots/)**
-Template-based LLM function generation with `@generative_slot`.
-- Slot-based templates
-- Dynamic code generation
-- Parameter injection
-
 **[context/](context/)**
 Understanding and working with Mellea's context system.
 - Context inspection

@@ -38,22 +38,6 @@ Shows how to use the `@tool` decorator for tool definition.
 - Automatic argument parsing from type hints
 - Tool documentation generation
 
-### python_plotting_repair_debug.py
-Debug example for code generation and repair focusing on matplotlib plotting.
-
-**Key Features:**
-- Plot generation from requirements
-- Debugging generated code
-- Repair strategies for failed plots
-
-### python_plotting_repair_openai.py
-Plotting repair example using OpenAI backend.
-
-**Key Features:**
-- Using OpenAI models for code generation
-- Cross-backend compatibility
-- Plot generation and validation
-
 ## Concepts Demonstrated
 
 - **Tool Definition**: Creating tools for LLM use
