@@ -31,6 +31,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     _server_type,
     _ServerType,
@@ -770,7 +771,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     chat_response,
                     output._async_queue,
                     chunk_timeout=(model_options or {}).get(
-                        ModelOption.STREAM_TIMEOUT, 60.0
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
@@ -968,7 +969,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     chat_response,
                     output._async_queue,
                     chunk_timeout=(model_options or {}).get(
-                        ModelOption.STREAM_TIMEOUT, 60.0
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )

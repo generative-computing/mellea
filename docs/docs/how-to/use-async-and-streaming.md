@@ -145,9 +145,11 @@ How `astream()` behaves:
 
 ### Streaming timeout
 
-Mellea waits up to 60 seconds for each individual chunk by default. If the backend
-stops sending without closing the connection the stream aborts with a `TimeoutError`
-rather than hanging indefinitely. Adjust with `ModelOption.STREAM_TIMEOUT`:
+Mellea waits up to 60 seconds for each chunk by default, including the first
+(time-to-first-token). If the backend stops sending without closing the connection
+the stream aborts with a `TimeoutError` rather than hanging indefinitely.
+
+For slow local inference or large models on CPU, increase the timeout or disable it:
 
 ```python
 # Shorter timeout for a fast remote endpoint
@@ -156,7 +158,13 @@ mot = await m.ainstruct(
     model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 10},
 )
 
-# Disable for a slow local model where chunks may arrive far apart
+# Larger value for slow local inference
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 300},
+)
+
+# Disable entirely — original unbounded behaviour
 mot = await m.ainstruct(
     "Write a long analysis.",
     model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: None},

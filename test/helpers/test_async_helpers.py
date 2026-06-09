@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from mellea.helpers.async_helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     get_current_event_loop,
     send_to_queue,
@@ -78,6 +79,42 @@ class TestSendToQueue:
         assert await q.get() == "ok"
         item = await q.get()
         assert isinstance(item, RuntimeError)
+
+    async def test_chunk_timeout_fires(self):
+        """A stalling iterator puts TimeoutError in the queue; no sentinel follows."""
+
+        async def _stalling_gen():
+            yield "first"
+            await asyncio.sleep(10)  # longer than chunk_timeout
+            yield "never"  # pragma: no cover
+
+        q: asyncio.Queue = asyncio.Queue()
+        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.05)
+
+        assert await q.get() == "first"
+        item = await q.get()
+        assert isinstance(item, TimeoutError)
+        assert "STREAM_TIMEOUT" in str(item)
+        assert q.empty()  # no trailing sentinel after a timeout
+
+    async def test_chunk_timeout_none_disables_timeout(self):
+        """chunk_timeout=None allows a slow-but-completing iterator to finish normally."""
+
+        async def _slow_gen():
+            yield "a"
+            await asyncio.sleep(0.05)
+            yield "b"
+
+        q: asyncio.Queue = asyncio.Queue()
+        await send_to_queue(_slow_gen(), q, chunk_timeout=None)
+
+        assert await q.get() == "a"
+        assert await q.get() == "b"
+        assert await q.get() is None  # sentinel present on clean completion
+
+    def test_default_chunk_timeout_value(self):
+        """DEFAULT_CHUNK_TIMEOUT is 60 seconds."""
+        assert DEFAULT_CHUNK_TIMEOUT == 60.0
 
 
 # --- get_current_event_loop ---

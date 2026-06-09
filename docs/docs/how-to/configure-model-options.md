@@ -119,7 +119,7 @@ non-deterministic session.
 | `ModelOption.SEED` | `int` | `None` | Random seed for reproducible output. |
 | `ModelOption.SYSTEM_PROMPT` | `str` | `None` | System prompt prepended to every call on the session. |
 | `ModelOption.STREAM` | `bool` | `False` | Enable streaming output. |
-| `ModelOption.STREAM_TIMEOUT` | `float \| None` | `60.0` | Inter-chunk timeout in seconds for streaming responses. If no chunk arrives within this window the stream aborts with a `TimeoutError`. Set to `None` to disable. |
+| `ModelOption.STREAM_TIMEOUT` | `float \| None` | `60.0` | Timeout in seconds applied to every chunk, including time-to-first-token. If no chunk arrives within this window the stream aborts with a `TimeoutError`. Set to `None` to disable. Increase for slow local inference. |
 | `ModelOption.STOP_SEQUENCES` | `list[str]` | `None` | Strings that halt generation when produced by the model. |
 | `ModelOption.THINKING` | varies | `None` | Enable or configure reasoning/thinking mode (model-dependent). |
 | `ModelOption.CONTEXT_WINDOW` | `int` | backend default | Context window size override. |
@@ -145,12 +145,14 @@ value the model sees depends on the backend's own defaults.
 
 ## Streaming timeout
 
-By default Mellea waits up to 60 seconds for each individual chunk from a streaming
-response. If the backend stops sending without closing the connection — for example
-when a local Ollama server is overloaded — the stream aborts with a `TimeoutError`
-rather than hanging indefinitely.
+By default Mellea waits up to 60 seconds for each chunk, including the first
+(time-to-first-token). If the backend stops sending without closing the connection
+the stream aborts with a `TimeoutError` rather than hanging indefinitely.
 
-Adjust the timeout per call or for the whole session:
+> **Note for slow or local backends:** The 60 s default covers time-to-first-token.
+> Large models on CPU, long prompts, or heavily loaded servers can take longer than
+> this before producing the first token. Use a higher value or `None` for those
+> deployments.
 
 ```python
 from mellea.backends import ModelOption
@@ -161,7 +163,13 @@ mot = await m.ainstruct(
     model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 10},
 )
 
-# Disable entirely for a slow local model where chunks may be far apart
+# Larger value for slow local inference (e.g. large model on CPU)
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 300},
+)
+
+# Disable entirely — original unbounded behaviour
 mot = await m.ainstruct(
     "Write a long analysis.",
     model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: None},

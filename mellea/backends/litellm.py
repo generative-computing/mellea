@@ -33,6 +33,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
@@ -458,7 +459,7 @@ class LiteLLMBackend(FormatterBackend):
                     chat_response,
                     output._async_queue,
                     chunk_timeout=(model_options or {}).get(
-                        ModelOption.STREAM_TIMEOUT, 60.0
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )

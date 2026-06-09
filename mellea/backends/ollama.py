@@ -24,7 +24,12 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
-from ..helpers import ClientCache, get_current_event_loop, send_to_queue
+from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
@@ -476,7 +481,7 @@ class OllamaModelBackend(FormatterBackend):
                     chat_response,
                     output._async_queue,
                     chunk_timeout=(model_options or {}).get(
-                        ModelOption.STREAM_TIMEOUT, 60.0
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )

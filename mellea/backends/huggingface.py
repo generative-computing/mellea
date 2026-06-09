@@ -56,7 +56,12 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..formatters.granite.base.util import _GuidanceLogitsProcessor
-from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
+from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
+    message_to_openai_message,
+    messages_to_docs,
+    send_to_queue,
+)
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
@@ -737,7 +742,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     chat_response,
                     output._async_queue,
                     chunk_timeout=(model_options or {}).get(
-                        ModelOption.STREAM_TIMEOUT, 60.0
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )  # type: ignore
             )
@@ -1027,7 +1032,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         response,
                         output._async_queue,
                         chunk_timeout=(model_options or {}).get(
-                            ModelOption.STREAM_TIMEOUT, 60.0
+                            ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
                 )
@@ -1201,7 +1206,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         response,
                         output._async_queue,
                         chunk_timeout=(model_options or {}).get(
-                            ModelOption.STREAM_TIMEOUT, 60.0
+                            ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
                 )

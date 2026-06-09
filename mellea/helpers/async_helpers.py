@@ -12,31 +12,41 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncGenerator, AsyncIterator, Coroutine
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..core import ModelOutputThunk
 
 
-_DEFAULT_CHUNK_TIMEOUT: float = 60.0
+DEFAULT_CHUNK_TIMEOUT: float = 60.0
+"""Default per-chunk timeout for streaming responses, in seconds.
+
+This value applies to every chunk including the first (time-to-first-token).
+Slow local inference (large models on CPU, heavily queued servers) can take
+well over 60 s before producing the first token — set ``ModelOption.STREAM_TIMEOUT``
+to a higher value or ``None`` for those deployments.
+"""
 
 
 async def send_to_queue(
     co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator,
     aqueue: asyncio.Queue,
-    chunk_timeout: float | None = _DEFAULT_CHUNK_TIMEOUT,
+    chunk_timeout: float | None = DEFAULT_CHUNK_TIMEOUT,
 ) -> None:
     """Processes the output of an async chat request by sending the output to an async queue.
 
     Args:
         co: A coroutine or async iterator producing the backend response.
         aqueue: The async queue to send results to. A sentinel ``None`` is appended on
-            completion; an exception instance is appended on error.
-        chunk_timeout: Maximum seconds to wait for each individual chunk from the backend
-            iterator. If a chunk does not arrive within this window a ``TimeoutError`` is
-            forwarded to the queue and the stream is aborted. ``None`` disables the timeout
-            (original behaviour). Defaults to ``_DEFAULT_CHUNK_TIMEOUT`` (60 s).
+            normal completion; an exception instance (including ``TimeoutError``) is
+            appended on error. A timeout does **not** append a trailing sentinel — the
+            exception item is the stream terminator.
+        chunk_timeout: Maximum seconds to wait for each chunk from the backend iterator,
+            including the first (time-to-first-token). If no chunk arrives within this
+            window a ``TimeoutError`` is forwarded to the queue and the stream is aborted.
+            ``None`` disables the timeout (original behaviour).
+            Defaults to ``DEFAULT_CHUNK_TIMEOUT`` (60 s).
     """
     try:
         if isinstance(co, Coroutine):
@@ -47,20 +57,26 @@ async def send_to_queue(
             aresponse = co
 
         if isinstance(aresponse, AsyncIterator):
-            aiter = aresponse.__aiter__()
+            ait = aiter(aresponse)
             while True:
                 try:
                     async with asyncio.timeout(chunk_timeout):
-                        item = await aiter.__anext__()
+                        item = await anext(ait)
                 except StopAsyncIteration:
                     break
                 except TimeoutError:
                     await aqueue.put(
                         TimeoutError(
-                            f"Stream timed out waiting for next chunk after {chunk_timeout}s. "
+                            f"Stream timed out after {chunk_timeout}s without a chunk "
+                            "(covers time-to-first-token and inter-chunk gaps). "
                             "Set ModelOption.STREAM_TIMEOUT to a larger value or None to disable."
                         )
                     )
+                    if isinstance(ait, AsyncGenerator):
+                        try:
+                            await ait.aclose()
+                        except Exception:
+                            pass
                     return
                 await aqueue.put(item)
         else:
