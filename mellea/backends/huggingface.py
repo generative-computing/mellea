@@ -741,7 +741,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 send_to_queue(
                     chat_response,
                     output._async_queue,
-                    chunk_timeout=(model_options or {}).get(
+                    chunk_timeout=model_options.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )  # type: ignore
@@ -988,6 +988,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Arm the cancel hook before creating tasks so a cancel racing
             # task creation still finds the hook set.
             if stream:
+                # TODO(#1242): send_to_queue fires this hook via mot.cancel_generation() only
+                # through stream_with_chunking; direct avalue()/astream() callers do not,
+                # so the worker thread leaks on STREAM_TIMEOUT for those paths.
                 output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
@@ -1031,7 +1034,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     send_to_queue(
                         response,
                         output._async_queue,
-                        chunk_timeout=(model_options or {}).get(
+                        chunk_timeout=model_options.get(
                             ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
@@ -1162,6 +1165,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Arm the cancel hook before creating tasks so a cancel racing
             # task creation still finds the hook set.
             if stream:
+                # TODO(#1242): send_to_queue fires this hook via mot.cancel_generation() only
+                # through stream_with_chunking; direct avalue()/astream() callers do not,
+                # so the worker thread leaks on STREAM_TIMEOUT for those paths.
                 output._cancel_hook = _cancel_event.set
             output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
@@ -1205,7 +1211,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     send_to_queue(
                         response,
                         output._async_queue,
-                        chunk_timeout=(model_options or {}).get(
+                        chunk_timeout=model_options.get(
                             ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from collections.abc import AsyncGenerator, AsyncIterator, Coroutine
+from collections.abc import AsyncIterator, Coroutine
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -72,11 +72,18 @@ async def send_to_queue(
                             "Set ModelOption.STREAM_TIMEOUT to a larger value or None to disable."
                         )
                     )
-                    if isinstance(ait, AsyncGenerator):
+                    close = getattr(ait, "aclose", None) or getattr(ait, "close", None)
+                    if close is not None:
+                        from ..core import MelleaLogger
+
                         try:
-                            await ait.aclose()
-                        except Exception:
-                            pass
+                            result = close()
+                            if asyncio.iscoroutine(result):
+                                await result
+                        except Exception as e:
+                            MelleaLogger.get_logger().debug(
+                                f"Failed to close stalled stream iterator: {e}"
+                            )
                     return
                 await aqueue.put(item)
         else:
