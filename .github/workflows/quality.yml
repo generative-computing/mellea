@@ -99,10 +99,10 @@ jobs:
         run: nohup ollama serve &
       - name: Pull models
         run: |
-          for i in 1 2 3; do
+          for i in 1 2 3 4 5; do
             ollama pull granite4.1:3b && break
-            echo "Attempt $i failed, retrying in 15s..."
-            sleep 15
+            echo "Attempt $i failed, retrying in 20s..."
+            sleep 20
           done
       - name: Run Tests
         id: tests
