@@ -45,6 +45,21 @@ class ModelOption:
     TEMPERATURE = "temperature"
     CONTEXT_WINDOW = "@@@context_window@@@"
     THINKING = "@@@thinking@@@"
+    """Enable or configure reasoning/thinking mode.
+
+    Accepted values:
+
+    * ``True`` — sets ``chat_template_kwargs.enable_thinking=True`` (vLLM,
+      Ollama OpenAI-compat) **and** ``reasoning_effort="medium"`` (OpenAI
+      o-series, DeepSeek). Use this to engage reasoning on vLLM-served models
+      such as Qwen3, Gemma 4, and GLM-4.5 — ``"medium"`` alone is silently
+      ignored by those servers.
+    * ``False`` — sets ``chat_template_kwargs.enable_thinking=False`` to
+      suppress the think block. ``reasoning_effort`` is not sent (passing
+      ``False`` would be an invalid value for OpenAI).
+    * ``"low"`` / ``"medium"`` / ``"high"`` — passed directly as
+      ``reasoning_effort`` (OpenAI/DeepSeek only; no-op on vLLM).
+    """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
     STOP_SEQUENCES = "@@@stop_sequences@@@"
