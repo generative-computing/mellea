@@ -100,7 +100,7 @@ print(f"Tracing enabled: {is_tracing_enabled()}")
 
 ## What spans Mellea emits
 
-Mellea has two independent trace scopes.
+Mellea has two trace scopes.
 
 ### Application spans (`mellea.application`)
 

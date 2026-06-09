@@ -38,6 +38,7 @@ def _reset_tracing_state() -> None:
     tracing_mod._tracer_provider = None
     tracing_mod._application_tracer = None
     tracing_mod._backend_tracer = None
+    tracing_mod._in_flight_spans.clear()
     tracing_mod._setup_tracing()
 
 

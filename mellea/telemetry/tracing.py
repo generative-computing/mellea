@@ -62,8 +62,7 @@ _plugins_registered: bool = False  # Plugin registry is process-global; register
 def _setup_tracer_provider() -> Any:
     """Set up the global TracerProvider with configured exporters.
 
-    Reads endpoint, exporter, and service-name env vars at call time so that
-    env changes made after module import (e.g. in tests) are respected.
+    Reads endpoint, exporter, and service-name env vars at call time.
 
     Returns:
         TracerProvider instance, or None if OpenTelemetry is not available.

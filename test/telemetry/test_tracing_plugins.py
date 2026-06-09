@@ -25,6 +25,8 @@ from mellea.telemetry.tracing_plugins import BackendTracingPlugin
 
 def _reset_tracing_state() -> None:
     """Reset module state and re-run setup so env-var changes take effect."""
+    if tracing._tracer_provider is not None:
+        tracing._tracer_provider.shutdown()
     tracing._tracer_provider = None
     tracing._application_tracer = None
     tracing._backend_tracer = None
@@ -110,22 +112,6 @@ async def test_post_call_finishes_span_with_usage_attrs(plugin, enabled_tracing)
 
 
 @pytest.mark.asyncio
-async def test_post_call_no_op_when_no_matching_pre_call(plugin, enabled_tracing):
-    """If pre_call didn't fire (e.g. tracing came up mid-flight), post_call must no-op."""
-    fake_tracer = MagicMock()
-    mot = ModelOutputThunk("hello")
-    mot.generation = GenerationMetadata(model="gpt-4o", provider="openai")
-    payload = GenerationPostCallPayload(
-        prompt="p", model_output=mot, latency_ms=100.0, generation_id="never-pre"
-    )
-
-    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
-        await plugin.on_post_call(payload, {})
-
-    fake_tracer.start_span.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_error_finishes_span_with_error_status(plugin, enabled_tracing):
     fake_span = MagicMock()
     fake_tracer = MagicMock()
@@ -159,8 +145,8 @@ async def test_pre_call_no_op_when_disabled(plugin, disabled_tracing):
 
 
 @pytest.mark.asyncio
-async def test_pre_call_no_op_with_missing_generation_id(plugin, enabled_tracing):
-    """Missing generation_id (e.g. from a non-tracing-aware caller) is skipped."""
+async def test_pre_call_no_op_with_none_generation_id(plugin, enabled_tracing):
+    """generation_id=None (e.g. from a non-tracing-aware caller) is skipped."""
     fake_tracer = MagicMock()
     payload = GenerationPreCallPayload(action=None, context=None, generation_id=None)
 

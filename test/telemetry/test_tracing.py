@@ -22,6 +22,7 @@ def _reset_tracing_state() -> None:
     tracing._tracer_provider = None
     tracing._application_tracer = None
     tracing._backend_tracer = None
+    tracing._in_flight_spans.clear()
     tracing._setup_tracing()
 
 
@@ -87,6 +88,34 @@ def test_otlp_traces_endpoint_honored(monkeypatch):
 
     assert get_backend_tracer() is not None
     _reset_tracing_state()
+
+
+def test_otlp_warns_when_no_endpoint_configured(monkeypatch, recwarn):
+    """MELLEA_TRACES_OTLP=true with no endpoint set must warn."""
+    monkeypatch.setenv("MELLEA_TRACES_OTLP", "true")
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+    tracing._setup_tracer_provider()
+
+    no_endpoint_warnings = [
+        w for w in recwarn.list if "no endpoint is configured" in str(w.message)
+    ]
+    assert len(no_endpoint_warnings) == 1
+
+
+def test_otlp_falls_back_to_generic_endpoint(monkeypatch, recwarn):
+    """OTEL_EXPORTER_OTLP_ENDPOINT should be picked up when the traces-specific var is unset."""
+    monkeypatch.setenv("MELLEA_TRACES_OTLP", "true")
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    tracing._setup_tracer_provider()
+
+    no_endpoint_warnings = [
+        w for w in recwarn.list if "no endpoint is configured" in str(w.message)
+    ]
+    assert no_endpoint_warnings == []
 
 
 def test_trace_application_context_manager():

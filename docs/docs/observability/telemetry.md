@@ -87,7 +87,7 @@ print(f"Metrics: {is_metrics_enabled()}")
 
 ## Tracing
 
-Mellea has two independent trace scopes:
+Mellea has two trace scopes:
 
 - **`mellea.application`** — user-facing operations: session lifecycle,
   `@generative` calls, `instruct()` and `act()`, sampling strategies, and
