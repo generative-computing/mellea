@@ -173,8 +173,8 @@ async def test_concurrent_generations_do_not_collide(plugin, enabled_tracing):
 
     assert "A" in tracing._in_flight_spans
     assert "B" in tracing._in_flight_spans
-    assert tracing._in_flight_spans["A"] is fake_span_a
-    assert tracing._in_flight_spans["B"] is fake_span_b
+    assert tracing._in_flight_spans["A"][0] is fake_span_a
+    assert tracing._in_flight_spans["B"][0] is fake_span_b
 
     mot_b = ModelOutputThunk("b")
     mot_b.generation = GenerationMetadata(model="m", provider="p")
@@ -517,7 +517,9 @@ async def test_nested_span_during_call_parents_under_backend_span(
     )
     await plugin.on_pre_call(pre, {})
 
-    backend_span_id = tracing._in_flight_spans["active-gid"].get_span_context().span_id
+    backend_span_id = (
+        tracing._in_flight_spans["active-gid"][0].get_span_context().span_id
+    )
 
     nested_tracer = tracing._tracer_provider.get_tracer("test-nested")
     with nested_tracer.start_as_current_span("nested-caller-task"):
@@ -543,3 +545,40 @@ async def test_nested_span_during_call_parents_under_backend_span(
     assert by_name["nested-caller-task"].parent.span_id == backend_span_id
     assert by_name["nested-background-task"].parent is not None
     assert by_name["nested-background-task"].parent.span_id == backend_span_id
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_sequential_backend_calls_produce_siblings(plugin, enabled_tracing):
+    """Two back-to-back backend calls in the same task with no enclosing app span are siblings, not parent/child."""
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    tracing.get_backend_tracer()
+    exporter = InMemorySpanExporter()
+    tracing._tracer_provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    for gid in ("call-a", "call-b"):
+        pre = GenerationPreCallPayload(action=None, context=None, generation_id=gid)
+        await plugin.on_pre_call(pre, {})
+
+        mot = ModelOutputThunk("x")
+        mot.generation = GenerationMetadata(model="m", provider="p")
+        post = GenerationPostCallPayload(
+            prompt="", model_output=mot, latency_ms=1.0, generation_id=gid
+        )
+        await plugin.on_post_call(post, {})
+
+    tracing._tracer_provider.force_flush()
+    chat_spans = [s for s in exporter.get_finished_spans() if s.name == "chat"]
+    assert len(chat_spans) == 2
+
+    # Neither span should be parented to the other; with no enclosing app
+    # span, both should have no parent.
+    for s in chat_spans:
+        assert s.parent is None, (
+            f"backend span {s.context.span_id:x} unexpectedly has parent "
+            f"{s.parent.span_id:x} — context token detach is missing"
+        )

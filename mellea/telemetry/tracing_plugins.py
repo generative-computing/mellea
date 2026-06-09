@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
-from mellea.plugins.types import PluginMode
 
 if TYPE_CHECKING:
     from mellea.plugins.hooks.generation import (
@@ -33,6 +32,9 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
     events on both the chat and raw (batch) paths to automatically emit one
     span per LLM call. Spans are started on pre-call and ended on post-call
     or error, correlated across hooks via generation_id.
+
+    All hooks run SEQUENTIAL so the OTel context token attached in pre-call
+    can be detached on the same task in post-call / error.
     """
 
     # --- Chat hooks ---
@@ -41,11 +43,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
     async def on_pre_call(
         self, payload: GenerationPreCallPayload, context: dict[str, Any]
     ) -> None:
-        """Start a backend chat span for this generation.
-
-        SEQUENTIAL (not FIRE_AND_FORGET) so the span is on the OTel context
-        before the backend call, letting nested instrumentation parent under it.
-        """
+        """Start a backend chat span for this generation."""
         if not payload.generation_id:
             return
         from mellea.telemetry.tracing import start_backend_span
@@ -63,7 +61,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
             tool_calls_enabled=payload.tool_calls,
         )
 
-    @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    @hook("generation_post_call")
     async def on_post_call(
         self, payload: GenerationPostCallPayload, context: dict[str, Any]
     ) -> None:
@@ -78,7 +76,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
             payload.generation_id, operation="chat", usage=gen.usage, mot=mot, gen=gen
         )
 
-    @hook("generation_error", mode=PluginMode.FIRE_AND_FORGET)
+    @hook("generation_error")
     async def on_error(
         self, payload: GenerationErrorPayload, context: dict[str, Any]
     ) -> None:
@@ -119,7 +117,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
             tool_calls_enabled=payload.tool_calls,
         )
 
-    @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    @hook("generation_batch_post_call")
     async def on_batch_post_call(
         self, payload: GenerationBatchPostCallPayload, context: dict[str, Any]
     ) -> None:
@@ -136,7 +134,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
             gen=None,
         )
 
-    @hook("generation_batch_error", mode=PluginMode.FIRE_AND_FORGET)
+    @hook("generation_batch_error")
     async def on_batch_error(
         self, payload: GenerationBatchErrorPayload, context: dict[str, Any]
     ) -> None:

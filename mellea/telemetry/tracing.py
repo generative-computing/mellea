@@ -32,6 +32,7 @@ from importlib.metadata import version
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from opentelemetry.context import Context, Token
     from opentelemetry.trace import Span
 
 try:
@@ -218,7 +219,7 @@ def get_backend_tracer() -> Any:
     return _backend_tracer
 
 
-_in_flight_spans: dict[str, Span] = {}
+_in_flight_spans: dict[str, tuple[Span, Token[Context]]] = {}
 
 
 def start_backend_span(
@@ -282,8 +283,8 @@ def start_backend_span(
         span.set_attribute("mellea.tool_calls_enabled", tool_calls_enabled)
     set_conversation_id(span)
 
-    otel_context.attach(trace.set_span_in_context(span))
-    _in_flight_spans[generation_id] = span
+    token = otel_context.attach(trace.set_span_in_context(span))
+    _in_flight_spans[generation_id] = (span, token)
     return span
 
 
@@ -315,9 +316,10 @@ def finish_backend_span_success(
         set_usage_attrs,
     )
 
-    span = _in_flight_spans.pop(generation_id, None)
-    if span is None:
+    entry = _in_flight_spans.pop(generation_id, None)
+    if entry is None:
         return
+    span, token = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -326,6 +328,7 @@ def finish_backend_span_success(
         if mot is not None and gen is not None:
             set_mellea_attrs(span, mot, gen)
     finally:
+        otel_context.detach(token)
         span.end()
 
 
@@ -347,9 +350,10 @@ def finish_backend_span_error(
     """
     from mellea.telemetry._tracing_setters import set_request_attrs
 
-    span = _in_flight_spans.pop(generation_id, None)
-    if span is None:
+    entry = _in_flight_spans.pop(generation_id, None)
+    if entry is None:
         return
+    span, token = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -357,6 +361,7 @@ def finish_backend_span_error(
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
         span.set_attribute("error.type", type(exception).__name__)
     finally:
+        otel_context.detach(token)
         span.end()
 
 
