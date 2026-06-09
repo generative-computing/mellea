@@ -480,7 +480,7 @@ class OllamaModelBackend(FormatterBackend):
                 send_to_queue(
                     chat_response,
                     output._async_queue,
-                    chunk_timeout=(model_options or {}).get(
+                    chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )

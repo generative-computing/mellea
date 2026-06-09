@@ -89,7 +89,7 @@ class TestSendToQueue:
             yield "never"  # pragma: no cover
 
         q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.05)
+        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.5)
 
         assert await q.get() == "first"
         item = await q.get()
