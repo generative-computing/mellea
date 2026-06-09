@@ -766,7 +766,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # we don't have to worry about scheduling the task to a specific
             # event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=(model_options or {}).get(
+                        ModelOption.STREAM_TIMEOUT, 60.0
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -958,7 +964,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=(model_options or {}).get(
+                        ModelOption.STREAM_TIMEOUT, 60.0
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:

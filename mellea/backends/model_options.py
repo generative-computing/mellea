@@ -30,6 +30,8 @@ class ModelOption:
         THINKING (str): Sentinel key for enabling/configuring reasoning/thinking mode.
         SEED (str): Sentinel key for the random seed for reproducible generation.
         STREAM (str): Sentinel key for enabling streaming responses.
+        STREAM_TIMEOUT (str): Sentinel key for the inter-chunk streaming timeout in seconds.
+            ``None`` disables the timeout. Defaults to ``60.0`` when not set.
         STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
             encountered in the model output, cause generation to halt.
     """
@@ -47,6 +49,10 @@ class ModelOption:
     THINKING = "@@@thinking@@@"
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
+    STREAM_TIMEOUT = "@@@stream_timeout@@@"
+    """Inter-chunk timeout in seconds for streaming responses. If no chunk arrives within
+    this window the stream is aborted with ``TimeoutError``. ``None`` disables the timeout.
+    Defaults to ``60.0`` seconds when not set."""
     STOP_SEQUENCES = "@@@stop_sequences@@@"
     """Must be a `list[str]`. Generation halts when the model emits any of these strings.
 

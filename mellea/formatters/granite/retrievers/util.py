@@ -130,7 +130,8 @@ def download_mtrag_embeddings(
 
     part_num = 1
     repo_root = "https://github.com/frreiss/mt-rag-embeddings"
-    while True:
+    _MAX_PARTS = 1000  # sanity guard against a malformed or unexpectedly large dataset
+    while part_num <= _MAX_PARTS:
         # Download part_001.parquet, part_002.parquet, etc. until a download fails.
         parquet_file_name = f"part_{part_num:03d}.parquet"
         source_url = (
@@ -146,6 +147,10 @@ def download_mtrag_embeddings(
                 # Found all the parts; flow through
                 break
             raise  # 429/5xx propagate rather than silently truncating
+    else:
+        raise RuntimeError(
+            f"Corpus download exceeded {_MAX_PARTS} parts — possible dataset corruption."
+        )
 
     if part_num == 1:
         raise ValueError(

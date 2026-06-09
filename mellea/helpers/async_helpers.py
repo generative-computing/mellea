@@ -19,15 +19,24 @@ if TYPE_CHECKING:
     from ..core import ModelOutputThunk
 
 
+_DEFAULT_CHUNK_TIMEOUT: float = 60.0
+
+
 async def send_to_queue(
-    co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, aqueue: asyncio.Queue
+    co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator,
+    aqueue: asyncio.Queue,
+    chunk_timeout: float | None = _DEFAULT_CHUNK_TIMEOUT,
 ) -> None:
     """Processes the output of an async chat request by sending the output to an async queue.
 
     Args:
         co: A coroutine or async iterator producing the backend response.
-        aqueue: The async queue to send results to. A sentinel `None` is appended on
+        aqueue: The async queue to send results to. A sentinel ``None`` is appended on
             completion; an exception instance is appended on error.
+        chunk_timeout: Maximum seconds to wait for each individual chunk from the backend
+            iterator. If a chunk does not arrive within this window a ``TimeoutError`` is
+            forwarded to the queue and the stream is aborted. ``None`` disables the timeout
+            (original behaviour). Defaults to ``_DEFAULT_CHUNK_TIMEOUT`` (60 s).
     """
     try:
         if isinstance(co, Coroutine):
@@ -38,7 +47,21 @@ async def send_to_queue(
             aresponse = co
 
         if isinstance(aresponse, AsyncIterator):
-            async for item in aresponse:
+            aiter = aresponse.__aiter__()
+            while True:
+                try:
+                    async with asyncio.timeout(chunk_timeout):
+                        item = await aiter.__anext__()
+                except StopAsyncIteration:
+                    break
+                except TimeoutError:
+                    await aqueue.put(
+                        TimeoutError(
+                            f"Stream timed out waiting for next chunk after {chunk_timeout}s. "
+                            "Set ModelOption.STREAM_TIMEOUT to a larger value or None to disable."
+                        )
+                    )
+                    return
                 await aqueue.put(item)
         else:
             await aqueue.put(aresponse)
