@@ -263,7 +263,7 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
             "reasoning_effort should not be passed when not specified"
         )
 
-    # Test 2: reasoning_effort SHOULD be passed when specified
+    # Test 2: reasoning_effort SHOULD be passed when specified (string)
     with patch.object(
         backend._async_client.chat.completions, "create", new_callable=AsyncMock
     ) as mock_create:
@@ -274,6 +274,88 @@ async def test_reasoning_effort_conditional_passing(backend) -> None:
         call_kwargs = mock_create.call_args.kwargs
         assert call_kwargs.get("reasoning_effort") == "medium", (
             "reasoning_effort should be passed with correct value when specified"
+        )
+
+    # Test 3: THINKING=True sets both reasoning_effort and chat_template_kwargs
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"), ctx, model_options={ModelOption.THINKING: True}
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("reasoning_effort") == "medium"
+        assert (
+            call_kwargs.get("extra_body", {})
+            .get("chat_template_kwargs", {})
+            .get("enable_thinking")
+            is True
+        )
+
+    # Test 4: THINKING=False sets chat_template_kwargs but NOT reasoning_effort
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"), ctx, model_options={ModelOption.THINKING: False}
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        assert "reasoning_effort" not in call_kwargs, (
+            "reasoning_effort must not be sent for THINKING=False (invalid for OpenAI)"
+        )
+        assert (
+            call_kwargs.get("extra_body", {})
+            .get("chat_template_kwargs", {})
+            .get("enable_thinking")
+            is False
+        )
+
+    # Test 5: THINKING=True + user-supplied extra_body merges without TypeError
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"),
+            ctx,
+            model_options={
+                ModelOption.THINKING: True,
+                "extra_body": {"guided_json": {"type": "string"}},
+            },
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        eb = call_kwargs.get("extra_body", {})
+        assert eb.get("chat_template_kwargs", {}).get("enable_thinking") is True, (
+            "enable_thinking must survive the merge"
+        )
+        assert eb.get("guided_json") == {"type": "string"}, (
+            "user-supplied extra_body keys must be preserved alongside enable_thinking"
+        )
+        assert call_kwargs.get("reasoning_effort") == "medium"
+
+    # Test 6: THINKING=True + user extra_body containing chat_template_kwargs must
+    # deep-merge — not clobber the backend-set enable_thinking.
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"),
+            ctx,
+            model_options={
+                ModelOption.THINKING: True,
+                "extra_body": {"chat_template_kwargs": {"adapter_name": "foo"}},
+            },
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        ctk = call_kwargs.get("extra_body", {}).get("chat_template_kwargs", {})
+        assert ctk.get("enable_thinking") is True, (
+            "backend-set enable_thinking must survive a user chat_template_kwargs merge"
+        )
+        assert ctk.get("adapter_name") == "foo", (
+            "user chat_template_kwargs keys must be preserved alongside enable_thinking"
         )
 
 

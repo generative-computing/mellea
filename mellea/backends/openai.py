@@ -670,11 +670,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        # Handle thinking/reasoning.
-        thinking = model_options.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            thinking = "medium"
-
         # Remap and filter remaining model options, then overlay onto api_params
         # so user values override rewriter/io.yaml defaults.
         user_api_params = self._make_backend_specific_and_remove(
@@ -682,10 +677,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         api_params.update(user_api_params)
 
-        # Add reasoning_effort last so it overrides any io.yaml default and
-        # avoids duplicate kwargs in the API call.
-        if thinking is not None:
-            api_params["reasoning_effort"] = thinking
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
+        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
+        # Both are set for True so the right server picks up whichever it understands.
+        thinking = model_options.get(ModelOption.THINKING)
+        if thinking is not None:  # False is a valid value — cannot use `if thinking`
+            if type(thinking) is bool:
+                ctk = extra_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                extra_body["chat_template_kwargs"] = ctk
+                if thinking:
+                    api_params["reasoning_effort"] = "medium"
+                # False: don't send reasoning_effort — OpenAI disables reasoning by
+                # default when the param is absent; passing False would be invalid.
+            else:
+                api_params["reasoning_effort"] = thinking
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
@@ -897,23 +904,54 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 add_tools_from_context_actions(tools, [action])
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
-        thinking = model_opts.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            # OpenAI uses strings for its reasoning levels.
-            thinking = "medium"
-
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        # Build optional reasoning parameters
-        # NOTE: the openai SDK doesn't like it if you pass `reasoning_effort` param to a non-reasoning model e.g. gpt4o
-        reasoning_params = {}
-        if thinking is not None:
-            reasoning_params["reasoning_effort"] = thinking
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
+        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
+        # NOTE: don't pass reasoning_effort to non-reasoning models (e.g. gpt-4o).
+        thinking = model_opts.get(ModelOption.THINKING)
+        reasoning_params: dict[str, Any] = {}
+        if thinking is not None:  # False is a valid value — cannot use `if thinking`
+            if type(thinking) is bool:
+                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+                ctk = ctk_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                ctk_body["chat_template_kwargs"] = ctk
+                extra_params["extra_body"] = ctk_body
+                if thinking:
+                    reasoning_params["reasoning_effort"] = "medium"
+                # False: don't send reasoning_effort — OpenAI disables reasoning by
+                # default when the param is absent; passing False would be invalid.
+            else:
+                reasoning_params["reasoning_effort"] = thinking
 
         # Request usage information in streaming responses
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
+
+        # Build the final backend-specific params and merge any user-supplied
+        # extra_body into extra_params so there is a single extra_body source.
+        # Two spreads each containing extra_body raises TypeError at call time.
+        backend_specific = self._make_backend_specific_and_remove(
+            model_opts, is_chat_context=ctx.is_chat_context
+        )
+        user_extra_body = backend_specific.pop("extra_body", None)
+        if user_extra_body is not None:
+            # shallow copy so .pop() below doesn't mutate the caller's dict
+            user_extra_body = dict(user_extra_body)
+            eb = dict(extra_params.get("extra_body") or {})
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
+            # shallow merge is safe: chat_template_kwargs is the only nested dict
+            # key Mellea writes into extra_body; it is deep-merged separately below
+            eb.update(user_extra_body)
+            if user_ctk is not None:
+                eb["chat_template_kwargs"] = {
+                    **eb.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
+            extra_params["extra_body"] = eb
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
@@ -924,9 +962,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **extra_params,
             **reasoning_params,  # type: ignore
-            **self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=ctx.is_chat_context
-            ),
+            **backend_specific,
         )  # type: ignore
 
         output = ModelOutputThunk(None)
@@ -1051,8 +1087,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             conversation (list[dict]): The chat conversation sent to the model,
                 used for logging.
-            thinking: The reasoning effort level passed to the model, or `None`
-                if reasoning mode was not enabled.
+            thinking: The reasoning value passed to the model: a string level
+                (``"low"``, ``"medium"``, ``"high"``) for explicit effort strings,
+                ``True``/``False`` for the bool toggle, or ``None`` if reasoning
+                was not enabled.
             seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """
