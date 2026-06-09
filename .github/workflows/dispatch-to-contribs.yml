@@ -24,7 +24,7 @@ jobs:
         if: github.event_name == 'release' && github.event.release.prerelease == true
         run: |
           echo "Skipping pre-release ${GITHUB_REF}; dispatch only fires on stable releases."
-          echo "SKIP=true" >> $GITHUB_ENV
+          echo "SKIP=true" >> "$GITHUB_ENV"
 
       - name: Resolve version
         if: env.SKIP != 'true'
@@ -35,7 +35,7 @@ jobs:
           else
             VERSION="${GITHUB_REF#refs/tags/v}"
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Dispatching mellea-released event to contribs with version=${VERSION}"
 
       - name: Mint GitHub App token
