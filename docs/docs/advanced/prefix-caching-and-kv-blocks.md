@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/advanced/prefix-caching-and-kv-blocks"
 title: "Prefix Caching and KV Blocks"
 description: "Reuse KV cache state across calls to eliminate redundant prefill work on LocalHFBackend."
 # diataxis: how-to

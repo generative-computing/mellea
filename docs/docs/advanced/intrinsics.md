@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/advanced/intrinsics"
 title: "Intrinsics"
 description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters with Granite models."
 # diataxis: how-to
@@ -7,7 +6,7 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 
 **Prerequisites:** `pip install "mellea[hf]"` for LocalHFBackend (GPU or Apple
 Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
-[Granite Switch](../guide/glossary#granite-switch) model served via vLLM.
+[Granite Switch](/reference/glossary#granite-switch) model served via vLLM.
 
 Intrinsics are adapter-accelerated operations for RAG quality checks. They use
 LoRA/aLoRA adapters loaded directly into the HuggingFace backend — faster and more

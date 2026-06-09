@@ -120,6 +120,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 | Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
+| GitHub Actions workflow injection warning | Never use `${{ expression }}` directly inside `run:` shell commands — always route through `env:` (`env: MY_VAR: ${{ expr }}` then `"$MY_VAR"` in the script). This rule applies only to `run:` steps; `${{ }}` in `if:` conditions and `with:` action inputs is fine. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
@@ -129,7 +130,7 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 5. Avoided over-engineering?
 6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), run the docstring quality gate before pushing:
    ```bash
-   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100 --orphans
+   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100
    ```
    Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
 
@@ -150,12 +151,14 @@ If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md).
 Key rules that differ from typical Markdown habits:
 
-- **No H1 in the body** — Mintlify renders the frontmatter `title` automatically;
+- **No H1 in the body** — Docusaurus renders the frontmatter `title` automatically;
   a body `# Heading` produces a duplicate title in the published site
-- **No `.md` extensions in internal links** — use `../concepts/requirements-system`,
-  not `../concepts/requirements-system.md`
+- **Use `.md` extensions in relative cross-doc links** — use `../concepts/requirements-system.md`,
+  not `../concepts/requirements-system`. Docusaurus treats links with `.md` as doc
+  cross-references (baseUrl-aware); links without `.md` are treated as raw URL paths
+  and fail the broken-link check when the site is built with a non-root `baseUrl`.
 - **Frontmatter required** — every page needs `title` and `description`; add
-  `sidebarTitle` if the title is long
+  `sidebar_label` if the title is long
 - **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix
   all warnings before committing a doc page
 - **Verified code only** — every code example must be checked against the current

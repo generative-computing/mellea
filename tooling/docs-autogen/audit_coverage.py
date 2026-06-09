@@ -903,61 +903,6 @@ def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) 
             )
 
 
-def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
-    """Find MDX files that exist on disk but are not linked in mint.json navigation.
-
-    An orphaned module has a generated MDX file but no entry in the Mintlify
-    navigation tree, so it is unreachable from the docs site.
-
-    Args:
-        docs_dir: Directory containing generated MDX files (e.g. docs/docs/api)
-        source_dir: Project root, used to locate docs/mint.json
-
-    Returns:
-        Sorted list of orphaned module paths relative to docs_dir (no extension)
-    """
-    # Support both Mintlify v1 (mint.json at docs/mint.json) and
-    # v2 (docs.json at docs/docs/docs.json).  docs.json uses plain string
-    # entries in "pages" arrays; mint.json uses {"page": "..."} dicts.
-    nav_config: Path | None = None
-    for candidate in (
-        source_dir / "docs" / "docs" / "docs.json",
-        source_dir / "docs" / "mint.json",
-    ):
-        if candidate.exists():
-            nav_config = candidate
-            break
-
-    mdx_files: set[str] = set()
-    for mdx_file in docs_dir.rglob("*.mdx"):
-        mdx_files.add(str(mdx_file.relative_to(docs_dir).with_suffix("")))
-
-    nav_refs: set[str] = set()
-    if nav_config is not None:
-        config = json.loads(nav_config.read_text())
-
-        def _extract(obj: object) -> None:
-            if isinstance(obj, str):
-                # docs.json / mint.json plain string page entry
-                if obj.startswith("api/"):
-                    nav_refs.add(obj[len("api/") :])
-            elif isinstance(obj, dict):
-                # mint.json {"page": "api/..."} dict entry
-                if "page" in obj:
-                    page = obj["page"]
-                    if isinstance(page, str) and page.startswith("api/"):
-                        nav_refs.add(page[len("api/") :])
-                for v in obj.values():
-                    _extract(v)
-            elif isinstance(obj, list):
-                for item in obj:
-                    _extract(item)
-
-        _extract(config)
-
-    return sorted(mdx_files - nav_refs)
-
-
 def find_documented_symbols(docs_dir: Path) -> set[str]:
     """Find which symbols have MDX documentation.
 
@@ -1072,11 +1017,6 @@ def main():
         help="Exclude class methods from quality audit (check top-level symbols only)",
     )
     parser.add_argument(
-        "--orphans",
-        action="store_true",
-        help="Check for MDX files not linked in docs/mint.json navigation",
-    )
-    parser.add_argument(
         "--fail-on-quality",
         action="store_true",
         help="Exit 1 if any quality issues are found (for CI/pre-commit use)",
@@ -1113,7 +1053,7 @@ def main():
         )
         print(
             "  Fix: Run the doc generation pipeline to produce MDX for new symbols,\n"
-            "       then add entries to docs/docs/docs.json navigation.\n"
+            "       then add entries to docs/sidebars.ts.\n"
             "       uv run python tooling/docs-autogen/generate-ast.py"
         )
         print(f"  Ref: {_COVERAGE_DOCS_URL}")
@@ -1153,21 +1093,6 @@ def main():
                 )
         _print_quality_report(quality_issues, fail_on_quality=args.fail_on_quality)
 
-    # Nav orphan check — MDX files not referenced in mint.json navigation
-    orphans: list[str] = []
-    if args.orphans:
-        print("\n🔗 Checking navigation orphans...")
-        orphans = audit_nav_orphans(docs_dir, source_dir)
-        print(f"\n{'=' * 60}")
-        print("Navigation Orphans Report")
-        print(f"{'=' * 60}")
-        if orphans:
-            print(f"⚠️  {len(orphans)} MDX file(s) not linked in navigation:")
-            for orphan in orphans:
-                print(f"  • {orphan}")
-        else:
-            print("✅ All MDX files are linked in navigation.")
-
     # Save report if requested
     if args.output:
         output_path = Path(args.output)
@@ -1175,8 +1100,6 @@ def main():
         full_report = {**report}
         if args.quality:
             full_report["quality_issues"] = quality_issues
-        if args.orphans:
-            full_report["nav_orphans"] = orphans
         output_path.write_text(json.dumps(full_report, indent=2))
         print(f"\n✅ Report saved to {output_path}")
 

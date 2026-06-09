@@ -11,8 +11,9 @@ generate-ast.py (step 1).  Run via build.py or directly:
 
 Decoration passes (applied in order per file):
 1. fix_source_links      — correct GitHub blob URLs to versioned tags
+1b. normalize_icon_size  — replace mdxify's hardcoded 14px icon style with em units
 2. inject_preamble       — add per-module introductory text
-3. inject_sidebar_fix    — insert SidebarFix Mintlify component
+3. wrap_doctest_blocks   — wrap bare >>> blocks in fenced code blocks
 4. escape_mdx_syntax     — escape {{ }} in code blocks so MDX doesn't treat them as JSX
 5. add_cross_references  — linkify type names to their definition pages
 6. decorate_mdx_body     — add CLASS/FUNC pills and visual dividers to headings
@@ -27,48 +28,7 @@ import argparse
 import re
 from pathlib import Path
 
-# =========================
-# SidebarFix injection
-# =========================
-
 FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.S)
-
-# Canonical Mintlify docs-root absolute import (this is what worked for you)
-SIDEBAR_IMPORT_LINE = 'import { SidebarFix } from "/snippets/SidebarFix.mdx";'
-SIDEBAR_RENDER_LINE = "<SidebarFix />"
-
-IMPORT_RE = re.compile(
-    r'(?m)^\s*import\s+\{\s*SidebarFix\s*\}\s+from\s+["\']\/snippets\/SidebarFix\.mdx["\']\s*;?\s*$'
-)
-RENDER_RE = re.compile(
-    r"(?m)^\s*<\s*SidebarFix\s*\/\s*>\s*$|^\s*<\s*SidebarFix\s*>\s*<\/\s*SidebarFix\s*>\s*$"
-)
-
-SIDEBAR_BLOCK = SIDEBAR_IMPORT_LINE + "\n\n" + SIDEBAR_RENDER_LINE + "\n\n"
-
-
-def inject_sidebar_fix(mdx_text: str) -> str:
-    """Insert SidebarFix import + render right after frontmatter (or at top if none)."""
-    has_import = bool(IMPORT_RE.search(mdx_text))
-    has_render = bool(RENDER_RE.search(mdx_text))
-    if has_import and has_render:
-        return mdx_text
-
-    # Normalize: remove any partial remnants and add canonical block
-    mdx_text = IMPORT_RE.sub("", mdx_text)
-    mdx_text = RENDER_RE.sub("", mdx_text)
-
-    m = FRONTMATTER_RE.match(mdx_text)
-    if m:
-        insert_at = m.end()
-        return (
-            mdx_text[:insert_at]
-            + "\n"
-            + SIDEBAR_BLOCK
-            + mdx_text[insert_at:].lstrip("\n")
-        )
-
-    return SIDEBAR_BLOCK + mdx_text.lstrip("\n")
 
 
 # =========================
@@ -77,7 +37,7 @@ def inject_sidebar_fix(mdx_text: str) -> str:
 
 
 def fix_source_links(content: str, version: str) -> str:
-    """Fix GitHub source links to use a versioned tag instead of blob/main.
+    """Fix GitHub source links to use the correct git ref.
 
     Handles both output formats from mdxify:
     - HTML anchor: <a href="https://github.com/OWNER/REPO/blob/main/PATH">
@@ -85,11 +45,17 @@ def fix_source_links(content: str, version: str) -> str:
 
     Args:
         content: MDX file content
-        version: Package version (e.g., "0.5.0")
+        version: Git ref for source links — either a final version number
+            (e.g. "0.5.0", becomes "v0.5.0" in the URL) or "main" for
+            pre-release / dev builds where no stable tag exists.
 
     Returns:
-        Content with blob/main replaced by blob/v{version}
+        Content with the branch/tag component of every GitHub blob URL
+        replaced by the appropriate ref.
     """
+    # Version tags get a "v" prefix; named branches (main) are used as-is.
+    ref = f"v{version}" if re.match(r"^\d", version) else version
+
     # HTML href format (used by current mdxify output):
     # <a href="https://github.com/OWNER/REPO/blob/BRANCH/PATH" ...>
     html_pattern = r'href="(https://github\.com/([^/]+)/([^/]+)/blob/)[^/]+/([^"]+)"'
@@ -97,7 +63,7 @@ def fix_source_links(content: str, version: str) -> str:
     def replace_html(match):
         base = match.group(1)  # https://github.com/OWNER/REPO/blob/
         path = match.group(4)
-        return f'href="{base}v{version}/{path}"'
+        return f'href="{base}{ref}/{path}"'
 
     content = re.sub(html_pattern, replace_html, content)
 
@@ -110,11 +76,37 @@ def fix_source_links(content: str, version: str) -> str:
     def replace_md(match):
         base = match.group(1)
         path = match.group(4)
-        return f"[View source]({base}v{version}/{path})"
+        return f"[View source]({base}{ref}/{path})"
 
     content = re.sub(md_pattern, replace_md, content)
 
     return content
+
+
+# =========================
+# Icon size normalisation
+# =========================
+
+_ICON_PX_RE = re.compile(
+    r'(<Icon\b[^>]*\bstyle=")width:\s*\d+px;\s*height:\s*\d+px;("[^>]*/?>)'
+)
+
+
+def normalize_icon_size(content: str) -> str:
+    """Replace mdxify's hardcoded pixel icon sizes with em units.
+
+    mdxify emits ``style="width: 14px; height: 14px;"`` on source-link Icon
+    components.  Inline styles take priority over the stylesheet, so the icon
+    renders at a fixed 14 px regardless of heading level.  Swapping to ``em``
+    units lets the icon scale with the surrounding heading font-size.
+
+    Args:
+        content: MDX file content.
+
+    Returns:
+        Content with pixel icon dimensions replaced by ``0.85em``.
+    """
+    return _ICON_PX_RE.sub(r"\g<1>width: 0.85em; height: 0.85em;\g<2>", content)
 
 
 # =========================
@@ -380,9 +372,15 @@ def label_heading(line: str, current_section: str | None) -> str:
 
     span = CLASS_SPAN if kind == "class" else FUNC_SPAN
 
+    # Add explicit heading ID so Docusaurus anchors match cross-reference links.
+    # Without this, Docusaurus strips the JSX span text and generates "#name"
+    # instead of "#class-name", breaking all links that target "#class-name".
+    anchor_id = f"class-{name.lower()}" if kind == "class" else f"{name.lower()}"
+    id_suffix = f" {{#{anchor_id}}}"
+
     if rest:
-        return f"{hashes} {span} `{name}`{rest}"
-    return f"{hashes} {span} `{name}`"
+        return f"{hashes} {span} `{name}`{rest}{id_suffix}"
+    return f"{hashes} {span} `{name}`{id_suffix}"
 
 
 def line_has_pill(line: str) -> bool:
@@ -627,6 +625,16 @@ def build_symbol_cache(source_dir: Path) -> dict[str, str]:
                 # outside the package (e.g. `from dataclasses import dataclass`).
                 # Skip these — they're not mellea symbols.
                 continue
+            # Only include classes: TypeAliases and other attributes do not get
+            # class headings in the generated MDX, so linking to them produces
+            # broken anchors.
+            try:
+                kind = member.kind
+                kind_str = kind.value if hasattr(kind, "value") else str(kind).lower()
+                if "class" not in kind_str:
+                    continue
+            except (AttributeError, ValueError):
+                continue
             parts = canonical.split(".")
             if len(parts) > 1:
                 cache[symbol_name] = ".".join(parts[:-1])
@@ -694,43 +702,55 @@ def add_cross_references(
         if target_module and target_module != module_path:
             resolved[ref] = target_module
 
+    current_parts = module_path.split(".")
+    # A directory-index file has the same name as its parent directory
+    # (e.g. backends/backends.mdx → module path mellea.backends.backends).
+    # Docusaurus serves it at /api/mellea/backends (not /backends/backends),
+    # so its effective URL base is one level higher than a regular file.
+    is_directory_index = (
+        len(current_parts) >= 2 and current_parts[-1] == current_parts[-2]
+    )
+
+    def _build_rel_path(target_parts: list[str]) -> str:
+        """Build a relative URL from the current page to target_parts."""
+        common = 0
+        for i in range(min(len(current_parts), len(target_parts))):
+            if current_parts[i] == target_parts[i]:
+                common += 1
+            else:
+                break
+
+        # Number of directory levels to go up from the current file's directory.
+        # current_parts[-1] is the filename, so exclude it.
+        up_levels = len(current_parts) - common - 1
+
+        if is_directory_index:
+            # The URL base is one level higher than the module path implies.
+            # Reduce up_levels by 1 to compensate; if it goes negative, we need
+            # to prefix with the current directory name instead.
+            adjusted = up_levels - 1
+            if adjusted < 0:
+                # Same directory in module terms — prefix with the dir name so
+                # relative link descends into it from the parent URL base.
+                return current_parts[-1] + "/" + "/".join(target_parts[common:])
+            elif adjusted == 0:
+                return "/".join(target_parts[common:])
+            else:
+                return "../" * adjusted + "/".join(target_parts[common:])
+        else:
+            if up_levels == 0:
+                return target_parts[-1]
+            return "../" * up_levels + "/".join(target_parts[common:])
+
     # Replace backtick references with links
     # Example: `Backend` -> [`Backend`](../core/backend#class-backend)
     def replace_ref(match):
         symbol = match.group(1)
         if symbol in resolved:
             target_module = resolved[symbol]
-            # Calculate relative path
-            # module_path is like "mellea.core.formatter" (the current file)
-            # target_module is like "mellea.core.base" (the target file)
-            current_parts = module_path.split(".")
             target_parts = target_module.split(".")
-
-            # Find common prefix
-            common = 0
-            for i in range(min(len(current_parts), len(target_parts))):
-                if current_parts[i] == target_parts[i]:
-                    common += 1
-                else:
-                    break
-
-            # Build relative path
-            # We need to go up from the current file's directory, not from the file itself
-            # current_parts[-1] is the file name, so we exclude it
-            up_levels = (
-                len(current_parts) - common - 1
-            )  # -1 because we're in a file, not a dir
-
-            # If we're in the same directory (e.g., both in mellea.core), up_levels will be 0
-            # and we just need the target file name
-            if up_levels == 0:
-                rel_path = target_parts[-1]  # Just the filename in same directory
-            else:
-                rel_path = "../" * up_levels + "/".join(target_parts[common:])
-
-            # Generate anchor
+            rel_path = _build_rel_path(target_parts)
             anchor = mintlify_anchor(f"class {symbol}")
-
             return f"[`{symbol}`]({rel_path}#{anchor})"
         return match.group(0)
 
@@ -738,31 +758,12 @@ def add_cross_references(
     # Pattern: [`Symbol`](path#anchor)
     def fix_existing_link(match):
         symbol = match.group(1)
-        # old_path = match.group(2)  # Not needed, we recalculate
         anchor = match.group(3)
 
         if symbol in resolved:
             target_module = resolved[symbol]
-            current_parts = module_path.split(".")
             target_parts = target_module.split(".")
-
-            # Find common prefix
-            common = 0
-            for i in range(min(len(current_parts), len(target_parts))):
-                if current_parts[i] == target_parts[i]:
-                    common += 1
-                else:
-                    break
-
-            # Build relative path
-            up_levels = len(current_parts) - common - 1
-
-            if up_levels == 0:
-                rel_path = target_parts[-1]
-            else:
-                rel_path = "../" * up_levels + "/".join(target_parts[common:])
-
-            # Keep the existing anchor
+            rel_path = _build_rel_path(target_parts)
             return f"[`{symbol}`]({rel_path}#{anchor})"
         return match.group(0)
 
@@ -841,13 +842,15 @@ def process_mdx_file(
     # Step 1: Fix GitHub source links
     text = fix_source_links(text, version)
 
+    # Step 1b: Replace mdxify's hardcoded 14px icon sizes with em units
+    text = normalize_icon_size(text)
+
     # Step 2: Inject preamble (docstring cache text may also contain RST notation;
     # inject_preamble runs after normalize so the injected text needs a second pass)
     text = inject_preamble(text, module_path, docstring_cache)
     text = normalize_rst_backticks(text)
 
-    # Step 3: inject SidebarFix
-    text = inject_sidebar_fix(text)
+    # Step 3: SidebarFix injection disabled (was Mintlify-only; no-op on Docusaurus)
 
     # Step 3.5: Wrap bare doctest (>>>) blocks in fenced code blocks.
     # Must run before escape_mdx_syntax so the new fences are processed.
@@ -872,7 +875,7 @@ def process_mdx_file(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Decorate API MDX files")
     parser.add_argument(
-        "--docs-root", type=Path, default=None, help="Mintlify docs root directory"
+        "--docs-root", type=Path, default=None, help="Docs root directory"
     )
     parser.add_argument(
         "--api-dir", type=Path, default=None, help="API directory containing MDX files"

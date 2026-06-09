@@ -1,8 +1,7 @@
 ---
-canonical: "https://docs.mellea.ai/concepts/plugins"
 title: "Plugins & Hooks"
 description: "Intercept and customize Mellea's execution pipeline with plugins — enforce policies, add observability, and transform payloads at well-defined hook points."
-sidebarTitle: "Plugins & Hooks"
+sidebar_label: "Plugins & Hooks"
 # diataxis: explanation
 ---
 
@@ -25,9 +24,9 @@ Plugins are organized into six hook categories:
 - **Sampling Pipeline** — sampling loop events (`sampling_loop_start`, `sampling_iteration`, `sampling_repair`, `sampling_loop_end`)
 - **Tool Execution** — before and after tool invocations (`tool_pre_invoke`, `tool_post_invoke`)
 
-<Note>
+:::note
 Plugins require the hooks extra: `pip install 'mellea[hooks]'`
-</Note>
+:::
 
 ---
 
@@ -675,9 +674,9 @@ async def enforce_tool_allowlist(payload, ctx):
         return block(f"Tool '{payload.model_tool_call.name}' not permitted", code="TOOL_NOT_ALLOWED")
 ```
 
-<Note>
+:::note
 The payload includes an `is_control_flow` field that is `True` for framework control-flow tools (e.g. the ReAct loop's `final_answer`). Allowlist plugins should check this field to avoid blocking internal tools. See [Control-flow tools](#control-flow-tools) for the recommended pattern.
-</Note>
+:::
 
 #### `tool_post_invoke`
 
@@ -720,9 +719,9 @@ This table summarizes which fields are writable for each hook type. Changes to n
 | `tool_pre_invoke` | `model_tool_call` |
 | `tool_post_invoke` | `tool_output` |
 
-<Warning>
+:::warning
 Only `SEQUENTIAL` and `TRANSFORM` modes can modify payloads. `AUDIT`, `CONCURRENT`, and `FIRE_AND_FORGET` modes have their modifications silently discarded regardless of the policy table.
-</Warning>
+:::
 
 ---
 
@@ -788,9 +787,9 @@ async def send_telemetry(payload, ctx):
     await telemetry_client.send({"component": payload.component_type})
 ```
 
-<Note>
+:::note
 The FIRE_AND_FORGET log output may appear after the main result is printed. This is expected behavior, as these hooks run in the background.
-</Note>
+:::
 
 ### Chaining
 

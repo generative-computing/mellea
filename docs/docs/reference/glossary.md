@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/reference/glossary"
 title: "Glossary"
 description: "Definitions of Mellea-specific terms and concepts."
 # diataxis: reference
@@ -19,7 +18,7 @@ when working with custom components or building your own inference loops.
 
 `aact()` is the async counterpart — same signature, same return types.
 
-See: [act() and aact()](./act-and-aact)
+See: [act() and aact()](/how-to/act-and-aact)
 
 ---
 
@@ -53,7 +52,7 @@ m = start_session()
 lang = classify_language(m, code="print('hello')")
 ```
 
-See: [Generative Functions](./generative-functions)
+See: [Generative Functions](/how-to/generative-functions)
 
 ---
 
@@ -63,7 +62,7 @@ A backend is an inference engine that Mellea uses to run LLM calls. Examples:
 `OllamaModelBackend`, `OpenAIBackend`, `LocalHFBackend`, `WatsonxAIBackend`. Backends are configured via `MelleaSession` or
 `start_session()`.
 
-See: [Backends and Configuration](./backends-and-configuration)
+See: [Backends and Configuration](/how-to/backends-and-configuration)
 
 ---
 
@@ -171,7 +170,7 @@ annotation as the output schema and its docstring as the prompt. Generative
 functions are called with a `MelleaSession` as the first argument and return the
 annotated type.
 
-See: [Generative Functions](./generative-functions)
+See: [Generative Functions](/how-to/generative-functions)
 
 ---
 
@@ -437,7 +436,7 @@ m = mellea.start_session(
 )
 ```
 
-See: [Backends and Configuration](./backends-and-configuration)
+See: [Backends and Configuration](/how-to/backends-and-configuration)
 
 ---
 
@@ -668,7 +667,7 @@ from mellea.stdlib.frameworks.react import react
 result, _ = await react(goal="...", context=ChatContext(), backend=m.backend, tools=[...])
 ```
 
-See: [Tools and Agents](./tools-and-agents)
+See: [Tools and Agents](/how-to/tools-and-agents)
 
 ---
 
@@ -705,7 +704,7 @@ to make PDFs, tables, and structured files queryable by the LLM. Extract tables 
 pip install 'mellea[docling]'
 ```
 
-See: [Working with Data](./working-with-data)
+See: [Working with Data](/how-to/working-with-data)
 
 ---
 
@@ -787,7 +786,7 @@ tables = rich_doc.get_tables()
 summary = m.query(tables[0], "What is the total in the last row?")
 ```
 
-See: [Working with Data](./working-with-data)
+See: [Working with Data](/how-to/working-with-data)
 
 ---
 
@@ -847,7 +846,7 @@ A Python function decorated with `@tool` (or registered via `MelleaSession`) tha
 Mellea exposes to an LLM for function calling. Tools have typed inputs and outputs
 so the LLM can call them reliably without free-form parsing.
 
-See: [Tools and Agents](./tools-and-agents)
+See: [Tools and Agents](/how-to/tools-and-agents)
 
 ---
 
@@ -893,4 +892,4 @@ Total wall-clock time is roughly the latency of the slowest single call rather
 than the sum of all calls. Use `SimpleContext` (the default) when calling
 `wait_for_all_mots`; concurrent writes to `ChatContext` can corrupt state.
 
-See: [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async)
+See: [Tutorial 02: Streaming and Async](/tutorials/streaming-and-async)

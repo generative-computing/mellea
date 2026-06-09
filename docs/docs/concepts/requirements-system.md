@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/concepts/requirements-system"
 title: "The Requirements System"
 description: "How Requirement, ValidationResult, and the IVR loop work together to enforce constraints on generative output."
 # diataxis: explanation

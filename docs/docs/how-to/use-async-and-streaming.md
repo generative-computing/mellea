@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/use-async-and-streaming"
 title: "Async and Streaming"
 description: "Use async methods, parallel generation, and streaming output with Mellea."
 # diataxis: how-to
@@ -299,4 +298,4 @@ requirement (both `"pass"` and `"unknown"`). This means `"pass"` from
 
 ---
 
-**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async) | [act() and aact()](../how-to/act-and-aact)
+**See also:** [Tutorial 02: Streaming and Async](../tutorials/streaming-and-async) | [act() and aact()](../how-to/act-and-aact)

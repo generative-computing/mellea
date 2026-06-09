@@ -28,8 +28,20 @@ def read_project_version(repo_root: Path) -> str:
 
 
 def normalize_version(version: str) -> str:
-    """Strip pre-release suffixes for GitHub source links."""
-    return version.split("-")[0]
+    """Return the git ref for GitHub source links.
+
+    Final releases (X.Y.Z) return the bare version string (e.g. "0.6.0"); the
+    caller adds the "v" prefix when constructing the tag URL.
+
+    Pre-releases (.devN, rcN, .aN, .bN) and any other non-final form return
+    "main" so that source links point to the live branch rather than a
+    non-existent tag.
+    """
+    import re
+
+    if re.match(r"^\d+\.\d+\.\d+$", version):
+        return version  # final release — tag exists
+    return "main"  # dev / rc / alpha / beta — no stable tag
 
 
 def main():
@@ -58,6 +70,11 @@ def main():
         "--skip-cli-reference",
         action="store_true",
         help="Skip CLI reference page generation",
+    )
+    parser.add_argument(
+        "--skip-nav-rebuild",
+        action="store_true",
+        help="Skip step 3 (nav-only rebuild of generate-ast.py). Auto-skipped when docs.json is absent.",
     )
     args = parser.parse_args()
 
@@ -120,23 +137,29 @@ def main():
     # this step re-reads those decorated files so the landing page cards show
     # the full module descriptions rather than the short frontmatter one-liners.
     if not args.skip_generation and not args.skip_decoration:
-        cmd = [
-            sys.executable,
-            str(script_dir / "generate-ast.py"),
-            "--docs-root",
-            str(output_dir.parent),
-            "--nav-only",
-            "--source-dir",
-            str(repo_root),
-        ]
-        print(f"[build.py] Running: {' '.join(cmd)}")
-        result = subprocess.run(cmd, check=False)
-        if result.returncode != 0:
+        docs_json = repo_root / "docs" / "docs" / "docs.json"
+        if args.skip_nav_rebuild or not docs_json.exists():
             print(
-                f"[build.py] ERROR: generate-ast.py (nav-only) failed with code {result.returncode}",
-                file=sys.stderr,
+                "[build.py] Skipping nav rebuild (docs.json not present — Docusaurus mode)"
             )
-            sys.exit(result.returncode)
+        else:
+            cmd = [
+                sys.executable,
+                str(script_dir / "generate-ast.py"),
+                "--docs-root",
+                str(output_dir.parent),
+                "--nav-only",
+                "--source-dir",
+                str(repo_root),
+            ]
+            print(f"[build.py] Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, check=False)
+            if result.returncode != 0:
+                print(
+                    f"[build.py] ERROR: generate-ast.py (nav-only) failed with code {result.returncode}",
+                    file=sys.stderr,
+                )
+                sys.exit(result.returncode)
 
     # Step 4: Generate CLI reference page
     if not args.skip_cli_reference:

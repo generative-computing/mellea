@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/community/contributing-guide"
 title: "Contributing to Mellea"
 description: "Development setup, coding standards, and PR process for Mellea contributors."
 # diataxis: how-to
@@ -276,7 +275,7 @@ Documentation lives in `docs/docs/`. The writing guide at
 [`docs/CONTRIBUTING_DOCS.md`](https://github.com/generative-computing/mellea/blob/main/docs/CONTRIBUTING_DOCS.md) covers conventions, the PR
 checklist, and the review process for documentation contributions. Key points:
 
-- Start body content with H2 — Mintlify renders the frontmatter `title` as the page heading.
+- Start body content with H2 — Docusaurus renders the frontmatter `title` as the page heading; do not repeat it as an H1 in the body.
 - Omit `.md` extensions from internal links.
 - Tag every fenced code block with a language.
 - Run `npx markdownlint-cli2` and fix all warnings before committing.

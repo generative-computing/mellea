@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/unit-test-generative-code"
 title: "Unit Test Generative Code"
 description: "Write reliable tests for @generative functions using pytest markers and output validation."
 # diataxis: how-to
@@ -437,5 +436,5 @@ pytest -m qualitative
   `Requirement`, `simple_validate`, and `check` interact with the IVR loop
 - [Handling Exceptions](../how-to/handling-exceptions) —
   catch and diagnose errors that occur during generation
-- [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
+- [Evaluate with LLM-as-a-Judge](/how-to/evaluate-with-llm-as-a-judge) —
   the `Requirement`-based approach for inline judge evaluation

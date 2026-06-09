@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/tutorials/01-your-first-generative-program"
 title: "Tutorial: Your First Generative Program"
 description: "Build a document analysis pipeline step by step — from a single instruct() call to a composed, typed, validated generative program."
 # diataxis: tutorial
@@ -18,7 +17,7 @@ By the end you will have covered:
 
 > **`@generative` in depth:** This tutorial uses `@generative` in the final pipeline
 > step. For a dedicated walkthrough of typed returns, `Literal`, and Pydantic models,
-> see [Tutorial 03: Using Generative Stubs](../tutorials/03-using-generative-stubs).
+> see [Tutorial 03: Using Generative Stubs](../tutorials/using-generative-stubs).
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 Mellea installed (`uv add mellea`), Ollama running locally with `granite4.1:3b` downloaded.
@@ -352,9 +351,9 @@ call is self-contained.
 | Requirements | Enforces plain-English constraints via IVR |
 | `simple_validate` | Adds deterministic checks (word count, format) |
 | `RejectionSamplingStrategy` | Controls retry budget and exposes `SamplingResult` |
-| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](../tutorials/03-using-generative-stubs)) |
+| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](../tutorials/using-generative-stubs)) |
 | Composition | Independent typed functions wired into a pipeline |
 
 ---
 
-**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair) | [The Requirements System](../concepts/requirements-system) | [Generative Functions](../concepts/generative-functions) | [MObjects and mify](../concepts/mobjects-and-mify) | [Use Images and Vision](../how-to/use-images-and-vision)
+**See also:** [Tutorial 02: Streaming and Async](../tutorials/streaming-and-async) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair) | [The Requirements System](../concepts/requirements-system) | [Generative Functions](../concepts/generative-functions) | [MObjects and mify](../concepts/mobjects-and-mify) | [Use Images and Vision](../how-to/use-images-and-vision)
