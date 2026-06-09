@@ -4,7 +4,7 @@ This directory contains examples of using Mellea with asynchronous Python patter
 
 ## Prerequisites
 
-These examples use async/await and require Python 3.7+. Most examples also need a running Ollama instance:
+These examples use async/await and require Python 3.11+. Most examples also need a running Ollama instance:
 
 ```bash
 ollama serve

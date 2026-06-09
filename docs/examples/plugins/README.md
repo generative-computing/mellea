@@ -83,6 +83,19 @@ Demonstrates:
 - Per-session plugins (fire only in specific session)
 - Content policy enforcement by session
 
+### Scoped Plugins
+
+```bash
+uv run plugin_scoped.py
+```
+
+Demonstrates:
+- Plugin activation for specific code blocks
+- `plugin_scope()` context manager for multiple plugins
+- Plugin subclasses as context managers
+- PluginSet as a context manager
+- Automatic deregistration on block exit
+
 ### Payload Modification
 
 ```bash

@@ -128,11 +128,6 @@ uv run uncertainty.py
 ```
 Demonstrates assessing model certainty about its response.
 
-```bash
-uv run context_attribution.py
-```
-Demonstrates finding context citations for responses.
-
 ### Guardian Intrinsics
 
 ```bash
