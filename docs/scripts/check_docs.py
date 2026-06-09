@@ -16,15 +16,14 @@ Usage
 Link checks
 -----------
 * Internal doc-to-doc links (relative paths within docs/docs/).
-* Mintlify absolute paths (/getting-started/installation etc.) resolved
-  against docs/docs/ and docs.json navigation.
-* Mintlify Card href="..." attributes (JSX).
+* Absolute paths (/getting-started/installation etc.) resolved
+  against docs/docs/.
+* Card href="..." attributes (JSX).
 * Links that escape docs/docs/ (e.g. ../../examples/) — these resolve
-  on the local filesystem but NOT on the published Mintlify site.  They
+  on the local filesystem but NOT on the published docs site.  They
   are flagged as errors: use a full GitHub URL instead.
 * External URLs (https://) — checked with a lightweight HEAD request.
   Failures are reported as warnings (network-dependent).
-* docs.json navbar links and nav page slugs.
 
 Code checks
 -----------
@@ -66,7 +65,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent  # docs/scripts/../../
-DOCS_ROOT = REPO_ROOT / "docs" / "docs"  # Mintlify content root
+DOCS_ROOT = REPO_ROOT / "docs" / "docs"  # docs content root
 
 # Skip API reference pages (separate PR)
 SKIP_PREFIXES = ("api/",)
@@ -129,8 +128,8 @@ def strip_anchor(target: str) -> str:
     return target.split("#", 1)[0]
 
 
-def file_exists_mintlify(resolved: Path) -> bool:
-    """Check whether the resolved target exists, trying Mintlify
+def file_exists_docs(resolved: Path) -> bool:
+    """Check whether the resolved target exists, trying standard
     extension conventions (.md, .mdx, index files)."""
     if resolved.exists():
         return True
@@ -278,7 +277,7 @@ def run_link_checks(
                     continue
 
                 resolved = DOCS_ROOT / target_clean.lstrip("/")
-                if file_exists_mintlify(resolved):
+                if file_exists_docs(resolved):
                     if verbose:
                         print(f"  [ok]   {rel}:{lineno} -> {raw_target}")
                 else:
@@ -302,7 +301,7 @@ def run_link_checks(
             if not inside_docs:
                 # It might still exist in the repo...
                 if resolved.exists() or Path(str(resolved)).exists():
-                    # File exists in repo but won't work on Mintlify site
+                    # File exists in repo but escapes the docs root
                     # Suggest the GitHub URL
                     try:
                         repo_rel = resolved.relative_to(REPO_ROOT)
@@ -311,7 +310,7 @@ def run_link_checks(
                         suggested = "(could not compute GitHub URL)"
                     errors.append(
                         f"  {rel}:{lineno} -> {raw_target}"
-                        f"  [escapes docs/ — won't work on Mintlify."
+                        f"  [escapes docs/ — won't resolve on published site."
                         f" Suggest: {suggested}]"
                     )
                 else:
@@ -324,7 +323,7 @@ def run_link_checks(
                 continue
 
             # Normal internal link
-            if file_exists_mintlify(resolved):
+            if file_exists_docs(resolved):
                 if verbose:
                     print(f"  [ok]   {rel}:{lineno} -> {raw_target}")
             else:
@@ -336,7 +335,7 @@ def run_link_checks(
         if any(slug.startswith(pfx) for pfx in SKIP_PREFIXES):
             continue
         resolved = DOCS_ROOT / slug
-        if not file_exists_mintlify(resolved):
+        if not file_exists_docs(resolved):
             errors.append(f"  docs.json nav: '{slug}' — file not found")
         elif verbose:
             print(f"  [ok]   docs.json nav: {slug}")

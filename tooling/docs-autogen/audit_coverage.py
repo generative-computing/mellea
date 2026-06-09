@@ -1053,7 +1053,7 @@ def main():
         )
         print(
             "  Fix: Run the doc generation pipeline to produce MDX for new symbols,\n"
-            "       then add entries to docs/docs/docs.json navigation.\n"
+            "       then add entries to docs/sidebars.ts.\n"
             "       uv run python tooling/docs-autogen/generate-ast.py"
         )
         print(f"  Ref: {_COVERAGE_DOCS_URL}")

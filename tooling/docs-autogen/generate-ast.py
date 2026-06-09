@@ -2,7 +2,7 @@
 """generate-ast.py — mdxify + postprocess docs pipeline.
 
 Runs mdxify against the project's mellea package then postprocesses
-the generated MDX files into the Mintlify docs tree.
+the generated MDX files into the Docusaurus docs tree.
 
 Requires mdxify to be installed in the current Python environment.  Run via::
 
@@ -15,8 +15,7 @@ Pipeline:
   4) Update frontmatter (title/sidebarTitle/description) from H1 + first paragraph
   5) Remove truly-empty MDX files
   6) Move generated docs to <docs-root>/api (replace existing)
-  7) Build Mintlify API Reference nav (NO .mdx suffix)
-  8) Merge by replacing ONLY: { "tab": "API Reference", ... } in docs.json
+  7) Build API Reference nav tree (docs.json merge skipped in Docusaurus mode)
 """
 
 import argparse
@@ -583,14 +582,14 @@ def build_tree_from_paths(paths: list[str]) -> dict[str, Any]:
     return root
 
 
-def tree_to_mintlify(node: dict[str, Any], group_name: str) -> dict[str, Any]:
+def tree_to_nav(node: dict[str, Any], group_name: str) -> dict[str, Any]:
     pages: list[Any] = []
     file_pages = node.get("__pages__", [])
     if file_pages:
         pages.extend(sorted(file_pages))
 
     for k in sorted(x for x in node.keys() if x != "__pages__"):
-        pages.append(tree_to_mintlify(node[k], k))
+        pages.append(tree_to_nav(node[k], k))
 
     return {"group": group_name, "pages": pages}
 
@@ -785,7 +784,7 @@ def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> dict[str, 
     mellea_pages = collect_pages_under(api_dir, "mellea", docs_root)
 
     mellea_tree = build_tree_from_paths(mellea_pages)
-    mellea_nav = tree_to_mintlify(mellea_tree, "mellea")
+    mellea_nav = tree_to_nav(mellea_tree, "mellea")
 
     return {
         "tab": NAV_TAB,
@@ -852,15 +851,17 @@ def build_and_merge_navigation(
 # -----------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate MDX API docs with mdxify, postprocess, and merge into the Mintlify docs tree."
+        description="Generate MDX API docs with mdxify, postprocess, and merge into the Docusaurus docs tree."
     )
     parser.add_argument(
-        "--docs-json", required=False, help="Path to docs.json to update."
+        "--docs-json",
+        required=False,
+        help="Path to docs.json to update (legacy; ignored in Docusaurus mode).",
     )
     parser.add_argument(
         "--docs-root",
         required=False,
-        help="Mintlify docs root (defaults to parent of docs.json).",
+        help="Docs root directory (defaults to parent of docs.json).",
     )
     parser.add_argument(
         "--nav-only",

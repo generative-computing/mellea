@@ -850,7 +850,7 @@ def process_mdx_file(
     text = inject_preamble(text, module_path, docstring_cache)
     text = normalize_rst_backticks(text)
 
-    # Step 3: SidebarFix injection disabled (Mintlify-only; site now uses Docusaurus)
+    # Step 3: SidebarFix injection disabled (was Mintlify-only; no-op on Docusaurus)
 
     # Step 3.5: Wrap bare doctest (>>>) blocks in fenced code blocks.
     # Must run before escape_mdx_syntax so the new fences are processed.
@@ -875,7 +875,7 @@ def process_mdx_file(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Decorate API MDX files")
     parser.add_argument(
-        "--docs-root", type=Path, default=None, help="Mintlify docs root directory"
+        "--docs-root", type=Path, default=None, help="Docs root directory"
     )
     parser.add_argument(
         "--api-dir", type=Path, default=None, help="API directory containing MDX files"
