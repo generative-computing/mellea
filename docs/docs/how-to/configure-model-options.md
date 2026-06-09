@@ -115,7 +115,7 @@ non-deterministic session.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `ModelOption.TEMPERATURE` | `float` | backend default | Sampling temperature. |
-| `ModelOption.MAX_NEW_TOKENS` | `int` | backend default | Maximum tokens to generate. |
+| `ModelOption.MAX_NEW_TOKENS` | `int` | backend default ⚠️ | Maximum tokens to generate. Backend defaults vary widely — set this explicitly in production code. |
 | `ModelOption.SEED` | `int` | `None` | Random seed for reproducible output. |
 | `ModelOption.SYSTEM_PROMPT` | `str` | `None` | System prompt prepended to every call on the session. |
 | `ModelOption.STREAM` | `bool` | `False` | Enable streaming output. |
@@ -128,6 +128,20 @@ non-deterministic session.
 
 Keys marked with a backend default are forwarded to the underlying API unchanged; the
 value the model sees depends on the backend's own defaults.
+
+> **Warning:** `MAX_NEW_TOKENS` backend defaults vary widely and some are very low — for
+> example vLLM defaults to 16 tokens, which will silently truncate most real responses.
+> Always set `ModelOption.MAX_NEW_TOKENS` explicitly in production code:
+>
+> ```python
+> m.instruct(
+>     "Summarise this document.",
+>     model_options={ModelOption.MAX_NEW_TOKENS: 1024},
+> )
+> ```
+>
+> A value of 512–2048 covers most chat and instruction use cases. For code generation
+> or long-form output, set a higher value to match your expected output length.
 
 ## Streaming timeout
 
