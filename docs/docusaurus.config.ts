@@ -43,7 +43,7 @@ const config: Config = {
               label: 'main (unreleased)',
               // path is added by the release pipeline (set-last-version.mjs) on
               // first final release, once a snapshot version exists as the default
-              banner: 'unreleased',
+              banner: 'none',
             },
           },
         } satisfies DocsOptions,
