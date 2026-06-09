@@ -17,7 +17,6 @@ should use ``MelleaTool`` objects directly.
 import os
 from typing import Any
 
-from cli.serve.models import ChatMessage
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.openai import OpenAIBackend
@@ -25,6 +24,7 @@ from mellea.backends.tools import MelleaTool
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
+from mellea.serve import ChatMessage
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession
 

@@ -16,8 +16,8 @@ it were a model.
 Your program must define a `serve()` function with this signature:
 
 ```python
-from cli.serve.models import ChatMessage
 from mellea.core import ModelOutputThunk, SamplingResult
+from mellea.serve import ChatMessage
 
 def serve(
     input: list[ChatMessage],
@@ -35,8 +35,8 @@ def serve(
 
 ```python
 import mellea
-from cli.serve.models import ChatMessage
 from mellea.core import ModelOutputThunk, Requirement, SamplingResult
+from mellea.serve import ChatMessage
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy

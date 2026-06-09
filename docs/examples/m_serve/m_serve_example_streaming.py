@@ -5,9 +5,9 @@
 from typing import Any
 
 import mellea
-from cli.serve.models import ChatMessage
 from mellea.backends.model_options import ModelOption
 from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
+from mellea.serve import ChatMessage
 from mellea.stdlib.context import SimpleContext
 
 session = mellea.start_session(ctx=SimpleContext())

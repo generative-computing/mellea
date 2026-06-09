@@ -18,9 +18,9 @@ Then test with:
 
 from typing import Any, cast
 
-from cli.serve.models import ChatMessage
 from mellea import start_session
 from mellea.core import ModelOutputThunk
+from mellea.serve import ChatMessage
 
 MODEL_ID = "granite3.2-vision"
 session = start_session(model_id=MODEL_ID)
