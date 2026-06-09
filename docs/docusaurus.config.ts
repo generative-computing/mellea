@@ -40,7 +40,7 @@ const config: Config = {
           lastVersion: 'current',
           versions: {
             current: {
-              label: 'main (unreleased)',
+              label: 'main',
               // path is added by the release pipeline (set-last-version.mjs) on
               // first final release, once a snapshot version exists as the default
               banner: 'none',
@@ -171,6 +171,10 @@ const config: Config = {
           label: 'API Reference',
         },
         {
+          type: 'docsVersionDropdown',
+          position: 'left',
+        },
+        {
           href: 'https://mellea.ai/blogs/',
           label: 'Blog',
           position: 'right',
@@ -178,10 +182,6 @@ const config: Config = {
         {
           href: 'https://github.com/generative-computing/mellea/discussions',
           label: 'Community',
-          position: 'right',
-        },
-        {
-          type: 'docsVersionDropdown',
           position: 'right',
         },
         {
