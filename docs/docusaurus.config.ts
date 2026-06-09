@@ -32,8 +32,7 @@ const config: Config = {
           path: 'docs',
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
-          showLastUpdateAuthor: true,
-          showLastUpdateTime: true,
+
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
           includeCurrentVersion: true,
           // set-last-version.mjs matches these lines with exact regexes — do not reformat
