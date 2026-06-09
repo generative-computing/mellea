@@ -96,8 +96,8 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
 
 Docusaurus versioning is integrated into the release pipeline:
 
-- **Pre-release / dev builds:** the site shows `main (unreleased)` as the
-  only version — there are no snapshots yet.
+- **Pre-release / dev builds:** the site shows `main` as the only version
+  — there are no snapshots yet.
 - **On each final release** (`publish-release.yml` with `bump_type: final`
   or `patch-final`): the `snapshot-docs` job runs
   `docusaurus docs:version X.Y.Z`, commits `versioned_docs/version-X.Y.Z/`
@@ -105,12 +105,12 @@ Docusaurus versioning is integrated into the release pipeline:
   `workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow
   run, so the dispatch is explicit rather than relying on a path filter.)
 - **Version dropdown** in the navbar lets users switch between released
-  versions and `main (unreleased)`.
+  versions and `main`.
 
 No manual bootstrap is needed — the first final release run triggers
 `snapshot-docs` automatically, which creates the initial snapshot and
 updates `lastVersion`. Until the first final release, the site shows only
-`main (unreleased)` in the version dropdown, which is correct.
+`main` in the version dropdown, which is correct.
 
 ## Local development
 
@@ -165,6 +165,18 @@ To preview the deployed site from a non-main branch:
 > PRs from forks build and validate successfully, but the deploy will fail
 > with a permission error. Push the branch to the upstream repo and use
 > manual dispatch instead.
+
+### Previewing from your own fork
+
+To get a live preview site from your fork (useful for reviewing visual changes before submitting a PR):
+
+1. **Enable GitHub Pages** on your fork: Settings → Pages → Source: `gh-pages` branch, root `/`.
+   - GitHub requires a branch to exist before Pages can be enabled. If `gh-pages` doesn't exist yet, push any content to a temporary `docs/staging` branch, enable Pages pointing at it, then switch to `gh-pages` once the first deployment creates it.
+2. **Push your branch** to your fork (`git push origin my-branch`).
+3. The `docs-publish.yml` workflow runs automatically — it builds the site with `baseUrl: /mellea/` (fork-aware) and deploys to `gh-pages` on your fork.
+4. Your preview is live at `https://<your-username>.github.io/mellea/`.
+
+> The fork `baseUrl` (`/mellea/`) differs from upstream (`/`). Internal links and assets will resolve correctly on the fork preview, but absolute URLs pointing to `docs.mellea.ai` will still go to the production site.
 
 ## File reference
 
