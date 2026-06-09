@@ -170,13 +170,9 @@ To preview the deployed site from a non-main branch:
 
 To get a live preview site from your fork (useful for reviewing visual changes before submitting a PR):
 
-1. **Enable GitHub Pages** on your fork: Settings → Pages → Source: `gh-pages` branch, root `/`.
-   - GitHub requires a branch to exist before Pages can be enabled. If `gh-pages` doesn't exist yet, push any content to a temporary `docs/staging` branch, enable Pages pointing at it, then switch to `gh-pages` once the first deployment creates it.
-2. **Push your branch** to your fork (`git push origin my-branch`).
-3. The `docs-publish.yml` workflow runs automatically — it builds the site with `baseUrl: /mellea/` (fork-aware) and deploys to `gh-pages` on your fork.
-4. Your preview is live at `https://<your-username>.github.io/mellea/`.
-
-> The fork `baseUrl` (`/mellea/`) differs from upstream (`/`). Internal links and assets will resolve correctly on the fork preview, but absolute URLs pointing to `docs.mellea.ai` will still go to the production site.
+1. **Push your branch** to your fork. The `docs-publish.yml` workflow runs automatically and deploys to the `gh-pages` branch on your fork, creating it if it doesn't exist.
+2. **Enable GitHub Pages** on your fork: Settings → Pages → Source: `gh-pages` branch, root `/`.
+3. Your preview is live at `https://<your-username>.github.io/mellea/`.
 
 ## File reference
 
