@@ -204,7 +204,7 @@ def test_alora_training_integration():
         from transformers import AutoModelForCausalLM
 
         base_model = AutoModelForCausalLM.from_pretrained(
-            "ibm-granite/granite-4.1-3b", device_map="auto", torch_dtype=torch.bfloat16
+            "ibm-granite/granite-4.1-3b", device_map="auto", dtype=torch.bfloat16
         )
 
         # Load the trained adapter
