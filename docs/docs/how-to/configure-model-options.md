@@ -110,6 +110,50 @@ result3 = m.instruct("Write a short poem.")
 This is useful when you need deterministic output for a batch of calls within a larger,
 non-deterministic session.
 
+## Reference: all ModelOption keys
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ModelOption.TEMPERATURE` | `float` | backend default | Sampling temperature. |
+| `ModelOption.MAX_NEW_TOKENS` | `int` | backend default | Maximum tokens to generate. |
+| `ModelOption.SEED` | `int` | `None` | Random seed for reproducible output. |
+| `ModelOption.SYSTEM_PROMPT` | `str` | `None` | System prompt prepended to every call on the session. |
+| `ModelOption.STREAM` | `bool` | `False` | Enable streaming output. |
+| `ModelOption.STREAM_TIMEOUT` | `float \| None` | `60.0` | Inter-chunk timeout in seconds for streaming responses. If no chunk arrives within this window the stream aborts with a `TimeoutError`. Set to `None` to disable. |
+| `ModelOption.STOP_SEQUENCES` | `list[str]` | `None` | Strings that halt generation when produced by the model. |
+| `ModelOption.THINKING` | varies | `None` | Enable or configure reasoning/thinking mode (model-dependent). |
+| `ModelOption.CONTEXT_WINDOW` | `int` | backend default | Context window size override. |
+| `ModelOption.TOOLS` | `list[MelleaTool]` | `None` | Tools exposed to the model for tool calling. |
+| `ModelOption.TOOL_CHOICE` | `str` | `"auto"` | Tool selection strategy (`"none"`, `"auto"`, or a specific tool name). |
+
+Keys marked with a backend default are forwarded to the underlying API unchanged; the
+value the model sees depends on the backend's own defaults.
+
+## Streaming timeout
+
+By default Mellea waits up to 60 seconds for each individual chunk from a streaming
+response. If the backend stops sending without closing the connection — for example
+when a local Ollama server is overloaded — the stream aborts with a `TimeoutError`
+rather than hanging indefinitely.
+
+Adjust the timeout per call or for the whole session:
+
+```python
+from mellea.backends import ModelOption
+
+# Tighter bound for a known-fast remote endpoint
+mot = await m.ainstruct(
+    "Summarise this document.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 10},
+)
+
+# Disable entirely for a slow local model where chunks may be far apart
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: None},
+)
+```
+
 ## System prompts
 
 Set a system prompt with `ModelOption.SYSTEM_PROMPT`. At session level it applies to all
