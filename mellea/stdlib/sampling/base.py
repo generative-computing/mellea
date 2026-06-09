@@ -225,13 +225,13 @@ class BaseSamplingStrategy(SamplingStrategy):
             SamplingResult[S]: A result object indicating the success or failure of the sampling process.
 
         Raises:
-            AssertionError: If `select_from_failure` returns an index outside
-                the generated samples, or if the selected result has no
-                generation log to mark as final.
+            AssertionError: If `select_from_failure` returns an out-of-range index
+                into `sample_generations`, or if the selected result's
+                `_generate_log` is `None`.
             ValueError: If a `SAMPLING_LOOP_START` hook returns a non-positive `loop_budget`.
-            Exception: Re-raised from a concurrent subsample if all subsamples
-                fail without producing a result, for example due to a backend
-                error.
+            Exception: If all subsamples raise without producing a result,
+                the first non-cancellation exception is re-raised (e.g. a
+                backend error).
         """
         validation_ctx = validation_ctx if validation_ctx is not None else context
 
