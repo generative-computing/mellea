@@ -130,7 +130,7 @@ def download_mtrag_embeddings(
 
     part_num = 1
     repo_root = "https://github.com/frreiss/mt-rag-embeddings"
-    _MAX_PARTS = 1000  # sanity guard against a malformed or unexpectedly large dataset
+    _MAX_PARTS = 50  # the largest corpus currently has 20 parts; 50 gives headroom
     while part_num <= _MAX_PARTS:
         # Download part_001.parquet, part_002.parquet, etc. until a download fails.
         parquet_file_name = f"part_{part_num:03d}.parquet"
@@ -149,7 +149,8 @@ def download_mtrag_embeddings(
             raise  # 429/5xx propagate rather than silently truncating
     else:
         raise RuntimeError(
-            f"Corpus download exceeded {_MAX_PARTS} parts — possible dataset corruption."
+            f"Corpus download exceeded {_MAX_PARTS} parts — the dataset may have grown "
+            "beyond what this guard expects. Raise _MAX_PARTS if the corpus is legitimately larger."
         )
 
     if part_num == 1:
