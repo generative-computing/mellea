@@ -104,7 +104,12 @@ def _get_token_usage(payload) -> str:
 
 @hook(HookType.GENERATION_PRE_CALL)
 async def log_generation_pre_call(payload, ctx):
-    """Log request details before calling the LLM."""
+    """Log request details before calling the LLM.
+
+    Args:
+        payload: GenerationPreCallPayload containing backend, action, generation_id.
+        ctx: Plugin context for hook execution.
+    """
     model = getattr(payload, "backend", None)
     model_id = model.model_id if model else "unknown"
     gen_id = payload.generation_id or "no-id"
@@ -148,7 +153,12 @@ async def log_generation_pre_call(payload, ctx):
 
 @hook(HookType.GENERATION_POST_CALL)
 async def log_generation_post_call(payload, ctx):
-    """Log response details after LLM returns."""
+    """Log response details after LLM returns.
+
+    Args:
+        payload: GenerationPostCallPayload containing model_output, generation_id, latency_ms.
+        ctx: Plugin context for hook execution.
+    """
     model_output = getattr(payload, "model_output", None)
     model_id = "unknown"
     if model_output:

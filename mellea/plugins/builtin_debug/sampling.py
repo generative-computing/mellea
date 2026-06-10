@@ -36,7 +36,12 @@ logger = logging.getLogger(__name__)
 
 @hook(HookType.SAMPLING_LOOP_START)
 async def log_sampling_loop_start(payload, ctx):
-    """Log sampling strategy initialization."""
+    """Log sampling strategy initialization with budget and requirement count.
+
+    Args:
+        payload: SamplingLoopStartPayload with strategy_name, loop_budget, requirements.
+        ctx: Plugin context for hook execution.
+    """
     strategy = payload.strategy_name
     budget = payload.loop_budget
     num_reqs = len(payload.requirements)
@@ -54,7 +59,12 @@ async def log_sampling_loop_start(payload, ctx):
 
 @hook(HookType.SAMPLING_ITERATION)
 async def log_sampling_iteration(payload, ctx):
-    """Log validation results for each sampling attempt."""
+    """Log validation results for each sampling attempt.
+
+    Args:
+        payload: SamplingIterationPayload with iteration, valid_count, validation_results.
+        ctx: Plugin context for hook execution.
+    """
     iteration = payload.iteration
     passed = payload.valid_count
     total = payload.total_count
@@ -85,7 +95,12 @@ async def log_sampling_iteration(payload, ctx):
 
 @hook(HookType.SAMPLING_REPAIR)
 async def log_sampling_repair(payload, ctx):
-    """Log when repair is triggered (RepairTemplateStrategy only)."""
+    """Log when repair is triggered during sampling iterations.
+
+    Args:
+        payload: SamplingRepairPayload with repair_iteration, repair_type, failed_validations.
+        ctx: Plugin context for hook execution.
+    """
     iteration = payload.repair_iteration
     repair_type = payload.repair_type
 
@@ -101,7 +116,12 @@ async def log_sampling_repair(payload, ctx):
 
 @hook(HookType.SAMPLING_LOOP_END)
 async def log_sampling_loop_end(payload, ctx):
-    """Log sampling completion and overall results."""
+    """Log sampling completion with success status and attempt statistics.
+
+    Args:
+        payload: SamplingLoopEndPayload with success, iterations_used, all_results, all_validations.
+        ctx: Plugin context for hook execution.
+    """
     strategy = payload.strategy_name
     iterations = payload.iterations_used
     success = payload.success

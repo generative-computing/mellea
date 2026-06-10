@@ -32,7 +32,12 @@ logger = logging.getLogger(__name__)
 
 @hook(HookType.VALIDATION_PRE_CHECK)
 async def log_validation_pre_check(payload, ctx):
-    """Log validation setup before requirements are checked."""
+    """Log validation setup before requirements are checked.
+
+    Args:
+        payload: ValidationPreCheckPayload containing requirements and target.
+        ctx: Plugin context for hook execution.
+    """
     num_reqs = len(payload.requirements)
     target_type = type(payload.target).__name__ if payload.target else "None"
 
@@ -50,7 +55,12 @@ async def log_validation_pre_check(payload, ctx):
 
 @hook(HookType.VALIDATION_POST_CHECK)
 async def log_validation_post_check(payload, ctx):
-    """Log validation results after requirements are checked."""
+    """Log validation results after requirements are checked.
+
+    Args:
+        payload: ValidationPostCheckPayload with passed_count, failed_count, results.
+        ctx: Plugin context for hook execution.
+    """
     passed = payload.passed_count
     failed = payload.failed_count
     total = len(payload.requirements)
