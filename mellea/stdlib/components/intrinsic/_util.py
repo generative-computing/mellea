@@ -100,7 +100,8 @@ def call_intrinsic(
 ):
     """Shared code for invoking intrinsics.
 
-    :returns: Result of the call in JSON format.
+    Returns:
+        dict: Result of the call as a parsed JSON object.
     """
     # Adapter needs to be present in the backend before it can be invoked.
     # We must create the Adapter object in order to determine whether we need to create

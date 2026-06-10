@@ -75,9 +75,13 @@ class TransformationRule(abc.ABC):
             )
 
     def _is_input_path(self, path: tuple) -> bool:
-        """:param path: JSON path as returned by :func:`scalar_paths()`
+        """Check whether this rule should be applied to the given path.
 
-        :returns: True if this rule should be applied to the indicated path.
+        Args:
+            path (tuple): JSON path as returned by `all_paths()`.
+
+        Returns:
+            bool: `True` if this rule should be applied to the indicated path.
         """
         if len(path) != len(self.input_path_expr):
             return False
@@ -90,10 +94,13 @@ class TransformationRule(abc.ABC):
     def _matching_paths(self, parsed_json: Any) -> list[tuple]:
         """Get paths that match this rule's input path spec.
 
-        :param parsed_json: Output of running model results through
-            :func:`json.loads()`, plus applying zero or more transformation rules.
-        :returns: List of paths within `parsed_json` that match this rule's input
-            path spec.
+        Args:
+            parsed_json (Any): Output of running model results through `json.loads()`,
+                plus applying zero or more transformation rules.
+
+        Returns:
+            list[tuple]: Paths within `parsed_json` that match this rule's input
+                path spec.
         """
         return [p for p in json_util.all_paths(parsed_json) if self._is_input_path(p)]
 
@@ -123,7 +130,8 @@ class TransformationRule(abc.ABC):
         Subclasses may override this method to prepare data structures that should be
         computed once per output.
 
-        :returns: Dict that will be passed to all calls to :func:`self._transform()`
+        Returns:
+            dict: Data to pass to all subsequent calls to `_transform()`.
         """
         return {}
 
@@ -173,14 +181,15 @@ class TransformationRule(abc.ABC):
         Subclasses should override this method to implement their transformation
          at a single location within the target JSON document.
 
-        :param result: Parsed JSON representation of the transformed output at the
-            current stage of transformation.  A copy of the original.
-        :param path: Current path to transform locally
-        :param prepare_output: Dictionary of global data that this object's
-            :func:`self._prepare()` method has set aside
+        Args:
+            result (Any): Parsed JSON representation of the transformed output at the
+                current stage of transformation. A copy of the original.
+            path (tuple): Current path to transform locally.
+            prepare_output (dict): Global data set aside by `_prepare()`.
 
-        :returns: A modified version of `result`, which may be modified in place or
-            a fresh copy.
+        Returns:
+            Any: A modified version of `result`, which may be modified in place or
+                a fresh copy.
         """
         raise NotImplementedError()
 
@@ -205,12 +214,14 @@ class InPlaceTransformation(TransformationRule):
         Subclasses should override this method to transform a single scalar value
         from a larger JSON expression.
 
-        :param value: Original value pulled out of the JSON expression, with position
-            information attached to any embedded scalars.
-        :param path: Location in the input JSON where the value was found
-        :param prepare_output: Results from calling :func:`self._prepare()`
+        Args:
+            value (Any): Original value pulled out of the JSON expression, with
+                position information attached to any embedded scalars.
+            path (tuple): Location in the input JSON where the value was found.
+            prepare_output (dict): Results from calling `_prepare()`.
 
-        :returns: New value for the indicated element of the JSON expression.
+        Returns:
+            Any: New value for the indicated element of the JSON expression.
         """
         raise NotImplementedError()
 
@@ -225,14 +236,15 @@ class AddFieldsTransformation(TransformationRule):
     def _apply_at_path(self, result: Any, path: tuple, prepare_output: dict) -> Any:
         """Subclasses should modify this.
 
-        :param result: Parsed JSON representation of the transformed output at the
-            current stage of transformation.  A copy of the original.
-        :param path: Current path to transform locally
-        :param prepare_output: Dictionary of global data that this object's
-            :func:`self._prepare()` method has set aside
+        Args:
+            result (Any): Parsed JSON representation of the transformed output at the
+                current stage of transformation. A copy of the original.
+            path (tuple): Current path to transform locally.
+            prepare_output (dict): Global data set aside by `_prepare()`.
 
-        :returns: A modified version of `result`, which may be modified in place or
-            a fresh copy.
+        Returns:
+            Any: A modified version of `result`, which may be modified in place or
+                a fresh copy.
         """
         if len(path) == 0:
             raise ValueError(
@@ -262,12 +274,14 @@ class AddFieldsTransformation(TransformationRule):
         Subclasses should override this method to transform a single scalar value
         from a larger JSON expression.
 
-        :param value: Original value pulled out of the JSON expression, with position
-            information attached to any embedded scalars.
-        :param path: Location in the input JSON where the value was found
-        :param prepare_output: Results from calling :func:`self._prepare()`
+        Args:
+            value (Any): Original value pulled out of the JSON expression, with
+                position information attached to any embedded scalars.
+            path (tuple): Location in the input JSON where the value was found.
+            prepare_output (dict): Results from calling `_prepare()`.
 
-        :returns: Mapping from name of added field to value.
+        Returns:
+            dict: Mapping from name of added field to value.
         """
         raise NotImplementedError()
 
@@ -425,14 +439,16 @@ def _desplit_sentences(
     Subroutine of :class:`DecodeSentences` rule. Undoes the sentence splitting
     that we sometimes do during input processing.
 
-    :param target_text: Text that has been split into sentences by inserting sentence
-        boundary markers.
-    :param tag: String such as that appears in every sentence boundary marker, e.g.
-        "i" => "<i123>"
-    :param first_sentence_num: Number we expect to see in the first sentence boundary
-        marker in `target_text`.
+    Args:
+        target_text (str): Text that has been split into sentences by inserting
+            sentence boundary markers.
+        tag (str): String that appears in every sentence boundary marker, e.g.
+            `"i"` produces `"<i123>"`.
+        first_sentence_num (int): Number expected in the first sentence boundary
+            marker in `target_text`.
 
-    :returns: Self-describing dictionary of lists.
+    Returns:
+        dict: Dictionary with keys `"begins"`, `"ends"`, and `"texts"` (lists).
     """
     begins = []
     ends = []
@@ -485,11 +501,12 @@ class DecodeSentences(AddFieldsTransformation):
         config (dict): Configuration of the parent output processor, as parsed YAML.
         input_path_expr (list[str | int | None]): Path expression matching all
             instances of the field that this rule transforms.
-        source (str): Name of the location to look for sentences; must be
-            `"last_message"` or `"documents"`.
-        output_names (dict): Mapping from output role name (`"begin"`,
-            `"end"`, `"text"`, `"document_id"`) to the name of the new
-            field to add in the result JSON.
+        source (str | list[str]): Name (or list of names) of the location(s) to look
+            for sentences; each name can be `"last_message"`, `"documents"`, or
+            `"all_but_last_message"`.
+        output_names (dict): Mapping from output role name (`"begin"`, `"end"`,
+            `"text"`, `"document_id"`) to the name of the new field to add in the
+            result JSON.
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
@@ -519,11 +536,6 @@ class DecodeSentences(AddFieldsTransformation):
         output_names: dict,
     ):
         """Initialize DecodeSentences with a source location and output field name mapping.
-
-        :param source: Name (or list of names) of the location(s) to look for
-            sentences; each name can be "last_message", "documents", or
-            "all_but_last_message".
-        :param output_names: Names of new result fields to add
 
         Raises:
             ValueError: If `source` is not one of the allowed values, or if
@@ -739,12 +751,7 @@ class Explode(InPlaceTransformation):
     YAML_NAME = "explode"
 
     def __init__(self, config, input_path_expr, /, target_field):
-        """Initialize Explode transformation rule.
-
-        :param config: Parsed YAML config for IO processing
-        :param input_path_expr: Path expression for the list of records to explode
-        :param target: Name of list-valued field within each record.
-        """
+        """Initialize Explode transformation rule."""
         super().__init__(config, input_path_expr)
         self.target_field = target_field
 
@@ -807,13 +814,7 @@ class DropDuplicates(InPlaceTransformation):
     YAML_NAME = "drop_duplicates"
 
     def __init__(self, config, input_path_expr, /, target_fields):
-        """Initialize DropDuplicates transformation rule.
-
-        :param config: Parsed YAML config for IO processing
-        :param input_path_expr: Path expression for the list of records to explode
-        :param target_fields: Names of fields to use for determining whether two records
-            are duplicates.
-        """
+        """Initialize DropDuplicates transformation rule."""
         super().__init__(config, input_path_expr)
         self.target_fields = target_fields
 
@@ -865,14 +866,7 @@ class Project(InPlaceTransformation):
     YAML_NAME = "project"
 
     def __init__(self, config, input_path_expr, /, retained_fields):
-        """Initialize Project transformation rule.
-
-        :param config: Parsed YAML config for IO processing
-        :param input_path_expr: Path expression for the list of records to explode
-        :param retained_fields: Names of fields that remain after the projection. Can
-            be either a list of fields or a mapping from retained field to new name of
-            retained field.
-        """
+        """Initialize Project transformation rule."""
         super().__init__(config, input_path_expr)
 
         if not isinstance(retained_fields, list | dict):
@@ -915,13 +909,7 @@ class Nest(InPlaceTransformation):
     YAML_NAME = "nest"
 
     def __init__(self, config, input_path_expr, /, field_name):
-        """Initialize Nest transformation rule.
-
-        :param config: Parsed YAML config for IO processing
-        :param input_path_expr: Path expression for the values to nest
-        :param field_name: name of the single field in the JSON object that this rule
-            will wrap around each matching value.
-        """
+        """Initialize Nest transformation rule."""
         super().__init__(config, input_path_expr)
         self._type_check("field_name", field_name, str)
         self.field_name = field_name
@@ -1122,7 +1110,8 @@ def _find_final_channel_header(token_strings: list[str]) -> int | None:
     `<|channel|>` is never confused with regular tokens that happen to
     concatenate to the same string (e.g. `['<|', 'channel', '|>']`).
 
-    :returns: Index of the `<|message|>` token, or `None`.
+    Returns:
+        int | None: Index of the `<|message|>` token, or `None`.
     """
     last_match = None
     i = 0
@@ -1152,21 +1141,24 @@ def _logprobs_workaround(
 ) -> tuple[str, ChatCompletionLogProbs] | None:
     """Extract content and aligned logprobs from the final Harmony channel.
 
-    Models using the `OpenAI Harmony response format
-    <https://developers.openai.com/cookbook/articles/openai-harmony>`_ wrap
-    output in channel tokens.  The final channel contains the user-facing
-    payload::
+    Models using the [OpenAI Harmony response format](https://developers.openai.com/cookbook/articles/openai-harmony) wrap output in channel tokens.
+    The final channel contains the user-facing payload:
 
-        <|channel|> final <|message|> {payload} <|end|>
+    ```
+    <|channel|> final <|message|> {payload} <|end|>
+    ```
 
     This function walks the logprob token sequence, matching individual
     tokens (not concatenated strings) to locate the final channel header.
     This ensures that the single special token `<|channel|>` is never
     confused with regular tokens that concatenate to the same string.
 
-    :param logprobs: Logprobs from a chat completion choice.
-    :returns: `(content, trimmed_logprobs)` or `None` if no final channel
-        is found.
+    Args:
+        logprobs (ChatCompletionLogProbs): Logprobs from a chat completion choice.
+
+    Returns:
+        tuple[str, ChatCompletionLogProbs] | None: `(content, trimmed_logprobs)`,
+            or `None` if no final channel is found.
     """
     if logprobs.content is None:
         return None

@@ -63,28 +63,24 @@ def find_context_attributions(
     documents that were most important to the LLM in generating each sentence in the
     assistant response.
 
-    :param response: Assistant response. When `None`, the response is extracted
-        from the last assistant output in `context`.
-    :param documents: Documents that were used to generate `response`. Each element
-        may be a `Document` or a plain string. Strings are wrapped in `Document`
-        with an auto-generated `doc_id` (`"0"`, `"1"`, ...); for explicit
-        control, pass `Document` objects with `doc_id` set. `Document` objects
-        without `doc_id` trigger a warning because the intrinsic uses `doc_id` to
-        identify attribution sources.
-    :param context: Context of the dialog between user and assistant, ending with a
-        user query
-    :param backend: Backend that supports intrinsic adapters
+    Args:
+        response (str | None): Assistant response. When `None`, extracted from the
+            last assistant output in `context`.
+        documents: Documents used to generate `response`. Each element may be a
+            `Document` or a plain string. Strings are wrapped in `Document` with an
+            auto-generated `doc_id` (`"0"`, `"1"`, ...); for explicit control, pass
+            `Document` objects with `doc_id` set. `Document` objects without `doc_id`
+            trigger a warning because the intrinsic uses `doc_id` to identify sources.
+        context (ChatContext): Dialog context between user and assistant, ending with
+            a user query.
+        backend (AdapterMixin): Backend that supports intrinsic adapters.
 
-    :return: List of records with the following fields:
-        * `response_begin`
-        * `response_end`
-        * `response_text`
-        * `attribution_doc_id`
-        * `attribution_msg_index`
-        * `attribution_begin`
-        * `attribution_end`
-        * `attribution_text`
-    Begin and end offsets are character offsets into their respective UTF-8 strings.
+    Returns:
+        list[dict]: Records with fields `response_begin`, `response_end`,
+            `response_text`, `attribution_doc_id`, `attribution_msg_index`,
+            `attribution_begin`, `attribution_end`, and `attribution_text`.
+            Begin and end offsets are character offsets into their respective
+            UTF-8 strings.
     """
     response, context = _resolve_response(response, context)
     result_json = call_intrinsic(

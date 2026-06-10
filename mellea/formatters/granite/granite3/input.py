@@ -22,9 +22,10 @@ class Granite3InputProcessor(InputProcessor):
     def _make_system_message_start():
         """Return string that comes at the beginning of the system message.
 
-        :returns: String that comes at the beginning of the system message that a
-        Granite 3 model must receive at the beginning of the prompt for any completion
-        request that does not provide a custom system message.
+        Returns:
+            str: String that comes at the beginning of the system message that a
+            Granite 3 model must receive at the beginning of the prompt for any
+            completion request that does not provide a custom system message.
 
         Note that the original Jinja template tends to choose weird dates from the
         future for the "Today's date" part. Instead of replicating that behavior, we
@@ -43,7 +44,8 @@ You are Granite, developed by IBM."""
     ) -> tuple[SystemMessage | None, list]:
         """Separate the system message from other messages.
 
-        :returns: Tuple of system message, if present, and remaining messages.
+        Returns:
+            tuple: System message (if present) and remaining messages.
         """
         messages = chat_completion.messages
 
@@ -85,8 +87,8 @@ You are Granite, developed by IBM."""
         undocumented arbitrary JSON data regarding output controls that the Jinja
         template expected to see in the input for each chat completion request.
 
-        :returns: A fake JSON record for "controls", or nothing if no output control
-        flags were set.
+        Returns:
+            dict | None: Controls record, or `None` if no output control flags were set.
         """
         kwargs = chat_completion._chat_template_kwargs()
         if not kwargs or not hasattr(kwargs, "controls") or not kwargs.controls:
@@ -118,13 +120,17 @@ You are Granite, developed by IBM."""
     ) -> Granite3ChatCompletion:
         """Sanitize a chat completion request by removing special tokens.
 
-        :chat_completion: Chat completion request with unsanitized inputs.
-        :remove_special_tokens: Function that removes special tokens from the
-            text string. Passed in subclass.
-        :parts: The parts of the chat completion request to sanitize. Accepted
-            values are "messages", "tools", "documents", and "all", which can be
-            given individually or as part of a list. Defaults to "all".
-        :returns: A new chat completion request with sanitized inputs.
+        Args:
+            chat_completion (Granite3ChatCompletion): Chat completion request with
+                unsanitized inputs.
+            remove_special_tokens (Callable[[str], str]): Function that removes special
+                tokens from a text string. Supplied by the subclass.
+            parts (list[str] | str): Parts of the chat completion request to sanitize.
+                Accepted values are `"messages"`, `"tools"`, `"documents"`, and `"all"`,
+                individually or as a list. Defaults to `"all"`.
+
+        Returns:
+            Granite3ChatCompletion: New chat completion request with sanitized inputs.
         """
         # Make a copy of the chat completion object.
         chat_completion = Granite3ChatCompletion.model_validate(

@@ -1103,8 +1103,7 @@ def python_tool(
             a normal mellea installation).
         ValueError: If any entry in `packages` is empty or begins with `-`.
 
-    Example::
-
+    Example:
         from mellea.stdlib.tools import python_tool
 
         tool = python_tool(packages=["matplotlib", "numpy"])
@@ -1199,8 +1198,8 @@ def python_tool(
 def code_interpreter(code: str) -> ExecutionResult:
     """Execute Python code in a Docker sandbox (docker_unsafe tier).
 
-    .. deprecated::
-        Use :func:`python_tool` instead::
+    Deprecated:
+        Use `python_tool` instead:
 
             from mellea.stdlib.tools import python_tool
             result = python_tool(tier="docker_unsafe").run(code=code)
@@ -1224,8 +1223,8 @@ def code_interpreter(code: str) -> ExecutionResult:
 def local_code_interpreter(code: str) -> ExecutionResult:
     """Execute Python code in the current process environment (local_unsafe tier).
 
-    .. deprecated::
-        Use :func:`python_tool` instead::
+    Deprecated:
+        Use `python_tool` instead:
 
             from mellea.stdlib.tools import python_tool
             result = python_tool(tier="local_unsafe").run(code=code)
