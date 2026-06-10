@@ -412,23 +412,27 @@ def test_hooks() -> None:
     )
 
 
-def test_telemetry_metrics_plugins_register() -> None:
-    """mellea[telemetry] with MELLEA_METRICS_ENABLED=true: metrics plugins auto-register."""
+def test_telemetry_plugins_register() -> None:
+    """mellea[telemetry]: metrics and tracing plugins auto-register when their env vars are set."""
     script = (
         "import os\n"
         "os.environ['MELLEA_METRICS_ENABLED'] = 'true'\n"
+        "os.environ['MELLEA_TRACES_ENABLED'] = 'true'\n"
         "import mellea\n"
         "from mellea.plugins.manager import get_plugin_manager\n"
         "pm = get_plugin_manager()\n"
         "if pm is None:\n"
-        "    raise SystemExit('plugin manager is None')\n"
-        "if pm.plugin_count == 0:\n"
-        "    raise SystemExit('expected non-zero plugin_count, got 0')\n"
+        "    raise SystemExit('plugin manager not initialised')\n"
+        "names = {p.name for p in pm._registry.get_all_plugins()}\n"
+        "missing = [plugin for plugin in ('token_metrics', 'backend_tracing')\n"
+        "           if not any(n.startswith(plugin + '.') for n in names)]\n"
+        "if missing:\n"
+        "    raise SystemExit(f'plugins missing from registry: {missing}; registered: {sorted(names)}')\n"
     )
     _run_isolated_script(
         extra="telemetry",
         script=script,
-        error_prefix="Metrics plugin registration check failed",
+        error_prefix="Telemetry plugin registration check failed",
     )
 
 

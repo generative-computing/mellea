@@ -441,9 +441,7 @@ def _imported_submodules(init_path: Path) -> set[str] | None:
 _CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset(
     {
         # Granite intrinsics internal JSON parser — not part of the public API
-        "mellea/formatters/granite/intrinsics/json_util",
-        # Backend telemetry wiring — internal instrumentation helpers
-        "mellea/telemetry/backend_instrumentation",
+        "mellea/formatters/granite/intrinsics/json_util"
     }
 )
 

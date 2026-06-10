@@ -5,6 +5,8 @@ import datetime
 import functools
 import inspect
 import os
+import time
+import uuid
 from collections.abc import Coroutine, Sequence
 from typing import Any, overload
 
@@ -44,10 +46,6 @@ from ..helpers import (
 )
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
 from .adapters.adapter import (
     Adapter,
@@ -63,6 +61,7 @@ from .tools import (
     add_tools_from_model_options,
     convert_tools_to_json,
 )
+from .utils import populate_response_metadata_openai_shape
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
@@ -466,11 +465,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "The Openai backend only supports chat-like contexts."
         )
 
-        # Start span without auto-closing (will be closed in post_processing)
-        span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        )
-
         _model_id_str = str(getattr(self, "model_id", "unknown"))
         with with_context(request_id=generate_request_id(), model_id=_model_id_str):
             await self.do_generate_walk(action)
@@ -516,16 +510,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                         model_options=model_opts,
                         tool_calls=tool_calls,
                     )
-                    if span is not None:
-                        mot._meta["_telemetry_span"] = span
                     return mot, ctx.add(alora_action).add(mot)
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
                     action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
-                if span is not None:
-                    mot._meta["_telemetry_span"] = span
                 return mot, ctx.add(action).add(mot)
 
             result = await self.generate_from_chat_context(
@@ -536,11 +526,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 tool_calls=tool_calls,
             )
 
-        # Store span in ModelOutputThunk for later use in post_processing
-        mot, new_ctx = result
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
-        return mot, new_ctx
+        return result
 
     async def _generate_from_intrinsic(
         self,
@@ -1158,22 +1144,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         mot.generation.model = self._model_id
         mot.generation.provider = "openai"
 
-        # Record telemetry now that response is available
-        span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
-
-            if usage:
-                record_token_usage(span, usage)
-            record_response_metadata(span, response)
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up the span reference
-            del mot._meta["_telemetry_span"]
+        # Populate response-side metadata for telemetry
+        if isinstance(response, dict):
+            populate_response_metadata_openai_shape(mot, response)
 
     @overload
     async def generate_from_raw(
@@ -1246,34 +1219,77 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "The completion endpoint does not support tool calling at the moment."
             )
 
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
+
+        gen_id = str(uuid.uuid4())
+
+        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_PRE_CALL,
+                GenerationBatchPreCallPayload(
+                    actions=tuple(actions),
+                    generation_id=gen_id,
+                    format=format,
+                    tool_calls=tool_calls,
+                    num_actions=len(actions),
+                    model=self._model_id,
+                    provider="openai",
+                ),
+            )
+
         model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            try:
-                completion_response: Completion = (
-                    await self._async_client.completions.create(
+        _start = time.perf_counter()
+        try:
+            completion_response: Completion = (
+                await self._async_client.completions.create(
+                    model=self._model_id,
+                    prompt=prompts,
+                    extra_body=extra_body,
+                    **self._make_backend_specific_and_remove(
+                        model_opts, is_chat_context=False
+                    ),
+                )
+            )  # type: ignore
+        except Exception as e:
+            if (
+                isinstance(e, openai.BadRequestError)
+                and openai_ollama_batching_error in e.message
+            ):
+                MelleaLogger.get_logger().error(
+                    "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                    "your requests will fail since ollama doesn't support batching requests."
+                )
+            if has_plugins(HookType.GENERATION_BATCH_ERROR):
+                from ..plugins.hooks.generation import GenerationBatchErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_BATCH_ERROR,
+                    GenerationBatchErrorPayload(
+                        generation_id=gen_id,
+                        exception=e,
                         model=self._model_id,
-                        prompt=prompts,
-                        extra_body=extra_body,
-                        **self._make_backend_specific_and_remove(
-                            model_opts, is_chat_context=False
-                        ),
-                    )
-                )  # type: ignore
-            except openai.BadRequestError as e:
-                if openai_ollama_batching_error in e.message:
-                    MelleaLogger.get_logger().error(
-                        "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
-                        "your requests will fail since ollama doesn't support batching requests."
-                    )
-                raise e
+                        provider="openai",
+                        latency_ms=(time.perf_counter() - _start) * 1000,
+                    ),
+                )
+            raise
+
+        latency_ms = (time.perf_counter() - _start) * 1000
 
         # Necessary for type checker.
         assert isinstance(completion_response, Completion)
+
+        usage_dump = (
+            completion_response.usage.model_dump()
+            if completion_response.usage
+            else None
+        )
 
         results = []
         for response, action, prompt in zip(
@@ -1285,9 +1301,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output._model_options = model_opts
             output._meta = {
                 "oai_completion_response": response.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
+                "usage": usage_dump,
             }
 
             output.parsed_repr = (
@@ -1305,6 +1319,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output._generate_log = generate_log
 
             results.append(output)
+
+        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_POST_CALL,
+                GenerationBatchPostCallPayload(
+                    generation_id=gen_id,
+                    model_outputs=results,
+                    usage=usage_dump,
+                    model=self._model_id,
+                    provider="openai",
+                    latency_ms=latency_ms,
+                ),
+            )
 
         return results
 

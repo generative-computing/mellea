@@ -30,9 +30,11 @@ All telemetry is configured via environment variables:
 
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
-| `MELLEA_TRACE_APPLICATION` | Enable application-level tracing | `false` |
-| `MELLEA_TRACE_BACKEND` | Enable backend-level tracing | `false` |
-| `MELLEA_TRACE_CONSOLE` | Print traces to console (debugging) | `false` |
+| `MELLEA_TRACES_ENABLED` | Enable tracing (umbrella flag) | `false` |
+| `MELLEA_TRACES_OTLP` | Enable OTLP span exporter | `false` |
+| `MELLEA_TRACES_CONSOLE` | Print traces to console (debugging) | `false` |
+| `MELLEA_TRACES_CONTENT` | Capture prompt/response content on spans (may include PII) | `false` |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Trace-specific OTLP endpoint (overrides general) | none |
 
 ### Metrics variables
 
@@ -58,9 +60,8 @@ All telemetry is configured via environment variables:
 Enable tracing and metrics with console output to verify everything works:
 
 ```bash
-export MELLEA_TRACE_APPLICATION=true
-export MELLEA_TRACE_BACKEND=true
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 export MELLEA_METRICS_ENABLED=true
 export MELLEA_METRICS_CONSOLE=true
 python your_script.py
@@ -77,20 +78,15 @@ export OTEL_SERVICE_NAME=my-mellea-app
 ## Checking telemetry status programmatically
 
 ```python
-from mellea.telemetry import (
-    is_application_tracing_enabled,
-    is_backend_tracing_enabled,
-    is_metrics_enabled,
-)
+from mellea.telemetry import is_metrics_enabled, is_tracing_enabled
 
-print(f"Application tracing: {is_application_tracing_enabled()}")
-print(f"Backend tracing:     {is_backend_tracing_enabled()}")
-print(f"Metrics:             {is_metrics_enabled()}")
+print(f"Tracing: {is_tracing_enabled()}")
+print(f"Metrics: {is_metrics_enabled()}")
 ```
 
 ## Tracing
 
-Mellea has two independent trace scopes:
+Mellea has two trace scopes:
 
 - **`mellea.application`** — user-facing operations: session lifecycle,
   `@generative` calls, `instruct()` and `act()`, sampling strategies, and
@@ -99,16 +95,15 @@ Mellea has two independent trace scopes:
   [OpenTelemetry Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/).
   Records model calls, token usage, finish reasons, and API latency.
 
-Enable both for full observability, or pick one depending on what you need to
-debug. When both scopes are active, backend spans nest inside application spans:
+Enable tracing for full observability. Backend spans nest inside application spans:
 
 ```text
 session_context          (mellea.application)
 ├── aact                 (mellea.application)
-│   ├── chat             (mellea.backend) [gen_ai.system=ollama]
+│   ├── chat             (mellea.backend) [gen_ai.provider.name=ollama]
 │   └── requirement_validation  (mellea.application)
 └── aact                 (mellea.application)
-    └── chat             (mellea.backend) [gen_ai.system=openai]
+    └── chat             (mellea.backend) [gen_ai.provider.name=openai]
 ```
 
 See [Tracing](../observability/tracing) for span attributes,

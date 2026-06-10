@@ -12,6 +12,7 @@ import asyncio
 import functools
 import itertools
 import time
+import uuid
 from collections.abc import Sequence
 from typing import final, overload
 
@@ -70,6 +71,8 @@ class Backend(abc.ABC):
         Returns:
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
         """
+        generation_id = str(uuid.uuid4())
+
         # --- generation_pre_call hook ---
         if has_plugins(HookType.GENERATION_PRE_CALL):
             from ..plugins.hooks.generation import GenerationPreCallPayload
@@ -80,6 +83,7 @@ class Backend(abc.ABC):
                 format=format,
                 model_options=model_options or {},
                 tool_calls=tool_calls,
+                generation_id=generation_id,
             )
             _, pre_payload = await invoke_hook(
                 HookType.GENERATION_PRE_CALL, pre_payload, backend=self
@@ -88,13 +92,30 @@ class Backend(abc.ABC):
             format = pre_payload.format
             tool_calls = pre_payload.tool_calls
 
-        return await self._generate_from_context(
-            action,
-            ctx,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+        try:
+            mot, new_ctx = await self._generate_from_context(
+                action,
+                ctx,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+        except BaseException as e:
+            # No MOT to fire the per-MOT error hook in astream from; emit here.
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_ERROR,
+                    GenerationErrorPayload(
+                        exception=e, model_output=None, generation_id=generation_id
+                    ),
+                    backend=self,
+                )
+            raise
+        # Save the ID for the post_call / error hooks.
+        mot._generation_id = generation_id
+        return mot, new_ctx
 
     @abc.abstractmethod
     async def _generate_from_context(

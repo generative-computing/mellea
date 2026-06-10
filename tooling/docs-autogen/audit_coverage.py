@@ -27,9 +27,7 @@ except ImportError:
 
 # Modules that are confirmed internal but whose parent __init__.py imports nothing
 # (making the import-based check indeterminate).  Must stay in sync with generate-ast.py.
-_CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset(
-    {"json_util", "backend_instrumentation"}
-)
+_CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset({"json_util"})
 
 
 def _imported_submodule_names(init_path: Path) -> set[str] | None:

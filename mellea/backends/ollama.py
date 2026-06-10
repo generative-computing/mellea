@@ -3,6 +3,8 @@
 import asyncio
 import datetime
 import functools
+import time
+import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
 from typing import Any, overload
 
@@ -27,10 +29,6 @@ from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -321,9 +319,6 @@ class OllamaModelBackend(FormatterBackend):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes ``action`` and the new output.
         """
-        # Start span without auto-closing (will be closed in post_processing)
-        span = start_generate_span(self, action, ctx, format, tool_calls)
-
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
@@ -337,10 +332,6 @@ class OllamaModelBackend(FormatterBackend):
                 model_options=model_options,
                 tool_calls=tool_calls,
             )
-
-        # Store span for telemetry recording and closing in post_processing
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
 
         return mot, ctx.add(action).add(mot)
 
@@ -557,28 +548,67 @@ class OllamaModelBackend(FormatterBackend):
         # Ollama doesn't support "batching". There's some ability for concurrency. Use that here.
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
 
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            # Run async so that we can make use of Ollama's concurrency.
-            coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
-            for prompt in prompts:
-                co = self._async_client.generate(
-                    model=self._get_ollama_model_id(),
-                    prompt=prompt,
-                    raw=True,
-                    think=model_opts.get(ModelOption.THINKING, None),
-                    format=format.model_json_schema() if format is not None else None,  # type: ignore
-                    options=self._make_backend_specific_and_remove(model_opts),
-                )
-                coroutines.append(co)
+        from ..plugins.manager import has_plugins, invoke_hook
+        from ..plugins.types import HookType
 
+        gen_id = str(uuid.uuid4())
+        ollama_model_id = str(self._get_ollama_model_id())
+
+        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_PRE_CALL,
+                GenerationBatchPreCallPayload(
+                    actions=tuple(actions),
+                    generation_id=gen_id,
+                    format=format,
+                    tool_calls=tool_calls,
+                    num_actions=len(actions),
+                    model=ollama_model_id,
+                    provider="ollama",
+                ),
+            )
+
+        # Run async so that we can make use of Ollama's concurrency.
+        coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
+        for prompt in prompts:
+            co = self._async_client.generate(
+                model=self._get_ollama_model_id(),
+                prompt=prompt,
+                raw=True,
+                think=model_opts.get(ModelOption.THINKING, None),
+                format=format.model_json_schema() if format is not None else None,  # type: ignore
+                options=self._make_backend_specific_and_remove(model_opts),
+            )
+            coroutines.append(co)
+
+        _start = time.perf_counter()
+        try:
             # All-or-nothing: first failure raises; remaining in-flight requests
             # complete but their results are discarded.
             responses = await asyncio.gather(*coroutines)
+        except Exception as e:
+            if has_plugins(HookType.GENERATION_BATCH_ERROR):
+                from ..plugins.hooks.generation import GenerationBatchErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_BATCH_ERROR,
+                    GenerationBatchErrorPayload(
+                        generation_id=gen_id,
+                        exception=e,
+                        model=ollama_model_id,
+                        provider="ollama",
+                        latency_ms=(time.perf_counter() - _start) * 1000,
+                    ),
+                )
+            raise
+        latency_ms = (time.perf_counter() - _start) * 1000
 
         results = []
         date = datetime.datetime.now()
+        agg_prompt = 0
+        agg_completion = 0
         for i, response in enumerate(responses):
             result = None
             error = None
@@ -597,19 +627,22 @@ class OllamaModelBackend(FormatterBackend):
                 result = ModelOutputThunk(value="")
                 error = empty_err
             else:
+                n_in = response.prompt_eval_count
+                n_out = response.eval_count
+                if n_in is not None and n_out is not None:
+                    total = n_in + n_out
+                    agg_prompt += n_in
+                    agg_completion += n_out
+                else:
+                    total = None
                 result = ModelOutputThunk(
                     value=response.response,
                     meta={
                         "generate_response": response.model_dump(),
                         "usage": {
-                            "completion_tokens": response.eval_count,
-                            "prompt_tokens": response.prompt_eval_count,
-                            "total_tokens": (
-                                response.prompt_eval_count + response.eval_count
-                                if response.prompt_eval_count is not None
-                                and response.eval_count is not None
-                                else None
-                            ),
+                            "completion_tokens": n_out,
+                            "prompt_tokens": n_in,
+                            "total_tokens": total,
                         },
                     },
                 )
@@ -637,6 +670,27 @@ class OllamaModelBackend(FormatterBackend):
             result._generate_log = generate_log
 
             results.append(result)
+
+        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_POST_CALL,
+                GenerationBatchPostCallPayload(
+                    generation_id=gen_id,
+                    model_outputs=results,
+                    usage={
+                        "prompt_tokens": agg_prompt,
+                        "completion_tokens": agg_completion,
+                        "total_tokens": agg_prompt + agg_completion,
+                    }
+                    if (agg_prompt or agg_completion)
+                    else None,
+                    model=ollama_model_id,
+                    provider="ollama",
+                    latency_ms=latency_ms,
+                ),
+            )
 
         return results
 
@@ -776,25 +830,11 @@ class OllamaModelBackend(FormatterBackend):
         mot.generation.model = str(self._get_ollama_model_id())
         mot.generation.provider = "ollama"
 
-        # Record telemetry and close span now that response is available
-        span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
-
-            if response:
-                if mot.generation.usage:
-                    record_token_usage(span, mot.generation.usage)
-                record_response_metadata(span, response)
-
-            # Close the span now that telemetry is recorded
-            end_backend_span(span)
-
-            # Clean up the span reference
-            del mot._meta["_telemetry_span"]
+        # Populate response-side metadata for telemetry
+        if response is not None:
+            mot.generation.response_model = getattr(response, "model", None)
+            if done_reason := getattr(response, "done_reason", None):
+                mot.generation.finish_reasons = [done_reason]
 
 
 def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):
