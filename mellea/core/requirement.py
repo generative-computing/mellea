@@ -276,9 +276,19 @@ class Requirement(Component[str]):
             )
             await llm_as_a_judge_result.avalue()
 
+            # For semantic checks (binary yes/no validation), the reason should be
+            # more helpful than just "yes" or "no". Fall back to description if the
+            # reason is just a yes/no answer.
+            judge_output = llm_as_a_judge_result.value
+            reason = judge_output
+            if judge_output and judge_output.strip().lower() in ("yes", "no"):
+                # Semantic check returned binary answer; use requirement description
+                # for repair feedback instead
+                reason = self.description
+
             return ValidationResult(
                 result=self.output_to_bool(llm_as_a_judge_result),
-                reason=llm_as_a_judge_result.value,
+                reason=reason,
                 thunk=llm_as_a_judge_result,
                 context=val_ctx,
             )
