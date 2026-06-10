@@ -1056,6 +1056,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
+                return_dict=True,
                 **self._filter_for_chat_template(model_options),
             ).to(self._device)  # type: ignore
 
