@@ -24,14 +24,21 @@ Examples:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from mellea.plugins import HookType, hook
+from mellea.plugins.hooks.validation import (
+    ValidationPostCheckPayload,
+    ValidationPreCheckPayload,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @hook(HookType.VALIDATION_PRE_CHECK)
-async def log_validation_pre_check(payload, ctx):
+async def log_validation_pre_check(
+    payload: ValidationPreCheckPayload, ctx: dict[str, Any]
+) -> None:
     """Log validation setup before requirements are checked.
 
     Args:
@@ -54,7 +61,9 @@ async def log_validation_pre_check(payload, ctx):
 
 
 @hook(HookType.VALIDATION_POST_CHECK)
-async def log_validation_post_check(payload, ctx):
+async def log_validation_post_check(
+    payload: ValidationPostCheckPayload, ctx: dict[str, Any]
+) -> None:
     """Log validation results after requirements are checked.
 
     Args:

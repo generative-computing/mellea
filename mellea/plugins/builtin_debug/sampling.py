@@ -28,14 +28,23 @@ Examples:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from mellea.plugins import HookType, hook
+from mellea.plugins.hooks.sampling import (
+    SamplingIterationPayload,
+    SamplingLoopEndPayload,
+    SamplingLoopStartPayload,
+    SamplingRepairPayload,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @hook(HookType.SAMPLING_LOOP_START)
-async def log_sampling_loop_start(payload, ctx):
+async def log_sampling_loop_start(
+    payload: SamplingLoopStartPayload, ctx: dict[str, Any]
+) -> None:
     """Log sampling strategy initialization with budget and requirement count.
 
     Args:
@@ -58,7 +67,9 @@ async def log_sampling_loop_start(payload, ctx):
 
 
 @hook(HookType.SAMPLING_ITERATION)
-async def log_sampling_iteration(payload, ctx):
+async def log_sampling_iteration(
+    payload: SamplingIterationPayload, ctx: dict[str, Any]
+) -> None:
     """Log validation results for each sampling attempt.
 
     Args:
@@ -94,7 +105,9 @@ async def log_sampling_iteration(payload, ctx):
 
 
 @hook(HookType.SAMPLING_REPAIR)
-async def log_sampling_repair(payload, ctx):
+async def log_sampling_repair(
+    payload: SamplingRepairPayload, ctx: dict[str, Any]
+) -> None:
     """Log when repair is triggered during sampling iterations.
 
     Args:
@@ -115,7 +128,9 @@ async def log_sampling_repair(payload, ctx):
 
 
 @hook(HookType.SAMPLING_LOOP_END)
-async def log_sampling_loop_end(payload, ctx):
+async def log_sampling_loop_end(
+    payload: SamplingLoopEndPayload, ctx: dict[str, Any]
+) -> None:
     """Log sampling completion with success status and attempt statistics.
 
     Args:

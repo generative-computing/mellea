@@ -19,8 +19,13 @@ Examples:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from mellea.plugins import HookType, hook
+from mellea.plugins.hooks.generation import (
+    GenerationPostCallPayload,
+    GenerationPreCallPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +108,9 @@ def _get_token_usage(payload) -> str:
 
 
 @hook(HookType.GENERATION_PRE_CALL)
-async def log_generation_pre_call(payload, ctx):
+async def log_generation_pre_call(
+    payload: GenerationPreCallPayload, ctx: dict[str, Any]
+) -> None:
     """Log request details before calling the LLM.
 
     Args:
@@ -152,7 +159,9 @@ async def log_generation_pre_call(payload, ctx):
 
 
 @hook(HookType.GENERATION_POST_CALL)
-async def log_generation_post_call(payload, ctx):
+async def log_generation_post_call(
+    payload: GenerationPostCallPayload, ctx: dict[str, Any]
+) -> None:
     """Log response details after LLM returns.
 
     Args:
