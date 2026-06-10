@@ -86,6 +86,9 @@ class ChatMessage(BaseModel):
         Returns:
             List of ImageBlocks from all ImageUrlContent items.
             Empty list if content is a string or contains no images.
+
+        Raises:
+            ValueError: If an image URL is invalid or cannot be processed.
         """
         image_urls = self.get_image_urls()
         image_blocks: list[ImageBlock] = []
