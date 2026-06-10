@@ -18,6 +18,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 from test.conftest import hf_skip
 from test.predicates import require_api_key, require_gpu
+from test.telemetry.conftest import reset_metrics_state
 
 # Check if OpenTelemetry is available
 try:
@@ -47,16 +48,10 @@ def enable_metrics(monkeypatch):
     enable_background_collection()
     discard_background_tasks()
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    # Force reload of metrics module to pick up env vars
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     yield
-    # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     disable_background_collection()
 
 

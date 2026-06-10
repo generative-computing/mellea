@@ -6,6 +6,8 @@ proper attributes and values using OpenTelemetry.
 
 import pytest
 
+from test.telemetry.conftest import reset_metrics_state
+
 # Check if OpenTelemetry is available
 try:
     from opentelemetry.sdk.metrics import MeterProvider
@@ -26,14 +28,9 @@ def clean_metrics_env(monkeypatch):
     """Enable metrics and reset module state for integration tests."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
-
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     yield
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
 
 
 def _setup_in_memory_provider(metrics_module):

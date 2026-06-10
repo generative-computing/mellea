@@ -65,7 +65,7 @@ def _resolve_pricing_enabled() -> bool:
     return _LITELLM_AVAILABLE
 
 
-_PRICING_ENABLED = _resolve_pricing_enabled()
+_PRICING_ENABLED: bool = False
 
 _warned_models: set[str] = set()
 
@@ -92,9 +92,23 @@ def _register_custom_pricing(path: str | Path) -> None:
         logger.warning("Failed to register custom pricing from %r: %s", str(path), exc)
 
 
-_custom_path = os.getenv("MELLEA_PRICING_FILE")
-if _PRICING_ENABLED and _custom_path:
-    _register_custom_pricing(_custom_path)
+def _setup_pricing() -> None:
+    """Read env vars and register custom pricing if configured.
+
+    Reads `MELLEA_PRICING_ENABLED` and `MELLEA_PRICING_FILE` at call time so
+    that environment changes made after module import are respected without
+    requiring a module reload.
+    """
+    global _PRICING_ENABLED
+    _PRICING_ENABLED = _resolve_pricing_enabled()
+    if not _PRICING_ENABLED:
+        return
+    custom_path = os.getenv("MELLEA_PRICING_FILE")
+    if custom_path:
+        _register_custom_pricing(custom_path)
+
+
+_setup_pricing()
 
 
 def compute_cost(

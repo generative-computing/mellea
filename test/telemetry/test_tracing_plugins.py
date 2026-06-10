@@ -21,17 +21,7 @@ from mellea.plugins.hooks.generation import (
 )
 from mellea.telemetry import tracing
 from mellea.telemetry.tracing_plugins import BackendTracingPlugin
-
-
-def _reset_tracing_state() -> None:
-    """Reset module state and re-run setup so env-var changes take effect."""
-    if tracing._tracer_provider is not None:
-        tracing._tracer_provider.shutdown()
-    tracing._tracer_provider = None
-    tracing._application_tracer = None
-    tracing._backend_tracer = None
-    tracing._in_flight_spans.clear()
-    tracing._setup_tracing()
+from test.telemetry.conftest import reset_tracing_state
 
 
 @pytest.fixture
@@ -42,17 +32,17 @@ def plugin():
 @pytest.fixture
 def enabled_tracing(monkeypatch):
     monkeypatch.setenv("MELLEA_TRACES_ENABLED", "true")
-    _reset_tracing_state()
+    reset_tracing_state()
     yield
-    _reset_tracing_state()
+    reset_tracing_state()
 
 
 @pytest.fixture
 def disabled_tracing(monkeypatch):
     monkeypatch.delenv("MELLEA_TRACES_ENABLED", raising=False)
-    _reset_tracing_state()
+    reset_tracing_state()
     yield
-    _reset_tracing_state()
+    reset_tracing_state()
 
 
 def _attrs(span: MagicMock) -> dict:
