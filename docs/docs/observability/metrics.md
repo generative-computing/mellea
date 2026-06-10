@@ -56,9 +56,6 @@ All token metrics include these attributes following Gen-AI semantic conventions
 | LiteLLM | Yes | Yes | `usage.prompt_tokens` and `usage.completion_tokens` |
 | HuggingFace | Yes | Yes | Calculated from input_ids and output sequences |
 
-> **Note:** Token usage metrics are only tracked for `generate_from_context`
-> requests. `generate_from_raw` calls do not record token metrics.
-
 ### Token recording timing
 
 Token metrics are recorded **after the full response is received**, not
