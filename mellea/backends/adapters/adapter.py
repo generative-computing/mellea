@@ -2,9 +2,9 @@
 
 Defines the abstract ``Adapter`` base class and its concrete subclasses
 ``LocalHFAdapter`` (for locally loaded HuggingFace models) and ``IntrinsicAdapter``
-(for adapters whose metadata is stored in Mellea's intrinsic catalog). Also provides
-``get_adapter_for_intrinsic`` for resolving the right adapter class given an
-intrinsic name, and ``AdapterMixin`` for backends that support runtime adapter
+(for adapters whose metadata is stored in Mellea's adapter function catalog). Also
+provides ``get_adapter_for_intrinsic`` for resolving the right adapter class given an
+adapter function name, and ``AdapterMixin`` for backends that support runtime adapter
 loading and unloading.
 """
 
@@ -77,36 +77,36 @@ class LocalHFAdapter(Adapter):
 
 
 class IntrinsicAdapter(LocalHFAdapter):
-    """Base class for adapters that implement intrinsics.
+    """Base class for adapters that implement adapter functions.
 
     Subtype of :class:`Adapter` for models that:
 
-    * implement intrinsic functions
+    * implement adapter functions
     * are packaged as LoRA or aLoRA adapters on top of a base model
     * use the shared model loading code in ``mellea.formatters.granite.intrinsics``
     * use the shared input and output processing code in
       ``mellea.formatters.granite.intrinsics``
 
     Args:
-        intrinsic_name (str): Name of the intrinsic (e.g. ``"answerability"``); the
-            adapter's ``qualified_name`` will be derived from this.
+        intrinsic_name (str): Name of the adapter function (e.g. ``"answerability"``);
+            the adapter's ``qualified_name`` will be derived from this.
         adapter_type (AdapterType): Enum describing the adapter type; defaults to
             ``AdapterType.ALORA``.
         config_file (str | pathlib.Path | None): Path to a YAML config file defining
-            the intrinsic's I/O transformations; mutually exclusive with
+            the adapter function's I/O transformations; mutually exclusive with
             ``config_dict``.
-        config_dict (dict | None): Dict defining the intrinsic's I/O transformations;
-            mutually exclusive with ``config_file``.
+        config_dict (dict | None): Dict defining the adapter function's I/O
+            transformations; mutually exclusive with ``config_file``.
         base_model_name (str | None): Base model name used to look up the I/O
             processing config when neither ``config_file`` nor ``config_dict`` are
             provided.
 
     Attributes:
-        intrinsic_name (str): Name of the intrinsic this adapter implements.
-        intrinsic_metadata (IntriniscsCatalogEntry): Catalog metadata for the intrinsic.
+        intrinsic_name (str): Name of the adapter function this adapter implements.
+        intrinsic_metadata (IntriniscsCatalogEntry): Catalog metadata for the adapter function.
         base_model_name (str | None): Base model name provided at construction, if any.
         adapter_type (AdapterType): The adapter type (``LORA`` or ``ALORA``).
-        config (dict): Parsed I/O transformation configuration for the intrinsic.
+        config (dict): Parsed I/O transformation configuration for the adapter function.
     """
 
     def __init__(
@@ -117,7 +117,7 @@ class IntrinsicAdapter(LocalHFAdapter):
         config_dict: dict | None = None,
         base_model_name: str | None = None,
     ):
-        """Initialize IntrinsicAdapter for the named intrinsic, loading its I/O configuration."""
+        """Initialize IntrinsicAdapter for the named adapter function, loading its I/O configuration."""
         super().__init__(intrinsic_name, adapter_type)
 
         self.intrinsic_name = intrinsic_name
@@ -133,7 +133,7 @@ class IntrinsicAdapter(LocalHFAdapter):
         self.adapter_type = adapter_type
 
         # If any of the optional params are specified, attempt to set up the
-        # config for the intrinsic here.
+        # config for the adapter function here.
         if config_file and config_dict:
             raise ValueError(
                 f"Conflicting values for config_file and config_dict "
@@ -155,7 +155,7 @@ class IntrinsicAdapter(LocalHFAdapter):
             )
             is_alora = self.adapter_type == AdapterType.ALORA
             # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision
-            # once revision-aware prepare() lands (issue #1141 / epic #929).
+            # once revision-aware prepare() is merged (issue #1141 / epic #929).
             config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
@@ -188,7 +188,7 @@ class IntrinsicAdapter(LocalHFAdapter):
         return self.download_and_get_path(base_model_name)
 
     def download_and_get_path(self, base_model_name: str) -> str:
-        """Downloads the required rag intrinsics files if necessary and returns the path to them.
+        """Downloads the required RAG adapter function files if necessary and returns the path to them.
 
         Args:
             base_model_name: the base model; typically the last part of the huggingface
@@ -218,12 +218,12 @@ def get_adapter_for_intrinsic(
     intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...],
     available_adapters: dict[str, T],
 ) -> T | None:
-    """Find an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
+    """Find an adapter from a dict of available adapters based on the adapter function name and its allowed adapter types.
 
     Args:
-        intrinsic_name (str): The name of the intrinsic, e.g. ``"answerability"``.
+        intrinsic_name (str): The name of the adapter function, e.g. ``"answerability"``.
         intrinsic_adapter_types (list[AdapterType] | tuple[AdapterType, ...]): The
-            adapter types allowed for this intrinsic, e.g.
+            adapter types allowed for this adapter function, e.g.
             ``[AdapterType.ALORA, AdapterType.LORA]``.
         available_adapters (dict[str, T]): The available adapters to choose from;
             maps ``adapter.qualified_name`` to the adapter object.
@@ -309,7 +309,7 @@ class AdapterMixin(Backend, abc.ABC):
 
 
 class EmbeddedIntrinsicAdapter(Adapter):
-    """Adapter for intrinsics embedded in a Granite Switch model.
+    """Adapter for adapter functions embedded in a Granite Switch model.
 
     Unlike PEFT-based adapters that are loaded into the model at runtime,
     embedded adapters are already baked into the model weights and activated
@@ -332,7 +332,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
     """
 
     def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
-        """Initialize an embedded intrinsic adapter with its I/O config."""
+        """Initialize an embedded adapter function adapter with its I/O config."""
         if technology not in ("lora", "alora"):
             raise ValueError(
                 f"technology must be 'lora' or 'alora', got '{technology}'"
@@ -356,7 +356,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
             model_path (str | pathlib.Path): Path to a Granite Switch model
                 directory that contains ``adapter_index.json`` and ``io_configs/``.
             intrinsic_name (str | None): If provided, only load the adapter
-                matching this intrinsic name. ``None`` loads all adapters.
+                matching this adapter function name. ``None`` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
@@ -432,7 +432,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
             revision (str): Git revision to download from.
             cache_dir (str | None): Local cache directory; ``None`` for the default.
             intrinsic_name (str | None): If provided, only load the adapter
-                matching this intrinsic name. ``None`` loads all adapters.
+                matching this adapter function name. ``None`` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
@@ -487,7 +487,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
             revision (str): Git revision (only used for Hub downloads).
             cache_dir (str | None): Cache directory (only used for Hub downloads).
             intrinsic_name (str | None): If provided, only load the adapter
-                matching this intrinsic name. ``None`` loads all adapters.
+                matching this adapter function name. ``None`` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
@@ -505,9 +505,9 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
 
 class CustomIntrinsicAdapter(IntrinsicAdapter):
-    """Special class for users to subclass when creating custom intrinsic adapters.
+    """Special class for users to subclass when creating custom adapter functions.
 
-    The documentation says that any developer who creates an intrinsic should create
+    The documentation says that any developer who creates an adapter function should create
     a subclass of this class. Creating a subclass of this class appears to be a cosmetic
     boilerplate development task that isn't actually necessary for any existing use case.
 
