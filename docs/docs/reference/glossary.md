@@ -51,17 +51,17 @@ user-facing prose, documentation, and API descriptions.
 
 ## aLoRA
 
-aLoRA is the technology that lets many adapter functions share one base model's KV cache.
-Each adapter function's prompt prefix is prefilled once and its KV-cache entry saved;
-subsequent requests to that adapter function are cache hits rather than fresh prefill
-passes. Because the cache is shared across all adapter functions loaded into a
-[Granite Switch](#granite-switch) model, serving multiple adapter functions produces more
-cache hits than running equivalent separate LoRA loads — lowering latency and reducing
-memory pressure. This benefit extends to non-adapter-function requests served by the same
-model too.
+aLoRA (Activated LoRA) is a LoRA adapter variant designed for fast inner-loop checks
+such as requirement validation. Unlike a standard LoRA, which processes the full context
+on every call, an aLoRA activates at a single invocation token — so the base model's
+KV cache for the preceding context is reused rather than recomputed. This makes the
+inference overhead minimal: only the activation token and the adapter's output tokens
+need a forward pass, not the full prompt.
 
-The term "aLoRA" refers to this KV-cache-sharing architecture, not to a particular file
-format or adapter variant. The underlying adapter weights are standard LoRA weights.
+In a [Granite Switch](#granite-switch) model, multiple aLoRA adapter functions are
+embedded together and share the base model's KV cache across calls. This means serving
+multiple adapter functions produces more cache hits than running equivalent separate LoRA
+loads, lowering latency and memory pressure for the full serving deployment.
 
 See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)
 
@@ -610,6 +610,15 @@ See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 
 ---
 
+## Mellea
+
+Mellea is the open-source Python library for building reliable, testable LLM
+applications. It orchestrates [Granite Switch](#granite-switch)
+[adapter functions](#adapter-function) as ordinary typed Python calls —
+structured inputs, structured outputs, built-in validation.
+
+---
+
 ## MelleaSession
 
 The primary entry point for Mellea. A `MelleaSession` wraps a backend and provides
@@ -620,15 +629,6 @@ session-level methods. Use `mellea.start_session()` to create one with defaults.
 import mellea
 m = mellea.start_session()  # returns a MelleaSession
 ```
-
----
-
-## Mellea
-
-Mellea is the open-source Python library for building reliable, testable LLM
-applications. It orchestrates [Granite Switch](#granite-switch)
-[adapter functions](#adapter-function) as ordinary typed Python calls —
-structured inputs, structured outputs, built-in validation.
 
 ---
 

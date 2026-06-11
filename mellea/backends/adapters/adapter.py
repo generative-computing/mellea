@@ -199,7 +199,7 @@ class IntrinsicAdapter(LocalHFAdapter):
         """
         is_alora = self.adapter_type == AdapterType.ALORA
         # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision once
-        # revision-aware prepare() lands (issue #1141 / epic #929).
+        # revision-aware prepare() is merged (issue #1141 / epic #929).
         return str(
             intrinsics.obtain_lora(
                 self.intrinsic_name,
@@ -318,7 +318,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
     downloaded or loaded.
 
     Args:
-        intrinsic_name (str): Name of the intrinsic (e.g. ``"answerability"``).
+        intrinsic_name (str): Name of the adapter function (e.g. ``"answerability"``).
         config (dict): Parsed I/O transformation configuration (from ``io.yaml``).
         technology (str): Adapter technology in the switch model — ``"lora"`` or
             ``"alora"``.  Determines where the control token is placed in the
@@ -326,13 +326,13 @@ class EmbeddedIntrinsicAdapter(Adapter):
             prompt for aLoRA).
 
     Attributes:
-        intrinsic_name (str): Name of the intrinsic this adapter implements.
+        intrinsic_name (str): Name of the adapter function this adapter implements.
         config (dict): Parsed I/O transformation configuration.
         technology (str): ``"lora"`` or ``"alora"``.
     """
 
     def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
-        """Initialize an embedded adapter function adapter with its I/O config."""
+        """Initialize an embedded adapter function with its I/O config."""
         if technology not in ("lora", "alora"):
             raise ValueError(
                 f"technology must be 'lora' or 'alora', got '{technology}'"
@@ -519,7 +519,7 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
     Args:
         model_id (str): The HuggingFace model ID used for downloading model weights;
             expected format is ``"<user-id>/<repo-name>"``.
-        intrinsic_name (str | None): Catalog name for the intrinsic; defaults to the
+        intrinsic_name (str | None): Catalog name for the adapter function; defaults to the
             repository name portion of ``model_id`` if not provided.
         base_model_name (str): The short name of the base model (NOT its repo ID).
     """
@@ -527,7 +527,7 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
     def __init__(
         self, *, model_id: str, intrinsic_name: str | None = None, base_model_name: str
     ):
-        """Initialize CustomIntrinsicAdapter and patch the global intrinsics catalog if needed."""
+        """Initialize CustomIntrinsicAdapter and patch the global adapter function catalog if needed."""
         assert re.match(".*/.*", model_id), (
             "expected a huggingface model id with format <user-id>/<repo-name>"
         )
