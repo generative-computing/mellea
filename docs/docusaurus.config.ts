@@ -32,7 +32,7 @@ const config: Config = {
           path: 'docs',
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
-          showLastUpdateAuthor: true,
+          showLastUpdateAuthor: false,
           showLastUpdateTime: true,
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
           includeCurrentVersion: true,
