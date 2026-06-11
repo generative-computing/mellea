@@ -164,6 +164,9 @@ def _setup_tracing() -> None:
     global _tracer_provider, _application_tracer, _backend_tracer, _tracing_enabled
 
     _tracing_enabled = False
+    _tracer_provider = None
+    _application_tracer = None
+    _backend_tracer = None
     if not (_OTEL_AVAILABLE and _env_true("MELLEA_TRACES_ENABLED")):
         return
 

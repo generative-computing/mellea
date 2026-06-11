@@ -326,6 +326,8 @@ def _setup_metrics() -> None:
     global _meter_provider, _meter, _metrics_enabled
 
     _metrics_enabled = False
+    _meter = None
+    _meter_provider = None
     if not (_OTEL_AVAILABLE and _env_true("MELLEA_METRICS_ENABLED")):
         return
 
