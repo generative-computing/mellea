@@ -463,7 +463,7 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
 
     backend = OpenAIBackend(
         model_id="nonexistent-model-xyz",
-        base_url="http://localhost:11434/v1",
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="dummy",
     )
     ctx = SimpleContext()
@@ -535,3 +535,86 @@ async def test_ollama_sampling_metrics_integration(enable_metrics, metric_reader
     )
     assert result.success
     assert successes == 1, f"Expected 1 success, got {successes}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.ollama
+async def test_ollama_generate_from_raw_metrics_integration(
+    enable_metrics, metric_reader
+):
+    """Token and latency metrics are recorded for `generate_from_raw` calls."""
+    from mellea.backends.ollama import OllamaModelBackend
+    from mellea.core import CBlock
+    from mellea.stdlib.context import SimpleContext
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
+
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
+    ctx = SimpleContext()
+    actions = [CBlock("Say 'hi' and nothing else."), CBlock("Say 'hello'.")]
+
+    results = await backend.generate_from_raw(actions, ctx=ctx)
+    assert len(results) == len(actions)
+
+    await drain_background_tasks()
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "ollama"}
+    )
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "ollama"}
+    )
+    assert input_tokens is not None and input_tokens > 0
+    assert output_tokens is not None and output_tokens > 0
+
+    duration_dp = _find_histogram_data_point(
+        metrics_data,
+        "mellea.llm.request.duration",
+        {"gen_ai.provider.name": "ollama", "streaming": False},
+    )
+    assert duration_dp is not None, "Request duration should be recorded for batch"
+    assert duration_dp.sum > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.openai
+@pytest.mark.ollama
+async def test_generate_from_raw_error_metrics_integration(
+    enable_metrics, metric_reader
+):
+    """Test that error metrics are recorded when `generate_from_raw` fails."""
+    from mellea.backends.openai import OpenAIBackend
+    from mellea.core import CBlock
+    from mellea.stdlib.context import SimpleContext
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
+
+    backend = OpenAIBackend(
+        model_id="nonexistent-model-xyz",
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
+        api_key="dummy",
+    )
+    ctx = SimpleContext()
+    actions = [CBlock("Say 'hi'.")]
+
+    with pytest.raises(Exception):
+        await backend.generate_from_raw(actions, ctx=ctx)
+
+    await drain_background_tasks()
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    error_count = get_metric_value(
+        metrics_data,
+        "mellea.llm.errors",
+        {
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "nonexistent-model-xyz",
+        },
+    )
+    assert error_count is not None, "Error counter should have been recorded"
+    assert error_count == 1, f"Expected 1 error, got {error_count}"
