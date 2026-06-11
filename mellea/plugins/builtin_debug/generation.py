@@ -114,11 +114,14 @@ async def log_generation_pre_call(
     """Log request details before calling the LLM.
 
     Args:
-        payload: GenerationPreCallPayload containing backend, action, generation_id.
-        ctx: Plugin context for hook execution.
+        payload: GenerationPreCallPayload containing action, generation_id.
+        ctx: Plugin context for hook execution; backend_name is in global_context.state.
     """
-    model = getattr(payload, "backend", None)
-    model_id = model.model_id if model else "unknown"
+    model_id = "unknown"
+    if ctx and hasattr(ctx, "global_context") and ctx.global_context:
+        gc_state = getattr(ctx.global_context, "state", {})
+        if gc_state:
+            model_id = gc_state.get("backend_name", "unknown")
     gen_id = payload.generation_id or "no-id"
 
     # Extract all data from the action

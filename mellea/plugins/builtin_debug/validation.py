@@ -87,6 +87,13 @@ async def log_validation_post_check(
 
     # Log detailed results per requirement
     if payload.results:
+        num_reqs = len(payload.requirements)
+        num_results = len(payload.results)
+        if num_reqs != num_results:
+            logger.warning(
+                f"   ⚠️ Result mismatch: {num_reqs} requirements but {num_results} results"
+            )
+
         for i, (req, result) in enumerate(
             zip(payload.requirements, payload.results), 1
         ):
