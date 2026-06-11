@@ -51,7 +51,15 @@ The shape subsumes both "contiguous role-based prefix" (e.g.
 
 
 def pin_nothing(components: list[Component | CBlock]) -> int:
-    """A :class:`PinPredicate` that pins nothing — pure body, no protected prefix."""
+    """A :class:`PinPredicate` that pins nothing — pure body, no protected prefix.
+
+    Args:
+        components: The full ordered list of context components. Unused; the
+            argument exists to satisfy the :class:`PinPredicate` signature.
+
+    Returns:
+        Always `0`, meaning the entire context is body and nothing is pinned.
+    """
     return 0
 
 
@@ -60,6 +68,14 @@ def pin_system(components: list[Component | CBlock]) -> int:
 
     Stops at the first non-system component. A system message that appears
     later in the conversation is *not* pinned.
+
+    Args:
+        components: The full ordered list of context components.
+
+    Returns:
+        Index after the contiguous leading system messages — i.e. the
+        length of the system-message prefix. `0` if the first component
+        is not a system message.
     """
     for i, c in enumerate(components):
         if not (isinstance(c, Message) and c.role == "system"):
@@ -72,6 +88,14 @@ def pin_system_and_initial_user(components: list[Component | CBlock]) -> int:
 
     Useful when the initial user prompt encodes the goal of the conversation
     and should survive compaction along with any system instructions.
+
+    Args:
+        components: The full ordered list of context components.
+
+    Returns:
+        Index after the system-message prefix plus the first user message
+        that immediately follows it. Equal to :func:`pin_system`'s result
+        when no user message follows the system prefix.
     """
     i = pin_system(components)
     if i < len(components):
@@ -166,6 +190,15 @@ class InlineCompactor:
         self, ctx: ChatContext, *, backend: Backend | None = None
     ) -> ChatContext:
         """Subclasses must override this with their concrete strategy.
+
+        Args:
+            ctx: The chat context to compact.
+            backend: Optional backend for compactors that need one. Inline
+                compactors typically ignore this argument.
+
+        Returns:
+            A compacted `ChatContext`. The base implementation never
+            returns — see Raises.
 
         Raises:
             NotImplementedError: Always — `InlineCompactor` is a marker base
@@ -476,9 +509,7 @@ class LLMSummarizeCompactor:
             return ctx
 
         try:
-            return _run_coro_blocking(
-                self._async_compact(ctx, backend, full, pin_end)
-            )
+            return _run_coro_blocking(self._async_compact(ctx, backend, full, pin_end))
         except (TypeError, AttributeError, AssertionError, LookupError):
             raise
         except Exception as exc:
