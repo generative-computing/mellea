@@ -233,6 +233,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if load_embedded_adapters:
             self.register_embedded_adapter_model(self._adapter_source or self._model_id)
 
+    def __repr__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        return (
+            f"{self.__class__.__name__}("
+            f"model_id={self._model_id!r}, "
+            f"base_url={self._base_url!r}, "
+            f"_api_key='***')"
+        )
+
+    def __str__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        return repr(self)
+
     # ------------------------------------------------------------------
     # AdapterMixin implementation
     # ------------------------------------------------------------------
