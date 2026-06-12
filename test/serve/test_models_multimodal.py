@@ -5,8 +5,8 @@ import base64
 import pytest
 from pydantic import ValidationError
 
-from cli.serve.models import ChatMessage, ImageUrlContent, TextContent
 from mellea.core import ImageBlock
+from mellea.serve.models import ChatMessage, ImageUrlContent, TextContent
 
 
 class TestTextContent:

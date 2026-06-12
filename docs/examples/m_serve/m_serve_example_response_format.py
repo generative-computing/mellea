@@ -18,8 +18,8 @@ Test with the client:
 from typing import Any
 
 import mellea
-from cli.serve.models import ChatMessage
 from mellea.core import ModelOutputThunk
+from mellea.serve import ChatMessage
 from mellea.stdlib.context import ChatContext
 
 session = mellea.start_session(ctx=ChatContext())

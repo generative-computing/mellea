@@ -5,8 +5,8 @@
 from typing import Any
 
 import mellea
-from cli.serve.models import ChatMessage
 from mellea.core import ModelOutputThunk, Requirement, SamplingResult
+from mellea.serve import ChatMessage
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy

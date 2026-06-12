@@ -4,9 +4,9 @@
 import spacy
 
 import mellea
-from cli.serve.models import ChatMessage
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.core import ModelOutputThunk, SamplingResult
+from mellea.serve import ChatMessage
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
