@@ -1304,9 +1304,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             cache_key = id(mot.value)
             self.cache_put(cache_key, cache_info)
 
+            # Surface logits to caller before clearing — scores are owned by LRU cache after this
+            if (
+                hf_output.scores is not None
+                and mot._model_options
+                and mot._model_options.get(ModelOption.LOGITS)
+            ):
+                # squeeze(0): hf_output.scores is (1, vocab_size) per token; normalise to (vocab_size,)
+                mot.logits = tuple(s.squeeze(0) for s in hf_output.scores)
+
             # Clear KV cache and scores from HF output - they're now owned by the LRU cache
             hf_output.past_key_values = None
             hf_output.scores = None
+        elif (
+            isinstance(hf_output, GenerateDecoderOnlyOutput)
+            and hf_output.scores is not None
+            and mot._model_options
+            and mot._model_options.get(ModelOption.LOGITS)
+        ):
+            # Caching disabled — scores were not moved to LRU, surface them directly
+            # squeeze(0): normalise (1, vocab_size) per token to (vocab_size,)
+            mot.logits = tuple(s.squeeze(0) for s in hf_output.scores)
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1432,7 +1450,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ctx (Context): The current generation context.
             format (type[BaseModelSubclass] | None): Optional Pydantic model for
                 structured output decoding via llguidance.
-            model_options (dict | None): Per-call model options.
+            model_options (dict | None): Per-call model options. Supports
+                ``ModelOption.MAX_NEW_TOKENS``, ``ModelOption.TEMPERATURE``,
+                ``ModelOption.SEED``, ``ModelOption.STOP_SEQUENCES``, and
+                ``ModelOption.LOGITS`` (populate ``ModelOutputThunk.logits``
+                with per-token scores of shape ``(vocab_size,)``).
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
@@ -1508,6 +1530,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         results = []
         agg_prompt = 0
         agg_completion = 0
+        want_logits = bool(model_opts and model_opts.get(ModelOption.LOGITS))
         for i, decoded_result in enumerate(decoded_results):
             n_prompt_tokens = int(inputs["input_ids"][i].size(0))
             n_completion_tokens = len(sequences_to_decode[i])
@@ -1523,6 +1546,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result.generation.model = self._model_id
             result.generation.provider = self._provider
             result.raw.provider = self._provider
+
+            if want_logits and outputs.scores is not None:
+                # Clone each slice so this MOT does not hold a view into the shared batch allocation.
+                result.logits = tuple(
+                    step_scores[i].detach().clone() for step_scores in outputs.scores
+                )
 
             action = actions[i]
             result.parsed_repr = (

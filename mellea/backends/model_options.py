@@ -35,6 +35,7 @@ class ModelOption:
             ``None`` disables the timeout. Defaults to ``120.0`` when not set.
         STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
             encountered in the model output, cause generation to halt.
+        LOGITS (str): Sentinel key for requesting per-token logit scores from the backend.
     """
 
     TOOLS = "@@@tools@@@"
@@ -75,6 +76,20 @@ class ModelOption:
     Backends translate this to their native parameter (`stop` for OpenAI/Ollama/LiteLLM
     chat backends, `stop_strings` for Hugging Face, `stop_sequences` for the WatsonX
     text-generation endpoint).
+    """
+    LOGITS = "@@@logits@@@"
+    """When ``True``, request that the backend return per-token logit scores.
+
+    Scores are exposed on ``ModelOutputThunk.logits`` as a tuple of 1-D
+    tensors of shape ``(vocab_size,)``, one per generated token. This shape
+    is consistent across both the standard and batch (``generate_from_raw``)
+    HuggingFace paths.
+
+    Only supported by the HuggingFace local backend. Ignored silently by
+    backends that cannot return logits (OpenAI, Ollama, LiteLLM, WatsonX).
+
+    **Streaming not supported**: when ``ModelOption.STREAM=True``, logit
+    scores are not available and ``ModelOutputThunk.logits`` will be ``None``.
     """
 
     @staticmethod

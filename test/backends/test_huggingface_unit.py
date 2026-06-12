@@ -267,3 +267,168 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
 
     assert captured["generate_input"]["do_sample"] is False
     assert "temperature" not in captured["generate_input"]
+
+
+@pytest.mark.asyncio
+async def test_logits_populated_when_option_set():
+    """mot.logits is populated with (vocab_size,) tensors when ModelOption.LOGITS=True."""
+    backend = _make_backend()
+    input_ids = torch.tensor([[1]])
+    sequences = torch.tensor([[0, 0]])
+    # scores shape: (1, vocab_size) per token — post_processing squeezes to (vocab_size,)
+    fake_scores = (torch.zeros(1, 32000), torch.zeros(1, 32000))
+
+    mot = ModelOutputThunk(value="hi")
+    mot._action = Message("user", "noop")
+    mot._model_options = {ModelOption.LOGITS: True}
+    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    await backend.post_processing(mot, [], None, False, {}, None, input_ids)
+
+    assert mot.logits is not None
+    assert len(mot.logits) == len(fake_scores)
+    assert all(t.shape == (32000,) for t in mot.logits)
+
+
+@pytest.mark.asyncio
+async def test_logits_not_populated_when_option_not_set():
+    """mot.logits stays None when ModelOption.LOGITS is not set."""
+    backend = _make_backend()
+    input_ids = torch.tensor([[1]])
+    sequences = torch.tensor([[0, 0]])
+    fake_scores = (torch.zeros(1, 32000), torch.zeros(1, 32000))
+
+    mot = ModelOutputThunk(value="hi")
+    mot._action = Message("user", "noop")
+    mot._model_options = {}
+    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    await backend.post_processing(mot, [], None, False, {}, None, input_ids)
+
+    assert mot.logits is None
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_logits_sliced_per_item():
+    """generate_from_raw slices outputs.scores per batch item and clones each tensor."""
+    backend = _make_backend()
+
+    batch_size = 2
+    vocab_size = 32000
+    n_tokens = 3
+    prompt_len = 1
+
+    # Fake tokenizer encoding: (batch_size, prompt_len) input ids
+    fake_input_ids = torch.zeros(batch_size, prompt_len, dtype=torch.long)
+    fake_encoding = MagicMock()
+    fake_encoding.__getitem__ = lambda self, k: (
+        fake_input_ids
+        if k == "input_ids"
+        else torch.ones(batch_size, prompt_len, dtype=torch.long)
+    )
+    fake_encoding.to = MagicMock(return_value=fake_encoding)
+    backend._tokenizer = MagicMock(eos_token_id=0, vocab_size=vocab_size)
+    backend._tokenizer.__len__ = MagicMock(return_value=vocab_size)
+    backend._tokenizer.return_value = fake_encoding
+    backend._tokenizer.batch_decode = MagicMock(return_value=["result_a", "result_b"])
+
+    # Fake outputs: sequences and scores
+    sequences = torch.zeros(batch_size, prompt_len + n_tokens, dtype=torch.long)
+    fake_scores = tuple(torch.randn(batch_size, vocab_size) for _ in range(n_tokens))
+    fake_outputs = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    actions = [Message("user", "hello"), Message("user", "world")]
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            actions, MagicMock(), model_options={ModelOption.LOGITS: True}
+        )
+
+    assert len(results) == batch_size
+    for item_idx, result in enumerate(results):
+        assert result.logits is not None, f"item {item_idx}: logits should be populated"
+        assert len(result.logits) == n_tokens, f"item {item_idx}: one tensor per token"
+        for tok_idx, t in enumerate(result.logits):
+            assert t.shape == (vocab_size,), (
+                f"item {item_idx} token {tok_idx}: expected (vocab_size,)"
+            )
+            # clone: must not share storage with the original batch tensor
+            assert not t.data_ptr() == fake_scores[tok_idx][item_idx].data_ptr(), (
+                f"item {item_idx} token {tok_idx}: logits must be a clone, not a view"
+            )
+
+
+@pytest.mark.asyncio
+async def test_generate_from_raw_logits_not_set_when_option_absent():
+    """generate_from_raw leaves logits=None when ModelOption.LOGITS is not set."""
+    backend = _make_backend()
+    batch_size = 1
+    vocab_size = 32000
+    n_tokens = 2
+    prompt_len = 1
+
+    fake_input_ids = torch.zeros(batch_size, prompt_len, dtype=torch.long)
+    fake_encoding = MagicMock()
+    fake_encoding.__getitem__ = lambda self, k: (
+        fake_input_ids
+        if k == "input_ids"
+        else torch.ones(batch_size, prompt_len, dtype=torch.long)
+    )
+    fake_encoding.to = MagicMock(return_value=fake_encoding)
+    backend._tokenizer = MagicMock(vocab_size=vocab_size)
+    backend._tokenizer.__len__ = MagicMock(return_value=vocab_size)
+    backend._tokenizer.return_value = fake_encoding
+    backend._tokenizer.batch_decode = MagicMock(return_value=["result"])
+
+    sequences = torch.zeros(batch_size, prompt_len + n_tokens, dtype=torch.long)
+    fake_scores = tuple(torch.randn(batch_size, vocab_size) for _ in range(n_tokens))
+    fake_outputs = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    with (
+        patch(
+            "mellea.backends.huggingface.asyncio.to_thread", return_value=fake_outputs
+        ),
+        patch.object(backend, "do_generate_walks"),
+        patch.object(backend, "formatter") as mock_fmt,
+    ):
+        mock_fmt.print = MagicMock(return_value="prompt")
+        results = await backend.generate_from_raw(
+            [Message("user", "hi")], MagicMock(), model_options={}
+        )
+
+    assert results[0].logits is None

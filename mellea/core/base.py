@@ -417,6 +417,13 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
         self._thinking: str | None = None
+        self.logits: Any | None = None
+        """Per-token logit scores from the backend, or ``None`` if not requested or unavailable.
+
+        Populated when ``ModelOption.LOGITS=True`` and the backend supports it.
+        For the HuggingFace backend this is a tuple of 1-D tensors of shape
+        ``(vocab_size,)``, one per generated token.
+        """
         self.generation: GenerationMetadata = GenerationMetadata()
         """Backend execution metadata populated during generation."""
 
@@ -620,6 +627,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
         self._thinking = other._thinking
+        self.logits = other.logits
         self.generation = other.generation
         self.raw = other.raw
         self._generate_log = other._generate_log
@@ -856,6 +864,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # and must not share the original's backend thread signal.
         copied._cancel_hook = None
         copied._thinking = self._thinking
+        copied.logits = self.logits
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
@@ -890,6 +899,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # and must not share the original's backend thread signal.
         deepcopied._cancel_hook = None
         deepcopied._thinking = self._thinking
+        deepcopied.logits = deepcopy(self.logits)
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
             self._context
