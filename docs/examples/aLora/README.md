@@ -25,9 +25,9 @@ m alora train \
     stembolt_failure_dataset.jsonl
 ```
 
->![NOTE]
-> You will need hardware capable of training models. 
-> For local training, our minimum recommendation is an M1 MAX with 64GB unitifed memory. This will allow you to train small language model adapters.
+> [!NOTE]
+> You will need hardware capable of training models.
+> For local training, our minimum recommendation is an M1 MAX with 64GB unified memory. This will allow you to train small language model adapters.
 > Alternatively, you can train small language models on relatively cheap spot instances at many popular cloud providers.
 
 ## Upload Models
@@ -56,7 +56,7 @@ m alora train \
     stembolt_failure_dataset.jsonl &&
 m alora upload \
    --intrinsic \
-   --name "$HF_USERNAME/stembolts"
+   --name "$HF_USERNAME/stembolts" \
    --io-yaml io.yaml \
     stembolts_model_3.3_2b
 ```
