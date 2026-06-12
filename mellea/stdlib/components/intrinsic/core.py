@@ -66,7 +66,7 @@ def find_context_attributions(
     Args:
         response (str | None): Assistant response. When `None`, extracted from the
             last assistant output in `context`.
-        documents: Documents used to generate `response`. Each element may be a
+        documents (collections.abc.Iterable[str | Document]): Documents used to generate `response`. Each element may be a
             `Document` or a plain string. Strings are wrapped in `Document` with an
             auto-generated `doc_id` (`"0"`, `"1"`, ...); for explicit control, pass
             `Document` objects with `doc_id` set. `Document` objects without `doc_id`

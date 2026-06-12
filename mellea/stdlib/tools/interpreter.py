@@ -1104,12 +1104,14 @@ def python_tool(
         ValueError: If any entry in `packages` is empty or begins with `-`.
 
     Example:
+        ```python
         from mellea.stdlib.tools import python_tool
 
         tool = python_tool(packages=["matplotlib", "numpy"])
         result = tool.run(code="import numpy as np; print(np.sqrt(4))")
         print(result.stdout)   # "2.0"
         print(result.artifacts)  # files written during execution
+        ```
     """
     from ...backends.tools import MelleaTool
 
@@ -1200,9 +1202,10 @@ def code_interpreter(code: str) -> ExecutionResult:
 
     Deprecated:
         Use `python_tool` instead:
-
-            from mellea.stdlib.tools import python_tool
-            result = python_tool(tier="docker_unsafe").run(code=code)
+        ```python
+        from mellea.stdlib.tools import python_tool
+        result = python_tool(tier="docker_unsafe").run(code=code)
+        ```
 
     Args:
         code: The Python code to execute.
@@ -1225,9 +1228,10 @@ def local_code_interpreter(code: str) -> ExecutionResult:
 
     Deprecated:
         Use `python_tool` instead:
-
-            from mellea.stdlib.tools import python_tool
-            result = python_tool(tier="local_unsafe").run(code=code)
+        ```python
+        from mellea.stdlib.tools import python_tool
+        result = python_tool(tier="local_unsafe").run(code=code)
+        ```
 
     Args:
         code: The Python code to execute.

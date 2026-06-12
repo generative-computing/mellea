@@ -127,7 +127,7 @@ class ChatCompletionRewriter(abc.ABC):
 
         Args:
             chat_completion (ChatCompletion): Original chat completion request.
-            **kwargs: Additional keyword arguments forwarded from :func:`transform`.
+            **kwargs: Additional keyword arguments forwarded from `transform`.
 
         Returns:
             ChatCompletion: Rewritten copy of the original chat completion request.
@@ -191,7 +191,7 @@ class ChatCompletionResultProcessor(abc.ABC):
         """Transform the completion response.
 
         Subclasses must override this method with an implementation of
-        :func:`transform()`.
+        `transform()`.
         """
 
 

@@ -165,7 +165,7 @@ project does not run doctests. RST directives (`Example::`, `.. deprecated::`,
 `:param:`, `:type:`) are not valid inside Google-style docstring sections; use
 Google-style section headers (`Example:`, `Raises:`, etc.) with plain Markdown instead.
 
-```python
+````python
 # Correct — triple-backtick fence inside an Example: section
 def greet(name: str) -> str:
     """Return a greeting.
@@ -193,7 +193,7 @@ def greet(name: str) -> str:
         >>> greet("world")
         'Hello, world!'
     """
-```
+````
 
 #### Class and `__init__` docstrings
 
