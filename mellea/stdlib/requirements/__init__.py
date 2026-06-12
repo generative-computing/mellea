@@ -6,6 +6,7 @@ from .plotting import (
     MatplotlibHeadlessBackend,
     PlotDependenciesAvailable,
     PlotFileSaved,
+    python_plotting_requirements,
 )
 from .python_reqs import PythonExecutionReq
 from .python_tools import (
@@ -49,6 +50,7 @@ __all__ = [
     "is_markdown_list",
     "is_markdown_table",
     "python_code_generation_requirements",
+    "python_plotting_requirements",
     "req",
     "reqify",
     "requirement_check_to_bool",

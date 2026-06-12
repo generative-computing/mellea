@@ -11,6 +11,12 @@ from .matplotlib import (
     MatplotlibHeadlessBackend,
     PlotDependenciesAvailable,
     PlotFileSaved,
+    python_plotting_requirements,
 )
 
-__all__ = ["MatplotlibHeadlessBackend", "PlotDependenciesAvailable", "PlotFileSaved"]
+__all__ = [
+    "MatplotlibHeadlessBackend",
+    "PlotDependenciesAvailable",
+    "PlotFileSaved",
+    "python_plotting_requirements",
+]
