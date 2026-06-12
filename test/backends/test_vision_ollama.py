@@ -145,7 +145,9 @@ def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Ima
     assert isinstance(last_action, Message)
     assert last_action.images is not None  # type: ignore[union-attr]
     assert len(last_action.images) > 0  # type: ignore[union-attr]
-    assert last_action.images[0] == image_block.value  # type: ignore[union-attr]
+    first_image = last_action.images[0]
+    assert isinstance(first_image, ImageBlock)
+    assert first_image.value == image_block.value
 
     lp = turn.output._generate_log.prompt  # type: ignore[union-attr]
     assert isinstance(lp, list)

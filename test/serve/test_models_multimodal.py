@@ -305,7 +305,7 @@ class TestChatMessageImageBlocks:
                 )
             ],
         )
-        with pytest.raises(ValueError, match="Invalid image URL"):
+        with pytest.raises(ValueError, match="Invalid image data"):
             msg.get_image_blocks()
 
     def test_get_image_blocks_empty_list(self):
