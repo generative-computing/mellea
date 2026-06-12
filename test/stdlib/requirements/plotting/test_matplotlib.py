@@ -10,6 +10,13 @@ from mellea.stdlib.requirements.plotting import (
     PlotFileSaved,
     python_plotting_requirements,
 )
+from mellea.stdlib.requirements.python_tools import (
+    ImportRestrictions,
+    NoImportRestrictions,
+    PythonCodeExtraction,
+    PythonExecutionReq,
+    PythonSyntaxValid,
+)
 
 
 def from_model(content: str) -> Context:
@@ -456,29 +463,50 @@ class TestPythonPlottingRequirementsFactory:
     """Tests for python_plotting_requirements factory function."""
 
     def test_factory_returns_list_of_requirements(self):
-        """Test that factory returns a list of three Requirement instances."""
+        """Test that factory returns a list of seven Requirement instances."""
         output_path = "/tmp/plot.png"
         reqs = python_plotting_requirements(output_path=output_path)
 
         assert isinstance(reqs, list)
-        assert len(reqs) == 3
+        assert len(reqs) == 7
         assert all(isinstance(r, Requirement) for r in reqs)
 
     def test_factory_returns_correct_requirement_order(self):
-        """Test requirements are in expected order."""
+        """Test requirements are in expected order (python tools + plotting)."""
         output_path = "/tmp/plot.png"
         reqs = python_plotting_requirements(output_path=output_path)
 
-        assert isinstance(reqs[0], MatplotlibHeadlessBackend)
-        assert isinstance(reqs[1], PlotFileSaved)
-        assert isinstance(reqs[2], PlotDependenciesAvailable)
+        # First 4 from python_code_generation_requirements
+        assert isinstance(reqs[0], PythonCodeExtraction)
+        assert isinstance(reqs[1], PythonSyntaxValid)
+        assert isinstance(reqs[2], PythonExecutionReq)
+        assert isinstance(
+            reqs[3], NoImportRestrictions
+        )  # No allowed_imports, so NoImportRestrictions
+
+        # Last 3 plotting-specific
+        assert isinstance(reqs[4], MatplotlibHeadlessBackend)
+        assert isinstance(reqs[5], PlotFileSaved)
+        assert isinstance(reqs[6], PlotDependenciesAvailable)
+
+    def test_factory_with_allowed_imports(self):
+        """Test that allowed_imports parameter creates ImportRestrictions."""
+        output_path = "/tmp/plot.png"
+        allowed_imports = ["matplotlib", "numpy"]
+        reqs = python_plotting_requirements(
+            output_path=output_path, allowed_imports=allowed_imports
+        )
+
+        assert len(reqs) == 7
+        assert isinstance(reqs[3], ImportRestrictions)
+        assert reqs[3].allowed_imports == allowed_imports
 
     def test_factory_propagates_output_path(self):
         """Test that output_path is correctly passed to PlotFileSaved."""
         output_path = "/output/my_plot.png"
         reqs = python_plotting_requirements(output_path=output_path)
 
-        plot_saved_req = reqs[1]
+        plot_saved_req = reqs[5]
         assert isinstance(plot_saved_req, PlotFileSaved)
         assert plot_saved_req.output_path == output_path
         assert output_path in plot_saved_req.description
@@ -494,8 +522,8 @@ class TestPythonPlottingRequirementsFactory:
 
         for path in test_paths:
             reqs = python_plotting_requirements(output_path=path)
-            assert len(reqs) == 3
-            assert reqs[1].output_path == path
+            assert len(reqs) == 7
+            assert reqs[5].output_path == path
 
     def test_factory_raises_on_non_string_path(self):
         """Test that factory raises TypeError for non-string output_path."""
@@ -523,7 +551,7 @@ class TestPythonPlottingRequirementsFactory:
 
         # Verify unpacking pattern works
         unpacked = [*reqs]
-        assert len(unpacked) == 3
+        assert len(unpacked) == 7
         assert unpacked == reqs
 
     def test_factory_requirements_are_independent_instances(self):
@@ -532,6 +560,20 @@ class TestPythonPlottingRequirementsFactory:
         reqs2 = python_plotting_requirements(output_path="/tmp/plot2.png")
 
         # Different instances
-        assert reqs1[1] is not reqs2[1]
+        assert reqs1[5] is not reqs2[5]
         # But different output paths
-        assert reqs1[1].output_path != reqs2[1].output_path
+        assert reqs1[5].output_path != reqs2[5].output_path
+
+    def test_factory_with_custom_execution_parameters(self):
+        """Test that custom execution parameters can be passed through."""
+        output_path = "/tmp/plot.png"
+        reqs = python_plotting_requirements(
+            output_path=output_path,
+            output_limit_chars=5000,
+            timeout_seconds=10,
+            use_sandbox=True,
+        )
+
+        assert len(reqs) == 7
+        execution_req = reqs[2]
+        assert isinstance(execution_req, PythonExecutionReq)

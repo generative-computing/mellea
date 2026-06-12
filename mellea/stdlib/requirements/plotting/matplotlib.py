@@ -8,6 +8,7 @@ import ast
 
 from mellea.core import Context, Requirement, ValidationResult
 from mellea.stdlib.requirements.python_reqs import _has_python_code_listing
+from mellea.stdlib.requirements.python_tools import python_code_generation_requirements
 
 # Matplotlib backends suitable for headless (non-interactive) execution.
 # Includes standard raster (Agg, Cairo), vector (pdf, svg, pgf),
@@ -336,22 +337,37 @@ class PlotDependenciesAvailable(Requirement):
         )
 
 
-def python_plotting_requirements(output_path: str) -> list[Requirement]:
+def python_plotting_requirements(
+    output_path: str,
+    allowed_imports: list[str] | None = None,
+    output_limit_chars: int = 10_000,
+    timeout_seconds: int = 5,
+    use_sandbox: bool = False,
+) -> list[Requirement]:
     """Bundle matplotlib-specific requirements for plotting code validation.
 
     Factory function that creates a complete set of requirements for validating
-    matplotlib plotting code, ensuring proper headless backend configuration,
-    file output, and dependency availability.
+    matplotlib plotting code, composing general Python code generation requirements
+    with plotting-specific constraints for headless backend configuration, file
+    output, and dependency availability.
 
     Args:
         output_path: File path where the plot should be saved (e.g., '/tmp/plot.png').
             This path must match the savefig() call in the generated code.
+        allowed_imports: Whitelist of importable top-level modules. None allows all.
+            Default None.
+        output_limit_chars: Maximum allowed characters of captured stdout.
+            Default 10,000.
+        timeout_seconds: Maximum execution time in seconds. Default 5.
+        use_sandbox: Use llm-sandbox for Docker-isolated execution. Default False.
 
     Returns:
-        list[Requirement]: Three requirements in validation order:
-            1. MatplotlibHeadlessBackend — validates headless backend configuration
-            2. PlotFileSaved — validates plot is saved to the specified output_path
-            3. PlotDependenciesAvailable — validates matplotlib and numpy are available
+        list[Requirement]: Seven requirements in validation order:
+            1-4. PythonCodeExtraction, PythonSyntaxValid, PythonExecutionReq,
+                 ImportRestrictions/NoImportRestrictions (from python_code_generation_requirements)
+            5. MatplotlibHeadlessBackend — validates headless backend configuration
+            6. PlotFileSaved — validates plot is saved to the specified output_path
+            7. PlotDependenciesAvailable — validates matplotlib and numpy are available
 
     Raises:
         TypeError: If output_path is not a string.
@@ -361,13 +377,19 @@ def python_plotting_requirements(output_path: str) -> list[Requirement]:
         >>> output_path = "/tmp/plot.png"
         >>> reqs = python_plotting_requirements(output_path=output_path)
         >>> len(reqs)
-        3
-        >>> isinstance(reqs[0], MatplotlibHeadlessBackend)
+        7
+        >>> isinstance(reqs[4], MatplotlibHeadlessBackend)
         True
-        >>> isinstance(reqs[1], PlotFileSaved)
+        >>> isinstance(reqs[5], PlotFileSaved)
         True
-        >>> isinstance(reqs[2], PlotDependenciesAvailable)
+        >>> isinstance(reqs[6], PlotDependenciesAvailable)
         True
+        >>> reqs_restricted = python_plotting_requirements(
+        ...     output_path=output_path,
+        ...     allowed_imports=["matplotlib", "numpy"]
+        ... )
+        >>> len(reqs_restricted)
+        7
     """
     if not isinstance(output_path, str):
         raise TypeError(
@@ -377,8 +399,17 @@ def python_plotting_requirements(output_path: str) -> list[Requirement]:
     if not output_path.strip():
         raise ValueError("output_path cannot be empty")
 
-    return [
-        MatplotlibHeadlessBackend(),
-        PlotFileSaved(output_path=output_path),
-        PlotDependenciesAvailable(),
-    ]
+    requirements = python_code_generation_requirements(
+        allowed_imports=allowed_imports,
+        output_limit_chars=output_limit_chars,
+        timeout_seconds=timeout_seconds,
+        use_sandbox=use_sandbox,
+    )
+    requirements.extend(
+        [
+            MatplotlibHeadlessBackend(),
+            PlotFileSaved(output_path=output_path),
+            PlotDependenciesAvailable(),
+        ]
+    )
+    return requirements
