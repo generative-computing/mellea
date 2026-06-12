@@ -20,6 +20,7 @@ from ..core import (
     Context,
     GenerateLog,
     GenerateType,
+    ImageUrlBlock,
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
@@ -394,16 +395,25 @@ class OllamaModelBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-        conversation.extend(
-            [
+        for m in messages:
+            if m.images is not None:
+                for img in m.images:
+                    if isinstance(img, ImageUrlBlock):
+                        raise ValueError(
+                            "OllamaModelBackend does not support URL images (ImageUrlBlock). "
+                            "Convert the image to a base64-encoded ImageBlock before passing it to Ollama."
+                        )
+            conversation.append(
                 {
                     "role": m.role,
                     "content": self.formatter.print(m),
-                    "images": _strip_data_uri_prefix(m.images) if m.images else None,
+                    "images": (
+                        _strip_data_uri_prefix([str(img.value) for img in m.images])
+                        if m.images
+                        else None
+                    ),
                 }
-                for m in messages
-            ]
-        )
+            )
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()

@@ -24,7 +24,7 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.core import ImageBlock, ModelOutputThunk
+from mellea.core import ImageBlock, ImageUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 
 # Ollama name for the target vision model; bump to the model_ids constant once
@@ -102,7 +102,7 @@ def mocked_session(mock_ollama_backend):
 def test_image_block_in_instruction(
     mocked_session: MelleaSession, pil_image: Image.Image
 ):
-    image_block = ImageBlock.from_pil_image(pil_image)
+    image_block: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(pil_image)
 
     instr = mocked_session.instruct(
         "Is this image mainly blue? Answer yes or no.",
@@ -209,7 +209,7 @@ def test_vision_instruct_live_e2e(
     vision_session: MelleaSession, pil_image: Image.Image
 ):
     """Live vision instruct round-trip; skips until granite-vision-4.1 lands on Ollama."""
-    image_block = ImageBlock.from_pil_image(pil_image)
+    image_block: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(pil_image)
     instr = vision_session.instruct(
         "Is this image mainly blue? Answer yes or no.",
         images=[image_block],

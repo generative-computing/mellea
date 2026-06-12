@@ -182,6 +182,38 @@ class ImageBlock(CBlock):
         return f"ImageBlock({self.value}, {self._meta.__repr__()})"
 
 
+class ImageUrlBlock(CBlock):
+    """An `ImageUrlBlock` represents an image as a URL.
+
+    Use this when the image is hosted remotely and you want to pass the URL
+    directly to backends that support it (e.g. OpenAI). Backends that only
+    accept base64-encoded images (e.g. Ollama) will raise a ``ValueError``
+    rather than silently drop the image.
+
+    Args:
+        value (str): A URL string pointing to the image.
+        meta (dict[str, Any] | None): Optional metadata to associate with this image block.
+
+    """
+
+    def __init__(self, value: str, meta: dict[str, Any] | None = None):
+        """Initialize ImageUrlBlock with a URL string.
+
+        Raises:
+            ValueError: If ``value`` does not look like a URL (does not start
+                with ``http://`` or ``https://``).
+        """
+        if not value.startswith(("http://", "https://")):
+            raise ValueError(
+                f"ImageUrlBlock requires an http:// or https:// URL; got: {value!r}"
+            )
+        super().__init__(value, meta)
+
+    def __repr__(self) -> str:
+        """Provides a python-parsable representation of the block (usually)."""
+        return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
+
+
 S = typing_extensions.TypeVar("S", default=Any, covariant=True)
 """Used for class definitions for Component and ModelOutputThunk; also used for functions that don't accept CBlocks. Defaults to `Any`."""
 
@@ -1182,7 +1214,7 @@ class TemplateRepresentation:
     fields: list[Any] | None = None
     template: str | None = None
     template_order: list[str] | None = None
-    images: list[ImageBlock] | None = None
+    images: list[ImageBlock | ImageUrlBlock] | None = None
 
 
 @dataclass
@@ -1266,22 +1298,23 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
             raise Exception("Type Error")
 
 
-def get_images_from_component(c: Component) -> None | list[ImageBlock]:
+def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrlBlock]:
     """Return the images attached to a `Component`, or `None` if absent or empty.
 
     Args:
         c: The `Component` whose `images` attribute is inspected.
 
     Returns:
-        A non-empty list of `ImageBlock` objects if the component has an
-        `images` attribute with at least one element; `None` otherwise.
+        A non-empty list of ``ImageBlock`` or ``ImageUrlBlock`` objects if the
+        component has an ``images`` attribute with at least one element;
+        ``None`` otherwise.
     """
     if hasattr(c, "images"):
         imgs = c.images  # type: ignore
         if imgs is not None:
             assert isinstance(imgs, list), "images field must be a list."
-            assert all(isinstance(im, ImageBlock) for im in imgs), (
-                "all elements of images list must be ImageBlocks."
+            assert all(isinstance(im, (ImageBlock, ImageUrlBlock)) for im in imgs), (
+                "all elements of images list must be ImageBlock or ImageUrlBlock."
             )
             if len(imgs) == 0:
                 return None

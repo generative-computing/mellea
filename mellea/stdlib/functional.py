@@ -19,6 +19,7 @@ from ..core import (
     Context,
     GenerateLog,
     ImageBlock,
+    ImageUrlBlock,
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
@@ -137,7 +138,7 @@ def instruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -158,7 +159,7 @@ def instruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -178,7 +179,7 @@ def instruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -251,7 +252,7 @@ def chat(
     backend: Backend,
     *,
     role: Message.Role = "user",
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     documents: Iterable[str | Document] | None = None,
     user_variables: dict[str, str] | None = None,
     format: type[BaseModelSubclass] | None = None,
@@ -768,7 +769,7 @@ async def ainstruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -790,7 +791,7 @@ async def ainstruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -812,7 +813,7 @@ async def ainstruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -834,7 +835,7 @@ async def ainstruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -855,7 +856,7 @@ async def ainstruct(
     context: Context,
     backend: Backend,
     *,
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -930,7 +931,7 @@ async def achat(
     backend: Backend,
     *,
     role: Message.Role = "user",
-    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
     documents: Iterable[str | Document] | None = None,
     user_variables: dict[str, str] | None = None,
     format: type[BaseModelSubclass] | None = None,
@@ -1244,9 +1245,9 @@ async def atransform(
 
 
 def _parse_and_clean_image_args(
-    images_: list[ImageBlock] | list[PILImage.Image] | None = None,
-) -> list[ImageBlock] | None:
-    images: list[ImageBlock] | None = None
+    images_: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+) -> list[ImageBlock | ImageUrlBlock] | None:
+    images: list[ImageBlock | ImageUrlBlock] | None = None
     if images_ is not None:
         assert isinstance(images_, list), "Images should be a list or None."
 
@@ -1260,8 +1261,8 @@ def _parse_and_clean_image_args(
             else:
                 images = images_  # type: ignore
             assert isinstance(images, list)
-            assert all(isinstance(i, ImageBlock) for i in images), (
-                "All images should be ImageBlocks now."
+            assert all(isinstance(i, (ImageBlock, ImageUrlBlock)) for i in images), (
+                "All images should be ImageBlock or ImageUrlBlock instances."
             )
         else:
             images = None

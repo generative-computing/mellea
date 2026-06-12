@@ -18,6 +18,7 @@ from ...core import (
     CBlock,
     Component,
     ImageBlock,
+    ImageUrlBlock,
     ModelOutputThunk,
     Requirement,
     TemplateRepresentation,
@@ -40,7 +41,7 @@ class Instruction(Component[str]):
         prefix (str | CBlock | None): A prefix prepended before the model's generation.
         output_prefix (str | CBlock | None): A prefix prepended to the model's output token
             stream (currently unsupported; must be `None`).
-        images (list[ImageBlock] | None): Images to include in the prompt.
+        images (list[ImageBlock | ImageUrlBlock] | None): Images to include in the prompt.
 
     Attributes:
         requirements (list[Requirement]): The resolved list of requirement instances
@@ -56,7 +57,7 @@ class Instruction(Component[str]):
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        images: list[ImageBlock] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | None = None,
     ):
         """Initialize Instruction, converting all string inputs to CBlocks and applying any Jinja2 variables."""
         requirements = [] if requirements is None else requirements
