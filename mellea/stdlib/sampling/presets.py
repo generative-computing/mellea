@@ -42,13 +42,15 @@ class SamplingPreset(Generic[S]):
     with a sampling strategy optimized for that use case. Presets reduce
     boilerplate by bundling common configurations.
 
-    Attributes:
+    Args:
         requirements: List of Requirement instances to validate against.
         strategy: SamplingStrategy (typically RepairTemplateStrategy).
         feedback_strategy_name: Human-readable name for the feedback approach
             (e.g., "python_code_repair", "matplotlib_plotting_repair").
+            Default "default".
         description: Optional one-line description of the preset's purpose.
-        example_usage: Optional usage example code snippet.
+            Default None.
+        example_usage: Optional usage example code snippet. Default None.
     """
 
     requirements: list[Requirement]
