@@ -80,7 +80,7 @@ class RichDocument(Component[str]):
         """
         return self._doc
 
-    def to_markdown(self):
+    def to_markdown(self) -> str:
         """Get the full text of the document as markdown."""
         return self._doc.export_to_markdown()
 
@@ -282,7 +282,7 @@ class Table(MObject):
         else:
             return None
 
-    def parts(self):
+    def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this table component.
 
         The current implementation always returns an empty list because the
