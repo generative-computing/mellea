@@ -35,7 +35,7 @@ def _make_backend(template: object) -> LocalHFBackend:
 
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     object.__setattr__(b, "_tokenizer", _FakeTokenizer())
-    b._hf_model_id = "test-org/test-model"
+    b._model_id = "test-org/test-model"
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 

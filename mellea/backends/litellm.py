@@ -4,10 +4,8 @@ import asyncio
 import datetime
 import functools
 import json
-import time
-import uuid
-from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, overload
+from collections.abc import Coroutine, Sequence
+from typing import Any
 
 try:
     import litellm
@@ -100,6 +98,7 @@ class LiteLLMBackend(FormatterBackend):
 
         assert isinstance(model_id, str), "Model ID must be a string."
         self._model_id = model_id
+        self._provider: str = "litellm"
 
         # _explicit_base_url tracks whether the caller provided a base_url.
         # api_base is only forwarded to litellm when explicit — otherwise litellm
@@ -436,8 +435,8 @@ class LiteLLMBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.generation.model = str(self.model_id)
-        output.generation.provider = "litellm"
+        output.generation.model = self._model_id
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -611,8 +610,8 @@ class LiteLLMBackend(FormatterBackend):
             mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.generation.model = str(self.model_id)
-        mot.generation.provider = "litellm"
+        mot.generation.model = self._model_id
+        mot.generation.provider = self._provider
 
         # Populate response-side metadata for telemetry
         if isinstance(full_response, dict):
@@ -638,29 +637,7 @@ class LiteLLMBackend(FormatterBackend):
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -668,11 +645,12 @@ class LiteLLMBackend(FormatterBackend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating via LiteLLM.
 
         Passes formatted prompt strings directly to LiteLLM's text completion endpoint.
-        Tool calling is not supported on this endpoint.
+        Tool calling is not supported on this endpoint. Per-MOT `mot.generation.usage`
+        stays `None` because LiteLLM's text completion API only reports whole-batch usage.
 
         Args:
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
@@ -683,11 +661,10 @@ class LiteLLMBackend(FormatterBackend):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the whole-batch token-usage dict or `None`.
         """
-        from ..plugins.manager import has_plugins, invoke_hook
-        from ..plugins.types import HookType
-
         await self.do_generate_walks(list(actions))
         extra_body = {}
         if format is not None:
@@ -703,25 +680,6 @@ class LiteLLMBackend(FormatterBackend):
                 "The completion endpoint does not support tool calling."
             )
 
-        gen_id = str(uuid.uuid4())
-        litellm_model_id = str(self.model_id)
-
-        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_PRE_CALL,
-                GenerationBatchPreCallPayload(
-                    actions=tuple(actions),
-                    generation_id=gen_id,
-                    format=format,
-                    tool_calls=tool_calls,
-                    num_actions=len(actions),
-                    model=litellm_model_id,
-                    provider="litellm",
-                ),
-            )
-
         # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
         model_opts = self._simplify_and_merge(model_options)
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
@@ -735,32 +693,13 @@ class LiteLLMBackend(FormatterBackend):
 
         user_api_base_raw = model_specific_options.pop("api_base", None)
 
-        _start = time.perf_counter()
-        try:
-            completion_response = await litellm.atext_completion(
-                model=self._model_id,
-                prompt=prompts,
-                api_base=user_api_base_raw
-                or (self._base_url if self._explicit_base_url else None),
-                **model_specific_options,
-            )
-        except Exception as e:
-            if has_plugins(HookType.GENERATION_BATCH_ERROR):
-                from ..plugins.hooks.generation import GenerationBatchErrorPayload
-
-                await invoke_hook(
-                    HookType.GENERATION_BATCH_ERROR,
-                    GenerationBatchErrorPayload(
-                        generation_id=gen_id,
-                        exception=e,
-                        model=litellm_model_id,
-                        provider="litellm",
-                        latency_ms=(time.perf_counter() - _start) * 1000,
-                    ),
-                )
-            raise
-
-        latency_ms = (time.perf_counter() - _start) * 1000
+        completion_response = await litellm.atext_completion(
+            model=self._model_id,
+            prompt=prompts,
+            api_base=user_api_base_raw
+            or (self._base_url if self._explicit_base_url else None),
+            **model_specific_options,
+        )
 
         # Necessary for type checker.
         assert isinstance(completion_response, litellm.TextCompletionResponse)  # type: ignore
@@ -788,6 +727,8 @@ class LiteLLMBackend(FormatterBackend):
                 "litellm_chat_response": res.model_dump(),
                 "usage": usage_dump,
             }
+            output.generation.model = self._model_id
+            output.generation.provider = self._provider
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value
@@ -805,22 +746,7 @@ class LiteLLMBackend(FormatterBackend):
 
             results.append(output)
 
-        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_POST_CALL,
-                GenerationBatchPostCallPayload(
-                    generation_id=gen_id,
-                    model_outputs=results,
-                    usage=usage_dump,
-                    model=litellm_model_id,
-                    provider="litellm",
-                    latency_ms=latency_ms,
-                ),
-            )
-
-        return results
+        return results, usage_dump
 
     def _extract_model_tool_requests(
         self,

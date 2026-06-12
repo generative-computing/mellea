@@ -92,8 +92,9 @@ class GenerationBatchPreCallPayload(MelleaBasePayload):
         generation_id: Correlation identifier set by the firing backend; matches
             the corresponding `generation_batch_post_call` /
             `generation_batch_error` payloads for the same call.
-        format: Optional structured-output format applied to the batch.
-        tool_calls: Whether tool calling is enabled (typically `False` for raw).
+        model_options: Dict of model options (writable — plugins may adjust temperature, etc.).
+        format: Optional structured-output format applied to the batch (writable).
+        tool_calls: Whether tool calling is enabled (writable; typically `False` for raw).
         num_actions: Convenience copy of `len(actions)`.
         model: Model identifier the backend is calling.
         provider: Provider name (e.g. `"openai"`, `"ollama"`).
@@ -101,6 +102,7 @@ class GenerationBatchPreCallPayload(MelleaBasePayload):
 
     actions: Sequence[Any] = ()
     generation_id: str | None = None
+    model_options: dict[str, Any] = {}
     format: Any = None
     tool_calls: bool = False
     num_actions: int = 0

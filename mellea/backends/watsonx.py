@@ -5,12 +5,10 @@ import datetime
 import functools
 import json
 import os
-import time
-import uuid
 import warnings
-from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
+from collections.abc import AsyncGenerator, Coroutine, Sequence
 from dataclasses import fields
-from typing import Any, overload
+from typing import Any
 
 try:
     from ibm_watsonx_ai import APIClient, Credentials
@@ -116,7 +114,16 @@ class WatsonxAIBackend(FormatterBackend):
             ),
             model_options=model_options,
         )
-        self._model_id = model_id
+
+        # Resolve to a concrete watsonx model name; assertion fires if no watsonx_name.
+        watsonx_model_id = (
+            model_id.watsonx_name if isinstance(model_id, ModelIdentifier) else model_id
+        )
+        assert watsonx_model_id is not None, (
+            "model_id is None: the ModelIdentifier has no watsonx_name configured, or this model is not available in watsonx."
+        )
+        self._model_id: str = watsonx_model_id
+        self._provider: str = "watsonx"
 
         if base_url is None:
             base_url = os.environ.get("WATSONX_URL")
@@ -178,7 +185,7 @@ class WatsonxAIBackend(FormatterBackend):
         if _model_inference is None:
             _client = APIClient(credentials=self._creds)
             _model_inference = ModelInference(
-                model_id=self._get_watsonx_model_id(),
+                model_id=self._model_id,
                 api_client=_client,
                 credentials=self._creds,
                 project_id=self._project_id,
@@ -187,18 +194,6 @@ class WatsonxAIBackend(FormatterBackend):
             )
             self._client_cache.put(key, _model_inference)
         return _model_inference
-
-    def _get_watsonx_model_id(self) -> str:
-        """Gets the watsonx model id from the model_id that was provided in the constructor. Raises AssertionError if the ModelIdentifier does not provide a watsonx_name."""
-        watsonx_model_id = (
-            self.model_id.watsonx_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else self.model_id
-        )
-        assert watsonx_model_id is not None, (
-            "model_id is None. This can also happen if the ModelIdentifier has no watsonx name set or this model is not available in watsonx."
-        )
-        return watsonx_model_id
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
         """Filter kwargs to only include valid watsonx chat.completions.create parameters.
@@ -459,8 +454,8 @@ class WatsonxAIBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.generation.model = str(self._get_watsonx_model_id())
-        output.generation.provider = "watsonx"
+        output.generation.model = self._model_id
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -597,8 +592,8 @@ class WatsonxAIBackend(FormatterBackend):
             mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.generation.model = str(self._get_watsonx_model_id())
-        mot.generation.provider = "watsonx"
+        mot.generation.model = self._model_id
+        mot.generation.provider = self._provider
 
         # Populate response-side metadata for telemetry
         populate_response_metadata_openai_shape(mot, response)
@@ -620,29 +615,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.action = mot._action
         mot._generate_log = generate_log
 
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -650,7 +623,7 @@ class WatsonxAIBackend(FormatterBackend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating via WatsonX.
 
         Passes formatted prompt strings directly to WatsonX's generate endpoint.
@@ -664,11 +637,10 @@ class WatsonxAIBackend(FormatterBackend):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the aggregate token-usage dict for the batch.
         """
-        from ..plugins.manager import has_plugins, invoke_hook
-        from ..plugins.types import HookType
-
         await self.do_generate_walks(list(actions))
 
         if format is not None:
@@ -676,79 +648,53 @@ class WatsonxAIBackend(FormatterBackend):
                 "WatsonxAI completion api does not accept response format, ignoring it for this request."
             )
 
-        gen_id = str(uuid.uuid4())
-        watsonx_model_id = str(self._get_watsonx_model_id())
-
-        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_PRE_CALL,
-                GenerationBatchPreCallPayload(
-                    actions=tuple(actions),
-                    generation_id=gen_id,
-                    format=format,
-                    tool_calls=tool_calls,
-                    num_actions=len(actions),
-                    model=watsonx_model_id,
-                    provider="watsonx",
-                ),
-            )
-
         model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        _start = time.perf_counter()
-        try:
-            responses = await asyncio.to_thread(
-                self._model.generate,
-                prompt=prompts,
-                params=self._make_backend_specific_and_remove(
-                    model_opts, is_chat_context=False
-                ),
-            )
-        except Exception as e:
-            if has_plugins(HookType.GENERATION_BATCH_ERROR):
-                from ..plugins.hooks.generation import GenerationBatchErrorPayload
-
-                await invoke_hook(
-                    HookType.GENERATION_BATCH_ERROR,
-                    GenerationBatchErrorPayload(
-                        generation_id=gen_id,
-                        exception=e,
-                        model=watsonx_model_id,
-                        provider="watsonx",
-                        latency_ms=(time.perf_counter() - _start) * 1000,
-                    ),
-                )
-            raise
-
-        latency_ms = (time.perf_counter() - _start) * 1000
+        responses = await asyncio.to_thread(
+            self._model.generate,
+            prompt=prompts,
+            params=self._make_backend_specific_and_remove(
+                model_opts, is_chat_context=False
+            ),
+        )
 
         results = []
         date = datetime.datetime.now()
-        # Sum per-request usages into an aggregate for the batch.
+        # All-or-nothing per-MOT usage; missing counts contribute 0 to the aggregate.
         agg_prompt = 0
         agg_completion = 0
 
         for i, response in enumerate(responses):
             output = response["results"][0]
-            n_in = output.get("input_token_count", 0) or 0
-            n_out = output.get("generated_token_count", 0) or 0
-            agg_prompt += n_in
-            agg_completion += n_out
+            n_in = output.get("input_token_count")
+            n_out = output.get("generated_token_count")
+            per_mot_usage: dict[str, Any] | None
+            if n_in is not None and n_out is not None:
+                agg_prompt += n_in
+                agg_completion += n_out
+                per_mot_usage = {
+                    "prompt_tokens": n_in,
+                    "completion_tokens": n_out,
+                    "total_tokens": n_in + n_out,
+                }
+            else:
+                per_mot_usage = None
             result = ModelOutputThunk(
                 value=output["generated_text"],
                 meta={
                     "oai_completion_response": response["results"][0],
                     "usage": {
-                        "prompt_tokens": n_in,
-                        "completion_tokens": n_out,
-                        "total_tokens": n_in + n_out,
+                        "prompt_tokens": n_in or 0,
+                        "completion_tokens": n_out or 0,
+                        "total_tokens": (n_in or 0) + (n_out or 0),
                     },
                 },
             )
+            result.generation.usage = per_mot_usage
+            result.generation.model = self._model_id
+            result.generation.provider = self._provider
 
             action = actions[i]
             result.parsed_repr = (
@@ -771,28 +717,16 @@ class WatsonxAIBackend(FormatterBackend):
 
             results.append(result)
 
-        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_POST_CALL,
-                GenerationBatchPostCallPayload(
-                    generation_id=gen_id,
-                    model_outputs=results,
-                    usage={
-                        "prompt_tokens": agg_prompt,
-                        "completion_tokens": agg_completion,
-                        "total_tokens": agg_prompt + agg_completion,
-                    }
-                    if (agg_prompt or agg_completion)
-                    else None,
-                    model=watsonx_model_id,
-                    provider="watsonx",
-                    latency_ms=latency_ms,
-                ),
-            )
-
-        return results
+        usage: dict[str, Any] | None = (
+            {
+                "prompt_tokens": agg_prompt,
+                "completion_tokens": agg_completion,
+                "total_tokens": agg_prompt + agg_completion,
+            }
+            if (agg_prompt or agg_completion)
+            else None
+        )
+        return results, usage
 
     def _extract_model_tool_requests(
         self, tools: dict[str, AbstractMelleaTool], chat_response: dict

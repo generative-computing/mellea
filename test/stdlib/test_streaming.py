@@ -81,6 +81,8 @@ class StreamingMockBackend(Backend):
     def __init__(self, response: str, token_size: int = 1) -> None:
         self._response = response
         self._token_size = token_size
+        self._model_id: str = "streaming-mock-model"
+        self._provider: str = "streaming-mock-provider"
 
     async def _generate_from_context(
         self,
@@ -98,9 +100,9 @@ class StreamingMockBackend(Backend):
         new_ctx = ctx.add(action).add(mot)
         return mot, new_ctx
 
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self, actions: Any, ctx: Any, **kwargs: Any
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         raise NotImplementedError
 
 
@@ -1457,6 +1459,9 @@ async def test_stream_with_chunking_rejects_precomputed_mot() -> None:
     """
 
     class PrecomputedBackend(Backend):
+        _model_id: str = "precomputed-mock-model"
+        _provider: str = "precomputed-mock-provider"
+
         async def _generate_from_context(
             self,
             action: Any,
@@ -1468,9 +1473,9 @@ async def test_stream_with_chunking_rejects_precomputed_mot() -> None:
         ) -> tuple[ModelOutputThunk, Any]:
             return ModelOutputThunk(value="already done"), ctx
 
-        async def generate_from_raw(
+        async def _generate_from_raw(
             self, actions: Any, ctx: Any, **kwargs: Any
-        ) -> list[ModelOutputThunk]:
+        ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
             raise NotImplementedError
 
     with pytest.raises(RuntimeError, match="already-computed MOT"):
@@ -1680,6 +1685,9 @@ async def test_cancelled_task_sets_completed_false() -> None:
         await gate.wait()
 
     class BlockingBackend(Backend):
+        _model_id: str = "blocking-mock-model"
+        _provider: str = "blocking-mock-provider"
+
         async def _generate_from_context(
             self, action: Any, ctx: Any, **kwargs: Any
         ) -> tuple[ModelOutputThunk, Any]:
@@ -1688,7 +1696,7 @@ async def test_cancelled_task_sets_completed_false() -> None:
             feed_task = asyncio.create_task(_blocking_feed(mot))
             return mot, ctx.add(action).add(mot)
 
-        async def generate_from_raw(self, *args: Any, **kwargs: Any) -> Any:
+        async def _generate_from_raw(self, *args: Any, **kwargs: Any) -> Any:
             raise NotImplementedError
 
     result = await stream_with_chunking(

@@ -1,5 +1,8 @@
 """This module holds shim backends used for smoke tests."""
 
+from collections.abc import Sequence
+from typing import Any
+
 from ..core import (
     Backend,
     BaseModelSubclass,
@@ -32,6 +35,8 @@ class DummyBackend(Backend):
         """Initialize the dummy backend with an optional list of predetermined responses."""
         self.responses = responses
         self.idx = 0
+        self._model_id: str = "dummy"
+        self._provider: str = "dummy"
 
     async def _generate_from_context(
         self,
@@ -76,3 +81,36 @@ class DummyBackend(Backend):
             raise Exception(
                 f"DummyBackend expected no more than {len(self.responses)} calls."
             )
+
+    async def _generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
+        """Return one predetermined response per action.
+
+        If `responses` is `None`, every action gets `"dummy"`. Otherwise consumes
+        items from `responses` in order, one per action.
+
+        Raises:
+            AssertionError: If `format` is not `None`.
+            Exception: If `responses` does not have enough remaining entries to
+                cover `actions`.
+        """
+        assert format is None, "The DummyBackend does not support constrained decoding."
+        if self.responses is None:
+            return [ModelOutputThunk(value="dummy") for _ in actions], None
+        if self.idx + len(actions) > len(self.responses):
+            raise Exception(
+                f"DummyBackend expected no more than {len(self.responses)} calls."
+            )
+        results = [
+            ModelOutputThunk(value=self.responses[self.idx + i])
+            for i in range(len(actions))
+        ]
+        self.idx += len(actions)
+        return results, None
