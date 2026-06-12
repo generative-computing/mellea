@@ -525,17 +525,6 @@ class TestPythonPlottingRequirementsFactory:
             assert len(reqs) == 7
             assert reqs[5].output_path == path
 
-    def test_factory_raises_on_non_string_path(self):
-        """Test that factory raises TypeError for non-string output_path."""
-        with pytest.raises(TypeError):
-            python_plotting_requirements(output_path=123)
-
-        with pytest.raises(TypeError):
-            python_plotting_requirements(output_path=None)
-
-        with pytest.raises(TypeError):
-            python_plotting_requirements(output_path=["/tmp/plot.png"])
-
     def test_factory_raises_on_empty_path(self):
         """Test that factory raises ValueError for empty output_path."""
         with pytest.raises(ValueError):
@@ -544,15 +533,31 @@ class TestPythonPlottingRequirementsFactory:
         with pytest.raises(ValueError):
             python_plotting_requirements(output_path="   ")
 
-    def test_factory_can_be_unpacked(self):
-        """Test that factory result can be unpacked like in usage examples."""
-        output_path = "/tmp/plot.png"
-        reqs = python_plotting_requirements(output_path=output_path)
+    def test_factory_propagates_timeout_seconds_validation(self):
+        """Test that invalid timeout_seconds from delegated factory propagates."""
+        with pytest.raises(ValueError, match="timeout_seconds must be positive"):
+            python_plotting_requirements(output_path="/tmp/plot.png", timeout_seconds=0)
 
-        # Verify unpacking pattern works
-        unpacked = [*reqs]
-        assert len(unpacked) == 7
-        assert unpacked == reqs
+    def test_factory_propagates_output_limit_chars_validation(self):
+        """Test that invalid output_limit_chars from delegated factory propagates."""
+        with pytest.raises(ValueError, match="output_limit_chars must be positive"):
+            python_plotting_requirements(
+                output_path="/tmp/plot.png", output_limit_chars=-1
+            )
+
+    def test_factory_can_be_unpacked(self):
+        """Test that factory result can be unpacked into all 7 requirements."""
+        output_path = "/tmp/plot.png"
+        r1, r2, r3, r4, r5, r6, r7 = python_plotting_requirements(
+            output_path=output_path
+        )
+        assert isinstance(r1, PythonCodeExtraction)
+        assert isinstance(r2, PythonSyntaxValid)
+        assert isinstance(r3, PythonExecutionReq)
+        assert isinstance(r4, NoImportRestrictions)
+        assert isinstance(r5, MatplotlibHeadlessBackend)
+        assert isinstance(r6, PlotFileSaved)
+        assert isinstance(r7, PlotDependenciesAvailable)
 
     def test_factory_requirements_are_independent_instances(self):
         """Test that multiple factory calls create independent requirement instances."""

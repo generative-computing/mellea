@@ -370,8 +370,8 @@ def python_plotting_requirements(
             7. PlotDependenciesAvailable — validates matplotlib and numpy are available
 
     Raises:
-        TypeError: If output_path is not a string.
-        ValueError: If output_path is empty.
+        ValueError: If output_path is empty or whitespace-only, or if timeout_seconds
+            or output_limit_chars is not positive.
 
     Examples:
         >>> output_path = "/tmp/plot.png"
@@ -391,13 +391,8 @@ def python_plotting_requirements(
         >>> len(reqs_restricted)
         7
     """
-    if not isinstance(output_path, str):
-        raise TypeError(
-            f"output_path must be a string, got {type(output_path).__name__}"
-        )
-
     if not output_path.strip():
-        raise ValueError("output_path cannot be empty")
+        raise ValueError("output_path cannot be empty or whitespace-only")
 
     requirements = python_code_generation_requirements(
         allowed_imports=allowed_imports,
