@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 @hook(HookType.VALIDATION_PRE_CHECK)
 async def log_validation_pre_check(
-    payload: ValidationPreCheckPayload, ctx: dict[str, Any]
+    payload: ValidationPreCheckPayload, ctx: Any
 ) -> None:
     """Log validation setup before requirements are checked.
 
@@ -48,7 +48,7 @@ async def log_validation_pre_check(
     num_reqs = len(payload.requirements)
     target_type = type(payload.target).__name__ if payload.target else "None"
 
-    logger.info(
+    logger.debug(
         f"[🔍 VALIDATION-PRE-CHECK] requirements={num_reqs} | target={target_type}"
     )
 
@@ -62,7 +62,7 @@ async def log_validation_pre_check(
 
 @hook(HookType.VALIDATION_POST_CHECK)
 async def log_validation_post_check(
-    payload: ValidationPostCheckPayload, ctx: dict[str, Any]
+    payload: ValidationPostCheckPayload, ctx: Any
 ) -> None:
     """Log validation results after requirements are checked.
 
@@ -76,11 +76,11 @@ async def log_validation_post_check(
     all_passed = payload.all_validations_passed
 
     if all_passed:
-        logger.info(
+        logger.debug(
             f"[✅ VALIDATION-POST-CHECK] ALL PASSED: {passed}/{total} requirements"
         )
     else:
-        logger.info(
+        logger.debug(
             f"[❌ VALIDATION-POST-CHECK] MIXED RESULTS: {passed}/{total} passed, "
             f"{failed}/{total} failed"
         )

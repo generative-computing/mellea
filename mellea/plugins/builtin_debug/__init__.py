@@ -2,6 +2,7 @@
 
 Provides pre-built plugins for common debugging tasks:
 - Generation pipeline tracing (requests, responses, latency, tokens)
+- Validation pipeline tracing (requirements, pass/fail, reasons)
 - Sampling strategy diagnostics (iterations, validation, repair, results)
 
 Examples:
