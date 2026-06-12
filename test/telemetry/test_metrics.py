@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from test.telemetry.conftest import reset_metrics_state
+
 # Check if OpenTelemetry is available
 try:
     from opentelemetry import metrics
@@ -30,22 +32,16 @@ def clean_metrics_env(monkeypatch):
     monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
     monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
-    # Force reload of metrics module to pick up env vars
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     yield
-    # Reset after test
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
 
 
 @pytest.fixture
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    # Clear other env vars to prevent user-set values from leaking into reload
+    # Clear other env vars to prevent user-set values from leaking in
     monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
     monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
     monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
@@ -53,16 +49,10 @@ def enable_metrics(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
-    # Force reload of metrics module to pick up env vars
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     yield
-    # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
 
 
 @pytest.fixture
@@ -96,29 +86,21 @@ def test_metrics_enabled_with_env_var(enable_metrics):
     assert is_metrics_enabled()
 
 
-def test_metrics_enabled_with_various_truthy_values(monkeypatch):
+def test_metrics_enabled_with_various_truthy_values(monkeypatch, clean_metrics_env):
     """Test that various truthy values enable metrics."""
-    import importlib
-
-    import mellea.telemetry.metrics
-
     for value in ["true", "True", "TRUE", "1", "yes", "Yes", "YES"]:
         monkeypatch.setenv("MELLEA_METRICS_ENABLED", value)
-        importlib.reload(mellea.telemetry.metrics)
+        reset_metrics_state()
         from mellea.telemetry.metrics import is_metrics_enabled
 
         assert is_metrics_enabled(), f"Failed for value: {value}"
 
 
-def test_metrics_disabled_with_falsy_values(monkeypatch):
+def test_metrics_disabled_with_falsy_values(monkeypatch, clean_metrics_env):
     """Test that falsy values keep metrics disabled."""
-    import importlib
-
-    import mellea.telemetry.metrics
-
     for value in ["false", "False", "FALSE", "0", "no", "No", "NO", ""]:
         monkeypatch.setenv("MELLEA_METRICS_ENABLED", value)
-        importlib.reload(mellea.telemetry.metrics)
+        reset_metrics_state()
         from mellea.telemetry.metrics import is_metrics_enabled
 
         assert not is_metrics_enabled(), f"Failed for value: {value}"
@@ -151,6 +133,52 @@ def test_meter_reused_across_instruments(enable_metrics):
     from mellea.telemetry.metrics import _meter
 
     assert _meter is not None
+
+
+def test_meter_remains_functional_after_repeated_resets(monkeypatch):
+    """Recordings via `_meter` must keep landing in the active reader after reset cycles."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
+
+    from mellea.telemetry import metrics as metrics_module
+
+    readers: list[InMemoryMetricReader] = []
+
+    def fake_setup_meter_provider() -> MeterProvider:
+        reader = InMemoryMetricReader()
+        readers.append(reader)
+        provider = MeterProvider(metric_readers=[reader])
+        # Must call set_meter_provider — its 2nd+ no-op is the bug trigger.
+        from opentelemetry import metrics as otel_metrics
+
+        otel_metrics.set_meter_provider(provider)
+        return provider
+
+    monkeypatch.setattr(
+        metrics_module, "_setup_meter_provider", fake_setup_meter_provider
+    )
+
+    for cycle in range(3):
+        reset_metrics_state()
+        metrics_module.record_token_usage_metrics(
+            input_tokens=10, output_tokens=5, model="m", provider="p"
+        )
+        metrics_module._meter_provider.force_flush()
+        data = readers[-1].get_metrics_data()
+        recorded = [
+            m.name
+            for rm in data.resource_metrics
+            for sm in rm.scope_metrics
+            for m in sm.metrics
+        ]
+        assert "mellea.llm.tokens.input" in recorded, (
+            f"cycle {cycle}: token recording vanished — _meter is bound to "
+            f"a stale/shutdown MeterProvider"
+        )
+
+    reset_metrics_state()
 
 
 # Instrument Creation Tests
@@ -253,26 +281,18 @@ def test_noop_updown_counter_methods_dont_raise(clean_metrics_env):
 # Import Safety Tests
 
 
-def test_graceful_handling_without_opentelemetry():
+def test_graceful_handling_without_opentelemetry(monkeypatch):
     """Test that metrics module handles missing OpenTelemetry gracefully."""
-    with patch.dict("sys.modules", {"opentelemetry": None}):
-        # Force reimport
-        import importlib
+    import mellea.telemetry.metrics as metrics_module
 
-        import mellea.telemetry.metrics
+    monkeypatch.setattr(metrics_module, "_OTEL_AVAILABLE", False)
+    reset_metrics_state()
 
-        importlib.reload(mellea.telemetry.metrics)
+    from mellea.telemetry.metrics import create_counter, is_metrics_enabled
 
-        # Should not raise, metrics should be disabled
-        from mellea.telemetry.metrics import (
-            create_counter,
-            create_histogram,
-            is_metrics_enabled,
-        )
-
-        assert not is_metrics_enabled()
-        counter = create_counter("test.counter")
-        assert counter is not None  # Should be no-op
+    assert not is_metrics_enabled()
+    counter = create_counter("test.counter")
+    assert counter is not None  # Should be no-op
 
 
 # Functional Tests with Real Instruments
@@ -356,23 +376,21 @@ def test_histogram_with_attributes(enable_metrics):
 def test_custom_service_name(monkeypatch, enable_metrics):
     """Test that custom service name is used."""
     monkeypatch.setenv("OTEL_SERVICE_NAME", "my-custom-service")
+    reset_metrics_state()
 
-    import importlib
+    import mellea.telemetry.metrics as m
 
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _SERVICE_NAME
-
-    assert _SERVICE_NAME == "my-custom-service"
+    assert (
+        m._meter_provider._sdk_config.resource.attributes["service.name"]
+        == "my-custom-service"
+    )
 
 
 def test_default_service_name(enable_metrics):
     """Test that default service name is 'mellea'."""
-    from mellea.telemetry.metrics import _SERVICE_NAME
+    import mellea.telemetry.metrics as m
 
-    assert _SERVICE_NAME == "mellea"
+    assert m._meter_provider._sdk_config.resource.attributes["service.name"] == "mellea"
 
 
 # Console Exporter Tests
@@ -380,25 +398,34 @@ def test_default_service_name(enable_metrics):
 
 def test_console_exporter_enabled(monkeypatch, shutdown_meter_provider):
     """Test that console exporter can be enabled."""
+    from opentelemetry.sdk.metrics.export import (
+        ConsoleMetricExporter,
+        PeriodicExportingMetricReader,
+    )
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
 
-    import importlib
+    with patch(
+        "mellea.telemetry.metrics.ConsoleMetricExporter", wraps=ConsoleMetricExporter
+    ) as mock_exporter:
+        reset_metrics_state()
+        mock_exporter.assert_called_once()
 
-    import mellea.telemetry.metrics
+    import mellea.telemetry.metrics as m
 
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _METRICS_CONSOLE
-
-    assert _METRICS_CONSOLE is True
+    assert any(
+        isinstance(r, PeriodicExportingMetricReader)
+        for r in m._meter_provider._sdk_config.metric_readers
+    )
 
 
 def test_console_exporter_disabled_by_default(enable_metrics):
     """Test that console exporter is disabled by default."""
-    from mellea.telemetry.metrics import _METRICS_CONSOLE
+    import mellea.telemetry.metrics as m
 
-    assert _METRICS_CONSOLE is False
+    # No readers attached because no exporter env vars are set in `enable_metrics`.
+    assert not m._meter_provider._sdk_config.metric_readers
 
 
 # OTLP Exporter Tests
@@ -406,69 +433,72 @@ def test_console_exporter_disabled_by_default(enable_metrics):
 
 def test_otlp_explicit_enablement(monkeypatch, shutdown_meter_provider):
     """Test that OTLP exporter requires explicit enablement via MELLEA_METRICS_OTLP."""
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+        OTLPMetricExporter,
+    )
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _METRICS_OTLP
-
-    assert _METRICS_OTLP is True
+    with patch(
+        "mellea.telemetry.metrics.OTLPMetricExporter", wraps=OTLPMetricExporter
+    ) as mock_exporter:
+        reset_metrics_state()
+        mock_exporter.assert_called_once_with(endpoint="http://localhost:4317")
 
 
 def test_metrics_specific_endpoint_precedence(monkeypatch):
     """Test that OTEL_EXPORTER_OTLP_METRICS_ENDPOINT takes precedence over general endpoint."""
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+        OTLPMetricExporter,
+    )
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "http://localhost:4318")
 
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _OTLP_METRICS_ENDPOINT
-
-    assert _OTLP_METRICS_ENDPOINT == "http://localhost:4318"
+    with patch(
+        "mellea.telemetry.metrics.OTLPMetricExporter", wraps=OTLPMetricExporter
+    ) as mock_exporter:
+        reset_metrics_state()
+        mock_exporter.assert_called_once_with(endpoint="http://localhost:4318")
 
 
 def test_custom_export_interval(monkeypatch):
     """Test that custom export interval is configured correctly."""
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
     monkeypatch.setenv("OTEL_METRIC_EXPORT_INTERVAL", "30000")
 
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _EXPORT_INTERVAL_MILLIS
-
-    assert _EXPORT_INTERVAL_MILLIS == 30000
+    with patch(
+        "mellea.telemetry.metrics.PeriodicExportingMetricReader",
+        wraps=PeriodicExportingMetricReader,
+    ) as mock_reader:
+        reset_metrics_state()
+        assert mock_reader.call_args.kwargs["export_interval_millis"] == 30000
 
 
 def test_invalid_export_interval_warning(monkeypatch):
-    """Test that invalid export interval produces warning and uses default."""
+    """Test that invalid export interval produces warning and falls back to 60000."""
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
     monkeypatch.setenv("OTEL_METRIC_EXPORT_INTERVAL", "invalid")
 
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    with pytest.warns(UserWarning, match="Invalid OTEL_METRIC_EXPORT_INTERVAL"):
-        importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _EXPORT_INTERVAL_MILLIS
-
-    assert _EXPORT_INTERVAL_MILLIS == 60000
+    with (
+        pytest.warns(UserWarning, match="Invalid OTEL_METRIC_EXPORT_INTERVAL"),
+        patch(
+            "mellea.telemetry.metrics.PeriodicExportingMetricReader",
+            wraps=PeriodicExportingMetricReader,
+        ) as mock_reader,
+    ):
+        reset_metrics_state()
+        assert mock_reader.call_args.kwargs["export_interval_millis"] == 60000
 
 
 def test_otlp_enabled_without_endpoint_warning(monkeypatch):
@@ -479,15 +509,11 @@ def test_otlp_enabled_without_endpoint_warning(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
-    import importlib
-
-    import mellea.telemetry.metrics
-
     with pytest.warns(
         UserWarning,
         match="OTLP metrics exporter is enabled.*but no endpoint is configured",
     ):
-        importlib.reload(mellea.telemetry.metrics)
+        reset_metrics_state()
 
 
 # Prometheus Exporter Tests
@@ -495,29 +521,26 @@ def test_otlp_enabled_without_endpoint_warning(monkeypatch):
 
 def test_prometheus_exporter_enabled(monkeypatch):
     """Test that Prometheus metric reader initializes when enabled."""
-    import importlib
-
-    import mellea.telemetry.metrics
+    from opentelemetry.exporter.prometheus import PrometheusMetricReader
 
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
+    reset_metrics_state()
 
-    importlib.reload(mellea.telemetry.metrics)
+    import mellea.telemetry.metrics as m
 
-    from mellea.telemetry.metrics import _METRICS_PROMETHEUS
-
-    assert _METRICS_PROMETHEUS is True
+    assert any(
+        isinstance(r, PrometheusMetricReader)
+        for r in m._meter_provider._sdk_config.metric_readers
+    )
 
 
 def test_prometheus_exporter_import_error_warning(monkeypatch):
     """Test that missing Prometheus package produces helpful warning."""
-    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
-
-    import importlib
     import sys
 
-    import mellea.telemetry.metrics
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
 
     # Temporarily remove the module to simulate ImportError
     original_modules = sys.modules.copy()
@@ -528,7 +551,7 @@ def test_prometheus_exporter_import_error_warning(monkeypatch):
             UserWarning,
             match="Prometheus exporter is enabled.*but opentelemetry-exporter-prometheus is not installed",
         ):
-            importlib.reload(mellea.telemetry.metrics)
+            reset_metrics_state()
     finally:
         # Restore modules
         sys.modules.clear()
@@ -537,48 +560,53 @@ def test_prometheus_exporter_import_error_warning(monkeypatch):
 
 def test_prometheus_and_otlp_exporters_together(monkeypatch, shutdown_meter_provider):
     """Test that Prometheus and OTLP exporters can run simultaneously."""
+    from opentelemetry.exporter.prometheus import PrometheusMetricReader
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    reset_metrics_state()
 
-    import importlib
+    import mellea.telemetry.metrics as m
 
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _METRICS_OTLP, _METRICS_PROMETHEUS
-
-    assert _METRICS_PROMETHEUS is True
-    assert _METRICS_OTLP is True
+    reader_types = [type(r) for r in m._meter_provider._sdk_config.metric_readers]
+    assert PrometheusMetricReader in reader_types
+    # OTLP exporter is wrapped in a PeriodicExportingMetricReader
+    assert PeriodicExportingMetricReader in reader_types
 
 
 def test_prometheus_exporter_disabled_by_default(enable_metrics):
     """Test that Prometheus exporter is disabled by default."""
-    from mellea.telemetry.metrics import _METRICS_PROMETHEUS
+    from opentelemetry.exporter.prometheus import PrometheusMetricReader
 
-    assert _METRICS_PROMETHEUS is False
+    import mellea.telemetry.metrics as m
+
+    assert not any(
+        isinstance(r, PrometheusMetricReader)
+        for r in m._meter_provider._sdk_config.metric_readers
+    )
 
 
 def test_prometheus_exporter_with_console_exporter(
     monkeypatch, shutdown_meter_provider
 ):
     """Test that Prometheus works alongside console exporter."""
+    from opentelemetry.exporter.prometheus import PrometheusMetricReader
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
     monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
+    reset_metrics_state()
 
-    import importlib
+    import mellea.telemetry.metrics as m
 
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
-
-    from mellea.telemetry.metrics import _METRICS_CONSOLE, _METRICS_PROMETHEUS
-
-    assert _METRICS_PROMETHEUS is True
-    assert _METRICS_CONSOLE is True
+    reader_types = [type(r) for r in m._meter_provider._sdk_config.metric_readers]
+    assert PrometheusMetricReader in reader_types
+    # Console exporter is wrapped in a PeriodicExportingMetricReader
+    assert PeriodicExportingMetricReader in reader_types
 
 
 # Metric Instrument Tests

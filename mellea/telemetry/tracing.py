@@ -57,6 +57,7 @@ def _env_true(name: str) -> bool:
 _tracer_provider: Any = None
 _application_tracer: Any = None
 _backend_tracer: Any = None
+_tracing_enabled: bool = False
 _plugins_registered: bool = False  # Plugin registry is process-global; register once.
 
 
@@ -150,20 +151,23 @@ def _register_tracing_plugins() -> None:
 
 
 def is_tracing_enabled() -> bool:
-    """Check if tracing is enabled via `MELLEA_TRACES_ENABLED`.
+    """Check if tracing is enabled.
 
     Returns:
-        True if `MELLEA_TRACES_ENABLED` is set to a truthy value AND
-        OpenTelemetry is installed.
+        True if `MELLEA_TRACES_ENABLED` is truthy AND OpenTelemetry is installed.
     """
-    return _OTEL_AVAILABLE and _env_true("MELLEA_TRACES_ENABLED")
+    return _tracing_enabled
 
 
 def _setup_tracing() -> None:
     """Initialise the tracer provider, tracers, and register plugins."""
-    global _tracer_provider, _application_tracer, _backend_tracer
+    global _tracer_provider, _application_tracer, _backend_tracer, _tracing_enabled
 
-    if not is_tracing_enabled():
+    _tracing_enabled = False
+    _tracer_provider = None
+    _application_tracer = None
+    _backend_tracer = None
+    if not (_OTEL_AVAILABLE and _env_true("MELLEA_TRACES_ENABLED")):
         return
 
     _tracer_provider = _setup_tracer_provider()
@@ -175,11 +179,11 @@ def _setup_tracing() -> None:
         "mellea.application", mellea_version
     )
     _backend_tracer = _tracer_provider.get_tracer("mellea.backend", mellea_version)
+    _tracing_enabled = True
     _register_tracing_plugins()
 
 
-if is_tracing_enabled():
-    _setup_tracing()
+_setup_tracing()
 
 
 def is_content_tracing_enabled() -> bool:

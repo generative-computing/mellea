@@ -15,24 +15,16 @@ from mellea.telemetry import (
     tracing,
 )
 from mellea.telemetry.tracing import get_backend_tracer
-
-
-def _reset_tracing_state() -> None:
-    """Reset module state and re-run setup so env-var changes take effect."""
-    tracing._tracer_provider = None
-    tracing._application_tracer = None
-    tracing._backend_tracer = None
-    tracing._in_flight_spans.clear()
-    tracing._setup_tracing()
+from test.telemetry.conftest import reset_tracing_state
 
 
 @pytest.fixture
 def enable_tracing(monkeypatch):
     """Enable tracing for the duration of a test."""
     monkeypatch.setenv("MELLEA_TRACES_ENABLED", "true")
-    _reset_tracing_state()
+    reset_tracing_state()
     yield
-    _reset_tracing_state()
+    reset_tracing_state()
 
 
 @pytest.fixture
@@ -41,9 +33,9 @@ def disable_tracing(monkeypatch):
     monkeypatch.delenv("MELLEA_TRACES_ENABLED", raising=False)
     monkeypatch.delenv("MELLEA_TRACES_OTLP", raising=False)
     monkeypatch.delenv("MELLEA_TRACES_CONSOLE", raising=False)
-    _reset_tracing_state()
+    reset_tracing_state()
     yield
-    _reset_tracing_state()
+    reset_tracing_state()
 
 
 def test_telemetry_disabled_by_default(disable_tracing):
@@ -73,7 +65,7 @@ def test_content_tracing(monkeypatch, env, expected):
     )
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    _reset_tracing_state()
+    reset_tracing_state()
 
     assert is_content_tracing_enabled() is expected
 
@@ -84,10 +76,10 @@ def test_otlp_traces_endpoint_honored(monkeypatch):
     monkeypatch.setenv("MELLEA_TRACES_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://localhost:4317")
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    _reset_tracing_state()
+    reset_tracing_state()
 
     assert get_backend_tracer() is not None
-    _reset_tracing_state()
+    reset_tracing_state()
 
 
 def test_otlp_warns_when_no_endpoint_configured(monkeypatch, recwarn):
@@ -120,7 +112,7 @@ def test_otlp_falls_back_to_generic_endpoint(monkeypatch, recwarn):
 
 def test_trace_application_context_manager():
     """Test that trace_application works as a context manager."""
-    _reset_tracing_state()
+    reset_tracing_state()
 
     # Should not raise even when tracing is disabled
     with trace_application("test_span", test_attr="value") as span:

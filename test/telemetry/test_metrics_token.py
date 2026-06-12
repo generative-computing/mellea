@@ -6,6 +6,8 @@ records token metrics with proper attributes and values using OpenTelemetry.
 
 import pytest
 
+from test.telemetry.conftest import reset_metrics_state
+
 # Check if OpenTelemetry is available
 try:
     from opentelemetry.sdk.metrics import MeterProvider
@@ -24,21 +26,11 @@ pytestmark = [
 @pytest.fixture
 def clean_metrics_env(monkeypatch):
     """Clean metrics environment variables and enable metrics for tests."""
-    # Enable metrics for integration tests
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-
-    # Clean other metrics env vars
     monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
-
-    # Force reload of metrics module to pick up env vars
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     yield
-    # Reset after test
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
 
 
 def _setup_in_memory_provider(metrics_module):

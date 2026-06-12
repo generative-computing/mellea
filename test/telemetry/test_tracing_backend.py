@@ -12,6 +12,7 @@ from mellea.plugins.manager import (
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
+from test.telemetry.conftest import reset_tracing_state
 
 # Check if OpenTelemetry is available
 try:
@@ -32,27 +33,17 @@ pytestmark = [
 ]
 
 
-def _reset_tracing_state() -> None:
-    import mellea.telemetry.tracing as tracing_mod
-
-    tracing_mod._tracer_provider = None
-    tracing_mod._application_tracer = None
-    tracing_mod._backend_tracer = None
-    tracing_mod._in_flight_spans.clear()
-    tracing_mod._setup_tracing()
-
-
 @pytest.fixture(scope="module", autouse=True)
 def setup_telemetry():
     """Enable tracing for all tests in this module."""
     mp = pytest.MonkeyPatch()
     mp.setenv("MELLEA_TRACES_ENABLED", "true")
-    _reset_tracing_state()
+    reset_tracing_state()
 
     yield
 
     mp.undo()
-    _reset_tracing_state()
+    reset_tracing_state()
 
 
 @pytest.fixture
