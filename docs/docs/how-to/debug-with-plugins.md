@@ -4,7 +4,7 @@ description: "Use built-in debug plugins to trace generation, validation, and sa
 # diataxis: how-to
 ---
 
-**Prerequisites:** [The Requirements System](../concepts/requirements-system.md), `pip install mellea`.
+**Prerequisites:** [The Requirements System](../concepts/requirements-system.md), `uv add 'mellea[hooks]'`.
 
 Mellea's plugin system provides debug hooks that trace the full lifecycle of
 generation, validation, and sampling. Use these plugins to understand:

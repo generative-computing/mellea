@@ -126,7 +126,7 @@ async def log_generation_pre_call(payload: GenerationPreCallPayload, ctx: Any) -
                 requirements = fmt.args.get("requirements", [])
                 repair_text = fmt.args.get("repair", "")
         except Exception:
-            pass
+            logger.debug("action extraction failed", exc_info=True)
 
     # Log main request info
     prompt_preview = _get_prompt_preview(payload)

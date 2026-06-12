@@ -23,7 +23,7 @@ Watch the logs to see tracing in action:
 import logging
 
 import mellea
-from mellea.plugins import register
+from mellea.plugins import plugin_scope
 from mellea.plugins.builtin_debug.generation import (
     log_generation_post_call,
     log_generation_pre_call,
@@ -32,12 +32,13 @@ from mellea.plugins.builtin_debug.generation import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
-# Enable generation tracing by registering the hooks
-register([log_generation_pre_call, log_generation_post_call])
-
 
 def main():
-    """Example: Use GenerationTracingPlugin to debug generation calls."""
+    """Example: Use generation tracing to debug generation calls.
+
+    The plugin_scope context manager ensures hooks are registered only
+    for this block and are cleaned up automatically on exit.
+    """
     log.info("=" * 70)
     log.info("Generation Tracing Plugin Example")
     log.info("=" * 70)
@@ -45,15 +46,16 @@ def main():
     log.info("Watch the logs for [📤 GEN-PRE-CALL] and [📥 GEN-POST-CALL] entries.")
     log.info("")
 
-    with mellea.start_session() as m:
-        result = m.instruct("What are the three main colors of the rainbow?")
+    with plugin_scope([log_generation_pre_call, log_generation_post_call]):
+        with mellea.start_session() as m:
+            result = m.instruct("What are the three main colors of the rainbow?")
 
-        log.info("")
-        log.info("=" * 70)
-        log.info("Final result:")
-        result_str = str(result)
-        log.info(result_str[:200] + "..." if len(result_str) > 200 else result_str)
-        log.info("=" * 70)
+            log.info("")
+            log.info("=" * 70)
+            log.info("Final result:")
+            result_str = str(result)
+            log.info(result_str[:200] + "..." if len(result_str) > 200 else result_str)
+            log.info("=" * 70)
 
 
 if __name__ == "__main__":
