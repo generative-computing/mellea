@@ -18,7 +18,7 @@ Hugging Face account.
 > **Backend note:** Custom-trained adapters can only be loaded into `LocalHFBackend`.
 > They do not work with Ollama, OpenAI, or other remote backends.
 >
-> Granite Switch models ship with pre-trained intrinsic adapters embedded in the
+> Granite Switch models ship with pre-trained adapter functions embedded in the
 > model weights, which can be used via `OpenAIBackend` with
 > `load_embedded_adapters=True`. See [Intrinsics](./intrinsics) for details.
 
@@ -104,7 +104,7 @@ weights. Requires `HF_TOKEN` set or a prior `huggingface-cli login`.
 > data includes proprietary, confidential, or personal information. Language models can
 > memorize details from small domain-specific datasets.
 
-If you intend to use the adapter as a Mellea intrinsic (so that it can be loaded by
+If you intend to use the adapter as a Mellea adapter function (so that it can be loaded by
 model ID rather than local path), pass `--intrinsic` and provide an `io.yaml` file:
 
 ```bash

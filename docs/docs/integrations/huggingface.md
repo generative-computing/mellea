@@ -83,11 +83,11 @@ See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for
 
 ## aLoRA adapters
 
-`LocalHFBackend` supports [Activated LoRA (aLoRA)](../advanced/lora-and-alora-adapters)
+`LocalHFBackend` supports [aLoRA](../advanced/lora-and-alora-adapters)
 adapters — lightweight domain-specific requirement validators that run on local GPU
 hardware. See the aLoRA guide for training and usage.
 
-> **Tip:** For intrinsics without local GPU requirements, Granite Switch models
+> **Tip:** For adapter functions without local GPU requirements, Granite Switch models
 > serve pre-embedded adapters via vLLM and the OpenAI backend. See
 > [Intrinsics](../advanced/intrinsics) for details.
 

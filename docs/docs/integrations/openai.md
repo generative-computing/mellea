@@ -261,7 +261,7 @@ m = MelleaSession(
 ## Intrinsics with Granite Switch
 
 Granite Switch models embed LoRA/aLoRA adapters directly in the model weights.
-When served via vLLM, these adapters enable intrinsic functions (RAG quality
+When served via vLLM, these adapters enable adapter functions (RAG quality
 checks, safety evaluation, requirement validation) through the OpenAI-compatible
 API without loading adapter weights at runtime.
 
@@ -290,13 +290,13 @@ backend = OpenAIBackend(
 )
 ```
 
-The high-level intrinsic wrappers (`rag.check_answerability`,
+The high-level adapter function wrappers (`rag.check_answerability`,
 `core.check_certainty`, etc.) work identically with this backend. See
-[Intrinsics](../advanced/intrinsics) for the full list of available intrinsics.
+[Intrinsics](../advanced/intrinsics) for the full list of available adapter functions.
 
 > **Note:** `load_embedded_adapters=True` downloads adapter I/O configurations
 > from the model's HuggingFace repository on first use. No adapter weights are
-> transferred — the adapters are already part of the model. Only intrinsics
+> transferred — the adapters are already part of the model. Only adapter functions
 > embedded in the model are available — check the model's `adapter_index.json`
 > for the list.
 

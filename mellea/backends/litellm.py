@@ -306,7 +306,7 @@ class LiteLLMBackend(FormatterBackend):
         # Add the final message.
         match action:
             case ALoraRequirement():
-                raise Exception("The LiteLLM backend does not support activated LoRAs.")
+                raise Exception("The LiteLLM backend does not support aLoRA adapters.")
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
 

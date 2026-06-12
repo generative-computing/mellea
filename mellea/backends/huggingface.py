@@ -1,6 +1,6 @@
 """A backend that uses the Huggingface Transformers library.
 
-The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or ALoras, consider using Ollama backends instead.
+The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.
 """
 
 from __future__ import annotations
@@ -235,7 +235,7 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
-    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
+    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
 
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 

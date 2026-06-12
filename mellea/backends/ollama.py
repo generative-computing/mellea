@@ -373,7 +373,7 @@ class OllamaModelBackend(FormatterBackend):
         match action:
             case ALoraRequirement():
                 raise Exception(
-                    "The ollama backend does not support currently support activated LoRAs."
+                    "The ollama backend does not currently support aLoRA adapters."
                 )
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))

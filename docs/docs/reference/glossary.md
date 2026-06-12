@@ -22,6 +22,14 @@ See: [act() and aact()](/how-to/act-and-aact)
 
 ---
 
+## Adapter
+
+Informal shorthand for **[adapter function](#adapter-function)**. Acceptable in brief
+references (e.g. code comments, table cells). Use the full term "adapter function" in
+user-facing prose, documentation, and API descriptions.
+
+---
+
 ## Adapter function
 
 An adapter function is a small, task-specific model component with a predictable structured
@@ -38,14 +46,6 @@ function". The Python symbol `Intrinsic` is the current implementation name; see
 user-facing text where precision matters).
 
 See: [Adapter Functions](../advanced/intrinsics.md)
-
----
-
-## Adapter
-
-Informal shorthand for **[adapter function](#adapter-function)**. Acceptable in brief
-references (e.g. code comments, table cells). Use the full term "adapter function" in
-user-facing prose, documentation, and API descriptions.
 
 ---
 
@@ -379,7 +379,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ## factuality_correction()
 
-A Guardian Intrinsic function that generates a corrected version of the assistant's
+A Guardian adapter function that generates a corrected version of the assistant's
 last response grounded in the documents provided in context. Returns whatever the
 model emits as a `str` — typically the corrected text. The model may emit `"none"`
 when no correction is needed, but this is a model-side convention, not part of the
@@ -395,7 +395,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails#factuality-correction)
 
 ## factuality_detection()
 
-A Guardian Intrinsic function that evaluates whether the assistant's last response
+A Guardian adapter function that evaluates whether the assistant's last response
 is factually consistent with the documents in context. Returns `"yes"` if the
 response contains factual errors, or `"no"` if it is consistent.
 
@@ -409,7 +409,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails#factuality-detection)
 
 ## guardian_check()
 
-A Guardian Intrinsic function that evaluates the last message from a given role in
+A Guardian adapter function that evaluates the last message from a given role in
 a `ChatContext` against a safety or quality criterion. Returns a `float` score from
 `0.0` (no risk) to `1.0` (risk detected); values at or above `0.5` indicate risk.
 
@@ -430,7 +430,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 > **Deprecated as of v0.4.** Use [`guardian_check()`](#guardian_check),
 > [`policy_guardrails()`](#policy_guardrails), or
-> [`factuality_detection()`](#factuality_detection) from the Guardian Intrinsics
+> [`factuality_detection()`](#factuality_detection) from the Guardian adapter functions
 > instead. See [Safety Guardrails](../how-to/safety-guardrails).
 
 A deprecated `Requirement` subclass that validates LLM outputs using a separately loaded
@@ -455,7 +455,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ## policy_guardrails()
 
-A Guardian Intrinsic function that checks whether a scenario complies with a
+A Guardian adapter function that checks whether a scenario complies with a
 natural-language policy. Returns `"Yes"` (compliant), `"No"` (non-compliant), or
 `"Ambiguous"` (insufficient information to decide).
 

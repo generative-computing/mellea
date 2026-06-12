@@ -362,7 +362,7 @@ class WatsonxAIBackend(FormatterBackend):
         match action:
             case ALoraRequirement():
                 raise Exception(
-                    "The watsonx backend does not support currently support activated LoRAs."
+                    "The watsonx backend does not currently support aLoRA adapters."
                 )
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
