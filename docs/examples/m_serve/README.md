@@ -46,6 +46,15 @@ against `m_serve_example_streaming.py`.
 ### client_response_format.py
 Client code demonstrating all three `response_format` types with examples.
 
+### m_serve_example_tool_calling.py
+Example of serving a function with tool calling capabilities through `m serve`.
+
+### client_tool_calling.py
+Client code for testing tool calling endpoints, demonstrating function invocation through the API.
+
+### client_streaming_tool_calling.py
+Client code demonstrating streaming responses combined with tool calling.
+
 ## Concepts Demonstrated
 
 - **API Deployment**: Exposing Mellea programs as REST APIs

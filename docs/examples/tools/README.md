@@ -22,6 +22,22 @@ Shows how to use pre-built tools from HuggingFace's smolagents library.
 - Converting to Mellea tools with `MelleaTool.from_smolagents()`
 - Using tools from the HuggingFace ecosystem
 
+### python_tool_example.py
+Demonstrates creating and using custom Python tools with Mellea.
+
+**Key Features:**
+- Defining custom tool functions
+- Tool registration and discovery
+- Integrating custom tools with LLM calls
+
+### tool_decorator_example.py
+Shows how to use the `@tool` decorator for tool definition.
+
+**Key Features:**
+- Decorator-based tool creation
+- Automatic argument parsing from type hints
+- Tool documentation generation
+
 ## Concepts Demonstrated
 
 - **Tool Definition**: Creating tools for LLM use
