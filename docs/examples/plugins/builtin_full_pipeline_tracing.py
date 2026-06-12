@@ -32,7 +32,7 @@ import logging
 
 import mellea
 from mellea.core import Requirement
-from mellea.plugins import register
+from mellea.plugins import plugin_scope
 from mellea.plugins.builtin_debug.generation import (
     log_generation_post_call,
     log_generation_pre_call,
@@ -48,20 +48,6 @@ from mellea.stdlib.sampling import RepairTemplateStrategy
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
-
-# Enable both generation and sampling tracing
-register(
-    [
-        # Generation pipeline
-        log_generation_pre_call,
-        log_generation_post_call,
-        # Sampling pipeline
-        log_sampling_loop_start,
-        log_sampling_iteration,
-        log_sampling_repair,
-        log_sampling_loop_end,
-    ]
-)
 
 
 def is_lowercase_only(text: str) -> bool:
@@ -85,7 +71,7 @@ requirements: list[Requirement | str] = [
 
 
 def main():
-    """Full pipeline tracing example."""
+    """Full pipeline tracing example with generation and sampling plugins."""
     log.info("=" * 70)
     log.info("Full Pipeline Tracing Example")
     log.info("=" * 70)
@@ -97,21 +83,33 @@ def main():
     log.info("  [🔧 REPAIR-TRIGGERED] - repair strategy kicks in")
     log.info("")
 
-    with mellea.start_session() as m:
-        log.info("Generating text with strict requirements and repair strategy...")
-        log.info("")
+    with plugin_scope(
+        [
+            # Generation pipeline
+            log_generation_pre_call,
+            log_generation_post_call,
+            # Sampling pipeline
+            log_sampling_loop_start,
+            log_sampling_iteration,
+            log_sampling_repair,
+            log_sampling_loop_end,
+        ]
+    ):
+        with mellea.start_session() as m:
+            log.info("Generating text with strict requirements and repair strategy...")
+            log.info("")
 
-        result = m.instruct(
-            "Write a thank you note",
-            requirements=requirements,
-            strategy=RepairTemplateStrategy(loop_budget=3),
-        )
+            result = m.instruct(
+                "Write a thank you note",
+                requirements=requirements,
+                strategy=RepairTemplateStrategy(loop_budget=3),
+            )
 
-        log.info("")
-        log.info("=" * 70)
-        log.info("Final result:")
-        log.info(str(result)[:300] + ("..." if len(str(result)) > 300 else ""))
-        log.info("=" * 70)
+            log.info("")
+            log.info("=" * 70)
+            log.info("Final result:")
+            log.info(str(result)[:300] + ("..." if len(str(result)) > 300 else ""))
+            log.info("=" * 70)
 
 
 if __name__ == "__main__":

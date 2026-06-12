@@ -32,8 +32,6 @@ from mellea.plugins.builtin_debug.generation import (
     _get_response_preview,
     _get_token_usage,
 )
-from mellea.plugins.builtin_debug.sampling import log_sampling_iteration
-from mellea.plugins.builtin_debug.validation import log_validation_post_check
 from mellea.plugins.hooks.generation import (
     GenerationPostCallPayload,
     GenerationPreCallPayload,

@@ -22,7 +22,7 @@ import logging
 
 import mellea
 from mellea.core import Requirement
-from mellea.plugins import register
+from mellea.plugins import plugin_scope
 from mellea.plugins.builtin_debug.validation import (
     log_validation_post_check,
     log_validation_pre_check,
@@ -31,9 +31,6 @@ from mellea.stdlib.requirements import req, simple_validate
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
-
-# Enable validation tracing
-register([log_validation_pre_check, log_validation_post_check])
 
 
 def is_single_word(text: str) -> bool:
@@ -76,19 +73,20 @@ def main():
         log.info(f"  {i}. {req_desc}")
     log.info("")
 
-    with mellea.start_session() as m:
-        log.info(
-            "Generating multi-word response (will fail 'single word' requirement):"
-        )
-        log.info("-" * 70)
+    with plugin_scope([log_validation_pre_check, log_validation_post_check]):
+        with mellea.start_session() as m:
+            log.info(
+                "Generating multi-word response (will fail 'single word' requirement):"
+            )
+            log.info("-" * 70)
 
-        result = m.instruct("Say hello world", requirements=requirements)
-        log.info(f"Result: {result}")
-        log.info("")
+            result = m.instruct("Say hello world", requirements=requirements)
+            log.info(f"Result: {result}")
+            log.info("")
 
-        log.info("=" * 70)
-        log.info("Validation tracing complete!")
-        log.info("=" * 70)
+            log.info("=" * 70)
+            log.info("Validation tracing complete!")
+            log.info("=" * 70)
 
 
 if __name__ == "__main__":

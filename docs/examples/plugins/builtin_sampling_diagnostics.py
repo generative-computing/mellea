@@ -27,7 +27,7 @@ import logging
 
 import mellea
 from mellea.core import Requirement
-from mellea.plugins import register
+from mellea.plugins import plugin_scope
 from mellea.plugins.builtin_debug.sampling import (
     log_sampling_iteration,
     log_sampling_loop_end,
@@ -39,16 +39,6 @@ from mellea.stdlib.sampling import RepairTemplateStrategy
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
-
-# Enable sampling diagnostics
-register(
-    [
-        log_sampling_loop_start,
-        log_sampling_iteration,
-        log_sampling_repair,
-        log_sampling_loop_end,
-    ]
-)
 
 
 def is_lowercase_only(text: str) -> bool:
@@ -84,21 +74,29 @@ def main():
     log.info("  [🎉/💥 SAMPLING-END] - final result")
     log.info("")
 
-    with mellea.start_session() as m:
-        log.info("Generating text with strict requirements...")
-        log.info("")
+    with plugin_scope(
+        [
+            log_sampling_loop_start,
+            log_sampling_iteration,
+            log_sampling_repair,
+            log_sampling_loop_end,
+        ]
+    ):
+        with mellea.start_session() as m:
+            log.info("Generating text with strict requirements...")
+            log.info("")
 
-        result = m.instruct(
-            "Write a thank you note",
-            requirements=requirements,
-            strategy=RepairTemplateStrategy(loop_budget=3),
-        )
+            result = m.instruct(
+                "Write a thank you note",
+                requirements=requirements,
+                strategy=RepairTemplateStrategy(loop_budget=3),
+            )
 
-        log.info("")
-        log.info("=" * 70)
-        log.info("Final result:")
-        log.info(str(result)[:300] + ("..." if len(str(result)) > 300 else ""))
-        log.info("=" * 70)
+            log.info("")
+            log.info("=" * 70)
+            log.info("Final result:")
+            log.info(str(result)[:300] + ("..." if len(str(result)) > 300 else ""))
+            log.info("=" * 70)
 
 
 if __name__ == "__main__":

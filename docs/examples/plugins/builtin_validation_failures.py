@@ -18,7 +18,7 @@ import logging
 
 import mellea
 from mellea.core import Requirement
-from mellea.plugins import register
+from mellea.plugins import plugin_scope
 from mellea.plugins.builtin_debug.validation import (
     log_validation_post_check,
     log_validation_pre_check,
@@ -27,9 +27,6 @@ from mellea.stdlib.requirements import req, simple_validate
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
-
-# Enable validation tracing
-register([log_validation_pre_check, log_validation_post_check])
 
 
 def requires_hello(text: str) -> bool:
@@ -72,19 +69,22 @@ def main():
         log.info(f"  {i}. {req_desc}")
     log.info("")
 
-    with mellea.start_session() as m:
-        log.info("Test: Generate casual greeting (likely to fail some requirements)")
-        log.info("-" * 70)
-        log.info("")
+    with plugin_scope([log_validation_pre_check, log_validation_post_check]):
+        with mellea.start_session() as m:
+            log.info(
+                "Test: Generate casual greeting (likely to fail some requirements)"
+            )
+            log.info("-" * 70)
+            log.info("")
 
-        # Use immediate validation (no repair) to see failures
-        result = m.instruct(
-            "Say a casual greeting with punctuation", requirements=requirements
-        )
-        log.info("")
-        log.info(f"Generated text: {result}")
-        log.info("")
-        log.info("=" * 70)
+            # Use immediate validation (no repair) to see failures
+            result = m.instruct(
+                "Say a casual greeting with punctuation", requirements=requirements
+            )
+            log.info("")
+            log.info(f"Generated text: {result}")
+            log.info("")
+            log.info("=" * 70)
 
 
 if __name__ == "__main__":
