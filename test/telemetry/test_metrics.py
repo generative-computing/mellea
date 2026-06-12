@@ -86,7 +86,7 @@ def test_metrics_enabled_with_env_var(enable_metrics):
     assert is_metrics_enabled()
 
 
-def test_metrics_enabled_with_various_truthy_values(monkeypatch):
+def test_metrics_enabled_with_various_truthy_values(monkeypatch, clean_metrics_env):
     """Test that various truthy values enable metrics."""
     for value in ["true", "True", "TRUE", "1", "yes", "Yes", "YES"]:
         monkeypatch.setenv("MELLEA_METRICS_ENABLED", value)
@@ -96,7 +96,7 @@ def test_metrics_enabled_with_various_truthy_values(monkeypatch):
         assert is_metrics_enabled(), f"Failed for value: {value}"
 
 
-def test_metrics_disabled_with_falsy_values(monkeypatch):
+def test_metrics_disabled_with_falsy_values(monkeypatch, clean_metrics_env):
     """Test that falsy values keep metrics disabled."""
     for value in ["false", "False", "FALSE", "0", "no", "No", "NO", ""]:
         monkeypatch.setenv("MELLEA_METRICS_ENABLED", value)
