@@ -1,8 +1,4 @@
-"""User-facing types for m serve.
-
-This module contains the types that users need when writing serve() functions
-for use with the `m serve` command.
-"""
+"""User-facing types for `m serve`."""
 
 from typing import Any, Literal
 
