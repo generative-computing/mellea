@@ -355,7 +355,7 @@ class MelleaSession:
         """
         return copy(self)
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the context state to a fresh, empty context of the same type.
 
         Fires the `SESSION_RESET` plugin hook if any plugins are registered, then
@@ -1132,7 +1132,7 @@ class MelleaSession:
         return result
 
     @classmethod
-    def powerup(cls, powerup_cls: type):
+    def powerup(cls, powerup_cls: type) -> None:
         """Appends methods in a class object `powerup_cls` to MelleaSession.
 
         Iterates over all functions defined on `powerup_cls` and attaches each

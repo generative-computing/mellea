@@ -142,8 +142,15 @@ class Instruction(Component[str]):
         self._images = images
         self._repair_string: str | None = None
 
-    def parts(self):
-        """Returns all of the constituent parts of an Instruction."""
+    def parts(self) -> list[Component | CBlock]:
+        """Returns all of the constituent parts of an Instruction.
+
+        Returns:
+            list[Component | CBlock]: All non-None constituent blocks and
+            components making up this instruction, including description,
+            prefix, grounding context, requirements, and in-context-learning
+            examples.
+        """
         # Add all of the optionally defined CBlocks/Components then filter Nones at the end.
         cs = [self._description, self._prefix, self._output_prefix]
         match self._grounding_context:
