@@ -122,6 +122,8 @@ WRITE_COMMANDS = {
     "dd",  # Copy and convert files (byte-level writes)
     "install",  # Install files
     "truncate",  # Truncate file to size
+    "curl",  # Download/upload files (with -o/-O)
+    "wget",  # Download files (with -O)
 }
 
 
@@ -209,9 +211,13 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
 
     # Check if any argument is a dangerous command (e.g., env sudo, timeout sudo)
     # Only check positional arguments that are not paths or flag values.
-    # Known value-taking flags that consume the next argument (space-separated only).
-    # NOTE: -i / --input are intentionally not included. env(1)'s -i takes NO value;
-    # other commands' -i/--input (if present) should not mask dangerous commands.
+    # IMPORTANT: Only skip flag values if the top-level command is a known safe wrapper.
+    # For regular commands like ssh or git, we must NOT skip arguments after flags,
+    # because those flags belong to the command itself, not to a nested wrapper.
+    # E.g., in "ssh -t sudo whoami", the -t is for ssh, not a wrapper; we must check sudo.
+    # E.g., in "git -c sudo whoami", the -c is for git, not a wrapper; we must check sudo.
+
+    # Flags that consume the next argument (only skip for safe wrappers)
     flag_value_flags = {
         "-c",
         "--config",
@@ -228,17 +234,21 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         "-w",
         "--wait",
     }
+
     for i, arg in enumerate(argv[1:], start=1):
-        # Skip if this argument is the value for a preceding flag (space-separated)
-        # E.g., in "timeout -t 10 sudo", skip "10" (it's the value for -t)
-        # But don't skip "sudo" when the flag uses = notation (e.g., --kill-after=1)
-        if i > 1 and argv[i - 1] in flag_value_flags:
-            continue
         # Skip if argument contains / (it's a path, not a command name)
         if "/" in arg:
             continue
         # Skip if argument starts with - (it's a flag)
         if arg.startswith("-"):
+            continue
+
+        # Skip if this argument is the value for a preceding flag (space-separated).
+        # IMPORTANT: Only do this if the command is a safe wrapper, because the flags
+        # for regular commands (like ssh, git) might precede dangerous nested commands.
+        # E.g., in "timeout -t 10 sudo", skip "10" because timeout is a safe wrapper.
+        # E.g., in "ssh -t sudo whoami", DON'T skip "sudo" because -t is for ssh, not a wrapper.
+        if cmd in SAFE_WRAPPER_COMMANDS and i > 1 and argv[i - 1] in flag_value_flags:
             continue
 
         arg_cmd = arg.split("/")[-1]
@@ -258,14 +268,23 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
                 # Allow shells as arguments in safe wrappers (e.g., timeout bash script.sh)
                 # but reject sudo/su/etc as nested commands
                 return True, f"Command '{arg_cmd}' is not allowed as an argument"
-            # For shells in safe wrappers, check if they have code-execution flags (-c, -e, etc.)
-            # that bypass the denylist (e.g., env bash -c <payload>)
-            shell_code_exec_flags = {"-c", "-e"}
+            # For shells in safe wrappers, check if they have dangerous flags that bypass
+            # the denylist. This includes both code-execution flags (e.g., env bash -c)
+            # and interactive flags (e.g., env bash -i).
             if arg_cmd in ("bash", "sh", "zsh", "ksh", "tcsh"):
+                # Check for code-execution flags
+                shell_code_exec_flags = {"-c", "-e"}
                 if any(flag in argv for flag in shell_code_exec_flags):
                     return (
                         True,
                         f"Interpreter code execution ('{arg_cmd} -c' or '{arg_cmd} -e' in nested argument) is not allowed",
+                    )
+                # Check for interactive flags
+                shell_interactive_flags = {"-i", "--interactive", "-l", "--login"}
+                if any(flag in argv for flag in shell_interactive_flags):
+                    return (
+                        True,
+                        f"Interactive shell ('{arg_cmd} -i' or '{arg_cmd} -l' in nested argument) is not allowed",
                     )
 
         # Check for dangerous nested commands that aren't in DANGEROUS_COMMANDS but
@@ -292,9 +311,18 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         # Check for destructive git operations: push --force, reset --hard, clean -f/-d
         has_destructive_op = False
 
-        # git push --force: check for exact tokens (not substrings)
-        if "push" in argv and any(arg == "--force" or arg == "-f" for arg in argv):
-            has_destructive_op = True
+        # git push --force and variants: check for --force, -f, --force-with-lease, --force-if-includes
+        # These all force-push and can lose commits
+        if "push" in argv:
+            for arg in argv:
+                # Exact match for -f
+                if arg == "-f":
+                    has_destructive_op = True
+                    break
+                # Any arg starting with --force (including --force-with-lease, --force-if-includes, etc.)
+                if arg.startswith("--force"):
+                    has_destructive_op = True
+                    break
 
         # git reset --hard: both must be exact tokens
         if "reset" in argv and "--hard" in argv:
@@ -304,8 +332,12 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         # Avoid false positives: --dry-run should not match -d (use exact or combined check)
         if "clean" in argv:
             for arg in argv:
-                # Exact matches: -f, -d, -fd, -df, etc.
+                # Exact matches: -f, -d, -fd, -df, etc. (short forms)
                 if arg in ("-f", "-d", "-fd", "-df"):
+                    has_destructive_op = True
+                    break
+                # Long form --force
+                if arg == "--force":
                     has_destructive_op = True
                     break
                 # Also check arg startswith for combined flags containing d or f
@@ -339,6 +371,85 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
                 return True, f"Command '{cmd}' with '{flag}' flag is not allowed"
 
     return False, ""
+
+
+def _extract_write_command(argv: list[str]) -> tuple[str, int]:
+    """Extract the actual write command from potentially wrapped argv.
+
+    Wrapper commands (env, nohup, timeout, etc.) may mask write commands.
+    This function finds the first non-wrapper command that is a write operation.
+
+    Args:
+        argv: Tokenized command arguments.
+
+    Returns:
+        A tuple of (write_command_name, index_in_argv). If no write command
+        is found, returns ("", -1).
+
+    Examples:
+        argv = ["env", "touch", "/etc/passwd"] → ("touch", 1)
+        argv = ["timeout", "10", "rm", "/etc/foo"] → ("rm", 2)
+        argv = ["curl", "-o", "/etc/passwd", "http://..."] → ("curl", 0)
+    """
+    if not argv:
+        return "", -1
+
+    # Check if argv[0] is a write command (direct case)
+    cmd = argv[0].split("/")[-1]
+    if cmd in WRITE_COMMANDS:
+        return cmd, 0
+
+    # If argv[0] is a wrapper command, look for the nested write command
+    if cmd not in SAFE_WRAPPER_COMMANDS:
+        return "", -1
+
+    # For wrapper commands, find the first positional argument that is a write command
+    # Skip flags and their values
+    flag_value_flags = {
+        "-c",
+        "--config",
+        "-f",
+        "--file",
+        "-o",
+        "--output",
+        "-d",
+        "--dir",
+        "-p",
+        "--path",
+        "-t",
+        "--timeout",
+        "-w",
+        "--wait",
+    }
+
+    i = 1
+    while i < len(argv):
+        arg = argv[i]
+
+        # Skip flags
+        if arg.startswith("-"):
+            # Check if this flag takes a value (space-separated)
+            if arg in flag_value_flags and i + 1 < len(argv):
+                i += 2  # Skip flag and its value
+            else:
+                i += 1  # Skip standalone flag
+            continue
+
+        # Skip numeric arguments (e.g., timeout duration, signal numbers)
+        if arg.isdigit():
+            i += 1
+            continue
+
+        # This is a positional argument, check if it's a write command
+        nested_cmd = arg.split("/")[-1]
+        if nested_cmd in WRITE_COMMANDS:
+            return nested_cmd, i
+
+        # If it's not a write command and not numeric, it might be an argument or another wrapper
+        # For now, we assume the first positional non-numeric argument is the command to wrap
+        return "", -1
+
+    return "", -1
 
 
 def _is_path_within(path_str: str, allowed_root: str) -> bool:
@@ -387,10 +498,15 @@ def _check_dangerous_paths(
     Returns:
         A tuple of (has_dangerous_paths, reason_message).
     """
-    if not argv or argv[0].split("/")[-1] not in WRITE_COMMANDS:
+    if not argv:
         return False, ""
 
-    cmd = argv[0].split("/")[-1]
+    # Extract the actual write command (handles wrapper commands like env, nohup, timeout)
+    write_cmd, write_cmd_idx = _extract_write_command(argv)
+    if not write_cmd:
+        return False, ""
+
+    cmd = write_cmd
     resolved_allowed_paths = _resolve_allowed_paths(allowed_paths or [])
 
     # For ln (symlink/hardlink), check both source and target
@@ -398,7 +514,7 @@ def _check_dangerous_paths(
     if cmd == "ln":
         source_idx = None
         target_idx = None
-        for i, arg in enumerate(argv[1:], start=1):
+        for i, arg in enumerate(argv[write_cmd_idx + 1 :], start=write_cmd_idx + 1):
             if not arg.startswith("-"):
                 if source_idx is None:
                     source_idx = i
@@ -443,7 +559,53 @@ def _check_dangerous_paths(
                         f"Symlink target '{target_arg}' is outside explicitly allowed paths",
                     )
 
-    for arg in argv[1:]:
+    # For curl/wget, check the output file path specified with -o/-O
+    if cmd in ("curl", "wget"):
+        output_file = None
+        for i, arg in enumerate(argv[write_cmd_idx + 1 :], start=write_cmd_idx + 1):
+            if arg in ("-o", "-O", "--output"):
+                # Next argument should be the output file
+                if i + 1 < len(argv):
+                    output_file = argv[i + 1]
+                break
+            # Also check for combined format like -o/file
+            elif arg.startswith("-o") and len(arg) > 2:
+                output_file = arg[2:]
+                break
+
+        if output_file:
+            try:
+                if output_file.startswith(("/", "~")):
+                    resolved_output = str(
+                        Path(output_file).expanduser().resolve(strict=False)
+                    )
+                else:
+                    resolved_output = str(
+                        Path(output_file).expanduser().resolve(strict=False)
+                    )
+            except Exception as e:
+                logger.warning(f"Cannot resolve {cmd} output file '{output_file}': {e}")
+                return (
+                    True,
+                    f"Cannot validate {cmd} output path '{output_file}': path resolution failed ({type(e).__name__})",
+                )
+            # Check output against dangerous paths
+            for danger_path in DANGEROUS_PATHS:
+                if resolved_output == danger_path or resolved_output.startswith(
+                    danger_path + "/"
+                ):
+                    return True, f"Writing to '{resolved_output}' is not allowed"
+            if resolved_allowed_paths:
+                if not any(
+                    _is_path_within(resolved_output, allowed_root)
+                    for allowed_root in resolved_allowed_paths
+                ):
+                    return (
+                        True,
+                        f"Path '{output_file}' is outside explicitly allowed paths: {', '.join(allowed_paths or [])}",
+                    )
+
+    for arg in argv[write_cmd_idx + 1 :]:
         if arg.startswith("-"):
             continue
 
@@ -512,7 +674,12 @@ def _check_working_dir_restriction(
     if not working_dir:
         return False, ""
 
-    if not argv or argv[0].split("/")[-1] not in WRITE_COMMANDS:
+    if not argv:
+        return False, ""
+
+    # Extract the actual write command (handles wrapper commands)
+    write_cmd, write_cmd_idx = _extract_write_command(argv)
+    if not write_cmd:
         return False, ""
 
     try:
@@ -531,7 +698,7 @@ def _check_working_dir_restriction(
     else:
         allowed_path_str_prefix = allowed_path_str
 
-    for arg in argv[1:]:
+    for arg in argv[write_cmd_idx + 1 :]:
         if arg.startswith("-"):
             continue
 

@@ -39,7 +39,7 @@ try:
 except ImportError as e:
     raise ImportError(
         "MCP integration requires the `mcp` and `httpx` packages. "
-        "Please install mellea with tools support: pip install 'mellea[tools]'"
+        "Please install mellea with tools support: uv add 'mellea[tools]'"
     ) from e
 
 from mellea.backends.tools import MelleaTool

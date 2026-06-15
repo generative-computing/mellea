@@ -399,7 +399,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             from llm_sandbox import SandboxSession
         except ImportError:
             raise ImportError(
-                "llm-sandbox not installed. Install with: pip install 'mellea[sandbox]'"
+                "llm-sandbox not installed. Install with: uv add 'mellea[sandbox]'"
             )
         self._session = SandboxSession(
             lang="python", verbose=False, keep_template=False
@@ -520,7 +520,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 stdout=None,
                 stderr=None,
                 skipped=True,
-                skip_message="llm-sandbox not installed. Install with: pip install 'mellea[sandbox]'",
+                skip_message="llm-sandbox not installed. Install with: uv add 'mellea[sandbox]'",
                 execution_mode=self._mode(),
             )
 
