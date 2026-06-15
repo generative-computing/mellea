@@ -158,6 +158,10 @@ def test_adapter_schema_mismatch_error_pickles():
 def test_known_capabilities_importable():
     assert isinstance(KNOWN_CAPABILITIES, frozenset)
     assert "answerability" in KNOWN_CAPABILITIES
+    # Hyphenated upstream names must NOT be in the capability vocabulary;
+    # only the stable underscore forms derived from effective_capability are.
+    assert "requirement-check" not in KNOWN_CAPABILITIES
+    assert "requirement_check" in KNOWN_CAPABILITIES
 
 
 def test_identity_known_capability_no_warning():
@@ -177,3 +181,21 @@ def test_identity_known_capability_no_warning():
 def test_identity_unknown_capability_warns():
     with pytest.warns(UserWarning, match="not in the KNOWN_CAPABILITIES"):
         Identity(name="a", adapter_type="lora", capability="unknown-capability")
+
+
+def test_identity_requirement_check_underscore_no_warning():
+    """requirement_check (underscore) must be a known capability after #1186."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        Identity(
+            name="requirement-check",
+            adapter_type="lora",
+            capability="requirement_check",
+        )
+    capability_warnings = [
+        w
+        for w in caught
+        if issubclass(w.category, UserWarning)
+        and "KNOWN_CAPABILITIES" in str(w.message)
+    ]
+    assert capability_warnings == []

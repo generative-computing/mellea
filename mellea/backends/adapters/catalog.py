@@ -51,7 +51,12 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     We use Pydantic for this dataclass because the rest of Mellea also uses Pydantic.
 
     Attributes:
-        name (str): User-visible name of the intrinsic.
+        name (str): User-visible name of the intrinsic. May contain hyphens when
+            that matches the upstream adapter name; prefer ``effective_capability``
+            to form the stable capability token.
+        capability (str | None): Stable Mellea-level capability token, independent
+            of the upstream adapter name. Uses underscores. When ``None``,
+            :attr:`effective_capability` falls back to ``name``.
         internal_name (str | None): Internal name used for adapter loading, or
             ``None`` if the same as ``name``.
         repo_id (str): HuggingFace repository where adapters for the intrinsic
@@ -68,6 +73,14 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     """
 
     name: str = pydantic.Field(description="User-visible name of the intrinsic.")
+    capability: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Stable capability token, independent of the upstream adapter name. "
+            "Uses underscores. When ``None``, ``effective_capability`` falls back "
+            "to ``name``."
+        ),
+    )
     internal_name: str | None = pydantic.Field(
         default=None,
         description="Internal name used for adapter loading, or None if the name used "
@@ -91,6 +104,20 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     def _check_revision(cls, v: str) -> str:
         return validate_revision(v)
 
+    @property
+    def effective_capability(self) -> str:
+        """Return the stable capability token for this intrinsic.
+
+        Returns ``capability`` when explicitly set; falls back to ``name``
+        otherwise. Use this property — not ``name`` — whenever building the
+        capability vocabulary or resolving an
+        :class:`~mellea.backends.adapters.Identity` capability.
+
+        Returns:
+            str: Capability token, guaranteed non-empty.
+        """
+        return self.capability if self.capability is not None else self.name
+
 
 _RAG_REPO = "ibm-granite/granitelib-rag-r1.0"
 _CORE_R1_REPO = "ibm-granite/granitelib-core-r1.0"
@@ -106,10 +133,16 @@ _INTRINSICS_CATALOG_ENTRIES = [
     # Core Intrinsics
     ############################################
     IntriniscsCatalogEntry(
-        name="context-attribution", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
+        name="context-attribution",
+        capability="context_attribution",
+        repo_id=_CORE_R1_REPO,
+        revision=_CORE_R1_SHA,
     ),
     IntriniscsCatalogEntry(
-        name="requirement-check", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
+        name="requirement-check",
+        capability="requirement_check",
+        repo_id=_CORE_R1_REPO,
+        revision=_CORE_R1_SHA,
     ),
     IntriniscsCatalogEntry(
         name="uncertainty", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
@@ -133,16 +166,28 @@ _INTRINSICS_CATALOG_ENTRIES = [
     # Guardian Intrinsics
     ############################################
     IntriniscsCatalogEntry(
-        name="policy-guardrails", repo_id=_GUARDIAN_REPO, revision=_GUARDIAN_SHA
+        name="policy-guardrails",
+        capability="policy_guardrails",
+        repo_id=_GUARDIAN_REPO,
+        revision=_GUARDIAN_SHA,
     ),
     IntriniscsCatalogEntry(
-        name="guardian-core", repo_id=_GUARDIAN_REPO, revision=_GUARDIAN_SHA
+        name="guardian-core",
+        capability="guardian_core",
+        repo_id=_GUARDIAN_REPO,
+        revision=_GUARDIAN_SHA,
     ),
     IntriniscsCatalogEntry(
-        name="factuality-detection", repo_id=_GUARDIAN_REPO, revision=_GUARDIAN_SHA
+        name="factuality-detection",
+        capability="factuality_detection",
+        repo_id=_GUARDIAN_REPO,
+        revision=_GUARDIAN_SHA,
     ),
     IntriniscsCatalogEntry(
-        name="factuality-correction", repo_id=_GUARDIAN_REPO, revision=_GUARDIAN_SHA
+        name="factuality-correction",
+        capability="factuality_correction",
+        repo_id=_GUARDIAN_REPO,
+        revision=_GUARDIAN_SHA,
     ),
 ]
 
