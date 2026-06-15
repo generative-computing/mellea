@@ -1,17 +1,17 @@
 """Model context-length lookup table.
 
 Maps known model identifiers to their maximum context window in tokens.
-The primary lookup uses ``ModelIdentifier.context_length`` when the caller
-passes a ``ModelIdentifier`` object.  String lookups fall back to a name
-table keyed on ``hf_model_name`` and ``ollama_name`` of every
-``ModelIdentifier`` constant defined in ``model_ids``.  The table is built
+The primary lookup uses `ModelIdentifier.context_length` when the caller
+passes a `ModelIdentifier` object.  String lookups fall back to a name
+table keyed on `hf_model_name` and `ollama_name` of every
+`ModelIdentifier` constant defined in `model_ids`.  The table is built
 automatically at import time so there is a single source of truth: the
-``context_length`` field on each constant.
+`context_length` field on each constant.
 
-Only ``hf_model_name`` and ``ollama_name`` are indexed — matching the two
-fields checked in the ``ModelIdentifier`` branch of ``get_context_length``.
-Platform-specific IDs (``mlx_name``, ``openai_name``, ``bedrock_name``) and
-tokenizer references (``hf_tokenizer_name``) are intentionally excluded: the
+Only `hf_model_name` and `ollama_name` are indexed — matching the two
+fields checked in the `ModelIdentifier` branch of `get_context_length`.
+Platform-specific IDs (`mlx_name`, `openai_name`, `bedrock_name`) and
+tokenizer references (`hf_tokenizer_name`) are intentionally excluded: the
 former would populate the table with deployment-platform strings that are
 not valid serving names, and the latter is a tokenizer reference, not a
 model-serving identifier.
@@ -23,24 +23,24 @@ from .model_ids import ModelIdentifier
 
 
 def get_context_length(model_id: str | ModelIdentifier) -> int | None:
-    """Return the maximum context length in tokens for a known model, or ``None``.
+    """Return the maximum context length in tokens for a known model, or `None`.
 
     Priority:
 
-    1. If *model_id* is a ``ModelIdentifier`` with a non-``None``
-       ``context_length`` field, return that value directly.
+    1. If *model_id* is a `ModelIdentifier` with a non-`None`
+       `context_length` field, return that value directly.
     2. Otherwise perform a name-based lookup in the built-in table,
-       checking ``hf_model_name`` then ``ollama_name`` (for
-       ``ModelIdentifier`` inputs) or the raw string (for string inputs).
-       Only ``hf_model_name`` and ``ollama_name`` are indexed in the table,
-       so platform-specific names (``mlx_name``, ``openai_name``,
-       ``bedrock_name``) do not resolve via raw string lookup.
+       checking `hf_model_name` then `ollama_name` (for
+       `ModelIdentifier` inputs) or the raw string (for string inputs).
+       Only `hf_model_name` and `ollama_name` are indexed in the table,
+       so platform-specific names (`mlx_name`, `openai_name`,
+       `bedrock_name`) do not resolve via raw string lookup.
 
     Args:
-        model_id: A ``ModelIdentifier`` instance or a raw model-name string.
+        model_id: A `ModelIdentifier` instance or a raw model-name string.
 
     Returns:
-        The context length in tokens, or ``None`` if the model is unknown or
+        The context length in tokens, or `None` if the model is unknown or
         its context length is not recorded in the catalog.
     """
     if isinstance(model_id, ModelIdentifier):

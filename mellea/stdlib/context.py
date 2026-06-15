@@ -55,31 +55,31 @@ class ChatContext(Context):
 
     @property
     def model_id(self) -> str | ModelIdentifier | None:
-        """The model identifier bound to this context, or ``None`` if unbound."""
+        """The model identifier bound to this context, or `None` if unbound."""
         return self._model_id
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
-        """Return a new empty root ``ChatContext`` with the given ``model_id``, preserving ``window_size``."""
+        """Return a new empty root `ChatContext` with the given `model_id`, preserving `window_size`."""
         return ChatContext(window_size=self._window_size, model_id=model_id)
 
     def _bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:
         """Return a new root `ChatContext` with the given model bound, preserving `window_size`.
 
-        Internal use only — called by ``MelleaSession`` to wire the backend's
+        Internal use only — called by `MelleaSession` to wire the backend's
         model identifier into the context at session construction and after
-        ``reset()``. To bind a model at construction time, pass ``model_id=``
-        directly to ``ChatContext()``.
+        `reset()`. To bind a model at construction time, pass `model_id=`
+        directly to `ChatContext()`.
 
         Args:
             model_id: The model identifier to associate with this context.
 
         Returns:
-            ChatContext: A new root `ChatContext` with ``_model_id`` set.
+            ChatContext: A new root `ChatContext` with `_model_id` set.
 
         Raises:
             ValueError: If called on a non-root (non-empty) context. History
                 would be silently discarded, so this is disallowed. Create a
-                new ``ChatContext(model_id=...)`` instead.
+                new `ChatContext(model_id=...)` instead.
         """
         if not self.is_root_node:
             raise ValueError(
@@ -90,15 +90,15 @@ class ChatContext(Context):
         return self._make_root(model_id)
 
     def reset_to_new(self) -> ChatContext:  # type: ignore[override]
-        """Return a new empty root ``ChatContext``, preserving ``window_size`` and ``model_id``.
+        """Return a new empty root `ChatContext`, preserving `window_size` and `model_id`.
 
-        Overrides ``Context.reset_to_new()`` so that the model binding and
+        Overrides `Context.reset_to_new()` so that the model binding and
         window size set at construction are not lost when a session is reset
         or when user code calls this method directly.
 
         Returns:
-            ChatContext: A fresh root context with the same ``window_size``
-            and ``model_id`` as this context, but no history.
+            ChatContext: A fresh root context with the same `window_size`
+            and `model_id` as this context, but no history.
         """
         return self._make_root(self._model_id)
 
@@ -122,10 +122,10 @@ class ChatContext(Context):
 
         Window size resolution priority:
 
-        1. Explicit ``window_size`` passed at construction — always wins.
-        2. Model-derived context length looked up via ``model_id`` — used when
-           ``window_size`` is ``None`` and a model binding exists.
-        3. ``None`` — return the full history (unbounded).
+        1. Explicit `window_size` passed at construction — always wins.
+        2. Model-derived context length looked up via `model_id` — used when
+           `window_size` is `None` and a model binding exists.
+        3. `None` — return the full history (unbounded).
 
         Returns:
             list[Component | CBlock] | None: Ordered list of context entries up to
