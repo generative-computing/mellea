@@ -1452,10 +1452,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             format (type[BaseModelSubclass] | None): Optional Pydantic model for
                 structured output decoding via llguidance.
             model_options (dict | None): Per-call model options. Supports
-                ``ModelOption.MAX_NEW_TOKENS``, ``ModelOption.TEMPERATURE``,
-                ``ModelOption.SEED``, ``ModelOption.STOP_SEQUENCES``, and
-                ``ModelOption.LOGITS`` (populate ``mot.generation.logits``
-                with per-token scores of shape ``(vocab_size,)``).
+                `ModelOption.MAX_NEW_TOKENS`, `ModelOption.TEMPERATURE`,
+                `ModelOption.SEED`, `ModelOption.STOP_SEQUENCES`, and
+                `ModelOption.LOGITS` (populate `mot.generation.logits`
+                with per-token scores of shape `(vocab_size,)`).
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:

@@ -371,10 +371,10 @@ class GenerationMetadata:
     logits: tuple[torch.Tensor, ...] | None = None
     """Per-token logit scores from the backend.
 
-    Populated when ``ModelOption.LOGITS=True`` and the backend supports it.
+    Populated when `ModelOption.LOGITS=True` and the backend supports it.
     For the HuggingFace backend this is a tuple of 1-D tensors of shape
-    ``(vocab_size,)``, one per generated token. ``None`` if not requested,
-    if the backend does not support logits, or when ``ModelOption.STREAM=True``.
+    `(vocab_size,)`, one per generated token. `None` if not requested,
+    if the backend does not support logits, or when `ModelOption.STREAM=True`.
     """
 
 

@@ -300,6 +300,11 @@ class OllamaModelBackend(FormatterBackend):
         Returns:
             a new dict
         """
+        if model_options.get(ModelOption.LOGITS):
+            MelleaLogger.get_logger().warning(
+                "ModelOption.LOGITS is not supported by the Ollama backend; generation.logits will be None."
+            )
+
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )

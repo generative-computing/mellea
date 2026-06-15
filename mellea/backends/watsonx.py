@@ -262,6 +262,11 @@ class WatsonxAIBackend(FormatterBackend):
         if not is_chat_context:
             remap_dict = self.from_mellea_model_opts_map_completions
 
+        if model_options.get(ModelOption.LOGITS):
+            MelleaLogger.get_logger().warning(
+                "ModelOption.LOGITS is not supported by the WatsonX backend; generation.logits will be None."
+            )
+
         backend_specific = ModelOption.replace_keys(model_options, remap_dict)
 
         if is_chat_context:

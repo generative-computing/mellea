@@ -436,6 +436,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         backend_specific = ModelOption.replace_keys(model_options, remap_dict)
 
+        if model_options.get(ModelOption.LOGITS):
+            MelleaLogger.get_logger().warning(
+                "ModelOption.LOGITS is not supported by the OpenAI backend; generation.logits will be None."
+            )
+
         # OpenAI Backend has specific filtering functionality.
         if is_chat_context:
             model_opts = self.filter_chat_completions_kwargs(backend_specific)
