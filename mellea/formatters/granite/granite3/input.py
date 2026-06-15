@@ -45,7 +45,8 @@ You are Granite, developed by IBM."""
         """Separate the system message from other messages.
 
         Returns:
-            tuple: System message (if present) and remaining messages.
+            tuple[SystemMessage | None, list]: The system message if present
+                (else `None`), and the remaining non-system messages.
         """
         messages = chat_completion.messages
 

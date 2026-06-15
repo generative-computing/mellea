@@ -88,6 +88,11 @@ while True:
     pass
 ```"""
 
+PYTHON_RST_DOUBLE_BACKTICK = """``python
+def f():
+    return 1
+``"""
+
 NO_PYTHON_CODE = """
 This is just text without any Python code blocks.
 It contains no executable content.
@@ -126,6 +131,14 @@ def test_has_python_code_listing_simple():
     result = _has_python_code_listing(PYTHON_SIMPLE_CTX)
     assert result.as_bool() is True
     assert "print" in result.reason  # type: ignore
+
+
+def test_has_python_code_listing_rst_double_backtick():
+    """Test extraction of Python code in RST-style double-backtick fences."""
+    ctx = from_model(PYTHON_RST_DOUBLE_BACKTICK)
+    result = _has_python_code_listing(ctx)
+    assert result.as_bool() is True
+    assert "def f" in result.reason  # type: ignore
 
 
 # endregion

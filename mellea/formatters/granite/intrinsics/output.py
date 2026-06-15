@@ -741,6 +741,12 @@ class Explode(InPlaceTransformation):
     Turn each row in a list of records into zero or more rows by expanding
     the elements of a list-valued attribute.
 
+    Args:
+        config: Parsed YAML config for IO processing.
+        input_path_expr: Path expression for the list of records to explode.
+        target_field (str): Name of list-valued field within each record to
+            expand.
+
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
             `"explode"`.
@@ -804,6 +810,13 @@ class Explode(InPlaceTransformation):
 class DropDuplicates(InPlaceTransformation):
     """Remove duplicate records from a list of records.
 
+    Args:
+        config: Parsed YAML config for IO processing.
+        input_path_expr: Path expression for the list of records to
+            deduplicate.
+        target_fields (list): Names of fields to use for determining whether
+            two records are duplicates.
+
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
             `"drop_duplicates"`.
@@ -855,6 +868,14 @@ class Project(InPlaceTransformation):
     Project records down to a specified set of fields.  Can also rename the
     retained fields.
 
+    Args:
+        config: Parsed YAML config for IO processing.
+        input_path_expr: Path expression for the list of records to project.
+        retained_fields (list | dict): Names of fields that remain after the
+            projection. Can be either a list of field names (identity mapping)
+            or a mapping from original field name to the (possibly renamed)
+            output field name.
+
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
             `"project"`.
@@ -898,6 +919,12 @@ class Project(InPlaceTransformation):
 
 class Nest(InPlaceTransformation):
     """Convert a value within a JSON structure into a record with a single field.
+
+    Args:
+        config: Parsed YAML config for IO processing.
+        input_path_expr: Path expression for the values to wrap.
+        field_name (str): Name of the single field in the JSON object that
+            this rule will wrap around each matching value.
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always

@@ -109,7 +109,8 @@ def set_log_context(**fields: Any) -> None:
     Call this at the start of a request or task to attach identifiers such as
     ``trace_id`` or ``request_id`` without modifying individual log calls.
 
-    Note: Prefer `log_context` as the primary API — it guarantees cleanup
+    Note:
+        Prefer `log_context` as the primary API — it guarantees cleanup
         (including restoring outer values on same-key nesting) even on exceptions.
 
     Args:
