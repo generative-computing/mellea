@@ -1314,7 +1314,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # squeeze(0): hf_output.scores is (1, vocab_size) per token; normalise to (vocab_size,)
                 mot.generation.logits = tuple(s.squeeze(0) for s in hf_output.scores)
 
-            # Clear KV cache and scores from HF output - they're now owned by the LRU cache
+            # Clear KV cache and scores from HF output - they're retained via the LRU cache
+            # (and, when LOGITS=True, also via the views in mot.generation.logits).
             hf_output.past_key_values = None
             hf_output.scores = None
         elif (
