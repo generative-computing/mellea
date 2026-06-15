@@ -3,7 +3,18 @@
 Maps known model identifiers to their maximum context window in tokens.
 The primary lookup uses ``ModelIdentifier.context_length`` when the caller
 passes a ``ModelIdentifier`` object.  String lookups fall back to a name
-table keyed on ``hf_model_name`` and ``ollama_name``.
+table keyed on ``hf_model_name`` and ``ollama_name`` of every
+``ModelIdentifier`` constant defined in ``model_ids``.  The table is built
+automatically at import time so there is a single source of truth: the
+``context_length`` field on each constant.
+
+Only ``hf_model_name`` and ``ollama_name`` are indexed — matching the two
+fields checked in the ``ModelIdentifier`` branch of ``get_context_length``.
+Platform-specific IDs (``mlx_name``, ``openai_name``, ``bedrock_name``) and
+tokenizer references (``hf_tokenizer_name``) are intentionally excluded: the
+former would populate the table with deployment-platform strings that are
+not valid serving names, and the latter is a tokenizer reference, not a
+model-serving identifier.
 """
 
 from __future__ import annotations
@@ -21,6 +32,9 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
     2. Otherwise perform a name-based lookup in the built-in table,
        checking ``hf_model_name`` then ``ollama_name`` (for
        ``ModelIdentifier`` inputs) or the raw string (for string inputs).
+       Only ``hf_model_name`` and ``ollama_name`` are indexed in the table,
+       so platform-specific names (``mlx_name``, ``openai_name``,
+       ``bedrock_name``) do not resolve via raw string lookup.
 
     Args:
         model_id: A ``ModelIdentifier`` instance or a raw model-name string.
@@ -34,7 +48,11 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
             return model_id.context_length
         names_to_check = [model_id.hf_model_name, model_id.ollama_name]
     else:
-        names_to_check = [model_id]
+        # LiteLLM and similar backends prefix model names with a provider
+        # slug (e.g. "ollama_chat/granite4.1:3b"). Strip the prefix so the
+        # bare name can resolve against the table.
+        stripped = model_id.split("/", 1)[-1] if "/" in model_id else model_id
+        names_to_check = [model_id, stripped] if stripped != model_id else [model_id]
 
     for name in names_to_check:
         if name and name in _CONTEXT_LENGTH_TABLE:
@@ -42,71 +60,25 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
     return None
 
 
+def _build_table() -> dict[str, int]:
+    import mellea.backends.model_ids as _m
+
+    table: dict[str, int] = {}
+    for obj in vars(_m).values():
+        if not isinstance(obj, ModelIdentifier) or obj.context_length is None:
+            continue
+        # Only index hf_model_name and ollama_name — these are the two fields
+        # checked by the ModelIdentifier branch of get_context_length, keeping
+        # the table and the lookup logic symmetric.  Platform-specific names
+        # (mlx_name, openai_name, bedrock_name) and hf_tokenizer_name are
+        # intentionally excluded; see module docstring for rationale.
+        for name in (obj.hf_model_name, obj.ollama_name):
+            if name:
+                table[name] = obj.context_length
+    return table
+
+
 # Fallback name-keyed table for raw strings and ModelIdentifiers constructed
-# without a context_length field.  Keyed on both hf_model_name and ollama_name
-# so either variant resolves correctly.
-_CONTEXT_LENGTH_TABLE: dict[str, int] = {
-    # IBM Granite 4.x dense
-    "ibm-granite/granite-4.1-3b": 131072,
-    "granite4.1:3b": 131072,
-    "ibm-granite/granite-4.1-8b": 131072,
-    "granite4.1:8b": 131072,
-    "ibm-granite/granite-4.1-30b": 131072,
-    "granite4.1:30b": 131072,
-    # IBM Granite 4.x hybrid
-    "ibm-granite/granite-4.0-h-micro": 131072,
-    "granite4:micro-h": 131072,
-    "ibm-granite/granite-4.0-h-tiny": 131072,
-    "granite4:tiny-h": 131072,
-    "ibm-granite/granite-4.0-h-small": 131072,
-    "granite4:small-h": 131072,
-    "ibm-granite/granite-4.0-h-1b": 131072,
-    "granite4:1b-h": 131072,
-    "ibm-granite/granite-4.0-h-350m": 32768,
-    "granite4:350m-h": 32768,
-    # IBM Granite 4.0 micro (pre-built)
-    "ibm-granite/granite-4.0-micro": 131072,
-    "granite4:micro": 131072,
-    # IBM Granite 3.x
-    "ibm-granite/granite-3.3-8b-instruct": 131072,
-    "granite3.3:8b": 131072,
-    "ibm-granite/granite-3.2-8b-instruct": 131072,
-    "granite3.2:8b": 131072,
-    # Meta Llama 4
-    "unsloth/Llama-4-Scout-17B-16E-Instruct": 10485760,
-    "llama4:scout": 10485760,
-    "unsloth/Llama-4-Maverick-17B-128E-Instruct": 1048576,
-    "llama4:maverick": 1048576,
-    # Meta Llama 3
-    "unsloth/Llama-3.3-70B-Instruct": 131072,
-    "llama3.3:70b": 131072,
-    "unsloth/Llama-3.2-3B-Instruct": 131072,
-    "llama3.2:3b": 131072,
-    "unsloth/Llama-3.2-1B": 131072,
-    "llama3.2:1b": 131072,
-    # Mistral
-    "mistralai/Mistral-7B-Instruct-v0.3": 32768,
-    "mistral:7b": 32768,
-    "mistralai/Mistral-Small-3.1-24B-Instruct-2503": 131072,
-    "mistral-small:latest": 131072,
-    "mistralai/Mistral-Large-Instruct-2411": 131072,
-    "mistral-large:latest": 131072,
-    # Qwen 3
-    "Qwen/Qwen3-0.6B": 32768,
-    "qwen3:0.6b": 32768,
-    "Qwen/Qwen3-1.7B": 32768,
-    "qwen3:1.7b": 32768,
-    "Qwen/Qwen3-8B": 40960,
-    "qwen3:8b": 40960,
-    "Qwen/Qwen3-14B": 40960,
-    "qwen3:14b": 40960,
-    # Microsoft Phi
-    "microsoft/phi-4": 16384,
-    "phi4:14b": 16384,
-    # DeepSeek
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B": 131072,
-    "deepseek-r1:8b": 131072,
-    # SmolLM2
-    "HuggingFaceTB/SmolLM2-1.7B-Instruct": 8192,
-    "smollm2:1.7b": 8192,
-}
+# without a context_length field.  Built automatically from the ModelIdentifier
+# constants in model_ids so there is a single source of truth.
+_CONTEXT_LENGTH_TABLE: dict[str, int] = _build_table()

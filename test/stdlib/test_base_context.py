@@ -115,7 +115,7 @@ def test_get_context_length_llama4_scout():
 
 def test_chat_context_model_id_constructor():
     ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B)
-    assert ctx._model_id is IBM_GRANITE_4_1_8B
+    assert ctx.model_id is IBM_GRANITE_4_1_8B
 
 
 def test_chat_context_existing_window_size_unchanged():
@@ -127,32 +127,39 @@ def test_chat_context_existing_window_size_unchanged():
 
 def test_chat_context_default_no_model_id():
     ctx = ChatContext()
-    assert ctx._model_id is None
+    assert ctx.model_id is None
     assert ctx._window_size is None
 
 
 # ---------------------------------------------------------------------------
-# bind_model
+# _bind_model
 # ---------------------------------------------------------------------------
 
 
-def test_bind_model_returns_new_root_context():
+def test__bind_model_returns_new_root_context():
     ctx = ChatContext()
-    bound = ctx.bind_model(IBM_GRANITE_4_1_8B)
-    assert bound._model_id is IBM_GRANITE_4_1_8B
+    bound = ctx._bind_model(IBM_GRANITE_4_1_8B)
+    assert bound.model_id is IBM_GRANITE_4_1_8B
     assert bound.is_root_node
 
 
-def test_bind_model_does_not_mutate_original():
+def test__bind_model_does_not_mutate_original():
     ctx = ChatContext()
-    ctx.bind_model(IBM_GRANITE_4_1_8B)
-    assert ctx._model_id is None
+    ctx._bind_model(IBM_GRANITE_4_1_8B)
+    assert ctx.model_id is None
 
 
-def test_bind_model_preserves_window_size():
+def test__bind_model_preserves_window_size():
     ctx = ChatContext(window_size=5)
-    bound = ctx.bind_model(IBM_GRANITE_4_1_8B)
+    bound = ctx._bind_model(IBM_GRANITE_4_1_8B)
     assert bound._window_size == 5
+
+
+def test__bind_model_raises_on_non_root_context():
+    ctx = ChatContext()
+    ctx = ctx.add(CBlock("some history"))
+    with pytest.raises(ValueError, match="_bind_model\\(\\) must be called on a root"):
+        ctx._bind_model(IBM_GRANITE_4_1_8B)
 
 
 # ---------------------------------------------------------------------------
@@ -164,14 +171,14 @@ def test_model_id_propagates_through_add():
     ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B)
     ctx = ctx.add(CBlock("hello"))
     ctx = ctx.add(CBlock("world"))
-    assert ctx._model_id is IBM_GRANITE_4_1_8B
+    assert ctx.model_id is IBM_GRANITE_4_1_8B
 
 
 def test_model_id_propagates_through_bind_then_add():
-    ctx = ChatContext().bind_model(META_LLAMA_3_3_70B)
+    ctx = ChatContext()._bind_model(META_LLAMA_3_3_70B)
     for i in range(3):
         ctx = ctx.add(CBlock(f"msg {i}"))
-    assert ctx._model_id is META_LLAMA_3_3_70B
+    assert ctx.model_id is META_LLAMA_3_3_70B
 
 
 # ---------------------------------------------------------------------------
@@ -179,13 +186,24 @@ def test_model_id_propagates_through_bind_then_add():
 # ---------------------------------------------------------------------------
 
 
-def test_view_for_generation_model_context_length_as_upper_bound():
-    # Mistral 7B has context_length=32768; we have far fewer items so all are returned.
+def test_view_for_generation_model_bound_returns_full_history_when_under_limit():
+    # 10 items is far below the 32768-token ceiling — full history returned.
     ctx = ChatContext(model_id=MISTRALAI_MISTRAL_0_3_7B)
     for i in range(10):
         ctx = ctx.add(CBlock(f"item {i}"))
     result = ctx.view_for_generation()
     assert len(result) == 10
+
+
+def test_view_for_generation_model_bound_used_as_upper_bound():
+    # A tiny context_length=5 triggers truncation; most recent items are retained.
+    tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=5)
+    ctx = ChatContext(model_id=tiny)
+    for i in range(10):
+        ctx = ctx.add(CBlock(f"item {i}"))
+    result = ctx.view_for_generation()
+    assert len(result) == 5
+    assert str(result[-1]) == "item 9"
 
 
 def test_view_for_generation_explicit_window_size_beats_model():
@@ -228,6 +246,15 @@ def test_reset_to_new_returns_empty_root():
     assert len(reset_ctx.as_list()) == 0
 
 
+def test_reset_to_new_preserves_model_id_and_window_size():
+    ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B, window_size=5)
+    for i in range(3):
+        ctx = ctx.add(CBlock(f"msg {i}"))
+    reset_ctx = ctx.reset_to_new()
+    assert reset_ctx.model_id is IBM_GRANITE_4_1_8B
+    assert reset_ctx._window_size == 5
+
+
 def test_session_reset_rebinds_model_id():
     from mellea.stdlib.session import MelleaSession
 
@@ -235,13 +262,13 @@ def test_session_reset_rebinds_model_id():
     mock_backend.model_id = IBM_GRANITE_4_1_8B
     ctx = ChatContext()
     session = MelleaSession(mock_backend, ctx)
-    assert session.ctx._model_id is IBM_GRANITE_4_1_8B
+    assert session.ctx.model_id is IBM_GRANITE_4_1_8B
 
     session.ctx = session.ctx.add(CBlock("some history"))
     session.reset()
 
     assert isinstance(session.ctx, ChatContext)
-    assert session.ctx._model_id is IBM_GRANITE_4_1_8B
+    assert session.ctx.model_id is IBM_GRANITE_4_1_8B
     assert len(session.ctx.as_list()) == 0
 
 
@@ -258,7 +285,7 @@ def test_session_binds_model_id_to_chat_context():
     ctx = ChatContext()
     session = MelleaSession(mock_backend, ctx)
     assert isinstance(session.ctx, ChatContext)
-    assert session.ctx._model_id is IBM_GRANITE_4_1_8B
+    assert session.ctx.model_id is IBM_GRANITE_4_1_8B
 
 
 def test_session_does_not_override_explicit_model_id():
@@ -268,7 +295,7 @@ def test_session_does_not_override_explicit_model_id():
     mock_backend.model_id = IBM_GRANITE_4_1_8B
     ctx = ChatContext(model_id=META_LLAMA_3_3_70B)
     session = MelleaSession(mock_backend, ctx)
-    assert session.ctx._model_id is META_LLAMA_3_3_70B
+    assert session.ctx.model_id is META_LLAMA_3_3_70B
 
 
 def test_session_does_not_bind_for_simple_context():
@@ -287,7 +314,51 @@ def test_session_graceful_when_backend_has_no_model_id():
     mock_backend = MagicMock(spec=[])  # no attributes at all
     ctx = ChatContext()
     session = MelleaSession(mock_backend, ctx)
-    assert session.ctx._model_id is None
+    assert session.ctx.model_id is None
+
+
+def test_session_does_not_bind_when_context_has_history():
+    from mellea.stdlib.session import MelleaSession
+
+    mock_backend = MagicMock()
+    mock_backend.model_id = IBM_GRANITE_4_1_8B
+    ctx = ChatContext()
+    ctx = ctx.add(CBlock("pre-existing history"))
+    session = MelleaSession(mock_backend, ctx)
+    # Non-root context must not be auto-bound (would silently discard history).
+    assert session.ctx.model_id is None
+    assert len(session.ctx.as_list()) == 1
+
+
+def test_get_context_length_litellm_prefixed_string():
+    # LiteLLM prefixes model names with a provider slug, e.g. "ollama_chat/granite4.1:3b".
+    # The stripped bare name should resolve to the correct context length.
+    assert get_context_length("ollama_chat/granite4.1:3b") == 131072
+    assert get_context_length("ollama/granite4.1:8b") == 131072
+    # Multi-segment strip still resolves when the remainder is a known HF name.
+    assert get_context_length("huggingface/ibm-granite/granite-4.1-3b") == 131072
+    # Completely unknown prefix+name returns None.
+    assert get_context_length("someprefix/not-a-real-model") is None
+
+
+def test_clone_does_not_double_bind_replaced_root_context():
+    from copy import copy
+
+    from mellea.stdlib.session import MelleaSession
+
+    mock_backend = MagicMock()
+    mock_backend.model_id = IBM_GRANITE_4_1_8B
+    session = MelleaSession(mock_backend, ChatContext())
+    assert session.ctx.model_id is IBM_GRANITE_4_1_8B
+
+    # User replaces ctx with a fresh unbound root — no model_id.
+    session.ctx = ChatContext()
+    assert session.ctx.model_id is None
+
+    cloned = copy(session)
+    # Clone must preserve the replaced (unbound) context, not re-bind from backend.
+    assert cloned.ctx.model_id is None
+    assert cloned.id != session.id  # fresh session ID
 
 
 if __name__ == "__main__":

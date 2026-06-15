@@ -101,7 +101,7 @@ IBM_GRANITE_4_1_30B = ModelIdentifier(
 )
 
 IBM_GRANITE_GUARDIAN_4_1_8B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-guardian-4.1-8b"
+    hf_model_name="ibm-granite/granite-guardian-4.1-8b", context_length=131072
 )
 
 
@@ -133,34 +133,36 @@ IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-vision-3.3-2b",
     ollama_name="ibm/granite3.3-vision:2b",
     watsonx_name=None,
+    context_length=131072,
 )
 
 IBM_GRANITE_GUARDIAN_3_0_2B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-guardian-3.0-2b",
     ollama_name="granite3-guardian:2b",
+    context_length=4096,
 )
 
 IBM_GRANITE_4_TINY_PREVIEW_7B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.0-tiny-preview"
+    hf_model_name="ibm-granite/granite-4.0-tiny-preview", context_length=131072
 )
 
 IBM_GRANITE_4_TINY_PREVIEW_BASE_7B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.0-tiny-base-preview"
+    hf_model_name="ibm-granite/granite-4.0-tiny-base-preview", context_length=131072
 )
 
 # Pre-Built Granite Switch Models
 IBM_GRANITE_SWITCH_4_1_3B_PREVIEW = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-switch-4.1-3b-preview"
+    hf_model_name="ibm-granite/granite-switch-4.1-3b-preview", context_length=131072
 )
 """Granite Switch Preview Model. Adapters: `citations`, `query_rewrite`, `query_clarification`, `hallucination_detection`, `answerability`, `policy-guardrails`, `guardian-core`, `uncertainty`, `requirement-check`, `context-attribution`, `factuality-detection`, `factuality-correction`."""  # Document what adapters are included by default here.
 
 IBM_GRANITE_SWITCH_4_1_8B_PREVIEW = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-switch-4.1-8b-preview"
+    hf_model_name="ibm-granite/granite-switch-4.1-8b-preview", context_length=131072
 )
 """Granite Switch Preview Model. Adapters: `citations`, `query_rewrite`, `query_clarification`, `hallucination_detection`, `answerability`, `policy-guardrails`, `guardian-core`, `uncertainty`, `requirement-check`, `context-attribution`, `factuality-detection`, `factuality-correction`."""  # Document what adapters are included by default here.
 
 IBM_GRANITE_SWITCH_4_1_30B_PREVIEW = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-switch-4.1-30b-preview"
+    hf_model_name="ibm-granite/granite-switch-4.1-30b-preview", context_length=131072
 )
 """Granite Switch Preview Model. Adapters: `citations`, `query_rewrite`, `query_clarification`, `hallucination_detection`, `answerability`, `policy-guardrails`, `guardian-core`, `uncertainty`, `requirement-check`, `context-attribution`, `factuality-detection`, `factuality-correction`."""  # Document what adapters are included by default here.
 
@@ -204,7 +206,9 @@ META_LLAMA_3_2_3B = ModelIdentifier(
 )
 
 META_LLAMA_GUARD3_1B = ModelIdentifier(
-    ollama_name="llama-guard3:1b", hf_model_name="meta-llama/Llama-Guard-3-1B"
+    ollama_name="llama-guard3:1b",
+    hf_model_name="meta-llama/Llama-Guard-3-1B",
+    context_length=131072,
 )
 
 META_LLAMA_3_2_1B = ModelIdentifier(
@@ -274,11 +278,13 @@ OPENAI_GPT_OSS_20B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-20b",  # OpenAI GPT-OSS 20B
     ollama_name="gpt-oss:20b",  # Ollama
     bedrock_name="openai.gpt-oss-20b",
+    context_length=131072,
 )
 OPENAI_GPT_OSS_120B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-120b",  # OpenAI GPT-OSS 120B
     ollama_name="gpt-oss:120b",  # Ollama
     bedrock_name="openai.gpt-oss-120b",
+    context_length=131072,
 )
 
 ###########################
@@ -296,6 +302,7 @@ OPENAI_GPT_5_1 = ModelIdentifier(
 GOOGLE_GEMMA_3N_E4B = ModelIdentifier(
     hf_model_name="google/gemma-3n-e4b-it",  # Google Gemma 3N E4B
     ollama_name="gemma3n:e4b",  # Ollama
+    context_length=32768,
 )
 
 MS_PHI_4_14B = ModelIdentifier(
@@ -307,6 +314,7 @@ MS_PHI_4_14B = ModelIdentifier(
 MS_PHI_4_MINI_REASONING_4B = ModelIdentifier(
     hf_model_name="microsoft/Phi-4-mini-flash-reasoning",
     ollama_name="phi4-mini-reasoning:3.8b",
+    context_length=131072,
 )
 
 
@@ -325,5 +333,5 @@ HF_SMOLLM2_2B = ModelIdentifier(
 )
 
 HF_SMOLLM3_3B_no_ollama = ModelIdentifier(
-    hf_model_name="HuggingFaceTB/SmolLM3-3B", ollama_name=""
+    hf_model_name="HuggingFaceTB/SmolLM3-3B", ollama_name=None, context_length=65536
 )

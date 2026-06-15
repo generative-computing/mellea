@@ -9,6 +9,7 @@ you want each call to the model to be independent.
 
 from __future__ import annotations
 
+from ..backends.context_lengths import get_context_length
 from ..backends.model_ids import ModelIdentifier
 
 # Leave unused `ContextTurn` import for import ergonomics.
@@ -32,10 +33,13 @@ class ChatContext(Context):
 
     Note:
         `context_length` is measured in tokens; `window_size` counts context
-        items (CBlocks / Components). When deriving the window from a model's
-        context length, the token count is used as a maximum item count — a
-        conservative proxy that is correct in practice because the number of
-        context items is always far smaller than the token budget.
+        items (CBlocks / Components). When only a `model_id` is bound (no
+        explicit `window_size`), the model's context length in tokens is used
+        as an absolute upper bound on the number of items passed to the model.
+        In practice this ceiling is never reached — real conversations do not
+        accumulate hundreds of thousands of items — so the full history is
+        returned for typical sessions. Set `window_size` explicitly to enforce
+        a tighter item-count limit.
     """
 
     def __init__(
@@ -49,21 +53,54 @@ class ChatContext(Context):
         self._window_size = window_size
         self._model_id: str | ModelIdentifier | None = model_id
 
-    def bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:
+    @property
+    def model_id(self) -> str | ModelIdentifier | None:
+        """The model identifier bound to this context, or ``None`` if unbound."""
+        return self._model_id
+
+    def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
+        """Return a new empty root ``ChatContext`` with the given ``model_id``, preserving ``window_size``."""
+        return ChatContext(window_size=self._window_size, model_id=model_id)
+
+    def _bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:
         """Return a new root `ChatContext` with the given model bound, preserving `window_size`.
 
-        Creates a new root node (not a linked continuation) with the same
-        `window_size` and the provided `model_id`. Intended to be called on a
-        freshly-created root context before any items are added; subsequent
-        `add()` calls propagate the binding automatically.
+        Internal use only — called by ``MelleaSession`` to wire the backend's
+        model identifier into the context at session construction and after
+        ``reset()``. To bind a model at construction time, pass ``model_id=``
+        directly to ``ChatContext()``.
 
         Args:
             model_id: The model identifier to associate with this context.
 
         Returns:
-            ChatContext: A new root `ChatContext` with `_model_id` set.
+            ChatContext: A new root `ChatContext` with ``_model_id`` set.
+
+        Raises:
+            ValueError: If called on a non-root (non-empty) context. History
+                would be silently discarded, so this is disallowed. Create a
+                new ``ChatContext(model_id=...)`` instead.
         """
-        return ChatContext(window_size=self._window_size, model_id=model_id)
+        if not self.is_root_node:
+            raise ValueError(
+                "_bind_model() must be called on a root (empty) ChatContext. "
+                "To bind a model on a context that already has history, create a "
+                "new ChatContext(model_id=...) before adding items."
+            )
+        return self._make_root(model_id)
+
+    def reset_to_new(self) -> ChatContext:  # type: ignore[override]
+        """Return a new empty root ``ChatContext``, preserving ``window_size`` and ``model_id``.
+
+        Overrides ``Context.reset_to_new()`` so that the model binding and
+        window size set at construction are not lost when a session is reset
+        or when user code calls this method directly.
+
+        Returns:
+            ChatContext: A fresh root context with the same ``window_size``
+            and ``model_id`` as this context, but no history.
+        """
+        return self._make_root(self._model_id)
 
     def add(self, c: Component | CBlock) -> ChatContext:
         """Add a new component or CBlock to the context and return the updated context.
@@ -96,8 +133,6 @@ class ChatContext(Context):
         """
         effective_window = self._window_size
         if effective_window is None and self._model_id is not None:
-            from ..backends.context_lengths import get_context_length
-
             effective_window = get_context_length(self._model_id)
         return self.as_list(effective_window)
 

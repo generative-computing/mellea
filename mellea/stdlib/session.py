@@ -304,10 +304,11 @@ class MelleaSession:
         # not explicitly set.
         if (
             isinstance(self.ctx, ChatContext)
-            and self.ctx._model_id is None
+            and self.ctx.model_id is None
+            and self.ctx.is_root_node
             and hasattr(self.backend, "model_id")
         ):
-            self.ctx = self.ctx.bind_model(self.backend.model_id)
+            self.ctx = self.ctx._bind_model(self.backend.model_id)
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -355,8 +356,19 @@ class MelleaSession:
 
     def __copy__(self):
         """Use self.clone. Copies the current session but keeps references to the backend and context."""
-        new = MelleaSession(backend=self.backend, ctx=self.ctx)
+        import uuid
+
+        # Bypass __init__'s auto-bind logic: the session state is already
+        # settled, so we replicate it directly rather than re-deriving it.
+        new = object.__new__(MelleaSession)
+        new.id = str(uuid.uuid4())
+        new.backend = self.backend
+        new.ctx = self.ctx
         new._session_logger = self._session_logger
+        new._context_token = None
+        new._log_context_token = None
+        new._session_span = None
+        new._exit_stack = None
         # Explicitly don't copy over the _context_token.
 
         return new
@@ -400,17 +412,7 @@ class MelleaSession:
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
-        old_ctx = self.ctx
         self.ctx = self.ctx.reset_to_new()
-        # Re-bind the model_id to the fresh context so automatic window sizing
-        # continues to work after a reset.
-        if (
-            isinstance(self.ctx, ChatContext)
-            and self.ctx._model_id is None
-            and isinstance(old_ctx, ChatContext)
-            and old_ctx._model_id is not None
-        ):
-            self.ctx = self.ctx.bind_model(old_ctx._model_id)
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
         """Clean up session resources and deregister session-scoped plugins.
