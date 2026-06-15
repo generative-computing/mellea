@@ -1,0 +1,223 @@
+"""Unit tests for adapter shim classes (Epic #929 Phase 1, issue #1136).
+
+Verifies that IntrinsicAdapter, EmbeddedIntrinsicAdapter, and CustomIntrinsicAdapter:
+  - emit DeprecationWarning on construction
+  - are instances of both their own class and the new Adapter dataclass
+  - expose a well-formed Identity (name, adapter_type, capability)
+  - leave AdapterMixin.resolve_adapter and AdapterMixin.adapter_scope callable
+"""
+
+import warnings
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from mellea.backends.adapters import Adapter, EmbeddedIntrinsicAdapter, IntrinsicAdapter
+from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters.adapter import AdapterMixin
+from mellea.backends.adapters.catalog import AdapterType, IntriniscsCatalogEntry
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_MOCK_CATALOG_ENTRY = IntriniscsCatalogEntry(
+    name="answerability",
+    repo_id="ibm-granite/granitelib-rag-r1.0",
+    revision="abc123deadbeef",
+    adapter_types=(AdapterType.ALORA, AdapterType.LORA),
+)
+
+
+def _make_intrinsic_adapter(intrinsic_name: str = "answerability") -> IntrinsicAdapter:
+    """Construct IntrinsicAdapter with mocked catalog + config (no HF downloads)."""
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=IntriniscsCatalogEntry(
+                name=intrinsic_name,
+                repo_id="ibm-granite/granitelib-rag-r1.0",
+                revision="abc123",
+                adapter_types=(AdapterType.ALORA, AdapterType.LORA),
+            ),
+        ),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return IntrinsicAdapter(
+            intrinsic_name,
+            adapter_type=AdapterType.ALORA,
+            config_dict={"dummy": "config"},
+        )
+
+
+# ---------------------------------------------------------------------------
+# EmbeddedIntrinsicAdapter shim tests (no mock needed — no catalog access)
+# ---------------------------------------------------------------------------
+
+
+def test_embedded_emits_deprecation_warning():
+    with pytest.warns(
+        DeprecationWarning, match="EmbeddedIntrinsicAdapter is deprecated"
+    ):
+        EmbeddedIntrinsicAdapter("answerability", config={}, technology="alora")
+
+
+def test_embedded_is_instance_of_new_adapter():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+    assert isinstance(adapter, Adapter), (
+        "shim must be instance of new Adapter dataclass"
+    )
+    assert isinstance(adapter, EmbeddedIntrinsicAdapter), (
+        "shim must remain its own type"
+    )
+
+
+def test_embedded_identity_populated():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+    assert isinstance(adapter.identity, Identity)
+    assert adapter.identity.name == "answerability"
+    assert adapter.identity.capability == "answerability"
+    assert adapter.identity.adapter_type == "alora"
+
+
+def test_embedded_identity_lora_technology():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="lora"
+        )
+    assert adapter.identity.adapter_type == "lora"
+
+
+def test_embedded_legacy_attributes_preserved():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={"k": 1}, technology="alora"
+        )
+    assert adapter.intrinsic_name == "answerability"
+    assert adapter.config == {"k": 1}
+    assert adapter.technology == "alora"
+    assert adapter.qualified_name == "answerability_alora"
+    assert adapter.backend is None
+
+
+def test_embedded_backend_mutable():
+    """Shim must allow setting backend after construction (frozen bypass)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = EmbeddedIntrinsicAdapter(
+            "answerability", config={}, technology="alora"
+        )
+    sentinel = object()
+    adapter.backend = sentinel  # type: ignore[assignment]
+    assert adapter.backend is sentinel
+
+
+def test_embedded_invalid_technology():
+    with pytest.raises(ValueError, match="technology must be"):
+        EmbeddedIntrinsicAdapter("answerability", config={}, technology="qlora")
+
+
+# ---------------------------------------------------------------------------
+# IntrinsicAdapter shim tests (uses patch to avoid catalog / HF access)
+# ---------------------------------------------------------------------------
+
+
+def test_intrinsic_emits_deprecation_warning():
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=_MOCK_CATALOG_ENTRY,
+        ),
+        pytest.warns(DeprecationWarning, match="IntrinsicAdapter is deprecated"),
+    ):
+        IntrinsicAdapter(
+            "answerability",
+            adapter_type=AdapterType.ALORA,
+            config_dict={"dummy": "config"},
+        )
+
+
+def test_intrinsic_is_instance_of_new_adapter():
+    adapter = _make_intrinsic_adapter("answerability")
+    assert isinstance(adapter, Adapter), (
+        "shim must be instance of new Adapter dataclass"
+    )
+    assert isinstance(adapter, IntrinsicAdapter), "shim must remain its own type"
+
+
+def test_intrinsic_identity_populated():
+    adapter = _make_intrinsic_adapter("answerability")
+    assert isinstance(adapter.identity, Identity)
+    assert adapter.identity.name == "answerability"
+    assert adapter.identity.capability == "answerability"
+    assert adapter.identity.adapter_type == "alora"
+
+
+def test_intrinsic_identity_lora_adapter_type():
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=IntriniscsCatalogEntry(
+                name="answerability",
+                repo_id="ibm-granite/granitelib-rag-r1.0",
+                revision="abc123",
+                adapter_types=(AdapterType.LORA,),
+            ),
+        ),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore", DeprecationWarning)
+        adapter = IntrinsicAdapter(
+            "answerability",
+            adapter_type=AdapterType.LORA,
+            config_dict={"dummy": "config"},
+        )
+    assert adapter.identity.adapter_type == "lora"
+
+
+def test_intrinsic_legacy_attributes_preserved():
+    adapter = _make_intrinsic_adapter("answerability")
+    assert adapter.intrinsic_name == "answerability"
+    assert adapter.config == {"dummy": "config"}
+    assert adapter.qualified_name == "answerability_alora"
+    assert adapter.backend is None
+
+
+def test_intrinsic_backend_mutable():
+    """Shim must allow setting backend after construction (frozen bypass)."""
+    adapter = _make_intrinsic_adapter()
+    sentinel = object()
+    adapter.backend = sentinel  # type: ignore[assignment]
+    assert adapter.backend is sentinel
+
+
+# ---------------------------------------------------------------------------
+# AdapterMixin stub methods
+# ---------------------------------------------------------------------------
+
+
+def test_adapter_mixin_has_resolve_adapter():
+    assert callable(getattr(AdapterMixin, "resolve_adapter", None))
+
+
+def test_adapter_mixin_has_adapter_scope():
+    assert callable(getattr(AdapterMixin, "adapter_scope", None))
+
+
+def test_adapter_scope_is_noop():
+    """adapter_scope must work as a no-op context manager via the mixin default."""
+    mock_backend = MagicMock(spec=AdapterMixin)
+    # Call the real implementation via the class (bypasses mock's own spec)
+    with AdapterMixin.adapter_scope(mock_backend, None):
+        pass  # must not raise

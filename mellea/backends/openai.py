@@ -45,13 +45,8 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
-from .adapters.adapter import (
-    Adapter,
-    AdapterMixin,
-    EmbeddedIntrinsicAdapter,
-    get_adapter_for_intrinsic,
-)
-from .adapters.catalog import AdapterType
+from .adapters._core import Adapter
+from .adapters.adapter import AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -488,8 +483,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = get_adapter_for_intrinsic(
-                    adapter_name, [AdapterType.ALORA], self._added_adapters
+                # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
+                alora_req_adapter = next(
+                    (
+                        a
+                        for a in self._added_adapters.values()
+                        if a.identity.capability == adapter_name
+                        and a.identity.adapter_type == "alora"
+                    ),
+                    None,
                 )
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
@@ -574,8 +576,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         # --- adapter lookup ------------------------------------------------
-        adapter = get_adapter_for_intrinsic(
-            action.intrinsic_name, action.adapter_types, self._added_adapters
+        # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
+        allowed_types = {at.value for at in action.adapter_types}
+        adapter = next(
+            (
+                a
+                for a in self._added_adapters.values()
+                if a.identity.capability == action.intrinsic_name
+                and a.identity.adapter_type in allowed_types
+            ),
+            None,
         )
         if adapter is None:
             raise ValueError(
