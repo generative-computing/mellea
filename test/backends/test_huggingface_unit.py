@@ -271,7 +271,7 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
 
 @pytest.mark.asyncio
 async def test_logits_populated_when_option_set():
-    """mot.logits is populated with (vocab_size,) tensors when ModelOption.LOGITS=True."""
+    """generation.logits is populated with (vocab_size,) tensors when ModelOption.LOGITS=True (caching disabled)."""
     backend = _make_backend()
     input_ids = torch.tensor([[1]])
     sequences = torch.tensor([[0, 0]])
@@ -292,14 +292,43 @@ async def test_logits_populated_when_option_set():
 
     await backend.post_processing(mot, [], None, False, {}, None, input_ids)
 
-    assert mot.logits is not None
-    assert len(mot.logits) == len(fake_scores)
-    assert all(t.shape == (32000,) for t in mot.logits)
+    assert mot.generation.logits is not None
+    assert len(mot.generation.logits) == len(fake_scores)
+    assert all(t.shape == (32000,) for t in mot.generation.logits)
+
+
+@pytest.mark.asyncio
+async def test_logits_populated_when_option_set_caching_enabled():
+    """generation.logits is populated via the caching branch (_use_caches=True) when ModelOption.LOGITS=True."""
+    backend = _make_backend()
+    backend._use_caches = True
+    input_ids = torch.tensor([[1]])
+    sequences = torch.tensor([[0, 0]])
+    fake_scores = (torch.zeros(1, 32000), torch.zeros(1, 32000))
+
+    mot = ModelOutputThunk(value="hi")
+    mot._action = Message("user", "noop")
+    mot._model_options = {ModelOption.LOGITS: True}
+    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=fake_scores,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    with patch.object(backend, "cache_put"):
+        await backend.post_processing(mot, [], None, False, {}, None, input_ids)
+
+    assert mot.generation.logits is not None
+    assert len(mot.generation.logits) == len(fake_scores)
+    assert all(t.shape == (32000,) for t in mot.generation.logits)
 
 
 @pytest.mark.asyncio
 async def test_logits_not_populated_when_option_not_set():
-    """mot.logits stays None when ModelOption.LOGITS is not set."""
+    """generation.logits stays None when ModelOption.LOGITS is not set."""
     backend = _make_backend()
     input_ids = torch.tensor([[1]])
     sequences = torch.tensor([[0, 0]])
@@ -319,7 +348,7 @@ async def test_logits_not_populated_when_option_not_set():
 
     await backend.post_processing(mot, [], None, False, {}, None, input_ids)
 
-    assert mot.logits is None
+    assert mot.generation.logits is None
 
 
 @pytest.mark.asyncio
@@ -374,9 +403,13 @@ async def test_generate_from_raw_logits_sliced_per_item():
 
     assert len(results) == batch_size
     for item_idx, result in enumerate(results):
-        assert result.logits is not None, f"item {item_idx}: logits should be populated"
-        assert len(result.logits) == n_tokens, f"item {item_idx}: one tensor per token"
-        for tok_idx, t in enumerate(result.logits):
+        assert result.generation.logits is not None, (
+            f"item {item_idx}: logits should be populated"
+        )
+        assert len(result.generation.logits) == n_tokens, (
+            f"item {item_idx}: one tensor per token"
+        )
+        for tok_idx, t in enumerate(result.generation.logits):
             assert t.shape == (vocab_size,), (
                 f"item {item_idx} token {tok_idx}: expected (vocab_size,)"
             )
@@ -431,4 +464,34 @@ async def test_generate_from_raw_logits_not_set_when_option_absent():
             [Message("user", "hi")], MagicMock(), model_options={}
         )
 
-    assert results[0].logits is None
+    assert results[0].generation.logits is None
+
+
+@pytest.mark.asyncio
+async def test_logits_none_when_stream_and_logits_both_set():
+    """generation.logits stays None when STREAM=True, because the streamer yields no scores.
+
+    The streaming path passes text chunks through an AsyncTextIteratorStreamer
+    and never accumulates hf_output.scores, so post_processing receives scores=None
+    regardless of ModelOption.LOGITS.
+    """
+    backend = _make_backend()
+    input_ids = torch.tensor([[1]])
+    sequences = torch.tensor([[0, 0]])
+
+    mot = ModelOutputThunk(value="hi")
+    mot._action = Message("user", "noop")
+    mot._model_options = {ModelOption.LOGITS: True, ModelOption.STREAM: True}
+    # Streaming output carries no scores — hf_output.scores is None.
+    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+        sequences=sequences,
+        scores=None,
+        logits=None,
+        attentions=None,
+        hidden_states=None,
+        past_key_values=None,
+    )
+
+    await backend.post_processing(mot, [], None, False, {}, None, input_ids)
+
+    assert mot.generation.logits is None

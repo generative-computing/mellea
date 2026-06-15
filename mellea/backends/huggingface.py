@@ -1304,14 +1304,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             cache_key = id(mot.value)
             self.cache_put(cache_key, cache_info)
 
-            # Surface logits to caller before clearing — scores are owned by LRU cache after this
+            # Surface logits to caller before clearing — scores move to LRU cache;
+            # when LOGITS=True the tuple views also keep them alive via generation.logits.
             if (
                 hf_output.scores is not None
                 and mot._model_options
                 and mot._model_options.get(ModelOption.LOGITS)
             ):
                 # squeeze(0): hf_output.scores is (1, vocab_size) per token; normalise to (vocab_size,)
-                mot.logits = tuple(s.squeeze(0) for s in hf_output.scores)
+                mot.generation.logits = tuple(s.squeeze(0) for s in hf_output.scores)
 
             # Clear KV cache and scores from HF output - they're now owned by the LRU cache
             hf_output.past_key_values = None
@@ -1324,7 +1325,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         ):
             # Caching disabled — scores were not moved to LRU, surface them directly
             # squeeze(0): normalise (1, vocab_size) per token to (vocab_size,)
-            mot.logits = tuple(s.squeeze(0) for s in hf_output.scores)
+            mot.generation.logits = tuple(s.squeeze(0) for s in hf_output.scores)
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1453,7 +1454,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             model_options (dict | None): Per-call model options. Supports
                 ``ModelOption.MAX_NEW_TOKENS``, ``ModelOption.TEMPERATURE``,
                 ``ModelOption.SEED``, ``ModelOption.STOP_SEQUENCES``, and
-                ``ModelOption.LOGITS`` (populate ``ModelOutputThunk.logits``
+                ``ModelOption.LOGITS`` (populate ``mot.generation.logits``
                 with per-token scores of shape ``(vocab_size,)``).
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
@@ -1549,7 +1550,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if want_logits and outputs.scores is not None:
                 # Clone each slice so this MOT does not hold a view into the shared batch allocation.
-                result.logits = tuple(
+                result.generation.logits = tuple(
                     step_scores[i].detach().clone() for step_scores in outputs.scores
                 )
 

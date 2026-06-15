@@ -80,16 +80,17 @@ class ModelOption:
     LOGITS = "@@@logits@@@"
     """When ``True``, request that the backend return per-token logit scores.
 
-    Scores are exposed on ``ModelOutputThunk.logits`` as a tuple of 1-D
+    Scores are exposed on ``mot.generation.logits`` as a tuple of 1-D
     tensors of shape ``(vocab_size,)``, one per generated token. This shape
     is consistent across both the standard and batch (``generate_from_raw``)
     HuggingFace paths.
 
-    Only supported by the HuggingFace local backend. Ignored silently by
-    backends that cannot return logits (OpenAI, Ollama, LiteLLM, WatsonX).
+    Only supported by the HuggingFace local backend. Backends that cannot
+    return logits (OpenAI, Ollama, LiteLLM, WatsonX) log a warning when this
+    option is set and leave ``generation.logits`` as ``None``.
 
     **Streaming not supported**: when ``ModelOption.STREAM=True``, logit
-    scores are not available and ``ModelOutputThunk.logits`` will be ``None``.
+    scores are not available and ``mot.generation.logits`` will be ``None``.
     """
 
     @staticmethod
