@@ -96,7 +96,7 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
 
 Docusaurus versioning is integrated into the release pipeline:
 
-- **Pre-release / dev builds:** the site shows `main` as the only version
+- **Pre-release / dev builds:** the site shows `Next` as the only version
   — there are no snapshots yet.
 - **On each final release** (`publish-release.yml` with `bump_type: final`
   or `patch-final`): the `snapshot-docs` job runs
@@ -105,12 +105,12 @@ Docusaurus versioning is integrated into the release pipeline:
   `workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow
   run, so the dispatch is explicit rather than relying on a path filter.)
 - **Version dropdown** in the navbar lets users switch between released
-  versions and `main`.
+  versions and `Next`.
 
 No manual bootstrap is needed — the first final release run triggers
 `snapshot-docs` automatically, which creates the initial snapshot and
 updates `lastVersion`. Until the first final release, the site shows only
-`main` in the version dropdown, which is correct.
+`Next` in the version dropdown, which is correct.
 
 ## Local development
 
