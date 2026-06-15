@@ -298,6 +298,17 @@ class MelleaSession:
         self._log_context_token = None
         self._exit_stack: contextlib.ExitStack | None = None
 
+        # Bind the backend's model_id to the context when the context is a
+        # ChatContext without an existing model binding. This enables automatic
+        # context-window sizing in view_for_generation() when window_size is
+        # not explicitly set.
+        if (
+            isinstance(self.ctx, ChatContext)
+            and self.ctx._model_id is None
+            and hasattr(self.backend, "model_id")
+        ):
+            self.ctx = self.ctx.bind_model(self.backend.model_id)
+
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
         # Called directly, not via hook: OTel Token attach/detach is task-affine,
@@ -389,7 +400,17 @@ class MelleaSession:
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
+        old_ctx = self.ctx
         self.ctx = self.ctx.reset_to_new()
+        # Re-bind the model_id to the fresh context so automatic window sizing
+        # continues to work after a reset.
+        if (
+            isinstance(self.ctx, ChatContext)
+            and self.ctx._model_id is None
+            and isinstance(old_ctx, ChatContext)
+            and old_ctx._model_id is not None
+        ):
+            self.ctx = self.ctx.bind_model(old_ctx._model_id)
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
         """Clean up session resources and deregister session-scoped plugins.

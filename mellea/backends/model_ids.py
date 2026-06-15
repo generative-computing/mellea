@@ -37,6 +37,7 @@ class ModelIdentifier:
     bedrock_name: str | None = None
 
     hf_tokenizer_name: str | None = None  # if None, is the same as hf_model_name
+    context_length: int | None = None
 
 
 ####################
@@ -48,30 +49,35 @@ IBM_GRANITE_4_HYBRID_MICRO = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-h-micro",
     ollama_name="granite4:micro-h",
     watsonx_name=None,  # Only h-small available on Watsonx
+    context_length=131072,
 )
 
 IBM_GRANITE_4_HYBRID_TINY = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-h-tiny",
     ollama_name="granite4:tiny-h",
     watsonx_name=None,  # Only h-small available on Watsonx
+    context_length=131072,
 )
 
 IBM_GRANITE_4_HYBRID_SMALL = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-h-small",
     ollama_name="granite4:small-h",
     watsonx_name="ibm/granite-4-h-small",
+    context_length=131072,
 )
 
 IBM_GRANITE_4_HYBRID_1B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-h-1b",
     ollama_name="granite4:1b-h",
     watsonx_name=None,
+    context_length=131072,
 )
 
 IBM_GRANITE_4_HYBRID_350m = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-h-350m",
     ollama_name="granite4:350m-h",
     watsonx_name=None,
+    context_length=32768,
 )
 
 # Granite 4.1 Dense Models
@@ -79,14 +85,19 @@ IBM_GRANITE_4_1_3B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.1-3b",
     ollama_name="granite4.1:3b",
     watsonx_name=None,
+    context_length=131072,
 )
 
 IBM_GRANITE_4_1_8B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.1-8b", ollama_name="granite4.1:8b"
+    hf_model_name="ibm-granite/granite-4.1-8b",
+    ollama_name="granite4.1:8b",
+    context_length=131072,
 )
 
 IBM_GRANITE_4_1_30B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.1-30b", ollama_name="granite4.1:30b"
+    hf_model_name="ibm-granite/granite-4.1-30b",
+    ollama_name="granite4.1:30b",
+    context_length=131072,
 )
 
 IBM_GRANITE_GUARDIAN_4_1_8B = ModelIdentifier(
@@ -100,18 +111,21 @@ IBM_GRANITE_3_2_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.2-8b-instruct",
     ollama_name="granite3.2:8b",
     watsonx_name="ibm/granite-3-2b-instruct",
+    context_length=131072,
 )
 
 IBM_GRANITE_3_3_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.3-8b-instruct",
     ollama_name="granite3.3:8b",
     watsonx_name="ibm/granite-3-3-8b-instruct",
+    context_length=131072,
 )
 
 IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-micro",
     ollama_name="granite4:micro",
     watsonx_name="ibm/granite-4-h-small",  # Keeping hybrid version here for backwards compatibility.
+    context_length=131072,
 )
 
 # Granite 3.3 Vision Model (2B)
@@ -160,6 +174,7 @@ META_LLAMA_4_SCOUT_17B_16E_INSTRUCT = ModelIdentifier(
     ollama_name="llama4:scout",
     hf_tokenizer_name="unsloth/Llama-4-Scout-17B-16E-Instruct",
     mlx_name="mlx-community/Llama-4-Scout-17B-16E-Instruct-4bit",
+    context_length=10485760,
 )
 
 META_LLAMA_4_MAVERICK_17B_128E_INSTRUCT = ModelIdentifier(
@@ -168,6 +183,7 @@ META_LLAMA_4_MAVERICK_17B_128E_INSTRUCT = ModelIdentifier(
     watsonx_name=None,  # NOTE: we do have a fp8 model in watsonx (meta-llama/llama-4-maverick-17b-128e-instruct-fp8) Not sure if we want to include it here.
     hf_tokenizer_name="unsloth/Llama-4-Maverick-17B-128E-Instruct",
     mlx_name="mlx-community/Llama-4-Maverick-17B-128E-Instruct-4bit",
+    context_length=1048576,
 )
 
 #### LLAMA 3 models ####
@@ -177,12 +193,14 @@ META_LLAMA_3_3_70B = ModelIdentifier(
     watsonx_name="meta-llama/llama-3-3-70b-instruct",
     hf_tokenizer_name="unsloth/Llama-3.3-70B-Instruct",
     mlx_name="mlx-community/Llama-3.3-70B-Instruct-4bit",
+    context_length=131072,
 )
 
 META_LLAMA_3_2_3B = ModelIdentifier(
     hf_model_name="unsloth/Llama-3.2-3B-Instruct",
     ollama_name="llama3.2:3b",
     watsonx_name="meta-llama/llama-3-2-3b-instruct",
+    context_length=131072,
 )
 
 META_LLAMA_GUARD3_1B = ModelIdentifier(
@@ -190,7 +208,9 @@ META_LLAMA_GUARD3_1B = ModelIdentifier(
 )
 
 META_LLAMA_3_2_1B = ModelIdentifier(
-    ollama_name="llama3.2:1b", hf_model_name="unsloth/Llama-3.2-1B"
+    ollama_name="llama3.2:1b",
+    hf_model_name="unsloth/Llama-3.2-1B",
+    context_length=131072,
 )
 
 ########################
@@ -200,18 +220,21 @@ META_LLAMA_3_2_1B = ModelIdentifier(
 MISTRALAI_MISTRAL_0_3_7B = ModelIdentifier(
     hf_model_name="mistralai/Mistral-7B-Instruct-v0.3",  # Mistral 7B v0.3
     ollama_name="mistral:7b",  # Ollama
+    context_length=32768,
 )
 
 MISTRALAI_MISTRAL_SMALL_24B = ModelIdentifier(
     hf_model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
     ollama_name="mistral-small:latest",
     watsonx_name="mistralai/mistral-small-3-1-24b-instruct-2503",
+    context_length=131072,
 )
 
 MISTRALAI_MISTRAL_LARGE_123B = ModelIdentifier(
     hf_model_name="mistralai/Mistral-Large-Instruct-2411",
     ollama_name="mistral-large:latest",
     watsonx_name="mistralai/mistral-large",
+    context_length=131072,
 )
 
 
@@ -222,21 +245,25 @@ MISTRALAI_MISTRAL_LARGE_123B = ModelIdentifier(
 QWEN3_0_6B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-0.6B",  # Qwen 0.6B
     ollama_name="qwen3:0.6b",  # Ollama
+    context_length=32768,
 )
 
 QWEN3_1_7B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-1.7B",  # Qwen 1.7B
     ollama_name="qwen3:1.7b",  # Ollama
+    context_length=32768,
 )
 
 QWEN3_8B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-8B",  # Qwen 8B
     ollama_name="qwen3:8b",  # Ollama
+    context_length=40960,
 )
 
 QWEN3_14B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-14B",  # Qwen 14B
     ollama_name="qwen3:14b",  # Ollama
+    context_length=40960,
 )
 
 ###########################
@@ -274,6 +301,7 @@ GOOGLE_GEMMA_3N_E4B = ModelIdentifier(
 MS_PHI_4_14B = ModelIdentifier(
     hf_model_name="microsoft/phi-4",  # Microsoft Phi-4 14B
     ollama_name="phi4:14b",  # Ollama
+    context_length=16384,
 )
 
 MS_PHI_4_MINI_REASONING_4B = ModelIdentifier(
@@ -285,6 +313,7 @@ MS_PHI_4_MINI_REASONING_4B = ModelIdentifier(
 DEEPSEEK_R1_8B = ModelIdentifier(
     hf_model_name="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
     ollama_name="deepseek-r1:8b",
+    context_length=131072,
 )
 
 
@@ -292,6 +321,7 @@ HF_SMOLLM2_2B = ModelIdentifier(
     ollama_name="smollm2:1.7b",
     hf_model_name="HuggingFaceTB/SmolLM2-1.7B-Instruct",
     mlx_name="mlx-community/SmolLM2-1.7B-Instruct",
+    context_length=8192,
 )
 
 HF_SMOLLM3_3B_no_ollama = ModelIdentifier(
