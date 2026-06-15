@@ -126,7 +126,7 @@ class IntrinsicAdapter(LocalHFAdapter):
 
         if adapter_type not in self.intrinsic_metadata.adapter_types:
             raise ValueError(
-                f"Intrinsic '{intrinsic_name}' not available as an adapter of type "
+                f"Adapter function '{intrinsic_name}' not available as an adapter of type "
                 f"'{adapter_type}. Available types are "
                 f"{self.intrinsic_metadata.adapter_types}."
             )
@@ -390,7 +390,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
             io_config_path = model_path / io_config_rel
             if not io_config_path.exists():
                 raise ValueError(
-                    f"io.yaml for intrinsic '{entry_name}' "
+                    f"io.yaml for adapter function '{entry_name}' "
                     f"not found at {io_config_path}"
                 )
 
@@ -408,7 +408,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
         if not adapters:
             if intrinsic_name is not None:
                 raise ValueError(
-                    f"No adapter found for intrinsic '{intrinsic_name}' in {model_path}"
+                    f"No adapter found for adapter function '{intrinsic_name}' in {model_path}"
                 )
             raise ValueError(f"No adapters found in {model_path}")
 
@@ -465,7 +465,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
         except ValueError as e:
             if intrinsic_name is not None:
                 raise ValueError(
-                    f"No adapter found for intrinsic '{intrinsic_name}' in {repo_id}"
+                    f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
                 ) from e
             raise ValueError(f"No adapters found in {repo_id}") from e
 

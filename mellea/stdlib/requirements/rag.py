@@ -203,7 +203,7 @@ class GroundednessRequirement(Requirement):
                 )
         except Exception as e:
             return ValidationResult(
-                False, reason=f"Citation generation intrinsic failed: {e!s}"
+                False, reason=f"Citation generation adapter function failed: {e!s}"
             )
 
         # Step 2: Citation Necessity

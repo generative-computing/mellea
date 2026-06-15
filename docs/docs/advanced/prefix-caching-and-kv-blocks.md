@@ -133,4 +133,4 @@ reused.
 
 **See also:** [HuggingFace Transformers](../integrations/huggingface) |
 [Adapter functions](./intrinsics.md) |
-[LoRA and aLoRA Adapters](./lora-and-alora-adapters)
+[LoRA and aLoRA Adapters](./lora-and-alora-adapters.md)

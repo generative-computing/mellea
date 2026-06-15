@@ -258,7 +258,7 @@ m = MelleaSession(
 > LiteLLM provides a verified integration — see
 > [Backends and Configuration](../how-to/backends-and-configuration).
 
-## Intrinsics with Granite Switch
+## Adapter functions with Granite Switch
 
 Granite Switch models embed LoRA/aLoRA adapters directly in the model weights.
 When served via vLLM, these adapters enable adapter functions (RAG quality

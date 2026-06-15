@@ -215,7 +215,7 @@ nest_asyncio.apply()
 Guardian adapter functions (`guardian_check()`, `policy_guardrails()`,
 `factuality_detection()`, `factuality_correction()`) require `LocalHFBackend`
 with an IBM Granite model.
-See [Safety Guardrails](../how-to/safety-guardrails) for full usage.
+See [Safety Guardrails](../how-to/safety-guardrails.md) for full usage.
 
 ### `guardian_check()` returns unexpected scores
 
@@ -234,7 +234,7 @@ Use the Guardian adapter functions instead
 ```
 
 Replace `GuardianCheck` / `GuardianRisk` imports with the Guardian adapter functions API.
-See [Safety Guardrails](../how-to/safety-guardrails) for migration guidance.
+See [Safety Guardrails](../how-to/safety-guardrails.md) for migration guidance.
 
 ---
 
@@ -250,4 +250,4 @@ See [Safety Guardrails](../how-to/safety-guardrails) for migration guidance.
 **See also:**
 [Quick Start](../getting-started/quickstart) |
 [Inference-Time Scaling](../advanced/inference-time-scaling) |
-[Safety Guardrails](../how-to/safety-guardrails)
+[Safety Guardrails](../how-to/safety-guardrails.md)

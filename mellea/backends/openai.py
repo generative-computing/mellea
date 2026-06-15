@@ -579,7 +579,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         if adapter is None:
             raise ValueError(
-                f"backend ({self}) has no adapter for processing intrinsic: "
+                f"backend ({self}) has no adapter for processing adapter function: "
                 f"{action.intrinsic_name}"
             )
 
