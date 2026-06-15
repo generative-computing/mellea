@@ -22,13 +22,16 @@ Examples:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from mellea.plugins import HookType, hook
 from mellea.plugins.hooks.generation import (
     GenerationPostCallPayload,
     GenerationPreCallPayload,
 )
+
+if TYPE_CHECKING:
+    from cpex.framework.models import PluginContext
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +103,9 @@ def _get_token_usage(payload) -> str:
 
 
 @hook(HookType.GENERATION_PRE_CALL)
-async def log_generation_pre_call(payload: GenerationPreCallPayload, ctx: Any) -> None:
+async def log_generation_pre_call(
+    payload: GenerationPreCallPayload, ctx: PluginContext
+) -> None:
     """Log request details before calling the LLM.
 
     Args:
@@ -153,7 +158,7 @@ async def log_generation_pre_call(payload: GenerationPreCallPayload, ctx: Any) -
 
 @hook(HookType.GENERATION_POST_CALL)
 async def log_generation_post_call(
-    payload: GenerationPostCallPayload, ctx: Any
+    payload: GenerationPostCallPayload, ctx: PluginContext
 ) -> None:
     """Log response details after LLM returns.
 

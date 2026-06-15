@@ -28,7 +28,7 @@ Examples:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from mellea.plugins import HookType, hook
 from mellea.plugins.hooks.sampling import (
@@ -38,11 +38,16 @@ from mellea.plugins.hooks.sampling import (
     SamplingRepairPayload,
 )
 
+if TYPE_CHECKING:
+    from cpex.framework.models import PluginContext
+
 logger = logging.getLogger(__name__)
 
 
 @hook(HookType.SAMPLING_LOOP_START)
-async def log_sampling_loop_start(payload: SamplingLoopStartPayload, ctx: Any) -> None:
+async def log_sampling_loop_start(
+    payload: SamplingLoopStartPayload, ctx: PluginContext
+) -> None:
     """Log sampling strategy initialization with budget and requirement count.
 
     Args:
@@ -65,7 +70,9 @@ async def log_sampling_loop_start(payload: SamplingLoopStartPayload, ctx: Any) -
 
 
 @hook(HookType.SAMPLING_ITERATION)
-async def log_sampling_iteration(payload: SamplingIterationPayload, ctx: Any) -> None:
+async def log_sampling_iteration(
+    payload: SamplingIterationPayload, ctx: PluginContext
+) -> None:
     """Log validation results for each sampling attempt.
 
     Args:
@@ -101,7 +108,9 @@ async def log_sampling_iteration(payload: SamplingIterationPayload, ctx: Any) ->
 
 
 @hook(HookType.SAMPLING_REPAIR)
-async def log_sampling_repair(payload: SamplingRepairPayload, ctx: Any) -> None:
+async def log_sampling_repair(
+    payload: SamplingRepairPayload, ctx: PluginContext
+) -> None:
     """Log when repair is triggered during sampling iterations.
 
     Args:
@@ -122,7 +131,9 @@ async def log_sampling_repair(payload: SamplingRepairPayload, ctx: Any) -> None:
 
 
 @hook(HookType.SAMPLING_LOOP_END)
-async def log_sampling_loop_end(payload: SamplingLoopEndPayload, ctx: Any) -> None:
+async def log_sampling_loop_end(
+    payload: SamplingLoopEndPayload, ctx: PluginContext
+) -> None:
     """Log sampling completion with success status and attempt statistics.
 
     Args:

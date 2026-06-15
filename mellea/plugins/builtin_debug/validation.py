@@ -24,7 +24,7 @@ Examples:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from mellea.plugins import HookType, hook
 from mellea.plugins.hooks.validation import (
@@ -32,12 +32,15 @@ from mellea.plugins.hooks.validation import (
     ValidationPreCheckPayload,
 )
 
+if TYPE_CHECKING:
+    from cpex.framework.models import PluginContext
+
 logger = logging.getLogger(__name__)
 
 
 @hook(HookType.VALIDATION_PRE_CHECK)
 async def log_validation_pre_check(
-    payload: ValidationPreCheckPayload, ctx: Any
+    payload: ValidationPreCheckPayload, ctx: PluginContext
 ) -> None:
     """Log validation setup before requirements are checked.
 
@@ -62,7 +65,7 @@ async def log_validation_pre_check(
 
 @hook(HookType.VALIDATION_POST_CHECK)
 async def log_validation_post_check(
-    payload: ValidationPostCheckPayload, ctx: Any
+    payload: ValidationPostCheckPayload, ctx: PluginContext
 ) -> None:
     """Log validation results after requirements are checked.
 
