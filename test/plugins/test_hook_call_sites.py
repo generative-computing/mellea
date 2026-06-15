@@ -252,6 +252,43 @@ class TestGenerationHookCallSites:
         assert captured_kwargs["model_options"] == {"temperature": 0.25}
         assert captured_kwargs["tool_calls"] is True
 
+    async def test_generation_pre_call_mutation_propagates_with_real_plugin(
+        self,
+    ) -> None:
+        """GENERATION_PRE_CALL mutations survive the cpex policy layer."""
+        captured_kwargs: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            async def _generate_from_context(self, action, ctx, **kwargs):
+                captured_kwargs.update(kwargs)
+                return await super()._generate_from_context(action, ctx, **kwargs)
+
+        @hook("generation_pre_call")
+        async def mutator(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(
+                    update={
+                        "model_options": {"temperature": 0.25},
+                        "format": dict,
+                        "tool_calls": True,
+                    }
+                ),
+            )
+
+        register(mutator)
+        backend = RecordingBackend()
+        await backend.generate_from_context(
+            CBlock("hook order"),
+            MagicMock(spec=Context),
+            model_options={"temperature": 1.0},
+            tool_calls=False,
+        )
+
+        assert captured_kwargs["model_options"] == {"temperature": 0.25}
+        assert captured_kwargs["format"] is dict
+        assert captured_kwargs["tool_calls"] is True
+
     async def test_generation_id_on_pre_call_payload_is_uuid(self) -> None:
         """Backend.generate_from_context generates a UUID and puts it on pre_call."""
         import uuid
@@ -515,6 +552,41 @@ class TestGenerationBatchHookCallSites:
             )
 
         assert order == ["hook", "generate"]
+        assert captured_kwargs["model_options"] == {"temperature": 0.25}
+        assert captured_kwargs["format"] is dict
+        assert captured_kwargs["tool_calls"] is True
+
+    async def test_batch_pre_call_mutation_propagates_with_real_plugin(self) -> None:
+        """GENERATION_BATCH_PRE_CALL mutations survive the cpex policy layer."""
+        captured_kwargs: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            async def _generate_from_raw(self, actions, ctx, **kwargs):
+                captured_kwargs.update(kwargs)
+                return await super()._generate_from_raw(actions, ctx, **kwargs)
+
+        @hook("generation_batch_pre_call")
+        async def mutator(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(
+                    update={
+                        "model_options": {"temperature": 0.25},
+                        "format": dict,
+                        "tool_calls": True,
+                    }
+                ),
+            )
+
+        register(mutator)
+        backend = RecordingBackend()
+        await backend.generate_from_raw(
+            [CBlock("a")],
+            MagicMock(spec=Context),
+            model_options={"temperature": 1.0},
+            tool_calls=False,
+        )
+
         assert captured_kwargs["model_options"] == {"temperature": 0.25}
         assert captured_kwargs["format"] is dict
         assert captured_kwargs["tool_calls"] is True
