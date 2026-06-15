@@ -92,7 +92,7 @@ class ChatMessage(BaseModel):
         for url in image_urls:
             if url.startswith(("http://", "https://")):
                 image_blocks.append(ImageUrlBlock(url))
-            else:
+            elif url.startswith("data:"):
                 try:
                     image_blocks.append(ImageBlock(url))
                 except AssertionError as e:
@@ -102,4 +102,9 @@ class ChatMessage(BaseModel):
                         f"Invalid image data: {url[:100]}{'...' if len(url) > 100 else ''}. "
                         f"Error: {e}"
                     ) from e
+            else:
+                raise ValueError(
+                    f"Invalid image URL: {url[:100]}{'...' if len(url) > 100 else ''}. "
+                    "Expected an http/https URL or a data: URI."
+                )
         return image_blocks
