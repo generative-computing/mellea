@@ -1,7 +1,11 @@
 # pytest: e2e, slow
 """Examples for python_tool() — arithmetic, CSV summary, and matplotlib plot.
 
-Each example uses the ``local_unsafe`` tier so no Docker daemon is required.
+Each example uses `tier="local_unsafe"` — an explicit trust decision meaning
+the model-generated code will run as a direct subprocess with no container
+isolation, no filesystem or network restrictions, and no memory/CPU limits.
+This tier is appropriate for trusted, development-time use.  For production or
+untrusted code, use `tier="docker"` or `tier="docker_unsafe"`.
 
 Package-install story
 ---------------------
@@ -27,7 +31,7 @@ from mellea.stdlib.tools import python_tool
 
 def example_arithmetic():
     """Run a simple arithmetic expression and print the result."""
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     result = tool.run(code="print(2 ** 10)")
     print("stdout:", result.stdout)
     assert result.success
@@ -43,7 +47,9 @@ def example_csv_summary():
     """
     with tempfile.TemporaryDirectory() as tmp:
         artifact_dir = Path(tmp)
-        tool = python_tool(packages=["pandas"], artifact_dir=artifact_dir)
+        tool = python_tool(
+            tier="local_unsafe", packages=["pandas"], artifact_dir=artifact_dir
+        )
 
         # Use a relative filename — the tool sets CWD to artifact_dir so
         # 'summary.csv' lands directly inside it.
@@ -76,7 +82,11 @@ def example_matplotlib_plot():
     """
     with tempfile.TemporaryDirectory() as tmp:
         artifact_dir = Path(tmp)
-        tool = python_tool(packages=["matplotlib", "numpy"], artifact_dir=artifact_dir)
+        tool = python_tool(
+            tier="local_unsafe",
+            packages=["matplotlib", "numpy"],
+            artifact_dir=artifact_dir,
+        )
 
         # Relative filename — CWD is artifact_dir.
         code = """

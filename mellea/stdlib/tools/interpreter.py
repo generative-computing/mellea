@@ -812,6 +812,9 @@ def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
     return len(_get_unauthorized_imports(code, allowed_imports)) == 0
 
 
+_LOCAL_TIERS: frozenset[str] = frozenset({"local_unsafe", "local"})
+
+
 def make_execution_environment(
     tier: ExecutionTier,
     policy: CapabilityPolicy | None = None,
@@ -1034,7 +1037,7 @@ _DOCKER_TIERS: frozenset[str] = frozenset({"docker", "docker_unsafe"})
 
 
 def python_tool(
-    tier: ExecutionTier = "local_unsafe",
+    tier: ExecutionTier | None = None,
     packages: list[str] | None = None,
     artifact_dir: Path | None = None,
     policy: CapabilityPolicy | None = None,
@@ -1065,9 +1068,13 @@ def python_tool(
     this injection (e.g. when the code sets its own backend explicitly).
 
     Args:
-        tier (ExecutionTier): Execution tier — one of `"static"`,
-            `"local_unsafe"`, `"local"`, `"docker_unsafe"`, or
-            `"docker"`.  Defaults to `"local_unsafe"`.
+        tier (ExecutionTier | None): Execution tier — one of `"static"`,
+            `"local_unsafe"`, `"local"`, `"docker_unsafe"`, or `"docker"`.
+            Defaults to `None`, which resolves to `"local_unsafe"` but
+            **emits a** :class:`UserWarning` **at construction time** to
+            surface the implicit trust decision.  Pass
+            `tier="local_unsafe"` explicitly to suppress the warning when
+            unsafe local execution is intentional.
         packages (list[str] | None): Python packages to pre-install via
             `pip install` before the first execution.  Ignored for the
             `"static"` tier.  `None` or `[]` means no installs.
@@ -1107,14 +1114,55 @@ def python_tool(
 
         from mellea.stdlib.tools import python_tool
 
-        tool = python_tool(packages=["matplotlib", "numpy"])
+        tool = python_tool(tier="local_unsafe", packages=["matplotlib", "numpy"])
         result = tool.run(code="import numpy as np; print(np.sqrt(4))")
         print(result.stdout)   # "2.0"
         print(result.artifacts)  # files written during execution
     """
     from ...backends.tools import MelleaTool
 
+    resolved_tier: ExecutionTier
+    if tier is None:
+        warnings.warn(
+            "python_tool() was called without an explicit 'tier' argument and defaulted "
+            "to 'local_unsafe', which executes model-generated code as an unrestricted "
+            "subprocess with no container isolation or resource limits. "
+            "Pass tier='local_unsafe' explicitly to acknowledge this trust decision, "
+            "or use tier='local', tier='docker_unsafe', or tier='docker' for a more "
+            "constrained environment.",
+            UserWarning,
+            stacklevel=2,
+        )
+        resolved_tier = "local_unsafe"
+    else:
+        resolved_tier = tier
+
     effective_policy: CapabilityPolicy | None = policy
+
+    # Warn once at construction time when the caller passed a policy on a local tier
+    # whose boolean restriction fields are unenforced — do this before any replace()
+    # so the warning fires exactly once and points at the python_tool() call site.
+    if policy is not None and resolved_tier in _LOCAL_TIERS:
+        restricted = []
+        if not policy.network_access:
+            restricted.append("network_access=False")
+        if not policy.package_installation:
+            restricted.append("package_installation=False")
+        if not policy.subprocess_execution:
+            restricted.append("subprocess_execution=False")
+        if not policy.env_var_access:
+            restricted.append("env_var_access=False")
+        if restricted:
+            warnings.warn(
+                f"A CapabilityPolicy with unenforced restrictions was passed to a "
+                f"{resolved_tier!r} execution environment. The following fields are "
+                "declared but will not restrict actual execution on local tiers — no "
+                f"subprocess isolation is applied: {', '.join(restricted)}. "
+                "These values are informational only. "
+                "Use tier='docker' or tier='docker_unsafe' for real process isolation.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     if packages:  # None and [] both mean "no installs requested"
         _validate_package_names(packages)
@@ -1124,15 +1172,19 @@ def python_tool(
             )
         else:
             # Merge, deduplicate (preserving order), and ensure the flag is set.
+            # Suppress the __post_init__ warning that fires on replace() — the
+            # user already saw it (if applicable) from the original construction.
             seen: set[str] = set()
             merged: list[str] = []
             for p in list(effective_policy.packages) + list(packages):
                 if p not in seen:
                     seen.add(p)
                     merged.append(p)
-            effective_policy = replace(
-                effective_policy, package_installation=True, packages=merged
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                effective_policy = replace(
+                    effective_policy, package_installation=True, packages=merged
+                )
 
     # Shared caches — persist across all run_python() calls on this tool instance
     # so packages are only installed once per tool lifetime, not per call.
@@ -1140,9 +1192,9 @@ def python_tool(
     _install_cache: set[str] = set()
     _failed_cache: set[str] = set()
 
-    if tier in _DOCKER_TIERS and artifact_dir is not None:
+    if resolved_tier in _DOCKER_TIERS and artifact_dir is not None:
         warnings.warn(
-            f"artifact_dir is ignored for the {tier!r} tier — "
+            f"artifact_dir is ignored for the {resolved_tier!r} tier — "
             "LLMSandboxEnvironment does not scan the container filesystem for "
             "artifacts.  result.artifacts will always be [].  "
             "Use a local tier to surface output files as structured artifacts.",
@@ -1161,7 +1213,7 @@ def python_tool(
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             env = make_execution_environment(
-                tier,
+                resolved_tier,
                 policy=effective_policy,
                 allowed_imports=allowed_imports,
                 working_directory=str(artifact_dir),
@@ -1176,7 +1228,7 @@ def python_tool(
         tmp_dir = Path(tempfile.mkdtemp())
         try:
             env = make_execution_environment(
-                tier,
+                resolved_tier,
                 policy=effective_policy,
                 allowed_imports=allowed_imports,
                 working_directory=str(tmp_dir),

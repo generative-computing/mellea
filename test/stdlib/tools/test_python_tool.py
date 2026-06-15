@@ -38,7 +38,7 @@ _docker_skip = pytest.mark.skipif(
 
 
 def test_arithmetic():
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     result: ExecutionResult = tool.run(code="print(1 + 1)")
     assert result.success
     assert result.stdout == "2"
@@ -46,14 +46,14 @@ def test_arithmetic():
 
 
 def test_returns_execution_result():
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     result = tool.run(code="x = 42")
     assert isinstance(result, ExecutionResult)
     assert result.success
 
 
 def test_artifact_surfaced(tmp_path: Path):
-    tool = python_tool(artifact_dir=tmp_path)
+    tool = python_tool(tier="local_unsafe", artifact_dir=tmp_path)
     code = f"""
 with open(r'{tmp_path / "output.csv"}', 'w') as f:
     f.write('a,b\\n1,2\\n')
@@ -68,7 +68,7 @@ with open(r'{tmp_path / "output.csv"}', 'w') as f:
 
 
 def test_multiple_artifacts(tmp_path: Path):
-    tool = python_tool(artifact_dir=tmp_path)
+    tool = python_tool(tier="local_unsafe", artifact_dir=tmp_path)
     code = f"""
 for name in ['a.txt', 'b.txt']:
     with open(r'{tmp_path}/' + name, 'w') as f:
@@ -86,7 +86,9 @@ def test_matplotlib_agg_injected(tmp_path: Path):
     # Installs matplotlib+numpy on demand via packages= to exercise the install story.
     # python_tool injects matplotlib.use('Agg') when matplotlib is imported,
     # so the savefig call works on headless environments without plt.show() crashing.
-    tool = python_tool(packages=["matplotlib", "numpy"], artifact_dir=tmp_path)
+    tool = python_tool(
+        tier="local_unsafe", packages=["matplotlib", "numpy"], artifact_dir=tmp_path
+    )
     code = f"""
 import matplotlib.pyplot as plt
 import numpy as np
@@ -104,7 +106,7 @@ plt.savefig(r'{tmp_path / "plot.png"}')
 
 @pytest.mark.slow
 def test_numpy_arithmetic(tmp_path: Path):
-    tool = python_tool(packages=["numpy"], artifact_dir=tmp_path)
+    tool = python_tool(tier="local_unsafe", packages=["numpy"], artifact_dir=tmp_path)
     result = tool.run(code="import numpy as np; print(np.sqrt(4.0))")
     assert result.success, result.stderr
     assert result.stdout is not None and result.stdout.strip() == "2.0"
@@ -112,7 +114,7 @@ def test_numpy_arithmetic(tmp_path: Path):
 
 @pytest.mark.slow
 def test_pandas_csv_summary(tmp_path: Path):
-    tool = python_tool(packages=["pandas"], artifact_dir=tmp_path)
+    tool = python_tool(tier="local_unsafe", packages=["pandas"], artifact_dir=tmp_path)
     out = tmp_path / "summary.csv"
     code = f"""
 import pandas as pd
@@ -130,17 +132,17 @@ print(len(df))
 
 
 def test_name_override():
-    tool = python_tool(name="my_python")
+    tool = python_tool(tier="local_unsafe", name="my_python")
     assert tool.name == "my_python"
 
 
 def test_default_name():
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     assert tool.name == "python"
 
 
 def test_failed_code():
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     result = tool.run(code="raise ValueError('oops')")
     assert not result.success
     assert result.stderr is not None
@@ -149,7 +151,7 @@ def test_failed_code():
 
 def test_failed_code_does_not_surface_prior_artifacts(tmp_path: Path):
     """A failed run must not return artifacts from a prior successful run on the same artifact_dir."""
-    tool = python_tool(artifact_dir=tmp_path)
+    tool = python_tool(tier="local_unsafe", artifact_dir=tmp_path)
     r1 = tool.run(code=f"open(r'{tmp_path / 'out.txt'}', 'w').write('x')")
     assert r1.success
     assert len(r1.artifacts) == 1
@@ -164,7 +166,13 @@ def test_timed_out_code_returns_no_artifacts(tmp_path: Path):
     """A timed-out execution (skipped=True) must not surface any artifacts."""
     from mellea.stdlib.tools import CapabilityPolicy
 
-    tool = python_tool(artifact_dir=tmp_path, policy=CapabilityPolicy(timeout=1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        tool = python_tool(
+            tier="local_unsafe",
+            artifact_dir=tmp_path,
+            policy=CapabilityPolicy(timeout=1),
+        )
     # Write a file then sleep long enough to time out.
     result = tool.run(
         code=f"import time; open(r'{tmp_path / 'partial.txt'}', 'w').write('x'); time.sleep(10)"
@@ -191,7 +199,7 @@ def test_execution_mode_local():
 
 def test_packages_empty_list_does_not_crash():
     """packages=[] should be accepted without error and not affect execution."""
-    tool = python_tool(packages=[])
+    tool = python_tool(tier="local_unsafe", packages=[])
     result = tool.run(code="print('ok')")
     assert result.success
     assert result.stdout == "ok"
@@ -200,8 +208,10 @@ def test_packages_empty_list_does_not_crash():
 def test_packages_deduplication():
     """Overlapping packages in policy.packages and packages= are deduplicated."""
     policy = CapabilityPolicy(timeout=30, packages=["fakepkg"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        tool = python_tool(tier="local_unsafe", packages=["fakepkg"], policy=policy)
     with patch.object(_interpreter_mod, "_install_packages", return_value=True):
-        tool = python_tool(packages=["fakepkg"], policy=policy)
         result = tool.run(code="print('ok')")
     assert result.success
     assert result.stdout == "ok"
@@ -209,7 +219,9 @@ def test_packages_deduplication():
 
 def test_policy_override():
     policy = CapabilityPolicy(timeout=5)
-    tool = python_tool(policy=policy)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        tool = python_tool(tier="local_unsafe", policy=policy)
     result = tool.run(code="print('ok')")
     assert result.success
 
@@ -217,8 +229,10 @@ def test_policy_override():
 def test_packages_merged_into_policy():
     """packages= is merged into an existing policy without breaking execution."""
     policy = CapabilityPolicy(timeout=30)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        tool = python_tool(tier="local_unsafe", packages=["fakepkg"], policy=policy)
     with patch.object(_interpreter_mod, "_install_packages", return_value=True):
-        tool = python_tool(packages=["fakepkg"], policy=policy)
         result = tool.run(code="print('ok')")
     assert result.success
     assert result.stdout == "ok"
@@ -227,7 +241,7 @@ def test_packages_merged_into_policy():
 @pytest.mark.slow
 def test_package_install():
     """Install cowsay on the fly and verify import succeeds."""
-    tool = python_tool(packages=["cowsay"])
+    tool = python_tool(tier="local_unsafe", packages=["cowsay"])
     result = tool.run(
         code="import cowsay; print(cowsay.get_output_string('cow', 'hi'))"
     )
@@ -330,7 +344,7 @@ def test_needs_matplotlib_preamble_syntax_error():
 
 def test_suppress_agg_skips_preamble(tmp_path: Path):
     """suppress_agg=True must not inject the Agg preamble even when matplotlib is imported."""
-    tool = python_tool(artifact_dir=tmp_path, suppress_agg=True)
+    tool = python_tool(tier="local_unsafe", artifact_dir=tmp_path, suppress_agg=True)
     # The preamble would set Agg before any other import; with suppress_agg=True
     # the code runs as-is.  We verify no preamble injection by checking stdout
     # (the code prints the backend — without Agg injection it will be whatever
@@ -375,12 +389,12 @@ def test_validate_package_names_double_dash():
 
 def test_python_tool_rejects_invalid_package():
     with pytest.raises(ValueError):
-        python_tool(packages=[""])
+        python_tool(tier="local_unsafe", packages=[""])
 
 
 def test_python_tool_rejects_flag_package():
     with pytest.raises(ValueError):
-        python_tool(packages=["-r"])
+        python_tool(tier="local_unsafe", packages=["-r"])
 
 
 # endregion
@@ -391,7 +405,7 @@ def test_python_tool_rejects_flag_package():
 
 def test_artifact_surfaced_no_artifact_dir():
     """Artifacts written during a no-artifact_dir run must be readable by the caller."""
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     # Write a file to CWD (which is the per-call tempdir when artifact_dir=None).
     result = tool.run(code="open('output.txt', 'w').write('hello')")
     assert result.success
@@ -416,7 +430,7 @@ def test_scan_artifacts_recursive(tmp_path: Path):
 
 def test_artifact_in_subdirectory(tmp_path: Path):
     """python_tool must surface files written to a subdirectory of artifact_dir."""
-    tool = python_tool(artifact_dir=tmp_path)
+    tool = python_tool(tier="local_unsafe", artifact_dir=tmp_path)
     code = """
 import os
 os.makedirs("subdir", exist_ok=True)
@@ -455,6 +469,184 @@ def test_packages_empty_list_does_not_create_policy():
 
     assert captured_envs, "make_execution_environment was not called"
     assert captured_envs[0].policy is None
+
+
+# endregion
+
+
+# region security posture warning tests
+
+
+def test_python_tool_no_tier_emits_user_warning():
+    """python_tool() with no explicit tier must emit a UserWarning about local_unsafe."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool()
+    user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+    assert user_warnings, "Expected a UserWarning when tier is omitted"
+    assert any("local_unsafe" in str(x.message) for x in user_warnings)
+    assert any("tier" in str(x.message) for x in user_warnings)
+
+
+def test_python_tool_explicit_tier_no_warning():
+    """python_tool(tier='local_unsafe') must not emit a UserWarning."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool(tier="local_unsafe")
+    user_warnings = [
+        x
+        for x in w
+        if issubclass(x.category, UserWarning)
+        and "local_unsafe" in str(x.message)
+        and "tier" in str(x.message)
+    ]
+    assert not user_warnings, "No UserWarning expected when tier is passed explicitly"
+
+
+def test_capability_policy_filesystem_read_roots_warns():
+    """CapabilityPolicy(filesystem_read_roots=[...]) must emit a UserWarning."""
+    from pathlib import Path
+
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        CapabilityPolicy(filesystem_read_roots=[Path("/tmp")])
+    user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+    assert user_warnings, "Expected a UserWarning for filesystem_read_roots"
+    assert any("filesystem_read_roots" in str(x.message) for x in user_warnings)
+    assert any("not enforced" in str(x.message) for x in user_warnings)
+
+
+def test_capability_policy_filesystem_write_roots_warns():
+    """CapabilityPolicy(filesystem_write_roots=[...]) must emit a UserWarning."""
+    from pathlib import Path
+
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        CapabilityPolicy(filesystem_write_roots=[Path("/tmp")])
+    user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+    assert user_warnings, "Expected a UserWarning for filesystem_write_roots"
+    assert any("filesystem_write_roots" in str(x.message) for x in user_warnings)
+
+
+def test_capability_policy_no_path_roots_no_warning():
+    """CapabilityPolicy() with no path roots must not emit a UserWarning."""
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        CapabilityPolicy(timeout=10)
+    user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+    assert not user_warnings, "No UserWarning expected for default CapabilityPolicy"
+
+
+def test_python_tool_packages_plus_filesystem_policy_warns_once():
+    """packages= merge via replace() must not double-emit the filesystem_read_roots warning."""
+    from pathlib import Path
+
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    policy = CapabilityPolicy(filesystem_read_roots=[Path("/tmp")])
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool(tier="local_unsafe", packages=["numpy"], policy=policy)
+    fs_warnings = [
+        x
+        for x in w
+        if issubclass(x.category, UserWarning)
+        and "filesystem_read_roots" in str(x.message)
+    ]
+    assert len(fs_warnings) == 1, (
+        f"Expected exactly one filesystem warning, got {len(fs_warnings)}"
+    )
+
+
+def test_python_tool_unenforced_policy_local_unsafe_warns():
+    """python_tool() with an explicit policy on local_unsafe must warn about unenforced bools at construction time."""
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    policy = CapabilityPolicy(network_access=False, package_installation=False)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool(tier="local_unsafe", policy=policy)
+    user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+    assert user_warnings, "Expected UserWarning for unenforced policy on local_unsafe"
+    assert any("network_access" in str(x.message) for x in user_warnings)
+    assert any(
+        "unenforced" in str(x.message) or "not restrict" in str(x.message)
+        for x in user_warnings
+    )
+
+
+def test_python_tool_unenforced_policy_local_warns():
+    """python_tool() with an explicit policy on local must warn about unenforced bools at construction time."""
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    policy = CapabilityPolicy(network_access=False)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool(tier="local", policy=policy)
+    user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+    assert user_warnings, "Expected UserWarning for unenforced policy on local"
+    assert any("network_access" in str(x.message) for x in user_warnings)
+
+
+def test_python_tool_unenforced_policy_warning_fires_at_construction_not_run():
+    """The unenforced-policy warning must fire at python_tool() construction, not during tool.run()."""
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    policy = CapabilityPolicy(network_access=False)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        tool = python_tool(tier="local_unsafe", policy=policy)
+    construction_warnings = [
+        x
+        for x in w
+        if issubclass(x.category, UserWarning) and "unenforced" in str(x.message)
+    ]
+    assert construction_warnings, "Warning must fire during python_tool() construction"
+
+    with warnings.catch_warnings(record=True) as w2:
+        warnings.simplefilter("always")
+        tool.run(code="print('ok')")
+    run_warnings = [
+        x
+        for x in w2
+        if issubclass(x.category, UserWarning) and "unenforced" in str(x.message)
+    ]
+    assert not run_warnings, "Warning must not re-fire during tool.run()"
+
+
+def test_python_tool_no_policy_no_unenforced_warning():
+    """python_tool() with no policy must not emit the unenforced warning."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool(tier="local_unsafe")
+    user_warnings = [
+        x
+        for x in w
+        if issubclass(x.category, UserWarning) and "unenforced" in str(x.message)
+    ]
+    assert not user_warnings, "No unenforced warning expected when policy is None"
+
+
+def test_python_tool_docker_tier_no_unenforced_warning():
+    """python_tool() on docker tiers must not emit the unenforced warning (docker provides real isolation)."""
+    from mellea.stdlib.tools import CapabilityPolicy
+
+    policy = CapabilityPolicy(network_access=False)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        python_tool(tier="docker_unsafe", policy=policy)
+    user_warnings = [
+        x
+        for x in w
+        if issubclass(x.category, UserWarning) and "unenforced" in str(x.message)
+    ]
+    assert not user_warnings, "No unenforced warning expected for docker tiers"
 
 
 # endregion
