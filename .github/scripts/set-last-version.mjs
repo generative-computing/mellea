@@ -20,16 +20,5 @@ if (updated === src) {
 }
 src = updated;
 
-// Add path: 'main' to the current version block if not already present.
-// This is a one-time insertion needed once a snapshot version exists as the
-// default — before the first snapshot, current IS the default and needs no path.
-if (!src.includes("path: 'main'")) {
-  src = src.replace(
-    /label: 'main \(unreleased\)',/,
-    "label: 'main (unreleased)',\n              path: 'main',",
-  );
-  console.log("Added path: 'main' to versions.current");
-}
-
 writeFileSync(configPath, src);
 console.log(`Set lastVersion to '${version}' in ${configPath}`);

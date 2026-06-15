@@ -96,8 +96,8 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
 
 Docusaurus versioning is integrated into the release pipeline:
 
-- **Pre-release / dev builds:** the site shows `main (unreleased)` as the
-  only version — there are no snapshots yet.
+- **Pre-release / dev builds:** the site shows `Next` as the only version
+  — there are no snapshots yet.
 - **On each final release** (`publish-release.yml` with `bump_type: final`
   or `patch-final`): the `snapshot-docs` job runs
   `docusaurus docs:version X.Y.Z`, commits `versioned_docs/version-X.Y.Z/`
@@ -105,12 +105,12 @@ Docusaurus versioning is integrated into the release pipeline:
   `workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow
   run, so the dispatch is explicit rather than relying on a path filter.)
 - **Version dropdown** in the navbar lets users switch between released
-  versions and `main (unreleased)`.
+  versions and `Next`.
 
 No manual bootstrap is needed — the first final release run triggers
 `snapshot-docs` automatically, which creates the initial snapshot and
 updates `lastVersion`. Until the first final release, the site shows only
-`main (unreleased)` in the version dropdown, which is correct.
+`Next` in the version dropdown, which is correct.
 
 ## Local development
 
@@ -165,6 +165,14 @@ To preview the deployed site from a non-main branch:
 > PRs from forks build and validate successfully, but the deploy will fail
 > with a permission error. Push the branch to the upstream repo and use
 > manual dispatch instead.
+
+### Previewing from your own fork
+
+To get a live preview site from your fork (useful for reviewing visual changes before submitting a PR):
+
+1. **Push your branch** to your fork. The `docs-publish.yml` workflow runs automatically and deploys to the `gh-pages` branch on your fork, creating it if it doesn't exist.
+2. **Enable GitHub Pages** on your fork: Settings → Pages → Source: `gh-pages` branch, root `/`.
+3. Your preview is live at `https://<your-username>.github.io/mellea/`.
 
 ## File reference
 

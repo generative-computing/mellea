@@ -36,13 +36,10 @@ const config: Config = {
           showLastUpdateTime: true,
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
           includeCurrentVersion: true,
-          // set-last-version.mjs matches these lines with exact regexes — do not reformat
+          // set-last-version.mjs matches this line with an exact regex — do not reformat
           lastVersion: 'current',
           versions: {
             current: {
-              label: 'main (unreleased)',
-              // path is added by the release pipeline (set-last-version.mjs) on
-              // first final release, once a snapshot version exists as the default
               banner: 'none',
             },
           },
@@ -171,6 +168,10 @@ const config: Config = {
           label: 'API Reference',
         },
         {
+          type: 'docsVersionDropdown',
+          position: 'left',
+        },
+        {
           href: 'https://mellea.ai/blogs/',
           label: 'Blog',
           position: 'right',
@@ -178,10 +179,6 @@ const config: Config = {
         {
           href: 'https://github.com/generative-computing/mellea/discussions',
           label: 'Community',
-          position: 'right',
-        },
-        {
-          type: 'docsVersionDropdown',
           position: 'right',
         },
         {
