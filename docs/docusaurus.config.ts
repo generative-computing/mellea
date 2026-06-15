@@ -36,13 +36,10 @@ const config: Config = {
           showLastUpdateTime: true,
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
           includeCurrentVersion: true,
-          // set-last-version.mjs matches these lines with exact regexes — do not reformat
+          // set-last-version.mjs matches this line with an exact regex — do not reformat
           lastVersion: 'current',
           versions: {
             current: {
-              label: 'main',
-              // path is added by the release pipeline (set-last-version.mjs) on
-              // first final release, once a snapshot version exists as the default
               banner: 'none',
             },
           },
@@ -93,23 +90,7 @@ const config: Config = {
           {from: '/dev/requirement-alora-rerouting', to: '/advanced/lora-and-alora-adapters'},
           {from: '/dev/spans', to: '/observability/tracing'},
           {from: '/dev/tool-calling', to: '/how-to/tools-and-agents'},
-          {from: '/api/cli/m', to: '/reference/cli'},
-          {from: '/api/cli/alora/commands', to: '/reference/cli'},
-          {from: '/api/cli/alora/intrinsic_uploader', to: '/reference/cli'},
-          {from: '/api/cli/alora/readme_generator', to: '/reference/cli'},
-          {from: '/api/cli/alora/train', to: '/reference/cli'},
-          {from: '/api/cli/alora/upload', to: '/reference/cli'},
-          {from: '/api/cli/decompose/decompose', to: '/reference/cli'},
-          {from: '/api/cli/decompose/pipeline', to: '/reference/cli'},
-          {from: '/api/cli/decompose/utils', to: '/reference/cli'},
-          {from: '/api/cli/eval/commands', to: '/reference/cli'},
-          {from: '/api/cli/eval/eval', to: '/reference/cli'},
-          {from: '/api/cli/eval/runner', to: '/reference/cli'},
-          {from: '/api/cli/serve/app', to: '/reference/cli'},
-          {from: '/api/cli/serve/models', to: '/reference/cli'},
-          {from: '/api/cli/fix/commands', to: '/reference/cli'},
-          {from: '/api/cli/fix/async_fixer', to: '/reference/cli'},
-          {from: '/api/cli/fix/genstub_fixer', to: '/reference/cli'},
+
           {from: '/guide/generative-functions', to: '/how-to/generative-functions'},
           {from: '/guide/tools-and-agents', to: '/how-to/tools-and-agents'},
           {from: '/guide/working-with-data', to: '/how-to/working-with-data'},

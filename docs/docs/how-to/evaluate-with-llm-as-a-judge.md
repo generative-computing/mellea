@@ -207,4 +207,4 @@ requirements. `sample_generations` lists every attempt made.
 **See also:** [The Requirements System](../concepts/requirements-system) |
 [Write Custom Verifiers](../how-to/write-custom-verifiers) |
 [Handling Exceptions and Failures](../how-to/handling-exceptions) |
-[CLI Reference](../reference/cli)
+[API Reference](../api)

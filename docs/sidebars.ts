@@ -124,7 +124,6 @@ const sidebars: SidebarsConfig = {
       label: 'Reference',
       items: [
         'reference/glossary',
-        'reference/cli',
       ],
     },
     {
