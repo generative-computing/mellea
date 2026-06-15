@@ -339,4 +339,4 @@ Guardian functions also do not emit `mellea.requirement` metrics — see
 > [`factuality_correction.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_correction.py),
 > and [`policy_guardrails.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/policy_guardrails.py).
 
-**See also:** [Adapter functions](../advanced/intrinsics.md) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md) | [Tutorial: Making Agents Reliable](../tutorials/making-agents-reliable.md)
+**See also:** [Adapter functions](../advanced/intrinsics.md) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md) | [Tutorial: Making Agents Reliable](../tutorials/04-making-agents-reliable.md)
