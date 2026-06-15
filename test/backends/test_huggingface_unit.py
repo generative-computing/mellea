@@ -414,7 +414,7 @@ async def test_generate_from_raw_logits_sliced_per_item():
                 f"item {item_idx} token {tok_idx}: expected (vocab_size,)"
             )
             # clone: must not share storage with the original batch tensor
-            assert not t.data_ptr() == fake_scores[tok_idx][item_idx].data_ptr(), (
+            assert t.data_ptr() != fake_scores[tok_idx][item_idx].data_ptr(), (
                 f"item {item_idx} token {tok_idx}: logits must be a clone, not a view"
             )
 
