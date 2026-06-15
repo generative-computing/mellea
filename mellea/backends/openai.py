@@ -484,8 +484,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
                 # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
-                # No isinstance guard needed: add_adapter (line 250) enforces that
-                # only EmbeddedIntrinsicAdapter (which IS-AN Adapter) can be registered.
+                # No isinstance guard needed: add_adapter enforces that only
+                # EmbeddedIntrinsicAdapter (which IS-AN Adapter) can be registered.
                 alora_req_adapter = next(
                     (
                         a
