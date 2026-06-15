@@ -199,3 +199,19 @@ def test_identity_requirement_check_underscore_no_warning():
         and "KNOWN_CAPABILITIES" in str(w.message)
     ]
     assert capability_warnings == []
+
+
+def test_known_capabilities_contains_no_hyphens():
+    # No hyphenated name should leak into KNOWN_CAPABILITIES.  If a future
+    # catalog entry uses hyphens in `name` without setting `capability`, this
+    # catches it immediately.
+    hyphenated = [cap for cap in KNOWN_CAPABILITIES if "-" in cap]
+    assert hyphenated == [], f"Hyphenated capabilities found: {hyphenated}"
+
+
+def test_known_capabilities_count_matches_catalog():
+    # Every catalog entry must contribute exactly one distinct effective_capability.
+    # If two entries resolve to the same token, the frozenset shrinks and this fails.
+    from mellea.backends.adapters.catalog import _INTRINSICS_CATALOG_ENTRIES
+
+    assert len(KNOWN_CAPABILITIES) == len(_INTRINSICS_CATALOG_ENTRIES)

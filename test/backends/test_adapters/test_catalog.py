@@ -144,3 +144,12 @@ def test_capability_none_means_effective_capability_equals_name():
     )
     assert entry.capability is None
     assert entry.effective_capability == "plain_name"
+
+
+def test_all_catalog_effective_capabilities_are_nonempty():
+    from mellea.backends.adapters.catalog import _INTRINSICS_CATALOG_ENTRIES
+
+    for entry in _INTRINSICS_CATALOG_ENTRIES:
+        assert entry.effective_capability, (
+            f"Entry {entry.name!r} has an empty effective_capability"
+        )
