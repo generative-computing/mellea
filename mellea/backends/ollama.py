@@ -365,6 +365,8 @@ class OllamaModelBackend(FormatterBackend):
 
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
+            ValueError: If a message contains an ``ImageUrlBlock``; Ollama requires
+                base64-encoded images — convert to an ``ImageBlock`` first.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)

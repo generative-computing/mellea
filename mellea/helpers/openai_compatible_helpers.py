@@ -12,7 +12,7 @@ from ..core.base import ImageUrlBlock
 
 if TYPE_CHECKING:
     from ..core import Formatter, ModelToolCall
-    from ..core.base import AbstractMelleaTool, ImageUrlBlock, ModelOutputThunk
+    from ..core.base import AbstractMelleaTool, ModelOutputThunk
     from ..stdlib.components import Document, Message
 
 

@@ -5,7 +5,7 @@ import base64
 import pytest
 from pydantic import ValidationError
 
-from mellea.core import ImageBlock
+from mellea.core import ImageBlock, ImageUrlBlock
 from mellea.serve.models import ChatMessage, ImageUrlContent, TextContent
 
 
@@ -349,3 +349,18 @@ class TestChatMessageImageBlocks:
         # Error message should contain truncated URL (first 100 chars + ...)
         assert "..." in str(exc_info.value)
         assert len(str(exc_info.value)) < len(long_url)
+
+    def test_get_image_blocks_https_url_returns_image_url_block(self):
+        """ChatMessage.get_image_blocks() returns ImageUrlBlock for https:// URLs."""
+        msg = ChatMessage(
+            role="user",
+            content=[
+                ImageUrlContent(
+                    type="image_url", image_url={"url": "https://example.com/photo.png"}
+                )
+            ],
+        )
+        blocks = msg.get_image_blocks()
+        assert len(blocks) == 1
+        assert isinstance(blocks[0], ImageUrlBlock)
+        assert blocks[0].value == "https://example.com/photo.png"

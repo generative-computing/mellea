@@ -132,6 +132,13 @@ def test_image_block_in_instruction(
     assert image_list[0] == str(image_block)
 
 
+def test_image_url_block_rejected_by_ollama(mocked_session: MelleaSession):
+    url_block: ImageUrlBlock = ImageUrlBlock("https://example.com/photo.png")
+    images: list[ImageBlock | ImageUrlBlock] = [url_block]
+    with pytest.raises(ValueError, match="ImageUrlBlock"):
+        mocked_session.chat("What is in this image?", images=images)
+
+
 def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Image):
     image_block = ImageBlock.from_pil_image(pil_image)
     ct = mocked_session.chat(

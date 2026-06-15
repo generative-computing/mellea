@@ -160,8 +160,9 @@ def test_image_block_in_chat(
     assert len(last_action.images) > 0  # type: ignore
 
     # first image in image list should be the same as the image block
-    image0_str = last_action.images[0]  # type: ignore
-    assert image0_str == ImageBlock.from_pil_image(pil_image).value
+    first_image = last_action.images[0]  # type: ignore
+    assert isinstance(first_image, ImageBlock)
+    assert first_image.value == ImageBlock.from_pil_image(pil_image).value
 
     # get prompt message
     lp = turn.output._generate_log.prompt  # type: ignore
