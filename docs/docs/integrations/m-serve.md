@@ -113,4 +113,4 @@ print(response.choices[0].message.content)
 
 **See also:** [Context and Sessions](../concepts/context-and-sessions) |
 [Backends and Configuration](../how-to/backends-and-configuration) |
-[API Reference](../api)
+[CLI Reference](../reference/cli)
