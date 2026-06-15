@@ -99,6 +99,15 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         description="Adapter types that are known to be available for this intrinsic.",
     )
 
+    @pydantic.field_validator("capability")
+    @classmethod
+    def _check_capability(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError(
+                "capability must be a non-empty string when set; use None to fall back to name"
+            )
+        return v
+
     @pydantic.field_validator("revision")
     @classmethod
     def _check_revision(cls, v: str) -> str:
@@ -195,6 +204,14 @@ _INTRINSICS_CATALOG = {e.name: e for e in _INTRINSICS_CATALOG_ENTRIES}
 """Catalog of intrinsics that Mellea knows about.
 
 Mellea code should access this catalog via :func:`fetch_intrinsic_metadata()`"""
+
+_effective_caps = [e.effective_capability for e in _INTRINSICS_CATALOG_ENTRIES]
+if len(_effective_caps) != len(set(_effective_caps)):
+    _dupes = {c for c in _effective_caps if _effective_caps.count(c) > 1}
+    raise ValueError(
+        f"Duplicate effective_capability values in intrinsics catalog: {_dupes}"
+    )
+del _effective_caps
 
 
 def known_intrinsic_names() -> list[str]:

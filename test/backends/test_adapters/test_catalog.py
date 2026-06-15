@@ -153,3 +153,17 @@ def test_all_catalog_effective_capabilities_are_nonempty():
         assert entry.effective_capability, (
             f"Entry {entry.name!r} has an empty effective_capability"
         )
+
+
+def test_capability_empty_string_rejected():
+    with pytest.raises(ValueError, match="non-empty"):
+        IntriniscsCatalogEntry(
+            name="x", capability="", repo_id="org/repo", revision="abc123"
+        )
+
+
+def test_capability_whitespace_only_rejected():
+    with pytest.raises(ValueError, match="non-empty"):
+        IntriniscsCatalogEntry(
+            name="x", capability="   ", repo_id="org/repo", revision="abc123"
+        )
