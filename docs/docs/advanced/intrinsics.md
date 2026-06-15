@@ -254,9 +254,9 @@ Output format is task-specific — `requirement-check` returns a likelihood scor
 
 ---
 
-## Guardian Intrinsics
+## Guardian adapter functions
 
-Safety and factuality checks use a separate set of Guardian-specific intrinsics:
+Safety and factuality checks use a separate set of Guardian-specific adapter functions:
 `guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
 `factuality_correction()`. These are documented in the
 [Safety Guardrails](../how-to/safety-guardrails) how-to guide.

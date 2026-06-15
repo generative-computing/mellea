@@ -128,7 +128,7 @@ class GuardianCheck(Requirement):
 
         warnings.warn(
             "GuardianCheck is deprecated as of version 0.4. "
-            "Use the Guardian Intrinsics instead ",
+            "Use the Guardian adapter functions instead ",
             DeprecationWarning,
             stacklevel=2,
         )

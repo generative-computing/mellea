@@ -135,7 +135,7 @@ orchestrator:
   with [`ChatContext`](../reference/glossary#chatcontext) and the `@tool` decorator. See
   [Tools and Agents](../how-to/tools-and-agents).
 - **Guarded agents** — combine the ReACT pattern with `requirements` and
-  [Guardian Intrinsics](../how-to/safety-guardrails) to enforce safety constraints
+  [Guardian adapter functions](../how-to/safety-guardrails.md) to enforce safety constraints
   at every step.
 - **Structured outputs** — use `@generative` with Pydantic models or `Literal` types
   to enforce type-safe structured output at each step. See

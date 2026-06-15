@@ -177,7 +177,7 @@ If the model is not calling tools as expected:
 - Check the tool's docstring — the model uses it to decide when to call the tool.
   A vague or absent docstring leads to poor tool selection.
 - Use `guardian_check(context, backend, criteria="function_call")` from the
-  [Guardian Intrinsics](../how-to/safety-guardrails) to detect function call
+  [Guardian adapter functions](../how-to/safety-guardrails.md) to detect function call
   hallucinations.
 
 ---
@@ -212,7 +212,7 @@ nest_asyncio.apply()
 
 ## Guardian / safety validation
 
-Guardian Intrinsics (`guardian_check()`, `policy_guardrails()`,
+Guardian adapter functions (`guardian_check()`, `policy_guardrails()`,
 `factuality_detection()`, `factuality_correction()`) require `LocalHFBackend`
 with an IBM Granite model.
 See [Safety Guardrails](../how-to/safety-guardrails) for full usage.
@@ -230,10 +230,10 @@ See [Safety Guardrails](../how-to/safety-guardrails) for full usage.
 
 ```text
 DeprecationWarning: GuardianCheck is deprecated as of version 0.4.
-Use the Guardian Intrinsics instead
+Use the Guardian adapter functions instead
 ```
 
-Replace `GuardianCheck` / `GuardianRisk` imports with the Guardian Intrinsics API.
+Replace `GuardianCheck` / `GuardianRisk` imports with the Guardian adapter functions API.
 See [Safety Guardrails](../how-to/safety-guardrails) for migration guidance.
 
 ---

@@ -1,18 +1,18 @@
 ---
 title: "Safety Guardrails"
-description: "Use Guardian Intrinsics to detect harmful, biased, ungrounded, or policy-violating content in LLM outputs."
+description: "Use Guardian adapter functions to detect harmful, biased, ungrounded, or policy-violating content in LLM outputs."
 # diataxis: how-to
 ---
 
 **Prerequisites:** `pip install "mellea[hf]"` for local inference; Apple Silicon or CUDA GPU recommended.
-Guardian Intrinsics work via `LocalHFBackend` (local HuggingFace inference) or `OpenAIBackend`
+Guardian adapter functions work via `LocalHFBackend` (local HuggingFace inference) or `OpenAIBackend`
 pointed at a Granite Switch endpoint.
 
-Guardian Intrinsics evaluate LLM outputs for safety and quality using LoRA adapters
+Guardian adapter functions evaluate LLM outputs for safety and quality using LoRA adapters
 loaded directly into a HuggingFace backend — purpose-built for evaluation tasks, not
 general-purpose generation.
 
-> **Generation vs evaluation:** Guardian Intrinsics evaluate content; they do not
+> **Generation vs evaluation:** Guardian adapter functions evaluate content; they do not
 > generate responses. Your session's generation backend (Ollama, OpenAI, etc.) is
 > unchanged. A separate `LocalHFBackend` instance handles evaluation only.
 
@@ -316,7 +316,7 @@ else:
 
 ## Limitations
 
-Guardian Intrinsics return a numeric score (or label string) rather than a
+Guardian adapter functions return a numeric score (or label string) rather than a
 [`Requirement`](../reference/glossary#requirement) instance, so they cannot be
 passed to `m.validate()` or wired into `RepairTemplateStrategy` the way the
 deprecated `GuardianCheck` could. The practical workaround is to call
@@ -339,4 +339,4 @@ Guardian functions also do not emit `mellea.requirement` metrics — see
 > [`factuality_correction.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/factuality_correction.py),
 > and [`policy_guardrails.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/intrinsics/policy_guardrails.py).
 
-**See also:** [Intrinsics](../advanced/intrinsics) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters) | [Tutorial: Making Agents Reliable](../tutorials/making-agents-reliable)
+**See also:** [Adapter functions](../advanced/intrinsics.md) | [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md) | [Tutorial: Making Agents Reliable](../tutorials/making-agents-reliable.md)

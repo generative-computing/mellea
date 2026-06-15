@@ -132,5 +132,5 @@ identical — disabling caching only affects whether prefill states are stored a
 reused.
 
 **See also:** [HuggingFace Transformers](../integrations/huggingface) |
-[Intrinsics](./intrinsics) |
+[Adapter functions](./intrinsics.md) |
 [LoRA and aLoRA Adapters](./lora-and-alora-adapters)

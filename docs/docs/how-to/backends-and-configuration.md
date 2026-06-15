@@ -132,7 +132,7 @@ print(str(result))
 
 > **Backend note:** Requires `pip install "mellea[hf]"`. Models are downloaded from
 > HuggingFace Hub on first use. GPU recommended for reasonable inference speed.
-> Required for [Intrinsics](../advanced/intrinsics).
+> Required for [Adapter functions](../advanced/intrinsics.md).
 
 Run models locally using HuggingFace transformers:
 

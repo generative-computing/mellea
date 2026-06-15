@@ -89,7 +89,7 @@ hardware. See the aLoRA guide for training and usage.
 
 > **Tip:** For adapter functions without local GPU requirements, Granite Switch models
 > serve pre-embedded adapters via vLLM and the OpenAI backend. See
-> [Intrinsics](../advanced/intrinsics) for details.
+> [Adapter functions](../advanced/intrinsics.md) for details.
 
 ## Vision support
 

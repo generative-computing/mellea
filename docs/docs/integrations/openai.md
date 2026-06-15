@@ -292,7 +292,7 @@ backend = OpenAIBackend(
 
 The high-level adapter function wrappers (`rag.check_answerability`,
 `core.check_certainty`, etc.) work identically with this backend. See
-[Intrinsics](../advanced/intrinsics) for the full list of available adapter functions.
+[Adapter functions](../advanced/intrinsics.md) for the full list of available adapter functions.
 
 > **Note:** `load_embedded_adapters=True` downloads adapter I/O configurations
 > from the model's HuggingFace repository on first use. No adapter weights are

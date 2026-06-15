@@ -20,7 +20,7 @@ Hugging Face account.
 >
 > Granite Switch models ship with pre-trained adapter functions embedded in the
 > model weights, which can be used via `OpenAIBackend` with
-> `load_embedded_adapters=True`. See [Intrinsics](./intrinsics) for details.
+> `load_embedded_adapters=True`. See [Adapter functions](./intrinsics.md) for details.
 
 ## LoRA vs aLoRA
 
@@ -160,7 +160,7 @@ backend.default_to_constraint_checking_alora = False
 Set it back to `True` to re-enable. This flag is per-backend instance and does not
 affect other sessions.
 
-**See also:** [Intrinsics](./intrinsics) |
+**See also:** [Adapter functions](./intrinsics.md) |
 [The Requirements System](../concepts/requirements-system) |
 [Write Custom Verifiers](../how-to/write-custom-verifiers) |
 [CLI Reference](../reference/cli)
