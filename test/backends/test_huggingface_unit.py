@@ -17,6 +17,7 @@ from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import ModelOption
 from mellea.backends.adapters import IntrinsicAdapter
+from mellea.backends.adapters._core import Identity
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Intrinsic, Message
@@ -142,6 +143,15 @@ def _make_intrinsic_adapter_stub():
     adapter.name = "answerability"
     adapter.qualified_name = "answerability_alora"
     adapter.config = {}
+    # Required for the capability-based lookup introduced in Epic #929 Phase 1.
+    # Use object.__setattr__ because IntrinsicAdapter inherits from a frozen dataclass.
+    object.__setattr__(
+        adapter,
+        "identity",
+        Identity(
+            name="answerability", adapter_type="alora", capability="answerability"
+        ),
+    )
     return adapter
 
 
@@ -222,11 +232,10 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
     def fake_generate_with_transformers(tokenizer, model, generate_input, other_input):
         return object()
 
+    # Pre-populate the adapter so the capability-based lookup finds it.
+    backend._added_adapters = {adapter.qualified_name: adapter}
+
     with (
-        patch(
-            "mellea.backends.huggingface.get_adapter_for_intrinsic",
-            return_value=adapter,
-        ),
         patch(
             "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
             _FakeRewriter,

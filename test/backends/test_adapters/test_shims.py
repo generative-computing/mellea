@@ -221,3 +221,22 @@ def test_adapter_scope_is_noop():
     # Call the real implementation via the class (bypasses mock's own spec)
     with AdapterMixin.adapter_scope(mock_backend, None):
         pass  # must not raise
+
+
+def test_resolve_adapter_returns_existing_by_capability():
+    """resolve_adapter must return an already-registered adapter without creating a new one."""
+    existing = _make_intrinsic_adapter("answerability")
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend._added_adapters = {existing.qualified_name: existing}
+    result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
+    assert result is existing
+    mock_backend.add_adapter.assert_not_called()
+
+
+def test_resolve_adapter_raises_without_base_model():
+    """resolve_adapter must raise ValueError when the backend has no model ID."""
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend._added_adapters = {}
+    mock_backend.base_model_name = None
+    with pytest.raises(ValueError, match="no model ID"):
+        AdapterMixin.resolve_adapter(mock_backend, "answerability")
