@@ -9,18 +9,18 @@ untrusted code, use `tier="docker"` or `tier="docker_unsafe"`.
 
 Package-install story
 ---------------------
-Pass ``packages=["pkg1", "pkg2"]`` to ``python_tool()`` for on-demand installs.
-The tool runs ``uv pip install`` when uv is on PATH (the default in uv-managed
-projects), falling back to ``python -m pip`` otherwise.  Installs happen once
-per tool lifetime (the shared install cache is keyed to the ``python_tool``
-instance), so repeated ``tool.run()`` calls only pay the pip cost once.
+Pass `packages=["pkg1", "pkg2"]` to `python_tool()` for on-demand installs.
+The tool runs `uv pip install` when uv is on PATH (the default in uv-managed
+projects), falling back to `python -m pip` otherwise.  Installs happen once
+per tool lifetime (the shared install cache is keyed to the `python_tool`
+instance), so repeated `tool.run()` calls only pay the pip cost once.
 
 Artifact directory
 ------------------
-Pass ``artifact_dir=<Path>`` to collect files the code writes.  Only files
-produced by a **successful** execution are surfaced.  When ``artifact_dir`` is
+Pass `artifact_dir=<Path>` to collect files the code writes.  Only files
+produced by a **successful** execution are surfaced.  When `artifact_dir` is
 omitted, a per-call tempdir is created; it is kept alive as long as the
-returned ``ExecutionResult`` holds artifacts, and cleaned up otherwise.
+returned `ExecutionResult` holds artifacts, and cleaned up otherwise.
 """
 
 import tempfile
