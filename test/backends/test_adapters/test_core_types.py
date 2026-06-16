@@ -17,6 +17,7 @@ from mellea.backends.adapters import (
     ServerMediatedBinding,
     WeightsBinding,
 )
+from mellea.backends.adapters.catalog import _INTRINSICS_CATALOG_ENTRIES
 from mellea.core import Component
 
 
@@ -212,6 +213,4 @@ def test_known_capabilities_contains_no_hyphens():
 def test_known_capabilities_count_matches_catalog():
     # Every catalog entry must contribute exactly one distinct effective_capability.
     # If two entries resolve to the same token, the frozenset shrinks and this fails.
-    from mellea.backends.adapters.catalog import _INTRINSICS_CATALOG_ENTRIES
-
     assert len(KNOWN_CAPABILITIES) == len(_INTRINSICS_CATALOG_ENTRIES)

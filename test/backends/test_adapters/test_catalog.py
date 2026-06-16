@@ -3,6 +3,7 @@
 import pytest
 
 from mellea.backends.adapters.catalog import (
+    _INTRINSICS_CATALOG_ENTRIES,
     AdapterType,
     IntriniscsCatalogEntry,
     fetch_intrinsic_metadata,
@@ -147,8 +148,6 @@ def test_capability_none_means_effective_capability_equals_name():
 
 
 def test_all_catalog_effective_capabilities_are_nonempty():
-    from mellea.backends.adapters.catalog import _INTRINSICS_CATALOG_ENTRIES
-
     for entry in _INTRINSICS_CATALOG_ENTRIES:
         assert entry.effective_capability, (
             f"Entry {entry.name!r} has an empty effective_capability"
