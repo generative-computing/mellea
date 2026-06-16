@@ -549,9 +549,9 @@ def test_python_tool_packages_plus_filesystem_policy_warns_once():
 
     from mellea.stdlib.tools import CapabilityPolicy
 
-    policy = CapabilityPolicy(filesystem_read_roots=[Path("/tmp")])
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
+        policy = CapabilityPolicy(filesystem_read_roots=[Path("/tmp")])
         python_tool(tier="local_unsafe", packages=["numpy"], policy=policy)
     fs_warnings = [
         x
