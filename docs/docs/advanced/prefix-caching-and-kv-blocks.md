@@ -131,6 +131,6 @@ Or pass `use_caches=False` at construction. The session behaviour is otherwise
 identical — disabling caching only affects whether prefill states are stored and
 reused.
 
-**See also:** [HuggingFace Transformers](../integrations/huggingface) |
+**See also:** [Hugging Face Transformers](../integrations/huggingface.md) |
 [Adapter functions](./intrinsics.md) |
 [LoRA and aLoRA Adapters](./lora-and-alora-adapters.md)

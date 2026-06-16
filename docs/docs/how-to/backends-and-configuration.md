@@ -1,6 +1,6 @@
 ---
 title: "Backends and Configuration"
-description: "Configure Mellea to use Ollama, OpenAI, LiteLLM, HuggingFace, or WatsonX backends."
+description: "Configure Mellea to use Ollama, OpenAI, LiteLLM, Hugging Face, or WatsonX backends."
 # diataxis: how-to
 ---
 
@@ -8,7 +8,7 @@ description: "Configure Mellea to use Ollama, OpenAI, LiteLLM, HuggingFace, or W
 or appropriate credentials for cloud backends.
 
 A backend is the engine that runs the LLM. Mellea ships with backends for Ollama,
-OpenAI-compatible APIs, LiteLLM, HuggingFace transformers, and IBM WatsonX. You
+OpenAI-compatible APIs, LiteLLM, Hugging Face Transformers, and IBM WatsonX. You
 configure the backend when you create a session.
 
 ## Default backend
@@ -128,13 +128,13 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-## HuggingFace backend
+## Hugging Face backend
 
 > **Backend note:** Requires `pip install "mellea[hf]"`. Models are downloaded from
-> HuggingFace Hub on first use. GPU recommended for reasonable inference speed.
+> Hugging Face Hub on first use. GPU recommended for reasonable inference speed.
 > Required for [Adapter functions](../advanced/intrinsics.md).
 
-Run models locally using HuggingFace transformers:
+Run models locally using Hugging Face Transformers:
 
 ```python
 # Requires: mellea[hf]

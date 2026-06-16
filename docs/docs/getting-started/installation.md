@@ -27,7 +27,7 @@ Install extras for specific backends and features:
 
 ```bash
 pip install "mellea[litellm]"    # LiteLLM multi-provider (Anthropic, Bedrock, etc.)
-pip install "mellea[hf]"         # HuggingFace transformers for local inference
+pip install "mellea[hf]"         # Hugging Face Transformers for local inference
 pip install "mellea[watsonx]"    # IBM WatsonX
 pip install "mellea[tools]"      # Tool and agent dependencies (LangChain, smolagents)
 pip install "mellea[cli]"        # m serve, m alora, m decompose CLI commands
@@ -36,7 +36,7 @@ pip install "mellea[telemetry]"  # OpenTelemetry tracing and metrics
 
 ```bash
 uv add "mellea[litellm]"        # LiteLLM multi-provider (Anthropic, Bedrock, etc.)
-uv add "mellea[hf]"             # HuggingFace transformers for local inference
+uv add "mellea[hf]"             # Hugging Face Transformers for local inference
 uv add "mellea[watsonx]"        # IBM WatsonX
 uv add "mellea[tools]"          # Tool and agent dependencies (LangChain, smolagents)
 uv add "mellea[cli]"            # m serve, m alora, m decompose CLI commands

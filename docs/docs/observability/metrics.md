@@ -54,7 +54,7 @@ All token metrics include these attributes following Gen-AI semantic conventions
 | Ollama | Yes | Yes | `prompt_eval_count` and `eval_count` |
 | WatsonX | No | Yes | `input_token_count` and `generated_token_count` (streaming API limitation) |
 | LiteLLM | Yes | Yes | `usage.prompt_tokens` and `usage.completion_tokens` |
-| HuggingFace | Yes | Yes | Calculated from input_ids and output sequences |
+| Hugging Face | Yes | Yes | Calculated from input_ids and output sequences |
 
 ### Token recording timing
 
@@ -193,7 +193,7 @@ is available. No code changes are required.
 Cost metrics use `litellm` (`mellea[litellm]`) as a pricing library. This is
 independent of the LiteLLM backend — pricing works with any Mellea backend, but
 cost is only recorded for models that `litellm` has pricing data for. Local and
-private model IDs (Ollama, HuggingFace, custom deployments) will log a one-time
+private model IDs (Ollama, Hugging Face, custom deployments) will log a one-time
 warning per model and produce no cost metric.
 
 Pricing is auto-enabled when `litellm` is installed. Use `MELLEA_PRICING_ENABLED`

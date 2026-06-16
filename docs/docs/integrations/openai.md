@@ -295,7 +295,7 @@ The high-level adapter function wrappers (`rag.check_answerability`,
 [Adapter functions](../advanced/intrinsics.md) for the full list of available adapter functions.
 
 > **Note:** `load_embedded_adapters=True` downloads adapter I/O configurations
-> from the model's HuggingFace repository on first use. No adapter weights are
+> from the model's Hugging Face repository on first use. No adapter weights are
 > transferred — the adapters are already part of the model. Only adapter functions
 > embedded in the model are available — check the model's `adapter_index.json`
 > for the list.
@@ -316,7 +316,7 @@ backend = OpenAIBackend(
     load_embedded_adapters=False,
 )
 
-# Load a single adapter from the model's HuggingFace repo
+# Load a single adapter from the model's Hugging Face repo
 adapters = EmbeddedIntrinsicAdapter.from_hub(
     IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
     intrinsic_name="answerability",

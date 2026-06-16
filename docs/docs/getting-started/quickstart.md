@@ -186,7 +186,7 @@ multi-turn conversations. Pass `ctx=ChatContext()` to `start_session()` for stat
 chat.
 
 **Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../reference/glossary#litellm--litellmbackend),
-HuggingFace, and WatsonX are also supported. See
+Hugging Face, and WatsonX are also supported. See
 [Backends and Configuration](../how-to/backends-and-configuration).
 
 ## Troubleshooting

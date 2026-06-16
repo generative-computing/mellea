@@ -9,7 +9,7 @@ Guardian adapter functions work via `LocalHFBackend` (local HuggingFace inferenc
 pointed at a Granite Switch endpoint.
 
 Guardian adapter functions evaluate LLM outputs for safety and quality using LoRA adapters
-loaded directly into a HuggingFace backend — purpose-built for evaluation tasks, not
+loaded directly into a Hugging Face backend — purpose-built for evaluation tasks, not
 general-purpose generation.
 
 > **Generation vs evaluation:** Guardian adapter functions evaluate content; they do not

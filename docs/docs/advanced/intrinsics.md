@@ -9,7 +9,7 @@ Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
 [Granite Switch](/reference/glossary#granite-switch) model served via vLLM.
 
 Adapter functions are adapter-accelerated operations for RAG quality checks. They use
-LoRA/aLoRA adapters loaded directly into the HuggingFace backend — faster and more
+LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
 reliable than prompting a general-purpose model for these specialized micro-tasks.
 
 > **Backend note:** Adapter functions work with two backends:
@@ -249,7 +249,7 @@ print(out)  # {"requirement_likelihood": 1.0}
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
-HuggingFace repository configuration instead of the adapter function catalog.
+Hugging Face repository configuration instead of the adapter function catalog.
 Output format is task-specific — `requirement-check` returns a likelihood score.
 
 ---

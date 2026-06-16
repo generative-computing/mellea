@@ -278,7 +278,7 @@ Granite Libraries is the collective name for the three curated collections of
 | **Granite Libraries RAG** | Retrieval-Augmented Generation pipeline: answerability, citations, context relevance, hallucination detection, query rewriting |
 | **Granite Libraries Guardian** | Safety and compliance: guardian checks, policy guardrails, factuality detection and correction |
 
-These adapter functions are distributed as HuggingFace repositories under
+These adapter functions are distributed as Hugging Face repositories under
 `ibm-granite/granitelib-{core,rag,guardian}-r1.0` and can be used with Mellea
 via `LocalHFBackend` (runtime loading) or embedded in a
 [Granite Switch](#granite-switch) checkpoint.
@@ -434,7 +434,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 > instead. See [Safety Guardrails](../how-to/safety-guardrails).
 
 A deprecated `Requirement` subclass that validates LLM outputs using a separately loaded
-Granite Guardian model. Requires an independent Ollama or HuggingFace backend
+Granite Guardian model. Requires an independent Ollama or Hugging Face backend
 for the Guardian model.
 
 See: [Safety Guardrails](../how-to/safety-guardrails)
