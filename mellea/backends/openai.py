@@ -5,10 +5,8 @@ import datetime
 import functools
 import inspect
 import os
-import time
-import uuid
 from collections.abc import Coroutine, Sequence
-from typing import Any, overload
+from typing import Any
 
 import openai
 from openai.types.chat import ChatCompletion
@@ -179,6 +177,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     "model_id is None. This can also happen if the ModelIdentifier has no `openai_name` name set."
                 )
                 self._model_id = model_id.openai_name
+
+        self._provider: str = "openai"
 
         self._adapter_source = adapter_source
 
@@ -971,7 +971,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Set model/provider early so they are available in the error path
         output.generation.model = self._model_id
-        output.generation.provider = "openai"
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1142,35 +1142,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Populate model and provider metadata
         mot.generation.model = self._model_id
-        mot.generation.provider = "openai"
+        mot.generation.provider = self._provider
 
         # Populate response-side metadata for telemetry
         if isinstance(response, dict):
             populate_response_metadata_openai_shape(mot, response)
 
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -1178,11 +1156,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating via the OpenAI completions API.
 
         Passes formatted prompt strings directly to the completions endpoint.
-        Tool calling is not supported on this endpoint.
+        Tool calling is not supported on this endpoint. Per-MOT `mot.generation.usage`
+        stays `None` because the OpenAI completions API only reports whole-batch usage.
 
         Args:
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
@@ -1193,7 +1172,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the whole-batch token-usage dict or `None`.
 
         Raises:
             openai.BadRequestError: If the request is invalid (e.g. when targeting an
@@ -1219,32 +1200,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "The completion endpoint does not support tool calling at the moment."
             )
 
-        from ..plugins.manager import has_plugins, invoke_hook
-        from ..plugins.types import HookType
-
-        gen_id = str(uuid.uuid4())
-
-        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_PRE_CALL,
-                GenerationBatchPreCallPayload(
-                    actions=tuple(actions),
-                    generation_id=gen_id,
-                    format=format,
-                    tool_calls=tool_calls,
-                    num_actions=len(actions),
-                    model=self._model_id,
-                    provider="openai",
-                ),
-            )
-
         model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        _start = time.perf_counter()
         try:
             completion_response: Completion = (
                 await self._async_client.completions.create(
@@ -1256,31 +1215,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     ),
                 )
             )  # type: ignore
-        except Exception as e:
-            if (
-                isinstance(e, openai.BadRequestError)
-                and openai_ollama_batching_error in e.message
-            ):
+        except openai.BadRequestError as e:
+            if openai_ollama_batching_error in e.message:
                 MelleaLogger.get_logger().error(
                     "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
                     "your requests will fail since ollama doesn't support batching requests."
                 )
-            if has_plugins(HookType.GENERATION_BATCH_ERROR):
-                from ..plugins.hooks.generation import GenerationBatchErrorPayload
-
-                await invoke_hook(
-                    HookType.GENERATION_BATCH_ERROR,
-                    GenerationBatchErrorPayload(
-                        generation_id=gen_id,
-                        exception=e,
-                        model=self._model_id,
-                        provider="openai",
-                        latency_ms=(time.perf_counter() - _start) * 1000,
-                    ),
-                )
             raise
-
-        latency_ms = (time.perf_counter() - _start) * 1000
 
         # Necessary for type checker.
         assert isinstance(completion_response, Completion)
@@ -1303,6 +1244,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "oai_completion_response": response.model_dump(),
                 "usage": usage_dump,
             }
+            output.generation.model = self._model_id
+            output.generation.provider = self._provider
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value
@@ -1320,22 +1263,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             results.append(output)
 
-        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_POST_CALL,
-                GenerationBatchPostCallPayload(
-                    generation_id=gen_id,
-                    model_outputs=results,
-                    usage=usage_dump,
-                    model=self._model_id,
-                    provider="openai",
-                    latency_ms=latency_ms,
-                ),
-            )
-
-        return results
+        return results, usage_dump
 
     @property
     def base_model_name(self):

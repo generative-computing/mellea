@@ -153,7 +153,8 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend._tokenizer = object()
     stub_backend._model = object()
     stub_backend._llguidance_tokenizer = object()
-    stub_backend._get_hf_model_id = lambda: "stub-model"
+    stub_backend._model_id = "stub-model"
+    stub_backend._provider = "huggingface"
     stub_backend._make_backend_specific_and_remove = lambda opts: (
         LocalHFBackend._make_backend_specific_and_remove(stub_backend, opts)
     )

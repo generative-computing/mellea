@@ -227,12 +227,13 @@ For built-in strategies and advanced patterns, see
 ## Custom backends
 
 A [`Backend`](../reference/glossary#backend) connects Mellea to an inference provider.
-Subclass the abstract `Backend` class from `mellea.core.backend` and implement
-the two abstract methods:
+Subclass the abstract `Backend` class from `mellea.core.backend`, implement
+`_generate_from_context` and `_generate_from_raw`, and set `_model_id` and
+`_provider`.
 
 ```python
-import asyncio
 from collections.abc import Sequence
+from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import C, CBlock, Component, Context, ModelOutputThunk
@@ -244,7 +245,12 @@ class EchoBackend(Backend):
     Useful for testing pipelines without a real inference provider.
     """
 
-    async def generate_from_context(
+    def __init__(self) -> None:
+        """Initialize the echo backend."""
+        self._model_id: str = "echo"
+        self._provider: str = "echo"
+
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -270,7 +276,7 @@ class EchoBackend(Backend):
         new_ctx = ctx.add(thunk)
         return thunk, new_ctx
 
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -278,7 +284,7 @@ class EchoBackend(Backend):
         format: type | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate responses for a list of actions without using context.
 
         Args:
@@ -289,9 +295,10 @@ class EchoBackend(Backend):
             tool_calls: Ignored by this backend.
 
         Returns:
-            List of ModelOutputThunks, one per action.
+            `(results, usage)` where `results` is a list of ModelOutputThunks,
+            one per action, and `usage` is `None` (no token data).
         """
-        return [ModelOutputThunk(value=f"ECHO: {str(a)}") for a in actions]
+        return [ModelOutputThunk(value=f"ECHO: {str(a)}") for a in actions], None
 ```
 
 The full `Backend` abstract interface is documented in the

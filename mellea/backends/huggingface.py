@@ -11,10 +11,8 @@ import datetime
 import functools
 import json
 import threading
-import time
-import uuid
 from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, cast, overload
+from typing import Any, cast
 
 import jinja2
 import jinja2.meta
@@ -307,16 +305,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
+        self._provider: str = "huggingface"
 
         # Either use the custom config or load the model from its model_id
         match model_id:
             case str():
-                self._hf_model_id = model_id
+                self._model_id: str = model_id
             case ModelIdentifier():
                 assert model_id.hf_model_name is not None, (
                     "model_id is None. This can also happen if the ModelIdentifier has no hf_model_id name set."
                 )
-                self._hf_model_id = model_id.hf_model_name
+                self._model_id = model_id.hf_model_name
         match custom_config:
             case None:
                 # Choose a device.
@@ -329,10 +328,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id, device_map=str(self._device)
+                    self._model_id, device_map=str(self._device)
                 )
                 self._tokenizer: PreTrainedTokenizerBase = (
-                    AutoTokenizer.from_pretrained(self._hf_model_id)
+                    AutoTokenizer.from_pretrained(self._model_id)
                 )
             case _:
                 self._tokenizer, self._model, self._device = custom_config
@@ -362,16 +361,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         self._generation_lock = threading.Lock()
         """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
-
-    def _get_hf_model_id(self) -> str:
-        """Return the HuggingFace model name as a string.
-
-        Returns the `hf_model_name` attribute when a `ModelIdentifier` is
-        provided, otherwise casts `model_id` to `str`.
-        """
-        if hasattr(self.model_id, "hf_model_name"):
-            return str(self.model_id.hf_model_name)  # type: ignore
-        return str(self.model_id)
 
     def _make_dc_cache(self, toks, **model_options):
         dc = DynamicCache()
@@ -707,8 +696,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Set model/provider early so they are available in the error path
-        output.generation.model = self._get_hf_model_id()
-        output.generation.provider = "huggingface"
+        output.generation.model = self._model_id
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -981,8 +970,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             # Set model/provider early so they are available in the error path
-            output.generation.model = self._get_hf_model_id()
-            output.generation.provider = "huggingface"
+            output.generation.model = self._model_id
+            output.generation.provider = self._provider
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1150,8 +1139,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             # Set model/provider early so they are available in the error path
-            output.generation.model = self._get_hf_model_id()
-            output.generation.provider = "huggingface"
+            output.generation.model = self._model_id
+            output.generation.provider = self._provider
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -1351,8 +1340,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
 
         # Populate model and provider metadata
-        mot.generation.model = self._get_hf_model_id()
-        mot.generation.provider = "huggingface"
+        mot.generation.model = self._model_id
+        mot.generation.provider = self._provider
 
         # When caching is disabled, clear hf_output from meta to free GPU memory.
         # The sequences tensor is on GPU and accumulates if not cleared.
@@ -1390,29 +1379,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         mot._generate_log = generate_log
 
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -1420,7 +1387,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating.
 
         Passes formatted prompt strings directly to the HuggingFace model's
@@ -1435,11 +1402,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the aggregate token-usage dict for the batch.
         """
-        from ..plugins.manager import has_plugins, invoke_hook
-        from ..plugins.types import HookType
-
         await self.do_generate_walks(list(actions))
 
         if tool_calls:
@@ -1453,25 +1419,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             #       https://github.com/pytorch/pytorch/pull/157727
             MelleaLogger.get_logger().warning(
                 "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
-            )
-
-        gen_id = str(uuid.uuid4())
-        hf_model_id = self._get_hf_model_id()
-
-        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_PRE_CALL,
-                GenerationBatchPreCallPayload(
-                    actions=tuple(actions),
-                    generation_id=gen_id,
-                    format=format,
-                    tool_calls=tool_calls,
-                    num_actions=len(actions),
-                    model=hf_model_id,
-                    provider="huggingface",
-                ),
             )
 
         model_opts = self._simplify_and_merge(model_options)
@@ -1502,37 +1449,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # transformers' generate() requires a tokenizer to decode stop_strings.
             generate_kwargs["tokenizer"] = self._tokenizer
 
-        _start = time.perf_counter()
-        try:
-            outputs = await asyncio.to_thread(
-                self._generate_with_adapter_lock,
-                "",  # Empty for no adapter.
-                self._model.generate,  # type: ignore
-                # Passed as args/kwargs to generate.
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                return_dict_in_generate=True,
-                output_scores=True,
-                **generate_kwargs,
-                **format_kwargs,
-            )
-        except Exception as e:
-            if has_plugins(HookType.GENERATION_BATCH_ERROR):
-                from ..plugins.hooks.generation import GenerationBatchErrorPayload
-
-                await invoke_hook(
-                    HookType.GENERATION_BATCH_ERROR,
-                    GenerationBatchErrorPayload(
-                        generation_id=gen_id,
-                        exception=e,
-                        model=hf_model_id,
-                        provider="huggingface",
-                        latency_ms=(time.perf_counter() - _start) * 1000,
-                    ),
-                )
-            raise
-
-        latency_ms = (time.perf_counter() - _start) * 1000
+        outputs = await asyncio.to_thread(
+            self._generate_with_adapter_lock,
+            "",  # Empty for no adapter.
+            self._model.generate,  # type: ignore
+            # Passed as args/kwargs to generate.
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            return_dict_in_generate=True,
+            output_scores=True,
+            **generate_kwargs,
+            **format_kwargs,
+        )
 
         sequences_to_decode = [
             sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
@@ -1547,20 +1475,28 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         agg_prompt = 0
         agg_completion = 0
         for i, decoded_result in enumerate(decoded_results):
-            n_prompt_tokens = inputs["input_ids"][i].size(0)  # type: ignore
+            n_prompt_tokens = int(inputs["input_ids"][i].size(0))
             n_completion_tokens = len(sequences_to_decode[i])
-            agg_prompt += int(n_prompt_tokens)
-            agg_completion += int(n_completion_tokens)
+            agg_prompt += n_prompt_tokens
+            agg_completion += n_completion_tokens
+            per_mot_usage: dict[str, Any] = {
+                "prompt_tokens": n_prompt_tokens,
+                "completion_tokens": n_completion_tokens,
+                "total_tokens": n_prompt_tokens + n_completion_tokens,
+            }
             result = ModelOutputThunk(
                 value=decoded_result,
                 meta={
                     "usage": {
-                        "prompt_tokens": n_prompt_tokens,  # type: ignore
+                        "prompt_tokens": n_prompt_tokens,
                         "completion_tokens": n_completion_tokens,
                         "total_tokens": n_prompt_tokens + n_completion_tokens,
                     }
                 },
             )
+            result.generation.usage = per_mot_usage
+            result.generation.model = self._model_id
+            result.generation.provider = self._provider
 
             action = actions[i]
             result.parsed_repr = (
@@ -1579,28 +1515,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result._generate_log = generate_log
             results.append(result)
 
-        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
-            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
-
-            await invoke_hook(
-                HookType.GENERATION_BATCH_POST_CALL,
-                GenerationBatchPostCallPayload(
-                    generation_id=gen_id,
-                    model_outputs=results,
-                    usage={
-                        "prompt_tokens": agg_prompt,
-                        "completion_tokens": agg_completion,
-                        "total_tokens": agg_prompt + agg_completion,
-                    }
-                    if (agg_prompt or agg_completion)
-                    else None,
-                    model=hf_model_id,
-                    provider="huggingface",
-                    latency_ms=latency_ms,
-                ),
-            )
-
-        return results
+        usage: dict[str, Any] | None = (
+            {
+                "prompt_tokens": agg_prompt,
+                "completion_tokens": agg_completion,
+                "total_tokens": agg_prompt + agg_completion,
+            }
+            if (agg_prompt or agg_completion)
+            else None
+        )
+        return results, usage
 
     # region cache management
     def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
@@ -1747,7 +1671,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # we cannot inspect the template's variable names.  Any caller-supplied
                 # model_options that the template would have accepted are silently dropped.
                 MelleaLogger.get_logger().warning(
-                    f"Chat template for {self._hf_model_id} is not a plain string "
+                    f"Chat template for {self._model_id} is not a plain string "
                     f"(got {type(template_str).__name__}); cannot inspect variable names. "
                     "model_options kwargs will not be forwarded to apply_chat_template."
                 )
@@ -1761,7 +1685,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # transformers' AssistantTracker) cannot be parsed with a plain Jinja2
             # environment. Fall back to forwarding nothing rather than crashing.
             MelleaLogger.get_logger().warning(
-                f"Could not parse chat template for {self._hf_model_id} ({e}); "
+                f"Could not parse chat template for {self._model_id} ({e}); "
                 "forwarding no model_options to apply_chat_template. "
                 "Template-referenced kwargs (think, guardian_config, etc.) will be ignored."
             )
@@ -1795,7 +1719,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     @property
     def base_model_name(self):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
-        return self._hf_model_id.split("/")[1]
+        return self._model_id.split("/")[1]
 
     def add_adapter(self, adapter: LocalHFAdapter):
         """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.

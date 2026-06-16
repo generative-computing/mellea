@@ -51,7 +51,8 @@ class _MockBackend(Backend):
     model_id = "mock-model"
 
     def __init__(self, *args, **kwargs):
-        pass
+        self._model_id: str = "mock-model"
+        self._provider: str = "mock-provider"
 
     async def _generate_from_context(self, action, ctx, **kwargs):
         mot = MagicMock(spec=ModelOutputThunk)
@@ -68,8 +69,8 @@ class _MockBackend(Backend):
         mot.value = "mocked output"
         return mot, SimpleContext()
 
-    async def generate_from_raw(self, actions, ctx, **kwargs):
-        return []
+    async def _generate_from_raw(self, actions, ctx, **kwargs):
+        return [], None
 
 
 # ---------------------------------------------------------------------------
