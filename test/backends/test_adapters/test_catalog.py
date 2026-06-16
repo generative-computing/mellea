@@ -155,6 +155,16 @@ def test_all_catalog_effective_capabilities_are_nonempty():
         )
 
 
+def test_name_empty_string_rejected():
+    with pytest.raises(ValueError, match="non-empty"):
+        IntriniscsCatalogEntry(name="", repo_id="org/repo", revision="abc123")
+
+
+def test_name_whitespace_only_rejected():
+    with pytest.raises(ValueError, match="non-empty"):
+        IntriniscsCatalogEntry(name="   ", repo_id="org/repo", revision="abc123")
+
+
 def test_capability_empty_string_rejected():
     with pytest.raises(ValueError, match="non-empty"):
         IntriniscsCatalogEntry(

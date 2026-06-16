@@ -99,6 +99,13 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         description="Adapter types that are known to be available for this intrinsic.",
     )
 
+    @pydantic.field_validator("name")
+    @classmethod
+    def _check_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("name must be a non-empty string")
+        return v
+
     @pydantic.field_validator("capability")
     @classmethod
     def _check_capability(cls, v: str | None) -> str | None:
