@@ -1063,6 +1063,48 @@ class TestSystemPathDetection:
         assert result.skip_message is not None
         assert "not allowed" in result.skip_message.lower()
 
+    def test_wrapper_command_env_with_var_assignment_write_rejected(self) -> None:
+        """env with variable assignments followed by write command should be detected.
+
+        Regression test for env command with VAR=VALUE syntax.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("env DEBUG=ON touch /etc/passwd")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wrapper_command_env_with_multiple_var_assignments_write_rejected(
+        self,
+    ) -> None:
+        """env with multiple variable assignments followed by write command.
+
+        Verifies that multiple VAR=VALUE patterns are correctly skipped.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("env VAR1=val1 VAR2=val2 rm /etc/foo")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "not allowed" in result.skip_message.lower()
+
+    def test_wrapper_command_env_with_dangerous_var_value_rejected(self) -> None:
+        """env with variable assignment containing dangerous path should be rejected.
+
+        Variable assignments like LD_PRELOAD or LIBRARY_PATH pointing to
+        system directories (e.g., /etc, /boot) should be rejected.
+        """
+        env = StaticBashEnvironment()
+        result = env.execute("env LD_PRELOAD=/etc/passwd echo hello")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "dangerous" in result.skip_message.lower()
+
     def test_wrapper_command_nohup_write_rejected(self) -> None:
         """Wrapper command nohup with write command should be checked.
 

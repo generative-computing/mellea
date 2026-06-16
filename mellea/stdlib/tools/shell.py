@@ -440,6 +440,11 @@ def _extract_write_command(argv: list[str]) -> tuple[str, int]:
             i += 1
             continue
 
+        # Skip variable assignments (e.g., DEBUG=ON, VAR=VALUE)
+        if "=" in arg and not arg.startswith("-"):
+            i += 1
+            continue
+
         # This is a positional argument, check if it's a write command
         nested_cmd = arg.split("/")[-1]
         if nested_cmd in WRITE_COMMANDS:
@@ -500,6 +505,33 @@ def _check_dangerous_paths(
     """
     if not argv:
         return False, ""
+
+    # Check env variable assignments for dangerous paths (e.g., LD_PRELOAD=/etc/passwd)
+    # Only check if argv[0] is 'env' to avoid checking all arguments
+    if argv and argv[0] in ("env", "/usr/bin/env"):
+        for arg in argv[1:]:
+            if "=" in arg and not arg.startswith("-"):
+                # This is a variable assignment; check the value part
+                var_name, var_value = arg.split("=", 1)
+                if var_value.startswith(("/", "~")):
+                    try:
+                        resolved_value = str(
+                            Path(var_value).expanduser().resolve(strict=False)
+                        )
+                        # Check if the path points to a dangerous location
+                        for danger_path in DANGEROUS_PATHS:
+                            if (
+                                resolved_value == danger_path
+                                or resolved_value.startswith(danger_path + "/")
+                            ):
+                                return (
+                                    True,
+                                    f"Environment variable '{var_name}' points to dangerous path '{var_value}'",
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            f"Cannot resolve env variable value '{var_value}': {e}"
+                        )
 
     # Extract the actual write command (handles wrapper commands like env, nohup, timeout)
     write_cmd, write_cmd_idx = _extract_write_command(argv)
