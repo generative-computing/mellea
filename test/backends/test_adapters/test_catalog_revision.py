@@ -30,6 +30,11 @@ def test_revision_validation_rejects_whitespace():
         validate_revision("   ")
 
 
+def test_revision_validation_rejects_leading_trailing_whitespace():
+    with pytest.raises(ValueError, match="leading or trailing whitespace"):
+        validate_revision("  main  ")
+
+
 def test_revision_validation_accepts_sha():
     assert validate_revision(_VALID_SHA) == _VALID_SHA
 

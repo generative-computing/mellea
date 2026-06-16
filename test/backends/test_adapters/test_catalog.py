@@ -165,6 +165,11 @@ def test_name_whitespace_only_rejected():
         IntriniscsCatalogEntry(name="   ", repo_id="org/repo", revision="abc123")
 
 
+def test_name_leading_trailing_whitespace_rejected():
+    with pytest.raises(ValueError, match="leading or trailing whitespace"):
+        IntriniscsCatalogEntry(name="  foo  ", repo_id="org/repo", revision="abc123")
+
+
 def test_capability_empty_string_rejected():
     with pytest.raises(ValueError, match="non-empty"):
         IntriniscsCatalogEntry(
@@ -176,4 +181,11 @@ def test_capability_whitespace_only_rejected():
     with pytest.raises(ValueError, match="non-empty"):
         IntriniscsCatalogEntry(
             name="x", capability="   ", repo_id="org/repo", revision="abc123"
+        )
+
+
+def test_capability_leading_trailing_whitespace_rejected():
+    with pytest.raises(ValueError, match="leading or trailing whitespace"):
+        IntriniscsCatalogEntry(
+            name="x", capability="  foo  ", repo_id="org/repo", revision="abc123"
         )

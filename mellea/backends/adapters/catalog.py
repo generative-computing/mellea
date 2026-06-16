@@ -26,10 +26,13 @@ def validate_revision(revision: str) -> str:
         str: The validated revision unchanged.
 
     Raises:
-        ValueError: If `revision` is empty or whitespace-only.
+        ValueError: If `revision` is empty, whitespace-only, or has leading
+            or trailing whitespace.
     """
     if not revision.strip():
         raise ValueError("revision must be a non-empty string")
+    if revision != revision.strip():
+        raise ValueError("revision must not have leading or trailing whitespace")
     return revision
 
 
@@ -53,10 +56,12 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     Attributes:
         name (str): User-visible name of the intrinsic. May contain hyphens when
             that matches the upstream adapter name; prefer ``effective_capability``
-            to form the stable capability token.
+            to form the stable capability token. Must be non-empty with no leading
+            or trailing whitespace.
         capability (str | None): Stable Mellea-level capability token, independent
             of the upstream adapter name. Uses underscores. When ``None``,
-            :attr:`effective_capability` falls back to ``name``.
+            :attr:`effective_capability` falls back to ``name``. When set, must be
+            non-empty with no leading or trailing whitespace.
         internal_name (str | None): Internal name used for adapter loading, or
             ``None`` if the same as ``name``.
         repo_id (str): HuggingFace repository where adapters for the intrinsic
@@ -72,13 +77,15 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
             ``(AdapterType.LORA, AdapterType.ALORA)``.
     """
 
-    name: str = pydantic.Field(description="User-visible name of the intrinsic.")
+    name: str = pydantic.Field(
+        description="User-visible name of the intrinsic. Non-empty, no leading/trailing whitespace."
+    )
     capability: str | None = pydantic.Field(
         default=None,
         description=(
             "Stable capability token, independent of the upstream adapter name. "
-            "Uses underscores. When ``None``, ``effective_capability`` falls back "
-            "to ``name``."
+            "Uses underscores; no leading/trailing whitespace. When ``None``, "
+            "``effective_capability`` falls back to ``name``."
         ),
     )
     internal_name: str | None = pydantic.Field(
@@ -104,15 +111,21 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     def _check_name(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("name must be a non-empty string")
+        if v != v.strip():
+            raise ValueError("name must not have leading or trailing whitespace")
         return v
 
     @pydantic.field_validator("capability")
     @classmethod
     def _check_capability(cls, v: str | None) -> str | None:
-        if v is not None and not v.strip():
+        if v is None:
+            return v
+        if not v.strip():
             raise ValueError(
                 "capability must be a non-empty string when set; use None to fall back to name"
             )
+        if v != v.strip():
+            raise ValueError("capability must not have leading or trailing whitespace")
         return v
 
     @pydantic.field_validator("revision")
