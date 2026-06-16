@@ -235,11 +235,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     def __repr__(self) -> str:
         """Mask the API key to prevent accidental exposure in logs."""
+        key_repr = "'***'" if self._api_key is not None else "None"
         return (
             f"{self.__class__.__name__}("
             f"model_id={self._model_id!r}, "
             f"base_url={self._base_url!r}, "
-            f"_api_key='***')"
+            f"_api_key={key_repr})"
         )
 
     def __str__(self) -> str:
