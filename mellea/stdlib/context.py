@@ -34,12 +34,11 @@ class ChatContext(Context):
     Note:
         `context_length` is measured in tokens; `window_size` counts context
         items (CBlocks / Components). When only a `model_id` is bound (no
-        explicit `window_size`), the model's context length in tokens is used
-        as an absolute upper bound on the number of items passed to the model.
-        In practice this ceiling is never reached — real conversations do not
-        accumulate hundreds of thousands of items — so the full history is
-        returned for typical sessions. Set `window_size` explicitly to enforce
-        a tighter item-count limit.
+        explicit `window_size`), `view_for_generation` estimates per-item token
+        counts (via `len(str(item)) // 4`) and walks history newest-first,
+        dropping the oldest items until the running sum fits within
+        `context_length`. Set `window_size` explicitly to enforce an item-count
+        limit instead of a token budget.
     """
 
     def __init__(
@@ -79,7 +78,9 @@ class ChatContext(Context):
         Raises:
             ValueError: If called on a non-root (non-empty) context. History
                 would be silently discarded, so this is disallowed. Create a
-                new `ChatContext(model_id=...)` instead.
+                new `ChatContext(model_id=...)` instead. Note: `__init__` is
+                the unrestricted path — it produces the same end state without
+                this root check.
         """
         if not self.is_root_node:
             raise ValueError(
@@ -89,16 +90,16 @@ class ChatContext(Context):
             )
         return self._make_root(model_id)
 
-    def reset_to_new(self) -> ChatContext:  # type: ignore[override]
+    def new_instance(self) -> ChatContext:
         """Return a new empty root `ChatContext`, preserving `window_size` and `model_id`.
 
-        Overrides `Context.reset_to_new()` so that the model binding and
-        window size set at construction are not lost when a session is reset
-        or when user code calls this method directly.
+        Use this instead of `reset_to_new()` when you need to preserve the
+        model binding and window size from an existing instance. `reset_to_new()`
+        is a classmethod that returns a bare `ChatContext()` with no configuration.
 
         Returns:
             ChatContext: A fresh root context with the same `window_size`
-            and `model_id` as this context, but no history.
+            and `model_id` as this instance, but no history.
         """
         return self._make_root(self._model_id)
 
@@ -122,19 +123,50 @@ class ChatContext(Context):
 
         Window size resolution priority:
 
-        1. Explicit `window_size` passed at construction — always wins.
-        2. Model-derived context length looked up via `model_id` — used when
-           `window_size` is `None` and a model binding exists.
-        3. `None` — return the full history (unbounded).
+        1. Explicit `window_size` passed at construction — item-count limit, always wins.
+        2. Model-derived context length looked up via `model_id` — token-budget truncation.
+           Items are added newest-first until adding the next item would exceed the budget.
+           Token count is estimated as `len(str(item)) // 4`.
+        3. No limit — return the full history.
 
         Returns:
             list[Component | CBlock] | None: Ordered list of context entries up to
-            the effective window size, or `None` if the history is non-linear.
+            the effective window, or `None` if the history is non-linear.
         """
-        effective_window = self._window_size
-        if effective_window is None and self._model_id is not None:
-            effective_window = get_context_length(self._model_id)
-        return self.as_list(effective_window)
+        if self._window_size is not None:
+            return self.as_list(self._window_size)
+
+        if self._model_id is not None:
+            token_budget = get_context_length(self._model_id)
+            if token_budget is not None:
+                return self._as_list_token_budget(token_budget)
+
+        return self.as_list(None)
+
+    def _as_list_token_budget(self, token_budget: int) -> list[Component | CBlock]:
+        """Return history items that fit within *token_budget*, dropping oldest first.
+
+        Walks the linked list from newest to oldest, accumulating items until
+        adding the next item would exceed the budget.  The returned list is in
+        chronological order (oldest-first), matching `as_list` behaviour.
+        Token count per item is estimated as `len(str(item)) // 4`.
+        """
+        collected: list[Component | CBlock] = []
+        spent = 0
+        current: Context = self
+        while not current.is_root_node:
+            item = current.node_data
+            assert item is not None
+            cost = max(1, len(str(item)) // 4)
+            if spent + cost > token_budget:
+                break
+            collected.append(item)
+            spent += cost
+            prev = current.previous_node
+            assert prev is not None
+            current = prev
+        collected.reverse()
+        return collected
 
 
 class SimpleContext(Context):

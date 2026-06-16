@@ -197,6 +197,8 @@ def test_view_for_generation_model_bound_returns_full_history_when_under_limit()
 
 def test_view_for_generation_model_bound_used_as_upper_bound():
     # A tiny context_length=5 triggers truncation; most recent items are retained.
+    # Each "item N" is 6 chars → cost = max(1, 6 // 4) = 1 token each.
+    # Budget 5 fits the 5 most-recent items.
     tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=5)
     ctx = ChatContext(model_id=tiny)
     for i in range(10):
@@ -204,6 +206,20 @@ def test_view_for_generation_model_bound_used_as_upper_bound():
     result = ctx.view_for_generation()
     assert len(result) == 5
     assert str(result[-1]) == "item 9"
+
+
+def test_view_for_generation_token_budget_drops_oldest():
+    # Each item is a 100-char string → cost = 100 // 4 = 25 tokens.
+    # Budget 60: fits 2 items (50 tokens), the 3rd would exceed the budget.
+    tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=60)
+    ctx = ChatContext(model_id=tiny)
+    for i in range(5):
+        ctx = ctx.add(CBlock("x" * 100 + str(i)))  # 101 chars → cost 25
+    result = ctx.view_for_generation()
+    assert len(result) == 2
+    # Newest items are kept.
+    assert str(result[-1]).endswith("4")
+    assert str(result[-2]).endswith("3")
 
 
 def test_view_for_generation_explicit_window_size_beats_model():
@@ -246,13 +262,22 @@ def test_reset_to_new_returns_empty_root():
     assert len(reset_ctx.as_list()) == 0
 
 
-def test_reset_to_new_preserves_model_id_and_window_size():
+def test_reset_to_new_classmethod_does_not_preserve_config():
+    # reset_to_new() is a classmethod — it returns a bare ChatContext() with
+    # no window_size or model_id, regardless of the instance it's called on.
+    ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B, window_size=5)
+    reset_ctx = ctx.reset_to_new()
+    assert reset_ctx.model_id is None
+    assert reset_ctx._window_size is None
+
+
+def test_new_instance_preserves_model_id_and_window_size():
     ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B, window_size=5)
     for i in range(3):
         ctx = ctx.add(CBlock(f"msg {i}"))
-    reset_ctx = ctx.reset_to_new()
-    assert reset_ctx.model_id is IBM_GRANITE_4_1_8B
-    assert reset_ctx._window_size == 5
+    new_ctx = ctx.new_instance()
+    assert new_ctx.model_id is IBM_GRANITE_4_1_8B
+    assert new_ctx._window_size == 5
 
 
 def test_session_reset_rebinds_model_id():

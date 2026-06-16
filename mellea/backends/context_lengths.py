@@ -19,6 +19,8 @@ model-serving identifier.
 
 from __future__ import annotations
 
+import mellea.backends.model_ids as _m
+
 from .model_ids import ModelIdentifier
 
 
@@ -61,17 +63,10 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
 
 
 def _build_table() -> dict[str, int]:
-    import mellea.backends.model_ids as _m
-
     table: dict[str, int] = {}
     for obj in vars(_m).values():
         if not isinstance(obj, ModelIdentifier) or obj.context_length is None:
             continue
-        # Only index hf_model_name and ollama_name — these are the two fields
-        # checked by the ModelIdentifier branch of get_context_length, keeping
-        # the table and the lookup logic symmetric.  Platform-specific names
-        # (mlx_name, openai_name, bedrock_name) and hf_tokenizer_name are
-        # intentionally excluded; see module docstring for rationale.
         for name in (obj.hf_model_name, obj.ollama_name):
             if name:
                 table[name] = obj.context_length
