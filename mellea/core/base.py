@@ -1028,6 +1028,19 @@ class Context(abc.ABC):
         """
         return cls()
 
+    def new_instance(self) -> Context:
+        """Return a new empty root context, preserving any subclass configuration.
+
+        The base implementation calls `reset_to_new()`, which returns a bare
+        instance with no history and no config.  Subclasses that carry
+        configuration (e.g. `ChatContext` with `model_id` and `window_size`)
+        should override this to propagate their config into the fresh instance.
+
+        Returns:
+            Context: A freshly initialised root context of the same type.
+        """
+        return self.reset_to_new()
+
     # Internal functions below this line.
 
     @property

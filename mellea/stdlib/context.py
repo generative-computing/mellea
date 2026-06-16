@@ -15,6 +15,8 @@ from ..backends.model_ids import ModelIdentifier
 # Leave unused `ContextTurn` import for import ergonomics.
 from ..core import CBlock, Component, Context, ContextTurn, MelleaLogger
 
+logger = MelleaLogger.get_logger()
+
 
 class ChatContext(Context):
     """Initializes a chat context with unbounded window_size and is_chat=True by default.
@@ -31,6 +33,12 @@ class ChatContext(Context):
             length and uses it as the window size. Explicit `window_size` always
             takes priority.
 
+    Class Attributes:
+        _propagated_fields: Instance-attribute names copied by `add()` and
+            `_make_root()` into every descendant node.  Add new `ChatContext`
+            fields here so they propagate automatically without touching both
+            methods.
+
     Note:
         `context_length` is measured in tokens; `window_size` counts context
         items (CBlocks / Components). When only a `model_id` is bound (no
@@ -39,7 +47,19 @@ class ChatContext(Context):
         dropping the oldest items until the running sum fits within
         `context_length`. Set `window_size` explicitly to enforce an item-count
         limit instead of a token budget.
+
+        The token estimate is intentionally conservative: `str()` falls back to
+        `repr()` for `Component` subclasses, so it counts repr boilerplate rather
+        than rendered prompt content.  A 0.55 headroom factor (retaining 55 % of
+        the model's rated context length as the effective budget) is applied to
+        absorb this repr-vs-render skew and to leave capacity for the current
+        action and the model's generated response.  The result is a rough
+        lower-bound — expect the actual token usage to be noticeably below the
+        budget ceiling.  Use `window_size` for precise item-count control, or
+        wait for a future tokenizer-backed estimate.
     """
+
+    _propagated_fields: tuple[str, ...] = ("_window_size", "_model_id")
 
     def __init__(
         self,
@@ -112,17 +132,10 @@ class ChatContext(Context):
         Returns:
             ChatContext: A new `ChatContext` with the added entry, preserving
             both `window_size` and any `model_id` binding.
-
-        Note:
-            Invariant: every ChatContext-specific field (_window_size, _model_id)
-            must be copied here AND in _make_root(). from_previous() initialises
-            them to None; we patch them back manually. Any new field added to
-            ChatContext must be propagated in both places or it will silently
-            disappear from child nodes.
         """
         new = ChatContext.from_previous(self, c)
-        new._window_size = self._window_size
-        new._model_id = self._model_id
+        for field in self._propagated_fields:
+            setattr(new, field, getattr(self, field))
         return new
 
     def view_for_generation(self) -> list[Component | CBlock] | None:
@@ -160,10 +173,12 @@ class ChatContext(Context):
         `str()` falls back to `repr()` for `Component` subclasses, so the
         estimate reflects repr boilerplate rather than rendered content.
 
-        A headroom factor of 0.8 is applied so the backend retains capacity for
-        the current action and the model's generated response.
+        A headroom factor of 0.55 is applied to absorb repr-vs-render skew and
+        to leave capacity for the current action and the model's generated
+        response.  This is a conservative approximation; a tokenizer-backed
+        estimate is a known follow-up.
         """
-        effective_budget = int(token_budget * 0.8)
+        effective_budget = int(token_budget * 0.55)
         collected: list[Component | CBlock] = []
         spent = 0
         total = 0
@@ -184,9 +199,9 @@ class ChatContext(Context):
             current = prev
         dropped = total - len(collected)
         if dropped:
-            MelleaLogger.get_logger().debug(
+            logger.debug(
                 "Context truncated: dropped %d item(s) to stay within %d-token budget "
-                "(effective budget after 0.8 headroom: %d tokens, used: %d tokens).",
+                "(effective budget after 0.55 headroom: %d tokens, used: %d tokens).",
                 dropped,
                 token_budget,
                 effective_budget,

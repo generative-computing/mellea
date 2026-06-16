@@ -41,6 +41,14 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
     Returns:
         The context length in tokens, or `None` if the model is unknown or
         its context length is not recorded in the catalog.
+
+    Warning:
+        The values returned here reflect each model's theoretical maximum context
+        window as recorded in the catalog — **not** the context window actually
+        used by a running server.  Ollama in particular defaults to
+        ``num_ctx=2048`` regardless of the model's rated maximum; a caller that
+        relies on this lookup to size a sliding context window will silently
+        overflow Ollama's wire-level limit.
     """
     if isinstance(model_id, ModelIdentifier):
         if model_id.context_length is not None:

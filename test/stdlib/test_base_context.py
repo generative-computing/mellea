@@ -198,26 +198,26 @@ def test_view_for_generation_model_bound_returns_full_history_when_under_limit()
 def test_view_for_generation_model_bound_used_as_upper_bound():
     # A tiny context_length=10 triggers truncation; most recent items are retained.
     # Each "item N" is 6 chars → cost = max(1, 6 // 4) = 1 token each.
-    # Effective budget = int(10 * 0.8) = 8; fits the 8 most-recent items.
+    # Effective budget = int(10 * 0.55) = 5; fits the 5 most-recent items.
     tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=10)
     ctx = ChatContext(model_id=tiny)
     for i in range(15):
         ctx = ctx.add(CBlock(f"item {i}"))
     result = ctx.view_for_generation()
-    assert len(result) == 8
+    assert len(result) == 5
     assert str(result[-1]) == "item 14"
 
 
 def test_view_for_generation_token_budget_drops_oldest():
     # Each item is a 100-char string → cost = 100 // 4 = 25 tokens.
-    # context_length=130: effective budget = int(130 * 0.8) = 104.
-    # Fits 4 items (100 tokens); the 5th would push spent to 125 > 104.
+    # context_length=130: effective budget = int(130 * 0.55) = 71.
+    # Fits 2 items (50 tokens); the 3rd would push spent to 75 > 71.
     tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=130)
     ctx = ChatContext(model_id=tiny)
     for i in range(7):
         ctx = ctx.add(CBlock("x" * 100 + str(i)))  # 101 chars → cost 25
     result = ctx.view_for_generation()
-    assert len(result) == 4
+    assert len(result) == 2
     # Newest items are kept.
     assert str(result[-1]).endswith("6")
     assert str(result[-2]).endswith("5")
@@ -395,19 +395,18 @@ def test_clone_does_not_double_bind_replaced_root_context():
 def test_as_list_token_budget_fits_exactly():
     # Verify > vs >= boundary: an item whose cost equals the remaining budget
     # is INCLUDED (condition is `spent + cost > effective_budget`, so equality passes).
-    # context_length=10 → effective = int(10 * 0.8) = 8.
-    # Two items, each 8 chars → cost = max(1, 8 // 4) = 2 tokens each; total = 4.
-    # Four such items = 8 tokens, exactly equal to effective_budget — all four included.
-    tiny = ModelIdentifier(hf_model_name="org/exact-fit-model", context_length=10)
+    # context_length=20 → effective = int(20 * 0.55) = 11.
+    # Items of 8 chars → cost = max(1, 8 // 4) = 2 tokens each.
+    # Five such items = 10 tokens ≤ 11 (all included); 6th = 12 > 11 (excluded).
+    tiny = ModelIdentifier(hf_model_name="org/exact-fit-model", context_length=20)
     ctx = ChatContext(model_id=tiny)
-    for _ in range(4):
+    for _ in range(6):
         ctx = ctx.add(CBlock("abcdefgh"))  # 8 chars → cost 2
     result = ctx.view_for_generation()
-    assert len(result) == 4
+    assert len(result) == 5
 
 
-def test_build_table_raises_on_collision():
-    import mellea.backends.context_lengths as cl
+def test_build_table_raises_on_collision(monkeypatch):
     from mellea.backends.context_lengths import _build_table
     from mellea.backends.model_ids import ModelIdentifier
 
@@ -418,18 +417,12 @@ def test_build_table_raises_on_collision():
         hf_model_name="shared/model-name", context_length=2048
     )
 
-    # Temporarily inject two colliding constants into the model_ids module that
-    # _build_table() scans via vars(_m).
     import mellea.backends.model_ids as _m_module
 
-    _m_module.COLLIDE_A = colliding_a  # type: ignore[attr-defined]
-    _m_module.COLLIDE_B = colliding_b  # type: ignore[attr-defined]
-    try:
-        with pytest.raises(ValueError, match="context_length collision"):
-            _build_table()
-    finally:
-        del _m_module.COLLIDE_A  # type: ignore[attr-defined]
-        del _m_module.COLLIDE_B  # type: ignore[attr-defined]
+    monkeypatch.setattr(_m_module, "COLLIDE_A", colliding_a, raising=False)
+    monkeypatch.setattr(_m_module, "COLLIDE_B", colliding_b, raising=False)
+    with pytest.raises(ValueError, match="context_length collision"):
+        _build_table()
 
 
 if __name__ == "__main__":

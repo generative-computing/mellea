@@ -287,7 +287,14 @@ class MelleaSession:
         *,
         session_id: str | None = None,
     ):
-        """Initialize MelleaSession with a backend and optional conversation context."""
+        """Initialize MelleaSession with a backend and optional conversation context.
+
+        Note:
+            When *ctx* is a bare (unbound, empty) `ChatContext` and *backend*
+            exposes a `model_id`, the constructor replaces `self.ctx` with a
+            re-bound copy that carries the model identifier.  After construction,
+            ``session.ctx is ctx`` will therefore be ``False``.
+        """
         import uuid
 
         self._init_fields(
@@ -411,11 +418,7 @@ class MelleaSession:
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
-        self.ctx = (
-            self.ctx.new_instance()
-            if isinstance(self.ctx, ChatContext)
-            else self.ctx.reset_to_new()
-        )
+        self.ctx = self.ctx.new_instance()
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
         """Clean up session resources and deregister session-scoped plugins.
