@@ -13,7 +13,7 @@ from ..backends.context_lengths import get_context_length
 from ..backends.model_ids import ModelIdentifier
 
 # Leave unused `ContextTurn` import for import ergonomics.
-from ..core import CBlock, Component, Context, ContextTurn
+from ..core import CBlock, Component, Context, ContextTurn, MelleaLogger
 
 
 class ChatContext(Context):
@@ -112,6 +112,13 @@ class ChatContext(Context):
         Returns:
             ChatContext: A new `ChatContext` with the added entry, preserving
             both `window_size` and any `model_id` binding.
+
+        Note:
+            Invariant: every ChatContext-specific field (_window_size, _model_id)
+            must be copied here AND in _make_root(). from_previous() initialises
+            them to None; we patch them back manually. Any new field added to
+            ChatContext must be propagated in both places or it will silently
+            disappear from child nodes.
         """
         new = ChatContext.from_previous(self, c)
         new._window_size = self._window_size
@@ -149,22 +156,42 @@ class ChatContext(Context):
         Walks the linked list from newest to oldest, accumulating items until
         adding the next item would exceed the budget.  The returned list is in
         chronological order (oldest-first), matching `as_list` behaviour.
-        Token count per item is estimated as `len(str(item)) // 4`.
+        Token count per item is estimated as `len(str(item)) // 4`; note that
+        `str()` falls back to `repr()` for `Component` subclasses, so the
+        estimate reflects repr boilerplate rather than rendered content.
+
+        A headroom factor of 0.8 is applied so the backend retains capacity for
+        the current action and the model's generated response.
         """
+        effective_budget = int(token_budget * 0.8)
         collected: list[Component | CBlock] = []
         spent = 0
+        total = 0
         current: Context = self
         while not current.is_root_node:
             item = current.node_data
             assert item is not None
-            cost = max(1, len(str(item)) // 4)
-            if spent + cost > token_budget:
+            cost = max(
+                1, len(str(item)) // 4
+            )  # str() falls back to repr() for Components
+            total += 1
+            if spent + cost > effective_budget:
                 break
             collected.append(item)
             spent += cost
             prev = current.previous_node
             assert prev is not None
             current = prev
+        dropped = total - len(collected)
+        if dropped:
+            MelleaLogger.get_logger().debug(
+                "Context truncated: dropped %d item(s) to stay within %d-token budget "
+                "(effective budget after 0.8 headroom: %d tokens, used: %d tokens).",
+                dropped,
+                token_budget,
+                effective_budget,
+                spent,
+            )
         collected.reverse()
         return collected
 

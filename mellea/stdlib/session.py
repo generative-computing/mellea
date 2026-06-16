@@ -313,9 +313,9 @@ class MelleaSession:
             isinstance(self.ctx, ChatContext)
             and self.ctx.model_id is None
             and self.ctx.is_root_node
-            and hasattr(self.backend, "model_id")
+            and getattr(self.backend, "model_id", None) is not None
         ):
-            self.ctx = self.ctx._bind_model(self.backend.model_id)
+            self.ctx = self.ctx._bind_model(getattr(self.backend, "model_id"))
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -399,8 +399,10 @@ class MelleaSession:
         """Reset the context state to a fresh, empty context of the same type.
 
         Fires the `SESSION_RESET` plugin hook if any plugins are registered, then
-        replaces `self.ctx` with the result of `ctx.reset_to_new()`, discarding
-        all accumulated conversation history.
+        replaces `self.ctx` with a fresh empty context, discarding all accumulated
+        conversation history. For `ChatContext`, uses `new_instance()` so the
+        `model_id` and `window_size` bindings are preserved; for all other context
+        types, uses `reset_to_new()`.
         """
         if has_plugins(HookType.SESSION_RESET):
             from ..plugins.hooks.session import SessionResetPayload

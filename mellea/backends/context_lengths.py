@@ -34,9 +34,6 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
     2. Otherwise perform a name-based lookup in the built-in table,
        checking `hf_model_name` then `ollama_name` (for
        `ModelIdentifier` inputs) or the raw string (for string inputs).
-       Only `hf_model_name` and `ollama_name` are indexed in the table,
-       so platform-specific names (`mlx_name`, `openai_name`,
-       `bedrock_name`) do not resolve via raw string lookup.
 
     Args:
         model_id: A `ModelIdentifier` instance or a raw model-name string.
@@ -69,6 +66,11 @@ def _build_table() -> dict[str, int]:
             continue
         for name in (obj.hf_model_name, obj.ollama_name):
             if name:
+                if name in table and table[name] != obj.context_length:
+                    raise ValueError(
+                        f"context_length collision for {name!r}: "
+                        f"{table[name]} vs {obj.context_length}"
+                    )
                 table[name] = obj.context_length
     return table
 

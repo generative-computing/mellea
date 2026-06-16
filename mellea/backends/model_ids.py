@@ -261,7 +261,7 @@ QWEN3_1_7B = ModelIdentifier(
 QWEN3_8B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-8B",  # Qwen 8B
     ollama_name="qwen3:8b",  # Ollama
-    context_length=40960,
+    context_length=40960,  # 8B+ series; smaller Qwen3 models use 32768
 )
 
 QWEN3_14B = ModelIdentifier(
