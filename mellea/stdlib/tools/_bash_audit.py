@@ -190,9 +190,14 @@ def record_bash_violation(
         working_dir: Working directory context.
         allowed_paths: Path restrictions context.
     """
-    context = get_current_context()
-    session_id = context.get("session_id") if context else None
-    request_id = context.get("request_id") if context else None
+    session_id = None
+    request_id = None
+    try:
+        context = get_current_context()
+        session_id = context.get("session_id") if context else None
+        request_id = context.get("request_id") if context else None
+    except Exception:
+        pass
 
     violation = BashViolation(
         timestamp=time.time(),

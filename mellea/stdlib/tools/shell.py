@@ -600,8 +600,8 @@ def _check_dangerous_paths(
                 if i + 1 < len(argv):
                     output_file = argv[i + 1]
                 break
-            # Also check for combined format like -o/file
-            elif arg.startswith("-o") and len(arg) > 2:
+            # Also check for combined format like -o/file or -O/file
+            elif arg.startswith(("-o", "-O")) and len(arg) > 2:
                 output_file = arg[2:]
                 break
 
@@ -867,16 +867,6 @@ class BashEnvironment(ABC):
 
         is_dangerous, reason = _is_dangerous_command(argv)
         if is_dangerous:
-            record_bash_violation(
-                command=" ".join(argv),
-                argv=argv,
-                pattern_name="DangerousCommandPattern",
-                category="UNKNOWN",
-                severity="HIGH",
-                reason=reason,
-                working_dir=self.working_dir,
-                allowed_paths=self.allowed_paths,
-            )
             return ExecutionResult(
                 success=False,
                 stdout=None,
@@ -1009,6 +999,27 @@ class _LocalBashEnvironment(BashEnvironment):
             return validated
 
         argv = validated
+
+        # Validate working_dir exists before subprocess call (fail-closed)
+        if self.working_dir:
+            try:
+                working_dir_path = Path(self.working_dir).expanduser().resolve()
+                if not working_dir_path.is_dir():
+                    return ExecutionResult(
+                        success=False,
+                        stdout=None,
+                        stderr=None,
+                        skipped=True,
+                        skip_message=f"Working directory '{self.working_dir}' does not exist or is not a directory",
+                    )
+            except Exception as e:
+                return ExecutionResult(
+                    success=False,
+                    stdout=None,
+                    stderr=None,
+                    skipped=True,
+                    skip_message=f"Cannot resolve working directory '{self.working_dir}': {e!s}",
+                )
 
         # Execute command with shell=False to prevent shell metacharacter bypass
         try:
