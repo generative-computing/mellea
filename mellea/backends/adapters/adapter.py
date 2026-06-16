@@ -378,7 +378,7 @@ class AdapterMixin(Backend, abc.ABC):
             name (str): Capability name (e.g. ``"answerability"``).
 
         Returns:
-            Adapter: The registered adapter with the given capability.
+            _AdapterCore: The registered adapter with the given capability.
 
         Raises:
             ValueError: If the backend has no model ID.
