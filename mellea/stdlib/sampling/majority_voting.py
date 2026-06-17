@@ -190,6 +190,8 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 class MajorityVotingStrategyForMath(BaseMBRDSampling):
     """MajorityVoting Sampling Strategy for Math Expressions.
 
+    For free-text outputs, use `MBRDRougeLStrategy` instead.
+
     Args:
         number_of_samples (int): Number of samples to generate. Defaults to `8`.
         float_rounding (int): Decimal places for float comparison. Defaults to `6`.
