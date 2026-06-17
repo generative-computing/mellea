@@ -111,7 +111,7 @@ async def react(
             assert len(tool_responses) == 1, "multiple tools were called with 'final'"
 
             if format is not None:
-                step, next_context = await mfuncs.aact(  # type: ignore[assignment]
+                step, next_context = await mfuncs.aact(  # type: ignore[assignment]  # dynamic format from caller
                     action=ReactThought(),
                     context=context,
                     backend=backend,
