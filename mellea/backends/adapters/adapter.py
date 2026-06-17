@@ -449,6 +449,14 @@ class AdapterMixin(Backend, abc.ABC):
 
         Returns:
             _AdapterCore | None: Matching adapter, or ``None`` if not found.
+
+        Note:
+            Returns the first dict hit in ``_added_adapters`` insertion order.
+            If both a ``lora`` and ``alora`` entry exist for the same capability,
+            pass ``adapter_types`` to constrain the result.  Phase 0's
+            ``get_adapter_for_intrinsic`` accepted an ordered list and preferred
+            the first matching type; that preference ordering is not preserved
+            here.  Phase 2 (issue #1138) will revisit if needed.
         """
         for a in getattr(self, "_added_adapters", {}).values():
             if (
@@ -505,15 +513,15 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
     def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
         """Initialize an embedded adapter function with its I/O config."""
+        if technology not in ("lora", "alora"):
+            raise ValueError(
+                f"technology must be 'lora' or 'alora', got '{technology}'"
+            )
         warnings.warn(
             "EmbeddedIntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
             DeprecationWarning,
             stacklevel=2,
         )
-        if technology not in ("lora", "alora"):
-            raise ValueError(
-                f"technology must be 'lora' or 'alora', got '{technology}'"
-            )
         adapter_type = AdapterType.ALORA if technology == "alora" else AdapterType.LORA
 
         # Old-style Adapter fields — set manually since we no longer inherit from the

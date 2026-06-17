@@ -124,8 +124,11 @@ def test_embedded_backend_mutable():
 
 
 def test_embedded_invalid_technology():
-    with pytest.raises(ValueError, match="technology must be"):
-        EmbeddedIntrinsicAdapter("answerability", config={}, technology="qlora")
+    # Validation runs before the deprecation warning, so no DeprecationWarning fires.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        with pytest.raises(ValueError, match="technology must be"):
+            EmbeddedIntrinsicAdapter("answerability", config={}, technology="qlora")
 
 
 # ---------------------------------------------------------------------------
