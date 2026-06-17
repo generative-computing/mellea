@@ -78,8 +78,12 @@ class ChatContext(Context):
         return self._model_id
 
     def _make_root(self, model_id: str | ModelIdentifier | None) -> ChatContext:
-        """Return a new empty root `ChatContext` with the given `model_id`, preserving `window_size`."""
-        return ChatContext(window_size=self._window_size, model_id=model_id)
+        """Return a new empty root `ChatContext` with the given `model_id`, propagating all `_propagated_fields`."""
+        new = ChatContext()
+        for field in self._propagated_fields:
+            setattr(new, field, getattr(self, field))
+        new._model_id = model_id
+        return new
 
     def _bind_model(self, model_id: str | ModelIdentifier) -> ChatContext:
         """Return a new root `ChatContext` with the given model bound, preserving `window_size`.
