@@ -290,6 +290,8 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
 class MBRDRougeLStrategy(BaseMBRDSampling):
     """Sampling Strategy that uses RougeL to compute symbol-level distances for majority voting.
 
+    This is the general-purpose majority voting strategy for text outputs.
+
     Args:
         number_of_samples (int): Number of samples to generate. Defaults to `8`.
         weighted (bool): Not yet implemented. Defaults to `False`.

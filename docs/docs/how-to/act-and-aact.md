@@ -160,7 +160,7 @@ class Planet(BaseModel):
 m = start_session()
 instruction = Instruction(description="Describe Saturn.")
 result = m.act(instruction, format=Planet)
-print(result.value)  # A Planet instance
+print(result.value)  # A JSON string — parse with Planet.model_validate_json(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
