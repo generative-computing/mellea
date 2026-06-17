@@ -10,16 +10,16 @@ import pydantic
 
 
 def validate_revision(revision: str) -> str:
-    """Validate a HuggingFace revision value.
+    """Validate a Hugging Face revision value.
 
-    Accepts any non-empty string. HuggingFace's ``revision`` parameter takes a
+    Accepts any non-empty string. Hugging Face's ``revision`` parameter takes a
     branch name, tag, or commit SHA; this validator mirrors that contract.
     Catalogue entries pin to commit SHAs by convention; that is enforced by
     review and (optionally) build-time drift checks rather than by this
     validator.
 
     Args:
-        revision (str): Any non-empty string accepted by HuggingFace as a
+        revision (str): Any non-empty string accepted by Hugging Face as a
             revision (branch name, tag, or commit SHA).
 
     Returns:
@@ -64,13 +64,13 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
             non-empty with no leading or trailing whitespace.
         internal_name (str | None): Internal name used for adapter loading, or
             ``None`` if the same as ``name``.
-        repo_id (str): HuggingFace repository where adapters for the adapter function
+        repo_id (str): Hugging Face repository where adapters for the adapter function
             are located.
-        revision (str): HuggingFace revision — branch name, tag, or commit SHA.
+        revision (str): Hugging Face revision — branch name, tag, or commit SHA.
             Catalogue entries pin to commit SHAs by convention so loads are
             reproducible; the validator itself only requires a non-empty string.
             Note: this field is stored in the catalogue but not yet forwarded to
-            the HuggingFace download call; wiring it through is deferred to a
+            the Hugging Face download call; wiring it through is deferred to a
             subsequent phase of the adapter-lifecycle epic (#929).
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this adapter function; defaults to
@@ -98,7 +98,7 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         "adapter function are located."
     )
     revision: str = pydantic.Field(
-        description="HuggingFace revision (branch name, tag, or commit SHA). "
+        description="Hugging Face revision (branch name, tag, or commit SHA). "
         "Catalogue entries pin to commit SHAs by convention."
     )
     adapter_types: tuple[AdapterType, ...] = pydantic.Field(
