@@ -4,7 +4,7 @@
 provided by a fine-tuned adapter (LoRA / aLoRA) rather than the base model. It
 is currently implemented as an alias for
 :class:`~mellea.stdlib.components.intrinsic.Intrinsic`; the alias allows
-downstream code to migrate to the new name as the rest of Epic #929 lands. The
+downstream code to migrate to the new name as the rest of Epic #929 is merged. The
 old import path ``mellea.stdlib.components.intrinsic`` continues to work.
 """
 

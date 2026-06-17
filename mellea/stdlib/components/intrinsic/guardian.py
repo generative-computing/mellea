@@ -1,4 +1,4 @@
-"""Intrinsic functions for Guardian safety and hallucination detection.
+"""Adapter functions for Guardian safety and hallucination detection.
 
 The Guardian adapters (`guardian-core`, `policy-guardrails`,
 `factuality-detection`, `factuality-correction`) require a
@@ -243,7 +243,7 @@ def guardian_check(
 def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
     """Determine is the last response is factually incorrect.
 
-    Intrinsic function that evaluates the factuality of the
+    Adapter function that evaluates the factuality of the
     assistant's response to a user's question. The context should end with
     a user question followed by an assistant answer.
 
@@ -259,7 +259,7 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
 def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
     """Corrects the last response so that it is factually correct.
 
-    Intrinsic function that corrects the assistant's response to a user's
+    Adapter function that corrects the assistant's response to a user's
     question relative to the given contextual information.
 
     :param context: Chat context containing user question and assistant answer.

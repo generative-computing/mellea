@@ -26,7 +26,7 @@ class GroundednessRequirement(Requirement):
     that LLM responses are fully grounded by citations to provided documents:
 
     1. **Citation Generation**: Generate citations for the response using the
-       find_citations intrinsic.
+       find_citations adapter function.
     2. **Citation Necessity**: Identify which response spans require citations (vs.
        conversational/inference text that doesn't need citations).
     3. **Citation Support**: For spans that need citations, assess the level of
@@ -35,7 +35,7 @@ class GroundednessRequirement(Requirement):
        citations are fully supported.
 
     **Important**: This requirement requires a HuggingFace backend (LocalHFBackend)
-    as it uses both the find_citations intrinsic and LLM-as-Judge for assessment.
+    as it uses both the find_citations adapter function and LLM-as-Judge for assessment.
 
     Args:
         documents: Optional documents to validate against. Can be Document
@@ -115,7 +115,7 @@ class GroundednessRequirement(Requirement):
 
         Args:
             backend: Backend to use for citation detection and LLM judgment.
-                Must be LocalHFBackend as this uses find_citations intrinsic.
+                Must be LocalHFBackend as this uses find_citations adapter function.
             ctx: Context containing the conversation history
             format: Unused for this requirement
             model_options: Unused for this requirement
@@ -173,9 +173,9 @@ class GroundednessRequirement(Requirement):
             )
 
         # Create context without the response being validated.
-        # This removes the assistant's response from the context passed to intrinsics,
+        # This removes the assistant's response from the context passed to adapter functions,
         # ensuring they only see the conversation history (user messages and prior context).
-        # This is important because intrinsics need to assess citations/necessity/support
+        # This is important because adapter functions need to assess citations/necessity/support
         # for the response independently, without the response itself influencing the judgment.
         # ChatContext is immutable, so we build a new one with all messages except the last.
         all_messages = ctx.as_list()
@@ -203,7 +203,7 @@ class GroundednessRequirement(Requirement):
                 )
         except Exception as e:
             return ValidationResult(
-                False, reason=f"Citation generation intrinsic failed: {e!s}"
+                False, reason=f"Citation generation adapter function failed: {e!s}"
             )
 
         # Step 2: Citation Necessity

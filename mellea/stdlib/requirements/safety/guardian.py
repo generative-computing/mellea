@@ -95,7 +95,7 @@ class GuardianCheck(Requirement):
             `"huggingface"`.
         model_version (str | None): Specific Guardian model version.  Defaults to
             the appropriate 8B model for the chosen backend.
-        device (str | None): Device string for HuggingFace inference (e.g.
+        device (str | None): Device string for Hugging Face inference (e.g.
             `"cuda"`).
         ollama_url (str | None): Base URL for the Ollama server.  When
             `None`, reads `OLLAMA_HOST` from the environment (falling back
@@ -128,7 +128,7 @@ class GuardianCheck(Requirement):
 
         warnings.warn(
             "GuardianCheck is deprecated as of version 0.4. "
-            "Use the Guardian Intrinsics instead ",
+            "Use the Guardian adapter functions instead ",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -376,11 +376,11 @@ class GuardianCheck(Requirement):
 
         # Generate the guardian decision.
         # For Ollama: add blank assistant turn to trigger generation
-        # For HuggingFace: use CBlock (won't be added to conversation, add_generation_prompt handles the judge role)
+        # For Hugging Face: use CBlock (won't be added to conversation, add_generation_prompt handles the judge role)
         if self._backend_type == "ollama":
             action = Message("assistant", "")
         else:
-            # Use a CBlock for HuggingFace - it won't be added as a message
+            # Use a CBlock for Hugging Face - it won't be added as a message
             action = CBlock("")  # type: ignore
 
         mot, val_ctx = await self._backend.generate_from_context(

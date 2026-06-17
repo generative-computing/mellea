@@ -289,7 +289,7 @@ debugging or for choosing the best available output when the budget runs out.
 
 ## Step 4: Adding Guardian harm detection
 
-Guardian intrinsics evaluate the output against specific risk criteria. Run them
+Guardian adapter functions evaluate the output against specific risk criteria. Run them
 after your agent responds to flag outputs before they reach downstream code.
 
 ```python
@@ -358,7 +358,7 @@ response = m.instruct(
 
 output_text = str(response)
 
-# Guardian intrinsics require a LocalHFBackend — they load LoRA adapters
+# Guardian adapter functions require a LocalHFBackend — they load LoRA adapters
 # that are not supported by OllamaModelBackend.
 guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
 
@@ -390,7 +390,7 @@ and dynamic applications with ease. The word "Mellea" consists of
 6 characters.
 ```
 
-> **Note:** Guardian intrinsics load LoRA adapters and require `LocalHFBackend`.
+> **Note:** Guardian adapter functions load LoRA adapters and require `LocalHFBackend`.
 > They cannot run against `OllamaModelBackend`. The main agent and the Guardian
 > checks can use different backends — only the Guardian calls need `LocalHFBackend`.
 

@@ -1,9 +1,9 @@
 """Advisory registry of known adapter capabilities.
 
 :data:`KNOWN_CAPABILITIES` is a frozenset of capability strings derived from the
-intrinsics catalog. It is advisory only: callers are warned (not rejected) when a
+adapter function catalog. It is advisory only: callers are warned (not rejected) when a
 capability outside this set is used, so that custom adapters and pre-release
-intrinsics are not blocked.
+adapter functions are not blocked.
 
 Deriving from the catalog (rather than hand-copying) keeps the two registries in
 sync automatically — adding a new entry to ``catalog.py`` automatically registers

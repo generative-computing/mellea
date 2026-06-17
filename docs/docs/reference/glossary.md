@@ -22,13 +22,48 @@ See: [act() and aact()](/how-to/act-and-aact)
 
 ---
 
-## aLoRA (Activated LoRA)
+## Adapter
 
-An **Activated LoRA** (aLoRA) is a LoRA adapter dynamically loaded by
-`LocalHFBackend` at inference time to serve as a lightweight requirement verifier.
-Instead of running a full LLM call to check a requirement, the adapter is activated on the same model weights already in memory. [Granite Switch](#granite-switch) models embed these adapters directly in the model weights, enabling intrinsic functions via `OpenAIBackend` without runtime adapter loading.
+Informal shorthand for **[adapter function](#adapter-function)**. Acceptable in brief
+references (e.g. code comments, table cells). Use the full term "adapter function" in
+user-facing prose, documentation, and API descriptions.
 
-See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)
+---
+
+## Adapter function
+
+An adapter function is a small, task-specific model component with a predictable structured
+output. Adapter functions are implemented as LoRA or [aLoRA](#alora) adapters on top of a
+base Granite model and expose a typed interface (input prompt + parsed output) through
+Mellea's `Intrinsic` class and its high-level wrappers. Examples include answerability
+checking, requirement verification, and hallucination detection.
+
+In prose and documentation, prefer "adapter function" over "intrinsic" or "intrinsic
+function". The Python symbol `Intrinsic` is the current implementation name; see
+[Intrinsic](#intrinsic).
+
+**Informal shorthand:** [Adapter](#adapter) (acceptable in brief references, avoid in
+user-facing text where precision matters).
+
+See: [Adapter Functions](../advanced/intrinsics.md)
+
+---
+
+## aLoRA
+
+aLoRA (Activated LoRA) is a LoRA adapter variant designed for fast inner-loop checks
+such as requirement validation. Unlike a standard LoRA, which processes the full context
+on every call, an aLoRA activates at a single invocation token — so the base model's
+KV cache for the preceding context is reused rather than recomputed. This makes the
+inference overhead minimal: only the activation token and the adapter's output tokens
+need a forward pass, not the full prompt.
+
+In a [Granite Switch](#granite-switch) model, multiple aLoRA adapter functions are
+embedded together and share the base model's KV cache across calls. This means serving
+multiple adapter functions produces more cache hits than running equivalent separate LoRA
+loads, lowering latency and memory pressure for the full serving deployment.
+
+See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)
 
 ---
 
@@ -96,6 +131,27 @@ holds text (or image data) and is assembled by a `Component` into the prompt sen
 to the backend. Multiple CBlocks compose into a single LLM request.
 
 See: [Mellea Core Internals](../advanced/mellea-core-internals)
+
+---
+
+## Capability
+
+A capability is what an [adapter function](#adapter-function) does — for example,
+`"answerability"` or `"requirement-check"`. Capability strings are used to look up
+the right adapter at runtime and are listed in the adapter function catalog
+(`mellea/backends/adapters/catalog.py`). Prefer "capability" over "feature" when
+describing what an adapter function provides.
+
+See: `mellea.backends.adapters.capabilities.KNOWN_CAPABILITIES`
+
+---
+
+## Checkpoint
+
+A checkpoint is a self-contained, ready-to-run model file produced by the
+[Granite Switch](#granite-switch) composer. It bundles a base Granite model together
+with all its embedded [adapter function](#adapter-function) weights into a single
+deployable artefact. Deploying a Granite Switch model means deploying its checkpoint.
 
 ---
 
@@ -211,6 +267,24 @@ See: [Evaluate with LLM-as-a-Judge](../how-to/evaluate-with-llm-as-a-judge)
 
 ---
 
+## Granite Libraries
+
+Granite Libraries is the collective name for the three curated collections of
+[adapter functions](#adapter-function) published by IBM Granite:
+
+| Collection | Purpose |
+|-----------|---------|
+| **Granite Libraries Core** | General-purpose capabilities: certainty checking, requirement verification, context attribution |
+| **Granite Libraries RAG** | Retrieval-Augmented Generation pipeline: answerability, citations, context relevance, hallucination detection, query rewriting |
+| **Granite Libraries Guardian** | Safety and compliance: guardian checks, policy guardrails, factuality detection and correction |
+
+These adapter functions are distributed as Hugging Face repositories under
+`ibm-granite/granitelib-{core,rag,guardian}-r1.0` and can be used with Mellea
+via `LocalHFBackend` (runtime loading) or embedded in a
+[Granite Switch](#granite-switch) checkpoint.
+
+---
+
 ## Hook / HookType
 
 A **hook** is an async function that intercepts a specific event in Mellea's
@@ -305,7 +379,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ## factuality_correction()
 
-A Guardian Intrinsic function that generates a corrected version of the assistant's
+A Guardian adapter function that generates a corrected version of the assistant's
 last response grounded in the documents provided in context. Returns whatever the
 model emits as a `str` — typically the corrected text. The model may emit `"none"`
 when no correction is needed, but this is a model-side convention, not part of the
@@ -321,7 +395,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails#factuality-correction)
 
 ## factuality_detection()
 
-A Guardian Intrinsic function that evaluates whether the assistant's last response
+A Guardian adapter function that evaluates whether the assistant's last response
 is factually consistent with the documents in context. Returns `"yes"` if the
 response contains factual errors, or `"no"` if it is consistent.
 
@@ -335,7 +409,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails#factuality-detection)
 
 ## guardian_check()
 
-A Guardian Intrinsic function that evaluates the last message from a given role in
+A Guardian adapter function that evaluates the last message from a given role in
 a `ChatContext` against a safety or quality criterion. Returns a `float` score from
 `0.0` (no risk) to `1.0` (risk detected); values at or above `0.5` indicate risk.
 
@@ -356,11 +430,11 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 > **Deprecated as of v0.4.** Use [`guardian_check()`](#guardian_check),
 > [`policy_guardrails()`](#policy_guardrails), or
-> [`factuality_detection()`](#factuality_detection) from the Guardian Intrinsics
+> [`factuality_detection()`](#factuality_detection) from the Guardian adapter functions
 > instead. See [Safety Guardrails](../how-to/safety-guardrails).
 
 A deprecated `Requirement` subclass that validates LLM outputs using a separately loaded
-Granite Guardian model. Requires an independent Ollama or HuggingFace backend
+Granite Guardian model. Requires an independent Ollama or Hugging Face backend
 for the Guardian model.
 
 See: [Safety Guardrails](../how-to/safety-guardrails)
@@ -381,7 +455,7 @@ See: [Safety Guardrails](../how-to/safety-guardrails)
 
 ## policy_guardrails()
 
-A Guardian Intrinsic function that checks whether a scenario complies with a
+A Guardian adapter function that checks whether a scenario complies with a
 natural-language policy. Returns `"Yes"` (compliant), `"No"` (non-compliant), or
 `"Ambiguous"` (insufficient information to decide).
 
@@ -395,11 +469,30 @@ See: [Safety Guardrails](../how-to/safety-guardrails#policy-compliance)
 
 ## Granite Switch
 
-A Granite model variant with LoRA and aLoRA adapters pre-baked into the model weights. When served via vLLM and accessed through `OpenAIBackend` with `load_embedded_adapters=True`, these embedded adapters enable [Intrinsics](../advanced/intrinsics) (RAG quality checks, requirement validation, safety evaluation) without runtime adapter loading. Only intrinsics embedded in the model are available — check the model's `adapter_index.json`.
+Granite Switch is the architecture and toolchain for composing adapter functions into a
+single deployable Granite model. The composer embeds LoRA/aLoRA adapter function weights
+directly into a base Granite model checkpoint, producing a self-contained model file that
+carries its adapter functions with it. When that checkpoint is served via vLLM and
+accessed through `OpenAIBackend` with `load_embedded_adapters=True`, adapter functions
+are available without runtime adapter loading. Only adapter functions embedded in the
+checkpoint are available — check the model's `adapter_index.json`.
 
-See: [Official Granite Switch Documentation](https://github.com/generative-computing/granite-switch) |
-[Intrinsics](../advanced/intrinsics) |
-[OpenAI and OpenAI-Compatible APIs](../integrations/openai)
+The resulting model file is sometimes called a **Granite Switch checkpoint** or simply a
+**checkpoint**. The toolchain that produces it is the **Granite Switch composer**.
+
+See: [Official Granite Switch Repository](https://github.com/generative-computing/granite-switch) |
+[Adapter Functions](../advanced/intrinsics.md) |
+[OpenAI and OpenAI-Compatible APIs](../integrations/openai.md)
+
+---
+
+## Granite Switch composer
+
+The Granite Switch composer is the toolchain component that embeds
+[adapter function](#adapter-function) weights into a base Granite model,
+producing a [Granite Switch](#granite-switch) [checkpoint](#checkpoint). It is
+distinct from the runtime: the composer runs offline to produce the checkpoint;
+Mellea and vLLM consume the checkpoint at inference time.
 
 ---
 
@@ -470,9 +563,19 @@ See: [Use Images and Vision Models](../how-to/use-images-and-vision)
 
 ## Intrinsic
 
-An `Intrinsic` is a backend-level primitive in Mellea — a structured generation operation with special handling (e.g., constrained decoding, RAG retrieval). `LocalHFBackend` exposes Intrinsics via runtime adapter loading. `OpenAIBackend` supports Intrinsics when backed by a [Granite Switch](#granite-switch) model with `load_embedded_adapters=True`.
+`Intrinsic` is the current Python class name for an **[adapter function](#adapter-function)**
+in Mellea's implementation. It is a backend-level primitive — a structured generation
+operation backed by a LoRA/aLoRA adapter with special input/output handling (e.g.,
+constrained decoding, RAG retrieval). `LocalHFBackend` loads `Intrinsic` adapters at
+runtime; `OpenAIBackend` uses them when backed by a [Granite Switch](#granite-switch)
+checkpoint with `load_embedded_adapters=True`.
 
-See: [Intrinsics](../advanced/intrinsics)
+> **Note:** The Python symbol `Intrinsic` (and related classes such as `IntrinsicAdapter`)
+> will be renamed to `AdapterFunction` / `Adapter` in a future phase of Epic #929
+> (#1136). Prefer the term **adapter function** in prose and documentation; use `Intrinsic`
+> only when referencing the current Python API directly.
+
+See: [Adapter Functions](../advanced/intrinsics.md)
 
 ---
 
@@ -504,6 +607,15 @@ A core generative programming pattern in Mellea:
 3. **Repair** — if validation fails, retry or fix the output.
 
 See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
+
+---
+
+## Mellea
+
+Mellea is the open-source Python library for building reliable, testable LLM
+applications. It orchestrates [Granite Switch](#granite-switch)
+[adapter functions](#adapter-function) as ordinary typed Python calls —
+structured inputs, structured outputs, built-in validation.
 
 ---
 
@@ -893,3 +1005,14 @@ than the sum of all calls. Use `SimpleContext` (the default) when calling
 `wait_for_all_mots`; concurrent writes to `ChatContext` can corrupt state.
 
 See: [Tutorial 02: Streaming and Async](/tutorials/streaming-and-async)
+
+---
+
+## References
+
+External resources for the key technologies underlying Mellea's adapter function system:
+
+- **Granite Switch**: [github.com/generative-computing/granite-switch](https://github.com/generative-computing/granite-switch) — the architecture and composer toolchain for building Granite Switch checkpoints.
+- **Granite Libraries Core**: [huggingface.co/ibm-granite/granitelib-core-r1.0](https://huggingface.co/ibm-granite/granitelib-core-r1.0) — certainty, requirement-check, context-attribution adapter functions.
+- **Granite Libraries RAG**: [huggingface.co/ibm-granite/granitelib-rag-r1.0](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) — answerability, citations, context relevance, hallucination detection, query rewriting.
+- **Granite Libraries Guardian**: [huggingface.co/ibm-granite/granitelib-guardian-r1.0](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) — guardian checks, policy guardrails, factuality detection and correction.

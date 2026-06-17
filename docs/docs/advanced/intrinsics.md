@@ -1,5 +1,5 @@
 ---
-title: "Intrinsics"
+title: "Adapter functions"
 description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters with Granite models."
 # diataxis: how-to
 ---
@@ -8,22 +8,22 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 Silicon Mac recommended), or `pip install mellea` for OpenAIBackend with a
 [Granite Switch](/reference/glossary#granite-switch) model served via vLLM.
 
-Intrinsics are adapter-accelerated operations for RAG quality checks. They use
-LoRA/aLoRA adapters loaded directly into the HuggingFace backend — faster and more
+Adapter functions are adapter-accelerated operations for RAG quality checks. They use
+LoRA/aLoRA adapters loaded directly into the Hugging Face backend — faster and more
 reliable than prompting a general-purpose model for these specialized micro-tasks.
 
-> **Backend note:** Intrinsics work with two backends:
+> **Backend note:** Adapter functions work with two backends:
 >
 > - **LocalHFBackend** — loads LoRA/aLoRA adapters from the catalog at runtime.
->   All intrinsics are available. Requires a GPU or Apple Silicon Mac.
+>   All adapter functions are available. Requires a GPU or Apple Silicon Mac.
 > - **OpenAIBackend** — uses a Granite Switch model served via vLLM with
->   `load_embedded_adapters=True`. Only intrinsics embedded in the model are
+>   `load_embedded_adapters=True`. Only adapter functions embedded in the model are
 >   available — check the model's `adapter_index.json` for the list.
 >   See `docs/docs/examples/granite-switch/README.md`
 >
-> Intrinsics do not work with Ollama or other remote backends.
+> Adapter functions do not work with Ollama or other remote backends.
 
-Set up the backend once and reuse it across intrinsic calls:
+Set up the backend once and reuse it across adapter function calls:
 
 ```python
 # Requires: mellea[hf]
@@ -209,7 +209,7 @@ print(result)
 # Maps each response sentence to supporting document sentences
 ```
 
-## Direct intrinsic usage
+## Direct adapter function usage
 
 > **Advanced:** For custom adapter tasks, use the `Intrinsic` component and
 > `CustomIntrinsicAdapter` directly.
@@ -249,14 +249,14 @@ print(out)  # {"requirement_likelihood": 1.0}
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
-HuggingFace repository configuration instead of the intrinsic catalog.
+Hugging Face repository configuration instead of the adapter function catalog.
 Output format is task-specific — `requirement-check` returns a likelihood score.
 
 ---
 
-## Guardian Intrinsics
+## Guardian adapter functions
 
-Safety and factuality checks use a separate set of Guardian-specific intrinsics:
+Safety and factuality checks use a separate set of Guardian-specific adapter functions:
 `guardian_check()`, `policy_guardrails()`, `factuality_detection()`, and
 `factuality_correction()`. These are documented in the
 [Safety Guardrails](../how-to/safety-guardrails) how-to guide.

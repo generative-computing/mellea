@@ -1,6 +1,6 @@
 """A backend that uses the Huggingface Transformers library.
 
-The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or ALoras, consider using Ollama backends instead.
+The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ try:
     from transformers.trainer_utils import set_seed
 except ImportError as e:
     raise ImportError(
-        "The HuggingFace backend requires extra dependencies. "
+        "The Hugging Face backend requires extra dependencies. "
         'Please install them with: pip install "mellea[hf]"'
     ) from e
 
@@ -134,7 +134,7 @@ class HFAloraCacheInfo:
     reused across generation requests via an LRU cache.
 
     Args:
-        kv_cache (DynamicCache | None): The HuggingFace `DynamicCache` holding
+        kv_cache (DynamicCache | None): The Hugging Face `DynamicCache` holding
             precomputed key/value tensors, or `None` if not available.
         merged_token_ids (Any): Token IDs corresponding to the cached prefix.
         merged_attention (Any): Attention mask for the cached prefix tokens.
@@ -202,7 +202,7 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
         torch.cuda.empty_cache()
 
 
-# Variables that HuggingFace injects into the Jinja template namespace automatically.
+# Variables that Hugging Face injects into the Jinja template namespace automatically.
 # These must be excluded from _chat_template_allowlist because they are provided by
 # apply_chat_template itself — forwarding a model_option with the same name would
 # either cause a "got multiple values for keyword argument" TypeError (for the named-param
@@ -235,7 +235,7 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
-    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
+    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
 
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 
@@ -243,7 +243,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     Args:
         model_id (str | ModelIdentifier): Used to load the model and tokenizer via
-            HuggingFace `Auto*` classes.
+            Hugging Face `Auto*` classes.
         formatter (ChatFormatter | None): Formatter for rendering components into
             prompts. Defaults to `TemplateFormatter`.
         use_caches (bool): If `False`, KV caching is disabled even if a `Cache`
@@ -382,7 +382,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for `action` given `ctx` using the HuggingFace model.
+        """Generate a completion for `action` given `ctx` using the Hugging Face model.
 
         Automatically routes `Requirement` and `Intrinsic` actions to their
         corresponding aLoRA adapters when available.
@@ -885,7 +885,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             stream = model_options.get(ModelOption.STREAM, False)
             if stream:
                 try:
-                    # HuggingFace uses a streaming interface that you pass to the generate call.
+                    # Hugging Face uses a streaming interface that you pass to the generate call.
                     # Must be called from a running event loop. This should always be the case given the same
                     # requirement of the ._generate function below.
                     streamer = AsyncTextIteratorStreamer(
@@ -1067,7 +1067,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             stream = model_options.get(ModelOption.STREAM, False)
             if stream:
                 try:
-                    # HuggingFace uses a streaming interface that you pass to the generate call.
+                    # Hugging Face uses a streaming interface that you pass to the generate call.
                     # Must be called from a running event loop. This should always be the case given the same
                     # requirement of the ._generate function below.
                     streamer = AsyncTextIteratorStreamer(
@@ -1183,7 +1183,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
             chunk (str | GenerateDecoderOnlyOutput): A decoded text chunk (streaming)
-                or a full HuggingFace generation output object (non-streaming).
+                or a full Hugging Face generation output object (non-streaming).
             input_ids: The prompt token IDs used for decoding; required to slice off
                 the prompt portion from the generated sequences.
         """
@@ -1219,7 +1219,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         seed,
         input_ids,
     ):
-        """Finalize the output thunk after HuggingFace generation completes.
+        """Finalize the output thunk after Hugging Face generation completes.
 
         Stores the KV cache for future reuse, parses tool calls if applicable,
         records token usage metrics, emits telemetry, and attaches the generate log.
@@ -1390,7 +1390,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating.
 
-        Passes formatted prompt strings directly to the HuggingFace model's
+        Passes formatted prompt strings directly to the Hugging Face model's
         `generate` method as a batch. Tool calling is not supported.
 
         Args:
@@ -1649,7 +1649,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         Parses the Jinja2 template with :func:`jinja2.meta.find_undeclared_variables` to
         find every variable the template references but does not define itself, then
-        subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables HuggingFace provides
+        subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables Hugging Face provides
         automatically). What remains is the exact set of keys a caller may legitimately
         forward from ``model_options`` to ``apply_chat_template``.
 
@@ -1756,7 +1756,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._added_adapters[adapter.qualified_name] = adapter
 
     def load_adapter(self, adapter_qualified_name: str):
-        """Load a previously registered adapter into the underlying HuggingFace model.
+        """Load a previously registered adapter into the underlying Hugging Face model.
 
         The adapter must have been registered via `add_adapter` first. Do not call
         this method while generation requests are in progress.
@@ -1797,7 +1797,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._loaded_adapters[adapter.qualified_name] = adapter
 
     def unload_adapter(self, adapter_qualified_name: str):
-        """Unload a previously loaded adapter from the underlying HuggingFace model.
+        """Unload a previously loaded adapter from the underlying Hugging Face model.
 
         If the adapter is not currently loaded, a log message is emitted and the
         method returns without error.

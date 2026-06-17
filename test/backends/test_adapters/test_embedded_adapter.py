@@ -213,7 +213,7 @@ class TestFromModelDirectory:
 
     def test_filter_nonexistent_intrinsic(self, model_dir):
         with pytest.raises(
-            ValueError, match="No adapter found for intrinsic 'nonexistent'"
+            ValueError, match="No adapter found for adapter function 'nonexistent'"
         ):
             EmbeddedIntrinsicAdapter.from_model_directory(
                 model_dir, intrinsic_name="nonexistent"

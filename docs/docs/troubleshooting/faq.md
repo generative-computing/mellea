@@ -73,14 +73,14 @@ m = MelleaSession(
 ## Can I use Mellea without Ollama?
 
 Yes. Ollama is the default backend but not the only one. Mellea ships with
-backends for OpenAI-compatible APIs, HuggingFace local inference, IBM WatsonX,
+backends for OpenAI-compatible APIs, Hugging Face local inference, IBM WatsonX,
 and LiteLLM (which itself proxies dozens of providers).
 
 Install the backend you need:
 
 ```bash
 pip install "mellea[litellm]"    # LiteLLM multi-provider
-pip install "mellea[hf]"         # HuggingFace / local inference
+pip install "mellea[hf]"         # Hugging Face / local inference
 pip install "mellea[watsonx]"    # IBM WatsonX
 ```
 

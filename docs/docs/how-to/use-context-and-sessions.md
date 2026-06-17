@@ -100,7 +100,7 @@ while keeping the session's backend and other configuration intact.
 
 Subclass `MelleaSession` and override any method to inject custom behavior.
 The example below gates all incoming chat messages through
-[Guardian Intrinsics](../how-to/safety-guardrails) safety checks:
+[Guardian adapter functions](../how-to/safety-guardrails.md) safety checks:
 
 ```python
 from typing import Literal

@@ -173,11 +173,11 @@ Found a bug, workaround, or pattern? Update the docs:
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section
 
-## 13. Working with Intrinsics
+## 14. Working with Adapter Functions
 
-Intrinsics are specialized LoRA adapters that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models. Mellea handles adapter loading and input formatting automatically — you just call the right function.
+Adapter functions are specialized LoRA/aLoRA adapters that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models. Mellea handles adapter loading and input formatting automatically — you just call the right function.
 
-### Using Intrinsics in Mellea
+### Using Adapter Functions in Mellea
 
 **Prefer the high-level wrappers** in `mellea/stdlib/components/intrinsic/`. These handle adapter loading, context formatting, and output parsing for you:
 
@@ -212,28 +212,28 @@ For lower-level control (custom adapters, model options), use `mfuncs.act()` wit
 
 ### Project Resources
 
-- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for intrinsic names, HF repo IDs, and adapter types
-- **Usage examples**: `docs/examples/intrinsics/` — working code for every intrinsic
+- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for adapter function names, HF repo IDs, and adapter types
+- **Usage examples**: `docs/examples/intrinsics/` — working code for every adapter function
 - **Helper functions**: `mellea/stdlib/components/intrinsic/rag.py` and `core.py`
 
-### Adding New Intrinsics
+### Adding New Adapter Functions
 
-When adding support for a new intrinsic (not just using an existing one), fetch its README from Hugging Face first. Each README contains the authoritative spec for input/output format, intended use, and examples.
+When adding support for a new adapter function (not just using an existing one), fetch its README from Hugging Face first. Each README contains the authoritative spec for input/output format, intended use, and examples.
 
 **Writing examples?** The HF READMEs also document intended usage patterns and example inputs — useful reference when writing code in `docs/examples/intrinsics/`.
 
-| Repo | Purpose | Intrinsics |
+| Repo | Purpose | Adapter functions |
 |------|---------|------------|
 | [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
 | [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
 | [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
 
-**README URLs** — RAG intrinsics (no model subfolder):
+**README URLs** — RAG adapter functions (no model subfolder):
 ```
 https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name}/README.md
 ```
 
-Core and Guardian intrinsics (include model subfolder):
+Core and Guardian adapter functions (include model subfolder):
 ```
 https://huggingface.co/ibm-granite/granitelib-{core,guardian,rag}-r1.0/blob/main/{intrinsic_name}/granite-4.1-{3b,8b,30b}/{lora,alora}/README.md
 ```
