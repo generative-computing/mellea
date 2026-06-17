@@ -256,11 +256,14 @@ class ModelFriendlyFeedbackFormatter:
                 "    import matplotlib\n"
                 "    matplotlib.use('Agg')"
             )
-        elif "Plot file" in reason or "plot.png" in reason.lower():
+        elif "No savefig() call found" in reason:
+            # Extract the expected path from the reason string so the repair
+            # instruction names the actual target path, not a hardcoded placeholder.
+            path_match = re.search(r"with path '([^']+)'", reason)
+            expected_path = path_match.group(1) if path_match else "your/output/path.png"
             return (
-                "Your code didn't save the plot to the expected file. "
-                "Try: Add 'plt.savefig(\"plot.png\")' at the end of your code "
-                "before plt.show() or plt.close()."
+                f"Your code didn't save the plot to the expected file. "
+                f"Try: Add plt.savefig('{expected_path}') before plt.show() or plt.close()."
             )
         else:
             return (

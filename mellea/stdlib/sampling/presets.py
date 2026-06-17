@@ -27,7 +27,7 @@ Examples:
 """
 
 from dataclasses import dataclass
-from typing import Generic, Literal
+from typing import Generic
 
 from ...core import Requirement, S, SamplingStrategy
 from ..requirements.python_tools import python_code_generation_requirements
@@ -67,7 +67,6 @@ def python_code_generation_sampling(
     output_limit_chars: int = 10_000,
     timeout_seconds: int = 5,
     use_sandbox: bool = False,
-    feedback_quality: Literal["brief", "detailed"] = "detailed",
 ) -> SamplingPreset:
     """Pre-configured preset for Python code generation with repair feedback.
 
@@ -85,8 +84,6 @@ def python_code_generation_sampling(
             Default 5. Only enforced if use_sandbox=True.
         use_sandbox: Use Docker-isolated execution (llm-sandbox).
             Default False. Set to True for untrusted code generation.
-        feedback_quality: Feedback verbosity level. Currently accepts "brief" and
-            "detailed"; future versions may customize this. Default "detailed".
 
     Returns:
         SamplingPreset with bundled requirements and repair strategy.
@@ -154,7 +151,6 @@ def python_plotting_sampling(
     allowed_imports: list[str] | None = None,
     timeout_seconds: int = 10,
     use_sandbox: bool = True,
-    feedback_quality: Literal["brief", "detailed"] = "detailed",
 ) -> SamplingPreset:
     """Pre-configured preset for matplotlib plotting with repair feedback.
 
@@ -177,7 +173,6 @@ def python_plotting_sampling(
             Default 10 (higher than code generation due to rendering).
         use_sandbox: Use Docker-isolated execution. Default True (strongly recommended
             for untrusted plot generation to prevent malicious graphics operations).
-        feedback_quality: Feedback verbosity. Default "detailed".
 
     Returns:
         SamplingPreset with bundled plotting requirements and repair strategy.

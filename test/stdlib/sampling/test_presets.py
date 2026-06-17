@@ -274,6 +274,30 @@ class TestModelFriendlyFeedbackFormatter:
         assert "Agg" in formatted
         assert "Try:" in formatted
 
+    def test_matplotlib_plot_file_saved_error_formatting(self):
+        """Test PlotFileSaved error formatting with dynamic path extraction."""
+        reason = "No savefig() call found with path 'plot.png'. Add: plt.savefig('plot.png') or fig.savefig('plot.png')"
+        result = ValidationResult(result=False, reason=reason)
+        formatted = ModelFriendlyFeedbackFormatter.format_matplotlib_error(result)
+        assert "plot.png" in formatted
+        assert "plt.savefig('plot.png')" in formatted
+        assert "Try:" in formatted
+
+    def test_matplotlib_plot_file_saved_error_with_custom_path(self):
+        """Test PlotFileSaved error formatting with custom output path."""
+        reason = "No savefig() call found with path '/tmp/output.png'. Add: plt.savefig('/tmp/output.png') or fig.savefig('/tmp/output.png')"
+        result = ValidationResult(result=False, reason=reason)
+        formatted = ModelFriendlyFeedbackFormatter.format_matplotlib_error(result)
+        assert "/tmp/output.png" in formatted
+        assert "plt.savefig('/tmp/output.png')" in formatted
+
+    def test_matplotlib_plot_file_saved_error_fallback(self):
+        """Test PlotFileSaved error formatting with malformed reason (fallback)."""
+        reason = "No savefig() call found but path parsing failed"
+        result = ValidationResult(result=False, reason=reason)
+        formatted = ModelFriendlyFeedbackFormatter.format_matplotlib_error(result)
+        assert "your/output/path.png" in formatted or "savefig" in formatted
+
     def test_code_extraction_error_formatting(self):
         """Test code extraction error formatting."""
         result = ValidationResult(
