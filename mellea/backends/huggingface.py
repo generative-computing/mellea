@@ -1513,6 +1513,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             generate_log.action = action
 
             result._generate_log = generate_log
+            result._format = format
             results.append(result)
 
         usage: dict[str, Any] | None = (

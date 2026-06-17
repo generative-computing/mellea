@@ -614,6 +614,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.result = mot
         generate_log.action = mot._action
         mot._generate_log = generate_log
+        mot._format = _format
 
     async def _generate_from_raw(
         self,

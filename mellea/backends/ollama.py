@@ -613,6 +613,7 @@ class OllamaModelBackend(FormatterBackend):
                 generate_log.extra["error"] = error
                 generate_log.extra["empty_response"] = response.model_dump()
             result._generate_log = generate_log
+            result._format = format
 
             results.append(result)
 
@@ -742,6 +743,7 @@ class OllamaModelBackend(FormatterBackend):
         generate_log.result = mot
 
         mot._generate_log = generate_log
+        mot._format = _format
         mot._generate = None
 
         # Extract token counts from response

@@ -3,10 +3,17 @@ import copy
 import io
 from typing import Any
 
+import pydantic
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import CBlock, Component, ImageBlock, ModelOutputThunk
+from mellea.core import (
+    CBlock,
+    Component,
+    ComputedModelOutputThunk,
+    ImageBlock,
+    ModelOutputThunk,
+)
 from mellea.stdlib.components import Message
 
 
@@ -317,3 +324,42 @@ async def test_cancel_generation_propagates_outer_cancellation() -> None:
         await asyncio.wait_for(mot._generate, timeout=1.0)  # type: ignore[attr-defined]
     except (TimeoutError, asyncio.CancelledError):
         pass
+
+
+# --- ComputedModelOutputThunk.parsed ---
+
+
+class _Label(pydantic.BaseModel):
+    label: str
+
+
+def _make_computed(
+    json_str: str, fmt: type[pydantic.BaseModel] | None
+) -> ComputedModelOutputThunk:
+    thunk = ModelOutputThunk(value=json_str)
+    thunk._format = fmt
+    return ComputedModelOutputThunk(thunk)
+
+
+def test_parsed_returns_model_instance() -> None:
+    result = _make_computed('{"label": "yes"}', _Label)
+    obj = result.parsed
+    assert isinstance(obj, _Label)
+    assert obj.label == "yes"
+
+
+def test_parsed_returns_none_when_no_format() -> None:
+    result = _make_computed('{"label": "yes"}', None)
+    assert result.parsed is None
+
+
+def test_parsed_raises_on_invalid_json() -> None:
+    result = _make_computed("not json", _Label)
+    with pytest.raises(pydantic.ValidationError):
+        _ = result.parsed
+
+
+def test_value_unaffected_by_format() -> None:
+    raw = '{"label": "ok"}'
+    result = _make_computed(raw, _Label)
+    assert result.value == raw

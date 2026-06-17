@@ -32,6 +32,7 @@ from typing import (
     runtime_checkable,
 )
 
+import pydantic
 import typing_extensions
 from PIL import Image as PILImage
 
@@ -401,6 +402,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Mellea-side hook correlation ID; distinct from the provider-assigned
         # `GenerationMetadata.response_id`.
         self._generation_id: str | None = None
+        self._format: type[pydantic.BaseModel] | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
@@ -542,6 +544,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._thinking = other._thinking
         self.generation = other.generation
         self._generate_log = other._generate_log
+        self._format = other._format
         self._cancelled = other._cancelled
         # _cancel_hook is deliberately not copied: _copy_from swaps output state,
         # not backend-thread plumbing, which is tied to the original computation.
@@ -557,7 +560,13 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
     @property
     def value(self) -> str | None:
-        """Gets the value of the block."""
+        """Gets the raw string value of the block.
+
+        When ``format=`` is set on the originating ``act()``/``instruct()`` call, the
+        model returns a JSON string and ``.value`` contains that raw JSON — not a
+        Pydantic instance.  Use ``.parsed`` on a ``ComputedModelOutputThunk`` to get
+        the validated model object.
+        """
         if not self._computed:
             return None
         return self._underlying_value
@@ -880,6 +889,25 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     def value(self, v: str):
         """Sets the value of the block."""
         self._underlying_value = v
+
+    @property
+    def parsed(self) -> pydantic.BaseModel | None:
+        """Returns the result as a validated Pydantic instance when ``format=`` was set.
+
+        Returns ``None`` when no ``format=`` type was provided to the originating
+        ``act()`` / ``instruct()`` call.  Use this instead of casting ``.value``
+        manually::
+
+            result = m.act(Instruction("Say yes or no"), format=MyModel)
+            obj = result.parsed  # MyModel instance, no cast needed
+
+        Returns:
+            A ``pydantic.BaseModel`` instance produced by ``model_validate_json``,
+            or ``None`` if no format type was set.
+        """
+        if self._format is None:
+            return None
+        return self._format.model_validate_json(self.value)
 
     def is_computed(self) -> Literal[True]:
         """Returns `True` since thunk is always computed.
