@@ -483,18 +483,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
-                # No isinstance guard needed: add_adapter enforces that only
-                # EmbeddedIntrinsicAdapter (which IS-AN Adapter) can be registered.
-                alora_req_adapter = next(
-                    (
-                        a
-                        for a in self._added_adapters.values()
-                        if a.identity.capability == adapter_name
-                        and a.identity.adapter_type == "alora"
-                    ),
-                    None,
-                )
+                alora_req_adapter = self._find_adapter(adapter_name, {"alora"})
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
@@ -578,17 +567,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         # --- adapter lookup ------------------------------------------------
-        # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
         allowed_types = {at.value for at in action.adapter_types}
-        adapter = next(
-            (
-                a
-                for a in self._added_adapters.values()
-                if a.identity.capability == action.intrinsic_name
-                and a.identity.adapter_type in allowed_types
-            ),
-            None,
-        )
+        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(
                 f"backend ({self}) has no adapter for processing adapter function: "

@@ -16,7 +16,7 @@ pytest.importorskip(
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import ModelOption
-from mellea.backends.adapters import IntrinsicAdapter
+from mellea.backends.adapters import AdapterMixin, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
@@ -144,7 +144,7 @@ def _make_intrinsic_adapter_stub():
     adapter.qualified_name = "answerability_alora"
     adapter.config = {}
     # Required for the capability-based lookup introduced in Epic #929 Phase 1.
-    # Use object.__setattr__ because IntrinsicAdapter inherits from a frozen dataclass.
+    # __new__ bypasses __init__; use object.__setattr__ to set frozen-dataclass fields.
     object.__setattr__(
         adapter,
         "identity",
@@ -171,6 +171,9 @@ def _make_intrinsic_backend_stub(stub_backend):
     stub_backend.post_processing = lambda *args, **kwargs: None
     stub_backend._generate_with_adapter_lock = (
         lambda adapter_name, generate_func, *args: generate_func(*args)
+    )
+    stub_backend._find_adapter = lambda cap, types=None: AdapterMixin._find_adapter(
+        stub_backend, cap, types
     )
     return stub_backend
 

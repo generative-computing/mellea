@@ -61,7 +61,6 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
-from .adapters._core import Adapter
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -437,17 +436,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 # Check if a requirement-check (or AloraRequirement specified) adapter
                 # exists.
-                # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
-                alora_req_adapter = next(
-                    (
-                        a
-                        for a in self._added_adapters.values()
-                        if isinstance(a, Adapter)
-                        and a.identity.capability == adapter_name
-                        and a.identity.adapter_type == "alora"
-                    ),
-                    None,
-                )
+                alora_req_adapter = self._find_adapter(adapter_name, {"alora"})
                 if alora_req_adapter is None:
                     # Log a warning if using an AloraRequirement but no adapter fit.
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
@@ -586,18 +575,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         docs = messages_to_docs(ctx_as_message_list)
 
-        # Capability-based lookup (Epic #929 Phase 1 — issue #1136).
         allowed_types = {at.value for at in action.adapter_types}
-        adapter = next(
-            (
-                a
-                for a in self._added_adapters.values()
-                if isinstance(a, Adapter)
-                and a.identity.capability == action.intrinsic_name
-                and a.identity.adapter_type in allowed_types
-            ),
-            None,
-        )
+        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(
                 f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"

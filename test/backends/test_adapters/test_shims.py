@@ -228,6 +228,10 @@ def test_resolve_adapter_returns_existing_by_capability():
     existing = _make_intrinsic_adapter("answerability")
     mock_backend = MagicMock(spec=AdapterMixin)
     mock_backend._added_adapters = {existing.qualified_name: existing}
+    # Route _find_adapter through the real implementation so the _added_adapters search runs.
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
     result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
     assert result is existing
     mock_backend.add_adapter.assert_not_called()
@@ -238,5 +242,7 @@ def test_resolve_adapter_raises_without_base_model():
     mock_backend = MagicMock(spec=AdapterMixin)
     mock_backend._added_adapters = {}
     mock_backend.base_model_name = None
+    # _find_adapter returns None so resolve_adapter proceeds to the base-model check.
+    mock_backend._find_adapter.return_value = None
     with pytest.raises(ValueError, match="no model ID"):
         AdapterMixin.resolve_adapter(mock_backend, "answerability")

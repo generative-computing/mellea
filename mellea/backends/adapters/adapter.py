@@ -137,9 +137,13 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
         base_model_name (str | None): Base model name provided at construction, if any.
         adapter_type (AdapterType): The adapter type (``LORA`` or ``ALORA``).
         config (dict): Parsed I/O transformation configuration for the adapter function.
-        identity (Identity): Composable identity from the new Adapter design.
-        io_contract (IOContract): Phase 1 stub; replaced in Phase 2.
-        weights (WeightsBinding): Phase 1 stub; replaced in Phase 2.
+
+    .. note::
+        ``identity``, ``io_contract``, and ``weights`` are Phase 1 internal scaffolding
+        populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
+        protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
+        ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
+        (issues #1137, #1138).
     """
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -384,14 +388,9 @@ class AdapterMixin(Backend, abc.ABC):
             ValueError: If the backend has no model ID.
             KeyError: If the adapter cannot be found after registration.
         """
-        added: dict = getattr(self, "_added_adapters", {})
-
-        for adapter in added.values():
-            if (
-                isinstance(adapter, _AdapterCore)
-                and adapter.identity.capability == name
-            ):
-                return adapter
+        found = self._find_adapter(name)
+        if found is not None:
+            return found
 
         base = self.base_model_name
         if base is None:
@@ -420,13 +419,9 @@ class AdapterMixin(Backend, abc.ABC):
                     )
                 )
 
-        added = getattr(self, "_added_adapters", {})
-        for adapter in added.values():
-            if (
-                isinstance(adapter, _AdapterCore)
-                and adapter.identity.capability == name
-            ):
-                return adapter
+        found = self._find_adapter(name)
+        if found is not None:
+            return found
 
         raise KeyError(f"Adapter {name!r} not found after registration")
 
@@ -441,6 +436,28 @@ class AdapterMixin(Backend, abc.ABC):
             adapter: The adapter to activate, or ``None`` (no-op in Phase 1).
         """
         yield
+
+    def _find_adapter(
+        self, capability: str, adapter_types: set[str] | None = None
+    ) -> "_AdapterCore | None":
+        """Return the first registered adapter matching capability and (optionally) type.
+
+        Args:
+            capability (str): Capability name (e.g. ``"answerability"``).
+            adapter_types (set[str] | None): Allowed adapter type strings
+                (e.g. ``{"alora"}``). ``None`` matches any type.
+
+        Returns:
+            _AdapterCore | None: Matching adapter, or ``None`` if not found.
+        """
+        for a in getattr(self, "_added_adapters", {}).values():
+            if (
+                isinstance(a, _AdapterCore)
+                and a.identity.capability == capability
+                and (adapter_types is None or a.identity.adapter_type in adapter_types)
+            ):
+                return a
+        return None
 
 
 class EmbeddedIntrinsicAdapter(_AdapterCore):
@@ -469,9 +486,13 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         intrinsic_name (str): Name of the adapter function this adapter implements.
         config (dict): Parsed I/O transformation configuration.
         technology (str): ``"lora"`` or ``"alora"``.
-        identity (Identity): Composable identity from the new Adapter design.
-        io_contract (IOContract): Phase 1 stub; replaced in Phase 2.
-        weights (WeightsBinding): Phase 1 stub; replaced in Phase 2.
+
+    .. note::
+        ``identity``, ``io_contract``, and ``weights`` are Phase 1 internal scaffolding
+        populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
+        protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
+        ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
+        (issues #1137, #1138).
     """
 
     def __setattr__(self, name: str, value: object) -> None:
