@@ -654,9 +654,9 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
 
         assert response.parsed_repr is not None
         if context is None:
-            return response.parsed_repr
+            return response.parsed_repr  # type: ignore[return-value]
         else:
-            return response.parsed_repr, context
+            return response.parsed_repr, context  # type: ignore[return-value]
 
 
 class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
@@ -797,9 +797,9 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
             )
             assert response.parsed_repr is not None
             if context is None:
-                return response.parsed_repr
+                return response.parsed_repr  # type: ignore[return-value]
             else:
-                return response.parsed_repr, context
+                return response.parsed_repr, context  # type: ignore[return-value]
 
         return __async_call__()
 

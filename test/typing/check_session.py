@@ -2,12 +2,18 @@
 
 from typing import Any, assert_type, cast
 
+from pydantic import BaseModel
+
 from mellea.core import ComputedModelOutputThunk, ModelOutputThunk, SamplingResult
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.session import MelleaSession
 
 s = cast(MelleaSession, None)
 action: Instruction = cast(Instruction, None)
+
+
+class _M(BaseModel):
+    value: str
 
 
 async def check_aact_computed() -> None:
@@ -53,3 +59,33 @@ async def check_aquery_uncomputed() -> None:
 def check_query_sync() -> None:
     r = s.query("obj", "q")
     assert_type(r, ComputedModelOutputThunk[Any])
+
+
+def check_act_format() -> None:
+    r = s.act(action, format=_M)
+    assert_type(r, ComputedModelOutputThunk[_M])
+
+
+def check_instruct_format() -> None:
+    r = s.instruct("test", format=_M)
+    assert_type(r, ComputedModelOutputThunk[_M])
+
+
+async def check_aact_format_computed() -> None:
+    r = await s.aact(action, strategy=None, await_result=True, format=_M)
+    assert_type(r, ComputedModelOutputThunk[_M])
+
+
+async def check_aact_format_uncomputed() -> None:
+    r = await s.aact(action, strategy=None, format=_M)
+    assert_type(r, ModelOutputThunk[_M])
+
+
+async def check_ainstruct_format_computed() -> None:
+    r = await s.ainstruct("test", strategy=None, await_result=True, format=_M)
+    assert_type(r, ComputedModelOutputThunk[_M])
+
+
+async def check_ainstruct_format_uncomputed() -> None:
+    r = await s.ainstruct("test", strategy=None, format=_M)
+    assert_type(r, ModelOutputThunk[_M])

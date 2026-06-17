@@ -393,12 +393,25 @@ class MelleaSession:
     @overload
     def act(
         self,
+        action: Component[Any],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ComputedModelOutputThunk[BaseModelSubclass]: ...
+
+    @overload
+    def act(
+        self,
         action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ComputedModelOutputThunk[S]: ...
@@ -418,7 +431,7 @@ class MelleaSession:
 
     def act(
         self,
-        action: Component[S],
+        action: Component[Any],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -426,7 +439,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk[S] | SamplingResult:
+    ) -> ModelOutputThunk[Any] | SamplingResult[Any]:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -475,7 +488,26 @@ class MelleaSession:
         output_prefix: str | CBlock | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ComputedModelOutputThunk[BaseModelSubclass]: ...
+
+    @overload
+    def instruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: Literal[False] = False,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ComputedModelOutputThunk[str]: ...
@@ -515,7 +547,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk[str] | SamplingResult:
+    ) -> ModelOutputThunk[Any] | SamplingResult[Any]:
         """Generates from an instruction.
 
         Args:
@@ -710,16 +742,44 @@ class MelleaSession:
     @overload
     async def aact(
         self,
+        action: Component[Any],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk[BaseModelSubclass]: ...
+
+    @overload
+    async def aact(
+        self,
         action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: None = None,
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: Literal[True],
     ) -> ComputedModelOutputThunk[S]: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component[Any],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
+    ) -> ComputedModelOutputThunk[BaseModelSubclass]: ...
 
     @overload
     async def aact(
@@ -729,11 +789,25 @@ class MelleaSession:
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy,
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
     ) -> ComputedModelOutputThunk[S]: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component[Any],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
+    ) -> ModelOutputThunk[BaseModelSubclass]: ...
 
     @overload
     async def aact(
@@ -743,7 +817,7 @@ class MelleaSession:
         requirements: list[Requirement] | None = None,
         strategy: None = None,
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: Literal[False] = False,
@@ -765,7 +839,7 @@ class MelleaSession:
 
     async def aact(
         self,
-        action: Component[S],
+        action: Component[Any],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -774,7 +848,7 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
-    ) -> ModelOutputThunk[S] | SamplingResult:
+    ) -> ModelOutputThunk[Any] | SamplingResult[Any]:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -826,7 +900,27 @@ class MelleaSession:
         output_prefix: str | CBlock | None = None,
         strategy: None = None,
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk[BaseModelSubclass]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: Literal[True],
@@ -846,7 +940,27 @@ class MelleaSession:
         output_prefix: str | CBlock | None = None,
         strategy: SamplingStrategy,
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
+    ) -> ComputedModelOutputThunk[BaseModelSubclass]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy,
+        return_sampling_results: Literal[False] = False,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
@@ -866,7 +980,27 @@ class MelleaSession:
         output_prefix: str | CBlock | None = None,
         strategy: None = None,
         return_sampling_results: Literal[False] = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: type[BaseModelSubclass],
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
+    ) -> ModelOutputThunk[BaseModelSubclass]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: Literal[False] = False,
@@ -909,7 +1043,7 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
-    ) -> ModelOutputThunk[str] | SamplingResult[str]:
+    ) -> ModelOutputThunk[Any] | SamplingResult[Any]:
         """Generates from an instruction.
 
         Args:

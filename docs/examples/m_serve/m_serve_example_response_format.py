@@ -50,7 +50,7 @@ def serve(
         description=message,
         requirements=requirements,  # type: ignore
         model_options=model_options,
-        format=format,  # This enables structured output validation
+        format=format,  # type: ignore[arg-type]  # dynamic format from caller
     )
 
     return result

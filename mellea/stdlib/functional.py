@@ -47,6 +47,21 @@ from .sampling import RejectionSamplingStrategy
 
 @overload
 def act(
+    action: Component[Any],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+) -> tuple[ComputedModelOutputThunk[BaseModelSubclass], Context]: ...
+
+
+@overload
+def act(
     action: Component[S],
     context: Context,
     backend: Backend,
@@ -54,7 +69,7 @@ def act(
     requirements: list[Requirement] | None = None,
     strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
 ) -> tuple[ComputedModelOutputThunk[S], Context]: ...
@@ -86,7 +101,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ComputedModelOutputThunk[S], Context] | SamplingResult[S]:
+) -> tuple[ComputedModelOutputThunk[Any], Context] | SamplingResult[Any]:
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -146,7 +161,28 @@ def instruct(
     output_prefix: str | CBlock | None = None,
     strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+) -> tuple[ComputedModelOutputThunk[BaseModelSubclass], Context]: ...
+
+
+@overload
+def instruct(
+    description: str,
+    context: Context,
+    backend: Backend,
+    *,
+    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | CBlock | Component] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    return_sampling_results: Literal[False] = False,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
 ) -> tuple[ComputedModelOutputThunk[str], Context]: ...
@@ -190,7 +226,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ComputedModelOutputThunk[str], Context] | SamplingResult[str]:
+) -> tuple[ComputedModelOutputThunk[Any], Context] | SamplingResult[Any]:
     """Generates from an instruction.
 
     Args:
@@ -476,6 +512,23 @@ def transform(
 
 @overload
 async def aact(
+    action: Component[Any],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[BaseModelSubclass], Context]: ...
+
+
+@overload
+async def aact(
     action: Component[S],
     context: Context,
     backend: Backend,
@@ -483,12 +536,29 @@ async def aact(
     requirements: list[Requirement] | None = None,
     strategy: None = None,
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
     await_result: Literal[True],
 ) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[Any],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[BaseModelSubclass], Context]: ...
 
 
 @overload
@@ -500,12 +570,29 @@ async def aact(
     requirements: list[Requirement] | None = None,
     strategy: SamplingStrategy,
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
     await_result: bool = False,
 ) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[Any],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk[BaseModelSubclass], Context]: ...
 
 
 @overload
@@ -517,7 +604,7 @@ async def aact(
     requirements: list[Requirement] | None = None,
     strategy: None = None,
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
@@ -555,7 +642,7 @@ async def aact(
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
     await_result: bool = False,
-) -> tuple[ModelOutputThunk[S], Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[Any], Context] | SamplingResult[Any]:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -777,7 +864,29 @@ async def ainstruct(
     output_prefix: str | CBlock | None = None,
     strategy: None = None,
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[BaseModelSubclass], Context]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: Context,
+    backend: Backend,
+    *,
+    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | CBlock | Component] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     await_result: Literal[True],
@@ -799,7 +908,29 @@ async def ainstruct(
     output_prefix: str | CBlock | None = None,
     strategy: SamplingStrategy,
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[BaseModelSubclass], Context]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: Context,
+    backend: Backend,
+    *,
+    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | CBlock | Component] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: SamplingStrategy,
+    return_sampling_results: Literal[False] = False,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     await_result: bool = False,
@@ -821,7 +952,29 @@ async def ainstruct(
     output_prefix: str | CBlock | None = None,
     strategy: None = None,
     return_sampling_results: Literal[False] = False,
-    format: type[BaseModelSubclass] | None = None,
+    format: type[BaseModelSubclass],
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    await_result: Literal[False] = False,
+) -> tuple[ModelOutputThunk[BaseModelSubclass], Context]: ...
+
+
+@overload
+async def ainstruct(
+    description: str,
+    context: Context,
+    backend: Backend,
+    *,
+    images: list[ImageBlock] | list[PILImage.Image] | None = None,
+    requirements: list[Requirement | str] | None = None,
+    icl_examples: list[str | CBlock] | None = None,
+    grounding_context: dict[str, str | CBlock | Component] | None = None,
+    user_variables: dict[str, str] | None = None,
+    prefix: str | CBlock | None = None,
+    output_prefix: str | CBlock | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     await_result: Literal[False] = False,
@@ -868,7 +1021,7 @@ async def ainstruct(
     model_options: dict | None = None,
     tool_calls: bool = False,
     await_result: bool = False,
-) -> tuple[ModelOutputThunk[str], Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[Any], Context] | SamplingResult[Any]:
     """Generates from an instruction.
 
     Args:
