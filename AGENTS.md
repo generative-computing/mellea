@@ -128,11 +128,12 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
-6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), run the docstring quality gate before pushing:
+6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), **or adds a class/function to `__all__`**, run the docstring quality gate before pushing:
    ```bash
+   uv run python tooling/docs-autogen/build.py  # generate docs/docs/api first
    uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100
    ```
-   Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
+   Every new `raise` in a public function requires a matching `Raises:` entry, and every `Returns:` type annotation must match the function's actual return type. Adding a class to `__all__` promotes its method docstrings into quality-gate scope — the gate will start enforcing them. The `build-and-validate` CI job enforces both with `--fail-on-quality`.
 
 ## 11. Writing Tests
 
