@@ -3342,6 +3342,11 @@ server = [
     { name = "typer" },
     { name = "uvicorn" },
 ]
+simbauq = [
+    { name = "numpy" },
+    { name = "scikit-learn" },
+    { name = "sentence-transformers" },
+]
 switch = [
     { name = "huggingface-hub", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "huggingface-hub", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or python_full_version >= '3.14'" },
@@ -3457,6 +3462,7 @@ requires-dist = [
     { name = "mellea", extras = ["watsonx", "hf", "litellm"], marker = "extra == 'backends'", editable = "." },
     { name = "mistletoe", specifier = ">=1.4.0" },
     { name = "nltk", specifier = ">=3.9" },
+    { name = "numpy", marker = "extra == 'simbauq'" },
     { name = "ollama", specifier = ">=0.5.1" },
     { name = "omegaconf", marker = "extra == 'docling'", specifier = ">=2.1" },
     { name = "openai" },
@@ -3474,14 +3480,16 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rouge-score" },
+    { name = "scikit-learn", marker = "extra == 'simbauq'" },
     { name = "sentence-transformers", marker = "extra == 'granite-retriever'" },
+    { name = "sentence-transformers", marker = "extra == 'simbauq'" },
     { name = "smolagents", marker = "extra == 'tools'", specifier = ">=1.0.0" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">5.5.0,<6.0.0" },
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
     { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'server'" },
 ]
-provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "backends", "hooks", "all"]
+provides-extras = ["hf", "litellm", "watsonx", "tools", "telemetry", "docling", "granite-retriever", "cli", "server", "sandbox", "switch", "backends", "hooks", "simbauq", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pdm", specifier = ">=2.24.0" }]
