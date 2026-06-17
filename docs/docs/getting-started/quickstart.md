@@ -66,8 +66,8 @@ with mellea.start_session("ollama", mellea.model_ids.IBM_GRANITE_4_1_3B) as m:
     print(str(email))
 ```
 
-The `with` block closes the session cleanly on exit, flushing telemetry and
-deregistering any scoped plugins.
+The `with` block closes the session cleanly on exit, ending any open telemetry
+spans and deregistering any scoped plugins.
 
 ## User variables
 
