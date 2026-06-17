@@ -445,6 +445,9 @@ class OllamaModelBackend(FormatterBackend):
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+        # Extract top-level Ollama params that must not be forwarded into `options`.
+        logprobs = model_opts.pop("logprobs", None)
+        top_logprobs = model_opts.pop("top_logprobs", None)
 
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[
@@ -457,6 +460,8 @@ class OllamaModelBackend(FormatterBackend):
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
             format=_format.model_json_schema() if _format is not None else None,  # type: ignore
+            logprobs=logprobs,
+            top_logprobs=top_logprobs,
         )  # type: ignore
 
         output = ModelOutputThunk(None)

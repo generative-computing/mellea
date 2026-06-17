@@ -17,6 +17,7 @@ except ImportError as e:
         'Please install them with: pip install "mellea[litellm]"'
     ) from e
 
+
 from ..backends import model_ids
 from ..core import (
     BaseModelSubclass,
@@ -86,6 +87,7 @@ class LiteLLMBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
+        num_retries: int = 0,
     ):
         """Initialize a LiteLLM-compatible backend for the given model ID and endpoint."""
         super().__init__(
@@ -109,6 +111,8 @@ class LiteLLMBackend(FormatterBackend):
         self._base_url = (
             base_url if base_url is not None else "http://localhost:11434/v1"
         )
+
+        self._num_retries = num_retries
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -263,9 +267,17 @@ class LiteLLMBackend(FormatterBackend):
         standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         unknown_keys = []  # Keys that are unknown to litellm.
         unsupported_openai_params = []  # OpenAI params that are known to litellm but not supported for this model/provider.
+        # Bedrock-specific pass-through params that LiteLLM accepts but doesn't list as supported OpenAI params.
+        known_provider_passthrough = {
+            "additional_model_request_fields",
+            "additional_model_response_field_paths",
+        }
+
         for key in backend_specific.keys():
             if key not in supported_params:
-                if key in standard_openai_subset:
+                if key in known_provider_passthrough:
+                    pass  # Expected provider-specific params; no warning needed.
+                elif key in standard_openai_subset:
                     # LiteLLM is pretty confident that this standard OpenAI parameter won't work.
                     unsupported_openai_params.append(key)
                 else:
@@ -290,8 +302,9 @@ class LiteLLMBackend(FormatterBackend):
         action: Component[C] | CBlock,
         ctx: Context,
         *,
-        _format: type[BaseModelSubclass]
-        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        _format: (
+            type[BaseModelSubclass] | None
+        ) = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[C]:
@@ -414,6 +427,7 @@ class LiteLLMBackend(FormatterBackend):
             tools=formatted_tools,
             api_base=resolved_api_base,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
+            num_retries=self._num_retries,
             **extra_params,
             **reasoning_params,  # type: ignore
             **model_specific_options,
@@ -504,6 +518,16 @@ class LiteLLMBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
+            if getattr(choice, "logprobs", None) is not None:
+                mot._meta["logprobs"] = choice.logprobs
+
+            # In some cases (converse API) Bedrock returns logprobs via additionalModelResponseFields.
+            additional_fields = getattr(chunk, "model_extra", {}) or {}
+            if "additionalModelResponseFields" in additional_fields:
+                mot._meta["additionalModelResponseFields"] = additional_fields[
+                    "additionalModelResponseFields"
+                ]
+
             # Store the full response (includes usage) as a dict.
             mot.raw.response = chunk.model_dump()
 
@@ -520,6 +544,12 @@ class LiteLLMBackend(FormatterBackend):
             content_chunk = message_delta.content
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
+
+            stream_logprobs = getattr(chunk.choices[0], "logprobs", None)
+            if stream_logprobs is not None:
+                if "logprobs" not in mot._meta:
+                    mot._meta["logprobs"] = []
+                mot._meta["logprobs"].append(stream_logprobs)
 
             if mot.raw.streamed_chunks is None:
                 mot.raw.streamed_chunks = []
@@ -603,6 +633,7 @@ class LiteLLMBackend(FormatterBackend):
         }
         generate_log.action = mot._action
         generate_log.result = mot
+
         mot._generate_log = generate_log
 
         # Non-streaming carries usage on the response; streaming already set it.
@@ -697,6 +728,7 @@ class LiteLLMBackend(FormatterBackend):
         completion_response = await litellm.atext_completion(
             model=self._model_id,
             prompt=prompts,
+            num_retries=self._num_retries,
             api_base=user_api_base_raw
             or (self._base_url if self._explicit_base_url else None),
             **model_specific_options,
