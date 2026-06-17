@@ -260,7 +260,9 @@ class ModelFriendlyFeedbackFormatter:
             # Extract the expected path from the reason string so the repair
             # instruction names the actual target path, not a hardcoded placeholder.
             path_match = re.search(r"with path '([^']+)'", reason)
-            expected_path = path_match.group(1) if path_match else "your/output/path.png"
+            expected_path = (
+                path_match.group(1) if path_match else "your/output/path.png"
+            )
             return (
                 f"Your code didn't save the plot to the expected file. "
                 f"Try: Add plt.savefig('{expected_path}') before plt.show() or plt.close()."
