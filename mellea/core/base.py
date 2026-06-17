@@ -785,6 +785,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
+        copied._format = self._format
         copied._model_options = self._model_options
         copied.generation = copy(self.generation)
         return copied
@@ -819,6 +820,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             self._context
         )  # The items in a context should be immutable.
         deepcopied._generate_log = copy(self._generate_log)
+        deepcopied._format = self._format
         deepcopied._model_options = copy(self._model_options)
         deepcopied.generation = deepcopy(self.generation)
         return deepcopied
@@ -904,6 +906,10 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         Returns:
             A ``pydantic.BaseModel`` instance produced by ``model_validate_json``,
             or ``None`` if no format type was set.
+
+        Raises:
+            pydantic.ValidationError: If the raw JSON value does not conform to
+                the format model (e.g. the model returned malformed structured output).
         """
         if self._format is None:
             return None
