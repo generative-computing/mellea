@@ -147,7 +147,7 @@ Pass a Pydantic `BaseModel` as the `format` parameter for constrained decoding:
 
 ```python
 # Requires: mellea, pydantic
-# Returns: Planet
+# Returns: ModelOutputThunk
 from pydantic import BaseModel
 from mellea import start_session
 from mellea.stdlib.components import Instruction

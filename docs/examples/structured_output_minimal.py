@@ -15,7 +15,10 @@ class Classification(BaseModel):
 
 with start_session("ollama") as m:
     result = m.act(
-        Instruction("Classify the sentiment of: 'ship it!'"), format=Classification
+        Instruction(
+            description="Classify the sentiment of 'ship it!' and provide a confidence score."
+        ),
+        format=Classification,
     )
     # result.value is a JSON string, not a Classification instance
     parsed = Classification.model_validate_json(str(result))
