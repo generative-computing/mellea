@@ -59,14 +59,16 @@ To pin a specific backend and model — useful when you need reproducible
 behaviour across environments — use the explicit form:
 
 ```python
-from mellea import start_session
+import mellea
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 
-# Explicit form — same as default, but pinned for reproducibility:
-with start_session("ollama", IBM_GRANITE_4_1_3B) as m:
+with mellea.start_session("ollama", IBM_GRANITE_4_1_3B) as m:
     email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
     print(str(email))
 ```
+
+The `with` block closes the session automatically — use this form in long-running
+scripts to avoid resource leaks.
 
 ## User variables
 
