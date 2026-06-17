@@ -50,6 +50,11 @@ Best Regards,
 
 > **Note:** LLM output is non-deterministic. Your exact results will vary by model and temperature, but you should see a well-formed email in a similar format.
 
+Three lines: create a session, instruct, print. The `instruct()` call returns a
+[`ModelOutputThunk`](../reference/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
+
+> **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
+
 To pin a specific backend and model — useful when you need reproducible
 behaviour across environments — use the explicit form:
 
@@ -62,11 +67,6 @@ with start_session("ollama", IBM_GRANITE_4_1_3B) as m:
     email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
     print(str(email))
 ```
-
-Three lines: create a session, instruct, print. The `instruct()` call returns a
-[`ModelOutputThunk`](../reference/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
-
-> **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
 
 ## User variables
 
