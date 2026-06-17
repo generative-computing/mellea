@@ -566,26 +566,16 @@ class OllamaModelBackend(FormatterBackend):
                 n_in = response.prompt_eval_count
                 n_out = response.eval_count
                 if n_in is not None and n_out is not None:
-                    total = n_in + n_out
                     agg_prompt += n_in
                     agg_completion += n_out
                     per_mot_usage = {
                         "prompt_tokens": n_in,
                         "completion_tokens": n_out,
-                        "total_tokens": total,
+                        "total_tokens": n_in + n_out,
                     }
-                else:
-                    total = None
                 result = ModelOutputThunk(
                     value=response.response,
-                    meta={
-                        "generate_response": response.model_dump(),
-                        "usage": {
-                            "completion_tokens": n_out,
-                            "prompt_tokens": n_in,
-                            "total_tokens": total,
-                        },
-                    },
+                    meta={"generate_response": response.model_dump()},
                 )
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id

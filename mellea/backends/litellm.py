@@ -723,10 +723,7 @@ class LiteLLMBackend(FormatterBackend):
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {
-                "litellm_chat_response": res.model_dump(),
-                "usage": usage_dump,
-            }
+            output._meta = {"litellm_chat_response": res.model_dump()}
             output.generation.model = self._model_id
             output.generation.provider = self._provider
 
