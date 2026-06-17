@@ -1484,16 +1484,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "completion_tokens": n_completion_tokens,
                 "total_tokens": n_prompt_tokens + n_completion_tokens,
             }
-            result = ModelOutputThunk(
-                value=decoded_result,
-                meta={
-                    "usage": {
-                        "prompt_tokens": n_prompt_tokens,
-                        "completion_tokens": n_completion_tokens,
-                        "total_tokens": n_prompt_tokens + n_completion_tokens,
-                    }
-                },
-            )
+            result = ModelOutputThunk(value=decoded_result)
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
             result.generation.provider = self._provider

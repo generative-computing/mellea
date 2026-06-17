@@ -683,14 +683,7 @@ class WatsonxAIBackend(FormatterBackend):
                 per_mot_usage = None
             result = ModelOutputThunk(
                 value=output["generated_text"],
-                meta={
-                    "oai_completion_response": response["results"][0],
-                    "usage": {
-                        "prompt_tokens": n_in or 0,
-                        "completion_tokens": n_out or 0,
-                        "total_tokens": (n_in or 0) + (n_out or 0),
-                    },
-                },
+                meta={"oai_completion_response": response["results"][0]},
             )
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
