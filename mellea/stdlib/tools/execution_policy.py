@@ -17,6 +17,7 @@ only.
 `COMPATIBILITY_MATRIX` records which capabilities each tier supports.
 """
 
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Literal
@@ -50,19 +51,36 @@ class CapabilityPolicy:
     decide whether to prompt the user ("allow once / allow always") or display
     a warning.
 
+    .. warning::
+        **Most fields are declarative only and are not enforced at runtime.**
+        Setting `network_access=False`, `package_installation=False`,
+        `subprocess_execution=False`, or `env_var_access=False` does *not*
+        block those capabilities in the current implementation — the declared
+        value is informational only.  Check the `ENFORCED_*` class attributes
+        to see what is actively enforced.  For stronger isolation use a
+        `"docker"` execution tier.
+
+        `filesystem_read_roots` and `filesystem_write_roots` emit a
+        :class:`UserWarning` at construction time when set to a non-`None`
+        value, because those restrictions are also unenforced.
+
     Args:
         filesystem_read_roots (list[Path] | None): Host paths the environment may
-            read.  `None` means unrestricted.  Declared only — not enforced.
+            read.  `None` means unrestricted.  **Declared only — not enforced.**
+            A :class:`UserWarning` is emitted when this is set to a non-`None`
+            value.
         filesystem_write_roots (list[Path] | None): Host paths the environment may
-            write.  `None` means unrestricted.  Declared only — not enforced.
+            write.  `None` means unrestricted.  **Declared only — not enforced.**
+            A :class:`UserWarning` is emitted when this is set to a non-`None`
+            value.
         network_access (bool): Whether outbound network connections are allowed.
-            Defaults to `False`.  Declared only — not enforced.
+            Defaults to `False`.  **Declared only — not enforced.**
         package_installation (bool): Whether the environment may install packages.
-            Declared only — not enforced.
+            **Declared only — not enforced.**
         subprocess_execution (bool): Whether spawning child processes is allowed.
-            Declared only — not enforced.
+            **Declared only — not enforced.**
         env_var_access (bool): Whether environment variables are readable.
-            Declared only — not enforced.
+            **Declared only — not enforced.**
         timeout (int): Wall-clock seconds before execution is killed.  Enforced.
         stdout_max_bytes (int | None): Truncate stdout to this byte count; `None`
             disables truncation.  Enforced.
@@ -104,6 +122,44 @@ class CapabilityPolicy:
     ENFORCED_stderr_max_bytes: ClassVar[bool] = True
     ENFORCED_artifact_export_paths: ClassVar[bool] = True
     ENFORCED_packages: ClassVar[bool] = True
+
+    def __post_init__(self) -> None:
+        """Warn when unenforced path-restriction fields are explicitly set.
+
+        `filesystem_read_roots` and `filesystem_write_roots` are the only
+        unenforced fields whose default value (`None`) means *unrestricted*,
+        so a non-`None` value unambiguously signals an intent to restrict
+        access that the runtime cannot enforce.  Emit a `UserWarning` in that
+        case so the false-confidence scenario is caught at construction time.
+
+        Boolean unenforced fields (`network_access`, `package_installation`,
+        `subprocess_execution`, `env_var_access`) default to their most
+        restrictive value, so they cannot be distinguished from an explicit
+        restriction — callers relying on those are covered by the docstring
+        `.. warning::` blocks rather than a runtime warning.
+        """
+        triggered: list[str] = []
+        if self.filesystem_read_roots is not None:
+            triggered.append(
+                "  'filesystem_read_roots': declared but not enforced at runtime"
+            )
+        if self.filesystem_write_roots is not None:
+            triggered.append(
+                "  'filesystem_write_roots': declared but not enforced at runtime"
+            )
+        if triggered:
+            field_list = "\n".join(triggered)
+            warnings.warn(
+                "CapabilityPolicy was constructed with path-restriction fields that are "
+                "declared but not enforced at runtime — the declared paths will not "
+                "restrict actual filesystem access:\n"
+                f"{field_list}\n"
+                "These fields are informational only. "
+                "Check CapabilityPolicy.ENFORCED_* class attributes to see what is "
+                "actively enforced. Use a 'docker' tier for stronger isolation.",
+                UserWarning,
+                stacklevel=3,
+            )
 
     def unenforced_capabilities(self) -> list[str]:
         """Return capability names that are declared but not enforced at runtime.

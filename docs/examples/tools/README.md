@@ -61,12 +61,12 @@ print(result)  # Output: 2
 ```python
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.stdlib.tools import local_code_interpreter
+from mellea.stdlib.tools import code_interpreter
 
 m = start_session()
 result = m.instruct(
     "Make a plot of y=x^2",
-    model_options={ModelOption.TOOLS: [local_code_interpreter]}
+    model_options={ModelOption.TOOLS: [code_interpreter]}
 )
 ```
 
@@ -76,17 +76,17 @@ from mellea.stdlib.requirements import uses_tool
 
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
-    requirements=[uses_tool(local_code_interpreter)],
-    model_options={ModelOption.TOOLS: [local_code_interpreter]},
+    requirements=[uses_tool(code_interpreter)],
+    model_options={ModelOption.TOOLS: [code_interpreter]},
     tool_calls=True
 )
 
 # Access the tool call
-code = result.tool_calls["local_code_interpreter"].args["code"]
+code = result.tool_calls["code_interpreter"].args["code"]
 print(f"Generated code:\n{code}")
 
 # Execute the tool
-exec_result = result.tool_calls["local_code_interpreter"].call_func()
+exec_result = result.tool_calls["code_interpreter"].call_func()
 ```
 
 ### Validating Tool Arguments
@@ -96,15 +96,15 @@ from mellea.stdlib.requirements import tool_arg_validator
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
     requirements=[
-        uses_tool(local_code_interpreter),
+        uses_tool(code_interpreter),
         tool_arg_validator(
             "The plot should be written to /tmp/output.png",
-            tool_name=local_code_interpreter,
+            tool_name=code_interpreter,
             arg_name="code",
             validation_fn=lambda code: "/tmp/output.png" in code
         )
     ],
-    model_options={ModelOption.TOOLS: [local_code_interpreter]},
+    model_options={ModelOption.TOOLS: [code_interpreter]},
     tool_calls=True
 )
 ```

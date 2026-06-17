@@ -1,22 +1,26 @@
 # pytest: e2e, slow
 """Examples for python_tool() — arithmetic, CSV summary, and matplotlib plot.
 
-Each example uses the ``local_unsafe`` tier so no Docker daemon is required.
+Each example uses `tier="local_unsafe"` — an explicit trust decision meaning
+the model-generated code will run as a direct subprocess with no container
+isolation, no filesystem or network restrictions, and no memory/CPU limits.
+This tier is appropriate for trusted, development-time use.  For production or
+untrusted code, use `tier="docker"` or `tier="docker_unsafe"`.
 
 Package-install story
 ---------------------
-Pass ``packages=["pkg1", "pkg2"]`` to ``python_tool()`` for on-demand installs.
-The tool runs ``uv pip install`` when uv is on PATH (the default in uv-managed
-projects), falling back to ``python -m pip`` otherwise.  Installs happen once
-per tool lifetime (the shared install cache is keyed to the ``python_tool``
-instance), so repeated ``tool.run()`` calls only pay the pip cost once.
+Pass `packages=["pkg1", "pkg2"]` to `python_tool()` for on-demand installs.
+The tool runs `uv pip install` when uv is on PATH (the default in uv-managed
+projects), falling back to `python -m pip` otherwise.  Installs happen once
+per tool lifetime (the shared install cache is keyed to the `python_tool`
+instance), so repeated `tool.run()` calls only pay the pip cost once.
 
 Artifact directory
 ------------------
-Pass ``artifact_dir=<Path>`` to collect files the code writes.  Only files
-produced by a **successful** execution are surfaced.  When ``artifact_dir`` is
+Pass `artifact_dir=<Path>` to collect files the code writes.  Only files
+produced by a **successful** execution are surfaced.  When `artifact_dir` is
 omitted, a per-call tempdir is created; it is kept alive as long as the
-returned ``ExecutionResult`` holds artifacts, and cleaned up otherwise.
+returned `ExecutionResult` holds artifacts, and cleaned up otherwise.
 """
 
 import tempfile
@@ -27,7 +31,7 @@ from mellea.stdlib.tools import python_tool
 
 def example_arithmetic():
     """Run a simple arithmetic expression and print the result."""
-    tool = python_tool()
+    tool = python_tool(tier="local_unsafe")
     result = tool.run(code="print(2 ** 10)")
     print("stdout:", result.stdout)
     assert result.success
@@ -43,7 +47,9 @@ def example_csv_summary():
     """
     with tempfile.TemporaryDirectory() as tmp:
         artifact_dir = Path(tmp)
-        tool = python_tool(packages=["pandas"], artifact_dir=artifact_dir)
+        tool = python_tool(
+            tier="local_unsafe", packages=["pandas"], artifact_dir=artifact_dir
+        )
 
         # Use a relative filename — the tool sets CWD to artifact_dir so
         # 'summary.csv' lands directly inside it.
@@ -76,7 +82,11 @@ def example_matplotlib_plot():
     """
     with tempfile.TemporaryDirectory() as tmp:
         artifact_dir = Path(tmp)
-        tool = python_tool(packages=["matplotlib", "numpy"], artifact_dir=artifact_dir)
+        tool = python_tool(
+            tier="local_unsafe",
+            packages=["matplotlib", "numpy"],
+            artifact_dir=artifact_dir,
+        )
 
         # Relative filename — CWD is artifact_dir.
         code = """
