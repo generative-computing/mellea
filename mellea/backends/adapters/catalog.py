@@ -135,7 +135,7 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
 
     @property
     def effective_capability(self) -> str:
-        """Return the stable capability token for this intrinsic.
+        """Return the stable capability token for this adapter function.
 
         Returns ``capability`` when explicitly set; falls back to ``name``
         otherwise. Use this property — not ``name`` — whenever building the

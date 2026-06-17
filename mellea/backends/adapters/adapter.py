@@ -1,7 +1,7 @@
 """Adapter classes for adding fine-tuned modules to inference backends.
 
 Defines the abstract ``Adapter`` base class and its concrete subclasses
-``LocalHFAdapter`` (for locally loaded HuggingFace models) and ``IntrinsicAdapter``
+``LocalHFAdapter`` (for locally loaded Hugging Face models) and ``IntrinsicAdapter``
 (for adapters whose metadata is stored in Mellea's adapter function catalog). Also
 provides ``get_adapter_for_intrinsic`` for resolving the right adapter class given an
 adapter function name, and ``AdapterMixin`` for backends that support runtime adapter
@@ -56,7 +56,7 @@ class Adapter(abc.ABC):
 
 
 class LocalHFAdapter(Adapter):
-    """Abstract adapter subclass for locally loaded HuggingFace model backends.
+    """Abstract adapter subclass for locally loaded Hugging Face model backends.
 
     Subclasses must implement ``get_local_hf_path`` to return the filesystem path
     from which adapter weights should be loaded given a base model name.
@@ -68,7 +68,7 @@ class LocalHFAdapter(Adapter):
 
         Args:
             base_model_name (str): The base model name; typically the last component
-                of the HuggingFace model ID (e.g. ``"granite-4.0-micro"``).
+                of the Hugging Face model ID (e.g. ``"granite-4.0-micro"``).
 
         Returns:
             str: Filesystem path to the adapter weights directory.
@@ -180,7 +180,7 @@ class IntrinsicAdapter(LocalHFAdapter):
 
         Args:
             base_model_name (str): The base model name; typically the last component
-                of the HuggingFace model ID (e.g. ``"granite-3.3-8b-instruct"``).
+                of the Hugging Face model ID (e.g. ``"granite-3.3-8b-instruct"``).
 
         Returns:
             str: Filesystem path to the downloaded adapter weights directory.
@@ -421,13 +421,13 @@ class EmbeddedIntrinsicAdapter(Adapter):
         cache_dir: str | None = None,
         intrinsic_name: str | None = None,
     ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load embedded adapters from a Granite Switch model on HuggingFace Hub.
+        """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
 
         Downloads ``adapter_index.json`` and the ``io_configs/`` directory, then
         delegates to :meth:`from_model_directory`.
 
         Args:
-            repo_id (str): HuggingFace Hub repository ID
+            repo_id (str): Hugging Face Hub repository ID
                 (e.g. ``"ibm-granite/granite-switch-micro"``).
             revision (str): Git revision to download from.
             cache_dir (str | None): Local cache directory; ``None`` for the default.
@@ -449,7 +449,7 @@ class EmbeddedIntrinsicAdapter(Adapter):
         except ImportError as e:
             raise ImportError(
                 "huggingface_hub is required to download embedded adapter configs from "
-                'HuggingFace Hub. Please install it with: pip install "mellea[switch]"'
+                'Hugging Face Hub. Please install it with: pip install "mellea[switch]"'
             ) from e
 
         local_root = huggingface_hub.snapshot_download(
@@ -476,13 +476,13 @@ class EmbeddedIntrinsicAdapter(Adapter):
         cache_dir: str | None = None,
         intrinsic_name: str | None = None,
     ) -> list["EmbeddedIntrinsicAdapter"]:
-        """Load embedded adapters from a local directory or HuggingFace Hub.
+        """Load embedded adapters from a local directory or Hugging Face Hub.
 
         Automatically detects whether ``source`` is a local filesystem path
-        or a HuggingFace Hub repo ID, and delegates accordingly.
+        or a Hugging Face Hub repo ID, and delegates accordingly.
 
         Args:
-            source (str): Local path to a model directory, or a HuggingFace
+            source (str): Local path to a model directory, or a Hugging Face
                 Hub repo ID (e.g. ``"ibm-granite/granite-switch-micro"``).
             revision (str): Git revision (only used for Hub downloads).
             cache_dir (str | None): Cache directory (only used for Hub downloads).
@@ -517,7 +517,7 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
     temporary hack.
 
     Args:
-        model_id (str): The HuggingFace model ID used for downloading model weights;
+        model_id (str): The Hugging Face model ID used for downloading model weights;
             expected format is ``"<user-id>/<repo-name>"``.
         intrinsic_name (str | None): Catalog name for the adapter function; defaults to the
             repository name portion of ``model_id`` if not provided.

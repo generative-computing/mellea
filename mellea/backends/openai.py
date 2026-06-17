@@ -82,8 +82,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         load_embedded_adapters (bool): If `True`, automatically registers
             embedded intrinsic adapters from *adapter_source* (or *model_id* if
             *adapter_source* is not set). Looks first for a local directory
-            and then for a HuggingFace hub repo.
-        adapter_source (str | None): Local directory path or HuggingFace hub
+            and then for a Hugging Face hub repo.
+        adapter_source (str | None): Local directory path or Hugging Face hub
             repo ID from which to load embedded adapter configs. When `None`,
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
@@ -288,8 +288,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Register all embedded adapters from an Embedded Adapter model.
 
         Args:
-            source (str): A local model directory path or HuggingFace Hub repo ID.
-            revision (str): Git revision when loading from HuggingFace Hub.
+            source (str): A local model directory path or Hugging Face Hub repo ID.
+            revision (str): Git revision when loading from Hugging Face Hub.
             cache_dir (str | None): Cache directory for HF downloads.
 
         Returns:
