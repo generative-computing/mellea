@@ -32,7 +32,6 @@ from ..helpers import _run_async_in_thread
 from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
 from ..plugins.manager import has_plugins, invoke_hook, is_internal_tool
 from ..plugins.types import HookType
-from ..telemetry import set_span_attribute, trace_application
 from .components import (
     Document,
     Instruction,
@@ -576,190 +575,158 @@ async def aact(
     """
     import time
     import traceback
+    import uuid
 
-    with trace_application(
-        "aact",
-        **{
-            "mellea.action_type": action.__class__.__name__,
-            "mellea.has_requirements": requirements is not None
-            and len(requirements) > 0,
-            "mellea.has_strategy": strategy is not None,
-            "mellea.strategy_type": strategy.__class__.__name__ if strategy else None,
-            "mellea.has_format": format is not None,
-            "mellea.tool_calls": tool_calls,
-        },
-    ) as span:
-        if not silence_context_type_warning and not isinstance(context, SimpleContext):
-            MelleaLogger.get_logger().warning(
-                "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
-                "\nSee the async section of the docs: https://docs.mellea.ai/how-to/use-async-and-streaming"
+    component_id = str(uuid.uuid4())
+
+    if not silence_context_type_warning and not isinstance(context, SimpleContext):
+        MelleaLogger.get_logger().warning(
+            "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
+            "\nSee the async section of the docs: https://docs.mellea.ai/how-to/use-async-and-streaming"
+        )
+
+    _component_type_name = type(action).__name__
+
+    # --- component_pre_execute hook ---
+    if has_plugins(HookType.COMPONENT_PRE_EXECUTE):
+        from ..plugins.hooks.component import ComponentPreExecutePayload
+
+        pre_exec_payload = ComponentPreExecutePayload(
+            component_id=component_id,
+            component_type=_component_type_name,
+            action=action,
+            context_view=context.view_for_generation(),
+            requirements=requirements or [],
+            model_options=model_options or {},
+            format=format,
+            strategy=strategy,
+            tool_calls_enabled=tool_calls,
+        )
+        _, pre_exec_payload = await invoke_hook(
+            HookType.COMPONENT_PRE_EXECUTE, pre_exec_payload, backend=backend
+        )
+        strategy = pre_exec_payload.strategy or strategy
+        requirements = pre_exec_payload.requirements or requirements
+        model_options = pre_exec_payload.model_options or model_options
+        format = pre_exec_payload.format
+        tool_calls = pre_exec_payload.tool_calls_enabled
+
+    t0 = time.monotonic()
+
+    try:
+        sampling_result: SamplingResult | None = None
+        generate_logs: list[GenerateLog] = []
+
+        if return_sampling_results:
+            assert strategy is not None, (
+                "Must provide a SamplingStrategy when return_sampling_results==True"
             )
 
-        _component_type_name = type(action).__name__
+        if strategy is None:
+            # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
+            if requirements is not None and len(requirements) > 0:
+                MelleaLogger.get_logger().warning(
+                    "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+                )
 
-        # --- component_pre_execute hook ---
-        if has_plugins(HookType.COMPONENT_PRE_EXECUTE):
-            from ..plugins.hooks.component import ComponentPreExecutePayload
+            result, new_ctx = await backend.generate_from_context(
+                action,
+                ctx=context,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+            # Only await and wrap if await_result is True
+            if await_result:
+                await result.avalue()
 
-            pre_exec_payload = ComponentPreExecutePayload(
+                # ._generate_log should never be None after generation.
+                assert result._generate_log is not None
+                result._generate_log.is_final_result = True
+                generate_logs.append(result._generate_log)
+
+                # Wrap in ComputedModelOutputThunk to indicate it's fully computed
+                computed_result = ComputedModelOutputThunk(result)
+                result = computed_result  # type: ignore
+
+        else:
+            # Always sample if a strategy is provided, even if no requirements were provided.
+            # Some sampling strategies don't use requirements or set them when instantiated.
+
+            sampling_result = await strategy.sample(
+                action,
+                context=context,
+                backend=backend,
+                requirements=requirements,
+                validation_ctx=None,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+
+            assert sampling_result.sample_generations is not None
+            for gen_result in sampling_result.sample_generations:
+                assert (
+                    gen_result._generate_log is not None
+                )  # Cannot be None after generation.
+                generate_logs.append(gen_result._generate_log)
+
+            new_ctx = sampling_result.result_ctx
+            result = sampling_result.result
+            assert sampling_result.result._generate_log is not None
+            assert sampling_result.result._generate_log.is_final_result, (
+                "generate logs from the final result returned by the sampling strategy must be marked as final"
+            )
+
+        # --- component_post_success hook ---
+        if has_plugins(HookType.COMPONENT_POST_SUCCESS):
+            from ..plugins.hooks.component import ComponentPostSuccessPayload
+
+            success_payload = ComponentPostSuccessPayload(
+                component_id=component_id,
                 component_type=_component_type_name,
                 action=action,
-                context_view=context.view_for_generation(),
-                requirements=requirements or [],
+                result=result,
+                context_before=context,
+                context_after=new_ctx,
+                generate_log=generate_logs[-1] if generate_logs else None,
+                sampling_results=sampling_result.sample_generations
+                if sampling_result
+                else None,
+                sampling_success=sampling_result.success if sampling_result else None,
+                latency_ms=int((time.monotonic() - t0) * 1000),
+            )
+            await invoke_hook(
+                HookType.COMPONENT_POST_SUCCESS, success_payload, backend=backend
+            )
+
+        if return_sampling_results:
+            assert (
+                sampling_result is not None
+            )  # Needed for the type checker but should never happen.
+            return sampling_result
+        else:
+            return result, new_ctx
+
+    except Exception as exc:
+        # --- component_post_error hook ---
+        if has_plugins(HookType.COMPONENT_POST_ERROR):
+            from ..plugins.hooks.component import ComponentPostErrorPayload
+
+            error_payload = ComponentPostErrorPayload(
+                component_id=component_id,
+                component_type=_component_type_name,
+                action=action,
+                error=exc,
+                error_type=type(exc).__name__,
+                stack_trace=traceback.format_exc(),
+                context=context,
                 model_options=model_options or {},
-                format=format,
-                strategy=strategy,
-                tool_calls_enabled=tool_calls,
             )
-            _, pre_exec_payload = await invoke_hook(
-                HookType.COMPONENT_PRE_EXECUTE, pre_exec_payload, backend=backend
+            await invoke_hook(
+                HookType.COMPONENT_POST_ERROR, error_payload, backend=backend
             )
-            strategy = pre_exec_payload.strategy or strategy
-            requirements = pre_exec_payload.requirements or requirements
-            model_options = pre_exec_payload.model_options or model_options
-            format = pre_exec_payload.format
-            tool_calls = pre_exec_payload.tool_calls_enabled
-
-        t0 = time.monotonic()
-
-        try:
-            sampling_result: SamplingResult | None = None
-            generate_logs: list[GenerateLog] = []
-
-            if return_sampling_results:
-                assert strategy is not None, (
-                    "Must provide a SamplingStrategy when return_sampling_results==True"
-                )
-
-            if strategy is None:
-                # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
-                if requirements is not None and len(requirements) > 0:
-                    MelleaLogger.get_logger().warning(
-                        "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
-                    )
-
-                result, new_ctx = await backend.generate_from_context(
-                    action,
-                    ctx=context,
-                    format=format,
-                    model_options=model_options,
-                    tool_calls=tool_calls,
-                )
-                # Only await and wrap if await_result is True
-                if await_result:
-                    await result.avalue()
-
-                    # ._generate_log should never be None after generation.
-                    assert result._generate_log is not None
-                    result._generate_log.is_final_result = True
-                    generate_logs.append(result._generate_log)
-
-                    # Wrap in ComputedModelOutputThunk to indicate it's fully computed
-                    computed_result = ComputedModelOutputThunk(result)
-                    result = computed_result  # type: ignore
-
-            else:
-                # Always sample if a strategy is provided, even if no requirements were provided.
-                # Some sampling strategies don't use requirements or set them when instantiated.
-
-                sampling_result = await strategy.sample(
-                    action,
-                    context=context,
-                    backend=backend,
-                    requirements=requirements,
-                    validation_ctx=None,
-                    format=format,
-                    model_options=model_options,
-                    tool_calls=tool_calls,
-                )
-
-                assert sampling_result.sample_generations is not None
-                for gen_result in sampling_result.sample_generations:
-                    assert (
-                        gen_result._generate_log is not None
-                    )  # Cannot be None after generation.
-                    generate_logs.append(gen_result._generate_log)
-
-                new_ctx = sampling_result.result_ctx
-                result = sampling_result.result
-                assert sampling_result.result._generate_log is not None
-                assert sampling_result.result._generate_log.is_final_result, (
-                    "generate logs from the final result returned by the sampling strategy must be marked as final"
-                )
-
-            # Add span attributes for the result
-            set_span_attribute(span, "mellea.num_generate_logs", len(generate_logs))
-            if sampling_result:
-                set_span_attribute(
-                    span, "mellea.sampling_success", bool(sampling_result.result)
-                )
-
-            # Log the model response (truncated for large responses)
-            try:
-                response_value = (
-                    str(result.value)
-                    if hasattr(result, "value") and result.value
-                    else str(result)
-                )
-                # Truncate to 500 chars to avoid overwhelming trace storage
-                if len(response_value) > 500:
-                    response_value = response_value[:500] + "..."
-                set_span_attribute(span, "mellea.response", response_value)
-                set_span_attribute(
-                    span,
-                    "mellea.response_length",
-                    len(str(result.value) if hasattr(result, "value") else str(result)),
-                )
-            except Exception:
-                # If we can't get the response, don't fail the trace
-                pass
-
-            # --- component_post_success hook ---
-            if has_plugins(HookType.COMPONENT_POST_SUCCESS):
-                from ..plugins.hooks.component import ComponentPostSuccessPayload
-
-                success_payload = ComponentPostSuccessPayload(
-                    component_type=_component_type_name,
-                    action=action,
-                    result=result,
-                    context_before=context,
-                    context_after=new_ctx,
-                    generate_log=generate_logs[-1] if generate_logs else None,
-                    sampling_results=sampling_result.sample_generations
-                    if sampling_result
-                    else None,
-                    latency_ms=int((time.monotonic() - t0) * 1000),
-                )
-                await invoke_hook(
-                    HookType.COMPONENT_POST_SUCCESS, success_payload, backend=backend
-                )
-
-            if return_sampling_results:
-                assert (
-                    sampling_result is not None
-                )  # Needed for the type checker but should never happen.
-                return sampling_result
-            else:
-                return result, new_ctx
-
-        except Exception as exc:
-            # --- component_post_error hook ---
-            if has_plugins(HookType.COMPONENT_POST_ERROR):
-                from ..plugins.hooks.component import ComponentPostErrorPayload
-
-                error_payload = ComponentPostErrorPayload(
-                    component_type=_component_type_name,
-                    action=action,
-                    error=exc,
-                    error_type=type(exc).__name__,
-                    stack_trace=traceback.format_exc(),
-                    context=context,
-                    model_options=model_options or {},
-                )
-                await invoke_hook(
-                    HookType.COMPONENT_POST_ERROR, error_payload, backend=backend
-                )
-            raise
+        raise
 
 
 @overload

@@ -11,6 +11,7 @@ class ComponentPreExecutePayload(MelleaBasePayload):
     """Payload for `component_pre_execute` — before component execution via `aact()`.
 
     Attributes:
+        component_id: UUID correlating pre/post hooks for a single component execution.
         component_type: Class name of the component being executed.
         action: The `Component` or `CBlock` about to be executed.
         context_view: Optional snapshot of the context as a list.
@@ -21,6 +22,7 @@ class ComponentPreExecutePayload(MelleaBasePayload):
         tool_calls_enabled: Whether tool calling is enabled for this execution (writable).
     """
 
+    component_id: str = ""
     component_type: str = ""
     action: Any = None
     context_view: list[Any] | None = None
@@ -35,6 +37,7 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
     """Payload for `component_post_success` — after successful component execution.
 
     Attributes:
+        component_id: UUID correlating pre/post hooks for a single component execution.
         component_type: Class name of the executed component.
         action: The `Component` or `CBlock` that was executed.
 
@@ -45,9 +48,11 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
 
         generate_log: The `GenerateLog` from the final generation pass.
         sampling_results: Optional list of `ModelOutputThunk` from all sampling attempts.
+        sampling_success: Whether the sampling strategy produced a passing result; `None` when no sampling strategy ran.
         latency_ms: Wall-clock time for the full execution in milliseconds.
     """
 
+    component_id: str = ""
     component_type: str = ""
     action: Any = None
     result: Any = None
@@ -55,6 +60,7 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
     context_after: Any = None
     generate_log: Any = None
     sampling_results: list[Any] | None = None
+    sampling_success: bool | None = None
     latency_ms: int = 0
 
 
@@ -62,6 +68,7 @@ class ComponentPostErrorPayload(MelleaBasePayload):
     """Payload for `component_post_error` — after component execution fails.
 
     Attributes:
+        component_id: UUID correlating pre/post hooks for a single component execution.
         component_type: Class name of the component that failed.
         action: The `Component` or `CBlock` that was being executed.
 
@@ -73,6 +80,7 @@ class ComponentPostErrorPayload(MelleaBasePayload):
         model_options: Dict of model options that were in effect.
     """
 
+    component_id: str = ""
     component_type: str = ""
     action: Any = None
     error: Any = None
