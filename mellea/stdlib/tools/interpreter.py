@@ -1062,6 +1062,13 @@ def python_tool(
         `result.artifacts` is always `[]`.  A `RuntimeWarning` is emitted if
         `artifact_dir` is passed with a docker tier.
 
+        **Local tiers are always unenforced.** ``CapabilityPolicy`` boolean
+        restrictions (``network_access``, ``subprocess_execution``, etc.)
+        are declarative-only on ``"local"`` and ``"local_unsafe"`` — this
+        applies to both explicitly passed policies *and* the default
+        ``LOCAL_POLICY`` used by ``tier="local"``.  Use a docker tier for
+        real process isolation.
+
     When the executed code imports `matplotlib`, `matplotlib.use('Agg')` is
     injected automatically as a preamble so plots are written to files rather
     than attempting interactive display.  Pass `suppress_agg=True` to disable
@@ -1114,7 +1121,7 @@ def python_tool(
 
         from mellea.stdlib.tools import python_tool
 
-        tool = python_tool(tier="local_unsafe", packages=["matplotlib", "numpy"])
+        tool = python_tool(tier="local_unsafe", packages=["matplotlib", "numpy"])  # explicit unsafe local execution
         result = tool.run(code="import numpy as np; print(np.sqrt(4))")
         print(result.stdout)   # "2.0"
         print(result.artifacts)  # files written during execution
