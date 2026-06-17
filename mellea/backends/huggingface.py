@@ -436,7 +436,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 # Check if a requirement-check (or AloraRequirement specified) adapter
                 # exists.
-                alora_req_adapter = self._find_adapter(adapter_name, {"alora"})
+                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
                 if alora_req_adapter is None:
                     # Log a warning if using an AloraRequirement but no adapter fit.
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
@@ -575,7 +575,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         docs = messages_to_docs(ctx_as_message_list)
 
-        allowed_types = {at.value for at in action.adapter_types}
+        allowed_types = tuple(at.value for at in action.adapter_types)
         adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(

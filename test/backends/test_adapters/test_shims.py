@@ -240,6 +240,26 @@ def test_resolve_adapter_returns_existing_by_capability():
     mock_backend.add_adapter.assert_not_called()
 
 
+def test_find_adapter_honours_type_preference_order():
+    """_find_adapter must return the highest-priority type, not the insertion-order winner."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        lora = EmbeddedIntrinsicAdapter("answerability", config={}, technology="lora")
+        alora = EmbeddedIntrinsicAdapter("answerability", config={}, technology="alora")
+
+    mock_backend = MagicMock(spec=AdapterMixin)
+    # Register lora first so insertion order would return it without preference logic.
+    mock_backend._added_adapters = {
+        lora.qualified_name: lora,
+        alora.qualified_name: alora,
+    }
+
+    result = AdapterMixin._find_adapter(
+        mock_backend, "answerability", ("alora", "lora")
+    )
+    assert result is alora, "alora must win over lora regardless of insertion order"
+
+
 def test_resolve_adapter_raises_without_base_model():
     """resolve_adapter must raise ValueError when the backend has no model ID."""
     mock_backend = MagicMock(spec=AdapterMixin)

@@ -438,33 +438,34 @@ class AdapterMixin(Backend, abc.ABC):
         yield
 
     def _find_adapter(
-        self, capability: str, adapter_types: set[str] | None = None
+        self, capability: str, adapter_types: tuple[str, ...] | None = None
     ) -> "_AdapterCore | None":
         """Return the first registered adapter matching capability and (optionally) type.
 
         Args:
             capability (str): Capability name (e.g. ``"answerability"``).
-            adapter_types (set[str] | None): Allowed adapter type strings
-                (e.g. ``{"alora"}``). ``None`` matches any type.
+            adapter_types (tuple[str, ...] | None): Adapter type strings in
+                preference order (e.g. ``("alora", "lora")``).  When provided,
+                aLoRA is returned before LoRA if both are registered for the same
+                capability.  ``None`` matches any type (insertion order wins).
 
         Returns:
             _AdapterCore | None: Matching adapter, or ``None`` if not found.
-
-        Note:
-            Returns the first dict hit in ``_added_adapters`` insertion order.
-            If both a ``lora`` and ``alora`` entry exist for the same capability,
-            pass ``adapter_types`` to constrain the result.  Phase 0's
-            ``get_adapter_for_intrinsic`` accepted an ordered list and preferred
-            the first matching type; that preference ordering is not preserved
-            here.  Phase 2 (issue #1138) will revisit if needed.
         """
-        for a in getattr(self, "_added_adapters", {}).values():
-            if (
-                isinstance(a, _AdapterCore)
-                and a.identity.capability == capability
-                and (adapter_types is None or a.identity.adapter_type in adapter_types)
-            ):
-                return a
+        adapters = getattr(self, "_added_adapters", {})
+        if adapter_types is None:
+            for a in adapters.values():
+                if isinstance(a, _AdapterCore) and a.identity.capability == capability:
+                    return a
+            return None
+        for preferred_type in adapter_types:
+            for a in adapters.values():
+                if (
+                    isinstance(a, _AdapterCore)
+                    and a.identity.capability == capability
+                    and a.identity.adapter_type == preferred_type
+                ):
+                    return a
         return None
 
 

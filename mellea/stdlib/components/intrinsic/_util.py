@@ -113,28 +113,31 @@ def call_intrinsic(
     # Ensure the adapter is registered; resolve_adapter creates it if absent.
     backend.resolve_adapter(intrinsic_name)
 
-    with backend.adapter_scope(None):  # Phase 1 stub — no-op; Phase 2 activates weights
-        intrinsic = Intrinsic(
-            intrinsic_name,
-            intrinsic_kwargs=kwargs,
-            adapter_types=(AdapterType.ALORA, AdapterType.LORA),
-        )
+    # Adapter activation is the backend's responsibility — the HF backend acquires
+    # its generation lock and sets the active adapter inside _generate_with_adapter_lock,
+    # immediately before generation.  Activating here (outside that lock) would race
+    # with concurrent async requests.
+    intrinsic = Intrinsic(
+        intrinsic_name,
+        intrinsic_kwargs=kwargs,
+        adapter_types=(AdapterType.ALORA, AdapterType.LORA),
+    )
 
-        default_opts: dict = {ModelOption.TEMPERATURE: 0.0}
-        if model_options is not None:
-            default_opts.update(model_options)
+    default_opts: dict = {ModelOption.TEMPERATURE: 0.0}
+    if model_options is not None:
+        default_opts.update(model_options)
 
-        model_output_thunk, _ = mfuncs.act(
-            intrinsic,
-            context,
-            backend,
-            model_options=default_opts,
-            tool_calls=True,
-            strategy=None,
-        )
+    model_output_thunk, _ = mfuncs.act(
+        intrinsic,
+        context,
+        backend,
+        model_options=default_opts,
+        tool_calls=True,
+        strategy=None,
+    )
 
-        assert model_output_thunk.is_computed()
-        result_str = model_output_thunk.value
-        if result_str is None:
-            raise ValueError("Model output is None.")
-        return json.loads(result_str)
+    assert model_output_thunk.is_computed()
+    result_str = model_output_thunk.value
+    if result_str is None:
+        raise ValueError("Model output is None.")
+    return json.loads(result_str)
