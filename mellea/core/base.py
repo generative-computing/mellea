@@ -901,7 +901,7 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         manually::
 
             result = m.act(Instruction("Say yes or no"), format=MyModel)
-            obj = result.parsed  # MyModel instance, no cast needed
+            obj = result.parsed  # no manual model_validate_json needed
 
         Returns:
             A ``pydantic.BaseModel`` instance produced by ``model_validate_json``,
