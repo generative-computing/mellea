@@ -119,7 +119,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
-            SamplingResult: A result object indicating the success or failure of the sampling process.
+            SamplingResult[S]: A result object indicating the success or failure of the sampling process.
 
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
