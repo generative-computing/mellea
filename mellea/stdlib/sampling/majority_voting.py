@@ -121,7 +121,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
-            SamplingResult: A result object indicating the success or failure of the sampling process.
+            SamplingResult[S]: A result object indicating the success or failure of the sampling process.
         """
         # execute sampling concurrently
         tasks: list[asyncio.Task[SamplingResult]] = []
