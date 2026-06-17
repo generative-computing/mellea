@@ -50,6 +50,19 @@ Best Regards,
 
 > **Note:** LLM output is non-deterministic. Your exact results will vary by model and temperature, but you should see a well-formed email in a similar format.
 
+To pin a specific backend and model — useful when you need reproducible
+behaviour across environments — use the explicit form:
+
+```python
+from mellea import start_session
+from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+
+# Explicit form — same as default, but pinned for reproducibility:
+with start_session("ollama", IBM_GRANITE_4_1_3B) as m:
+    email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
+    print(str(email))
+```
+
 Three lines: create a session, instruct, print. The `instruct()` call returns a
 [`ModelOutputThunk`](../reference/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
 
