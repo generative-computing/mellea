@@ -81,12 +81,7 @@ adapter, replacing the old `isinstance` + `AdapterType` check:
 adapter = get_adapter_for_intrinsic("requirement-check", [AdapterType.ALORA], self._added_adapters)
 
 # After (Phase 1)
-adapter = next(
-    (a for a in self._added_adapters.values()
-     if isinstance(a, Adapter) and a.identity.capability == "requirement-check"
-     and a.identity.adapter_type == "alora"),
-    None,
-)
+adapter = self._find_adapter("requirement-check", {"alora"})
 ```
 
 The logical rule (three exceptions above) is unchanged. The change is purely
