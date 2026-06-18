@@ -21,6 +21,7 @@ import tempfile
 from pathlib import Path
 
 import mellea
+from mellea.stdlib.sampling import python_plotting_sampling
 
 
 def load_csv_data(csv_path: str) -> tuple[list[dict], str]:
@@ -227,6 +228,8 @@ def process_user_request(
 
     m = mellea.start_session()
 
+    output_path = f"{output_dir}/graph_{request_number}.png"
+
     prompt = f"""
     The user has this request:
     "{user_request}"
@@ -244,7 +247,7 @@ def process_user_request(
     2. Extract the data as specified in the user request
     3. Use matplotlib with headless backend (set matplotlib.use('Agg') at start)
     4. Create the visualization (graph type) specified by the user
-    5. Save the graph to {output_dir}/graph_{request_number}.png using plt.savefig()
+    5. Save the graph to {output_path} using plt.savefig()
     6. Do NOT call plt.show() - only save to file
     7. Print a message indicating success
 
@@ -257,8 +260,16 @@ def process_user_request(
     Generate only valid Python code without explanations.
     """
 
+    preset = python_plotting_sampling(
+        output_path=output_path, use_sandbox=False, loop_budget=5
+    )
+
     print("Generating code to extract data and create graph...")
-    generated = m.instruct(prompt)
+    generated = m.instruct(
+        prompt,
+        requirements=preset.requirements,  # type: ignore[arg-type]
+        strategy=preset.strategy,
+    )
     generated_str = str(generated)
     code = extract_python_code(generated_str)
 
@@ -277,7 +288,7 @@ def process_user_request(
         print(f"\n  Output: {result['output']}")
 
     # Check if graph file was created
-    graph_path = Path(f"{output_dir}/graph_{request_number}.png")
+    graph_path = Path(output_path)
     if graph_path.exists():
         print(f"\n  ✓ Graph saved to: {graph_path}")
         print(f"    File size: {graph_path.stat().st_size} bytes")
