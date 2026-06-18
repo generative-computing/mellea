@@ -21,7 +21,18 @@ import tempfile
 from pathlib import Path
 
 import mellea
-from mellea.stdlib.sampling import python_plotting_sampling
+from mellea.stdlib.requirements.plotting.matplotlib import (
+    MatplotlibHeadlessBackend,
+    PlotFileSaved,
+)
+from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+from mellea.stdlib.requirements.python_tools import (
+    NoImportRestrictions,
+    PythonCodeExtraction,
+    PythonSyntaxValid,
+)
+from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
+from mellea.stdlib.tools.execution_policy import CapabilityPolicy
 
 
 def load_csv_data(csv_path: str) -> tuple[list[dict], str]:
@@ -260,15 +271,26 @@ def process_user_request(
     Generate only valid Python code without explanations.
     """
 
-    preset = python_plotting_sampling(
-        output_path=output_path, use_sandbox=False, loop_budget=5
-    )
+    all_reqs = [
+        PythonCodeExtraction(),
+        PythonSyntaxValid(),
+        PythonExecutionReq(
+            execution_tier="local",
+            policy=CapabilityPolicy(timeout=10),
+            max_output_chars=10_000,
+        ),
+        NoImportRestrictions(),
+        MatplotlibHeadlessBackend(),
+        PlotFileSaved(output_path=output_path),
+    ]
+
+    strategy = ModelFriendlyRepairStrategy(loop_budget=3, requirements=all_reqs)
 
     print("Generating code to extract data and create graph...")
     generated = m.instruct(
         prompt,
-        requirements=preset.requirements,  # type: ignore[arg-type]
-        strategy=preset.strategy,
+        requirements=all_reqs,  # type: ignore[arg-type]
+        strategy=strategy,
     )
     generated_str = str(generated)
     code = extract_python_code(generated_str)
