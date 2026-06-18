@@ -24,10 +24,7 @@ from pathlib import Path
 import mellea
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.plotting.matplotlib import (
-    MatplotlibHeadlessBackend,
-    PlotFileSaved,
-)
+from mellea.stdlib.requirements.plotting import MatplotlibHeadlessBackend, PlotFileSaved
 from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 from mellea.stdlib.requirements.python_tools import (
     NoImportRestrictions,
@@ -202,7 +199,6 @@ def create_sample_csv(csv_path: str) -> None:
         "Nancy",
         "Oscar",
         "Piper",
-        "Quinn",
         "Rosa",
         "Steve",
         "Tara",
@@ -234,7 +230,7 @@ def process_user_request(
     user_request: str,
     csv_path: str,
     csv_preview: str,
-    output_dir: str = "/tmp",
+    output_dir: str,
     request_number: int = 1,
 ) -> None:
     """Process a user request to extract data and generate a graph.
@@ -380,11 +376,12 @@ Examples:
     print("=" * 70)
 
     # Use provided options or defaults
-    csv_path = args.csv if args.csv else "/tmp/sample_data.csv"
-    output_dir = args.output if args.output else "/tmp"
+    temp_dir = tempfile.gettempdir()
+    csv_path = args.csv if args.csv else str(Path(temp_dir) / "sample_data.csv")
+    output_dir = args.output if args.output else temp_dir
 
     # Create sample CSV if using default path
-    if csv_path == "/tmp/sample_data.csv":
+    if csv_path == str(Path(temp_dir) / "sample_data.csv"):
         create_sample_csv(csv_path)
         print(f"\nCreated sample CSV file: {csv_path}")
     elif not Path(csv_path).exists():
