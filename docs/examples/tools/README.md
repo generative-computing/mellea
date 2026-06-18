@@ -61,23 +61,26 @@ print(result)  # Output: 2
 ```python
 from mellea import start_session
 from mellea.backends import ModelOption
+from mellea.backends.tools import MelleaTool
 from mellea.stdlib.tools import code_interpreter
 
 m = start_session()
 result = m.instruct(
     "Make a plot of y=x^2",
-    model_options={ModelOption.TOOLS: [code_interpreter]}
+    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(code_interpreter)]}
 )
 ```
 
 ### Forcing Tool Use
 ```python
+from mellea.backends.tools import MelleaTool
 from mellea.stdlib.requirements import uses_tool
+from mellea.stdlib.tools import code_interpreter
 
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
     requirements=[uses_tool(code_interpreter)],
-    model_options={ModelOption.TOOLS: [code_interpreter]},
+    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(code_interpreter)]},
     tool_calls=True
 )
 
@@ -91,7 +94,9 @@ exec_result = result.tool_calls["code_interpreter"].call_func()
 
 ### Validating Tool Arguments
 ```python
-from mellea.stdlib.requirements import tool_arg_validator
+from mellea.backends.tools import MelleaTool
+from mellea.stdlib.requirements import tool_arg_validator, uses_tool
+from mellea.stdlib.tools import code_interpreter
 
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
@@ -104,7 +109,7 @@ result = m.instruct(
             validation_fn=lambda code: "/tmp/output.png" in code
         )
     ],
-    model_options={ModelOption.TOOLS: [code_interpreter]},
+    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(code_interpreter)]},
     tool_calls=True
 )
 ```
@@ -119,12 +124,14 @@ result = m.instruct(
 
 Create custom tools by defining functions:
 ```python
+from mellea.backends.tools import MelleaTool
+
 def my_tool(arg1: str, arg2: int) -> str:
     """Tool description for the LLM."""
     return f"Processed {arg1} with {arg2}"
 
 # Use in model_options
-model_options={ModelOption.TOOLS: [my_tool]}
+model_options={ModelOption.TOOLS: [MelleaTool.from_callable(my_tool)]}
 ```
 
 ## Tool Requirements
