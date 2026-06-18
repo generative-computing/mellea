@@ -596,8 +596,8 @@ class GroundednessRequirement(Requirement):
             "For each span, determine if the citations fully support, partially support, "
             "or do not support the span. Consider the full context from the source documents "
             "where the citations appear.\n\n"
-            "Respond with a JSON array of the form:\n"
-            '[{"span_id": ..., "support_level": ...}, ...]\n\n'
+            "Respond with a flat JSON array (no nested arrays). Example output:\n"
+            '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}, ...]\n\n'
             "Support levels must be ONLY one of: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED.\n\n"
             f"{documents_section}"
             f"Response context:\n{response}\n\n"
@@ -690,6 +690,15 @@ class GroundednessRequirement(Requirement):
                 support_level_raw = (
                     (judgment.get("support_level") or "").upper().strip()
                 )
+                # Handle nested format: {"span_id": 0, "citations": [{"support_level": "..."}]}
+                # This format appears when the model mirrors the input span structure from the prompt.
+                if not support_level_raw:
+                    for cit in judgment.get("citations", []):
+                        if isinstance(cit, dict):
+                            support_level_raw = (
+                                (cit.get("support_level") or "").upper().strip()
+                            )
+                            break
 
                 logger.debug(
                     f"  Judgment: span_id={span_id}, support_level={support_level_raw}"
