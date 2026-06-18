@@ -483,7 +483,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = self._find_adapter(adapter_name, {"alora"})
+                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
@@ -567,7 +567,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         # --- adapter lookup ------------------------------------------------
-        allowed_types = {at.value for at in action.adapter_types}
+        allowed_types = tuple(at.value for at in action.adapter_types)
         adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(
