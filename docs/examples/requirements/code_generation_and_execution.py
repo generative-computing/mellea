@@ -14,6 +14,7 @@ The pipeline implements a 4-step process:
 4. Code Execution - Execute the code to generate and save graph to file (no display)
 """
 
+import argparse
 import csv
 import subprocess
 import sys
@@ -21,6 +22,8 @@ import tempfile
 from pathlib import Path
 
 import mellea
+from mellea.stdlib.components import Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.plotting.matplotlib import (
     MatplotlibHeadlessBackend,
     PlotFileSaved,
@@ -59,73 +62,86 @@ def load_csv_data(csv_path: str) -> tuple[list[dict], str]:
     return data, preview
 
 
-def extract_python_code(generated_text: str) -> str:
-    """Extract Python code from LLM-generated text.
+def _extract_code_from_output(generated: str) -> str | None:
+    """Extract the highest-scoring Python code block from model output.
 
-    Looks for code blocks marked with triple backticks and python language tag.
-    Falls back to treating entire output as code if no markers found.
-    """
-    lines = generated_text.split("\n")
-    in_code_block = False
-    code_lines = []
-
-    for line in lines:
-        if line.strip().startswith("```python"):
-            in_code_block = True
-            continue
-        elif line.strip().startswith("```") and in_code_block:
-            in_code_block = False
-            continue
-
-        if in_code_block:
-            code_lines.append(line)
-
-    if code_lines:
-        return "\n".join(code_lines)
-    return generated_text
-
-
-def execute_python_code(code: str, timeout: int = 10) -> dict:
-    """Execute Python code in a subprocess and capture output.
+    Uses PythonCodeExtraction to intelligently extract code blocks, scoring
+    them by length, complexity, and content to prioritize the main implementation.
+    Falls back to returning entire output if it looks like unwrapped Python code.
 
     Args:
-        code: Python code to execute
-        timeout: Maximum execution time in seconds
+        generated: Raw model output string.
 
     Returns:
-        dict with 'success', 'output', and 'error' keys
+        Extracted Python code string, or None if extraction failed.
     """
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write(code)
-            temp_file = f.name
+    from mellea.stdlib.requirements.python_reqs import _has_python_code_listing
 
-        try:
-            result = subprocess.run(
-                [sys.executable, temp_file],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+    ctx = ChatContext().add(Message("assistant", generated))
+    result = _has_python_code_listing(ctx)
+    if result.as_bool():
+        return result.reason
 
-            return {
-                "success": result.returncode == 0,
-                "output": result.stdout,
-                "error": result.stderr,
-                "return_code": result.returncode,
-            }
-        finally:
-            Path(temp_file).unlink()
+    # Fallback: if extraction failed but output looks like Python code,
+    # the LLM may have generated code without backtick markers
+    if any(
+        line.strip().startswith(p)
+        for line in generated.split("\n")
+        for p in ["import ", "from ", "def ", "class ", "plt.", "pandas"]
+    ):
+        return generated.strip()
 
-    except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "output": "",
-            "error": f"Code execution timed out after {timeout} seconds",
-            "return_code": -1,
-        }
-    except Exception as e:
-        return {"success": False, "output": "", "error": str(e), "return_code": -1}
+    return None
+
+
+# NOTE: Code execution has already occurred as a side effect of requirement validation.
+# When m.instruct() is called with PythonExecutionReq, the validation_fn executes the
+# code in a subprocess to verify it runs without errors. The code execution below is
+# documented for educational purposes to show what happens during validation, but is
+# not needed since validation already ran the code. To verify the graph was created,
+# we only need to check if the output file exists (see process_user_request line ~310).
+#
+# def execute_python_code(code: str, timeout: int = 10) -> dict:
+#     """Execute Python code in a subprocess and capture output.
+#
+#     Args:
+#         code: Python code to execute
+#         timeout: Maximum execution time in seconds
+#
+#     Returns:
+#         dict with 'success', 'output', and 'error' keys
+#     """
+#     try:
+#         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+#             f.write(code)
+#             temp_file = f.name
+#
+#         try:
+#             result = subprocess.run(
+#                 [sys.executable, temp_file],
+#                 capture_output=True,
+#                 text=True,
+#                 timeout=timeout,
+#             )
+#
+#             return {
+#                 "success": result.returncode == 0,
+#                 "output": result.stdout,
+#                 "error": result.stderr,
+#                 "return_code": result.returncode,
+#             }
+#         finally:
+#             Path(temp_file).unlink()
+#
+#     except subprocess.TimeoutExpired:
+#         return {
+#             "success": False,
+#             "output": "",
+#             "error": f"Code execution timed out after {timeout} seconds",
+#             "return_code": -1,
+#         }
+#     except Exception as e:
+#         return {"success": False, "output": "", "error": str(e), "return_code": -1}
 
 
 def create_sample_csv(csv_path: str) -> None:
@@ -276,7 +292,7 @@ def process_user_request(
         PythonSyntaxValid(),
         PythonExecutionReq(
             execution_tier="local",
-            policy=CapabilityPolicy(timeout=10),
+            policy=CapabilityPolicy(timeout=20),
             max_output_chars=10_000,
         ),
         NoImportRestrictions(),
@@ -284,7 +300,7 @@ def process_user_request(
         PlotFileSaved(output_path=output_path),
     ]
 
-    strategy = ModelFriendlyRepairStrategy(loop_budget=3, requirements=all_reqs)
+    strategy = ModelFriendlyRepairStrategy(loop_budget=5, requirements=all_reqs)
 
     print("Generating code to extract data and create graph...")
     generated = m.instruct(
@@ -293,21 +309,30 @@ def process_user_request(
         strategy=strategy,
     )
     generated_str = str(generated)
-    code = extract_python_code(generated_str)
+    code = _extract_code_from_output(generated_str)
+    if code is None:
+        print("  ✗ Failed to extract Python code from model output")
+        print(f"\nModel output:\n{generated_str}")
+        return
 
     print("\nGenerated code:")
     print(code)
 
-    print("\nExecuting code...")
-    result = execute_python_code(code, timeout=15)
-
-    if not result["success"]:
-        print(f"  ✗ Error during execution: {result['error']}")
-        return
-
-    print("  ✓ Code executed successfully")
-    if result["output"]:
-        print(f"\n  Output: {result['output']}")
+    # NOTE: Code execution already occurred as a side effect of PythonExecutionReq
+    # validation during m.instruct(). Because PythonExecutionReq uses execution_tier="local"
+    # (not "static"), the code was executed in a subprocess during validation. The lines
+    # below are kept as comments to show what would happen if we were executing separately:
+    #
+    # print("\nExecuting code...")
+    # result = execute_python_code(code, timeout=15)
+    #
+    # if not result["success"]:
+    #     print(f"  ✗ Error during execution: {result['error']}")
+    #     return
+    #
+    # print("  ✓ Code executed successfully")
+    # if result["output"]:
+    #     print(f"\n  Output: {result['output']}")
 
     # Check if graph file was created
     graph_path = Path(output_path)
@@ -320,9 +345,6 @@ def process_user_request(
 
 def main():
     """Demonstrate complete pipeline: accept user input and generate graphs."""
-    import argparse
-    import sys
-
     parser = argparse.ArgumentParser(
         description="Code Generation: Extract Data and Generate Graphs",
         formatter_class=argparse.RawDescriptionHelpFormatter,
