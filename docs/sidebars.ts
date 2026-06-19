@@ -58,6 +58,7 @@ const sidebars: SidebarsConfig = {
         'how-to/refactor-prompts-with-cli',
         'how-to/unit-test-generative-code',
         'how-to/handling-exceptions',
+        'how-to/debug-with-plugins',
       ],
     },
     {
