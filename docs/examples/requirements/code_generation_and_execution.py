@@ -24,15 +24,26 @@ from pathlib import Path
 import mellea
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.plotting import MatplotlibHeadlessBackend, PlotFileSaved
+from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
+from mellea.stdlib.tools.execution_policy import CapabilityPolicy
 from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 from mellea.stdlib.requirements.python_tools import (
     NoImportRestrictions,
     PythonCodeExtraction,
     PythonSyntaxValid,
 )
-from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
-from mellea.stdlib.tools.execution_policy import CapabilityPolicy
+
+try:
+    from mellea.stdlib.requirements.plotting import (
+        MatplotlibHeadlessBackend,
+        PlotFileSaved,
+    )
+except ImportError as e:
+    raise ImportError(
+        "The code_generation_and_execution example requires matplotlib support. "
+        "Please install Mellea with plotting support: `uv pip install mellea[plotting]` "
+        "or install matplotlib and numpy directly: `uv pip install matplotlib numpy`"
+    ) from e
 
 
 def load_csv_data(csv_path: str) -> tuple[list[dict], str]:
@@ -332,11 +343,10 @@ def process_user_request(
 
     # Check if graph file was created
     graph_path = Path(output_path)
-    if graph_path.exists():
-        print(f"\n  ✓ Graph saved to: {graph_path}")
-        print(f"    File size: {graph_path.stat().st_size} bytes")
-    else:
-        print(f"\n  ⚠ Graph file not found at {graph_path}")
+    if not graph_path.exists():
+        raise RuntimeError(f"Graph was not created at {graph_path}")
+    print(f"\n  ✓ Graph saved to: {graph_path}")
+    print(f"    File size: {graph_path.stat().st_size} bytes")
 
 
 def main():

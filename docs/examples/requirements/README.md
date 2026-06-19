@@ -21,6 +21,21 @@ visualization.
 - Command-line options for custom CSV files and interactive mode
 - 100-row sample dataset with work location information
 
+**Prerequisites:**
+
+Before running this example, ensure you have:
+
+1. Ollama running with the granite4.1:3b model:
+   ```bash
+   ollama serve  # in one terminal
+   ollama pull granite4.1:3b  # in another terminal (if not already downloaded)
+   ```
+
+2. Required dependencies installed:
+   ```bash
+   uv pip install matplotlib numpy
+   ```
+
 **Usage Examples:**
 
 ```bash
@@ -209,5 +224,13 @@ Extract employee distribution across work locations and create a pie chart
 
 ## Requirements
 
+### matplotlib_plotting.py
+
 - matplotlib and numpy installed (auto-checked by requirements)
 - Any code analysis backend (requirements use AST analysis)
+
+### code_generation_and_execution.py
+
+- Ollama backend with granite4.1:3b model running (`ollama serve`)
+- matplotlib and numpy installed (required for executing generated code)
+- Python subprocess execution support (provided by `PythonExecutionReq`)
