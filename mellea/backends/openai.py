@@ -661,6 +661,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         user_api_params = self._make_backend_specific_and_remove(
             model_options, is_chat_context=True
         )
+        user_extra_body = user_api_params.pop("extra_body", None)
         api_params.update(user_api_params)
 
         # Map THINKING to the correct backend parameter(s). Two mechanisms:
@@ -679,6 +680,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 # default when the param is absent; passing False would be invalid.
             else:
                 api_params["reasoning_effort"] = thinking
+
+        if user_extra_body is not None:
+            user_extra_body = dict(user_extra_body)
+            merged_extra_body = dict(extra_body)
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
+            merged_extra_body.update(user_extra_body)
+            if user_ctk is not None:
+                merged_extra_body["chat_template_kwargs"] = {
+                    **merged_extra_body.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
+            extra_body = merged_extra_body
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
