@@ -24,14 +24,14 @@ from pathlib import Path
 import mellea
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
-from mellea.stdlib.tools.execution_policy import CapabilityPolicy
 from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 from mellea.stdlib.requirements.python_tools import (
     NoImportRestrictions,
     PythonCodeExtraction,
     PythonSyntaxValid,
 )
+from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
+from mellea.stdlib.tools.execution_policy import CapabilityPolicy
 
 try:
     from mellea.stdlib.requirements.plotting import (
