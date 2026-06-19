@@ -7,7 +7,6 @@ output, including edge cases with missing or None-valued payload fields.
 from __future__ import annotations
 
 import logging
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,7 +15,7 @@ pytestmark = pytest.mark.unit
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import HookType, hook, register
+from mellea.plugins import HookType, register
 from mellea.plugins.builtin_debug import (
     log_generation_post_call,
     log_generation_pre_call,
