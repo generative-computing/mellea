@@ -278,6 +278,7 @@ async def test_multiple_generations_separate_spans(span_exporter):
 
 
 @pytest.mark.asyncio
+@pytest.mark.slow
 async def test_streaming_span_duration(span_exporter):
     """Test that streaming operations have accurate span durations."""
 
