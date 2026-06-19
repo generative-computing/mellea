@@ -207,8 +207,8 @@ def test_delta_merge_thinking_concatenated():
 # --- timeout wiring ---
 
 
-def test_timeout_default_not_passed_to_clients():
-    """When timeout is omitted, it must not be forwarded to the Ollama clients."""
+def test_timeout_default_forwarded_to_clients():
+    """When timeout is omitted, the 300 s default must be forwarded to both Ollama clients."""
     with (
         patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
         patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
@@ -218,9 +218,9 @@ def test_timeout_default_not_passed_to_clients():
         OllamaModelBackend(model_id="granite3.3:8b")
 
     _, sync_kwargs = mock_client.call_args
-    assert "timeout" not in sync_kwargs
+    assert sync_kwargs.get("timeout") == 300.0
     _, async_kwargs = mock_async_client.call_args
-    assert "timeout" not in async_kwargs
+    assert async_kwargs.get("timeout") == 300.0
 
 
 def test_timeout_forwarded_to_sync_and_async_clients():
