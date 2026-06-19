@@ -162,7 +162,7 @@ class OllamaModelBackend(FormatterBackend):
         """Requests generic info about the Ollama server to ensure it's running."""
         try:
             self._client.ps()
-        except ConnectionError:
+        except (ConnectionError, httpx.TimeoutException, httpx.ConnectError):
             return False
         return True
 

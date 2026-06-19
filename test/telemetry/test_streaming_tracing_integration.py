@@ -138,7 +138,8 @@ async def test_streaming_span_creates_and_closes_span(span_exporter):
     )
 
     span_duration_s = (backend_span.end_time - backend_span.start_time) / 1e9
-    assert span_duration_s >= 0.05, (
+    # fake stream is 3 chunks x 50 ms ~= 150 ms; >= 0.1 confirms span survived past first chunk
+    assert span_duration_s >= 0.1, (
         f"Span closed too early — duration {span_duration_s:.3f}s is shorter than "
         "the streaming delay, suggesting the span did not stay open for the full stream"
     )
