@@ -204,6 +204,9 @@ async def test_groundedness_e2e_complex_response(backend, simple_docs):
 @pytest.mark.e2e
 @pytest.mark.huggingface
 @require_gpu(min_vram_gb=8)
+@pytest.mark.xfail(
+    reason="CPU/GPU response differences - see comment in test/stdlib/components/intrinsic/test_rag.py"
+)
 async def test_groundedness_e2e_string_documents(backend):
     """End-to-end test: documents provided as strings instead of Document objects."""
     doc_strings = [
