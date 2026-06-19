@@ -6,6 +6,7 @@ import functools
 from collections.abc import AsyncIterator, Coroutine, Sequence
 from typing import Any
 
+import httpx
 import ollama
 from tqdm import tqdm
 
@@ -222,7 +223,7 @@ class OllamaModelBackend(FormatterBackend):
             for pbar in progress_bars.values():
                 pbar.close()
             return True
-        except ollama.ResponseError:
+        except (ollama.ResponseError, httpx.TimeoutException, httpx.ConnectError):
             return False
 
     @property
