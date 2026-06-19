@@ -8,7 +8,7 @@ Verifies that IntrinsicAdapter, EmbeddedIntrinsicAdapter, and CustomIntrinsicAda
 """
 
 import warnings
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -295,9 +295,16 @@ def test_resolve_adapter_lazy_creates_and_returns():
         AdapterMixin._find_adapter(mock_backend, cap, types)
     )
 
-    with patch(
-        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-        return_value=mock_catalog_entry,
+    with (
+        patch(
+            "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+            return_value=mock_catalog_entry,
+        ),
+        patch(
+            "mellea.backends.adapters.adapter.intrinsics.obtain_io_yaml",
+            return_value="/fake/adapter.yaml",
+        ),
+        patch("builtins.open", mock_open(read_data="key: value")),
     ):
         result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
