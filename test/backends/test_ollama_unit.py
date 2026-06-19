@@ -223,6 +223,22 @@ def test_timeout_default_forwarded_to_clients():
     assert async_kwargs.get("timeout") == 300.0
 
 
+def test_timeout_none_not_forwarded_to_clients():
+    """Explicit timeout=None must omit the key — preserves the upstream SDK default (no timeout)."""
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client") as mock_client,
+        patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
+    ):
+        OllamaModelBackend(model_id="granite3.3:8b", timeout=None)
+
+    _, sync_kwargs = mock_client.call_args
+    assert "timeout" not in sync_kwargs
+    _, async_kwargs = mock_async_client.call_args
+    assert "timeout" not in async_kwargs
+
+
 def test_timeout_forwarded_to_sync_and_async_clients():
     """When timeout is set, it must reach both ollama.Client and ollama.AsyncClient."""
     with (
