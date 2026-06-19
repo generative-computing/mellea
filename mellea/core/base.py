@@ -398,6 +398,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._start: datetime.datetime | None = None
         self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
+        # Soft-failure cause recorded by backends that return a placeholder
+        # MOT instead of raising. Sibling to `_cancelled`.
+        self._error: Exception | None = None
         # Mellea-side hook correlation ID; distinct from the provider-assigned
         # `GenerationMetadata.response_id`.
         self._generation_id: str | None = None
@@ -528,6 +531,26 @@ class ModelOutputThunk(CBlock, Generic[S]):
         """
         return self._cancelled
 
+    @property
+    def error(self) -> Exception | None:
+        """Soft-failure cause recorded by the backend, or `None` on success.
+
+        Sibling to `cancelled`: `error` is involuntary (the backend produced
+        an unusable result without raising); `cancelled` is voluntary (a
+        consumer stopped the generation via `cancel_generation`). The two
+        are recorded independently.
+        """
+        return self._error
+
+    @property
+    def generate_log(self) -> GenerateLog | None:
+        """The `GenerateLog` recorded for this generation.
+
+        Returned by reference; mutating the returned object mutates the MOT's
+        log.
+        """
+        return self._generate_log
+
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
 
@@ -543,6 +566,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.generation = other.generation
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
+        self._error = other._error
         # _cancel_hook is deliberately not copied: _copy_from swaps output state,
         # not backend-thread plumbing, which is tied to the original computation.
         self._cancel_hook = None
@@ -769,6 +793,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         copied._computed = self._computed
         copied._cancelled = self._cancelled
+        copied._error = self._error
         # _cancel_hook is not forwarded: a copied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         copied._cancel_hook = None
@@ -801,6 +826,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
         deepcopied._cancelled = self._cancelled
+        deepcopied._error = self._error
         # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         deepcopied._cancel_hook = None

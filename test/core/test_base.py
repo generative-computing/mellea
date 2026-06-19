@@ -189,6 +189,51 @@ def test_mot_deep_copy_clones_generation():
     assert deepcopied.generation.ttfb_ms == 42.0
 
 
+# --- Public error / generate_log surface ---
+
+
+def test_mot_generate_log_property_aliases_private_attr() -> None:
+    """`mot.generate_log` returns the same object as `_generate_log`."""
+    from mellea.core.base import GenerateLog
+
+    mot = ModelOutputThunk(value="x")
+    assert mot.generate_log is None
+    glog = GenerateLog()
+    mot._generate_log = glog
+    assert mot.generate_log is glog
+
+
+def test_mot_error_and_cancelled_are_independent_channels() -> None:
+    """Setting `_error` must not flip `cancelled`, and vice versa."""
+    soft_failed = ModelOutputThunk(value="")
+    soft_failed._error = RuntimeError("backend soft-failure")
+    assert soft_failed.error is not None
+    assert soft_failed.cancelled is False
+
+    cancelled = ModelOutputThunk(value="partial")
+    cancelled._cancelled = True
+    assert cancelled.cancelled is True
+    assert cancelled.error is None
+
+
+def test_mot_error_carried_by_copy_methods() -> None:
+    """`_error` survives `copy`, `deepcopy`, and `_copy_from`."""
+    mot = ModelOutputThunk(value="")
+    err = RuntimeError("recorded")
+    mot._error = err
+
+    shallow = copy.copy(mot)
+    assert shallow.error is err
+
+    deep = copy.deepcopy(mot)
+    assert isinstance(deep.error, RuntimeError)
+    assert str(deep.error) == "recorded"
+
+    target = ModelOutputThunk(value=None)
+    target._copy_from(mot)
+    assert target.error is err
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
 
