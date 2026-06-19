@@ -96,6 +96,8 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
+**Review states**: when reviewing a PR, see [CONTRIBUTING.md → Review States](CONTRIBUTING.md#review-states) for when to use `APPROVE` vs `REQUEST CHANGES` vs `COMMENT`.
+
 For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution).
 
 ## 7. AI Attribution

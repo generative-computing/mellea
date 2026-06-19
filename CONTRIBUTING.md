@@ -393,6 +393,31 @@ as it can corrupt state.
 8. **Push to your fork** and create a pull request to the main repository
 9. **Follow the automated PR workflow** instructions
 
+### Review States
+
+When submitting a PR review, pick one of GitHub's three states. Using them consistently keeps the merge signal meaningful: an `APPROVE` should mean the reviewer is willing to support the change, and a `REQUEST CHANGES` should mean something is actually blocking.
+
+| State | Use when |
+|-------|----------|
+| `APPROVE` | You'd be fine if this merged as-is. |
+| `REQUEST CHANGES` | This PR shouldn't merge in its current form. |
+| `COMMENT` | Anything else, or a follow-up that doesn't change the prior status. |
+
+**`APPROVE`** — the reviewer is willing to support the change.
+- The PR is ready to merge as-is, with or without non-blocking nits or follow-up suggestions that the author may address or skip with no harm.
+- The standard open-source "LGTM" signal: the reviewer stands behind the change.
+
+**`REQUEST CHANGES`** — the PR should not merge in its current form. Use when:
+- There is an actual blocking or breaking issue (correctness, regression, missing tests, etc.).
+- The reviewer wants to personally validate something before the PR merges, and is withholding their approval until the next round.
+- Important follow-up issues have not yet been opened, and the reviewer doesn't want them forgotten. The expectation here is that the issues get filed, not that the PR itself changes.
+
+**`COMMENT`** — for everything else. Use when:
+- Posting a follow-up review that shouldn't change the PR's status from a prior `APPROVE` or `REQUEST CHANGES` (e.g., re-reviewing after a push when nothing material changed).
+- The review falls between `APPROVE` and `REQUEST CHANGES` and the reviewer doesn't want to block.
+- The reviewer wants to defer the final call to other reviewers.
+- The review is purely informational and the reviewer isn't gating on the PR at all.
+
 ## Testing
 
 ### Quick Reference
