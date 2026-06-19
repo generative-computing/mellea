@@ -697,7 +697,7 @@ class GroundednessRequirement(Requirement):
                 if not support_level_raw:
                     nested_levels = {
                         (cit.get("support_level") or "").upper().strip()
-                        for cit in judgment.get("citations", [])
+                        for cit in (judgment.get("citations") or [])
                         if isinstance(cit, dict)
                     }
                     for pessimistic in (

@@ -495,6 +495,34 @@ def test_parse_batch_support_output_nested_citations():
     assert result[1] == "NOT_SUPPORTED"
 
 
+def test_parse_batch_support_output_nested_citations_pessimistic_aggregate():
+    """Mixed nested citation support levels on one span aggregate pessimistically.
+
+    NOT_SUPPORTED beats PARTIALLY_SUPPORTED beats FULLY_SUPPORTED, regardless
+    of citation order in the LLM response.
+    """
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "text": "Mixed-support span.",
+            "citations": [
+                {"citation_id": 0, "source_document": 0, "support_level": "FULLY_SUPPORTED"},
+                {"citation_id": 1, "source_document": 0, "support_level": "NOT_SUPPORTED"},
+                {"citation_id": 2, "source_document": 0, "support_level": "PARTIALLY_SUPPORTED"}
+            ]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert len(result) == 1
+    assert result[0] == "NOT_SUPPORTED"
+
+
 def test_parse_batch_support_output_with_recovery():
     """Test parsing batch support output with malformed JSON recovery."""
     req = GroundednessRequirement()
