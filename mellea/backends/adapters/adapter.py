@@ -95,10 +95,17 @@ class _ShimIOContract(IOContract):
 class _ShimWeightsBinding(WeightsBinding):
     """Phase 1 placeholder; Phase 2 (issue #1138) wires in real lifecycle."""
 
-    def prepare(self) -> None: ...
-    def activate(self) -> None: ...
-    def deactivate(self) -> None: ...
-    def release(self) -> None: ...
+    def prepare(self) -> None:
+        raise NotImplementedError("WeightsBinding not yet implemented")
+
+    def activate(self) -> None:
+        raise NotImplementedError("WeightsBinding not yet implemented")
+
+    def deactivate(self) -> None:
+        raise NotImplementedError("WeightsBinding not yet implemented")
+
+    def release(self) -> None:
+        raise NotImplementedError("WeightsBinding not yet implemented")
 
 
 class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
@@ -398,6 +405,10 @@ class AdapterMixin(Backend, abc.ABC):
                 f"Backend has no model ID; cannot resolve adapter {name!r}"
             )
 
+        # warnings.catch_warnings() modifies the process-global filter state and is not
+        # async/thread-safe.  Concurrent first-time resolves race on filter restoration;
+        # add_adapter is idempotent so the double-registration hazard is benign, but the
+        # filter race is a known Phase-1 gap.  Phase 2 (#1138) introduces a proper lock.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
         with warnings.catch_warnings():
@@ -411,8 +422,15 @@ class AdapterMixin(Backend, abc.ABC):
                 for a in EmbeddedIntrinsicAdapter.from_source(
                     repo_id, intrinsic_name=name
                 ):
+                    # EmbeddedIntrinsicAdapter is only valid for backends whose
+                    # add_adapter accepts the full Adapter type (e.g. OpenAIBackend).
+                    # LocalHFBackend.add_adapter expects LocalHFAdapter; HF backends
+                    # never set _uses_embedded_adapters=True.
                     self.add_adapter(a)
             else:
+                # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
+                # Every current catalog entry supports LORA.  Phase 2 (#1138) will
+                # select the type from catalog availability instead of hardcoding.
                 self.add_adapter(
                     IntrinsicAdapter(
                         name, adapter_type=AdapterType.LORA, base_model_name=base

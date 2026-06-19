@@ -269,3 +269,42 @@ def test_resolve_adapter_raises_without_base_model():
     mock_backend._find_adapter.return_value = None
     with pytest.raises(ValueError, match="no model ID"):
         AdapterMixin.resolve_adapter(mock_backend, "answerability")
+
+
+def test_resolve_adapter_lazy_creates_and_returns():
+    """resolve_adapter must create an IntrinsicAdapter when none is registered."""
+    mock_catalog_entry = IntriniscsCatalogEntry(
+        name="answerability",
+        repo_id="ibm-granite/granitelib-rag-r1.0",
+        revision="abc123",
+        adapter_types=(AdapterType.ALORA, AdapterType.LORA),
+    )
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+
+    created_adapters: list = []
+
+    def fake_add_adapter(a):
+        created_adapters.append(a)
+        mock_backend._added_adapters[a.qualified_name] = a
+
+    mock_backend._added_adapters = {}
+    mock_backend.add_adapter.side_effect = fake_add_adapter
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+
+    with patch(
+        "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
+        return_value=mock_catalog_entry,
+    ):
+        result = AdapterMixin.resolve_adapter(mock_backend, "answerability")
+
+    assert mock_backend.add_adapter.called, (
+        "add_adapter must be called for a new capability"
+    )
+    assert len(created_adapters) == 1
+    assert isinstance(created_adapters[0], IntrinsicAdapter)
+    assert created_adapters[0].adapter_type == AdapterType.LORA
+    assert result is created_adapters[0]
