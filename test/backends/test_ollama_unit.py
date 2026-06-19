@@ -207,8 +207,8 @@ def test_delta_merge_thinking_concatenated():
 # --- timeout wiring ---
 
 
-def test_timeout_default_not_passed_to_clients():
-    """When timeout is omitted, it must not be forwarded to the Ollama clients."""
+def test_timeout_default_forwarded_to_clients():
+    """When timeout is omitted, the 300 s default must be forwarded to both Ollama clients."""
     with (
         patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
         patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
@@ -216,6 +216,22 @@ def test_timeout_default_not_passed_to_clients():
         patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
     ):
         OllamaModelBackend(model_id="granite3.3:8b")
+
+    _, sync_kwargs = mock_client.call_args
+    assert sync_kwargs.get("timeout") == 300.0
+    _, async_kwargs = mock_async_client.call_args
+    assert async_kwargs.get("timeout") == 300.0
+
+
+def test_timeout_none_not_forwarded_to_clients():
+    """Explicit timeout=None must omit the key — preserves the upstream SDK default (no timeout)."""
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client") as mock_client,
+        patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
+    ):
+        OllamaModelBackend(model_id="granite3.3:8b", timeout=None)
 
     _, sync_kwargs = mock_client.call_args
     assert "timeout" not in sync_kwargs

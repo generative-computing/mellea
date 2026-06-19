@@ -6,6 +6,7 @@ import functools
 from collections.abc import AsyncIterator, Coroutine, Sequence
 from typing import Any
 
+import httpx
 import ollama
 from tqdm import tqdm
 
@@ -68,10 +69,11 @@ class OllamaModelBackend(FormatterBackend):
         base_url (str | None): Ollama server endpoint; defaults to
             ``env(OLLAMA_HOST)`` or ``http://localhost:11434``.
         model_options (dict | None): Default model options for generation requests.
-        timeout (float | None): Request timeout in seconds for the underlying HTTP
-            client. ``None`` (the default) preserves the upstream ``ollama`` SDK
-            default. Set this to bound how long a single request will wait when
-            the Ollama server is overloaded or stalled.
+        timeout (float | None): Per-operation HTTP timeout in seconds (connect,
+            read, write, pool). Defaults to 300 s. For streaming requests this
+            bounds the wait between consecutive chunks; for non-streaming requests
+            it bounds total time-to-response. Pass ``None`` to use the upstream
+            ``ollama`` SDK default (no timeout).
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
@@ -86,7 +88,7 @@ class OllamaModelBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
-        timeout: float | None = None,
+        timeout: float | None = 300.0,
     ):
         """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
@@ -160,7 +162,7 @@ class OllamaModelBackend(FormatterBackend):
         """Requests generic info about the Ollama server to ensure it's running."""
         try:
             self._client.ps()
-        except ConnectionError:
+        except (ConnectionError, httpx.TimeoutException, httpx.ConnectError):
             return False
         return True
 
@@ -221,7 +223,7 @@ class OllamaModelBackend(FormatterBackend):
             for pbar in progress_bars.values():
                 pbar.close()
             return True
-        except ollama.ResponseError:
+        except (ollama.ResponseError, httpx.TimeoutException, httpx.ConnectError):
             return False
 
     @property
