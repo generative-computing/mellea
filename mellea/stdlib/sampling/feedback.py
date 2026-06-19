@@ -265,7 +265,8 @@ class ModelFriendlyFeedbackFormatter:
             )
             return (
                 f"Your code didn't save the plot to the expected file. "
-                f"Try: Add plt.savefig('{expected_path}') before plt.show() or plt.close()."
+                f"Try: Add plt.savefig('{expected_path}') before plt.show() or plt.close(). "
+                f"Do not use a variable as an argument of plt.savefig.  Use a string literal as the argument like plt.savefig('{expected_path}'). "
             )
         else:
             return (
