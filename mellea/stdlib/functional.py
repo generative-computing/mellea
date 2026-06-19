@@ -1,4 +1,9 @@
-"""Functions for Mellea operations like Instruct, Chat, etc..."""
+"""Low-level primitives for Mellea operations: Instruct, Chat, and friends.
+
+For scripts and applications, prefer `MelleaSession` (via `start_session()`),
+which manages context and backend for you. Reach for these functions only when
+implementing a custom session or sampling strategy.
+"""
 
 from __future__ import annotations
 

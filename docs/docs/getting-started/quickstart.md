@@ -55,6 +55,20 @@ Three lines: create a session, instruct, print. The `instruct()` call returns a
 
 > **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
 
+To pin a specific backend and model — ensuring the same model runs across all
+environments — use the explicit form:
+
+```python
+import mellea
+
+with mellea.start_session("ollama", mellea.model_ids.IBM_GRANITE_4_1_3B) as m:
+    email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
+    print(str(email))
+```
+
+The `with` block closes the session cleanly on exit, ending any open telemetry
+spans and deregistering any scoped plugins.
+
 ## User variables
 
 Embed dynamic values in instructions using `{{double_braces}}`. The description is
