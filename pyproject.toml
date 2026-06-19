@@ -24,7 +24,7 @@ dependencies = [
     "ollama>=0.5.1",
     "requests>=2.32.3",
     "mistletoe>=1.4.0",
-    "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
+    "pillow>=12.0.0", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "nltk>=3.9", # Needed for sentence tokenization in granite citation parsing.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
