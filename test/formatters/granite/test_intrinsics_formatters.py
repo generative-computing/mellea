@@ -771,8 +771,6 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
     # Run the model using Hugging Face APIs
     model, tokenizer = base_util.load_transformers_lora(lora_dir)
-    if torch.cuda.is_available():  # Use GPU if available
-        model.cuda()
 
     generate_input, other_input = (
         base_util.chat_completion_request_to_transformers_inputs(

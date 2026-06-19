@@ -216,6 +216,54 @@ def test_invocation_prompt_tokenization():
 
 
 @pytest.mark.integration
+def test_device_auto_selects_mps_when_cuda_unavailable():
+    """Test that --device auto picks MPS on Apple Silicon when CUDA is absent."""
+    from cli.alora.train import train_model
+
+    with (
+        patch("cli.alora.train.AutoTokenizer") as mock_tokenizer_class,
+        patch("cli.alora.train.AutoModelForCausalLM") as mock_model_class,
+        patch("cli.alora.train.Dataset"),
+        patch("cli.alora.train.SafeSaveTrainer") as mock_trainer,
+        patch("cli.alora.train.get_peft_model") as mock_get_peft_model,
+        patch("cli.alora.train.load_dataset_from_json") as mock_load_dataset,
+        patch("cli.alora.train.DataCollatorForCompletionOnlyLM"),
+        patch("cli.alora.train.torch.cuda.is_available", return_value=False),
+        patch("cli.alora.train.torch.backends.mps.is_available", return_value=True),
+    ):
+        mock_tokenizer = Mock()
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
+
+        mock_model = Mock()
+        mock_param = Mock()
+        mock_param.device.type = "mps"
+        mock_model.parameters.return_value = [mock_param]
+        mock_model_class.from_pretrained.return_value = mock_model
+        mock_get_peft_model.return_value = Mock()
+
+        mock_ds = MagicMock()
+        mock_ds.shuffle.return_value = mock_ds
+        mock_ds.select.return_value = mock_ds
+        mock_ds.__len__ = Mock(return_value=10)
+        mock_load_dataset.return_value = mock_ds
+        mock_trainer.return_value = Mock()
+
+        train_model(
+            dataset_path="test.jsonl",
+            base_model="test-model",
+            output_file="./test_output/adapter",
+            adapter="lora",
+            epochs=1,
+        )
+
+        call_kwargs = mock_model_class.from_pretrained.call_args[1]
+        assert call_kwargs.get("device_map") == "auto", (
+            "--device auto should pass device_map='auto' when MPS is available"
+        )
+
+
+@pytest.mark.integration
 def test_imports_work():
     """Test that PEFT imports work correctly (no IBM alora dependency)."""
     # This test verifies the migration was successful
