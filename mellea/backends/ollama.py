@@ -78,6 +78,11 @@ class OllamaModelBackend(FormatterBackend):
             to Mellea ``ModelOption`` sentinel keys.
         from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption``
             sentinel keys to Ollama-specific option names.
+
+    Raises:
+        ValueError: If ``model_id`` is a ``ModelIdentifier`` with no ``ollama_name`` set.
+        ConnectionError: If the Ollama server is not running at ``base_url``.
+        OSError: If the model cannot be pulled from the Ollama library.
     """
 
     def __init__(
@@ -98,7 +103,7 @@ class OllamaModelBackend(FormatterBackend):
             ),
             model_options=model_options,
         )
-        # Resolve to a concrete ollama model name; assertion fires if no ollama_name.
+        # Resolve to a concrete ollama model name; raises ValueError if no ollama_name is set.
         ollama_model_id = (
             model_id.ollama_name if isinstance(model_id, ModelIdentifier) else model_id
         )
@@ -128,7 +133,7 @@ class OllamaModelBackend(FormatterBackend):
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
             MelleaLogger.get_logger().error(err)
-            raise Exception(err)
+            raise ConnectionError(err)
         if not self._pull_ollama_model():
             err = (
                 f"Model '{self._model_id}' could not be pulled from the Ollama library. "
