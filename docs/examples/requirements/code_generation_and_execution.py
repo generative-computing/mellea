@@ -281,7 +281,7 @@ def process_user_request(
     2. Extract the data as specified in the user request
     3. Use matplotlib with headless backend (set matplotlib.use('Agg') at start)
     4. Create the visualization (graph type) specified by the user
-    5. Save the graph to {output_path} using plt.savefig()
+    5. Save the graph to {output_path} using plt.savefig(\'{output_path}\')
     6. Do NOT call plt.show() - only save to file
     7. Print a message indicating success
 
