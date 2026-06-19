@@ -872,7 +872,8 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                     # Context-attribution produces a non-deterministic number and ordering
                     # of attribution records (HF README explicitly warns about this).
                     # Check that the expected core attributions are present in the actual
-                    # output rather than asserting exact equality.
+                    # output rather than asserting exact equality. Extra records in actual
+                    # are intentionally tolerated — count varies per GPU run.
                     # See issue #1291 for full analysis.
                     def _key(r):
                         return (

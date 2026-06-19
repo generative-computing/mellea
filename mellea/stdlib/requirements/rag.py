@@ -525,7 +525,7 @@ class GroundednessRequirement(Requirement):
             "  - Purely conversational or transitional text (e.g., 'Let me explain', 'In summary')\n"
             "  - A direct restatement or reformulation of information already stated in another span\n\n"
             "Output a JSON array of the form "
-            '[{"span_id": ..., "needs_citation": ...}, ...], with one object for each span. '
+            '[{"span_id": 0, "needs_citation": "yes"}], with one object for each span. '
             'Set "needs_citation" to "yes" if the span contains factual claims needing grounding, '
             'or "no" if it is exempt per the criteria above. '
             "Output ONLY the JSON array, no other text.\n\n"
@@ -597,7 +597,7 @@ class GroundednessRequirement(Requirement):
             "or do not support the span. Consider the full context from the source documents "
             "where the citations appear.\n\n"
             "Respond with a flat JSON array (no nested arrays). Example output:\n"
-            '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}, ...]\n\n'
+            '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}]\n\n'
             "Support levels must be ONLY one of: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED.\n\n"
             f"{documents_section}"
             f"Response context:\n{response}\n\n"
@@ -692,12 +692,21 @@ class GroundednessRequirement(Requirement):
                 )
                 # Handle nested format: {"span_id": 0, "citations": [{"support_level": "..."}]}
                 # This format appears when the model mirrors the input span structure from the prompt.
+                # Aggregate using pessimistic ordering (NOT_SUPPORTED beats PARTIALLY, etc.)
+                # so the result is deterministic regardless of citation order.
                 if not support_level_raw:
-                    for cit in judgment.get("citations", []):
-                        if isinstance(cit, dict):
-                            support_level_raw = (
-                                (cit.get("support_level") or "").upper().strip()
-                            )
+                    nested_levels = {
+                        (cit.get("support_level") or "").upper().strip()
+                        for cit in judgment.get("citations", [])
+                        if isinstance(cit, dict)
+                    }
+                    for pessimistic in (
+                        "NOT_SUPPORTED",
+                        "PARTIALLY_SUPPORTED",
+                        "FULLY_SUPPORTED",
+                    ):
+                        if pessimistic in nested_levels:
+                            support_level_raw = pessimistic
                             break
 
                 logger.debug(
