@@ -228,6 +228,7 @@ def test_device_auto_selects_mps_when_cuda_unavailable():
         patch("cli.alora.train.get_peft_model") as mock_get_peft_model,
         patch("cli.alora.train.load_dataset_from_json") as mock_load_dataset,
         patch("cli.alora.train.DataCollatorForCompletionOnlyLM"),
+        patch("cli.alora.train.SFTConfig"),
         patch("cli.alora.train.torch.cuda.is_available", return_value=False),
         patch("cli.alora.train.torch.backends.mps.is_available", return_value=True),
     ):
