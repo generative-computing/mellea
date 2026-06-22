@@ -282,6 +282,7 @@ class TestModelFriendlyFeedbackFormatter:
         assert "plot.png" in formatted
         assert "plt.savefig('plot.png')" in formatted
         assert "Try:" in formatted
+        assert "Do not use a variable as an argument" in formatted
 
     def test_matplotlib_plot_file_saved_error_with_custom_path(self):
         """Test PlotFileSaved error formatting with custom output path."""
@@ -290,6 +291,7 @@ class TestModelFriendlyFeedbackFormatter:
         formatted = ModelFriendlyFeedbackFormatter.format_matplotlib_error(result)
         assert "/tmp/output.png" in formatted
         assert "plt.savefig('/tmp/output.png')" in formatted
+        assert "Do not use a variable as an argument" in formatted
 
     def test_matplotlib_plot_file_saved_error_fallback(self):
         """Test PlotFileSaved error formatting with malformed reason (fallback)."""
