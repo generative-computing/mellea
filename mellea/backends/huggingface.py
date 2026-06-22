@@ -261,6 +261,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map (dict): Mapping from Mellea sentinel keys to
             HF-specific option names.
+
+    Raises:
+        OSError: If the model cannot be loaded from HuggingFace Hub (bad ID,
+            missing access, or local filesystem/cache error).
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
@@ -327,12 +331,21 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     else "cpu"
                 )
                 # Get the model and tokenizer.
-                self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._model_id, device_map=str(self._device)
-                )
-                self._tokenizer: PreTrainedTokenizerBase = (
-                    AutoTokenizer.from_pretrained(self._model_id)
-                )
+                try:
+                    self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+                        self._model_id, device_map=str(self._device)
+                    )
+                    self._tokenizer: PreTrainedTokenizerBase = (
+                        AutoTokenizer.from_pretrained(self._model_id)
+                    )
+                except OSError as e:
+                    raise OSError(
+                        f"Model '{self._model_id}' could not be loaded from HuggingFace Hub. "
+                        "Check that the model ID is correct and that you have access to it. "
+                        "If the model is gated, set the HF_TOKEN environment variable. "
+                        "To browse available models, visit https://huggingface.co/models "
+                        f"(Original error: {e})"
+                    ) from e
             case _:
                 self._tokenizer, self._model, self._device = custom_config
 

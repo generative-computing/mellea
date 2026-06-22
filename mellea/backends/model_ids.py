@@ -186,7 +186,7 @@ META_LLAMA_3_2_3B = ModelIdentifier(
 )
 
 META_LLAMA_GUARD3_1B = ModelIdentifier(
-    ollama_name="llama-guard3:1b", hf_model_name="unsloth/Llama-Guard-3-1B"
+    ollama_name="llama-guard3:1b", hf_model_name="meta-llama/Llama-Guard-3-1B"
 )
 
 META_LLAMA_3_2_1B = ModelIdentifier(

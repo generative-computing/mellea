@@ -80,6 +80,11 @@ class OllamaModelBackend(FormatterBackend):
             to Mellea ``ModelOption`` sentinel keys.
         from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption``
             sentinel keys to Ollama-specific option names.
+
+    Raises:
+        ValueError: If ``model_id`` is a ``ModelIdentifier`` with no ``ollama_name`` set.
+        ConnectionError: If the Ollama server is not running at ``base_url``.
+        OSError: If the model cannot be pulled from the Ollama library.
     """
 
     def __init__(
@@ -100,13 +105,16 @@ class OllamaModelBackend(FormatterBackend):
             ),
             model_options=model_options,
         )
-        # Resolve to a concrete ollama model name; assertion fires if no ollama_name.
+        # Resolve to a concrete ollama model name; raises ValueError if no ollama_name is set.
         ollama_model_id = (
             model_id.ollama_name if isinstance(model_id, ModelIdentifier) else model_id
         )
-        assert ollama_model_id is not None, (
-            "model_id is None: the ModelIdentifier has no ollama_name configured, or this model is not available in ollama."
-        )
+        if ollama_model_id is None or ollama_model_id == "":
+            raise ValueError(
+                "Cannot create OllamaModelBackend: the ModelIdentifier has no ollama_name set. "
+                "Check mellea/backends/model_ids.py and ensure the constant you are using "
+                "has an ollama_name value, or pass the Ollama model tag as a plain string."
+            )
         self._model_id: str = ollama_model_id
         self._provider: str = "ollama"
 
@@ -127,11 +135,15 @@ class OllamaModelBackend(FormatterBackend):
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
             MelleaLogger.get_logger().error(err)
-            raise Exception(err)
+            raise ConnectionError(err)
         if not self._pull_ollama_model():
-            err = f"could not create OllamaModelBackend: {self._model_id} could not be pulled from ollama library"
+            err = (
+                f"Model '{self._model_id}' could not be pulled from the Ollama library. "
+                f"Check that the model name is correct (run 'ollama list' to see locally "
+                f"available models, or 'ollama pull {self._model_id}' to fetch it manually)."
+            )
             MelleaLogger.get_logger().error(err)
-            raise Exception(err)
+            raise OSError(err)
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
