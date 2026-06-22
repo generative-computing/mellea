@@ -521,10 +521,9 @@ class OllamaModelBackend(FormatterBackend):
 
                 If Ollama returns an empty done response (``response=""``,
                 ``done=True``, no thinking content) for an action, that thunk
-                soft-fails: it has ``value=""``, with the ``RuntimeError`` stored
-                at ``thunk._generate_log.extra["error"]`` and the serialized
-                response dict at ``thunk._generate_log.extra["empty_response"]``.
-                Other actions in the batch are unaffected.
+                soft-fails: it has ``value=""`` and ``thunk.error`` carries the
+                ``RuntimeError`` describing the cause. Other actions in the
+                batch are unaffected.
 
         Note:
             Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
@@ -572,7 +571,6 @@ class OllamaModelBackend(FormatterBackend):
         agg_completion = 0
         for i, response in enumerate(responses):
             result = None
-            error = None
             per_mot_usage: dict[str, Any] | None = None
             if response.done and not response.response and not response.thinking:
                 # Empty done response with no thinking content. Commonly caused by the
@@ -587,7 +585,7 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 MelleaLogger.get_logger().warning(str(empty_err))
                 result = ModelOutputThunk(value="")
-                error = empty_err
+                result._error = empty_err
             else:
                 n_in = response.prompt_eval_count
                 n_out = response.eval_count
@@ -624,10 +622,6 @@ class OllamaModelBackend(FormatterBackend):
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
             generate_log.action = action
-
-            if error:
-                generate_log.extra["error"] = error
-                generate_log.extra["empty_response"] = response.model_dump()
             result._generate_log = generate_log
 
             results.append(result)

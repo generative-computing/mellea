@@ -220,8 +220,9 @@ def test_instruct_returns_string(session):
 
 ### Inspecting logged model options
 
-`_generate_log.model_options` lets you confirm that options you passed were
-forwarded to the model. This is useful when testing custom model option handling:
+`result.generate_log.model_options` lets you confirm that options you passed
+were forwarded to the model. This is useful when testing custom model option
+handling:
 
 ```python
 # Requires: mellea, pytest
@@ -239,12 +240,12 @@ def test_model_options_forwarded(session):
         "Write a one-sentence summary.",
         model_options=model_options,
     )
-    assert "custom_param" in res._generate_log.model_options
+    assert "custom_param" in res.generate_log.model_options
 ```
 
-> **Note:** `_generate_log` is an internal attribute. Its structure may change
-> between Mellea versions. Use it for debugging and option-forwarding tests, not
-> as a primary correctness check.
+> **Note:** `GenerateLog` is recorded for every generation, but its field set
+> may change between Mellea versions. Use it for debugging and
+> option-forwarding tests, not as a primary correctness check.
 
 ## Using `simple_validate` for deterministic checks
 
