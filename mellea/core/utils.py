@@ -109,10 +109,9 @@ def set_log_context(**fields: Any) -> None:
     Call this at the start of a request or task to attach identifiers such as
     ``trace_id`` or ``request_id`` without modifying individual log calls.
 
-    .. note::
-        Prefer :func:`log_context` as the primary API — it guarantees cleanup
-        (including restoring outer values on same-key nesting) even on
-        exceptions.
+    Note:
+        Prefer `log_context` as the primary API — it guarantees cleanup
+        (including restoring outer values on same-key nesting) even on exceptions.
 
     Args:
         **fields: Arbitrary key-value pairs to include in log records.
@@ -145,11 +144,12 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
     copy of the context variable, so coroutines running on the same event-loop
     thread cannot overwrite each other's fields.
 
-    Example::
-
+    Example:
+        ```python
         with log_context(request_id="req-1", user_id="u-42"):
             logger.info("Handling request")   # both IDs appear here
         logger.info("After request")          # IDs are gone
+        ```
 
     Args:
         **fields: Key-value pairs to inject.  Same restrictions as

@@ -33,10 +33,13 @@ def policy_guardrails(
     Uses the policy_guardrails LoRA adapter to judge whether the scenario
     described in the last message in `context` is compliant with the given `policy_text`.
 
-    :param context: Chat context containing the conversation to evaluate.
-    :param backend: Backend instance that supports LoRA adapters.
-    :param policy_text: Policy against with compliance is to be checked
-    :return: Compliance as a "Yes/No/Ambiguous" label (Yes = compliant).
+    Args:
+        context (ChatContext): Chat context containing the conversation to evaluate.
+        backend (AdapterMixin): Backend instance that supports LoRA adapters.
+        policy_text (str): Policy against which compliance is to be checked.
+
+    Returns:
+        str: Compliance as a `"Yes"` / `"No"` / `"Ambiguous"` label (`"Yes"` = compliant).
     """
     result_json = call_intrinsic(
         "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
@@ -247,10 +250,12 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
     assistant's response to a user's question. The context should end with
     a user question followed by an assistant answer.
 
-    :param context: Chat context containing user question and assistant answer.
-    :param backend: Backend instance that supports LoRA/aLoRA adapters.
+    Args:
+        context (ChatContext): Chat context containing user question and assistant answer.
+        backend (AdapterMixin): Backend instance that supports LoRA/aLoRA adapters.
 
-    :return: Factuality score as a "yes/no" label (yes = factually incorrect).
+    Returns:
+        str: Factuality score as a `"yes"` / `"no"` label (`"yes"` = factually incorrect).
     """
     result_json = call_intrinsic("factuality-detection", context, backend)
     return result_json["score"]
@@ -262,10 +267,12 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
     Adapter function that corrects the assistant's response to a user's
     question relative to the given contextual information.
 
-    :param context: Chat context containing user question and assistant answer.
-    :param backend: Backend instance that supports LoRA/aLoRA adapters.
+    Args:
+        context (ChatContext): Chat context containing user question and assistant answer.
+        backend (AdapterMixin): Backend instance that supports LoRA/aLoRA adapters.
 
-    :return: Correct assistant response.
+    Returns:
+        str: Corrected assistant response.
     """
     result_json = call_intrinsic("factuality-correction", context, backend)
     return result_json["correction"]
