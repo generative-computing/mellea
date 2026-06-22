@@ -29,6 +29,7 @@ from typing import (
     ParamSpec,
     Protocol,
     TypeVar,
+    cast,
     runtime_checkable,
 )
 
@@ -402,7 +403,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Mellea-side hook correlation ID; distinct from the provider-assigned
         # `GenerationMetadata.response_id`.
         self._generation_id: str | None = None
-        self._format: type[pydantic.BaseModel] | None = None
+        self._format: type[S] | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
@@ -893,15 +894,18 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         self._underlying_value = v
 
     @property
-    def parsed(self) -> pydantic.BaseModel | None:
+    def parsed(self) -> S | None:
         """Returns the result as a validated Pydantic instance when ``format=`` was set.
 
-        Returns ``None`` when no ``format=`` type was provided to the originating
-        ``act()`` / ``instruct()`` call.  Use this instead of casting ``.value``
+        The return type tracks the format type supplied at the originating call
+        site: ``m.act(action, format=MyModel)`` yields a
+        ``ComputedModelOutputThunk[MyModel]`` whose ``.parsed`` is typed
+        ``MyModel | None`` — no ``cast()`` required. Returns ``None`` when no
+        ``format=`` type was provided.  Use this instead of casting ``.value``
         manually::
 
             result = m.act(Instruction("Say yes or no"), format=MyModel)
-            obj = result.parsed  # no manual model_validate_json needed
+            obj = result.parsed  # typed MyModel | None, no model_validate_json needed
 
         Note:
             This property relies on the originating backend storing the format
@@ -911,8 +915,8 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
             ``format=`` was supplied.
 
         Returns:
-            A ``pydantic.BaseModel`` instance produced by ``model_validate_json``,
-            or ``None`` if no format type was set.
+            An instance of the format type (``S``) produced by
+            ``model_validate_json``, or ``None`` if no format type was set.
 
         Raises:
             pydantic.ValidationError: If the raw JSON value does not conform to
@@ -920,7 +924,11 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         """
         if self._format is None:
             return None
-        return self._format.model_validate_json(self.value)
+        # `_format` is a pydantic model type in every code path that sets it (the
+        # `format=` overloads bind `S` to that model), but `S` itself is unbounded,
+        # so we narrow to call `model_validate_json` and re-assert the result as `S`.
+        fmt = cast("type[pydantic.BaseModel]", self._format)
+        return cast("S", fmt.model_validate_json(self.value))
 
     def is_computed(self) -> Literal[True]:
         """Returns `True` since thunk is always computed.
