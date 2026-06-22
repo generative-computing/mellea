@@ -6,7 +6,16 @@ import inspect
 from collections.abc import Awaitable, Callable, Coroutine
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints, overload
+from typing import (
+    Any,
+    Generic,
+    ParamSpec,
+    TypedDict,
+    TypeVar,
+    cast,
+    get_type_hints,
+    overload,
+)
 
 from pydantic import BaseModel, Field, create_model
 
@@ -653,19 +662,15 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
             )
 
         assert response.parsed_repr is not None
-        # The format= overloads on act/aact narrow the *thunk's* element type, but a
-        # genstub must return the inner value R (the unwrapped FunctionResponse[R]
-        # payload), not the thunk. `parsed_repr` is typed `S | None` at the call
-        # site and cannot be re-bound to R here, so the ignore bridges the gap.
-        #
-        # TODO: the clean shape is for act/aact to deliver a ComputedModelOutputThunk[R]
-        # whose value is R, with the FunctionResponse[R] unwrap happening inside a typed
-        # parse step rather than at the genstub boundary. That requires coordinating the
-        # thunk-generics redesign (see the .parsed work) and is outside this PR's scope.
+        # GenerativeStub._parse calls model_validate_json and returns the unwrapped R,
+        # so parsed_repr is R at runtime. The thunk types it as S | None (where
+        # S = FunctionResponse[R]) because the overloads narrow S to the format type,
+        # not to R. cast makes the coercion explicit rather than suppressing it.
+        parsed = cast("R", response.parsed_repr)
         if context is None:
-            return response.parsed_repr  # type: ignore[return-value]
+            return parsed
         else:
-            return response.parsed_repr, context  # type: ignore[return-value]
+            return parsed, context
 
 
 class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
@@ -805,16 +810,13 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 "unexpectedly received uncomputed model output thunk in async generative stub"
             )
             assert response.parsed_repr is not None
-            # See the SyncGenerativeStub.__call__ comment above: the format= overloads
-            # narrow the thunk's element type, but a genstub returns the unwrapped inner
-            # value R, not the thunk. `parsed_repr` is `S | None` and can't be re-bound to
-            # R here. The clean fix (ComputedModelOutputThunk[R] with the FunctionResponse[R]
-            # unwrap in a typed parse step) needs the thunk-generics redesign and is out of
-            # scope for this PR.
+            # Same as SyncGenerativeStub: _parse returns the unwrapped R at runtime;
+            # cast makes the S → R coercion explicit.
+            parsed = cast("R", response.parsed_repr)
             if context is None:
-                return response.parsed_repr  # type: ignore[return-value]
+                return parsed
             else:
-                return response.parsed_repr, context  # type: ignore[return-value]
+                return parsed, context
 
         return __async_call__()
 
