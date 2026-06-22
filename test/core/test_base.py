@@ -275,6 +275,19 @@ def test_mot_error_carried_by_copy_methods() -> None:
     assert target.error is err
 
 
+def test_mot_thinking_public_field_round_trip():
+    mot = ModelOutputThunk(value="x")
+    mot.thinking = "reasoning trace"
+    assert mot.thinking == "reasoning trace"
+
+
+def test_mot__thinking_deprecated_alias_warns_on_read():
+    mot = ModelOutputThunk(value="x")
+    mot.thinking = "reasoning trace"
+    with pytest.warns(DeprecationWarning, match="ModelOutputThunk._thinking"):
+        assert mot._thinking == "reasoning trace"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
 

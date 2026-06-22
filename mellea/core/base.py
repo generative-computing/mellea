@@ -18,6 +18,7 @@ import binascii
 import datetime
 import enum
 import logging
+import warnings
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -394,7 +395,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
-        self._thinking: str | None = None
+        self.thinking: str | None = None
         self.generation: GenerationMetadata = GenerationMetadata()
         """Backend execution metadata populated during generation."""
 
@@ -594,7 +595,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._meta = other._meta
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
-        self._thinking = other._thinking
+        self.thinking = other.thinking
         self.generation = other.generation
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
@@ -610,6 +611,26 @@ class ModelOutputThunk(CBlock, Generic[S]):
             `True` if the thunk value has been set, `False` otherwise.
         """
         return self._computed
+
+    @property
+    def _thinking(self) -> str | None:
+        """Deprecated alias for :attr:`thinking`.
+
+        Returns:
+            str | None: The model's reasoning/thinking trace.
+        """
+        warnings.warn(
+            "`ModelOutputThunk._thinking` is deprecated and will be removed in a "
+            "future minor release. Use `ModelOutputThunk.thinking` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.thinking
+
+    @_thinking.setter
+    def _thinking(self, value: str | None) -> None:
+        """Deprecated write alias for :attr:`thinking`."""
+        self.thinking = value
 
     @property
     def value(self) -> str | None:
@@ -829,7 +850,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # _cancel_hook is not forwarded: a copied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         copied._cancel_hook = None
-        copied._thinking = self._thinking
+        copied.thinking = self.thinking
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
@@ -862,7 +883,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         deepcopied._cancel_hook = None
-        deepcopied._thinking = self._thinking
+        deepcopied.thinking = self.thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
             self._context
