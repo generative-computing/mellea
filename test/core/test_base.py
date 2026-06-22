@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import CBlock, Component, ImageBlock, ModelOutputThunk
+from mellea.core import CBlock, Component, ImageBlock, ImageUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Message
 
 
@@ -123,6 +123,47 @@ def test_image_block_data_uri_prefix_stripped():
 def test_image_block_invalid_value_raises():
     with pytest.raises(AssertionError, match="Invalid base64"):
         ImageBlock(value="not-a-png")
+
+
+# --- ImageUrlBlock ---
+
+
+def test_image_url_block_valid_https():
+    block = ImageUrlBlock("https://example.com/image.png")
+    assert block.value == "https://example.com/image.png"
+
+
+def test_image_url_block_valid_http():
+    block = ImageUrlBlock("http://example.com/image.png")
+    assert block.value == "http://example.com/image.png"
+
+
+def test_image_url_block_invalid_scheme_raises():
+    with pytest.raises(ValueError, match="http"):
+        ImageUrlBlock("ftp://example.com/image.png")
+
+
+def test_image_url_block_base64_raises():
+    b64 = _make_png_b64()
+    with pytest.raises(ValueError, match="http"):
+        ImageUrlBlock(b64)
+
+
+def test_message_accepts_image_url_block():
+    from mellea.stdlib.components import Message
+
+    block = ImageUrlBlock("https://example.com/cat.png")
+    msg = Message("user", "look at this", images=[block])
+    assert msg.images == [block]
+
+
+def test_message_mixed_image_types():
+    from mellea.stdlib.components import Message
+
+    url_block = ImageUrlBlock("https://example.com/cat.png")
+    b64_block = ImageBlock(_make_png_b64())
+    msg = Message("user", "two images", images=[url_block, b64_block])
+    assert len(msg.images) == 2  # type: ignore[arg-type]
 
 
 # --- ModelOutputThunk._copy_from ---

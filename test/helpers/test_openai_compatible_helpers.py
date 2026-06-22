@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from mellea.backends.tools import MelleaTool
-from mellea.core.base import ImageBlock, ModelOutputThunk, ModelToolCall
+from mellea.core.base import ImageBlock, ImageUrlBlock, ModelOutputThunk, ModelToolCall
 from mellea.helpers.openai_compatible_helpers import (
     build_tool_calls,
     chat_completion_delta_merge,
@@ -349,6 +349,17 @@ class TestMessageToOpenaiMessage:
         assert url.startswith("data:image/png;base64,")
         assert url.count("data:image/png;base64,") == 1
         assert url == f"data:image/png;base64,{_B64_PNG}"
+
+    def test_image_url_block_passed_through_as_url(self):
+        """ImageUrlBlock (https://) is forwarded as-is without data-URI wrapping."""
+        img_url = ImageUrlBlock("https://example.com/photo.png")
+        msg = Message(role="user", content="describe", images=[img_url])
+        result = message_to_openai_message(msg)
+
+        assert isinstance(result["content"], list)
+        url_entry = result["content"][1]
+        assert url_entry["type"] == "image_url"
+        assert url_entry["image_url"]["url"] == "https://example.com/photo.png"
 
 
 # --- messages_to_docs ---
