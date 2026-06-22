@@ -197,27 +197,27 @@ def test_view_for_generation_model_bound_returns_full_history_when_under_limit()
 
 def test_view_for_generation_model_bound_used_as_upper_bound():
     # A tiny context_length=10 triggers truncation; most recent items are retained.
-    # Each "item N" is 6 chars → cost = max(1, 6 // 4) = 1 token each.
-    # Effective budget = int(10 * 0.55) = 5; fits the 5 most-recent items.
+    # Each "item N" renders to ~7 chars → cost = max(1, 7 // 4) = 1 token each.
+    # Effective budget = int(10 * 0.75) = 7; fits the 7 most-recent items.
     tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=10)
     ctx = ChatContext(model_id=tiny)
     for i in range(15):
         ctx = ctx.add(CBlock(f"item {i}"))
     result = ctx.view_for_generation()
-    assert len(result) == 5
+    assert len(result) == 7
     assert str(result[-1]) == "item 14"
 
 
 def test_view_for_generation_token_budget_drops_oldest():
-    # Each item is a 100-char string → cost = 100 // 4 = 25 tokens.
-    # context_length=130: effective budget = int(130 * 0.55) = 71.
-    # Fits 2 items (50 tokens); the 3rd would push spent to 75 > 71.
+    # Each item is a 100-char string → cost = 101 // 4 = 25 tokens.
+    # context_length=130: effective budget = int(130 * 0.75) = 97.
+    # Fits 3 items (75 tokens); the 4th would push spent to 100 > 97.
     tiny = ModelIdentifier(hf_model_name="org/tiny-model", context_length=130)
     ctx = ChatContext(model_id=tiny)
     for i in range(7):
         ctx = ctx.add(CBlock("x" * 100 + str(i)))  # 101 chars → cost 25
     result = ctx.view_for_generation()
-    assert len(result) == 2
+    assert len(result) == 3
     # Newest items are kept.
     assert str(result[-1]).endswith("6")
     assert str(result[-2]).endswith("5")
@@ -395,15 +395,15 @@ def test_clone_does_not_double_bind_replaced_root_context():
 def test_as_list_token_budget_fits_exactly():
     # Verify > vs >= boundary: an item whose cost equals the remaining budget
     # is INCLUDED (condition is `spent + cost > effective_budget`, so equality passes).
-    # context_length=20 → effective = int(20 * 0.55) = 11.
+    # context_length=20 → effective = int(20 * 0.75) = 15.
     # Items of 8 chars → cost = max(1, 8 // 4) = 2 tokens each.
-    # Five such items = 10 tokens ≤ 11 (all included); 6th = 12 > 11 (excluded).
+    # Seven items = 14 tokens ≤ 15 (all included); 8th = 16 > 15 (excluded).
     tiny = ModelIdentifier(hf_model_name="org/exact-fit-model", context_length=20)
     ctx = ChatContext(model_id=tiny)
-    for _ in range(6):
+    for _ in range(8):
         ctx = ctx.add(CBlock("abcdefgh"))  # 8 chars → cost 2
     result = ctx.view_for_generation()
-    assert len(result) == 5
+    assert len(result) == 7
 
 
 def test_build_table_raises_on_collision(monkeypatch):
