@@ -288,6 +288,12 @@ def test_mot__thinking_deprecated_alias_warns_on_read():
         assert mot._thinking == "reasoning trace"
 
 
+def test_mot__thinking_deprecated_alias_write_sets_public_field():
+    mot = ModelOutputThunk(value="x")
+    mot._thinking = "reasoning trace"
+    assert mot.thinking == "reasoning trace"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
 

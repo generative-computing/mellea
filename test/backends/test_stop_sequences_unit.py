@@ -11,6 +11,7 @@ import pytest
 from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
+from mellea.core import ModelOutputThunk
 
 # --- OpenAI ---
 
@@ -125,6 +126,40 @@ def test_watsonx_stop_sequences_round_trip(is_chat, native_key):
     )
     assert backend_specific[native_key] == stops
     assert ModelOption.STOP_SEQUENCES not in backend_specific
+
+
+@pytest.mark.asyncio
+async def test_watsonx_processing_non_streaming_captures_reasoning_content():
+    backend = _make_watsonx_backend()
+    mot = ModelOutputThunk(value=None)
+
+    chunk = {
+        "choices": [
+            {"message": {"reasoning_content": "trace", "content": "answer content"}}
+        ]
+    }
+    await backend.processing(mot, chunk)
+
+    assert mot.thinking == "trace"
+    assert mot._underlying_value == "answer content"
+    assert mot._meta["oai_chat_response_choice"] == chunk["choices"][0]
+
+
+@pytest.mark.asyncio
+async def test_watsonx_processing_streaming_captures_reasoning_content():
+    backend = _make_watsonx_backend()
+    mot = ModelOutputThunk(value=None)
+
+    await backend.processing(
+        mot, {"choices": [{"delta": {"reasoning_content": "a", "content": "x"}}]}
+    )
+    await backend.processing(
+        mot, {"choices": [{"delta": {"reasoning_content": "b", "content": "y"}}]}
+    )
+
+    assert mot.thinking == "ab"
+    assert mot._underlying_value == "xy"
+    assert len(mot._meta["oai_chat_response_streamed"]) == 2
 
 
 # --- HuggingFace ---
