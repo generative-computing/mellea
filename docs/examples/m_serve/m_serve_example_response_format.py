@@ -44,18 +44,18 @@ def serve(
     """
     message = input[-1].get_text_content() or "No message provided"
 
-    # When format is provided (from json_schema response_format),
-    # pass it to instruct() to get structured output
-    # `format` arrives as a dynamic `type | None` from the response_format request, so it
-    # matches no single narrow instruct() overload (those key off format=None vs a concrete
-    # type). A serving wrapper that wanted cast-free typing would branch on `format is None`
-    # and call instruct() in each branch; here the passthrough ignore keeps the example
-    # focused on the serving flow.
-    result = session.instruct(
-        description=message,
-        requirements=requirements,  # type: ignore
-        model_options=model_options,
-        format=format,  # type: ignore[arg-type]  # dynamic format from caller
-    )
+    if format is None:
+        result = session.instruct(
+            description=message,
+            requirements=requirements,  # type: ignore
+            model_options=model_options,
+        )
+    else:
+        result = session.instruct(
+            description=message,
+            requirements=requirements,  # type: ignore
+            model_options=model_options,
+            format=format,
+        )
 
     return result
