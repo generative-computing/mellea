@@ -371,6 +371,8 @@ def test_format_preserved_by_copy() -> None:
     result = _make_computed('{"label": "yes"}', _Label)
     shallow = _copy.copy(result)
     assert shallow._format is _Label
+    # __copy__ returns ModelOutputThunk (loses ComputedModelOutputThunk subclass due to
+    # zero-copy __class__ reassignment), so we validate manually rather than via .parsed.
     assert shallow._format.model_validate_json(shallow.value).label == "yes"  # type: ignore[union-attr]
 
 
@@ -380,4 +382,5 @@ def test_format_preserved_by_deepcopy() -> None:
     result = _make_computed('{"label": "yes"}', _Label)
     deep = _copy.deepcopy(result)
     assert deep._format is _Label
+    # Same subclass-loss caveat as test_format_preserved_by_copy.
     assert deep._format.model_validate_json(deep.value).label == "yes"  # type: ignore[union-attr]
