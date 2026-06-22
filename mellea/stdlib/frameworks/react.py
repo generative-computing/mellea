@@ -111,6 +111,15 @@ async def react(
             assert len(tool_responses) == 1, "multiple tools were called with 'final'"
 
             if format is not None:
+                # `format` is a dynamic `type[BaseModelSubclass] | None` forwarded from
+                # the caller, which matches no single narrow aact() overload (those key
+                # off `format=None` vs `format=<type>` as distinct literals). We are
+                # already inside `if format is not None`, so the value is known non-None
+                # here, but mypy does not propagate that narrowing into the overload pick.
+                # The clean fix is for the caller to branch on `format is None` and call
+                # aact in each branch so each call matches a narrow overload; that is
+                # not worth the duplication for this single internal call site, so we
+                # accept the ignore.
                 step, next_context = await mfuncs.aact(  # type: ignore[assignment]  # dynamic format from caller
                     action=ReactThought(),
                     context=context,
