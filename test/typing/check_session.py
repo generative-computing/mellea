@@ -66,6 +66,25 @@ def check_act_format() -> None:
     assert_type(r, ComputedModelOutputThunk[_M])
 
 
+def check_act_format_attributes() -> None:
+    # Locks in what the format= overloads actually narrow at the attribute level.
+    r = s.act(action, format=_M)
+
+    # `parsed_repr` is the attribute the overloads narrow: it carries the generic
+    # element type S, so with format=_M it resolves to `_M | None`.
+    assert_type(r.parsed_repr, _M | None)
+
+    # KNOWN LIMITATION: `.value` is typed `-> str` unconditionally on
+    # ComputedModelOutputThunk (see mellea/core/base.py), so it does NOT narrow to
+    # `_M` even though the thunk is parameterised `[_M]`. At runtime `.value` is the
+    # raw string and `.parsed_repr` is also a plain str (Instruction._parse returns
+    # str), so `parsed_repr.value` type-checks but AttributeErrors. Asserting
+    # `assert_type(r.value, _M)` here would (correctly) fail mypy. Both the static
+    # `.value` type and the runtime parsed_repr mismatch are pending the coordinated
+    # thunk-generics / `.parsed` redesign (PR #1282).
+    assert_type(r.value, str)
+
+
 def check_instruct_format() -> None:
     r = s.instruct("test", format=_M)
     assert_type(r, ComputedModelOutputThunk[_M])
