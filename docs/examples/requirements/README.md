@@ -170,6 +170,64 @@ print(result.as_bool())  # True if matplotlib and numpy are available
 The `code_generation_and_execution.py` example demonstrates end-to-end code generation
 with execution:
 
+### How Code Execution Works
+
+When `m.instruct()` is called with `PythonExecutionReq` (with
+`execution_tier="local"`), the requirement validation automatically
+executes the generated code in a subprocess during validation. This
+happens as a **side effect** of the validation process — before the code
+is returned to the caller.
+
+The underlying mechanism (what `PythonExecutionReq` does under the hood):
+
+```python
+def execute_python_code(code: str, timeout: int = 10) -> dict:
+    """Execute Python code in a subprocess and capture output."""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False
+        ) as f:
+            f.write(code)
+            temp_file = f.name
+
+        try:
+            result = subprocess.run(
+                [sys.executable, temp_file],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+
+            return {
+                "success": result.returncode == 0,
+                "output": result.stdout,
+                "error": result.stderr,
+                "return_code": result.returncode,
+            }
+        finally:
+            Path(temp_file).unlink()
+
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "output": "",
+            "error": f"Code execution timed out after {timeout}s",
+            "return_code": -1,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "output": "",
+            "error": str(e),
+            "return_code": -1,
+        }
+```
+
+**Key point:** In `code_generation_and_execution.py`, after `m.instruct()`
+returns, the code has *already been executed*. To verify success, check
+if the output file exists (e.g., the PNG graph file). There is no need
+for a separate execution step.
+
 ### Command-line Options
 
 ```text

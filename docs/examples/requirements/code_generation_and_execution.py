@@ -102,54 +102,8 @@ def _extract_code_from_output(generated: str) -> str | None:
     return None
 
 
-# NOTE: Code execution has already occurred as a side effect of requirement validation.
-# When m.instruct() is called with PythonExecutionReq, the validation_fn executes the
-# code in a subprocess to verify it runs without errors. The code execution below is
-# documented for educational purposes to show what happens during validation, but is
-# not needed since validation already ran the code. To verify the graph was created,
-# we only need to check if the output file exists (see process_user_request line ~310).
-#
-# def execute_python_code(code: str, timeout: int = 10) -> dict:
-#     """Execute Python code in a subprocess and capture output.
-#
-#     Args:
-#         code: Python code to execute
-#         timeout: Maximum execution time in seconds
-#
-#     Returns:
-#         dict with 'success', 'output', and 'error' keys
-#     """
-#     try:
-#         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-#             f.write(code)
-#             temp_file = f.name
-#
-#         try:
-#             result = subprocess.run(
-#                 [sys.executable, temp_file],
-#                 capture_output=True,
-#                 text=True,
-#                 timeout=timeout,
-#             )
-#
-#             return {
-#                 "success": result.returncode == 0,
-#                 "output": result.stdout,
-#                 "error": result.stderr,
-#                 "return_code": result.returncode,
-#             }
-#         finally:
-#             Path(temp_file).unlink()
-#
-#     except subprocess.TimeoutExpired:
-#         return {
-#             "success": False,
-#             "output": "",
-#             "error": f"Code execution timed out after {timeout} seconds",
-#             "return_code": -1,
-#         }
-#     except Exception as e:
-#         return {"success": False, "output": "", "error": str(e), "return_code": -1}
+# See README.md "How Code Execution Works" section for details on the execute_python_code
+# mechanism that PythonExecutionReq uses under the hood.
 
 
 def create_sample_csv(csv_path: str) -> None:
@@ -325,21 +279,8 @@ def process_user_request(
     print("\nGenerated code:")
     print(code)
 
-    # NOTE: Code execution already occurred as a side effect of PythonExecutionReq
-    # validation during m.instruct(). Because PythonExecutionReq uses execution_tier="local"
-    # (not "static"), the code was executed in a subprocess during validation. The lines
-    # below are kept as comments to show what would happen if we were executing separately:
-    #
-    # print("\nExecuting code...")
-    # result = execute_python_code(code, timeout=15)
-    #
-    # if not result["success"]:
-    #     print(f"  ✗ Error during execution: {result['error']}")
-    #     return
-    #
-    # print("  ✓ Code executed successfully")
-    # if result["output"]:
-    #     print(f"\n  Output: {result['output']}")
+    # Code execution already occurred as a side effect of PythonExecutionReq validation.
+    # See README.md for explanation of how execution works.
 
     # Check if graph file was created
     graph_path = Path(output_path)
