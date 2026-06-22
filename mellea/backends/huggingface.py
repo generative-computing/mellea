@@ -11,6 +11,8 @@ import datetime
 import functools
 import json
 import threading
+import time
+import uuid
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, cast
 
@@ -62,6 +64,8 @@ from ..helpers import (
     messages_to_docs,
     send_to_queue,
 )
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
@@ -1609,6 +1613,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if model_opts.get(ModelOption.RAW_LOGITS):
             raw_scores_kwargs["output_logits"] = True
 
+        gen_id = str(uuid.uuid4())
         _start = time.perf_counter()
         try:
             outputs = await asyncio.to_thread(
@@ -1632,14 +1637,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     GenerationBatchErrorPayload(
                         generation_id=gen_id,
                         exception=e,
-                        model=hf_model_id,
+                        model=self._model_id,
                         provider="huggingface",
                         latency_ms=(time.perf_counter() - _start) * 1000,
                     ),
                 )
             raise
-
-        latency_ms = (time.perf_counter() - _start) * 1000
 
         sequences_to_decode = [
             sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
