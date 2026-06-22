@@ -1,11 +1,14 @@
 """Adapter classes for adding fine-tuned modules to inference backends.
 
-Defines the abstract ``Adapter`` base class and its concrete subclasses
-``LocalHFAdapter`` (for locally loaded Hugging Face models) and ``IntrinsicAdapter``
-(for adapters whose metadata is stored in Mellea's adapter function catalog). Also
-provides ``get_adapter_for_intrinsic`` for resolving the right adapter class given an
-adapter function name, and ``AdapterMixin`` for backends that support runtime adapter
-loading and unloading.
+The primary public surface is :func:`AdapterMixin.resolve_adapter` (find or lazily
+register an adapter by capability name) and :meth:`AdapterMixin._find_adapter`
+(look up a registered adapter).  :class:`AdapterMixin` is mixed into backends that
+support runtime adapter loading and unloading.
+
+``LocalHFAdapter``, ``IntrinsicAdapter``, and ``EmbeddedIntrinsicAdapter`` are
+**deprecation shims** retained for backwards compatibility.  They satisfy
+``isinstance(x, _core.Adapter)`` but delegate all behaviour to the new dataclass.
+``get_adapter_for_intrinsic`` is similarly deprecated; prefer ``resolve_adapter``.
 """
 
 import abc
@@ -96,16 +99,24 @@ class _ShimWeightsBinding(WeightsBinding):
     """Phase 1 placeholder; Phase 2 (issue #1138) wires in real lifecycle."""
 
     def prepare(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
 
     def activate(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
 
     def deactivate(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
 
     def release(self) -> None:
-        raise NotImplementedError("WeightsBinding not yet implemented")
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
 
 
 class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
@@ -408,7 +419,9 @@ class AdapterMixin(Backend, abc.ABC):
         # warnings.catch_warnings() modifies the process-global filter state and is not
         # async/thread-safe.  Concurrent first-time resolves race on filter restoration;
         # add_adapter is idempotent so the double-registration hazard is benign, but the
-        # filter race is a known Phase-1 gap.  Phase 2 (#1138) introduces a proper lock.
+        # filter race is a known Phase-1 gap: two concurrent first-time call_intrinsic
+        # calls can interleave their catch_warnings contexts, causing a DeprecationWarning
+        # to surface in user code during lazy-registration.  Phase 2 (#1138) adds a lock.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
         with warnings.catch_warnings():
