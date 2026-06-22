@@ -101,6 +101,11 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    # Implementation return type intentionally widened to `Any`: the @overload signatures
+    # above own the precise S propagation (action's S -> thunk's S, plus the
+    # format= -> BaseModelSubclass narrowing). Tightening the body to the bare `[S]` case
+    # would conflict with the format= and sampling overloads, so it is left untyped on
+    # purpose. Callers always resolve against an overload, never this implementation body.
 ) -> tuple[ComputedModelOutputThunk[Any], Context] | SamplingResult[Any]:
     """Runs a generic action, and adds both the action and the result to the context.
 
