@@ -903,6 +903,13 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
             result = m.act(Instruction("Say yes or no"), format=MyModel)
             obj = result.parsed  # no manual model_validate_json needed
 
+        Note:
+            This property relies on the originating backend storing the format
+            type on the thunk. Custom backend authors must set ``mot._format``
+            in their ``post_processing`` method (mirroring the built-in
+            backends); otherwise ``.parsed`` always returns ``None`` even when
+            ``format=`` was supplied.
+
         Returns:
             A ``pydantic.BaseModel`` instance produced by ``model_validate_json``,
             or ``None`` if no format type was set.

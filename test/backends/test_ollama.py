@@ -128,6 +128,24 @@ def test_format(session) -> None:
 
 
 @pytest.mark.qualitative
+def test_parsed_returns_pydantic_instance(session) -> None:
+    class Sentiment(pydantic.BaseModel):
+        label: str
+
+    output = session.instruct(
+        "Classify the sentiment of 'I love this!' as the single word "
+        "positive, negative, or neutral. Respond with a label field.",
+        format=Sentiment,
+        model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
+    )
+
+    parsed = output.parsed
+    assert isinstance(parsed, Sentiment)
+    assert isinstance(parsed.label, str) and parsed.label
+    assert parsed == Sentiment.model_validate_json(output.value)
+
+
+@pytest.mark.qualitative
 @pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
     prompts = ["What is 1+1?", "What is 2+2?", "What is 3+3?", "What is 4+4?"]

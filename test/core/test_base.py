@@ -363,3 +363,21 @@ def test_value_unaffected_by_format() -> None:
     raw = '{"label": "ok"}'
     result = _make_computed(raw, _Label)
     assert result.value == raw
+
+
+def test_format_preserved_by_copy() -> None:
+    import copy as _copy
+
+    result = _make_computed('{"label": "yes"}', _Label)
+    shallow = _copy.copy(result)
+    assert shallow._format is _Label
+    assert shallow._format.model_validate_json(shallow.value).label == "yes"  # type: ignore[union-attr]
+
+
+def test_format_preserved_by_deepcopy() -> None:
+    import copy as _copy
+
+    result = _make_computed('{"label": "yes"}', _Label)
+    deep = _copy.deepcopy(result)
+    assert deep._format is _Label
+    assert deep._format.model_validate_json(deep.value).label == "yes"  # type: ignore[union-attr]
