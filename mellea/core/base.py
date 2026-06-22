@@ -885,7 +885,12 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @property
     def value(self) -> str:
-        """Gets the value of the block."""
+        """Gets the raw string value of the block.
+
+        When ``format=`` is set on the originating ``act()``/``instruct()`` call, the
+        model returns a JSON string and ``.value`` contains that raw JSON — not a
+        Pydantic instance.  Use ``.parsed`` to get the validated model object.
+        """
         return self._underlying_value  # type: ignore
 
     @value.setter
@@ -897,15 +902,17 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     def parsed(self) -> S | None:
         """Returns the result as a validated Pydantic instance when ``format=`` was set.
 
-        The return type tracks the format type supplied at the originating call
-        site: ``m.act(action, format=MyModel)`` yields a
-        ``ComputedModelOutputThunk[MyModel]`` whose ``.parsed`` is typed
-        ``MyModel | None`` — no ``cast()`` required. Returns ``None`` when no
-        ``format=`` type was provided.  Use this instead of casting ``.value``
-        manually::
+        The return type is ``S | None``, where ``S`` is the thunk's type parameter.
+        The ``format=`` overloads do not yet bind ``S`` to the format model, so
+        callers must parameterize the thunk explicitly to get a narrowed type::
 
-            result = m.act(Instruction("Say yes or no"), format=MyModel)
-            obj = result.parsed  # typed MyModel | None, no model_validate_json needed
+            thunk = cast(ComputedModelOutputThunk[MyModel], result)
+            obj = thunk.parsed  # typed MyModel | None, no model_validate_json needed
+
+        Returns ``None`` when no ``format=`` type was provided.  Unlike
+        ``parsed_repr`` (which holds the action-specific parse result),
+        ``.parsed`` always re-validates the raw JSON string against ``_format``
+        via ``model_validate_json``.
 
         Note:
             This property relies on the originating backend storing the format
