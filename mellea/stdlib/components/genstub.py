@@ -653,10 +653,19 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
             )
 
         assert response.parsed_repr is not None
+        # The format= overloads on act/aact narrow the *thunk's* element type, but a
+        # genstub must return the inner value R (the unwrapped FunctionResponse[R]
+        # payload), not the thunk. `parsed_repr` is typed `S | None` at the call
+        # site and cannot be re-bound to R here, so the ignore bridges the gap.
+        #
+        # TODO: the clean shape is for act/aact to deliver a ComputedModelOutputThunk[R]
+        # whose value is R, with the FunctionResponse[R] unwrap happening inside a typed
+        # parse step rather than at the genstub boundary. That requires coordinating the
+        # thunk-generics redesign (see the .parsed work) and is outside this PR's scope.
         if context is None:
-            return response.parsed_repr  # type: ignore[return-value]  # genstub unwraps R from FunctionResponse[R]; format overloads can't re-bind R here
+            return response.parsed_repr  # type: ignore[return-value]
         else:
-            return response.parsed_repr, context  # type: ignore[return-value]  # same
+            return response.parsed_repr, context  # type: ignore[return-value]
 
 
 class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
@@ -796,10 +805,16 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 "unexpectedly received uncomputed model output thunk in async generative stub"
             )
             assert response.parsed_repr is not None
+            # See the SyncGenerativeStub.__call__ comment above: the format= overloads
+            # narrow the thunk's element type, but a genstub returns the unwrapped inner
+            # value R, not the thunk. `parsed_repr` is `S | None` and can't be re-bound to
+            # R here. The clean fix (ComputedModelOutputThunk[R] with the FunctionResponse[R]
+            # unwrap in a typed parse step) needs the thunk-generics redesign and is out of
+            # scope for this PR.
             if context is None:
-                return response.parsed_repr  # type: ignore[return-value]  # genstub unwraps R from FunctionResponse[R]; format overloads can't re-bind R here
+                return response.parsed_repr  # type: ignore[return-value]
             else:
-                return response.parsed_repr, context  # type: ignore[return-value]  # same
+                return response.parsed_repr, context  # type: ignore[return-value]
 
         return __async_call__()
 
