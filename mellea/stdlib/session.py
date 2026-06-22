@@ -390,6 +390,14 @@ class MelleaSession:
 
             deregister_session_plugins(self.id)
 
+    # The format= overloads below narrow the thunk's generic element type. That narrowing
+    # is observable on `parsed_repr: S | None`, NOT on `.value` — ComputedModelOutputThunk.value
+    # is typed `-> str` unconditionally (mellea/core/base.py). There is also a runtime gap:
+    # parsed_repr currently goes through Instruction._parse, which returns a plain str, so
+    # `result.parsed_repr.some_field` type-checks but raises AttributeError at runtime.
+    # TODO: a coherent end state has the thunk's `.parsed` generic over S backed by a runtime
+    # path that delivers S. That is a coordinated change tracked by PR #1282 and is out of
+    # scope here; these overloads only land the static format= narrowing where they can.
     @overload
     def act(
         self,
