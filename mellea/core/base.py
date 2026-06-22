@@ -403,7 +403,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Mellea-side hook correlation ID; distinct from the provider-assigned
         # `GenerationMetadata.response_id`.
         self._generation_id: str | None = None
-        self._format: type[S] | None = None
+        self._format: type[pydantic.BaseModel] | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
@@ -924,11 +924,10 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         """
         if self._format is None:
             return None
-        # `_format` is a pydantic model type in every code path that sets it (the
-        # `format=` overloads bind `S` to that model), but `S` itself is unbounded,
-        # so we narrow to call `model_validate_json` and re-assert the result as `S`.
-        fmt = cast("type[pydantic.BaseModel]", self._format)
-        return cast("S", fmt.model_validate_json(self.value))
+        # `_format` is always a pydantic model type; `model_validate_json` returns
+        # `pydantic.BaseModel` statically, but the caller's type parameter `S` is
+        # the concrete model when `format=` was used, so we cast the result to `S`.
+        return cast(S, self._format.model_validate_json(self.value))
 
     def is_computed(self) -> Literal[True]:
         """Returns `True` since thunk is always computed.

@@ -1,10 +1,14 @@
-"""Mypy checks that `ComputedModelOutputThunk.parsed` tracks the type parameter.
+"""Mypy / pyright checks that `ComputedModelOutputThunk.parsed` tracks the type parameter.
 
 `.parsed` is typed `S | None`, so a thunk parameterized with a Pydantic model
 (`ComputedModelOutputThunk[MyModel]`) exposes `.parsed` as `MyModel | None` —
 callers need no `cast()`. The `format=` overloads in `session.py` /
 `functional.py` bind `S` to the format model (companion issue #1274), at which
 point these checks hold end-to-end from the call site.
+
+The `cast(X, cast(object, None))` idiom creates a typed stub value without
+triggering basedpyright's ``reportInvalidCast`` rule (direct ``cast(X, None)``
+raises that diagnostic because ``None`` and ``X`` share no overlap).
 """
 
 from typing import assert_type, cast
@@ -19,10 +23,10 @@ class _Person(pydantic.BaseModel):
 
 
 def check_parsed_tracks_format_model() -> None:
-    thunk = cast(ComputedModelOutputThunk[_Person], None)
-    assert_type(thunk.parsed, _Person | None)
+    thunk = cast(ComputedModelOutputThunk[_Person], cast(object, None))
+    _ = assert_type(thunk.parsed, _Person | None)
 
 
 def check_parsed_is_str_for_str_thunk() -> None:
-    thunk = cast(ComputedModelOutputThunk[str], None)
-    assert_type(thunk.parsed, str | None)
+    thunk = cast(ComputedModelOutputThunk[str], cast(object, None))
+    _ = assert_type(thunk.parsed, str | None)
