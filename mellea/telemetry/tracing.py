@@ -369,6 +369,250 @@ def finish_backend_span_error(
         span.end()
 
 
+def _start_application_span(
+    name: str, key: str, attributes: dict[str, Any]
+) -> Span | None:
+    """Open an application span, attach it to the OTel context, and stash by key.
+
+    Args:
+        name: Span name.
+        key: Correlation key for the in-flight stash.
+        attributes: Initial attributes; `None` values are skipped.
+
+    Returns:
+        The span, or `None` if the application tracer is unavailable.
+    """
+    tracer = get_application_tracer()
+    if tracer is None:
+        return None
+
+    span = tracer.start_span(name)
+    for k, v in attributes.items():
+        if v is not None:
+            _set_attribute_safe(span, k, v)
+
+    token = otel_context.attach(trace.set_span_in_context(span))
+    _in_flight_spans[key] = (span, token)
+    return span
+
+
+def _finish_application_span(
+    key: str,
+    *,
+    extra_attributes: dict[str, Any] | None = None,
+    exception: BaseException | None = None,
+) -> None:
+    """End an in-flight application span, optionally marking it ERROR.
+
+    Detach the OTel context token before ending so subsequent work parents
+    correctly. Tokens are task-affine — callers must arrange for detach to
+    happen on the same task that attached.
+
+    Args:
+        key: Correlation key from the matching open call.
+        extra_attributes: Optional response-side attributes; `None` values are skipped.
+        exception: If provided, mark the span ERROR and record the exception.
+    """
+    entry = _in_flight_spans.pop(key, None)
+    if entry is None:
+        return
+    span, token = entry
+    try:
+        if extra_attributes:
+            for k, v in extra_attributes.items():
+                if v is not None:
+                    _set_attribute_safe(span, k, v)
+        if exception is not None:
+            span.record_exception(exception)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
+            span.set_attribute("error.type", type(exception).__name__)
+    finally:
+        otel_context.detach(token)
+        span.end()
+
+
+_SESSION_STARTUP_KEY_SUFFIX = ":startup"
+
+
+def start_session_startup_span(
+    session_id: str,
+    *,
+    backend: str | None,
+    model_id: str | None,
+    context_type: str | None,
+) -> Span | None:
+    """Open the `start_session` span around backend construction.
+
+    Carries construction-time attributes (`mellea.session_id`,
+    `mellea.backend`, `mellea.model_id`, `mellea.context_type`). Stashed
+    under a derived key so it doesn't collide with the long-lived
+    `session` span when both share a `session_id`.
+
+    Args:
+        session_id: Session UUID. The in-flight key is derived from this.
+        backend: Backend identifier (e.g. `"ollama"`); stamped as `mellea.backend`.
+        model_id: Resolved model id string.
+        context_type: Context class name (e.g. `"SimpleContext"`).
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        "start_session",
+        session_id + _SESSION_STARTUP_KEY_SUFFIX,
+        {
+            "mellea.session_id": session_id,
+            "mellea.backend": backend,
+            "mellea.model_id": model_id,
+            "mellea.context_type": context_type,
+        },
+    )
+
+
+def finish_session_startup_span(
+    session_id: str, *, exception: BaseException | None = None
+) -> bool:
+    """End the nested `start_session` span if one is in flight.
+
+    Args:
+        session_id: Session UUID from the matching open call. The in-flight
+            key is derived from this.
+        exception: If provided, mark the span ERROR.
+
+    Returns:
+        True if a child span was open and was finished; False if no-op.
+    """
+    key = session_id + _SESSION_STARTUP_KEY_SUFFIX
+    if key not in _in_flight_spans:
+        return False
+    _finish_application_span(key, exception=exception)
+    return True
+
+
+def start_session_span(
+    session_id: str, *, context_type: str | None, backend: str | None = None
+) -> Span | None:
+    """Open the long-lived `session` span over a session's lifetime.
+
+    Args:
+        session_id: Session UUID, used as the correlation key and stamped
+            as `mellea.session_id`.
+        context_type: Context class name.
+        backend: Backend identifier (e.g. `"ollama"`); stamped as
+            `mellea.backend` when provided.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        "session",
+        session_id,
+        {
+            "mellea.session_id": session_id,
+            "mellea.context_type": context_type,
+            "mellea.backend": backend,
+        },
+    )
+
+
+def finish_session_span(
+    session_id: str, *, exception: BaseException | None = None
+) -> None:
+    """End the long-lived `session` span.
+
+    Args:
+        session_id: Correlation key from the matching open call.
+        exception: If provided, mark the span ERROR.
+    """
+    _finish_application_span(session_id, exception=exception)
+
+
+def start_action_span(
+    action_id: str,
+    *,
+    action_class_name: str | None,
+    has_requirements: bool | None,
+    has_strategy: bool | None,
+    strategy_type: str | None,
+    has_format: bool | None,
+    tool_calls: bool | None,
+) -> Span | None:
+    """Open the `action` span for a single component execution.
+
+    Args:
+        action_id: UUID correlating this component execution across hooks.
+        action_class_name: Class name of the component being executed.
+        has_requirements: Whether requirements were supplied.
+        has_strategy: Whether a sampling strategy was supplied.
+        strategy_type: Sampling strategy class name when present.
+        has_format: Whether a structured-output format was supplied.
+        tool_calls: Whether tool calling is enabled.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        "action",
+        action_id,
+        {
+            "mellea.action_type": action_class_name,
+            "mellea.has_requirements": has_requirements,
+            "mellea.has_strategy": has_strategy,
+            "mellea.strategy_type": strategy_type,
+            "mellea.has_format": has_format,
+            "mellea.tool_calls": tool_calls,
+        },
+    )
+
+
+def finish_action_span_success(
+    action_id: str,
+    *,
+    num_generate_logs: int | None = None,
+    sampling_success: bool | None = None,
+    response_text: str | None = None,
+    response_length: int | None = None,
+) -> None:
+    """End the action span with response-side attributes.
+
+    `mellea.response` is recorded only when `is_content_tracing_enabled()`
+    returns true; the helper truncates to 500 chars before recording.
+    `mellea.response_length` is always recorded (a non-content metric).
+
+    Args:
+        action_id: Correlation key from the matching open call.
+        num_generate_logs: `mellea.num_generate_logs`.
+        sampling_success: `mellea.sampling_success` (set when a strategy ran).
+        response_text: Raw response text. Recorded as `mellea.response` only
+            when content tracing is enabled.
+        response_length: `mellea.response_length` (always safe; ungated).
+    """
+    response_value: str | None = None
+    if response_text is not None and is_content_tracing_enabled():
+        response_value = (
+            response_text[:500] + "..." if len(response_text) > 500 else response_text
+        )
+    _finish_application_span(
+        action_id,
+        extra_attributes={
+            "mellea.num_generate_logs": num_generate_logs,
+            "mellea.sampling_success": sampling_success,
+            "mellea.response": response_value,
+            "mellea.response_length": response_length,
+        },
+    )
+
+
+def finish_action_span_error(action_id: str, *, exception: BaseException) -> None:
+    """End the action span with ERROR status.
+
+    Args:
+        action_id: Correlation key from the matching open call.
+        exception: The exception that ended the action.
+    """
+    _finish_application_span(action_id, exception=exception)
+
+
 @contextmanager
 def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None]:
     """Create an application trace span if application tracing is enabled.

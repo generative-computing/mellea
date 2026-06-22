@@ -308,7 +308,7 @@ applicable:
 | Attribute | Description |
 | --------- | ----------- |
 | `mellea.model_id` | Model identifier used for the call |
-| `mellea.backend` | Backend class name (e.g. `OllamaModelBackend`) |
+| `mellea.backend` | Backend identifier (e.g. `"ollama"`) |
 | `mellea.action_type` | Component type (e.g. `generative`, `instruct`) |
 | `mellea.context_size` | Number of context items passed |
 | `mellea.has_requirements` | Whether requirements were specified |

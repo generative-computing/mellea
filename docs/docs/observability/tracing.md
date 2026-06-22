@@ -106,15 +106,36 @@ Mellea has two trace scopes.
 Application spans cover user-facing Mellea operations. They appear whenever you
 call `m.act()`, `m.instruct()`, `m.chat()`, or a `@generative` function.
 
+The `session` span:
+
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.backend` | Backend class name (e.g., `OllamaModelBackend`) |
+| `mellea.session_id` | UUID identifying this session |
+| `mellea.context_type` | Context class name (e.g., `SimpleContext`) |
+| `mellea.backend` | Backend identifier (e.g., `"ollama"`); set when known |
+
+The `start_session` span:
+
+| Attribute | Description |
+| --------- | ----------- |
+| `mellea.backend` | Backend identifier (e.g., `"ollama"`) |
+| `mellea.model_id` | Resolved model id string |
+| `mellea.context_type` | Context class name |
+
+The `action` span:
+
+| Attribute | Description |
+| --------- | ----------- |
 | `mellea.action_type` | Component class being executed (e.g., `Instruction`) |
-| `mellea.context_size` | Length of the context at call time |
+| `mellea.has_requirements` | Whether requirements were supplied |
+| `mellea.has_strategy` | Whether a sampling strategy was supplied |
+| `mellea.strategy_type` | Sampling strategy class name when present |
 | `mellea.has_format` | Whether a format constraint was specified |
-| `mellea.sampling_success` | Whether the sampling strategy succeeded |
+| `mellea.tool_calls` | Whether tool calling is enabled |
 | `mellea.num_generate_logs` | Number of generation attempts (>1 means retries occurred) |
-| `mellea.response` | Model response truncated to 500 characters |
+| `mellea.sampling_success` | Whether the sampling strategy succeeded |
+| `mellea.response` | Model response truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
+| `mellea.response_length` | Length of the model response (always recorded) |
 
 ### Backend spans (`mellea.backend`)
 
@@ -137,7 +158,6 @@ Mellea also adds context-specific attributes to backend spans:
 
 | Attribute | Description |
 | --------- | ----------- |
-| `mellea.backend` | Backend class name (e.g., `OpenAIBackend`) |
 | `mellea.action_type` | Component type being executed |
 | `mellea.context_size` | Number of items in context |
 | `mellea.has_format` | Whether structured output format is specified |
@@ -150,17 +170,20 @@ Mellea also adds context-specific attributes to backend spans:
 Backend spans nest inside application spans:
 
 ```text
-session_context           (mellea.application)
-├── aact                  (mellea.application)
+start_session             (mellea.application)
+                          [mellea.backend=ollama]
+                          [mellea.model_id=granite4.1:3b]
+
+session                   (mellea.application)
+├── action                (mellea.application)
 │   │                     [mellea.action_type=Instruction]
-│   │                     [mellea.backend=OllamaModelBackend]
 │   ├── chat              (mellea.backend)
 │   │                     [gen_ai.provider.name=ollama]
 │   │                     [gen_ai.request.model=granite4.1:3b]
 │   │                     [gen_ai.usage.input_tokens=150]
 │   │                     [gen_ai.usage.output_tokens=42]
 │   └── requirement_validation  (mellea.application)
-└── aact                  (mellea.application)
+└── action                (mellea.application)
     └── chat              (mellea.backend)
                           [gen_ai.provider.name=openai]
                           [gen_ai.request.model=gpt-4o]
@@ -170,12 +193,12 @@ session_context           (mellea.application)
 
 When you open a trace in your backend, look for these patterns:
 
-**High input token counts on early spans.** A single `aact` span with
+**High input token counts on early spans.** A single `action` span with
 `gen_ai.usage.input_tokens` much larger than expected usually means the context
 has accumulated many previous messages. Use
 [prefix caching](../advanced/prefix-caching-and-kv-blocks) to reduce cost.
 
-**Repeated `requirement_validation` spans beneath one `aact`.** The value of
+**Repeated `requirement_validation` spans beneath one `action`.** The value of
 `mellea.num_generate_logs` in the parent span tells you how many retries occurred.
 If the model keeps retrying, read the `mellea.response` attribute on each attempt to
 understand why validation is failing.
