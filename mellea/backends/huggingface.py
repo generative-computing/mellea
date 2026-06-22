@@ -11,8 +11,6 @@ import datetime
 import functools
 import json
 import threading
-import time
-import uuid
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, cast
 
@@ -674,6 +672,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if want_scores:
             _real_model = self._model
 
+            # Two load-bearing assumptions: (1) __getattr__ falls through for attributes
+            # accessed by generate_with_transformers (model.device, model.vocab_size,
+            # model.generation_config). (2) chat_completion_request_to_transformers_inputs
+            # always sets return_dict_in_generate=True, so .generate() always returns a
+            # GenerateDecoderOnlyOutput — if that ever changes, the cell stays None and
+            # logits silently won't be populated.
             class _CapturingModelProxy:
                 def generate(self_proxy, *args: Any, **kwargs: Any) -> Any:
                     result = cast(Callable[..., Any], _real_model.generate)(
@@ -724,11 +728,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 if raw_hf_output_cell[0] is not None:
                     mot._meta["hf_output"] = raw_hf_output_cell[0]
                 else:
-                    MelleaLogger.get_logger().warning(
-                        "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
-                        "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
-                        "generation.logits and generation.raw_logits will be None."
-                    )
+                    warn_key = "intrinsic_no_hf_output"
+                    if warn_key not in self._warned_about:
+                        self._warned_about.add(warn_key)
+                        MelleaLogger.get_logger().warning(
+                            "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
+                            "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
+                            "generation.logits and generation.raw_logits will be None."
+                        )
 
             # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
             return await self.processing(
@@ -1613,36 +1620,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if model_opts.get(ModelOption.RAW_LOGITS):
             raw_scores_kwargs["output_logits"] = True
 
-        gen_id = str(uuid.uuid4())
-        _start = time.perf_counter()
-        try:
-            outputs = await asyncio.to_thread(
-                self._generate_with_adapter_lock,
-                "",  # Empty for no adapter.
-                self._model.generate,  # type: ignore
-                # Passed as args/kwargs to generate.
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                return_dict_in_generate=True,
-                **raw_scores_kwargs,
-                **generate_kwargs,
-                **format_kwargs,
-            )
-        except Exception as e:
-            if has_plugins(HookType.GENERATION_BATCH_ERROR):
-                from ..plugins.hooks.generation import GenerationBatchErrorPayload
-
-                await invoke_hook(
-                    HookType.GENERATION_BATCH_ERROR,
-                    GenerationBatchErrorPayload(
-                        generation_id=gen_id,
-                        exception=e,
-                        model=self._model_id,
-                        provider="huggingface",
-                        latency_ms=(time.perf_counter() - _start) * 1000,
-                    ),
-                )
-            raise
+        outputs = await asyncio.to_thread(
+            self._generate_with_adapter_lock,
+            "",  # Empty for no adapter.
+            self._model.generate,  # type: ignore
+            # Passed as args/kwargs to generate.
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            return_dict_in_generate=True,
+            **raw_scores_kwargs,
+            **generate_kwargs,
+            **format_kwargs,
+        )
 
         sequences_to_decode = [
             sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
