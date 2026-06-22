@@ -293,7 +293,7 @@ class MelleaSession:
             When *ctx* is a bare (unbound, empty) `ChatContext` and *backend*
             exposes a `model_id`, the constructor replaces `self.ctx` with a
             re-bound copy that carries the model identifier.  After construction,
-            ``session.ctx is ctx`` will therefore be ``False``.
+            `session.ctx is ctx` will therefore be `False`.
         """
         import uuid
 

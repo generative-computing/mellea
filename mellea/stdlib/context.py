@@ -41,22 +41,22 @@ class ChatContext(Context):
 
     Note:
         `context_length` is measured in tokens; `window_size` counts context
-        items (CBlocks / Components). When only a `model_id` is bound (no
-        explicit `window_size`), `view_for_generation` estimates per-item token
-        counts (via `len(str(item)) // 4`) and walks history newest-first,
-        dropping the oldest items until the running sum fits within
-        `context_length`. Set `window_size` explicitly to enforce an item-count
-        limit instead of a token budget.
+        items (CBlocks / Components). When both `window_size` and `model_id`
+        are set, `window_size` always takes priority — the token-budget path is
+        skipped entirely. When only `model_id` is bound, `view_for_generation`
+        estimates per-item token counts (via ``len(rendered) // 4``) and walks
+        history newest-first, dropping the oldest items until the running sum
+        fits within `context_length`. Set `window_size` explicitly to enforce
+        an item-count limit instead of a token budget.
 
-        The token estimate is intentionally conservative: `str()` falls back to
-        `repr()` for `Component` subclasses, so it counts repr boilerplate rather
-        than rendered prompt content.  A 0.55 headroom factor (retaining 55 % of
-        the model's rated context length as the effective budget) is applied to
-        absorb this repr-vs-render skew and to leave capacity for the current
-        action and the model's generated response.  The result is a rough
-        lower-bound — expect the actual token usage to be noticeably below the
-        budget ceiling.  Use `window_size` for precise item-count control, or
-        wait for a future tokenizer-backed estimate.
+        Per-item token count is estimated as ``len(rendered) // 4`` where
+        ``rendered`` is the string produced by `TemplateFormatter` (the same
+        renderer used at generation time), so the estimate reflects actual prompt
+        content.  A 0.75 headroom factor (retaining 75 % of the model's rated
+        context length) is applied to leave capacity for the system prompt,
+        injected tool schemas, the current action, and the model's response —
+        none of which are tracked here.  Use ``window_size`` for precise
+        item-count control.
     """
 
     _propagated_fields: tuple[str, ...] = ("_window_size", "_model_id")
@@ -82,6 +82,8 @@ class ChatContext(Context):
         new = ChatContext()
         for field in self._propagated_fields:
             setattr(new, field, getattr(self, field))
+        # Override whatever _propagated_fields copied for _model_id: the caller
+        # explicitly supplies the model_id to bind (e.g. _bind_model changes it).
         new._model_id = model_id
         return new
 
@@ -150,7 +152,7 @@ class ChatContext(Context):
         1. Explicit `window_size` passed at construction — item-count limit, always wins.
         2. Model-derived context length looked up via `model_id` — token-budget truncation.
            Items are added newest-first until adding the next item would exceed the budget.
-           Token count is estimated as `len(str(item)) // 4`.
+           Token count is estimated as ``len(rendered) // 4`` via `TemplateFormatter`.
         3. No limit — return the full history.
 
         Returns:
@@ -173,16 +175,20 @@ class ChatContext(Context):
         Walks the linked list from newest to oldest, accumulating items until
         adding the next item would exceed the budget.  The returned list is in
         chronological order (oldest-first), matching `as_list` behaviour.
-        Token count per item is estimated as `len(str(item)) // 4`; note that
-        `str()` falls back to `repr()` for `Component` subclasses, so the
-        estimate reflects repr boilerplate rather than rendered content.
 
-        A headroom factor of 0.55 is applied to absorb repr-vs-render skew and
-        to leave capacity for the current action and the model's generated
-        response.  This is a conservative approximation; a tokenizer-backed
-        estimate is a known follow-up.
+        Per-item token count is estimated as ``len(rendered) // 4`` where
+        ``rendered`` is the string produced by `TemplateFormatter` for the
+        bound model — the same renderer used at generation time.  A 0.75
+        headroom factor (retaining 75 % of the rated context length) reserves
+        capacity for the system prompt, injected tool schemas, the current
+        action, and the model's response.  Use ``window_size`` for precise
+        item-count control.
         """
-        effective_budget = int(token_budget * 0.55)
+        assert self._model_id is not None
+        from ..formatters import TemplateFormatter  # deferred to avoid circular import
+
+        formatter = TemplateFormatter(self._model_id)
+        effective_budget = int(token_budget * 0.75)
         collected: list[Component | CBlock] = []
         spent = 0
         total = 0
@@ -190,9 +196,7 @@ class ChatContext(Context):
         while not current.is_root_node:
             item = current.node_data
             assert item is not None
-            cost = max(
-                1, len(str(item)) // 4
-            )  # str() falls back to repr() for Components
+            cost = max(1, len(formatter.print(item)) // 4)
             total += 1
             if spent + cost > effective_budget:
                 break
@@ -205,7 +209,7 @@ class ChatContext(Context):
         if dropped:
             logger.debug(
                 "Context truncated: dropped %d item(s) to stay within %d-token budget "
-                "(effective budget after 0.55 headroom: %d tokens, used: %d tokens).",
+                "(effective budget after 0.75 headroom: %d tokens, used: %d tokens).",
                 dropped,
                 token_budget,
                 effective_budget,
