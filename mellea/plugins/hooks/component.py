@@ -11,7 +11,7 @@ class ComponentPreExecutePayload(MelleaBasePayload):
     """Payload for `component_pre_execute` — before component execution via `aact()`.
 
     Attributes:
-        component_id: UUID correlating pre/post hooks for a single component execution.
+        action_id: UUID correlating pre/post hooks for a single component execution.
         component_type: Class name of the component being executed.
         action: The `Component` or `CBlock` about to be executed.
         context_view: Optional snapshot of the context as a list.
@@ -22,7 +22,7 @@ class ComponentPreExecutePayload(MelleaBasePayload):
         tool_calls_enabled: Whether tool calling is enabled for this execution (writable).
     """
 
-    component_id: str = ""
+    action_id: str = ""
     component_type: str = ""
     action: Any = None
     context_view: list[Any] | None = None
@@ -37,7 +37,7 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
     """Payload for `component_post_success` — after successful component execution.
 
     Attributes:
-        component_id: UUID correlating pre/post hooks for a single component execution.
+        action_id: UUID correlating pre/post hooks for a single component execution.
         component_type: Class name of the executed component.
         action: The `Component` or `CBlock` that was executed.
 
@@ -52,7 +52,7 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
         latency_ms: Wall-clock time for the full execution in milliseconds.
     """
 
-    component_id: str = ""
+    action_id: str = ""
     component_type: str = ""
     action: Any = None
     result: Any = None
@@ -68,7 +68,7 @@ class ComponentPostErrorPayload(MelleaBasePayload):
     """Payload for `component_post_error` — after component execution fails.
 
     Attributes:
-        component_id: UUID correlating pre/post hooks for a single component execution.
+        action_id: UUID correlating pre/post hooks for a single component execution.
         component_type: Class name of the component that failed.
         action: The `Component` or `CBlock` that was being executed.
 
@@ -80,7 +80,7 @@ class ComponentPostErrorPayload(MelleaBasePayload):
         model_options: Dict of model options that were in effect.
     """
 
-    component_id: str = ""
+    action_id: str = ""
     component_type: str = ""
     action: Any = None
     error: Any = None

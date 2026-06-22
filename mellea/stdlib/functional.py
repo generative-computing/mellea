@@ -577,7 +577,7 @@ async def aact(
     import traceback
     import uuid
 
-    component_id = str(uuid.uuid4())
+    action_id = str(uuid.uuid4())
 
     if not silence_context_type_warning and not isinstance(context, SimpleContext):
         MelleaLogger.get_logger().warning(
@@ -592,7 +592,7 @@ async def aact(
         from ..plugins.hooks.component import ComponentPreExecutePayload
 
         pre_exec_payload = ComponentPreExecutePayload(
-            component_id=component_id,
+            action_id=action_id,
             component_type=_component_type_name,
             action=action,
             context_view=context.view_for_generation(),
@@ -683,7 +683,7 @@ async def aact(
             from ..plugins.hooks.component import ComponentPostSuccessPayload
 
             success_payload = ComponentPostSuccessPayload(
-                component_id=component_id,
+                action_id=action_id,
                 component_type=_component_type_name,
                 action=action,
                 result=result,
@@ -714,7 +714,7 @@ async def aact(
             from ..plugins.hooks.component import ComponentPostErrorPayload
 
             error_payload = ComponentPostErrorPayload(
-                component_id=component_id,
+                action_id=action_id,
                 component_type=_component_type_name,
                 action=action,
                 error=exc,

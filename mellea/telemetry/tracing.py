@@ -528,7 +528,7 @@ def finish_session_span(
 
 
 def start_action_span(
-    component_id: str,
+    action_id: str,
     *,
     action_class_name: str | None,
     has_requirements: bool | None,
@@ -540,7 +540,7 @@ def start_action_span(
     """Open the `action` span for a single component execution.
 
     Args:
-        component_id: UUID correlating this component execution across hooks.
+        action_id: UUID correlating this component execution across hooks.
         action_class_name: Class name of the component being executed.
         has_requirements: Whether requirements were supplied.
         has_strategy: Whether a sampling strategy was supplied.
@@ -553,7 +553,7 @@ def start_action_span(
     """
     return _start_application_span(
         "action",
-        component_id,
+        action_id,
         {
             "mellea.action_type": action_class_name,
             "mellea.has_requirements": has_requirements,
@@ -566,7 +566,7 @@ def start_action_span(
 
 
 def finish_action_span_success(
-    component_id: str,
+    action_id: str,
     *,
     num_generate_logs: int | None = None,
     sampling_success: bool | None = None,
@@ -580,7 +580,7 @@ def finish_action_span_success(
     `mellea.response_length` is always recorded (a non-content metric).
 
     Args:
-        component_id: Correlation key from the matching open call.
+        action_id: Correlation key from the matching open call.
         num_generate_logs: `mellea.num_generate_logs`.
         sampling_success: `mellea.sampling_success` (set when a strategy ran).
         response_text: Raw response text. Recorded as `mellea.response` only
@@ -593,7 +593,7 @@ def finish_action_span_success(
             response_text[:500] + "..." if len(response_text) > 500 else response_text
         )
     _finish_application_span(
-        component_id,
+        action_id,
         extra_attributes={
             "mellea.num_generate_logs": num_generate_logs,
             "mellea.sampling_success": sampling_success,
@@ -603,14 +603,14 @@ def finish_action_span_success(
     )
 
 
-def finish_action_span_error(component_id: str, *, exception: BaseException) -> None:
+def finish_action_span_error(action_id: str, *, exception: BaseException) -> None:
     """End the action span with ERROR status.
 
     Args:
-        component_id: Correlation key from the matching open call.
+        action_id: Correlation key from the matching open call.
         exception: The exception that ended the action.
     """
-    _finish_application_span(component_id, exception=exception)
+    _finish_application_span(action_id, exception=exception)
 
 
 @contextmanager

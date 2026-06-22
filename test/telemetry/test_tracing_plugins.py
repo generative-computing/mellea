@@ -616,7 +616,7 @@ async def test_action_pre_execute_emits_request_attrs(
         pass
 
     pre = ComponentPreExecutePayload(
-        component_id="cid-1",
+        action_id="cid-1",
         component_type="Foo",
         action=Foo(),
         requirements=["r1"],
@@ -654,11 +654,11 @@ async def test_action_post_success_records_response_length_always(
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
 
-    pre = ComponentPreExecutePayload(component_id="cid-2", component_type="X")
+    pre = ComponentPreExecutePayload(action_id="cid-2", component_type="X")
     result = MagicMock()
     result.value = "hello world"
     success = ComponentPostSuccessPayload(
-        component_id="cid-2", result=result, generate_log=MagicMock()
+        action_id="cid-2", result=result, generate_log=MagicMock()
     )
 
     with patch(
@@ -683,11 +683,11 @@ async def test_action_post_success_records_response_when_content_enabled(
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
 
-    pre = ComponentPreExecutePayload(component_id="cid-3", component_type="X")
+    pre = ComponentPreExecutePayload(action_id="cid-3", component_type="X")
     result = MagicMock()
     result.value = "captured text"
     success = ComponentPostSuccessPayload(
-        component_id="cid-3", result=result, generate_log=MagicMock()
+        action_id="cid-3", result=result, generate_log=MagicMock()
     )
 
     with patch(
@@ -711,12 +711,12 @@ async def test_action_post_success_truncates_long_response(
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
 
-    pre = ComponentPreExecutePayload(component_id="cid-4", component_type="X")
+    pre = ComponentPreExecutePayload(action_id="cid-4", component_type="X")
     long_text = "a" * 800
     result = MagicMock()
     result.value = long_text
     success = ComponentPostSuccessPayload(
-        component_id="cid-4", result=result, generate_log=MagicMock()
+        action_id="cid-4", result=result, generate_log=MagicMock()
     )
 
     with patch(
@@ -737,10 +737,10 @@ async def test_action_post_error_marks_error_status(component_plugin, enabled_tr
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
 
-    pre = ComponentPreExecutePayload(component_id="cid-err", component_type="X")
+    pre = ComponentPreExecutePayload(action_id="cid-err", component_type="X")
     err = ValueError("nope")
     error_payload = ComponentPostErrorPayload(
-        component_id="cid-err", error=err, error_type="ValueError"
+        action_id="cid-err", error=err, error_type="ValueError"
     )
 
     with patch(
@@ -758,11 +758,11 @@ async def test_action_post_error_marks_error_status(component_plugin, enabled_tr
 
 
 @pytest.mark.asyncio
-async def test_action_pre_execute_no_op_with_empty_component_id(
+async def test_action_pre_execute_no_op_with_empty_action_id(
     component_plugin, enabled_tracing
 ):
     fake_tracer = MagicMock()
-    pre = ComponentPreExecutePayload(component_id="", component_type="X")
+    pre = ComponentPreExecutePayload(action_id="", component_type="X")
     with patch(
         "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
     ):
