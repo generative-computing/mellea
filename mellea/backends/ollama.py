@@ -26,7 +26,12 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
-from ..helpers import ClientCache, get_current_event_loop, send_to_queue
+from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.context import generate_request_id, with_context
@@ -482,7 +487,13 @@ class OllamaModelBackend(FormatterBackend):
 
             # Use `create_task` so that we don't have to specifically await this task before it starts executing.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:

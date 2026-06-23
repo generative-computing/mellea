@@ -10,6 +10,7 @@ this package directly — it is consumed internally by the backend layer.
 """
 
 from .async_helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     get_current_event_loop,
     send_to_queue,
@@ -29,6 +30,7 @@ from .server_type import (
 )
 
 __all__ = [
+    "DEFAULT_CHUNK_TIMEOUT",
     "ClientCache",
     "_ServerType",
     "_run_async_in_thread",
