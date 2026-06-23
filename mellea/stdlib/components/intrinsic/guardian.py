@@ -16,7 +16,6 @@ from typing import cast
 from ....backends.adapters import AdapterMixin
 from ....core.utils import MelleaLogger
 from ...components import Document
-from ...components.docs.document import _coerce_to_documents
 from ...context import ChatContext
 from ..chat import Message
 from ._util import call_intrinsic
@@ -264,13 +263,17 @@ def factuality_detection(
     to a user's question. The context should end with a user question followed
     by an assistant answer.
 
-    Reference documents can be supplied in three ways (in precedence order):
+    Reference documents can be supplied in any of these ways:
 
     1. Pass them explicitly via ``documents=``.
     2. Include them on messages already in ``context``
        (e.g. ``Message("assistant", response, documents=[doc])``).
     3. Perform retrieval and add the resulting documents to ``context``
        before calling this function.
+
+    When ``documents=`` is given it replaces any documents already on the
+    last assistant turn; documents on other messages in ``context`` are
+    not affected.
 
     Args:
         context: Chat context ending with a user question and an assistant
@@ -308,13 +311,17 @@ def factuality_correction(
     question so that it is consistent with the supplied reference documents.
     The context should end with a user question followed by an assistant answer.
 
-    Reference documents can be supplied in three ways (in precedence order):
+    Reference documents can be supplied in any of these ways:
 
     1. Pass them explicitly via ``documents=``.
     2. Include them on messages already in ``context``
        (e.g. ``Message("assistant", response, documents=[doc])``).
     3. Perform retrieval and add the resulting documents to ``context``
        before calling this function.
+
+    When ``documents=`` is given it replaces any documents already on the
+    last assistant turn; documents on other messages in ``context`` are
+    not affected.
 
     Args:
         context: Chat context ending with a user question and an assistant
@@ -359,7 +366,8 @@ def _inject_documents(
 
     Raises:
         ValueError: If the last element of *context* is not an assistant
-            response that can be extracted.
+            response that can be extracted, or if the assistant response
+            has not been computed yet.
     """
     turn = context.last_turn()
     if turn is None:
@@ -368,16 +376,23 @@ def _inject_documents(
         )
 
     if turn.output is not None and turn.output.value is not None:
-        # Session-generated response stored as a ModelOutputThunk
+        # Session-generated response stored as a ModelOutputThunk.
+        # Only the text value is preserved; thunk metadata is intentionally dropped.
         response_text: str = turn.output.value
         prev_ctx = context.previous_node
+    elif turn.output is not None and turn.output.value is None:
+        raise ValueError(
+            "Cannot attach documents: the assistant response has not been computed yet. "
+            "Await the response before calling factuality_detection or "
+            "factuality_correction with documents=."
+        )
     elif (
         turn.model_input is not None
         and isinstance(turn.model_input, Message)
         and turn.model_input.role == "assistant"
     ):
         # Manually-added assistant Message (e.g. built from test fixtures)
-        response_text = turn.model_input.content  # type: ignore[assignment]
+        response_text = turn.model_input.content
         prev_ctx = context.previous_node
     else:
         raise ValueError(
@@ -394,9 +409,5 @@ def _inject_documents(
 
     return cast(
         ChatContext,
-        prev_ctx.add(
-            Message(
-                "assistant", response_text, documents=_coerce_to_documents(documents)
-            )
-        ),
+        prev_ctx.add(Message("assistant", response_text, documents=documents)),
     )

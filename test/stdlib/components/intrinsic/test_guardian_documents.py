@@ -5,6 +5,7 @@ All tests monkeypatch ``call_intrinsic`` so no model is required.
 
 import pytest
 
+from mellea.core.base import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
@@ -144,3 +145,56 @@ def test_inject_documents_raises_when_last_turn_is_not_assistant(capture_intrins
     ctx = ChatContext().add(Message("user", "Hello"))
     with pytest.raises(ValueError, match="not an assistant response"):
         guardian.factuality_detection(ctx, object(), documents=["doc"])
+
+
+def test_inject_documents_raises_on_uncomputed_thunk(capture_intrinsic):
+    # value=None means not yet computed
+    thunk = ModelOutputThunk(None)
+    ctx = ChatContext().add(Message("user", "Is Ozzy Osbourne alive?")).add(thunk)
+    with pytest.raises(ValueError, match="not been computed yet"):
+        guardian.factuality_detection(ctx, object(), documents=["doc"])
+
+
+# ---------------------------------------------------------------------------
+# ModelOutputThunk path: session-generated context
+# ---------------------------------------------------------------------------
+
+
+def _context_with_thunk() -> ChatContext:
+    """Return a context where the last turn is a computed ModelOutputThunk."""
+    return (
+        ChatContext()
+        .add(Message("user", "Is Ozzy Osbourne alive?"))
+        .add(ModelOutputThunk("Yes, he is."))
+    )
+
+
+def test_factuality_detection_thunk_changes_context(capture_intrinsic):
+    ctx = _context_with_thunk()
+    guardian.factuality_detection(ctx, object(), documents=["ref doc"])
+
+    passed = capture_intrinsic["context"]
+    assert passed is not ctx
+
+
+def test_factuality_detection_thunk_preserves_user_turn(capture_intrinsic):
+    guardian.factuality_detection(_context_with_thunk(), object(), documents=["ref"])
+
+    history = capture_intrinsic["context"].view_for_generation() or []
+    assert len(history) == 2
+    assert isinstance(history[0], Message)
+    assert history[0].role == "user"
+
+
+def test_factuality_detection_thunk_attaches_doc_to_assistant_turn(capture_intrinsic):
+    doc = Document(text="Ozzy Osbourne passed away.", doc_id="1")
+    guardian.factuality_detection(_context_with_thunk(), object(), documents=[doc])
+
+    history = capture_intrinsic["context"].view_for_generation() or []
+    last = history[-1]
+    assert isinstance(last, Message)
+    assert last.role == "assistant"
+    assert last.content == "Yes, he is."
+    doc_parts = [p for p in last.parts() if isinstance(p, Document)]
+    assert len(doc_parts) == 1
+    assert doc_parts[0].text == "Ozzy Osbourne passed away."
