@@ -54,6 +54,11 @@ async def send_to_queue(
             the queue and the stream is aborted. ``None`` disables the timeout.
             Defaults to ``DEFAULT_CHUNK_TIMEOUT`` (120 s). Note that ``0`` sets the
             deadline to "now" and aborts immediately — use ``None`` to disable.
+
+    Raises:
+        TimeoutError: Re-raised verbatim when the backend itself raises ``TimeoutError``
+            (i.e. the timeout did not originate from *this* function's per-chunk guard).
+            Stream-guard timeouts are forwarded into *aqueue* rather than raised.
     """
     try:
         if isinstance(co, Coroutine):
