@@ -151,6 +151,19 @@ def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]
     ...
 ```
 
+#### Inline code references
+
+Code references in docstrings (parameter names, variables, types, literals) use a single backtick (\`), like ``` `variable` ```— not double backticks (``` ``variable`` ```). Mellea uses Markdown-style docstrings, so a single backtick is the correct delimiter for inline code.
+
+```python
+def scale(value: float, factor: float = 1.0) -> float:
+    """Multiply `value` by `factor`.
+
+    Pass `factor` as `0.0` to zero out the result.
+    """
+    return value * factor
+```
+
 #### Class and `__init__` docstrings
 
 Place `Args:` on the **class docstring only**. The `__init__` docstring should be a
