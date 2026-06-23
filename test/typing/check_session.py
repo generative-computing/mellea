@@ -78,10 +78,10 @@ def check_act_format_attributes() -> None:
     # ComputedModelOutputThunk (see mellea/core/base.py), so it does NOT narrow to
     # `_M` even though the thunk is parameterised `[_M]`. At runtime `.value` is the
     # raw string and `.parsed_repr` is also a plain str (Instruction._parse returns
-    # str), so `parsed_repr.value` type-checks but AttributeErrors. Asserting
-    # `assert_type(r.value, _M)` here would (correctly) fail mypy. Both the static
-    # `.value` type and the runtime parsed_repr mismatch are pending the coordinated
-    # thunk-generics / `.parsed` redesign (PR #1282).
+    # str), so `parsed_repr.some_field` type-checks but raises AttributeError.
+    # Use `.parsed` for the runtime-safe accessor; the `parsed_repr` Instruction gap
+    # is tracked in #1313. Asserting `assert_type(r.value, _M)` would (correctly)
+    # fail mypy.
     assert_type(r.value, str)
 
 

@@ -1378,6 +1378,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         generate_log.result = mot
 
         mot._generate_log = generate_log
+        mot._format = _format
 
     async def _generate_from_raw(
         self,
@@ -1513,6 +1514,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             generate_log.action = action
 
             result._generate_log = generate_log
+            result._format = format
             results.append(result)
 
         usage: dict[str, Any] | None = (

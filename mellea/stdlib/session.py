@@ -391,13 +391,11 @@ class MelleaSession:
             deregister_session_plugins(self.id)
 
     # The format= overloads below narrow the thunk's generic element type. That narrowing
-    # is observable on `parsed_repr: S | None`, NOT on `.value` — ComputedModelOutputThunk.value
-    # is typed `-> str` unconditionally (mellea/core/base.py). There is also a runtime gap:
-    # parsed_repr currently goes through Instruction._parse, which returns a plain str, so
-    # `result.parsed_repr.some_field` type-checks but raises AttributeError at runtime.
-    # TODO: a coherent end state has the thunk's `.parsed` generic over S backed by a runtime
-    # path that delivers S. That is a coordinated change tracked by PR #1282 and is out of
-    # scope here; these overloads only land the static format= narrowing where they can.
+    # is observable on `parsed_repr: S | None` and `.parsed: S | None`. The `.parsed`
+    # property (mellea/core/base.py) is the runtime-safe accessor — it calls
+    # model_validate_json on the raw string value. `.value` is typed `-> str`
+    # unconditionally. There is a residual runtime gap: `parsed_repr` for the
+    # Instruction._parse path still returns a plain str rather than S; tracked in #1313.
     @overload
     def act(
         self,
@@ -455,7 +453,9 @@ class MelleaSession:
             requirements: used as additional requirements when a sampling strategy is provided
             strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-            format: if set, the BaseModel to use for constrained decoding.
+            format: if set, the BaseModel to use for constrained decoding.  When
+                provided, ``.value`` on the returned thunk is always a raw JSON string —
+                use ``.parsed`` to obtain the validated Pydantic model instance.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
 

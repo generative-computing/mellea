@@ -29,9 +29,11 @@ from typing import (
     ParamSpec,
     Protocol,
     TypeVar,
+    cast,
     runtime_checkable,
 )
 
+import pydantic
 import typing_extensions
 from PIL import Image as PILImage
 
@@ -401,6 +403,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Mellea-side hook correlation ID; distinct from the provider-assigned
         # `GenerationMetadata.response_id`.
         self._generation_id: str | None = None
+        self._format: type[pydantic.BaseModel] | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
@@ -542,6 +545,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._thinking = other._thinking
         self.generation = other.generation
         self._generate_log = other._generate_log
+        self._format = other._format
         self._cancelled = other._cancelled
         # _cancel_hook is deliberately not copied: _copy_from swaps output state,
         # not backend-thread plumbing, which is tied to the original computation.
@@ -557,7 +561,13 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
     @property
     def value(self) -> str | None:
-        """Gets the value of the block."""
+        """Gets the raw string value of the block.
+
+        When ``format=`` is set on the originating ``act()``/``instruct()`` call, the
+        model returns a JSON string and ``.value`` contains that raw JSON — not a
+        Pydantic instance.  Use ``.parsed`` on a ``ComputedModelOutputThunk`` to get
+        the validated model object.
+        """
         if not self._computed:
             return None
         return self._underlying_value
@@ -776,6 +786,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
+        copied._format = self._format
         copied._model_options = self._model_options
         copied.generation = copy(self.generation)
         return copied
@@ -810,6 +821,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             self._context
         )  # The items in a context should be immutable.
         deepcopied._generate_log = copy(self._generate_log)
+        deepcopied._format = self._format
         deepcopied._model_options = copy(self._model_options)
         deepcopied.generation = deepcopy(self.generation)
         return deepcopied
@@ -873,13 +885,57 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @property
     def value(self) -> str:
-        """Gets the value of the block."""
+        """Gets the raw string value of the block.
+
+        When ``format=`` is set on the originating ``act()``/``instruct()`` call, the
+        model returns a JSON string and ``.value`` contains that raw JSON — not a
+        Pydantic instance.  Use ``.parsed`` to get the validated model object.
+        """
         return self._underlying_value  # type: ignore
 
     @value.setter
     def value(self, v: str):
         """Sets the value of the block."""
         self._underlying_value = v
+
+    @property
+    def parsed(self) -> S | None:
+        """Returns the result as a validated Pydantic instance when ``format=`` was set.
+
+        The return type tracks the format type supplied at the call site.
+        Passing ``format=MyModel`` to ``act()`` or ``instruct()`` yields a
+        ``ComputedModelOutputThunk[MyModel]`` whose ``.parsed`` is typed
+        ``MyModel | None`` — no explicit ``cast()`` required::
+
+            result, _ = session.act(action, format=MyModel)
+            obj = result.parsed  # typed MyModel | None
+
+        Returns ``None`` when no ``format=`` type was provided.  Unlike
+        ``parsed_repr`` (which holds the action-specific parse result),
+        ``.parsed`` always re-validates the raw JSON string against ``_format``
+        via ``model_validate_json``.
+
+        Note:
+            This property relies on the originating backend storing the format
+            type on the thunk. Custom backend authors must set ``mot._format``
+            in their ``post_processing`` method (mirroring the built-in
+            backends); otherwise ``.parsed`` always returns ``None`` even when
+            ``format=`` was supplied.
+
+        Returns:
+            An instance of the format type (``S``) produced by
+            ``model_validate_json``, or ``None`` if no format type was set.
+
+        Raises:
+            pydantic.ValidationError: If the raw JSON value does not conform to
+                the format model (e.g. the model returned malformed structured output).
+        """
+        if self._format is None:
+            return None
+        # `_format` is always a pydantic model type; `model_validate_json` returns
+        # `pydantic.BaseModel` statically, but the caller's type parameter `S` is
+        # the concrete model when `format=` was used, so we cast the result to `S`.
+        return cast(S, self._format.model_validate_json(self.value))
 
     def is_computed(self) -> Literal[True]:
         """Returns `True` since thunk is always computed.

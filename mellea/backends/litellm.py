@@ -596,6 +596,7 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.action = mot._action
         generate_log.result = mot
         mot._generate_log = generate_log
+        mot._format = _format
 
         # Extract token usage from full response dict or streaming usage
         full_response = mot._meta.get("litellm_full_response")
