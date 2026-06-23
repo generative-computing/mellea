@@ -22,7 +22,7 @@ try:
     import llguidance.hf
     import llguidance.torch
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
     from transformers.cache_utils import DynamicCache
     from transformers.generation.logits_process import LogitsProcessorList
     from transformers.generation.stopping_criteria import (
@@ -30,7 +30,7 @@ try:
         StoppingCriteriaList,
     )
     from transformers.generation.streamers import AsyncTextIteratorStreamer
-    from transformers.generation.utils import GenerateDecoderOnlyOutput
+    from transformers.generation.utils import GenerateDecoderOnlyOutput, GenerationMixin
     from transformers.modeling_utils import PreTrainedModel
     from transformers.tokenization_utils_base import PreTrainedTokenizerBase
     from transformers.trainer_utils import set_seed
@@ -232,6 +232,43 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
         "strftime_now",  # callable: returns datetime.now().strftime(format)
     }
 )
+
+
+def _compute_generate_kwargs_allowlist() -> frozenset[str]:
+    """Names that ``transformers``' ``model.generate`` accepts as keyword arguments.
+
+    Combines two sources of truth:
+
+    - The explicit named parameters of :meth:`GenerationMixin.generate`
+      (``stopping_criteria``, ``streamer``, ``synced_gpus``, …).
+    - Every public field on :class:`GenerationConfig`
+      (``temperature``, ``max_new_tokens``, ``return_dict_in_generate``, …).
+
+    Anything outside this set, passed as a free kwarg to ``generate``, is either
+    absorbed by ``**kwargs`` and forwarded to the model forward pass (rare, but
+    valid for forward-only kwargs Mellea sets explicitly — ``attention_mask``,
+    ``past_key_values``, ``cache_position``, ``token_type_ids``, ``inputs_embeds``)
+    or — far more commonly — raises ``TypeError`` because the chat template
+    variable name (``thinking``, ``enable_thinking``, ``custom_tools`` …) is not
+    a generation parameter. This allowlist is the self-maintaining filter that
+    drops those before they reach ``generate``.
+
+    Computed at import time; depends only on the installed ``transformers``
+    version.
+    """
+    import inspect
+
+    sig = inspect.signature(GenerationMixin.generate)
+    sig_kw = {
+        p.name
+        for p in sig.parameters.values()
+        if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+    } - {"self", "inputs"}
+    gc_fields = {a for a in vars(GenerationConfig()) if not a.startswith("_")}
+    return frozenset(sig_kw | gc_fields)
+
+
+_GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -915,8 +952,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
 
-            # Filter out chat template-only options before passing to generate()
-            generate_options = self._filter_chat_template_only_options(model_options)
+            # Rename Mellea sentinels and filter to kwargs that generate() accepts.
+            # Chat-template-only variables (thinking, enable_thinking, custom_tools, …)
+            # are dropped here so they cannot crash generate() with TypeError.
+            generate_kwargs = self._make_backend_specific_and_remove(model_options)
 
             # Only install cooperative-cancel plumbing on the streaming path.
             # Non-streaming calls have no orchestrator calling cancel_generation(),
@@ -924,7 +963,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # wrap any user-supplied stopping_criteria on every decode step.
             if stream:
                 _cancel_event = _install_cancel_stopping_criteria(
-                    generate_options, streaming_kwargs
+                    generate_kwargs, streaming_kwargs
                 )
 
             linearized_ctx = ctx.view_for_generation()
@@ -938,7 +977,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
             )
 
-            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
             if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
                 # transformers' generate() requires a tokenizer to decode stop_strings.
                 generate_kwargs["tokenizer"] = self._tokenizer
@@ -1097,8 +1135,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
 
-            # Filter out chat template-only options before passing to generate()
-            generate_options = self._filter_chat_template_only_options(model_options)
+            # Rename Mellea sentinels and filter to kwargs that generate() accepts.
+            # Chat-template-only variables (thinking, enable_thinking, custom_tools, …)
+            # are dropped here so they cannot crash generate() with TypeError.
+            generate_kwargs = self._make_backend_specific_and_remove(model_options)
 
             # Only install cooperative-cancel plumbing on the streaming path.
             # Non-streaming calls have no orchestrator calling cancel_generation(),
@@ -1106,10 +1146,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # wrap any user-supplied stopping_criteria on every decode step.
             if stream:
                 _cancel_event = _install_cancel_stopping_criteria(
-                    generate_options, streaming_kwargs
+                    generate_kwargs, streaming_kwargs
                 )
 
-            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
             if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
                 # transformers' generate() requires a tokenizer to decode stop_strings.
                 generate_kwargs["tokenizer"] = self._tokenizer
@@ -1592,7 +1631,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return merged
 
     def _make_backend_specific_and_remove(
-        self, model_options: dict[str, Any]
+        self, model_options: dict[str, Any], *, for_generate: bool = True
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
@@ -1606,8 +1645,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         ``do_sample=True`` with ``temperature=0`` would crash transformers
         ("temperature has to be a strictly positive float").
 
+        When ``for_generate`` is True (the default — and the right choice for any
+        kwargs about to be splatted into ``model.generate``), the result is filtered
+        through :attr:`_generate_kwargs_allowlist` so chat-template-only variables
+        (``thinking``, ``enable_thinking``, ``custom_tools`` …) cannot leak in and
+        crash ``generate`` with ``TypeError``.  Pass ``for_generate=False`` from
+        :meth:`_filter_for_chat_template` to skip that filter — that path applies
+        the chat-template allowlist instead.
+
         Args:
             model_options: the model_options for this call
+            for_generate: whether the result will be passed to
+                ``model.generate``; controls whether the generate-kwargs filter
+                runs.
 
         Returns:
             a new dict
@@ -1625,27 +1675,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             and (seed is not None or temperature is not None)
         ):
             backend_specific["do_sample"] = True
+        if for_generate:
+            backend_specific = {
+                k: v
+                for k, v in backend_specific.items()
+                if k in _GENERATE_KWARGS_ALLOWLIST
+            }
         return backend_specific
-
-    def _filter_chat_template_only_options(
-        self, model_options: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Remove options that are only for apply_chat_template, not for generate().
-
-        Args:
-            model_options: the model_options for this call
-
-        Returns:
-            a new dict without chat template-specific options
-        """
-        # Options that should only go to apply_chat_template, not generate()
-        chat_template_only = {
-            "guardian_config",
-            "think",
-            "add_generation_prompt",
-            "documents",
-        }
-        return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     @functools.cached_property
     def _chat_template_allowlist(self) -> frozenset[str]:
@@ -1714,7 +1750,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Returns:
             dict of kwargs safe to splat into ``apply_chat_template``
         """
-        backend_opts = self._make_backend_specific_and_remove(model_options)
+        backend_opts = self._make_backend_specific_and_remove(
+            model_options, for_generate=False
+        )
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }

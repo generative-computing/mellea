@@ -352,7 +352,7 @@ class GuardianCheck(Requirement):
             guardian_options.update(
                 {
                     "guardian_config": guardian_cfg,
-                    "think": self._thinking,  # Passed to apply_chat_template
+                    "thinking": self._thinking,  # Passed to apply_chat_template
                     # "add_generation_prompt": True,  # Guardian template requires a generation prompt. Mellea always does this for hugging face generation.
                     "max_new_tokens": 4000 if self._thinking else 50,
                     "stream": False,

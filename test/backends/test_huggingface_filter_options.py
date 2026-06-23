@@ -13,20 +13,25 @@ torch must be importable because importing LocalHFBackend triggers the top-level
 """
 
 import logging
+from typing import Any
 
 import pytest
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends import ModelOption
-from mellea.backends.huggingface import _HF_INTERNAL_TEMPLATE_VARS, LocalHFBackend
+from mellea.backends.huggingface import (
+    _GENERATE_KWARGS_ALLOWLIST,
+    _HF_INTERNAL_TEMPLATE_VARS,
+    LocalHFBackend,
+)
 
 
 def _make_backend(template: object) -> LocalHFBackend:
     """Return a LocalHFBackend with __init__ bypassed, wired with a known template.
 
     Only the attributes accessed by _chat_template_allowlist, _filter_for_chat_template,
-    _filter_chat_template_only_options, and _make_backend_specific_and_remove are set.
+    and _make_backend_specific_and_remove are set.
     If any of those methods gains a new self.* dependency, update this helper.
     """
 
@@ -295,50 +300,159 @@ def test_filter_for_chat_template_unknown_key_dropped() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _filter_chat_template_only_options (pre-existing method — regression guard)
+# _GENERATE_KWARGS_ALLOWLIST + _make_backend_specific_and_remove(for_generate=True):
+# kwargs that generate() does not accept (chat-template variables) must be
+# dropped before they reach generate.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def plain_backend() -> LocalHFBackend:
-    """Backend fixture without a tokenizer — sufficient for the pre-existing filter."""
+    """Backend fixture without a tokenizer — sufficient for the generate-kwargs filter."""
     b: LocalHFBackend = LocalHFBackend.__new__(LocalHFBackend)
     b.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
     return b
 
 
-def test_filter_chat_template_only_removes_guardian_config(
-    plain_backend: LocalHFBackend,
-) -> None:
+def test_generate_filter_drops_guardian_config(plain_backend: LocalHFBackend) -> None:
     opts = {"guardian_config": {"foo": "bar"}, ModelOption.TEMPERATURE: 0.5}
-    result = plain_backend._filter_chat_template_only_options(opts)
+    result = plain_backend._make_backend_specific_and_remove(opts)
     assert "guardian_config" not in result
-    assert ModelOption.TEMPERATURE in result
+    assert "temperature" in result
 
 
-def test_filter_chat_template_only_removes_think(plain_backend: LocalHFBackend) -> None:
-    opts = {"think": True, "max_new_tokens": 64}
-    result = plain_backend._filter_chat_template_only_options(opts)
-    assert "think" not in result
-    assert "max_new_tokens" in result
+def test_generate_filter_drops_thinking(plain_backend: LocalHFBackend) -> None:
+    opts = {"thinking": True, ModelOption.MAX_NEW_TOKENS: 64}
+    result = plain_backend._make_backend_specific_and_remove(opts)
+    assert "thinking" not in result
+    assert result["max_new_tokens"] == 64
 
 
-def test_filter_chat_template_only_removes_add_generation_prompt(
+def test_generate_filter_drops_add_generation_prompt(
     plain_backend: LocalHFBackend,
 ) -> None:
     opts = {"add_generation_prompt": True, "temperature": 1.0}
-    result = plain_backend._filter_chat_template_only_options(opts)
+    result = plain_backend._make_backend_specific_and_remove(opts)
     assert "add_generation_prompt" not in result
     assert "temperature" in result
 
 
-def test_filter_chat_template_only_removes_documents(
-    plain_backend: LocalHFBackend,
-) -> None:
+def test_generate_filter_drops_documents(plain_backend: LocalHFBackend) -> None:
     opts = {"documents": [{"text": "hello"}], "do_sample": False}
-    result = plain_backend._filter_chat_template_only_options(opts)
+    result = plain_backend._make_backend_specific_and_remove(opts)
     assert "documents" not in result
     assert "do_sample" in result
+
+
+def test_generate_filter_drops_template_only_reasoning_kwargs(
+    plain_backend: LocalHFBackend,
+) -> None:
+    """Chat-template variables specific to non-Granite models must also be dropped.
+
+    These variables are referenced by the chat templates of models shipped in
+    ``mellea/backends/model_ids.py`` (Qwen3, Llama 3.x/4, gpt-oss, etc.) but are
+    NOT accepted by ``transformers``' ``generate``. If forwarded through, they
+    would raise ``TypeError`` at inference time.
+    """
+    template_only_kwargs = [
+        "enable_thinking",  # Qwen3
+        "thinking",  # Granite
+        "controls",  # Granite
+        "available_tools",  # Granite
+        "custom_tools",  # Llama 3.x / 4
+        "tools_in_user_message",  # Llama 3.x / 4
+        "builtin_tools",  # Llama 3.3
+        "reasoning_effort",  # gpt-oss
+        "model_identity",  # gpt-oss
+    ]
+    opts: dict[str, Any] = dict.fromkeys(template_only_kwargs, "x")
+    opts["temperature"] = 0.7  # control: a real generate() kwarg
+    result = plain_backend._make_backend_specific_and_remove(opts)
+    for kw in template_only_kwargs:
+        assert kw not in result, f"{kw!r} leaked through to generate() kwargs"
+    assert result["temperature"] == 0.7
+
+
+def test_for_generate_false_skips_filter(plain_backend: LocalHFBackend) -> None:
+    """``for_generate=False`` skips the generate-kwargs filter.
+
+    This is the path used by ``_filter_for_chat_template`` — chat-template
+    variables must survive the rename step so the chat-template allowlist can
+    examine them.
+    """
+    opts = {"thinking": True, "guardian_config": {"x": 1}, ModelOption.TEMPERATURE: 0.5}
+    result = plain_backend._make_backend_specific_and_remove(opts, for_generate=False)
+    assert result["thinking"] is True
+    assert result["guardian_config"] == {"x": 1}
+    assert result["temperature"] == 0.5
+
+
+def test_generate_kwargs_allowlist_no_chat_template_only_overlap() -> None:
+    """No chat-template-only variable shipped by Mellea's models is in the allowlist.
+
+    This is the regression guard for the bug class fixed in this change: if a
+    Jinja variable referenced by one of the templates in
+    ``mellea/backends/model_ids.py`` is *also* a real ``generate()`` kwarg name,
+    the allowlist would let it leak through and we'd need a different mechanism
+    (an explicit denylist or a per-call-site decision). Today there is no
+    overlap, and this test will fail loudly the day that changes.
+    """
+    chat_template_only = {
+        # Granite (3.x and 4.0-tiny-preview)
+        "guardian_config",
+        "thinking",
+        "controls",
+        "available_tools",
+        # Llama 3.x / 4
+        "custom_tools",
+        "tools_in_user_message",
+        "builtin_tools",
+        # Qwen3
+        "enable_thinking",
+        # gpt-oss
+        "model_identity",
+        "reasoning_effort",
+        # Universal
+        "add_generation_prompt",
+        "documents",
+    }
+    overlap = chat_template_only & _GENERATE_KWARGS_ALLOWLIST
+    assert not overlap, (
+        f"chat-template-only variables {sorted(overlap)} are also accepted by "
+        "transformers' generate(); the generate-kwargs allowlist filter alone is "
+        "insufficient. Add a denylist for the overlapping names."
+    )
+
+
+def test_generate_kwargs_allowlist_includes_known_generate_kwargs() -> None:
+    """Common ``generate()`` kwargs Mellea relies on must be in the allowlist.
+
+    A canary against an upstream rename or removal of a kwarg that Mellea
+    forwards from caller-supplied ``model_options``. Mellea-injected kwargs
+    (``stopping_criteria``, ``streamer``, etc.) are passed explicitly at the
+    call sites and don't need to be in this set, but generation-tuning kwargs
+    that callers customize do.
+    """
+    expected = {
+        "max_new_tokens",
+        "temperature",
+        "top_p",
+        "top_k",
+        "do_sample",
+        "num_beams",
+        "repetition_penalty",
+        "return_dict_in_generate",
+        "output_scores",
+        "use_cache",
+        "stop_strings",
+        "stopping_criteria",
+        "streamer",
+    }
+    missing = expected - _GENERATE_KWARGS_ALLOWLIST
+    assert not missing, (
+        f"expected generate() kwargs {sorted(missing)} not found in allowlist; "
+        "did transformers rename or remove them?"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +479,7 @@ def _try_load_granite_tokenizer():
 
 @pytest.mark.huggingface
 def test_granite_allowlist_includes_known_template_vars() -> None:
-    """Granite's chat template exposes 'think' and 'guardian_config' as Jinja vars.
+    """Granite's chat template exposes 'thinking' and 'guardian_config' as Jinja vars.
 
     This test loads the real tokenizer (tokenizer files only — no GPU, no model
     weights) and asserts the computed allowlist includes the template-specific
@@ -390,8 +504,8 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     # These are Granite-specific Jinja variables that must survive the filter.
     # If either is absent the filter is over-aggressive and will break Granite
     # think-mode and guardian calls.
-    assert "think" in allowlist, (
-        f"'think' missing from allowlist; got: {sorted(allowlist)}"
+    assert "thinking" in allowlist, (
+        f"'thinking' missing from allowlist; got: {sorted(allowlist)}"
     )
     assert "guardian_config" in allowlist, (
         f"'guardian_config' missing from allowlist; got: {sorted(allowlist)}"
