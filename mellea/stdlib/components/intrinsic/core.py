@@ -11,9 +11,7 @@ from ._util import _resolve_response, call_intrinsic
 
 
 def check_certainty(
-    context: ChatContext,
-    backend: AdapterMixin,
-    model_options: dict | None = None,
+    context: ChatContext, backend: AdapterMixin, model_options: dict | None = None
 ) -> float:
     """Estimate the model's certainty about its last response.
 
@@ -31,7 +29,9 @@ def check_certainty(
     Returns:
         Certainty score as a float (higher = more certain).
     """
-    result_json = call_intrinsic("uncertainty", context, backend, model_options=model_options)
+    result_json = call_intrinsic(
+        "uncertainty", context, backend, model_options=model_options
+    )
     return result_json["certainty"]
 
 
