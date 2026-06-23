@@ -5,7 +5,7 @@ description: "Use Guardian adapter functions to detect harmful, biased, unground
 ---
 
 **Prerequisites:** `pip install "mellea[hf]"` for local inference; Apple Silicon or CUDA GPU recommended.
-Guardian adapter functions work via `LocalHFBackend` (local HuggingFace inference) or `OpenAIBackend`
+Guardian adapter functions work via `LocalHFBackend` (local Hugging Face inference) or `OpenAIBackend`
 pointed at a Granite Switch endpoint.
 
 Guardian adapter functions evaluate LLM outputs for safety and quality using LoRA adapters

@@ -144,7 +144,7 @@ class Message(Component["Message"]):
                     ),
                 )
             else:
-                # HuggingFace (or others). There are no guarantees on how the model represented the function calls.
+                # Hugging Face (or others). There are no guarantees on how the model represented the function calls.
                 # Output it in the same format we received the tool call request.
                 assert computed.value is not None
                 return Message(role="assistant", content=computed.value)
