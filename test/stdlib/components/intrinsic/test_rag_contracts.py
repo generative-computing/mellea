@@ -161,3 +161,18 @@ def test_flag_hallucinated_content_forward_compat() -> None:
     extra_item = {**_GOOD_SPAN, "extra_field": "ignored"}
     result = _HALLUCINATION_ADAPTER.io_contract.parse(json.dumps([extra_item]))
     assert result["items"][0]["faithfulness"] == "faithful"  # type: ignore[index]
+
+
+# ---------------------------------------------------------------------------
+# Empty-list edge cases for list-shaped contracts
+# ---------------------------------------------------------------------------
+
+
+def test_find_citations_empty_list() -> None:
+    result = _CITATIONS_ADAPTER.io_contract.parse(json.dumps([]))
+    assert result == {"items": []}
+
+
+def test_flag_hallucinated_content_empty_list() -> None:
+    result = _HALLUCINATION_ADAPTER.io_contract.parse(json.dumps([]))
+    assert result == {"items": []}

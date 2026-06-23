@@ -38,7 +38,7 @@ class _DictContract(IOContract):
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2 (#1138)."
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
@@ -51,6 +51,7 @@ class _DictContract(IOContract):
             dict[str, object]: Parsed output dict, unchanged.
 
         Raises:
+            ValueError: When *raw* is not valid JSON.
             AdapterSchemaMismatchError: When a required key is absent.
         """
         data = json.loads(raw)
@@ -84,7 +85,7 @@ class _ListContract(IOContract):
 
     def build_prompt(self, **_kwargs: object) -> Component:
         raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2 (#1138)."
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
         )
 
     def parse(self, raw: str) -> dict[str, object]:
@@ -95,8 +96,10 @@ class _ListContract(IOContract):
 
         Returns:
             dict[str, object]: ``{"items": [list of validated dicts]}``.
+                An empty list parses to ``{"items": []}``.
 
         Raises:
+            ValueError: When *raw* is not valid JSON.
             AdapterSchemaMismatchError: When the output is not a list, any item
                 is not a dict, or any item is missing a required key.
         """
@@ -226,6 +229,7 @@ def check_answerability(
         A string value of either ``"answerable"`` or ``"unanswerable"``.
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
             ``answerability`` field.
     """
@@ -272,6 +276,7 @@ def rewrite_question(
         Rewritten version of `question`.
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
             ``rewritten_question`` field.
     """
@@ -322,6 +327,7 @@ def clarify_query(
         the string ``"CLEAR"`` if no clarification is needed.
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
             ``clarification`` field.
     """
@@ -381,6 +387,7 @@ def find_citations(
         character offsets into their respective UTF-8 strings.
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
     """
@@ -445,6 +452,7 @@ def check_context_relevance(
         ``"relevant"``, ``"irrelevant"``, or ``"partially relevant"``.
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
             ``context_relevance`` field.
     """
@@ -512,6 +520,7 @@ def flag_hallucinated_content(
         ``response_text``, ``faithfulness``, ``explanation``.
 
     Raises:
+        ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When any record in the output is missing a
             required field.
     """

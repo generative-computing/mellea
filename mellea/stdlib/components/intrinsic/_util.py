@@ -94,7 +94,7 @@ def call_intrinsic(
     model_options: dict | None = None,
     io_contract: IOContract | None = None,
 ):
-    """Invoke an adapter function via the backend, returning parsed JSON output.
+    """Invoke an adapter function via the backend, returning parsed and optionally validated JSON output.
 
     Uses :meth:`~mellea.backends.adapters.AdapterMixin.resolve_adapter` to find
     or lazily register the adapter, then executes via ``mfuncs.act``.
@@ -118,6 +118,9 @@ def call_intrinsic(
 
     Returns:
         dict: Parsed (and optionally validated) JSON output from the adapter function.
+
+    Raises:
+        ValueError: When the model output is ``None`` or is not valid JSON.
     """
     # Ensure the adapter is registered; resolve_adapter creates it if absent.
     backend.resolve_adapter(intrinsic_name)
