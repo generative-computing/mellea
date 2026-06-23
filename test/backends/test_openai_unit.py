@@ -29,6 +29,33 @@ def backend():
     return _make_backend()
 
 
+# --- __repr__ / __str__ ---
+
+
+def test_repr_masks_api_key():
+    backend = _make_backend()
+    r = repr(backend)
+    assert "fake-key" not in r
+    assert "***" in r
+
+
+def test_repr_no_key_shows_none(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    backend = OpenAIBackend(
+        model_id="gpt-4o", api_key=None, base_url="http://localhost:9999/v1"
+    )
+    r = repr(backend)
+    assert "env-key" not in r
+    assert "***" not in r
+    assert "_api_key=None" in r
+
+
+def test_str_masks_api_key():
+    backend = _make_backend()
+    assert "fake-key" not in str(backend)
+    assert "***" in str(backend)
+
+
 # --- filter_openai_client_kwargs ---
 
 

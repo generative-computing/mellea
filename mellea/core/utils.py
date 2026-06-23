@@ -272,6 +272,7 @@ class RESTHandler(logging.Handler):
                 self.api_url,
                 headers=self.headers,
                 data=json.dumps([log_dict]),
+                timeout=2,
             )
             response.raise_for_status()
         except requests.exceptions.RequestException:
