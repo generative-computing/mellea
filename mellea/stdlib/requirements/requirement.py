@@ -58,7 +58,7 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
         )
 
     score = likelihood.get("score", None)
-    if score is None:
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
         raise AdapterSchemaMismatchError(
             name="requirement-check",
             observed_keys=frozenset(likelihood.keys()),
@@ -69,18 +69,25 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
 
 
 class ALoraRequirement(Requirement, Intrinsic):
-    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on error.
+    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on generation error.
 
-    If an exception is thrown during the ALoRA execution path, `mellea` will
-    fall back to LLMaJ. That is the only case where LLMaJ will be used.
+    If the adapter **generation** step raises (e.g. the adapter cannot be
+    loaded), ``mellea`` falls back to LLMaJ for that requirement.  That is the
+    only case where LLMaJ will be used.
+
+    If the adapter generates output but the output **fails schema validation**
+    (``requirement_check_to_bool`` raises ``AdapterSchemaMismatchError``), the
+    exception propagates to the caller — it is not caught and does not trigger
+    the LLMaJ fallback.  This is intentional: schema drift should surface
+    loudly rather than silently return a wrong result.
 
     Args:
         description (str): Human-readable requirement description.
         intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
-            Defaults to `"requirement-check"`.
+            Defaults to ``"requirement-check"``.
 
     Attributes:
-        use_aloras (bool): Always `True`; this class always attempts to use
+        use_aloras (bool): Always ``True``; this class always attempts to use
             ALoRA adapters for validation.
     """
 
