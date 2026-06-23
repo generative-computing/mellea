@@ -67,7 +67,12 @@ from ..plugins.types import HookType
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
-from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
+from .adapters import (
+    AdapterMixin,
+    IntrinsicAdapter,
+    LocalHFAdapter,
+    get_adapter_for_intrinsic,
+)
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -582,8 +587,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         docs = messages_to_docs(ctx_as_message_list)
 
-        allowed_types = tuple(at.value for at in action.adapter_types)
-        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
+        adapter = get_adapter_for_intrinsic(
+            action.intrinsic_name, action.adapter_types, self._added_adapters
+        )
         if adapter is None:
             raise ValueError(
                 f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
@@ -1394,6 +1400,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Store KV cache in LRU separately (not on the MOT) to enable proper cleanup on eviction.
         # This prevents GPU memory from being held by ModelOutputThunk references.
         hf_output = mot.raw.response
+
+        # Surface logits before the caching branch clears hf_output.scores/logits.
+        if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._model_options:
+            self._surface_logits(mot, hf_output)
+
+
         if (
             self._use_caches
             and isinstance(hf_output, GenerateDecoderOnlyOutput)
@@ -1421,9 +1433,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             hf_output.past_key_values = None
             hf_output.scores = None
 
-        # Surface logits and clear the raw logits tensor in all cases.
-        if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._model_options:
-            self._surface_logits(mot, hf_output)
+        # Clear the raw logits tensor (scores already cleared above if cached).
+        if isinstance(hf_output, GenerateDecoderOnlyOutput):
             hf_output.logits = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
@@ -1761,14 +1772,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
-        If the caller supplied a ``SEED`` or a non-zero ``TEMPERATURE`` but did
-        not explicitly set ``do_sample``, ``do_sample`` is forced to ``True`` so
-        the underlying transformers ``generate`` call respects those parameters
-        (they are silently ignored under the default greedy ``do_sample=False``).
+        If the caller supplied a `SEED` or a non-zero `TEMPERATURE` but did
+        not explicitly set `do_sample`, `do_sample` is forced to `True` so
+        the underlying transformers `generate` call respects those parameters
+        (they are silently ignored under the default greedy `do_sample=False`).
 
-        An explicit ``TEMPERATURE`` of ``0.0`` always means greedy decoding and
+        An explicit `TEMPERATURE` of `0.0` always means greedy decoding and
         suppresses this override even when a seed is set — pairing
-        ``do_sample=True`` with ``temperature=0`` would crash transformers
+        `do_sample=True` with `temperature=0` would crash transformers
         ("temperature has to be a strictly positive float").
 
         Args:
@@ -1820,16 +1831,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         find every variable the template references but does not define itself, then
         subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables Hugging Face provides
         automatically). What remains is the exact set of keys a caller may legitimately
-        forward from ``model_options`` to ``apply_chat_template``.
+        forward from `model_options` to `apply_chat_template`.
 
         This is the self-maintaining alternative to a hand-written denylist: it adapts
         automatically as the loaded model's Jinja template changes without any manual
         enumeration of generate()-only option names.
 
         Returns:
-            frozenset of kwarg names valid for ``apply_chat_template`` on this tokenizer,
-            minus HF-provided variables. Empty if the tokenizer has no ``chat_template``
-            (``apply_chat_template`` would raise before kwargs matter in that case).
+            frozenset of kwarg names valid for `apply_chat_template` on this tokenizer,
+            minus HF-provided variables. Empty if the tokenizer has no `chat_template`
+            (`apply_chat_template` would raise before kwargs matter in that case).
         """
         template_str = getattr(self._tokenizer, "chat_template", None)
         if not isinstance(template_str, str) or not template_str:
@@ -1877,7 +1888,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             model_options: raw model options (may contain Mellea sentinel keys)
 
         Returns:
-            dict of kwargs safe to splat into ``apply_chat_template``
+            dict of kwargs safe to splat into `apply_chat_template`
         """
         backend_opts = self._make_backend_specific_and_remove(model_options)
         return {
