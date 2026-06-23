@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
+from mellea.backends.adapters import AdapterSchemaMismatchError
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import LLMaJRequirement, simple_validate
@@ -88,8 +89,22 @@ def test_requirement_check_to_bool_at_threshold():
     assert requirement_check_to_bool('{"requirement_check": {"score": 0.5}}') is False
 
 
-def test_requirement_check_to_bool_missing_key():
-    assert requirement_check_to_bool('{"other_field": 1.0}') is False
+def test_requirement_check_to_bool_raises_on_schema_mismatch():
+    """Regression test for #1008: wrong top-level key must raise, not silently return False."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"other_field": 1.0}')
+
+
+def test_pre_1008_schema_raises():
+    """Pre-#1008 output shape (requirement_likelihood) must raise AdapterSchemaMismatchError."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_likelihood": 0.9}')
+
+
+def test_requirement_check_to_bool_missing_score_raises():
+    """Missing nested score key must raise AdapterSchemaMismatchError."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"other_key": 0.9}}')
 
 
 def test_requirement_check_to_bool_invalid_json():

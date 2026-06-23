@@ -12,6 +12,7 @@ from ...core import (
     Requirement,
     ValidationResult,
 )
+from ...backends.adapters import AdapterSchemaMismatchError
 from ..components.intrinsic import Intrinsic
 
 
@@ -27,39 +28,44 @@ class LLMaJRequirement(Requirement):
 
 
 def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
-    """Checks if a given output should be marked converted to `True`.
-
-    By default, the requirement check alora outputs: `{"requirement_likelihood": 0.0}`.
-    Returns `True` if the likelihood value is > 0.5.
+    """Convert a ``requirement-check`` adapter output string to a boolean result.
+    Parses the JSON output produced by the ``requirement-check`` adapter and
+    returns ``True`` when the score exceeds 0.5.
 
     Args:
-        x: ALoRA output string or CBlock containing JSON with a
-            `requirement_likelihood` field.
+        x: Adapter output string or CBlock containing JSON with the contract
+            ``{"requirement_check": {"score": <float>}}``.
 
     Returns:
-        True if the extracted likelihood exceeds 0.5, False otherwise.
+        ``True`` if the extracted score exceeds 0.5, ``False`` otherwise.
+
+    Raises:
+        json.JSONDecodeError: If ``x`` is not valid JSON.
+        AdapterSchemaMismatchError: If the parsed output does not contain the
+            expected ``requirement_check.score`` structure.  Callers that
+            previously treated ``False`` as "requirement not met" must now
+            catch this error separately.
     """
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
 
     likelihood = req_dict.get("requirement_check", None)
     if not isinstance(likelihood, dict):
-        MelleaLogger.get_logger().warning(
-            f"could not get value from alora requirement output; looking for `requirement_check` in {req_dict}"
+        raise AdapterSchemaMismatchError(
+            name="requirement-check",
+            observed_keys=frozenset(req_dict.keys()),
+            expected_keys=frozenset({"requirement_check"}),
         )
-        return False
 
     score = likelihood.get("score", None)
     if score is None:
-        MelleaLogger.get_logger().warning(
-            f"could not get value from alora requirement output; looking for `score` in {req_dict}"
+        raise AdapterSchemaMismatchError(
+            name="requirement-check",
+            observed_keys=frozenset(likelihood.keys()),
+            expected_keys=frozenset({"score"}),
         )
-        return False
 
-    if score > 0.5:
-        return True
-
-    return False
+    return score > 0.5
 
 
 class ALoraRequirement(Requirement, Intrinsic):

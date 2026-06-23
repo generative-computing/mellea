@@ -29,7 +29,10 @@ def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
 
 
 def requirement_check(
-    context: ChatContext, backend: AdapterMixin, requirement: str
+    context: ChatContext,
+    backend: AdapterMixin,
+    requirement: str,
+    model_options: dict | None = None,
 ) -> float:
     """Detect if text adheres to provided requirements.
 
@@ -42,12 +45,20 @@ def requirement_check(
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         requirement: Set of requirements to satisfy.
+        model_options: Optional model-level overrides forwarded to the backend
+            (e.g. ``{ModelOption.MAX_NEW_TOKENS: 64}``). When ``None``, defaults
+            apply.
 
     Returns:
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
+        Raw adapter output contract: ``{"requirement_check": {"score": <float>}}``.
     """
     result_json = call_intrinsic(
-        "requirement-check", context, backend, kwargs={"requirement": requirement}
+        "requirement-check",
+        context,
+        backend,
+        kwargs={"requirement": requirement},
+        model_options=model_options,
     )
     return cast(
         float, cast(dict[str, object], result_json["requirement_check"])["score"]
