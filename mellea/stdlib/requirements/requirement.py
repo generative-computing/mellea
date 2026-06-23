@@ -180,7 +180,7 @@ def simple_validate(
     def validate(ctx: Context) -> ValidationResult:
         o = ctx.last_output()
         if o is None or o.value is None:
-            MelleaLogger.get_logger().warn(
+            MelleaLogger.get_logger().warning(
                 "Last output of context was None. That might be a problem. We return validation as False to be able to continue..."
             )
             return ValidationResult(

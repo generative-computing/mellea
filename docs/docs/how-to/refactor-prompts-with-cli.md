@@ -1,7 +1,6 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/refactor-prompts-with-cli"
 title: "Refactor Prompts with the CLI"
-sidebarTitle: "Refactor with m decompose"
+sidebar_label: "Refactor with m decompose"
 description: "Use m decompose to break a complex prompt into typed, validated generative functions."
 # diataxis: how-to
 ---

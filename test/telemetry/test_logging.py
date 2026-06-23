@@ -1,17 +1,16 @@
 """Unit tests for OpenTelemetry logging instrumentation."""
 
-import importlib
 import logging
-import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
 
+from test.telemetry.conftest import reset_logging_state
+
 # Check if OpenTelemetry is available
 try:
-    from opentelemetry._logs import set_logger_provider
     from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+    from opentelemetry.sdk._logs import LoggingHandler
 
     OTEL_AVAILABLE = True
 except ImportError:
@@ -22,24 +21,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _reset_logging_modules():
-    """Helper to reset logging state and reload modules."""
-    import mellea.core.utils
-    import mellea.telemetry.logging
-    from mellea.core.utils import MelleaLogger
-
-    # Clear any existing handlers from previous tests
-    fancy_logger = logging.getLogger("mellea")
-    fancy_logger.handlers.clear()
-
-    # Reset MelleaLogger singleton
-    MelleaLogger.logger = None
-
-    # Force reload of logging module and core.utils to pick up env vars
-    importlib.reload(mellea.telemetry.logging)
-    importlib.reload(mellea.core.utils)
-
-
 @pytest.fixture
 def clean_logging_env(monkeypatch):
     """Clean logging environment variables before each test."""
@@ -47,10 +28,9 @@ def clean_logging_env(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
-
-    _reset_logging_modules()
+    reset_logging_state()
     yield
-    _reset_logging_modules()
+    reset_logging_state()
 
 
 @pytest.fixture
@@ -58,10 +38,9 @@ def enable_otlp_logging(monkeypatch):
     """Enable OTLP logging with endpoint for tests."""
     monkeypatch.setenv("MELLEA_LOGS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-
-    _reset_logging_modules()
+    reset_logging_state()
     yield
-    _reset_logging_modules()
+    reset_logging_state()
 
 
 # Configuration Tests
@@ -88,8 +67,7 @@ def test_otlp_logging_enabled_without_endpoint_warns(monkeypatch, clean_logging_
     """Test that enabling OTLP without endpoint produces warning on first handler request."""
     monkeypatch.setenv("MELLEA_LOGS_OTLP", "true")
     # No endpoint set
-
-    _reset_logging_modules()
+    reset_logging_state()
 
     from mellea.telemetry.logging import get_otlp_log_handler
 
@@ -105,10 +83,7 @@ def test_otlp_logging_with_various_truthy_values(monkeypatch, clean_logging_env)
 
     for value in ["true", "True", "TRUE", "1", "yes", "Yes", "YES"]:
         monkeypatch.setenv("MELLEA_LOGS_OTLP", value)
-
-        import mellea.telemetry.logging
-
-        importlib.reload(mellea.telemetry.logging)
+        reset_logging_state()
 
         from mellea.telemetry.logging import get_otlp_log_handler
 
@@ -121,8 +96,7 @@ def test_logs_specific_endpoint_takes_precedence(monkeypatch, clean_logging_env)
     monkeypatch.setenv("MELLEA_LOGS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "http://localhost:4318/logs")
-
-    _reset_logging_modules()
+    reset_logging_state()
 
     import mellea.telemetry.logging
 

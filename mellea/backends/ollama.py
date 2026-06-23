@@ -3,9 +3,10 @@
 import asyncio
 import datetime
 import functools
-from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
-from typing import Any, overload
+from collections.abc import AsyncIterator, Coroutine, Sequence
+from typing import Any
 
+import httpx
 import ollama
 from tqdm import tqdm
 
@@ -18,19 +19,21 @@ from ..core import (
     Context,
     GenerateLog,
     GenerateType,
+    ImageUrlBlock,
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
-from ..helpers import ClientCache, get_current_event_loop, send_to_queue
+from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -39,28 +42,55 @@ from .tools import add_tools_from_context_actions, add_tools_from_model_options
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
+def _strip_data_uri_prefix(images: list[str]) -> list[str]:
+    """Strip data URI prefix from base64 image strings for Ollama.
+
+    Ollama expects raw base64 strings without the 'data:image/...;base64,' prefix.
+    This function removes the prefix if present, leaving just the base64 data.
+
+    Args:
+        images: List of base64 image strings, potentially with data URI prefixes.
+
+    Returns:
+        List of base64 strings with data URI prefixes removed.
+    """
+    stripped = []
+    for img in images:
+        # Check if the string has a data URI prefix and remove it
+        if "data:" in img and "base64," in img:
+            img = img.split("base64,")[1]
+        stripped.append(img)
+    return stripped
+
+
 class OllamaModelBackend(FormatterBackend):
     """A model that uses the Ollama Python SDK for local inference.
 
     Args:
         model_id (str | ModelIdentifier): Ollama model ID. If a
-            `ModelIdentifier` is passed, its `ollama_name` attribute must
+            ``ModelIdentifier`` is passed, its ``ollama_name`` attribute must
             be set.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to `TemplateFormatter`.
+            Defaults to ``TemplateFormatter``.
         base_url (str | None): Ollama server endpoint; defaults to
-            `env(OLLAMA_HOST)` or `http://localhost:11434`.
+            ``env(OLLAMA_HOST)`` or ``http://localhost:11434``.
         model_options (dict | None): Default model options for generation requests.
-        timeout (float | None): Request timeout in seconds for the underlying HTTP
-            client. `None` (the default) preserves the upstream `ollama` SDK
-            default. Set this to bound how long a single request will wait when
-            the Ollama server is overloaded or stalled.
+        timeout (float | None): Per-operation HTTP timeout in seconds (connect,
+            read, write, pool). Defaults to 300 s. For streaming requests this
+            bounds the wait between consecutive chunks; for non-streaming requests
+            it bounds total time-to-response. Pass ``None`` to use the upstream
+            ``ollama`` SDK default (no timeout).
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
-            to Mellea `ModelOption` sentinel keys.
-        from_mellea_model_opts_map (dict): Mapping from Mellea `ModelOption`
+            to Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption``
             sentinel keys to Ollama-specific option names.
+
+    Raises:
+        ValueError: If ``model_id`` is a ``ModelIdentifier`` with no ``ollama_name`` set.
+        ConnectionError: If the Ollama server is not running at ``base_url``.
+        OSError: If the model cannot be pulled from the Ollama library.
     """
 
     def __init__(
@@ -69,7 +99,7 @@ class OllamaModelBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
-        timeout: float | None = None,
+        timeout: float | None = 300.0,
     ):
         """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
@@ -81,8 +111,18 @@ class OllamaModelBackend(FormatterBackend):
             ),
             model_options=model_options,
         )
-        # Run the ollama model id accessor early, so that an Assertion fails immediately if we cannot find an ollama model id for the provided ModelIdentifier.
-        self._get_ollama_model_id()
+        # Resolve to a concrete ollama model name; raises ValueError if no ollama_name is set.
+        ollama_model_id = (
+            model_id.ollama_name if isinstance(model_id, ModelIdentifier) else model_id
+        )
+        if ollama_model_id is None or ollama_model_id == "":
+            raise ValueError(
+                "Cannot create OllamaModelBackend: the ModelIdentifier has no ollama_name set. "
+                "Check mellea/backends/model_ids.py and ensure the constant you are using "
+                "has an ollama_name value, or pass the Ollama model tag as a plain string."
+            )
+        self._model_id: str = ollama_model_id
+        self._provider: str = "ollama"
 
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
@@ -101,11 +141,15 @@ class OllamaModelBackend(FormatterBackend):
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
             MelleaLogger.get_logger().error(err)
-            raise Exception(err)
+            raise ConnectionError(err)
         if not self._pull_ollama_model():
-            err = f"could not create OllamaModelBackend: {self._get_ollama_model_id()} could not be pulled from ollama library"
+            err = (
+                f"Model '{self._model_id}' could not be pulled from the Ollama library. "
+                f"Check that the model name is correct (run 'ollama list' to see locally "
+                f"available models, or 'ollama pull {self._model_id}' to fetch it manually)."
+            )
             MelleaLogger.get_logger().error(err)
-            raise Exception(err)
+            raise OSError(err)
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -132,23 +176,11 @@ class OllamaModelBackend(FormatterBackend):
             ModelOption.STOP_SEQUENCES: "stop",
         }
 
-    def _get_ollama_model_id(self) -> str:
-        """Gets the ollama model id from the model_id that was provided in the constructor. Raises AssertionError is the ModelIdentifier does not provide an ollama_name."""
-        ollama_model_id = (
-            self.model_id.ollama_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else self.model_id
-        )
-        assert ollama_model_id is not None, (
-            "model_id is None. This can also happen if the ModelIdentifier has no ollama name set or this model is not available in ollama."
-        )
-        return ollama_model_id
-
     def _check_ollama_server(self) -> bool:
         """Requests generic info about the Ollama server to ensure it's running."""
         try:
             self._client.ps()
-        except ConnectionError:
+        except (ConnectionError, httpx.TimeoutException, httpx.ConnectError):
             return False
         return True
 
@@ -177,14 +209,14 @@ class OllamaModelBackend(FormatterBackend):
         This code was generated by ChatGPT.
         """
         # shortcut --  if model is in list-- don't try to pull
-        if self.is_model_available(self._get_ollama_model_id()):
+        if self.is_model_available(self._model_id):
             return True
 
         try:
             MelleaLogger.get_logger().debug(
-                f"Loading/Pulling model from Ollama: {self._get_ollama_model_id()}"
+                f"Loading/Pulling model from Ollama: {self._model_id}"
             )
-            stream = self._client.pull(self._get_ollama_model_id(), stream=True)
+            stream = self._client.pull(self._model_id, stream=True)
             progress_bars = {}
             for update in stream:
                 status = update.status
@@ -209,7 +241,7 @@ class OllamaModelBackend(FormatterBackend):
             for pbar in progress_bars.values():
                 pbar.close()
             return True
-        except ollama.ResponseError:
+        except (ollama.ResponseError, httpx.TimeoutException, httpx.ConnectError):
             return False
 
     @property
@@ -281,9 +313,9 @@ class OllamaModelBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for `action` given `ctx` via the Ollama chat API.
+        """Generate a completion for ``action`` given ``ctx`` via the Ollama chat API.
 
-        Delegates to `generate_from_chat_context`. Only chat contexts are supported.
+        Delegates to ``generate_from_chat_context``. Only chat contexts are supported.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -293,16 +325,13 @@ class OllamaModelBackend(FormatterBackend):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If `True`, expose available tools to the model and
+            tool_calls (bool): If ``True``, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes `action` and the new output.
+                and an updated context that includes ``action`` and the new output.
         """
-        # Start span without auto-closing (will be closed in post_processing)
-        span = start_generate_span(self, action, ctx, format, tool_calls)
-
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
@@ -317,10 +346,6 @@ class OllamaModelBackend(FormatterBackend):
                 tool_calls=tool_calls,
             )
 
-        # Store span for telemetry recording and closing in post_processing
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
-
         return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
@@ -334,7 +359,7 @@ class OllamaModelBackend(FormatterBackend):
     ) -> ModelOutputThunk[C]:
         """Generate a new completion from the provided context using this backend's formatter.
 
-        Treats the `Context` as a chat history and uses the `ollama.Client.chat()`
+        Treats the ``Context`` as a chat history and uses the ``ollama.Client.chat()``
         interface to generate a completion. Returns a thunk that lazily resolves
         the model output.
 
@@ -345,13 +370,15 @@ class OllamaModelBackend(FormatterBackend):
             _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
                 structured output decoding.
             model_options (dict | None): Per-call model options.
-            tool_calls (bool): If `True`, expose available tools and parse responses.
+            tool_calls (bool): If ``True``, expose available tools and parse responses.
 
         Returns:
             ModelOutputThunk[C]: A thunk holding the (lazy) model output.
 
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
+            ValueError: If a message contains an ``ImageUrlBlock``; Ollama requires
+                base64-encoded images — convert to an ``ImageBlock`` first.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)
@@ -368,7 +395,7 @@ class OllamaModelBackend(FormatterBackend):
         match action:
             case ALoraRequirement():
                 raise Exception(
-                    "The ollama backend does not support currently support activated LoRAs."
+                    "The ollama backend does not currently support aLoRA adapters."
                 )
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
@@ -382,12 +409,25 @@ class OllamaModelBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-        conversation.extend(
-            [
-                {"role": m.role, "content": self.formatter.print(m), "images": m.images}
-                for m in messages
-            ]
-        )
+        for m in messages:
+            if m.images is not None:
+                for img in m.images:
+                    if isinstance(img, ImageUrlBlock):
+                        raise ValueError(
+                            "OllamaModelBackend does not support URL images (ImageUrlBlock). "
+                            "Convert the image to a base64-encoded ImageBlock before passing it to Ollama."
+                        )
+            conversation.append(
+                {
+                    "role": m.role,
+                    "content": self.formatter.print(m),
+                    "images": (
+                        _strip_data_uri_prefix([str(img.value) for img in m.images])
+                        if m.images
+                        else None
+                    ),
+                }
+            )
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()
@@ -409,7 +449,7 @@ class OllamaModelBackend(FormatterBackend):
         chat_response: Coroutine[
             Any, Any, AsyncIterator[ollama.ChatResponse] | ollama.ChatResponse
         ] = self._async_client.chat(
-            model=self._get_ollama_model_id(),
+            model=self._model_id,
             messages=conversation,
             tools=[t.as_json_tool for t in tools.values()],
             think=model_opts.get(ModelOption.THINKING, None),
@@ -435,8 +475,8 @@ class OllamaModelBackend(FormatterBackend):
         )
 
         # Set model/provider early so they are available in the error path
-        output.generation.model = self._get_ollama_model_id()
-        output.generation.provider = "ollama"
+        output.generation.model = self._model_id
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -447,7 +487,13 @@ class OllamaModelBackend(FormatterBackend):
 
             # Use `create_task` so that we don't have to specifically await this task before it starts executing.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -456,29 +502,7 @@ class OllamaModelBackend(FormatterBackend):
 
         return output
 
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -486,7 +510,7 @@ class OllamaModelBackend(FormatterBackend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating via Ollama.
 
         Passes formatted prompt strings directly to Ollama's generate endpoint.
@@ -501,13 +525,22 @@ class OllamaModelBackend(FormatterBackend):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the aggregate token-usage dict for the batch (or `None`
+                when no request reported usage).
 
-        Raises:
-            Exception: Any exception raised by the Ollama client (e.g.,
-                ``ConnectionError``, ``ollama.ResponseError``) propagates
-                directly to the caller. Semantics are all-or-nothing: if any
-                request fails, no thunks are returned.
+                If Ollama returns an empty done response (``response=""``,
+                ``done=True``, no thinking content) for an action, that thunk
+                soft-fails: it has ``value=""`` and ``thunk.error`` carries the
+                ``RuntimeError`` describing the cause. Other actions in the
+                batch are unaffected.
+
+        Note:
+            Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
+            request raises (e.g. ``ollama.ResponseError`` or a connection error),
+            that exception propagates to the caller and no list is returned, even
+            for requests that completed successfully.
         """
         if len(actions) > 1:
             MelleaLogger.get_logger().info(
@@ -526,45 +559,63 @@ class OllamaModelBackend(FormatterBackend):
         # Ollama doesn't support "batching". There's some ability for concurrency. Use that here.
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
 
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            # Run async so that we can make use of Ollama's concurrency.
-            coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
-            for prompt in prompts:
-                co = self._async_client.generate(
-                    model=self._get_ollama_model_id(),
-                    prompt=prompt,
-                    raw=True,
-                    think=model_opts.get(ModelOption.THINKING, None),
-                    format=format.model_json_schema() if format is not None else None,  # type: ignore
-                    options=self._make_backend_specific_and_remove(model_opts),
-                )
-                coroutines.append(co)
+        # Run async so that we can make use of Ollama's concurrency.
+        coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
+        for prompt in prompts:
+            co = self._async_client.generate(
+                model=self._model_id,
+                prompt=prompt,
+                raw=True,
+                think=model_opts.get(ModelOption.THINKING, None),
+                format=format.model_json_schema() if format is not None else None,  # type: ignore
+                options=self._make_backend_specific_and_remove(model_opts),
+            )
+            coroutines.append(co)
 
-            # All-or-nothing: first failure raises; remaining in-flight requests
-            # complete but their results are discarded.
-            responses = await asyncio.gather(*coroutines)
+        # All-or-nothing: first failure raises; remaining in-flight requests
+        # complete but their results are discarded.
+        responses = await asyncio.gather(*coroutines)
 
         results = []
         date = datetime.datetime.now()
+        agg_prompt = 0
+        agg_completion = 0
         for i, response in enumerate(responses):
-            result = ModelOutputThunk(
-                value=response.response,
-                meta={
-                    "generate_response": response.model_dump(),
-                    "usage": {
-                        "completion_tokens": response.eval_count,
-                        "prompt_tokens": response.prompt_eval_count,
-                        "total_tokens": (
-                            response.prompt_eval_count + response.eval_count
-                            if response.prompt_eval_count is not None
-                            and response.eval_count is not None
-                            else None
-                        ),
-                    },
-                },
-            )
+            result = None
+            per_mot_usage: dict[str, Any] | None = None
+            if response.done and not response.response and not response.thinking:
+                # Empty done response with no thinking content. Commonly caused by the
+                # Ollama model-load race (#599) but can also occur on an early stop or
+                # stop-sequence hit.
+                empty_err = RuntimeError(
+                    f"generate_from_raw: request {i} returned an empty response from Ollama "
+                    "(response='', done=True). This commonly occurs when the model is still "
+                    "loading, but can also indicate an early stop or stop-sequence hit. "
+                    "See https://github.com/generative-computing/mellea/issues/599 "
+                    "and https://github.com/ollama/ollama/issues/16326"
+                )
+                MelleaLogger.get_logger().warning(str(empty_err))
+                result = ModelOutputThunk(value="")
+                result._error = empty_err
+            else:
+                n_in = response.prompt_eval_count
+                n_out = response.eval_count
+                if n_in is not None and n_out is not None:
+                    agg_prompt += n_in
+                    agg_completion += n_out
+                    per_mot_usage = {
+                        "prompt_tokens": n_in,
+                        "completion_tokens": n_out,
+                        "total_tokens": n_in + n_out,
+                    }
+                result = ModelOutputThunk(
+                    value=response.response,
+                    meta={"generate_response": response.model_dump()},
+                )
+            result.generation.usage = per_mot_usage
+            result.generation.model = self._model_id
+            result.generation.provider = self._provider
+
             action = actions[i]
             result.parsed_repr = (
                 action.parse(result) if isinstance(action, Component) else result.value
@@ -586,7 +637,16 @@ class OllamaModelBackend(FormatterBackend):
 
             results.append(result)
 
-        return results
+        usage: dict[str, Any] | None = (
+            {
+                "prompt_tokens": agg_prompt,
+                "completion_tokens": agg_completion,
+                "total_tokens": agg_prompt + agg_completion,
+            }
+            if (agg_prompt or agg_completion)
+            else None
+        )
+        return results, usage
 
     def _extract_model_tool_requests(
         self, tools: dict[str, AbstractMelleaTool], chat_response: ollama.ChatResponse
@@ -624,9 +684,9 @@ class OllamaModelBackend(FormatterBackend):
     ):
         """Accumulate text and tool calls from a single Ollama ChatResponse chunk.
 
-        Called for each streaming or non-streaming `ollama.ChatResponse`. Also
+        Called for each streaming or non-streaming ``ollama.ChatResponse``. Also
         extracts tool call requests inline and merges the chunk into the running
-        aggregated response stored in `mot._meta["chat_response"]`.
+        aggregated response stored in ``mot._meta["chat_response"]``.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -688,7 +748,7 @@ class OllamaModelBackend(FormatterBackend):
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
-        generate_log.backend = f"ollama::{self._get_ollama_model_id()}"
+        generate_log.backend = f"ollama::{self._model_id}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["chat_response"]
@@ -721,28 +781,14 @@ class OllamaModelBackend(FormatterBackend):
             }
 
         # Populate model and provider metadata
-        mot.generation.model = str(self._get_ollama_model_id())
-        mot.generation.provider = "ollama"
+        mot.generation.model = self._model_id
+        mot.generation.provider = self._provider
 
-        # Record telemetry and close span now that response is available
-        span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
-
-            if response:
-                if mot.generation.usage:
-                    record_token_usage(span, mot.generation.usage)
-                record_response_metadata(span, response)
-
-            # Close the span now that telemetry is recorded
-            end_backend_span(span)
-
-            # Clean up the span reference
-            del mot._meta["_telemetry_span"]
+        # Populate response-side metadata for telemetry
+        if response is not None:
+            mot.generation.response_model = getattr(response, "model", None)
+            if done_reason := getattr(response, "done_reason", None):
+                mot.generation.finish_reasons = [done_reason]
 
 
 def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):

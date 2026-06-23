@@ -6,7 +6,7 @@ import functools
 import inspect
 import os
 from collections.abc import Coroutine, Sequence
-from typing import TYPE_CHECKING, Any, overload
+from typing import Any
 
 import openai
 from openai.types.chat import ChatCompletion
@@ -31,6 +31,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     _server_type,
     _ServerType,
@@ -44,18 +45,9 @@ from ..helpers import (
 )
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
-from .adapters.adapter import (
-    Adapter,
-    AdapterMixin,
-    EmbeddedIntrinsicAdapter,
-    get_adapter_for_intrinsic,
-)
-from .adapters.catalog import AdapterType
+from .adapters._core import Adapter
+from .adapters.adapter import AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -63,9 +55,7 @@ from .tools import (
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-
-if TYPE_CHECKING:
-    from transformers.tokenization_utils import PreTrainedTokenizer
+from .utils import populate_response_metadata_openai_shape
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
@@ -88,8 +78,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         load_embedded_adapters (bool): If `True`, automatically registers
             embedded intrinsic adapters from *adapter_source* (or *model_id* if
             *adapter_source* is not set). Looks first for a local directory
-            and then for a HuggingFace hub repo.
-        adapter_source (str | None): Local directory path or HuggingFace hub
+            and then for a Hugging Face hub repo.
+        adapter_source (str | None): Local directory path or Hugging Face hub
             repo ID from which to load embedded adapter configs. When `None`,
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
@@ -184,6 +174,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 self._model_id = model_id.openai_name
 
+        self._provider: str = "openai"
+
         self._adapter_source = adapter_source
 
         # Use provided parameters or fall back to environment variables
@@ -236,6 +228,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._uses_embedded_adapters = True
         if load_embedded_adapters:
             self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+
+    def __repr__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        key_repr = "'***'" if self._api_key is not None else "None"
+        return (
+            f"{self.__class__.__name__}("
+            f"model_id={self._model_id!r}, "
+            f"base_url={self._base_url!r}, "
+            f"_api_key={key_repr})"
+        )
+
+    def __str__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        return repr(self)
 
     # ------------------------------------------------------------------
     # AdapterMixin implementation
@@ -292,8 +298,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Register all embedded adapters from an Embedded Adapter model.
 
         Args:
-            source (str): A local model directory path or HuggingFace Hub repo ID.
-            revision (str): Git revision when loading from HuggingFace Hub.
+            source (str): A local model directory path or Hugging Face Hub repo ID.
+            revision (str): Git revision when loading from Hugging Face Hub.
             cache_dir (str | None): Cache directory for HF downloads.
 
         Returns:
@@ -469,11 +475,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "The Openai backend only supports chat-like contexts."
         )
 
-        # Start span without auto-closing (will be closed in post_processing)
-        span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        )
-
         _model_id_str = str(getattr(self, "model_id", "unknown"))
         with with_context(request_id=generate_request_id(), model_id=_model_id_str):
             await self.do_generate_walk(action)
@@ -497,9 +498,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = get_adapter_for_intrinsic(
-                    adapter_name, [AdapterType.ALORA], self._added_adapters
-                )
+                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
@@ -519,16 +518,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                         model_options=model_opts,
                         tool_calls=tool_calls,
                     )
-                    if span is not None:
-                        mot._meta["_telemetry_span"] = span
                     return mot, ctx.add(alora_action).add(mot)
 
             elif isinstance(action, Intrinsic):
                 mot = await self._generate_from_intrinsic(
                     action, ctx, model_options=model_opts, tool_calls=tool_calls
                 )
-                if span is not None:
-                    mot._meta["_telemetry_span"] = span
                 return mot, ctx.add(action).add(mot)
 
             result = await self.generate_from_chat_context(
@@ -539,11 +534,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 tool_calls=tool_calls,
             )
 
-        # Store span in ModelOutputThunk for later use in post_processing
-        mot, new_ctx = result
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
-        return mot, new_ctx
+        return result
 
     async def _generate_from_intrinsic(
         self,
@@ -591,12 +582,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         # --- adapter lookup ------------------------------------------------
-        adapter = get_adapter_for_intrinsic(
-            action.intrinsic_name, action.adapter_types, self._added_adapters
-        )
+        allowed_types = tuple(at.value for at in action.adapter_types)
+        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(
-                f"backend ({self}) has no adapter for processing intrinsic: "
+                f"backend ({self}) has no adapter for processing adapter function: "
                 f"{action.intrinsic_name}"
             )
 
@@ -673,11 +663,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        # Handle thinking/reasoning.
-        thinking = model_options.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            thinking = "medium"
-
         # Remap and filter remaining model options, then overlay onto api_params
         # so user values override rewriter/io.yaml defaults.
         user_api_params = self._make_backend_specific_and_remove(
@@ -685,10 +670,22 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         api_params.update(user_api_params)
 
-        # Add reasoning_effort last so it overrides any io.yaml default and
-        # avoids duplicate kwargs in the API call.
-        if thinking is not None:
-            api_params["reasoning_effort"] = thinking
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
+        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
+        # Both are set for True so the right server picks up whichever it understands.
+        thinking = model_options.get(ModelOption.THINKING)
+        if thinking is not None:  # False is a valid value — cannot use `if thinking`
+            if type(thinking) is bool:
+                ctk = extra_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                extra_body["chat_template_kwargs"] = ctk
+                if thinking:
+                    api_params["reasoning_effort"] = "medium"
+                # False: don't send reasoning_effort — OpenAI disables reasoning by
+                # default when the param is absent; passing False would be invalid.
+            else:
+                api_params["reasoning_effort"] = thinking
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
@@ -769,7 +766,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # we don't have to worry about scheduling the task to a specific
             # event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_options.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -872,8 +875,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     },
                 }
             else:
-                MelleaLogger.get_logger().warning(
-                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
+                MelleaLogger.get_logger().info(
+                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on supporting JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
                 )
                 extra_params["response_format"] = {
                     "type": "json_schema",
@@ -900,23 +903,54 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 add_tools_from_context_actions(tools, [action])
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
-        thinking = model_opts.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            # OpenAI uses strings for its reasoning levels.
-            thinking = "medium"
-
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        # Build optional reasoning parameters
-        # NOTE: the openai SDK doesn't like it if you pass `reasoning_effort` param to a non-reasoning model e.g. gpt4o
-        reasoning_params = {}
-        if thinking is not None:
-            reasoning_params["reasoning_effort"] = thinking
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3 (bool toggle)
+        # - reasoning_effort: OpenAI/DeepSeek (string level, or True → "medium")
+        # NOTE: don't pass reasoning_effort to non-reasoning models (e.g. gpt-4o).
+        thinking = model_opts.get(ModelOption.THINKING)
+        reasoning_params: dict[str, Any] = {}
+        if thinking is not None:  # False is a valid value — cannot use `if thinking`
+            if type(thinking) is bool:
+                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+                ctk = ctk_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                ctk_body["chat_template_kwargs"] = ctk
+                extra_params["extra_body"] = ctk_body
+                if thinking:
+                    reasoning_params["reasoning_effort"] = "medium"
+                # False: don't send reasoning_effort — OpenAI disables reasoning by
+                # default when the param is absent; passing False would be invalid.
+            else:
+                reasoning_params["reasoning_effort"] = thinking
 
         # Request usage information in streaming responses
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
+
+        # Build the final backend-specific params and merge any user-supplied
+        # extra_body into extra_params so there is a single extra_body source.
+        # Two spreads each containing extra_body raises TypeError at call time.
+        backend_specific = self._make_backend_specific_and_remove(
+            model_opts, is_chat_context=ctx.is_chat_context
+        )
+        user_extra_body = backend_specific.pop("extra_body", None)
+        if user_extra_body is not None:
+            # shallow copy so .pop() below doesn't mutate the caller's dict
+            user_extra_body = dict(user_extra_body)
+            eb = dict(extra_params.get("extra_body") or {})
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
+            # shallow merge is safe: chat_template_kwargs is the only nested dict
+            # key Mellea writes into extra_body; it is deep-merged separately below
+            eb.update(user_extra_body)
+            if user_ctk is not None:
+                eb["chat_template_kwargs"] = {
+                    **eb.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
+            extra_params["extra_body"] = eb
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
@@ -927,9 +961,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **extra_params,
             **reasoning_params,  # type: ignore
-            **self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=ctx.is_chat_context
-            ),
+            **backend_specific,
         )  # type: ignore
 
         output = ModelOutputThunk(None)
@@ -952,7 +984,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Set model/provider early so they are available in the error path
         output.generation.model = self._model_id
-        output.generation.provider = "openai"
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -961,7 +993,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -1054,8 +1092,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             conversation (list[dict]): The chat conversation sent to the model,
                 used for logging.
-            thinking: The reasoning effort level passed to the model, or `None`
-                if reasoning mode was not enabled.
+            thinking: The reasoning value passed to the model: a string level
+                (``"low"``, ``"medium"``, ``"high"``) for explicit effort strings,
+                ``True``/``False`` for the bool toggle, or ``None`` if reasoning
+                was not enabled.
             seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """
@@ -1121,48 +1161,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Populate model and provider metadata
         mot.generation.model = self._model_id
-        mot.generation.provider = "openai"
+        mot.generation.provider = self._provider
 
-        # Record telemetry now that response is available
-        span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
+        # Populate response-side metadata for telemetry
+        if isinstance(response, dict):
+            populate_response_metadata_openai_shape(mot, response)
 
-            if usage:
-                record_token_usage(span, usage)
-            record_response_metadata(span, response)
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up the span reference
-            del mot._meta["_telemetry_span"]
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -1170,11 +1175,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating via the OpenAI completions API.
 
         Passes formatted prompt strings directly to the completions endpoint.
-        Tool calling is not supported on this endpoint.
+        Tool calling is not supported on this endpoint. Per-MOT `mot.generation.usage`
+        stays `None` because the OpenAI completions API only reports whole-batch usage.
 
         Args:
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
@@ -1185,7 +1191,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the whole-batch token-usage dict or `None`.
 
         Raises:
             openai.BadRequestError: If the request is invalid (e.g. when targeting an
@@ -1215,30 +1223,33 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            try:
-                completion_response: Completion = (
-                    await self._async_client.completions.create(
-                        model=self._model_id,
-                        prompt=prompts,
-                        extra_body=extra_body,
-                        **self._make_backend_specific_and_remove(
-                            model_opts, is_chat_context=False
-                        ),
-                    )
-                )  # type: ignore
-            except openai.BadRequestError as e:
-                if openai_ollama_batching_error in e.message:
-                    MelleaLogger.get_logger().error(
-                        "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
-                        "your requests will fail since ollama doesn't support batching requests."
-                    )
-                raise e
+        try:
+            completion_response: Completion = (
+                await self._async_client.completions.create(
+                    model=self._model_id,
+                    prompt=prompts,
+                    extra_body=extra_body,
+                    **self._make_backend_specific_and_remove(
+                        model_opts, is_chat_context=False
+                    ),
+                )
+            )  # type: ignore
+        except openai.BadRequestError as e:
+            if openai_ollama_batching_error in e.message:
+                MelleaLogger.get_logger().error(
+                    "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                    "your requests will fail since ollama doesn't support batching requests."
+                )
+            raise
 
         # Necessary for type checker.
         assert isinstance(completion_response, Completion)
+
+        usage_dump = (
+            completion_response.usage.model_dump()
+            if completion_response.usage
+            else None
+        )
 
         results = []
         for response, action, prompt in zip(
@@ -1248,12 +1259,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {
-                "oai_completion_response": response.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
-            }
+            output._meta = {"oai_completion_response": response.model_dump()}
+            output.generation.model = self._model_id
+            output.generation.provider = self._provider
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value
@@ -1271,7 +1279,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             results.append(output)
 
-        return results
+        return results, usage_dump
 
     @property
     def base_model_name(self):

@@ -55,6 +55,8 @@ class ScriptedBackend(Backend):
 
     def __init__(self, script: list[_ScriptedTurn]) -> None:
         self._script = iter(script)
+        self._model_id: str = "scripted-mock"
+        self._provider: str = "scripted-mock"
 
     async def _generate_from_context(
         self,
@@ -72,7 +74,7 @@ class ScriptedBackend(Backend):
         mot._generate_log = GenerateLog(is_final_result=True)
         return mot, ctx.add(action).add(mot)
 
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -80,7 +82,7 @@ class ScriptedBackend(Backend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict | None]:
         raise NotImplementedError("react does not use generate_from_raw")
 
 

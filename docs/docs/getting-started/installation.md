@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/getting-started/installation"
 title: "Installation"
 description: "Install Mellea and set up your Python environment."
 # diataxis: tutorial
@@ -17,13 +16,18 @@ pip install mellea
 uv add mellea
 ```
 
+> **Note:** `uv add` adds Mellea to an existing uv project, so run it from a
+> directory created with `uv init` (or one that already has a `pyproject.toml`).
+> To install into a plain virtual environment without a uv project, use
+> `uv pip install mellea` instead.
+
 ## Optional extras
 
 Install extras for specific backends and features:
 
 ```bash
 pip install "mellea[litellm]"    # LiteLLM multi-provider (Anthropic, Bedrock, etc.)
-pip install "mellea[hf]"         # HuggingFace transformers for local inference
+pip install "mellea[hf]"         # Hugging Face Transformers for local inference
 pip install "mellea[watsonx]"    # IBM WatsonX
 pip install "mellea[tools]"      # Tool and agent dependencies (LangChain, smolagents)
 pip install "mellea[cli]"        # m serve, m alora, m decompose CLI commands
@@ -32,7 +36,7 @@ pip install "mellea[telemetry]"  # OpenTelemetry tracing and metrics
 
 ```bash
 uv add "mellea[litellm]"        # LiteLLM multi-provider (Anthropic, Bedrock, etc.)
-uv add "mellea[hf]"             # HuggingFace transformers for local inference
+uv add "mellea[hf]"             # Hugging Face Transformers for local inference
 uv add "mellea[watsonx]"        # IBM WatsonX
 uv add "mellea[tools]"          # Tool and agent dependencies (LangChain, smolagents)
 uv add "mellea[cli]"            # m serve, m alora, m decompose CLI commands

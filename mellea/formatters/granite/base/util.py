@@ -80,11 +80,14 @@ def random_uuid() -> str:
 
 
 def load_transformers_lora(local_or_remote_path: str) -> tuple:
-    """Load transformers LoRA model.
+    """Load transformers LoRA model placed on the best available device.
 
     AutoModelForCausalLM.from_pretrained() is supposed to auto-load base models if you
     pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
     Workaround powers activate!
+
+    Device selection mirrors ``LocalHFBackend``: CUDA → MPS → CPU. The returned model
+    is already on that device; callers do not need to move it.
 
     Only works if `transformers` and `peft` are installed.
 
@@ -92,14 +95,18 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
         local_or_remote_path: Local directory path of the LoRA adapter.
 
     Returns:
-        Tuple of `(model, tokenizer)` where `model` is the loaded LoRA model and
-        `tokenizer` is the corresponding HuggingFace tokenizer.
+        Tuple of `(model, tokenizer)` where `model` is the loaded LoRA model placed on
+        the best available device, and `tokenizer` is the corresponding HuggingFace
+        tokenizer.
 
     Raises:
         ImportError: If `peft` or `transformers` packages are not installed.
         NotImplementedError: If `local_or_remote_path` does not exist locally
             (remote loading from the Hugging Face Hub is not yet implemented).
     """
+    with import_optional("hf"):
+        # Third Party
+        import torch
     with import_optional("peft"):
         # Third Party
         import peft
@@ -110,9 +117,20 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
     with open(f"{local_model_dir}/adapter_config.json", encoding="utf-8") as f:
         adapter_config = json.load(f)
     base_model_name = adapter_config["base_model_name_or_path"]
-    base_model = transformers.AutoModelForCausalLM.from_pretrained(base_model_name)
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    base_model = transformers.AutoModelForCausalLM.from_pretrained(
+        base_model_name, device_map=str(device)
+    )
     tokenizer = transformers.AutoTokenizer.from_pretrained(base_model_name)
-    model = peft.PeftModel.from_pretrained(base_model, local_model_dir)
+    model = peft.PeftModel.from_pretrained(
+        base_model, local_model_dir, device_map=str(device)
+    )
     return model, tokenizer
 
 
@@ -389,13 +407,11 @@ def generate_with_transformers(
         # Third Party
         import torch
 
-    # Input tokens must be passed to generate() as a positional argument, not a named
-    # argument.
     input_tokens = generate_input["input_tokens"]
     generate_input = generate_input.copy()
     del generate_input["input_tokens"]
 
-    generate_result = model.generate(input_tokens, **generate_input)  # type: ignore[operator]
+    generate_result = model.generate(input_ids=input_tokens, **generate_input)  # type: ignore[operator]
 
     # Result is a a 2D tensor of shape (num responses, prompt + max generated tokens)
     # containing tokens, plus a tuple of <max generated tokens> tensors of shape
@@ -462,6 +478,7 @@ def generate_with_transformers(
                 all_logprobs[token_ix][response_tokens[token_ix]].item()
                 for token_ix in range(len(response_tokens))
             ]
+            assert isinstance(response_string, str)
             token_strings = [response_string[begin:end] for begin, end in token_offsets]
             token_bytes = [list(s.encode("utf-8")) for s in token_strings]
 
@@ -474,8 +491,8 @@ def generate_with_transformers(
                     torch.nan_to_num(all_logprobs, float("-inf")),
                     other_input["top_logprobs"],
                 )
-                top_k_token_strs = [
-                    [tokenizer.decode(t) for t in row_i] for row_i in top_k_indices
+                top_k_token_strs: list[list[str]] = [
+                    [str(tokenizer.decode(t)) for t in row_i] for row_i in top_k_indices
                 ]
                 top_logprobs = [
                     [

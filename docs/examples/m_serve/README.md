@@ -27,6 +27,12 @@ Example demonstrating structured output with the `response_format` parameter.
 - Structured output validation with JSON schemas
 - Three format types: `text`, `json_object`, `json_schema`
 
+### m_serve_example_multimodal_image.py
+Example of serving a vision model through `m serve` with image inputs.
+
+### client_multimodal_image.py
+Client code for testing the multimodal image endpoint with an OpenAI-compatible request.
+
 ### pii_serve.py
 Example of serving a PII (Personally Identifiable Information) detection service.
 
@@ -40,6 +46,15 @@ against `m_serve_example_streaming.py`.
 ### client_response_format.py
 Client code demonstrating all three `response_format` types with examples.
 
+### m_serve_example_tool_calling.py
+Example of serving a function with tool calling capabilities through `m serve`.
+
+### client_tool_calling.py
+Client code for testing tool calling endpoints, demonstrating function invocation through the API.
+
+### client_streaming_tool_calling.py
+Client code demonstrating streaming responses combined with tool calling.
+
 ## Concepts Demonstrated
 
 - **API Deployment**: Exposing Mellea programs as REST APIs
@@ -49,6 +64,7 @@ Client code demonstrating all three `response_format` types with examples.
 - **Model Options**: Passing model configuration through API
 - **Streaming Responses**: Real-time token streaming via Server-Sent Events (SSE)
 - **Structured Output**: Using `response_format` for JSON schema validation
+- **Multimodal Inputs**: Sending text plus image content to vision-capable models
 
 ## Basic Pattern
 
@@ -104,6 +120,16 @@ m serve docs/examples/m_serve/m_serve_example_response_format.py
 
 # In another terminal, test with the response_format client
 python docs/examples/m_serve/client_response_format.py
+```
+
+### Multimodal Images
+
+```bash
+# Start the multimodal image example server
+m serve docs/examples/m_serve/m_serve_example_multimodal_image.py
+
+# In another terminal, test with the multimodal client
+uv run python docs/examples/m_serve/client_multimodal_image.py
 ```
 
 ## Response Format Support

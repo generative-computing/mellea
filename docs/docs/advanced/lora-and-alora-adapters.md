@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/advanced/lora-and-alora-adapters"
 title: "LoRA and aLoRA adapters"
 description: "Train lightweight adapters on your own labeled data and use them as requirement validators in Mellea programs."
 # diataxis: how-to
@@ -19,9 +18,9 @@ Hugging Face account.
 > **Backend note:** Custom-trained adapters can only be loaded into `LocalHFBackend`.
 > They do not work with Ollama, OpenAI, or other remote backends.
 >
-> Granite Switch models ship with pre-trained intrinsic adapters embedded in the
+> Granite Switch models ship with pre-trained adapter functions embedded in the
 > model weights, which can be used via `OpenAIBackend` with
-> `load_embedded_adapters=True`. See [Intrinsics](./intrinsics) for details.
+> `load_embedded_adapters=True`. See [Adapter functions](./intrinsics.md) for details.
 
 ## LoRA vs aLoRA
 
@@ -105,7 +104,7 @@ weights. Requires `HF_TOKEN` set or a prior `huggingface-cli login`.
 > data includes proprietary, confidential, or personal information. Language models can
 > memorize details from small domain-specific datasets.
 
-If you intend to use the adapter as a Mellea intrinsic (so that it can be loaded by
+If you intend to use the adapter as a Mellea adapter function (so that it can be loaded by
 model ID rather than local path), pass `--intrinsic` and provide an `io.yaml` file:
 
 ```bash
@@ -161,7 +160,7 @@ backend.default_to_constraint_checking_alora = False
 Set it back to `True` to re-enable. This flag is per-backend instance and does not
 affect other sessions.
 
-**See also:** [Intrinsics](./intrinsics) |
+**See also:** [Adapter functions](./intrinsics.md) |
 [The Requirements System](../concepts/requirements-system) |
 [Write Custom Verifiers](../how-to/write-custom-verifiers) |
 [CLI Reference](../reference/cli)

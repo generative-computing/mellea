@@ -14,6 +14,7 @@ class SessionPreInitPayload(MelleaBasePayload):
     """Payload for `session_pre_init` — before backend initialization.
 
     Attributes:
+        session_id: UUID string identifying this session.
         backend_name: Name of the backend (e.g. `"ollama"`, `"openai"`).
         model_id: Model identifier string (writable).
         model_options: Optional dict of model options like temperature, max_tokens (writable).
@@ -61,7 +62,11 @@ class SessionCleanupPayload(MelleaBasePayload):
             the session (each ``self.ctx = ...`` assignment in ``MelleaSession``
             counts as one). Reset to 0 by ``MelleaSession.reset()``. Stable
             under any context-compaction strategy.
+
+        exception: The exception that triggered cleanup, or `None` for normal
+            teardown. Set when `MelleaSession.__exit__` propagates an error.
     """
 
     context: Any = None
     interaction_count: int = 0
+    exception: BaseException | None = None

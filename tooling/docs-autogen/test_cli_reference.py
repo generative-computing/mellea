@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -157,6 +158,45 @@ def test_see_also_links_rendered(generated_md):
     assert "**See also:**" in generated_md
     # Should contain at least one relative link
     assert re.search(r"\[.*?\]\(\.\./.*?\)", generated_md)
+
+
+def test_see_also_targets_exist(click_app):
+    """Every See Also path in CLI docstrings must resolve to a real docs page.
+
+    This guards against stale Mintlify paths surviving migration to Docusaurus.
+    Paths are checked relative to docs/docs/ in the repo root.
+    """
+    from generate_cli_reference import _parse_docstring_sections, _parse_see_also
+
+    # Locate docs/docs relative to this script (tooling/docs-autogen/)
+    script_dir = Path(__file__).parent
+    docs_root = script_dir.parents[1] / "docs" / "docs"
+
+    missing: list[str] = []
+
+    def _check_command(full_name: str, cmd) -> None:  # type: ignore[no-untyped-def]
+        sections = _parse_docstring_sections(cmd.help)
+        see_also = sections.get("See Also", "")
+        if not see_also:
+            return
+        for kind, path in _parse_see_also(see_also):
+            if kind != "guide":
+                continue
+            # The generator produces ../<path> relative to reference/cli.md,
+            # which means docs/<path>.md or docs/<path>.mdx must exist.
+            candidate_md = docs_root / f"{path}.md"
+            candidate_mdx = docs_root / f"{path}.mdx"
+            if not candidate_md.exists() and not candidate_mdx.exists():
+                missing.append(f"{full_name}: See Also path '{path}' not found")
+
+    for cmd_name, cmd in click_app.commands.items():
+        if hasattr(cmd, "commands") and cmd.commands:
+            for sub_name, sub_cmd in cmd.commands.items():
+                _check_command(f"m {cmd_name} {sub_name}", sub_cmd)
+        else:
+            _check_command(f"m {cmd_name}", cmd)
+
+    assert not missing, "Broken See Also paths:\n" + "\n".join(missing)
 
 
 def test_synopsis_present(generated_md):

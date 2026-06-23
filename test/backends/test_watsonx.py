@@ -260,7 +260,9 @@ def test_default_model():
     default_backend = WatsonxAIBackend()
 
     # Verify it uses IBM_GRANITE_4_HYBRID_SMALL as default
-    assert default_backend._model_id == model_ids.IBM_GRANITE_4_HYBRID_SMALL, (
+    assert (
+        default_backend._model_id == model_ids.IBM_GRANITE_4_HYBRID_SMALL.watsonx_name
+    ), (
         f"Expected default model to be IBM_GRANITE_4_HYBRID_SMALL, "
         f"but got {default_backend._model_id}"
     )

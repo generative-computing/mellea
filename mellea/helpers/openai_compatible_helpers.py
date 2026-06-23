@@ -1,15 +1,19 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
+from __future__ import annotations
+
 import json
 import uuid
-from typing import Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
-from ..backends.tools import validate_tool_arguments
-from ..core import Formatter, MelleaLogger, ModelToolCall
-from ..core.base import AbstractMelleaTool, ModelOutputThunk
-from ..stdlib.components import Document, Message
+from ..core.base import ImageUrlBlock
+
+if TYPE_CHECKING:
+    from ..core import Formatter, ModelToolCall
+    from ..core.base import AbstractMelleaTool, ModelOutputThunk
+    from ..stdlib.components import Document, Message
 
 
 class ToolCallFunction(TypedDict):
@@ -54,6 +58,9 @@ def extract_model_tool_requests(
         Mapping of tool name to `ModelToolCall` for each requested tool call, or
         `None` if no tool calls were found.
     """
+    from ..backends.tools import validate_tool_arguments
+    from ..core import MelleaLogger, ModelToolCall
+
     model_tool_calls: dict[str, ModelToolCall] = {}
     calls = response["message"].get("tool_calls", None)
     if calls:
@@ -190,7 +197,12 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     if msg.images is not None:
         img_list = []
         for img in msg.images:
-            url = img if img.startswith("data:") else f"data:image/png;base64,{img}"
+            if isinstance(img, ImageUrlBlock):
+                url = img.value
+            else:
+                # ImageBlock: base64-encoded PNG
+                raw = str(img.value)
+                url = raw if raw.startswith("data:") else f"data:image/png;base64,{raw}"
             img_list.append({"type": "image_url", "image_url": {"url": url}})
 
         return {

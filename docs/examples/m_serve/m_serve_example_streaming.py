@@ -5,9 +5,9 @@
 from typing import Any
 
 import mellea
-from cli.serve.models import ChatMessage
 from mellea.backends.model_options import ModelOption
 from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
+from mellea.serve import ChatMessage
 from mellea.stdlib.context import SimpleContext
 
 session = mellea.start_session(ctx=SimpleContext())
@@ -24,7 +24,7 @@ async def serve(
     for streaming requests.
     """
     del requirements
-    message = input[-1].content or ""
+    message = input[-1].get_text_content()
     is_streaming = bool((model_options or {}).get(ModelOption.STREAM, False))
 
     if is_streaming:

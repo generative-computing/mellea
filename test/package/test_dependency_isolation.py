@@ -256,6 +256,15 @@ def _run_check(
         )
 
     script = _build_check_script(should_succeed, should_fail, flag_checks)
+    _run_isolated_script(extra, script, "Import isolation check failures")
+
+
+def _run_isolated_script(extra: str | None, script: str, error_prefix: str) -> None:
+    """Run `script` in a throwaway `uv run --isolated --no-project` env.
+
+    Installs mellea (with the given extra if provided) and executes the script.
+    Fails the current pytest test if the script exits non-zero.
+    """
     install_spec = f".[{extra}]" if extra else "."
     assert UV_BIN is not None  # guaranteed by module-level skip
     cmd = [
@@ -270,14 +279,13 @@ def _run_check(
         "-c",
         script,
     ]
-
     result = subprocess.run(
         cmd, capture_output=True, text=True, timeout=300, cwd=str(PROJECT_ROOT)
     )
     if result.returncode != 0:
         # The script prints failures to stderr via SystemExit; uv may also print to stderr
         output = (result.stdout.strip() + "\n" + result.stderr.strip()).strip()
-        pytest.fail(f"Import isolation check failures:\n{output}")
+        pytest.fail(f"{error_prefix}:\n{output}")
 
 
 def _inverted_flag_checks(extra: str) -> list[tuple[str, str, bool]]:
@@ -401,6 +409,30 @@ def test_hooks() -> None:
         extra="hooks",
         should_succeed=[*IMPORTS["core"], *IMPORTS["hooks"]],
         flag_checks=FLAG_CHECKS["hooks"],
+    )
+
+
+def test_telemetry_plugins_register() -> None:
+    """mellea[telemetry]: metrics and tracing plugins auto-register when their env vars are set."""
+    script = (
+        "import os\n"
+        "os.environ['MELLEA_METRICS_ENABLED'] = 'true'\n"
+        "os.environ['MELLEA_TRACES_ENABLED'] = 'true'\n"
+        "import mellea\n"
+        "from mellea.plugins.manager import get_plugin_manager\n"
+        "pm = get_plugin_manager()\n"
+        "if pm is None:\n"
+        "    raise SystemExit('plugin manager not initialised')\n"
+        "names = {p.name for p in pm._registry.get_all_plugins()}\n"
+        "missing = [plugin for plugin in ('token_metrics', 'backend_tracing')\n"
+        "           if not any(n.startswith(plugin + '.') for n in names)]\n"
+        "if missing:\n"
+        "    raise SystemExit(f'plugins missing from registry: {missing}; registered: {sorted(names)}')\n"
+    )
+    _run_isolated_script(
+        extra="telemetry",
+        script=script,
+        error_prefix="Telemetry plugin registration check failed",
     )
 
 

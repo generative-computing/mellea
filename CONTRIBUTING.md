@@ -145,11 +145,55 @@ def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]
         Dictionary mapping entity types to lists of extracted entities.
 
     Example:
-        >>> extract_entities("Alice works at IBM", ["PERSON", "ORG"])
-        {"PERSON": ["Alice"], "ORG": ["IBM"]}
+        ```python
+        result = extract_entities("Alice works at IBM", ["PERSON", "ORG"])
+        # {"PERSON": ["Alice"], "ORG": ["IBM"]}
+        ```
     """
     ...
 ```
+
+#### Code examples in docstrings
+
+Use **triple-backtick fenced code blocks** (` ```python `) for all code examples inside
+docstrings — not RST-style `Example::` notation and not `>>>` doctest prompts.
+
+**Why:** Fenced blocks render correctly in IDEs (VS Code hover cards, PyCharm quick
+docs), in the Docusaurus-based docs site, and in raw GitHub file views. Doctest-style
+`>>>` prompts mislead readers into thinking output is verified, which it is not — this
+project does not run doctests. RST directives (`Example::`, `.. deprecated::`,
+`:param:`, `:type:`) are not valid inside Google-style docstring sections; use
+Google-style section headers (`Example:`, `Raises:`, etc.) with plain Markdown instead.
+
+````python
+# Correct — triple-backtick fence inside an Example: section
+def greet(name: str) -> str:
+    """Return a greeting.
+
+    Example:
+        ```python
+        greet("world")  # "Hello, world!"
+        ```
+    """
+
+# Wrong — RST directive inside a docstring section
+def greet(name: str) -> str:
+    """Return a greeting.
+
+    Example::
+
+        greet("world")
+    """
+
+# Wrong — doctest prompts (output is not verified)
+def greet(name: str) -> str:
+    """Return a greeting.
+
+    Example:
+        >>> greet("world")
+        'Hello, world!'
+    """
+````
 
 #### Class and `__init__` docstrings
 
@@ -397,6 +441,9 @@ as it can corrupt state.
 
 ### Quick Reference
 
+See [test/README.md](test/README.md) for classification rules, authoring guide,
+CI tier map, coverage, and the full local workflow reference. Essential commands:
+
 ```bash
 # Install all dependencies (required for tests)
 uv sync --all-extras --all-groups
@@ -404,24 +451,11 @@ uv sync --all-extras --all-groups
 # Start Ollama (required for most tests)
 ollama serve
 
-# Default: qualitative tests, skip slow tests
+# Default: includes qualitative tests, skips slow tests
 uv run pytest
 
 # Fast tests only (no qualitative, ~2 min)
 uv run pytest -m "not qualitative"
-
-# Unit tests only (self-contained, no services)
-uv run pytest -m unit
-
-# Run only slow tests (>1 min)
-uv run pytest -m slow
-
-# Run specific backend tests
-uv run pytest -m "ollama"
-uv run pytest -m "openai"
-
-# CI/CD mode (skips qualitative tests)
-CICD=1 uv run pytest
 
 # Lint and format
 uv run ruff format .
@@ -471,22 +505,25 @@ for m in granite4.1:3b deepseek-r1:8b \
 
 ### Test Markers
 
-Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference, including tier definitions, backend markers, resource gates, and auto-skip logic.
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/README.md](test/README.md) for the full guide: classification rules, marker reference, authoring guide, CI tiers, and auto-skip logic.
 
 ### CI/CD Tests
 
 CI runs the following checks on every pull request:
-1. **Pre-commit hooks** (`pre-commit run --all-files`) - Ruff, mypy, uv-lock, codespell
-2. **Test suite** (`CICD=1 uv run pytest`) - Skips qualitative tests for speed
+1. **Pre-commit hooks** (`pre-commit run --all-files`) — ruff, mypy, uv-lock, codespell
+2. **Test suite** — `CICD=1 uv run pytest test` on Python 3.11/3.12/3.13 with Ollama running; skips qualitative tests
 
 To replicate CI locally:
 ```bash
-# Run pre-commit checks (same as CI)
+# Pre-commit checks (same as CI)
 pre-commit run --all-files
 
-# Run tests with CICD flag (same as CI, skips qualitative tests)
-CICD=1 uv run pytest
+# Tests with CICD flag (skips qualitative, matches CI scope)
+CICD=1 uv run pytest test
 ```
+
+See [test/README.md — CI pipeline](test/README.md#ci-pipeline) for the full CI
+breakdown and planned nightly/pre-release tiers.
 
 ### Timing Expectations
 
@@ -524,7 +561,7 @@ print(m.last_prompt())
 
 ### Getting Help
 
-- Check this guide and [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)
+- Check this guide and [test/README.md](test/README.md)
 - Search [existing issues](https://github.com/generative-computing/mellea/issues)
 - Check out [Github Discussions](https://github.com/generative-computing/mellea/discussions)
 - Open a new issue with the appropriate label
@@ -535,7 +572,7 @@ print(m.last_prompt())
 
 - **[Docs writing guide](docs/CONTRIBUTING_DOCS.md)** - Conventions, PR checklist, and review process for documentation contributions
 - **[API Documentation](https://docs.mellea.ai)** - Published documentation site
-- **[Test Markers Guide](test/MARKERS_GUIDE.md)** - Detailed pytest marker documentation
+- **[Test Guide](test/README.md)** - Test strategy, classification, markers, and authoring guide
 - **[AGENTS.md](AGENTS.md)** - Guidelines for AI assistants working on Mellea internals
 - **[AGENTS_TEMPLATE.md](docs/AGENTS_TEMPLATE.md)** - Template for projects using Mellea
 

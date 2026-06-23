@@ -6,7 +6,7 @@ repos:
     hooks:
       - id: dco-check
         name: DCO sign-off check
-        entry: "bash -c 'grep -q \"^Signed-off-by: \" \"$1\" || { echo \"Missing Signed-off-by trailer. Use: git commit -s\"; exit 1; }' --"
+        entry: "bash -c 'git rev-parse -q --verify MERGE_HEAD >/dev/null && exit 0; grep -q \"^Signed-off-by: \" \"$1\" || { echo \"Missing Signed-off-by trailer. Use: git commit -s\"; exit 1; }' --"
         language: system
         stages: [commit-msg]
 

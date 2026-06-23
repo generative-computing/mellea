@@ -60,6 +60,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/quality.yml
+    secrets:
+      HF_TOKEN_READ_PUBLIC_ONLY: ${{ secrets.HF_TOKEN_READ_PUBLIC_ONLY }}
   pre-release-check:
     permissions:
       contents: read
@@ -143,3 +145,52 @@ jobs:
           PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
         run: ./.github/scripts/release.sh
         shell: bash
+  snapshot-docs:
+    name: Snapshot docs for release
+    needs: [release, pre-release-check]
+    if: ${{ inputs.bump_type == 'final' || inputs.bump_type == 'patch-final' }}
+    environment: auto-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
+      - name: Install docs deps
+        working-directory: docs
+        run: npm ci
+      - name: Snapshot docs as version
+        working-directory: docs
+        env:
+          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
+        run: npm run docusaurus -- docs:version "$VERSION"
+      - name: Update lastVersion
+        env:
+          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
+        run: node .github/scripts/set-last-version.mjs "$VERSION"
+      - name: Commit and push snapshot
+        env:
+          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add docs/versioned_docs docs/versioned_sidebars docs/versions.json docs/docusaurus.config.ts
+          git commit -m "docs: snapshot ${VERSION}"
+          git push origin main
+      - name: Trigger docs deploy from snapshot
+        # A GITHUB_TOKEN push does not trigger workflow runs by design, so we
+        # dispatch docs-publish.yml explicitly. workflow_dispatch is exempt from
+        # the no-re-trigger rule.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
+        run: gh workflow run docs-publish.yml --ref main --field release_tag="v${VERSION}"

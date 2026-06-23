@@ -5,8 +5,9 @@
 Each backend generation call emits a ``chat`` span with the following attributes
 drawn from the OTel GenAI semconv (https://opentelemetry.io/docs/specs/semconv/gen-ai/):
 
-  gen_ai.provider.name   — provider identity (current semconv)
-  gen_ai.system          — same value, retained for back-compat with existing dashboards
+  gen_ai.provider.name   — provider identity (replaces the deprecated gen_ai.system)
+  gen_ai.request.model   — model identifier
+  gen_ai.usage.*         — token counts (input, output, total, plus cache/reasoning when reported)
   gen_ai.conversation.id — correlated to the active session via ``with_context``
   error.type             — set on the error path alongside ERROR span status
 
@@ -16,8 +17,9 @@ Run against otelite for human verification:
   docker run --rm -p 4317:4317 -p 8080:8080 ghcr.io/planetf1/otelite:latest
 
   # Terminal 2
-  export MELLEA_TRACE_BACKEND=1
-  export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+  export MELLEA_TRACES_ENABLED=true
+  export MELLEA_TRACES_OTLP=true
+  export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317
   export OTEL_SERVICE_NAME=mellea-semconv-demo
   python otel_genai_semconv_example.py
 
@@ -26,10 +28,9 @@ Run against otelite for human verification:
 Expected span attributes
 ------------------------
   Span "chat" (normal path)
-    gen_ai.system              = "ollama"
     gen_ai.provider.name       = "ollama"
+    gen_ai.request.model       = "granite4.1:3b"
     gen_ai.conversation.id     = "demo-session-1"
-    mellea.session_id          = "demo-session-1"
 
   Span "chat" (error path)
     error.type  = <exception class name>
@@ -37,7 +38,7 @@ Expected span attributes
 """
 
 from mellea import start_session
-from mellea.telemetry import is_backend_tracing_enabled, with_context
+from mellea.telemetry import is_tracing_enabled, with_context
 
 
 def _section(title: str) -> None:
@@ -46,16 +47,15 @@ def _section(title: str) -> None:
 
 def main() -> None:
     _section("Mellea OTel GenAI Semantic Convention Demo")
-    print(f"Backend tracing: {is_backend_tracing_enabled()}")
-    if not is_backend_tracing_enabled():
-        print("Set MELLEA_TRACE_BACKEND=1 to enable backend spans.")
+    print(f"Tracing enabled: {is_tracing_enabled()}")
+    if not is_tracing_enabled():
+        print("Set MELLEA_TRACES_ENABLED=true to enable backend spans.")
 
     # -----------------------------------------------------------------------
     # Normal path: provider name + conversation id
     # -----------------------------------------------------------------------
     _section("Normal path — provider name and conversation id")
     print("Expected span attrs:")
-    print("  gen_ai.system              = 'ollama'")
     print("  gen_ai.provider.name       = 'ollama'")
     print("  gen_ai.conversation.id     = 'demo-session-1'")
 
@@ -81,8 +81,8 @@ def main() -> None:
         print("\n(No error — nothing is listening on port 19999)")
 
     _section("Done")
-    print("If OTEL_EXPORTER_OTLP_ENDPOINT is set, check your trace backend.")
-    print("If MELLEA_TRACE_CONSOLE=1, spans were printed to stdout above.")
+    print("If OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set, check your trace backend.")
+    print("If MELLEA_TRACES_CONSOLE=true, spans were printed to stdout above.")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,12 @@
 """Abstract `Backend` interface and generation-walk utilities.
 
-Defines the `Backend` abstract base class whose two key abstract methods —
-`generate_from_context` (context-aware single-action generation) and
-`generate_from_raw` (context-free batch generation) — all concrete backends must
-implement. Also provides `generate_walk`, which traverses a `Component` tree to
-find un-computed `ModelOutputThunk` leaves that need to be resolved before rendering.
+Defines the `Backend` abstract base class. Backend implementers override
+`_generate_from_context` (context-aware single-action generation) and
+`_generate_from_raw` (context-free batch generation); the public
+`generate_from_context` and `generate_from_raw` wrappers on `Backend` own
+hook firing and delegate to the backend implementations. Also provides
+`generate_walk`, which traverses a `Component` tree to find un-computed
+`ModelOutputThunk` leaves that need to be resolved before rendering.
 """
 
 import abc
@@ -12,8 +14,9 @@ import asyncio
 import functools
 import itertools
 import time
+import uuid
 from collections.abc import Sequence
-from typing import final, overload
+from typing import Any, final, overload
 
 import pydantic
 import typing_extensions
@@ -42,11 +45,19 @@ BaseModelSubclass = typing_extensions.TypeVar(
 class Backend(abc.ABC):
     """Abstract base class for all inference backends.
 
-    All concrete backends must implement `generate_from_context` (context-aware
-    single-action generation) and `generate_from_raw` (context-free batch
-    generation). The `do_generate_walk` / `do_generate_walks` helpers can be
-    used to pre-compute any unresolved `ModelOutputThunk` leaves before rendering.
+    Backend implementers override `_generate_from_context` (context-aware
+    single-action generation) and `_generate_from_raw` (context-free batch
+    generation). The public `generate_from_context` and `generate_from_raw`
+    methods own hook firing and delegate to the implementations. The
+    `do_generate_walk` / `do_generate_walks` helpers can be used to
+    pre-compute any unresolved `ModelOutputThunk` leaves before rendering.
     """
+
+    _model_id: str
+    """Resolved model identifier string. Must be set by every backend implementation."""
+
+    _provider: str
+    """Provider name (e.g. 'openai', 'ollama'). Must be set by every backend implementation."""
 
     @final
     async def generate_from_context(
@@ -70,6 +81,8 @@ class Backend(abc.ABC):
         Returns:
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
         """
+        generation_id = str(uuid.uuid4())
+
         # --- generation_pre_call hook ---
         if has_plugins(HookType.GENERATION_PRE_CALL):
             from ..plugins.hooks.generation import GenerationPreCallPayload
@@ -80,6 +93,7 @@ class Backend(abc.ABC):
                 format=format,
                 model_options=model_options or {},
                 tool_calls=tool_calls,
+                generation_id=generation_id,
             )
             _, pre_payload = await invoke_hook(
                 HookType.GENERATION_PRE_CALL, pre_payload, backend=self
@@ -88,13 +102,30 @@ class Backend(abc.ABC):
             format = pre_payload.format
             tool_calls = pre_payload.tool_calls
 
-        return await self._generate_from_context(
-            action,
-            ctx,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+        try:
+            mot, new_ctx = await self._generate_from_context(
+                action,
+                ctx,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+        except BaseException as e:
+            # No MOT to fire the per-MOT error hook in astream from; emit here.
+            if has_plugins(HookType.GENERATION_ERROR):
+                from ..plugins.hooks.generation import GenerationErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_ERROR,
+                    GenerationErrorPayload(
+                        exception=e, model_output=None, generation_id=generation_id
+                    ),
+                    backend=self,
+                )
+            raise
+        # Save the ID for the post_call / error hooks.
+        mot._generation_id = generation_id
+        return mot, new_ctx
 
     @abc.abstractmethod
     async def _generate_from_context(
@@ -142,7 +173,7 @@ class Backend(abc.ABC):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk[C | str]]: ...
 
-    @abc.abstractmethod
+    @final
     async def generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
@@ -163,6 +194,103 @@ class Backend(abc.ABC):
 
         Returns:
             list[ModelOutputThunk]: A list of output thunks, one per action, in the same order as `actions`.
+        """
+        gen_id = str(uuid.uuid4())
+
+        # --- generation_batch_pre_call hook ---
+        if has_plugins(HookType.GENERATION_BATCH_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPreCallPayload
+
+            pre_payload = GenerationBatchPreCallPayload(
+                actions=tuple(actions),
+                generation_id=gen_id,
+                model_options=model_options or {},
+                format=format,
+                tool_calls=tool_calls,
+                num_actions=len(actions),
+                model=self._model_id,
+                provider=self._provider,
+            )
+            _, pre_payload = await invoke_hook(
+                HookType.GENERATION_BATCH_PRE_CALL, pre_payload, backend=self
+            )
+            model_options = pre_payload.model_options
+            format = pre_payload.format
+            tool_calls = pre_payload.tool_calls
+
+        _start = time.perf_counter()
+        try:
+            results, usage = await self._generate_from_raw(
+                actions,
+                ctx,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+        except BaseException as e:
+            if has_plugins(HookType.GENERATION_BATCH_ERROR):
+                from ..plugins.hooks.generation import GenerationBatchErrorPayload
+
+                await invoke_hook(
+                    HookType.GENERATION_BATCH_ERROR,
+                    GenerationBatchErrorPayload(
+                        generation_id=gen_id,
+                        exception=e,
+                        model=self._model_id,
+                        provider=self._provider,
+                        latency_ms=(time.perf_counter() - _start) * 1000,
+                    ),
+                )
+            raise
+        latency_ms = (time.perf_counter() - _start) * 1000
+
+        # --- generation_batch_post_call hook ---
+        if has_plugins(HookType.GENERATION_BATCH_POST_CALL):
+            from ..plugins.hooks.generation import GenerationBatchPostCallPayload
+
+            await invoke_hook(
+                HookType.GENERATION_BATCH_POST_CALL,
+                GenerationBatchPostCallPayload(
+                    generation_id=gen_id,
+                    model_outputs=results,
+                    usage=usage,
+                    model=self._model_id,
+                    provider=self._provider,
+                    latency_ms=latency_ms,
+                ),
+            )
+
+        return results
+
+    @abc.abstractmethod
+    async def _generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
+        """Backend implementers should override this method to generate the actual responses.
+
+        Backends should populate `mot.generation.usage` on each returned MOT
+        when the underlying API exposes per-MOT token counts; otherwise leave
+        it as `None` and report only the whole-batch aggregate via the
+        returned tuple's second element.
+
+        Args:
+            actions: list of actions to generate responses for. Each action is separate.
+            ctx: context passed to generation. Currently not used in `_generate_from_raw`.
+            format: A response format to use for structured outputs / constrained decoding. Some backends do not support this parameter and will log warnings.
+            model_options: Any model options to upsert into the defaults for this call.
+            tool_calls: Always set to false unless supported by backend.
+
+        Returns:
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the aggregate token-usage dict for the whole batch
+                (OpenAI shape) or `None`.
         """
 
     async def do_generate_walk(

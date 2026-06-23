@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/concepts/context-and-sessions"
 title: "Context and Sessions"
 description: "How Component, Backend, Context, and Session fit together in Mellea's architecture."
 # diataxis: explanation
@@ -41,7 +40,7 @@ The backend is responsible for:
 - Making the network or process call to the LLM
 - Parsing the response into a typed representation where applicable
 
-Different backends — Ollama, OpenAI, HuggingFace, WatsonX — share the same
+Different backends — Ollama, OpenAI, Hugging Face, WatsonX — share the same
 component interface. A `Component` does not know which backend will render it.
 
 ### Contexts

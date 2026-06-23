@@ -1,4 +1,4 @@
-"""Intrinsic functions related to retrieval-augmented generation."""
+"""Adapter functions related to retrieval-augmented generation."""
 
 import collections.abc
 
@@ -18,7 +18,7 @@ def check_answerability(
 ) -> str:
     """Test a user's question for answerability.
 
-    Intrinsic function that checks whether the question in the last user turn of a
+    Adapter function that checks whether the question in the last user turn of a
     chat can be answered by a provided set of RAG documents.
 
     Args:
@@ -51,7 +51,7 @@ def rewrite_question(
 ) -> str:
     """Rewrite a user's question for retrieval.
 
-    Intrinsic function that rewrites the question in the next user turn into a
+    Adapter function that rewrites the question in the next user turn into a
     self-contained query that can be passed to the retriever.
 
     Args:
@@ -79,7 +79,7 @@ def clarify_query(
 ) -> str:
     """Generate clarification for an ambiguous query.
 
-    Intrinsic function that determines if a user's question requires clarification
+    Adapter function that determines if a user's question requires clarification
     based on the retrieved documents and conversation context, and generates an
     appropriate clarification question if needed.
 
@@ -116,7 +116,7 @@ def find_citations(
 ) -> list[dict]:
     """Find information in documents that supports an assistant response.
 
-    Intrinsic function that finds sentences in RAG documents that support sentences
+    Adapter function that finds sentences in RAG documents that support sentences
     in a potential assistant response to a user question.
 
     Args:
@@ -162,7 +162,7 @@ def check_context_relevance(
 ) -> str:
     """Test whether a document is relevant to a user's question.
 
-    Intrinsic function that checks whether a single document contains part or all of
+    Adapter function that checks whether a single document contains part or all of
     the answer to a user's question. Does not consider the context in which the
     question was asked.
 
@@ -201,7 +201,7 @@ def flag_hallucinated_content(
 ) -> list[dict]:
     """Flag potentially-hallucinated sentences in an agent's response.
 
-    Intrinsic function that checks whether the sentences in an agent's response to a
+    Adapter function that checks whether the sentences in an agent's response to a
     user question are faithful to the retrieved document snippets. Sentences that do not
     align with the retrieved snippets are flagged as potential hallucinations.
 

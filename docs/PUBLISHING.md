@@ -1,60 +1,58 @@
 # Documentation Publishing Strategy
 
 This document describes how Mellea's documentation is built, validated,
-and deployed to Mintlify.
+and deployed to GitHub Pages.
 
 ## Architecture
 
 ```text
 main branch (source of truth)
-├── docs/docs/           ← hand-authored MDX guides
-├── mellea/, cli/        ← Python source (docstrings → API reference)
-└── tooling/docs-autogen/  ← build & validation scripts
+├── docs/                    ← Docusaurus site root
+│   ├── docs/                ← hand-authored MDX/MD guides
+│   ├── docusaurus.config.ts ← site config, redirects, nav
+│   ├── sidebars.ts          ← sidebar structure
+│   └── src/                 ← custom components and CSS
+├── mellea/, cli/            ← Python source (docstrings → API reference)
+└── tooling/docs-autogen/    ← build & validation scripts
         │
         ▼  GitHub Actions (docs-publish.yml)
    ┌─────────────────────────────┐
-   │  1. Install from source     │
+   │  1. Install Python deps     │
    │  2. Generate API docs       │
    │  3. Validate everything     │
-   │  4. Combine static + API    │
+   │  4. Build Docusaurus site   │
+   │  5. Deploy to gh-pages      │
    └────────────┬────────────────┘
                 │
-        ┌───────┴───────┐
-        ▼               ▼
-  docs/staging     docs/production
-  (from main)      (from releases)
-        │               │
-        ▼               ▼
-     Mintlify        Mintlify
-   (staging env)   (production env)
+                ▼
+          gh-pages branch
+                │
+                ▼
+         GitHub Pages
+      (docs.mellea.ai)
 ```
 
 ### Key principle
 
-The **source of truth** is always `main` (or a feature branch targeting
-`main`). The docs branches `docs/staging` and `docs/production` are
-**fully automated orphan branches** that are force-pushed on each run.
+The **source of truth** is always `main`. The `gh-pages` branch is a
+**fully automated output** — every deploy replaces it with a fresh build.
 
-**Never edit files on the docs branches directly.** Any manual
-changes will be overwritten without warning on the next pipeline run.
+**Never edit files on `gh-pages` directly.** Any manual changes will be
+overwritten without warning on the next pipeline run.
 
-## Docs branches
+## When does deployment happen?
 
-| Branch | Trigger | Purpose |
-| --- | --- | --- |
-| `docs/staging` | Push to `main` (paths: `docs/**`, `mellea/**`, `cli/**`, `tooling/docs-autogen/**`) | Preview environment for reviewing docs before release |
-| `docs/production` | GitHub release published | Production docs site served to users |
-| `docs/preview` | PR with `docs-preview` label, or `workflow_dispatch` | Throwaway branch for validating the full pipeline |
+| Trigger | Build | Deploy |
+| ------- | ----- | ------ |
+| Push to `main` (docs/source paths) | ✅ | ✅ |
+| GitHub release published | ✅ | ✅ (latest final only) |
+| Pull request (docs/source paths) | ✅ (validate only) | ❌ |
+| `workflow_dispatch` with `force_publish: true` | ✅ | ✅ |
 
-All docs branches are true orphan branches (no shared commit
-history with `main`). They contain only the assembled documentation
-output — static guides plus generated API reference.
-
-Each deploy **replaces the branch with a single new commit** — no
-history is retained between runs. The branch is effectively a write
-target for the latest build, not a versioned record. If deploy history
-becomes useful in future, this can be changed by removing `force_orphan:
-true` from the workflow, which would let commits accumulate instead.
+PRs run the full build and validation pipeline — markdownlint, docstring
+quality gate, Docusaurus build — but do **not** deploy. This surfaces
+broken links and build failures in CI before merge without affecting
+production.
 
 ## What the pipeline does
 
@@ -62,46 +60,57 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
 
 1. **Install dependencies** — `uv sync --all-extras --group dev` installs
    mellea from local source along with build tooling (griffe, mdxify).
+   Node 22 + `npm ci` installs Docusaurus and its plugins.
 
 2. **Generate API docs** — `tooling/docs-autogen/build.py` orchestrates:
    - `generate-ast.py`: runs `mdxify` against the installed package to
      produce MDX files, restructures into nested folders, updates
-     frontmatter, generates the API Reference navigation in `docs.json`.
-   - `decorate_api_mdx.py`: injects SidebarFix component, CLASS/FUNC
-     pills, cross-reference links, and escapes JSX-sensitive syntax.
-   - A final nav-rebuild pass to incorporate decorated preamble text.
+     frontmatter (`sidebar_label`, `title`, `description`).
+   - `decorate_api_mdx.py`: injects CLASS/FUNC pills, cross-reference
+     links, and escapes JSX-sensitive syntax. Also fixes source-link
+     git refs (blob/main for dev builds, blob/vX.Y.Z for releases).
+   - CLI reference: `generate_cli_reference.py` generates
+     `docs/docs/reference/cli.md` from Typer command metadata.
 
-3. **Validate** — multiple checks run (soft-fail by default):
-   - **markdownlint** on static `.md` docs
-   - **validate.py** on generated MDX: syntax, frontmatter, internal
-     links, anchor collisions
-   - **audit_coverage.py**: checks that generated docs cover ≥ 80% of
-     public symbols
+3. **Validate** — multiple checks run:
+   - **Markdownlint** on static `.md` docs (soft-fail)
+   - **API validation** — `validate.py` checks anchor collisions within
+     generated API pages and RST double-backtick notation in docstrings
+     (soft-fail; these are gaps not caught by Docusaurus itself)
+   - **API coverage audit** — warns if < 80% of public symbols are
+     documented (soft-fail)
+   - **Docstring quality gate** — fails if any public function with a
+     `raise` statement is missing a `Raises:` entry (hard fail)
+   - **CLI reference tests** — `pytest tooling/docs-autogen/test_cli_reference.py`
 
-4. **Deploy** — uses `peaceiris/actions-gh-pages` to force-push the
-   combined output to the target orphan branch. Each deploy commit records
-   the source SHA, branch, trigger event, PR number (if applicable), and a
-   direct link to the Actions run that produced it:
+4. **Build** — `npm run build` in `docs/`. Runs with
+   `onBrokenLinks: 'throw'` and `onBrokenAnchors: 'throw'`, so broken
+   internal links and anchors are hard failures.
 
-   ```text
-   docs: publish from <sha>
+5. **Deploy** — `peaceiris/actions-gh-pages` force-pushes the built site
+   to `gh-pages`. For release events, a `latest_check` step first confirms
+   the release is the highest final semver — a backported patch to an old
+   minor cannot overwrite the production site.
 
-   Branch:  <ref_name>
-   Trigger: <event_name> (PR #N)
-   Run:     https://github.com/generative-computing/mellea/actions/runs/<id>
-   ```
+## Docs versioning
 
-### Validation strictness
+Docusaurus versioning is integrated into the release pipeline:
 
-By default, validation issues are **reported but do not block** the
-deploy. This allows us to publish while resolving remaining issues.
+- **Pre-release / dev builds:** the site shows `Next` as the only version
+  — there are no snapshots yet.
+- **On each final release** (`publish-release.yml` with `bump_type: final`
+  or `patch-final`): the `snapshot-docs` job runs
+  `docusaurus docs:version X.Y.Z`, commits `versioned_docs/version-X.Y.Z/`
+  to `main`, and explicitly dispatches `docs-publish.yml` via
+  `workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow
+  run, so the dispatch is explicit rather than relying on a path filter.)
+- **Version dropdown** in the navbar lets users switch between released
+  versions and `Next`.
 
-To enable hard failures, use the `strict_validation` input:
-
-- Via `workflow_dispatch`: check the "Fail the build if validation checks
-  fail" checkbox.
-- To make it the permanent default: change `default: false` to
-  `default: true` in the workflow file.
+No manual bootstrap is needed — the first final release run triggers
+`snapshot-docs` automatically, which creates the initial snapshot and
+updates `lastVersion`. Until the first final release, the site shows only
+`Next` in the version dropdown, which is correct.
 
 ## Local development
 
@@ -111,19 +120,23 @@ To enable hard failures, use the `strict_validation` input:
 # Full pipeline: generate + decorate + nav rebuild
 uv run poe apidocs
 
-# Preview build to /tmp (doesn't touch your working tree)
-uv run poe apidocs-preview
-
 # Clean generated artifacts
 uv run poe apidocs-clean
 ```
 
+### Run the Docusaurus dev server
+
+```bash
+cd docs && npm ci   # first time only
+npm run start
+# → http://localhost:3000
+```
+
+Changes to `docs/docs/` are hot-reloaded. Generated API docs (`docs/docs/api/`) must be generated separately with `uv run poe apidocs` — they are gitignored.
+
 ### Run validation locally
 
 ```bash
-# Validate generated MDX (syntax, links, anchors)
-uv run poe apidocs-validate
-
 # Audit API coverage (add --quality to also run docstring quality, as CI does)
 uv run python tooling/docs-autogen/audit_coverage.py \
     --docs-dir docs/docs/api --threshold 80 --quality
@@ -131,76 +144,51 @@ uv run python tooling/docs-autogen/audit_coverage.py \
 # Audit docstring quality only (via poe alias)
 uv run poe apidocs-quality
 
-# Find orphan MDX files not in navigation
-uv run poe apidocs-orphans
-```
-
-### Run the Mintlify dev server
-
-```bash
-cd docs/docs
-npx mintlify dev
-# → http://localhost:3000
+# Full Docusaurus build (catches broken links)
+cd docs && npm run build
 ```
 
 ## Testing the pipeline from a PR
 
-### Label-based preview (recommended)
+PR branches run the full build-and-validate job automatically. The
+Docusaurus build enforces broken-link detection (`onBrokenLinks: 'throw'`),
+so any broken internal link or anchor surfaces in CI before merge.
 
-Add the **`docs-preview`** label to your PR. This triggers the full
-pipeline including deployment to `docs/preview`. Remove the label when
-you're done testing.
-
-Without the label, PRs only run build + validation (no deploy).
-
-> **Fork PRs:** The deploy step requires write access to the upstream
-> repo. PRs from forks will build and validate successfully, but the
-> deploy will fail with a permission error. Use manual dispatch instead
-> (see below), or push the branch to the upstream repo.
-
-### Manual dispatch
-
-For more control (e.g. deploying to a custom branch):
+To preview the deployed site from a non-main branch:
 
 1. Go to **Actions → Docs → Run workflow**.
-2. Select your feature branch (must exist on the upstream repo).
-3. Check **"Deploy even from a non-main context"**.
-4. Optionally change the target branch (defaults to `docs/preview`).
-5. Click **Run workflow**.
+2. Select your feature branch.
+3. Check **"Deploy even from a non-main context"** (`force_publish: true`).
+4. Click **Run workflow**.
 
-## Mintlify configuration
+> **Fork PRs:** the deploy step requires write access to the upstream repo.
+> PRs from forks build and validate successfully, but the deploy will fail
+> with a permission error. Push the branch to the upstream repo and use
+> manual dispatch instead.
 
-In the Mintlify dashboard (Git Configuration):
+### Previewing from your own fork
 
-- **Staging environment** → branch: `docs/staging`, docs directory: `/` (root)
-- **Production environment** → branch: `docs/production`, docs directory: `/` (root)
+To get a live preview site from your fork (useful for reviewing visual changes before submitting a PR):
 
-The docs branches contain only documentation — `docs.json` sits at
-the root, not under `docs/docs/` as it does on `main`. Set the docs
-directory to `/` (root), not `docs/docs`.
-
-## Pre-commit hooks
-
-Two informational hooks run locally when relevant files change:
-
-- **`docs-mdx-validate`**: validates MDX syntax/frontmatter when
-  `.mdx` files or docs tooling change (requires `docs/docs/api/` to
-  exist locally).
-- **`docs-docstring-quality`**: audits docstring quality when Python
-  source files change (requires `docs/docs/api/` to exist locally).
-
-Both skip gracefully if generated docs are not present.
+1. **Push your branch** to your fork. The `docs-publish.yml` workflow runs automatically and deploys to the `gh-pages` branch on your fork, creating it if it doesn't exist.
+2. **Enable GitHub Pages** on your fork: Settings → Pages → Source: `gh-pages` branch, root `/`.
+3. Your preview is live at `https://<your-username>.github.io/mellea/`.
 
 ## File reference
 
 | Path | Description |
 | --- | --- |
-| `.github/workflows/docs-publish.yml` | CI/CD workflow |
+| `.github/workflows/docs-publish.yml` | CI/CD workflow (build, validate, deploy) |
+| `.github/workflows/publish-release.yml` | Release pipeline — includes `snapshot-docs` job |
+| `.github/scripts/set-last-version.mjs` | Updates `lastVersion` in `docusaurus.config.ts` on release |
 | `tooling/docs-autogen/build.py` | Unified build wrapper |
-| `tooling/docs-autogen/generate-ast.py` | MDX generation + nav |
+| `tooling/docs-autogen/generate-ast.py` | MDX generation + frontmatter update |
 | `tooling/docs-autogen/decorate_api_mdx.py` | Decoration + escaping |
-| `tooling/docs-autogen/validate.py` | Comprehensive validation |
+| `tooling/docs-autogen/generate_cli_reference.py` | CLI reference page generator |
 | `tooling/docs-autogen/audit_coverage.py` | Coverage + quality audit |
+| `tooling/docs-autogen/validate.py` | Anchor / RST-syntax validation |
 | `tooling/docs-autogen/README.md` | Detailed tooling docs |
-| `docs/docs/docs.json` | Mintlify configuration |
+| `docs/docusaurus.config.ts` | Docusaurus config (redirects, nav, plugins) |
+| `docs/sidebars.ts` | Sidebar structure for docs and API reference |
+| `docs/src/` | Custom CSS and MDX shim components |
 | `docs/docs/api/` | Generated API docs (gitignored) |

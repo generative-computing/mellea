@@ -70,7 +70,7 @@ def is_vllm_server_with_structured_output(
             base_url.removesuffix("/v1").removesuffix("/v1/") + "/version"
         )
 
-        version_response = requests.get(version_endpoint, headers=headers)
+        version_response = requests.get(version_endpoint, headers=headers, timeout=10)
         if not version_response.ok:
             return False
 

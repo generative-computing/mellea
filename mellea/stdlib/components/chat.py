@@ -18,6 +18,7 @@ from ...core import (
     Component,
     Context,
     ImageBlock,
+    ImageUrlBlock,
     ModelOutputThunk,
     ModelToolCall,
     TemplateRepresentation,
@@ -34,8 +35,11 @@ class Message(Component["Message"]):
         role (str): The role that this message came from (e.g., `"user"`,
             `"assistant"`).
         content (str): The content of the message.
-        images (list[ImageBlock] | None): Optional images associated with the
-            message.
+        images (list[ImageBlock | ImageUrlBlock] | None): Optional images
+            associated with the message. Use `ImageBlock` for base64-encoded
+            images (supported by all vision backends) or `ImageUrlBlock` for
+            URL-referenced images (supported by OpenAI-compatible backends only;
+            backends that require base64 will raise a ``ValueError``).
         documents (list[Document] | None): Optional documents associated with
             the message.
 
@@ -51,7 +55,7 @@ class Message(Component["Message"]):
         role: "Message.Role",
         content: str,
         *,
-        images: None | list[ImageBlock] = None,
+        images: None | list[ImageBlock | ImageUrlBlock] = None,
         documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
@@ -62,11 +66,9 @@ class Message(Component["Message"]):
         self._docs = _coerce_to_documents(documents)
 
     @property
-    def images(self) -> None | list[str]:
-        """Returns the images associated with this message as list of base 64 strings."""
-        if self._images is not None:
-            return [str(i) for i in self._images]
-        return None
+    def images(self) -> None | list[ImageBlock | ImageUrlBlock]:
+        """Returns the images associated with this message."""
+        return self._images
 
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this message, including content, documents, and images.
@@ -97,8 +99,8 @@ class Message(Component["Message"]):
     def __repr__(self) -> str:
         """Pretty representation of messages, because they are a special case."""
         images = []
-        if self.images is not None:
-            images = [f"{i[:20]}..." for i in self.images]
+        if self._images is not None:
+            images = [f"{str(i.value)[:20]}..." for i in self._images]
 
         docs = []
         if self._docs is not None:

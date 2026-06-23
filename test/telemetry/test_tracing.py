@@ -1,6 +1,4 @@
-"""Tests for OpenTelemetry instrumentation."""
-
-import os
+"""Tests for OpenTelemetry tracing public API."""
 
 import pytest
 
@@ -8,91 +6,113 @@ pytest.importorskip(
     "opentelemetry", reason="opentelemetry not installed — install mellea[telemetry]"
 )
 
-
-@pytest.fixture
-def enable_app_tracing(monkeypatch):
-    """Enable application tracing for tests."""
-    monkeypatch.setenv("MELLEA_TRACE_APPLICATION", "true")
-    monkeypatch.setenv("MELLEA_TRACE_BACKEND", "false")
-    # Force reload of tracing module to pick up env vars
-    import importlib
-
-    import mellea.telemetry.tracing
-
-    importlib.reload(mellea.telemetry.tracing)
-    yield
-    # Reset after test
-    monkeypatch.setenv("MELLEA_TRACE_APPLICATION", "false")
-    importlib.reload(mellea.telemetry.tracing)
+from mellea.telemetry import (
+    is_content_tracing_enabled,
+    is_tracing_enabled,
+    set_span_attribute,
+    set_span_error,
+    trace_application,
+    tracing,
+)
+from mellea.telemetry.tracing import get_backend_tracer
+from test.telemetry.conftest import reset_tracing_state
 
 
 @pytest.fixture
-def enable_backend_tracing(monkeypatch):
-    """Enable backend tracing for tests."""
-    monkeypatch.setenv("MELLEA_TRACE_APPLICATION", "false")
-    monkeypatch.setenv("MELLEA_TRACE_BACKEND", "true")
-    # Force reload of tracing module to pick up env vars
-    import importlib
-
-    import mellea.telemetry.tracing
-
-    importlib.reload(mellea.telemetry.tracing)
+def enable_tracing(monkeypatch):
+    """Enable tracing for the duration of a test."""
+    monkeypatch.setenv("MELLEA_TRACES_ENABLED", "true")
+    reset_tracing_state()
     yield
-    # Reset after test
-    monkeypatch.setenv("MELLEA_TRACE_BACKEND", "false")
-    importlib.reload(mellea.telemetry.tracing)
+    reset_tracing_state()
 
 
 @pytest.fixture
 def disable_tracing(monkeypatch):
-    """Disable all tracing for tests."""
-    monkeypatch.delenv("MELLEA_TRACE_APPLICATION", raising=False)
-    monkeypatch.delenv("MELLEA_TRACE_BACKEND", raising=False)
-    import importlib
-
-    import mellea.telemetry.tracing
-
-    importlib.reload(mellea.telemetry.tracing)
+    """Ensure tracing is disabled for the duration of a test."""
+    monkeypatch.delenv("MELLEA_TRACES_ENABLED", raising=False)
+    monkeypatch.delenv("MELLEA_TRACES_OTLP", raising=False)
+    monkeypatch.delenv("MELLEA_TRACES_CONSOLE", raising=False)
+    reset_tracing_state()
     yield
-    importlib.reload(mellea.telemetry.tracing)
+    reset_tracing_state()
 
 
 def test_telemetry_disabled_by_default(disable_tracing):
     """Test that telemetry is disabled by default."""
-    from mellea.telemetry import (
-        is_application_tracing_enabled,
-        is_backend_tracing_enabled,
+    assert not is_tracing_enabled()
+
+
+def test_tracing_enabled(enable_tracing):
+    """Test that tracing can be enabled."""
+    assert is_tracing_enabled()
+
+
+@pytest.mark.parametrize(
+    "env, expected",
+    [
+        ({}, False),
+        ({"MELLEA_TRACES_CONTENT": "true"}, True),
+        ({"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "true"}, True),
+    ],
+    ids=["disabled-by-default", "mellea-var", "otel-standard-var"],
+)
+def test_content_tracing(monkeypatch, env, expected):
+    """Content tracing honors both MELLEA_TRACES_CONTENT and the OTel standard var."""
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+    monkeypatch.delenv(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False
     )
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    reset_tracing_state()
 
-    assert not is_application_tracing_enabled()
-    assert not is_backend_tracing_enabled()
-
-
-def test_application_tracing_enabled(enable_app_tracing):
-    """Test that application tracing can be enabled."""
-    from mellea.telemetry import (
-        is_application_tracing_enabled,
-        is_backend_tracing_enabled,
-    )
-
-    assert is_application_tracing_enabled()
-    assert not is_backend_tracing_enabled()
+    assert is_content_tracing_enabled() is expected
 
 
-def test_backend_tracing_enabled(enable_backend_tracing):
-    """Test that backend tracing can be enabled."""
-    from mellea.telemetry import (
-        is_application_tracing_enabled,
-        is_backend_tracing_enabled,
-    )
+def test_otlp_traces_endpoint_honored(monkeypatch):
+    """OTEL_EXPORTER_OTLP_TRACES_ENDPOINT should activate the OTLP exporter."""
+    monkeypatch.setenv("MELLEA_TRACES_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_TRACES_OTLP", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://localhost:4317")
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    reset_tracing_state()
 
-    assert not is_application_tracing_enabled()
-    assert is_backend_tracing_enabled()
+    assert get_backend_tracer() is not None
+    reset_tracing_state()
+
+
+def test_otlp_warns_when_no_endpoint_configured(monkeypatch, recwarn):
+    """MELLEA_TRACES_OTLP=true with no endpoint set must warn."""
+    monkeypatch.setenv("MELLEA_TRACES_OTLP", "true")
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+    tracing._setup_tracer_provider()
+
+    no_endpoint_warnings = [
+        w for w in recwarn.list if "no endpoint is configured" in str(w.message)
+    ]
+    assert len(no_endpoint_warnings) == 1
+
+
+def test_otlp_falls_back_to_generic_endpoint(monkeypatch, recwarn):
+    """OTEL_EXPORTER_OTLP_ENDPOINT should be picked up when the traces-specific var is unset."""
+    monkeypatch.setenv("MELLEA_TRACES_OTLP", "true")
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    tracing._setup_tracer_provider()
+
+    no_endpoint_warnings = [
+        w for w in recwarn.list if "no endpoint is configured" in str(w.message)
+    ]
+    assert no_endpoint_warnings == []
 
 
 def test_trace_application_context_manager():
     """Test that trace_application works as a context manager."""
-    from mellea.telemetry import trace_application
+    reset_tracing_state()
 
     # Should not raise even when tracing is disabled
     with trace_application("test_span", test_attr="value") as span:
@@ -100,116 +120,14 @@ def test_trace_application_context_manager():
         assert span is None or hasattr(span, "set_attribute")
 
 
-def test_trace_backend_context_manager():
-    """Test that trace_backend works as a context manager."""
-    from mellea.telemetry import trace_backend
-
-    # Should not raise even when tracing is disabled
-    with trace_backend("test_span", test_attr="value") as span:
-        # Span will be None when tracing is disabled
-        assert span is None or hasattr(span, "set_attribute")
-
-
 def test_set_span_attribute_with_none_span():
     """Test that set_span_attribute handles None span gracefully."""
-    from mellea.telemetry import set_span_attribute
-
     # Should not raise when span is None
     set_span_attribute(None, "key", "value")
 
 
 def test_set_span_error_with_none_span():
     """Test that set_span_error handles None span gracefully."""
-    from mellea.telemetry import set_span_error
-
     # Should not raise when span is None
     exception = ValueError("test error")
     set_span_error(None, exception)
-
-
-@pytest.mark.e2e
-@pytest.mark.ollama
-def test_session_with_tracing_disabled():
-    """Test that session works normally when tracing is disabled."""
-    from mellea import start_session
-
-    with start_session() as m:
-        result = m.instruct("Say hello")
-        assert result is not None
-
-
-@pytest.mark.e2e
-@pytest.mark.ollama
-def test_session_with_application_tracing(enable_app_tracing):
-    """Test that session works with application tracing enabled."""
-    from mellea import start_session
-
-    # This should create application trace spans
-    with start_session() as m:
-        result = m.instruct("Say hello")
-        assert result is not None
-
-
-@pytest.mark.e2e
-@pytest.mark.ollama
-def test_session_with_backend_tracing(enable_backend_tracing):
-    """Test that session works with backend tracing enabled."""
-    from mellea import start_session
-
-    # This should create backend trace spans
-    with start_session() as m:
-        result = m.instruct("Say hello")
-        assert result is not None
-
-
-@pytest.mark.e2e
-@pytest.mark.ollama
-def test_generative_function_with_tracing(enable_app_tracing):
-    """Test that @generative functions work with tracing enabled."""
-    from mellea import generative, start_session
-
-    @generative
-    def classify(text: str) -> str:
-        """Classify the text."""
-
-    with start_session() as m:
-        result = classify(m, text="test")
-        assert result is not None
-
-
-def test_backend_instrumentation_helpers():
-    """Test backend instrumentation helper functions."""
-    from mellea.telemetry.backend_instrumentation import (
-        get_context_size,
-        get_model_id_str,
-    )
-
-    # Test with mock objects
-    class MockBackend:
-        def __init__(self):
-            self.model_id = "test-model"
-
-    class MockContext:
-        def __init__(self):
-            self.turns = [1, 2, 3]
-
-    backend = MockBackend()
-    ctx = MockContext()
-
-    assert get_model_id_str(backend) == "test-model"
-    assert get_context_size(ctx) == 3
-
-
-def test_instrument_generate_from_raw():
-    """Test instrument_generate_from_raw helper."""
-    from mellea.telemetry.backend_instrumentation import instrument_generate_from_raw
-
-    class MockBackend:
-        model_id = "test-model"
-
-    backend = MockBackend()
-
-    # Should return a context manager
-    with instrument_generate_from_raw(backend, num_actions=5) as span:
-        # Span will be None when tracing is disabled
-        assert span is None or hasattr(span, "set_attribute")

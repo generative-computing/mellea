@@ -182,6 +182,38 @@ class ImageBlock(CBlock):
         return f"ImageBlock({self.value}, {self._meta.__repr__()})"
 
 
+class ImageUrlBlock(CBlock):
+    """An `ImageUrlBlock` represents an image as a URL.
+
+    Use this when the image is hosted remotely and you want to pass the URL
+    directly to backends that support it (e.g. OpenAI). Backends that only
+    accept base64-encoded images (e.g. Ollama) will raise a ``ValueError``
+    rather than silently drop the image.
+
+    Args:
+        value (str): A URL string pointing to the image.
+        meta (dict[str, Any] | None): Optional metadata to associate with this image block.
+
+    """
+
+    def __init__(self, value: str, meta: dict[str, Any] | None = None):
+        """Initialize ImageUrlBlock with a URL string.
+
+        Raises:
+            ValueError: If ``value`` does not look like a URL (does not start
+                with ``http://`` or ``https://``).
+        """
+        if not value.startswith(("http://", "https://")):
+            raise ValueError(
+                f"ImageUrlBlock requires an http:// or https:// URL; got: {value!r}"
+            )
+        super().__init__(value, meta)
+
+    def __repr__(self) -> str:
+        """Provides a python-parsable representation of the block (usually)."""
+        return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
+
+
 S = typing_extensions.TypeVar("S", default=Any, covariant=True)
 """Used for class definitions for Component and ModelOutputThunk; also used for functions that don't accept CBlocks. Defaults to `Any`."""
 
@@ -268,10 +300,13 @@ class GenerationMetadata:
 
     Args:
         usage: Token usage dict with 'prompt_tokens', 'completion_tokens', 'total_tokens'.
-        model: Model identifier that generated the output.
+        model: Requested model identifier.
         provider: Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx').
         ttfb_ms: Time to first token in milliseconds; None for non-streaming.
         streaming: Whether this generation used streaming mode.
+        response_model: Model identifier reported on the response; may differ from the requested model.
+        finish_reasons: Finish reason(s) reported on the response (typically one per choice).
+        response_id: Provider-assigned identifier for the response.
     """
 
     usage: dict[str, Any] | None = None
@@ -284,7 +319,11 @@ class GenerationMetadata:
     """
 
     model: str | None = None
-    """Model identifier that generated the output (e.g. 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf')."""
+    """Requested model identifier (e.g. 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf').
+
+    What the caller asked for. See `response_model` for what the provider
+    actually served, which may differ for version aliases or routed deployments.
+    """
 
     provider: str | None = None
     """Provider name (e.g. 'openai', 'ollama', 'huggingface', 'watsonx')."""
@@ -300,6 +339,28 @@ class GenerationMetadata:
     """Whether this generation used streaming mode.
 
     Set from model options at the start of astream().
+    """
+
+    response_model: str | None = None
+    """Model identifier reported on the response.
+
+    May differ from the request-side `model` when the provider routes to a
+    different deployment (e.g. fine-tunes, version aliases). `None` when the
+    backend response does not surface a model field.
+    """
+
+    finish_reasons: list[str] | None = None
+    """Finish reason(s) reported on the response.
+
+    Typically a one-element list (single-choice completions). `None` when the
+    backend response does not surface a finish reason.
+    """
+
+    response_id: str | None = None
+    """Provider-assigned response identifier.
+
+    Useful for cross-referencing logs/traces with provider-side records.
+    `None` when the backend response does not carry an id.
     """
 
 
@@ -369,6 +430,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._start: datetime.datetime | None = None
         self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
+        # Soft-failure cause recorded by backends that return a placeholder
+        # MOT instead of raising. Sibling to `_cancelled`.
+        self._error: Exception | None = None
+        # Mellea-side hook correlation ID; distinct from the provider-assigned
+        # `GenerationMetadata.response_id`.
+        self._generation_id: str | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
@@ -383,7 +450,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             self._first_chunk_received = True
 
     async def cancel_generation(self, error: Exception | None = None) -> None:
-        """Cancel an in-progress streaming generation, drain the queue, and close any open telemetry span.
+        """Cancel an in-progress streaming generation, drain the queue, and fire the `generation_error` hook.
 
         Safe to call at any point during streaming. After this method returns,
         `is_computed()` is `True` and `value` contains whatever text was
@@ -395,12 +462,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
         (queue maxsize=20).
 
         Args:
-            error: Optional cause attributed to the open telemetry span.  When
-                provided, this exception is recorded via `set_span_error` so
-                the span reflects the actual reason for cancellation (e.g. the
-                requirement failure or an unhandled exception from a streaming
-                validator).  When `None`, a generic
-                `RuntimeError("Generation cancelled")` is recorded.
+            error: Optional cause attached to the `generation_error` hook
+                payload.  When provided, this exception is delivered to
+                subscribed plugins (e.g. the tracing plugin records it on the
+                in-flight span) so observers reflect the actual reason for
+                cancellation.  When `None`, a generic
+                `RuntimeError("Generation cancelled")` is used.
 
         Raises:
             asyncio.CancelledError: Re-raised when the *calling* task itself is
@@ -465,15 +532,20 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Drain again for any final item the task put before terminating.
         _drain()
 
-        span = self._meta.pop("_telemetry_span", None)
-        if span is not None:
-            from ..telemetry import end_backend_span, set_span_error
+        if has_plugins(HookType.GENERATION_ERROR):
+            from ..plugins.hooks.generation import GenerationErrorPayload
 
             recorded: Exception = (
                 error if error is not None else RuntimeError("Generation cancelled")
             )
-            set_span_error(span, recorded)
-            end_backend_span(span)
+            await invoke_hook(
+                HookType.GENERATION_ERROR,
+                GenerationErrorPayload(
+                    exception=recorded,
+                    model_output=self,
+                    generation_id=self._generation_id,
+                ),
+            )
 
         if self._underlying_value is None:
             self._underlying_value = ""
@@ -491,6 +563,26 @@ class ModelOutputThunk(CBlock, Generic[S]):
         """
         return self._cancelled
 
+    @property
+    def error(self) -> Exception | None:
+        """Soft-failure cause recorded by the backend, or `None` on success.
+
+        Sibling to `cancelled`: `error` is involuntary (the backend produced
+        an unusable result without raising); `cancelled` is voluntary (a
+        consumer stopped the generation via `cancel_generation`). The two
+        are recorded independently.
+        """
+        return self._error
+
+    @property
+    def generate_log(self) -> GenerateLog | None:
+        """The `GenerateLog` recorded for this generation.
+
+        Returned by reference; mutating the returned object mutates the MOT's
+        log.
+        """
+        return self._generate_log
+
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
 
@@ -506,6 +598,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.generation = other.generation
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
+        self._error = other._error
         # _cancel_hook is deliberately not copied: _copy_from swaps output state,
         # not backend-thread plumbing, which is tied to the original computation.
         self._cancel_hook = None
@@ -641,22 +734,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # and set fields to None.
 
         elif isinstance(chunks[-1], Exception):
-            # Close any open telemetry span before propagating the error.
-            # We can't call full post_process here (it assumes success invariants),
-            # but we must not leak the span.
-            span = self._meta.get("_telemetry_span")
-            if span is not None:
-                from ..telemetry.backend_instrumentation import finalize_backend_span
-
-                finalize_backend_span(span, error=chunks[-1])
-                del self._meta["_telemetry_span"]
-
             # Fire generation_error hook (FIRE_AND_FORGET — does not block the raise)
             if has_plugins(HookType.GENERATION_ERROR):
                 from ..plugins.hooks.generation import GenerationErrorPayload
 
                 err_payload = GenerationErrorPayload(
-                    exception=chunks[-1], model_output=self
+                    exception=chunks[-1],
+                    model_output=self,
+                    generation_id=self._generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_ERROR, err_payload)
 
@@ -701,7 +786,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
                     else -1
                 )
                 post_payload = GenerationPostCallPayload(
-                    prompt=prompt, model_output=self, latency_ms=latency_ms
+                    prompt=prompt,
+                    model_output=self,
+                    latency_ms=latency_ms,
+                    generation_id=self._generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
                 # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
@@ -737,6 +825,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         copied._computed = self._computed
         copied._cancelled = self._cancelled
+        copied._error = self._error
         # _cancel_hook is not forwarded: a copied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         copied._cancel_hook = None
@@ -769,6 +858,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
         deepcopied._cancelled = self._cancelled
+        deepcopied._error = self._error
         # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         deepcopied._cancel_hook = None
@@ -1150,7 +1240,7 @@ class TemplateRepresentation:
     fields: list[Any] | None = None
     template: str | None = None
     template_order: list[str] | None = None
-    images: list[ImageBlock] | None = None
+    images: list[ImageBlock | ImageUrlBlock] | None = None
 
 
 @dataclass
@@ -1234,22 +1324,23 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
             raise Exception("Type Error")
 
 
-def get_images_from_component(c: Component) -> None | list[ImageBlock]:
+def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrlBlock]:
     """Return the images attached to a `Component`, or `None` if absent or empty.
 
     Args:
         c: The `Component` whose `images` attribute is inspected.
 
     Returns:
-        A non-empty list of `ImageBlock` objects if the component has an
-        `images` attribute with at least one element; `None` otherwise.
+        A non-empty list of ``ImageBlock`` or ``ImageUrlBlock`` objects if the
+        component has an ``images`` attribute with at least one element;
+        ``None`` otherwise.
     """
     if hasattr(c, "images"):
         imgs = c.images  # type: ignore
         if imgs is not None:
             assert isinstance(imgs, list), "images field must be a list."
-            assert all(isinstance(im, ImageBlock) for im in imgs), (
-                "all elements of images list must be ImageBlocks."
+            assert all(isinstance(im, (ImageBlock, ImageUrlBlock)) for im in imgs), (
+                "all elements of images list must be ImageBlock or ImageUrlBlock."
             )
             if len(imgs) == 0:
                 return None

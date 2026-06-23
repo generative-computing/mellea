@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/examples/index"
 title: "Examples"
 description: "Complete working programs demonstrating Mellea patterns in production-like scenarios."
 # diataxis: reference
@@ -13,10 +12,10 @@ together. Copy any example as a starting point for your own project.
 
 | Example | What it shows |
 | ------- | ------------- |
-| [Data extraction pipeline](./data-extraction-pipeline) | Use `@generative` with a typed return to pull structured data from unstructured text |
-| [Legacy code integration](./legacy-code-integration) | Apply `@mify` to existing Python classes so the model can act on them |
-| [Resilient RAG with fallback](./resilient-rag-fallback) | Build a FAISS retrieval pipeline with an LLM relevance filter before generation |
-| [Traced generation loop](./traced-generation-loop) | Enable OpenTelemetry application and backend traces with two environment variables |
+| [Data extraction pipeline](/examples/data-extraction-pipeline) | Use `@generative` with a typed return to pull structured data from unstructured text |
+| [Legacy code integration](/examples/legacy-code-integration) | Apply `@mify` to existing Python classes so the model can act on them |
+| [Resilient RAG with fallback](/examples/resilient-rag-fallback) | Build a FAISS retrieval pipeline with an LLM relevance filter before generation |
+| [Traced generation loop](/examples/traced-generation-loop) | Enable OpenTelemetry application and backend traces with two environment variables |
 
 ## All example categories
 
@@ -62,8 +61,8 @@ to run.
 
 | Category | What it shows |
 | -------- | ------------- |
-| `intrinsics/` | [Guardian Intrinsics](../how-to/safety-guardrails): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
-| `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
+| `intrinsics/` | [Guardian adapter functions](../how-to/safety-guardrails.md): `guardian_check()` for harm, jailbreak, social bias, groundedness; `policy_guardrails()`; `factuality_detection()` / `factuality_correction()` |
+| `safety/` | *(Examples removed — see [Guardian how-to guide](../how-to/safety-guardrails.md) for the current API. The `RepairTemplateStrategy` gap is tracked in [#1071](https://github.com/generative-computing/mellea/issues/1071).)* |
 
 ### Integration and deployment
 

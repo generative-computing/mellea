@@ -468,7 +468,7 @@ def _render_command(
 FRONTMATTER = """\
 ---
 title: "CLI Reference"
-sidebarTitle: "CLI Reference"
+sidebar_label: "CLI Reference"
 description: "Complete reference for the m command-line tool — all subcommands, flags, and defaults."
 ---
 """

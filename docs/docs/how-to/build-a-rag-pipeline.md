@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/build-a-rag-pipeline"
 title: "Build a RAG Pipeline"
 description: "Combine vector retrieval with Mellea's generative filtering and grounded generation to build a reliable retrieval-augmented generation system."
 # diataxis: how-to
@@ -303,4 +302,4 @@ def rag(docs: list[str], query: str, *, check_groundedness: bool = True) -> str 
 
 ---
 
-**See also:** [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback) | [Making Agents Reliable](../tutorials/04-making-agents-reliable) | [The Requirements System](../concepts/requirements-system)
+**See also:** [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback) | [Making Agents Reliable](../tutorials/making-agents-reliable) | [The Requirements System](../concepts/requirements-system)

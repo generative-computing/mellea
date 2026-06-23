@@ -3,14 +3,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, RootModel, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
-
-
-class ChatMessage(BaseModel):
-    role: Literal["system", "user", "assistant", "tool", "function"]
-    content: str | None = None
-    name: str | None = None
-    tool_call_id: str | None = None
-    function_call: dict[str, Any] | None = None  # For function/tool messages
+from mellea.serve.models import (
+    ChatMessage,
+    ImageUrlContent,
+    MessageContent,
+    TextContent,
+)
 
 
 class FunctionParameters(RootModel[dict[str, Any]]):

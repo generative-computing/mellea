@@ -47,6 +47,7 @@ from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from test.conftest import hf_skip
 
 
 @pytest.fixture(scope="module")
@@ -54,19 +55,23 @@ def backend():
     """Shared HuggingFace backend for all tests in this module.
 
     Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    The "requirement-check" intrinsic only has adapters for Granite 3.3 models.
-    Granite 4 adapters are not yet available.
-    Other intrinsics are not affected by this issue.
+    Note: as of #1135, the "requirement-check" intrinsic catalogue entry points to
+    granitelib-core-r1.0 (granite-4.x adapters). Tests that exercise requirement-check
+    against this granite-3.3 backend will fail once revision pinning is wired through
+    in phase-2.2 (#1141). Other intrinsics are not affected.
     """
-    backend = LocalHFBackend(
-        model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
-    )
-    backend.add_adapter(
-        IntrinsicAdapter("requirement-check", base_model_name=backend.base_model_name)
-    )
-    backend.add_adapter(
-        IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
-    )
+    with hf_skip():
+        backend = LocalHFBackend(
+            model_id=model_ids.IBM_GRANITE_4_1_3B, cache=SimpleLRUCache(5)
+        )
+        backend.add_adapter(
+            IntrinsicAdapter(
+                "requirement-check", base_model_name=backend.base_model_name
+            )
+        )
+        backend.add_adapter(
+            IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
+        )
     yield backend
 
     from test.conftest import cleanup_gpu_backend
@@ -371,19 +376,33 @@ async def test_generate_with_lock(backend) -> None:
     memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
 
-    def mock_func(input_ids, *args, **kwargs):
+    def _extract_inputs(inputs, args, kwargs):
+        # Callers in mellea/backends/huggingface.py use three different conventions
+        # (positional, inputs=, input_ids=); canonicalize to one tensor key.
+        if inputs is not None:
+            return inputs
+        if args:
+            return args[0]
+        return kwargs.get("input_ids", kwargs.get("inputs"))
+
+    def mock_func(inputs=None, *args, **kwargs):
         """Mocks the generate function. Must call `populate_mocked_dict` with each input that must be cached before using this."""
+        key_tensor = _extract_inputs(inputs, args, kwargs)
         for key, val in memoized.items():
-            if torch.equal(key, input_ids):
+            if torch.equal(key, key_tensor):
                 time.sleep(random.uniform(0.1, 0.5))  # Simulate a bit of work.
                 return val
         assert False, "did not get a cached response"
 
     # Safely create the dict.
-    def populate_mocked_dict(input_ids, *args, **kwargs):
+    def populate_mocked_dict(inputs=None, *args, **kwargs):
         """Generates the model output and adds to the memoized dict."""
-        output = gen_func(input_ids, *args, **kwargs)  # type: ignore
-        memoized[input_ids] = output
+        key_tensor = _extract_inputs(inputs, args, kwargs)
+        if inputs is not None:
+            output = gen_func(inputs, *args, **kwargs)  # type: ignore
+        else:
+            output = gen_func(*args, **kwargs)  # type: ignore
+        memoized[key_tensor] = output
         return output
 
     model.generate = Mock(side_effect=populate_mocked_dict)
@@ -566,6 +585,31 @@ async def test_error_during_generate_with_lock(backend) -> None:
         await reg_mot.avalue()
 
     await req_mot.avalue()
+
+
+@pytest.mark.qualitative
+def test_generate_only_options_do_not_break_generation(session) -> None:
+    """Non-regression: generation still works when temperature, max_new_tokens, and
+    do_sample are passed as model_options alongside a chat call.
+
+    Note: this test verifies that the overall generate pipeline is not broken by the
+    filter change, not that the filter itself is exercised end-to-end (the Granite chat
+    template silently ignores unknown kwargs, so a missing filter would still produce
+    the correct answer). Filter correctness is covered by the unit tests in
+    test_huggingface_filter_options.py.
+    """
+    output = session.chat(
+        "What is 1+1?",
+        model_options={
+            ModelOption.TEMPERATURE: 0.0,
+            ModelOption.MAX_NEW_TOKENS: 64,
+            "do_sample": False,
+        },
+    )
+    assert output is not None
+    assert "2" in output.content, (
+        f"Expected response containing '2' but got: {output.content!r}"
+    )
 
 
 def test_assert_correct_adapters() -> None:

@@ -49,6 +49,9 @@ class HookType(StrEnum):
     GENERATION_PRE_CALL = "generation_pre_call"
     GENERATION_POST_CALL = "generation_post_call"
     GENERATION_ERROR = "generation_error"
+    GENERATION_BATCH_PRE_CALL = "generation_batch_pre_call"
+    GENERATION_BATCH_POST_CALL = "generation_batch_post_call"
+    GENERATION_BATCH_ERROR = "generation_batch_error"
 
     # Validation
     VALIDATION_PRE_CHECK = "validation_pre_check"
@@ -81,6 +84,9 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         ComponentPreExecutePayload,
     )
     from mellea.plugins.hooks.generation import (
+        GenerationBatchErrorPayload,
+        GenerationBatchPostCallPayload,
+        GenerationBatchPreCallPayload,
         GenerationErrorPayload,
         GenerationPostCallPayload,
         GenerationPreCallPayload,
@@ -123,6 +129,18 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         HookType.GENERATION_PRE_CALL.value: (GenerationPreCallPayload, PluginResult),
         HookType.GENERATION_POST_CALL.value: (GenerationPostCallPayload, PluginResult),
         HookType.GENERATION_ERROR.value: (GenerationErrorPayload, PluginResult),
+        HookType.GENERATION_BATCH_PRE_CALL.value: (
+            GenerationBatchPreCallPayload,
+            PluginResult,
+        ),
+        HookType.GENERATION_BATCH_POST_CALL.value: (
+            GenerationBatchPostCallPayload,
+            PluginResult,
+        ),
+        HookType.GENERATION_BATCH_ERROR.value: (
+            GenerationBatchErrorPayload,
+            PluginResult,
+        ),
         # Validation
         HookType.VALIDATION_PRE_CHECK.value: (ValidationPreCheckPayload, PluginResult),
         HookType.VALIDATION_POST_CHECK.value: (

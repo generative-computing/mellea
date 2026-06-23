@@ -49,7 +49,7 @@ uv run mypy .                         # Type check
 ## 3. Test Markers
 Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The `unit` marker is auto-applied by conftest — never write it explicitly. The `llm` marker is deprecated; use `e2e` instead.
 
-See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
+See **[test/README.md](test/README.md)** for classification rules, authoring guide, marker reference, CI tier map, and local workflow.
 
 **Examples in `docs/examples/`** are opt-in — unlike `test/` files (auto-collected, default `unit`), examples require an explicit `# pytest:` comment to be collected. Files without this comment are silently ignored (they won't appear in skip summaries either). This is because examples have variable dependencies and limited setup:
 ```python
@@ -83,7 +83,7 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 ## 5. Coding Standards
 - **Types required** on all core functions
 - **Docstrings are prompts** — be specific, the LLM reads them
-- **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example.
+- **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example. **No RST directives inside docstrings** — never use `Example::`, `.. deprecated::`, `:param:`, `:type:`, or other RST markup inside a docstring; Google-style sections (`Example:`, `Raises:`, etc.) use plain Markdown. **Code examples use triple-backtick fences** (` ```python `) — not `>>>` doctest prompts (output is not verified). See CONTRIBUTING.md for the full rationale and examples.
 - **Ruff** for linting/formatting
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes
@@ -119,6 +119,8 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 | `uv.lock` out of sync | Run `uv sync` |
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
+| Silent empty strings from async backends | Check for `asyncio.gather(..., return_exceptions=True)` — exceptions become values silently; use `return_exceptions=False` unless callers explicitly handle `BaseException` values |
+| GitHub Actions workflow injection warning | Never use `${{ expression }}` directly inside `run:` shell commands — always route through `env:` (`env: MY_VAR: ${{ expr }}` then `"$MY_VAR"` in the script). This rule applies only to `run:` steps; `${{ }}` in `if:` conditions and `with:` action inputs is fine. |
 
 ## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
@@ -126,13 +128,16 @@ Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
-6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), run the docstring quality gate before pushing:
+6. If the diff adds `raise` statements to library code (`mellea/` but not `test/`), **or adds a class/function to `__all__`**, run the docstring quality gate before pushing:
    ```bash
-   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100 --orphans
+   uv run python tooling/docs-autogen/build.py  # generate docs/docs/api first
+   uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100
    ```
-   Every new `raise` in a public function requires a matching `Raises:` entry — the `build-and-validate` CI job enforces this with `--fail-on-quality`.
+   Every new `raise` in a public function requires a matching `Raises:` entry, and every `Returns:` type annotation must match the function's actual return type. Adding a class to `__all__` promotes its method docstrings into quality-gate scope — the gate will start enforcing them. The `build-and-validate` CI job enforces both with `--fail-on-quality`.
 
 ## 11. Writing Tests
+
+See **[test/README.md — Authoring guide](test/README.md#authoring-guide)** for the full authoring guide (naming, fixture discipline, mock discipline, assertion style).
 
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
@@ -147,12 +152,14 @@ If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/CONTRIBUTING_DOCS.md`](docs/CONTRIBUTING_DOCS.md).
 Key rules that differ from typical Markdown habits:
 
-- **No H1 in the body** — Mintlify renders the frontmatter `title` automatically;
+- **No H1 in the body** — Docusaurus renders the frontmatter `title` automatically;
   a body `# Heading` produces a duplicate title in the published site
-- **No `.md` extensions in internal links** — use `../concepts/requirements-system`,
-  not `../concepts/requirements-system.md`
+- **Use `.md` extensions in relative cross-doc links** — use `../concepts/requirements-system.md`,
+  not `../concepts/requirements-system`. Docusaurus treats links with `.md` as doc
+  cross-references (baseUrl-aware); links without `.md` are treated as raw URL paths
+  and fail the broken-link check when the site is built with a non-root `baseUrl`.
 - **Frontmatter required** — every page needs `title` and `description`; add
-  `sidebarTitle` if the title is long
+  `sidebar_label` if the title is long
 - **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix
   all warnings before committing a doc page
 - **Verified code only** — every code example must be checked against the current
@@ -167,11 +174,11 @@ Found a bug, workaround, or pattern? Update the docs:
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section
 
-## 13. Working with Intrinsics
+## 14. Working with Adapter Functions
 
-Intrinsics are specialized LoRA adapters that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models. Mellea handles adapter loading and input formatting automatically — you just call the right function.
+Adapter functions are specialized LoRA/aLoRA adapters that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models. Mellea handles adapter loading and input formatting automatically — you just call the right function.
 
-### Using Intrinsics in Mellea
+### Using Adapter Functions in Mellea
 
 **Prefer the high-level wrappers** in `mellea/stdlib/components/intrinsic/`. These handle adapter loading, context formatting, and output parsing for you:
 
@@ -206,28 +213,28 @@ For lower-level control (custom adapters, model options), use `mfuncs.act()` wit
 
 ### Project Resources
 
-- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for intrinsic names, HF repo IDs, and adapter types
-- **Usage examples**: `docs/examples/intrinsics/` — working code for every intrinsic
+- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for adapter function names, HF repo IDs, and adapter types
+- **Usage examples**: `docs/examples/intrinsics/` — working code for every adapter function
 - **Helper functions**: `mellea/stdlib/components/intrinsic/rag.py` and `core.py`
 
-### Adding New Intrinsics
+### Adding New Adapter Functions
 
-When adding support for a new intrinsic (not just using an existing one), fetch its README from Hugging Face first. Each README contains the authoritative spec for input/output format, intended use, and examples.
+When adding support for a new adapter function (not just using an existing one), fetch its README from Hugging Face first. Each README contains the authoritative spec for input/output format, intended use, and examples.
 
 **Writing examples?** The HF READMEs also document intended usage patterns and example inputs — useful reference when writing code in `docs/examples/intrinsics/`.
 
-| Repo | Purpose | Intrinsics |
+| Repo | Purpose | Adapter functions |
 |------|---------|------------|
 | [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
 | [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
 | [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
 
-**README URLs** — RAG intrinsics (no model subfolder):
+**README URLs** — RAG adapter functions (no model subfolder):
 ```
 https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name}/README.md
 ```
 
-Core and Guardian intrinsics (include model subfolder):
+Core and Guardian adapter functions (include model subfolder):
 ```
 https://huggingface.co/ibm-granite/granitelib-{core,guardian,rag}-r1.0/blob/main/{intrinsic_name}/granite-4.1-{3b,8b,30b}/{lora,alora}/README.md
 ```

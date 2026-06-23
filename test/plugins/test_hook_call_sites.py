@@ -23,17 +23,33 @@ pytest.importorskip("cpex.framework")
 from mellea.core.backend import Backend
 from mellea.core.base import (
     CBlock,
+    Component,
     Context,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
 )
+from mellea.core.requirement import Requirement, ValidationResult
 from mellea.plugins import HookType, PluginResult, hook, register
+from mellea.stdlib.components import Instruction
 from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
 # ---------------------------------------------------------------------------
 # Mock backend (module-level so it can be used as a class in session tests)
 # ---------------------------------------------------------------------------
+
+
+_MOCK_RAW_USAGE = {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+
+
+def _make_raw_mot(value: str, usage: dict[str, Any] | None = None) -> ModelOutputThunk:
+    """Build a real, computed MOT for raw-path tests."""
+    mot = ModelOutputThunk(value=value)
+    mot.generation.usage = usage
+    mot.generation.model = "mock-model"
+    mot.generation.provider = "mock-provider"
+    return mot
 
 
 class _MockBackend(Backend):
@@ -43,7 +59,8 @@ class _MockBackend(Backend):
 
     def __init__(self, *args, **kwargs):
         # Accept but discard constructor arguments; real backends need model_id etc.
-        pass
+        self._model_id: str = "mock-model"
+        self._provider: str = "mock-provider"
 
     async def _generate_from_context(self, action, ctx, **kwargs):
         mot = MagicMock(spec=ModelOutputThunk)
@@ -62,9 +79,9 @@ class _MockBackend(Backend):
         new_ctx = SimpleContext()
         return mot, new_ctx
 
-    async def generate_from_raw(self, actions, ctx, **kwargs):
-        # Required abstract method; not exercised by these tests
-        return []
+    async def _generate_from_raw(self, actions, ctx, **kwargs):
+        results = [_make_raw_mot(f"mocked raw output for {a}") for a in actions]
+        return results, _MOCK_RAW_USAGE
 
 
 async def _noop_process(mot, chunk):
@@ -234,6 +251,466 @@ class TestGenerationHookCallSites:
         assert order == ["hook", "generate"]
         assert captured_kwargs["model_options"] == {"temperature": 0.25}
         assert captured_kwargs["tool_calls"] is True
+
+    async def test_generation_pre_call_mutation_propagates_with_real_plugin(
+        self,
+    ) -> None:
+        """GENERATION_PRE_CALL mutations survive the cpex policy layer."""
+        captured_kwargs: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            async def _generate_from_context(self, action, ctx, **kwargs):
+                captured_kwargs.update(kwargs)
+                return await super()._generate_from_context(action, ctx, **kwargs)
+
+        @hook("generation_pre_call")
+        async def mutator(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(
+                    update={
+                        "model_options": {"temperature": 0.25},
+                        "format": dict,
+                        "tool_calls": True,
+                    }
+                ),
+            )
+
+        register(mutator)
+        backend = RecordingBackend()
+        await backend.generate_from_context(
+            CBlock("hook order"),
+            MagicMock(spec=Context),
+            model_options={"temperature": 1.0},
+            tool_calls=False,
+        )
+
+        assert captured_kwargs["model_options"] == {"temperature": 0.25}
+        assert captured_kwargs["format"] is dict
+        assert captured_kwargs["tool_calls"] is True
+
+    async def test_generation_id_on_pre_call_payload_is_uuid(self) -> None:
+        """Backend.generate_from_context generates a UUID and puts it on pre_call."""
+        import uuid
+
+        observed: list[Any] = []
+
+        @hook("generation_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        await backend.generate_from_context(CBlock("hi"), MagicMock(spec=Context))
+
+        gen_id = observed[0].generation_id
+        assert gen_id
+        uuid.UUID(gen_id)  # Raises if not a valid UUID
+
+    async def test_generation_id_stashed_on_returned_mot(self) -> None:
+        """The same generation_id is stashed on the returned ModelOutputThunk."""
+        observed: list[Any] = []
+
+        @hook("generation_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        mot, _ = await backend.generate_from_context(
+            CBlock("hi"), MagicMock(spec=Context)
+        )
+
+        assert mot._generation_id == observed[0].generation_id
+
+    async def test_generation_post_call_carries_generation_id(self) -> None:
+        """astream() fires post_call with the MOT's _generation_id."""
+        observed: list[Any] = []
+
+        @hook("generation_post_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = _make_thunk()
+        mot._generation_id = "gid-post-1"
+        await mot._async_queue.put("hello")
+        await mot._async_queue.put(None)
+        await mot.avalue()
+
+        assert observed[0].generation_id == "gid-post-1"
+
+    async def test_generation_error_fires_with_payload(self) -> None:
+        """GENERATION_ERROR fires with the original exception and generation_id."""
+        observed: list[Any] = []
+
+        @hook("generation_error")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = _make_thunk()
+        mot._generation_id = "gid-err-1"
+        error = ConnectionError("server unavailable")
+        await mot._async_queue.put(error)
+
+        with pytest.raises(ConnectionError, match="server unavailable"):
+            await mot.astream()
+
+        assert len(observed) == 1
+        assert observed[0].exception is error
+        assert observed[0].model_output is not None
+        assert observed[0].generation_id == "gid-err-1"
+
+    async def test_cancel_generation_fires_error_with_supplied_exception(self) -> None:
+        """cancel_generation(error=...) fires GENERATION_ERROR with that exception."""
+        observed: list[Any] = []
+
+        @hook("generation_error")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = ModelOutputThunk(value=None)
+        mot._generation_id = "gid-cancel-1"
+        cause = ValueError("validator rejected")
+
+        await mot.cancel_generation(error=cause)
+
+        assert len(observed) == 1
+        assert observed[0].exception is cause
+        assert observed[0].model_output is not None
+        assert observed[0].generation_id == "gid-cancel-1"
+        assert mot._cancelled is True
+
+    async def test_cancel_generation_fires_error_with_default_runtimeerror(
+        self,
+    ) -> None:
+        """cancel_generation() with no error fires GENERATION_ERROR with a generic RuntimeError."""
+        observed: list[Any] = []
+
+        @hook("generation_error")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+
+        mot = ModelOutputThunk(value=None)
+        mot._generation_id = "gid-cancel-2"
+
+        await mot.cancel_generation()
+
+        assert len(observed) == 1
+        assert isinstance(observed[0].exception, RuntimeError)
+        assert "cancelled" in str(observed[0].exception).lower()
+        assert observed[0].generation_id == "gid-cancel-2"
+
+    async def test_generation_error_fires_on_sync_raise_in_generate(self) -> None:
+        """A synchronous raise inside `_generate_from_context` still fires GENERATION_ERROR."""
+        observed_pre: list[Any] = []
+        observed_err: list[Any] = []
+
+        @hook("generation_pre_call")
+        async def pre_recorder(payload: Any, ctx: Any) -> Any:
+            observed_pre.append(payload)
+            return None
+
+        @hook("generation_error")
+        async def err_recorder(payload: Any, ctx: Any) -> Any:
+            observed_err.append(payload)
+            return None
+
+        register(pre_recorder)
+        register(err_recorder)
+
+        class _RaisingBackend(_MockBackend):
+            async def _generate_from_context(self, action, ctx, **kwargs):
+                raise RuntimeError("setup failure")
+
+        backend = _RaisingBackend()
+        with pytest.raises(RuntimeError, match="setup failure"):
+            await backend.generate_from_context(CBlock("hi"), MagicMock(spec=Context))
+
+        assert len(observed_pre) == 1
+        assert len(observed_err) == 1
+        assert observed_err[0].generation_id == observed_pre[0].generation_id
+        assert isinstance(observed_err[0].exception, RuntimeError)
+        assert observed_err[0].model_output is None
+
+
+# ---------------------------------------------------------------------------
+# Generation batch hook call sites
+# ---------------------------------------------------------------------------
+
+
+class TestGenerationBatchHookCallSites:
+    """GENERATION_BATCH_PRE/POST/ERROR fire in Backend.generate_from_raw()."""
+
+    async def test_batch_pre_call_fires_once(self) -> None:
+        """GENERATION_BATCH_PRE_CALL fires exactly once per generate_from_raw() call."""
+        observed: list[Any] = []
+
+        @hook("generation_batch_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        actions: list[Component[Any] | CBlock] = [CBlock("a"), CBlock("b")]
+        await backend.generate_from_raw(actions, MagicMock(spec=Context))
+
+        assert len(observed) == 1
+
+    async def test_batch_pre_call_payload_carries_actions_and_metadata(self) -> None:
+        """Pre-call payload carries actions, num_actions, model, provider, generation_id."""
+        observed: list[Any] = []
+
+        @hook("generation_batch_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        actions: list[Component[Any] | CBlock] = [CBlock("first"), CBlock("second")]
+        await backend.generate_from_raw(actions, MagicMock(spec=Context))
+
+        p = observed[0]
+        assert len(p.actions) == 2
+        assert p.num_actions == 2
+        assert p.model == "mock-model"
+        assert p.provider == "mock-provider"
+        assert p.generation_id is not None
+
+    async def test_batch_generation_id_on_pre_call_payload_is_uuid(self) -> None:
+        """Backend.generate_from_raw generates a UUID and puts it on pre_call."""
+        import uuid
+
+        observed: list[Any] = []
+
+        @hook("generation_batch_pre_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        await backend.generate_from_raw([CBlock("a")], MagicMock(spec=Context))
+
+        gen_id = observed[0].generation_id
+        assert gen_id
+        uuid.UUID(gen_id)  # Raises if not a valid UUID
+
+    async def test_batch_pre_call_mutation_propagates(self) -> None:
+        """GENERATION_BATCH_PRE_CALL mutations reach the backend generation call."""
+        order: list[str] = []
+        captured_kwargs: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            async def _generate_from_raw(self, actions, ctx, **kwargs):
+                order.append("generate")
+                captured_kwargs.update(kwargs)
+                return await super()._generate_from_raw(actions, ctx, **kwargs)
+
+        async def fake_invoke_hook(hook_type, payload, **_kwargs):
+            if hook_type is HookType.GENERATION_BATCH_PRE_CALL:
+                order.append("hook")
+                modified = payload.model_copy(
+                    update={
+                        "model_options": {"temperature": 0.25},
+                        "format": dict,
+                        "tool_calls": True,
+                    }
+                )
+                return (
+                    PluginResult(continue_processing=True, modified_payload=modified),
+                    modified,
+                )
+            return None, payload
+
+        backend = RecordingBackend()
+
+        with (
+            patch("mellea.core.backend.has_plugins", return_value=True),
+            patch("mellea.core.backend.invoke_hook", side_effect=fake_invoke_hook),
+        ):
+            await backend.generate_from_raw(
+                [CBlock("a")],
+                MagicMock(spec=Context),
+                model_options={"temperature": 1.0},
+                tool_calls=False,
+            )
+
+        assert order == ["hook", "generate"]
+        assert captured_kwargs["model_options"] == {"temperature": 0.25}
+        assert captured_kwargs["format"] is dict
+        assert captured_kwargs["tool_calls"] is True
+
+    async def test_batch_pre_call_mutation_propagates_with_real_plugin(self) -> None:
+        """GENERATION_BATCH_PRE_CALL mutations survive the cpex policy layer."""
+        captured_kwargs: dict[str, Any] = {}
+
+        class RecordingBackend(_MockBackend):
+            async def _generate_from_raw(self, actions, ctx, **kwargs):
+                captured_kwargs.update(kwargs)
+                return await super()._generate_from_raw(actions, ctx, **kwargs)
+
+        @hook("generation_batch_pre_call")
+        async def mutator(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(
+                    update={
+                        "model_options": {"temperature": 0.25},
+                        "format": dict,
+                        "tool_calls": True,
+                    }
+                ),
+            )
+
+        register(mutator)
+        backend = RecordingBackend()
+        await backend.generate_from_raw(
+            [CBlock("a")],
+            MagicMock(spec=Context),
+            model_options={"temperature": 1.0},
+            tool_calls=False,
+        )
+
+        assert captured_kwargs["model_options"] == {"temperature": 0.25}
+        assert captured_kwargs["format"] is dict
+        assert captured_kwargs["tool_calls"] is True
+
+    async def test_batch_post_call_fires_once_on_success(self) -> None:
+        """GENERATION_BATCH_POST_CALL fires exactly once on success."""
+        observed: list[Any] = []
+
+        @hook("generation_batch_post_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        await backend.generate_from_raw([CBlock("a")], MagicMock(spec=Context))
+
+        assert len(observed) == 1
+
+    async def test_batch_post_call_payload_carries_results_and_usage(self) -> None:
+        """Post-call payload carries model_outputs, usage, model, provider, latency_ms."""
+        observed: list[Any] = []
+
+        @hook("generation_batch_post_call")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        await backend.generate_from_raw(
+            [CBlock("a"), CBlock("b")], MagicMock(spec=Context)
+        )
+
+        p = observed[0]
+        # _MockBackend yields one MOT per action; usage is _MOCK_RAW_USAGE.
+        assert len(p.model_outputs) == 2
+        assert all(isinstance(m, ModelOutputThunk) for m in p.model_outputs)
+        assert dict(p.usage) == _MOCK_RAW_USAGE
+        assert p.model == "mock-model"
+        assert p.provider == "mock-provider"
+        assert p.latency_ms >= 0
+
+    async def test_batch_post_call_generation_id_matches_pre_call(self) -> None:
+        """Post-call's generation_id equals pre-call's generation_id for the same call."""
+        observed_pre: list[Any] = []
+        observed_post: list[Any] = []
+
+        @hook("generation_batch_pre_call")
+        async def pre_recorder(payload: Any, ctx: Any) -> Any:
+            observed_pre.append(payload)
+            return None
+
+        @hook("generation_batch_post_call")
+        async def post_recorder(payload: Any, ctx: Any) -> Any:
+            observed_post.append(payload)
+            return None
+
+        register(pre_recorder)
+        register(post_recorder)
+        backend = _MockBackend()
+        await backend.generate_from_raw([CBlock("a")], MagicMock(spec=Context))
+
+        assert observed_pre[0].generation_id == observed_post[0].generation_id
+
+    async def test_batch_error_fires_when_impl_raises(self) -> None:
+        """GENERATION_BATCH_ERROR fires when _generate_from_raw raises; original re-raises."""
+        boom = RuntimeError("boom")
+
+        class _RaisingBackend(_MockBackend):
+            async def _generate_from_raw(self, actions, ctx, **kwargs):
+                raise boom
+
+        observed_pre: list[Any] = []
+        observed_err: list[Any] = []
+        observed_post: list[Any] = []
+
+        @hook("generation_batch_pre_call")
+        async def pre_recorder(payload: Any, ctx: Any) -> Any:
+            observed_pre.append(payload)
+            return None
+
+        @hook("generation_batch_error")
+        async def err_recorder(payload: Any, ctx: Any) -> Any:
+            observed_err.append(payload)
+            return None
+
+        @hook("generation_batch_post_call")
+        async def post_recorder(payload: Any, ctx: Any) -> Any:
+            observed_post.append(payload)
+            return None
+
+        register(pre_recorder)
+        register(err_recorder)
+        register(post_recorder)
+        backend = _RaisingBackend()
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await backend.generate_from_raw([CBlock("a")], MagicMock(spec=Context))
+
+        # Error fires; post does not.
+        assert len(observed_err) == 1
+        assert len(observed_post) == 0
+        err_payload = observed_err[0]
+        assert err_payload.exception is boom
+        assert err_payload.generation_id == observed_pre[0].generation_id
+        assert err_payload.model == "mock-model"
+        assert err_payload.provider == "mock-provider"
+        assert err_payload.latency_ms >= 0
+
+    async def test_batch_error_does_not_fire_on_success(self) -> None:
+        """GENERATION_BATCH_ERROR does NOT fire on the success path."""
+        observed_err: list[Any] = []
+
+        @hook("generation_batch_error")
+        async def err_recorder(payload: Any, ctx: Any) -> Any:
+            observed_err.append(payload)
+            return None
+
+        register(err_recorder)
+        backend = _MockBackend()
+        await backend.generate_from_raw([CBlock("a")], MagicMock(spec=Context))
+
+        assert len(observed_err) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +970,45 @@ class TestSamplingHookCallSites:
         )
         assert observed[0].loop_budget == 3
 
+    @pytest.mark.parametrize("bad_budget", [0, -1])
+    async def test_sampling_loop_start_rejects_non_positive_loop_budget(
+        self, bad_budget: int
+    ) -> None:
+        """A SAMPLING_LOOP_START hook that returns loop_budget < 1 must raise ValueError.
+
+        The constructor enforces loop_budget >= 1 but a hook can override it
+        post-construction; without explicit validation this collapses
+        total_possible_generations to 0, no slices are produced, and the user
+        sees an opaque AssertionError from SamplingResult.__init__ instead of
+        a clear cause.
+        """
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+
+        @hook("sampling_loop_start")
+        async def shrink_budget(payload: Any, ctx: Any) -> Any:
+            return PluginResult(
+                continue_processing=True,
+                modified_payload=payload.model_copy(update={"loop_budget": bad_budget}),
+            )
+
+        register(shrink_budget)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        with pytest.raises(ValueError, match="non-positive loop_budget"):
+            await strategy.sample(
+                Instruction("Bad budget test"),
+                context=ctx,
+                backend=backend,
+                requirements=[],
+                format=None,
+                model_options=None,
+                tool_calls=False,
+                show_progress=False,
+            )
+
     async def test_sampling_iteration_fires_once_per_loop_iteration(self) -> None:
         """SAMPLING_ITERATION fires once per loop iteration."""
         from mellea.stdlib.components import Instruction
@@ -524,6 +1040,54 @@ class TestSamplingHookCallSites:
         assert len(observed) == 1
         assert observed[0].iteration == 1
         assert observed[0].all_validations_passed is True  # no requirements → all pass
+
+    async def test_sampling_iteration_ids_unique_under_concurrency(self) -> None:
+        """Each generate/validate of the base sampling strategy should report a unique `iteration` to the sampling iteration hook.
+
+        With `concurrency_budget=3, loop_budget=2`, six generations run; their `SAMPLING_ITERATION`
+        payloads must carry six distinct `iteration` values (computed as `subsample_index * loop_budget + i + 1`),
+        not three duplicated `{1, 2}` pairs.
+        """
+
+        observed: list[int] = []
+
+        @hook("sampling_iteration")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload.iteration)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        loop_budget = 2
+        concurrency_budget = 3
+        strategy = RejectionSamplingStrategy(
+            loop_budget=loop_budget, concurrency_budget=concurrency_budget
+        )
+
+        await strategy.sample(
+            Instruction("Concurrency iteration id test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        expected = set(range(1, loop_budget * concurrency_budget + 1))
+        assert set(observed) == expected, (
+            f"iteration ids should be {sorted(expected)} (one per generation, unique "
+            f"across subsamples), got {sorted(observed)}"
+        )
 
     async def test_sampling_loop_end_fires_on_success_path(self) -> None:
         """SAMPLING_LOOP_END fires with success=True when sampling succeeds."""
@@ -663,6 +1227,82 @@ class TestSamplingHookCallSites:
             show_progress=False,
         )
         assert order == ["loop_start", "iteration", "loop_end"]
+
+    async def test_sampling_repair_skipped_on_final_iteration(self) -> None:
+        """SAMPLING_REPAIR fires only between iterations, never after the last one.
+
+        With loop_budget=N and all-failing requirements, repair runs N-1 times:
+        once after each failed attempt that has a successor, but not after the
+        final attempt (its repair output would be discarded).
+        """
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        loop_budget = 3
+        strategy = RejectionSamplingStrategy(loop_budget=loop_budget)
+
+        await strategy.sample(
+            Instruction("Repair-skip test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert len(observed) == loop_budget - 1, (
+            f"repair should fire N-1 times for N iterations, got {len(observed)}"
+        )
+
+    async def test_sampling_repair_not_fired_when_loop_budget_is_one(self) -> None:
+        """With loop_budget=1, SAMPLING_REPAIR must never fire even on validation failure."""
+        observed: list[Any] = []
+
+        @hook("sampling_repair")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(result=False),
+        )
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        await strategy.sample(
+            Instruction("Single-iteration test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert observed == [], (
+            "loop_budget=1 should never invoke repair (no next iteration to feed)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +1539,8 @@ class _MockLazyBackend(Backend):
     model_id = "mock-lazy-model"
 
     def __init__(self, *args, **kwargs):
-        pass
+        self._model_id: str = "mock-lazy-model"
+        self._provider: str = "mock-provider"
 
     async def _generate_from_context(self, action, ctx, **kwargs):
         import asyncio
@@ -933,8 +1574,8 @@ class _MockLazyBackend(Backend):
 
         return mot, SimpleContext()
 
-    async def generate_from_raw(self, actions, ctx, **kwargs):
-        return []
+    async def _generate_from_raw(self, actions, ctx, **kwargs):
+        return [], None
 
 
 class TestGenerationPostCallObserveOnlyLazyPath:

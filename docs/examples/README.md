@@ -107,13 +107,11 @@ Tool calling and code execution.
 
 ### Safety & Validation
 
-**[safety/](safety/)**
-Content safety with Granite Guardian models.
-- Harm detection
-- Jailbreak prevention
-- Bias checking
-- Groundedness validation
-- Function call hallucination detection
+**[requirements/](requirements/)**
+Implementing and composing requirements for output validation.
+- Custom requirement definitions
+- Requirement composition
+- Validation with requirements
 
 ### Integration & Deployment
 
@@ -174,6 +172,44 @@ Python script versions of tutorials.
 - Thunks and deferred execution
 - Advanced control flow
 
+### Backends & Infrastructure
+
+**[async/](async/)**
+Asynchronous Mellea workflows and streaming patterns.
+- Async backend usage
+- Streaming responses
+- Concurrent operations
+
+**[bedrock/](bedrock/)**
+AWS Bedrock backend integration.
+- Model selection
+- Service configuration
+
+**[m_decompose/](m_decompose/)**
+Decomposing complex problems into simpler steps.
+- Problem decomposition
+- Multi-step reasoning
+
+**[plugins/](plugins/)**
+Extending Mellea with custom plugins.
+- Plugin development
+- Extension patterns
+
+**[telemetry/](telemetry/)**
+Monitoring and observability for Mellea programs.
+- Metrics collection
+- Tracing and logging
+
+**[streaming/](streaming/)**
+Real-time streaming of LLM responses.
+- Token streaming
+- Progressive output
+
+**[granite-switch/](granite-switch/)**
+Switching between Granite model variants.
+- Model selection strategies
+- Performance comparison
+
 ### Utilities
 
 **[helper/](helper/)**
@@ -200,7 +236,7 @@ Utility functions used across examples.
 
 ### Production Deployment
 - [m_serve/](m_serve/) - API services
-- [safety/](safety/) - Content moderation
+- [requirements/](requirements/) - Output validation
 - [library_interop/](library_interop/) - Integration
 
 ### Performance Optimization

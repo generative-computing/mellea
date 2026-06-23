@@ -1,6 +1,7 @@
 """Helper for event loop management. Allows consistently running async generate requests in sync code."""
 
 import asyncio
+import contextvars
 import os
 import threading
 from collections.abc import Coroutine
@@ -69,12 +70,25 @@ class _EventLoopHandler:
             self._event_loop.stop()
 
     def __call__(self, co: Coroutine[Any, Any, R]) -> R:
-        """Runs the coroutine in the event loop."""
+        """Run the coroutine in the event loop, propagating the calling thread's contextvars.
+
+        The caller's `contextvars` snapshot is applied inside the new Task so
+        contextvar-backed state is visible to the coroutine. One-way:
+        mutations inside the Task don't leak back.
+        """
         self._reinit_if_forked()
         if self._event_loop == get_current_event_loop():
             # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
             return _EventLoopHandler()(co)
-        return asyncio.run_coroutine_threadsafe(co, self._event_loop).result()
+
+        parent_ctx = contextvars.copy_context()
+
+        async def _wrapped() -> R:
+            for var, value in parent_ctx.items():
+                var.set(value)
+            return await co
+
+        return asyncio.run_coroutine_threadsafe(_wrapped(), self._event_loop).result()
 
 
 # Instantiate this class once. It will not be re-instantiated.

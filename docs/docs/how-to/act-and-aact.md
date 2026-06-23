@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/act-and-aact"
 title: "act() and aact()"
 description: "Work directly with Components using act(), aact(), and the functional API."
 # diataxis: how-to
@@ -148,7 +147,7 @@ Pass a Pydantic `BaseModel` as the `format` parameter for constrained decoding:
 
 ```python
 # Requires: mellea, pydantic
-# Returns: Planet
+# Returns: ModelOutputThunk
 from pydantic import BaseModel
 from mellea import start_session
 from mellea.stdlib.components import Instruction
@@ -161,7 +160,8 @@ class Planet(BaseModel):
 m = start_session()
 instruction = Instruction(description="Describe Saturn.")
 result = m.act(instruction, format=Planet)
-print(result.value)  # A Planet instance
+print(result.value)  # A JSON string like '{"name": "Saturn", ...}'
+# Parse with: Planet.model_validate_json(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 

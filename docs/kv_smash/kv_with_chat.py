@@ -1,7 +1,7 @@
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
+from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches_v5
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 
 backend = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO)
@@ -30,7 +30,7 @@ def cache(s: str, store=True) -> DynamicCache:
 def merge(toks, dcs):
     merged_toks = torch.cat([t["input_ids"] for t in toks], dim=1)
     merged_masks = torch.cat([t["attention_mask"] for t in toks], dim=1)
-    merged_dcs = merge_dynamic_caches(dcs)
+    merged_dcs = merge_dynamic_caches_v5(dcs)
 
     return merged_toks, merged_masks, merged_dcs
 
@@ -89,7 +89,7 @@ if current_suffix != "":
 # Merge everything together.
 merged_toks = torch.cat([toks["input_ids"] for toks in tok_parts], dim=1)
 merged_masks = torch.cat([toks["attention_mask"] for toks in tok_parts], dim=1)
-merged_dcs = merge_dynamic_caches(dc_parts)
+merged_dcs = merge_dynamic_caches_v5(dc_parts)
 
 # crop the last KV for safety.
 merged_dcs.crop(-1)

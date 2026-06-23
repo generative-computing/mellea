@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/advanced/prefix-caching-and-kv-blocks"
 title: "Prefix Caching and KV Blocks"
 description: "Reuse KV cache state across calls to eliminate redundant prefill work on LocalHFBackend."
 # diataxis: how-to
@@ -64,7 +63,7 @@ When a prompt contains a mix of cached and uncached blocks, Mellea:
 2. Runs forward passes on uncached blocks.
 3. Retrieves stored `DynamicCache` for cached blocks.
 4. **Smashes** (concatenates) all KV caches along the time axis using
-   `merge_dynamic_caches()`.
+   `merge_dynamic_caches_v5()`.
 5. Passes the merged cache plus the combined input IDs to the generation step.
 
 The result is identical to a single full-context forward pass, with the prefill
@@ -132,6 +131,6 @@ Or pass `use_caches=False` at construction. The session behaviour is otherwise
 identical — disabling caching only affects whether prefill states are stored and
 reused.
 
-**See also:** [HuggingFace Transformers](../integrations/huggingface) |
-[Intrinsics](./intrinsics) |
-[LoRA and aLoRA Adapters](./lora-and-alora-adapters)
+**See also:** [Hugging Face Transformers](../integrations/huggingface.md) |
+[Adapter functions](./intrinsics.md) |
+[LoRA and aLoRA Adapters](./lora-and-alora-adapters.md)

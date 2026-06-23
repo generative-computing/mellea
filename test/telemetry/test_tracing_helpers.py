@@ -1,20 +1,16 @@
 """Unit tests for tracing helper functions — no OpenTelemetry installation required.
 
-_set_attribute_safe and end_backend_span operate on any object with a
-set_attribute / end method, so these tests use MagicMock spans and run
-unconditionally. test_set_span_error_records_exception calls into the real
-OTel trace API and is skipped when opentelemetry is not installed.
+_set_attribute_safe operates on any object with a set_attribute method, so
+these tests use MagicMock spans and run unconditionally.
+test_set_span_error_records_exception calls into the real OTel trace API and
+is skipped when opentelemetry is not installed.
 """
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mellea.telemetry.tracing import (
-    _set_attribute_safe,
-    end_backend_span,
-    set_span_error,
-)
+from mellea.telemetry.tracing import _set_attribute_safe, set_span_error
 
 # --- _set_attribute_safe type-conversion ---
 
@@ -74,16 +70,3 @@ def test_set_span_error_records_exception():
 
     span.record_exception.assert_called_once_with(exc)
     span.set_status.assert_called_once()
-
-
-# --- end_backend_span ---
-
-
-def test_end_backend_span_calls_end_on_span():
-    span = MagicMock()
-    end_backend_span(span)
-    span.end.assert_called_once()
-
-
-def test_end_backend_span_none_no_op():
-    end_backend_span(None)

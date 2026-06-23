@@ -2,7 +2,7 @@
 """generate-ast.py — mdxify + postprocess docs pipeline.
 
 Runs mdxify against the project's mellea package then postprocesses
-the generated MDX files into the Mintlify docs tree.
+the generated MDX files into the Docusaurus docs tree.
 
 Requires mdxify to be installed in the current Python environment.  Run via::
 
@@ -15,8 +15,7 @@ Pipeline:
   4) Update frontmatter (title/sidebarTitle/description) from H1 + first paragraph
   5) Remove truly-empty MDX files
   6) Move generated docs to <docs-root>/api (replace existing)
-  7) Build Mintlify API Reference nav (NO .mdx suffix)
-  8) Merge by replacing ONLY: { "tab": "API Reference", ... } in docs.json
+  7) Build API Reference nav tree (docs.json merge skipped in Docusaurus mode)
 """
 
 import argparse
@@ -91,7 +90,9 @@ def is_meaningful_body_line(line: str) -> bool:
     return True
 
 
-def find_docs_json(cli_path: str | None, search_root: Path | None = None) -> Path:
+def find_docs_json(
+    cli_path: str | None, search_root: Path | None = None
+) -> Path | None:
     if cli_path:
         p = Path(cli_path)
         if not p.is_absolute():
@@ -110,10 +111,11 @@ def find_docs_json(cli_path: str | None, search_root: Path | None = None) -> Pat
     for c in candidates:
         if c.exists():
             return c
-    raise FileNotFoundError(
-        f"Could not locate docs.json under {root}. "
-        "Pass --docs-json explicitly, e.g. --docs-json docs/docs/docs.json"
+    print(
+        f"[generate-ast.py] docs.json not found under {root} — skipping nav merge (Docusaurus mode).",
+        flush=True,
     )
+    return None
 
 
 def merge_api_reference_into_docs_json(
@@ -345,7 +347,9 @@ def update_frontmatter_metadata() -> None:
         preserved = []
         for line in front_lines:
             k = line.strip()
-            if k.startswith(("title:", "sidebarTitle:", "description:")):
+            if k.startswith(
+                ("title:", "sidebarTitle:", "sidebar_label:", "description:")
+            ):
                 continue
             preserved.append(line)
 
@@ -359,7 +363,7 @@ def update_frontmatter_metadata() -> None:
 
         new_front = ["---"]
         new_front.append(f"title: {yaml_quote(title_value)}")
-        new_front.append(f"sidebarTitle: {yaml_quote(title_value)}")
+        new_front.append(f"sidebar_label: {yaml_quote(title_value)}")
         if desc_value:
             new_front.append(f"description: {yaml_quote(desc_value)}")
         new_front.extend(preserved)
@@ -437,9 +441,7 @@ def _imported_submodules(init_path: Path) -> set[str] | None:
 _CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset(
     {
         # Granite intrinsics internal JSON parser — not part of the public API
-        "mellea/formatters/granite/intrinsics/json_util",
-        # Backend telemetry wiring — internal instrumentation helpers
-        "mellea/telemetry/backend_instrumentation",
+        "mellea/formatters/granite/intrinsics/json_util"
     }
 )
 
@@ -540,6 +542,13 @@ def move_api_to_docs_root(target_docs_root: Path) -> Path:
         raise RuntimeError(f"Staging API dir not found: {STAGING_API_DIR}")
 
     if target_api_dir.exists():
+        # Preserve static seed files (e.g. index.md) that live in the root of
+        # the target api dir but are not produced by the pipeline.
+        for seed_file in target_api_dir.glob("*.md"):
+            dest = STAGING_API_DIR / seed_file.name
+            if not dest.exists():
+                shutil.copy2(seed_file, dest)
+                print(f"   💾 Preserving seed file: {seed_file.name}", flush=True)
         print(f"   🧹 Deleting existing target api dir: {target_api_dir}", flush=True)
         shutil.rmtree(target_api_dir)
 
@@ -571,14 +580,14 @@ def build_tree_from_paths(paths: list[str]) -> dict[str, Any]:
     return root
 
 
-def tree_to_mintlify(node: dict[str, Any], group_name: str) -> dict[str, Any]:
+def tree_to_nav(node: dict[str, Any], group_name: str) -> dict[str, Any]:
     pages: list[Any] = []
     file_pages = node.get("__pages__", [])
     if file_pages:
         pages.extend(sorted(file_pages))
 
     for k in sorted(x for x in node.keys() if x != "__pages__"):
-        pages.append(tree_to_mintlify(node[k], k))
+        pages.append(tree_to_nav(node[k], k))
 
     return {"group": group_name, "pages": pages}
 
@@ -699,7 +708,12 @@ def _collect_module_entries(
                 preamble = docstring_cache.get(module_path, "")
             else:
                 preamble = _read_body_preamble(index_mdx)
-            href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
+            # Directory-index files (stem == parent dir name) are served at the
+            # directory route, not at /<dir>/<filename>.
+            if index_mdx.stem == child.name:
+                href = f"api/{pkg}/{child.name}"
+            else:
+                href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
             entries.append((child.name, desc, preamble, href))
         elif child.suffix == ".mdx":
             module_path = f"{pkg}.{child.stem}"
@@ -714,14 +728,14 @@ def _collect_module_entries(
 
 
 def generate_landing_page(
-    api_dir: Path, docs_root: Path, docstring_cache: dict[str, str] | None = None
+    api_dir: Path, docstring_cache: dict[str, str] | None = None
 ) -> None:
-    """Generate api-reference.mdx as a landing page for the API Reference tab.
+    """Generate api/index.md as the landing page for the API Reference tab.
 
     Scans the generated api/ directory structure to produce an up-to-date
     overview of every top-level module, rendered as a prose list with links.
-    The file is written to docs_root so Mintlify serves it when the user
-    clicks the API Reference tab.
+    Written to api_dir/index.md so the Docusaurus apiSidebar serves it as
+    the first page when the user clicks the API Reference navbar tab.
 
     When docstring_cache is provided, package descriptions are sourced directly
     from __init__ module docstrings (standard Python practice) rather than
@@ -759,7 +773,7 @@ workflows.
     content += "\n## CLI (`m`)\n\n"
     content += "See the [CLI Reference](/reference/cli) page.\n"
 
-    out_path = docs_root / "api-reference.mdx"
+    out_path = api_dir / "index.md"
     safe_write_text(out_path, content)
     print(f"✅ Generated landing page: {out_path}", flush=True)
 
@@ -768,7 +782,7 @@ def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> dict[str, 
     mellea_pages = collect_pages_under(api_dir, "mellea", docs_root)
 
     mellea_tree = build_tree_from_paths(mellea_pages)
-    mellea_nav = tree_to_mintlify(mellea_tree, "mellea")
+    mellea_nav = tree_to_nav(mellea_tree, "mellea")
 
     return {
         "tab": NAV_TAB,
@@ -810,7 +824,7 @@ def _load_docstring_cache(source_root: Path | None = None) -> dict[str, str]:
 
 
 def build_and_merge_navigation(
-    docs_json_path: Path,
+    docs_json_path: Path | None,
     api_dir: Path,
     docs_root: Path,
     docstring_cache: dict[str, str] | None = None,
@@ -819,8 +833,14 @@ def build_and_merge_navigation(
     print(
         "🛠️ Building API Reference navigation and merging into docs.json...", flush=True
     )
-    generate_landing_page(api_dir, docs_root, docstring_cache)
+    generate_landing_page(api_dir, docstring_cache)
     api_tab = build_api_reference_tab_object(api_dir, docs_root)
+    if docs_json_path is None:
+        print(
+            "[generate-ast.py] Skipping docs.json merge — no docs.json present (Docusaurus mode).",
+            flush=True,
+        )
+        return
     merge_api_reference_into_docs_json(docs_json_path, api_tab)
 
 
@@ -829,15 +849,17 @@ def build_and_merge_navigation(
 # -----------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate MDX API docs with mdxify, postprocess, and merge into the Mintlify docs tree."
+        description="Generate MDX API docs with mdxify, postprocess, and merge into the Docusaurus docs tree."
     )
     parser.add_argument(
-        "--docs-json", required=False, help="Path to docs.json to update."
+        "--docs-json",
+        required=False,
+        help="Path to docs.json to update (legacy; ignored in Docusaurus mode).",
     )
     parser.add_argument(
         "--docs-root",
         required=False,
-        help="Mintlify docs root (defaults to parent of docs.json).",
+        help="Docs root directory (defaults to parent of docs.json).",
     )
     parser.add_argument(
         "--nav-only",
@@ -864,11 +886,12 @@ def main() -> None:
     source_root = Path(args.source_dir).resolve() if args.source_dir else REPO_ROOT
 
     docs_json_path = find_docs_json(args.docs_json, search_root=source_root)
-    docs_root = (
-        Path(args.docs_root).resolve()
-        if args.docs_root
-        else docs_json_path.parent.resolve()
-    )
+    if args.docs_root:
+        docs_root = Path(args.docs_root).resolve()
+    elif docs_json_path is not None:
+        docs_root = docs_json_path.parent.resolve()
+    else:
+        docs_root = (source_root / "docs" / "docs").resolve()
 
     # --nav-only: skip all MDX generation; just rebuild landing page + nav
     if args.nav_only:

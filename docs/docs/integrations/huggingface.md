@@ -1,11 +1,10 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/huggingface"
-title: "HuggingFace Transformers"
-description: "Run Mellea on local hardware with LocalHFBackend and HuggingFace Transformers."
+title: "Hugging Face Transformers"
+description: "Run Mellea on local hardware with LocalHFBackend and Hugging Face Transformers."
 # diataxis: how-to
 ---
 
-`LocalHFBackend` uses [HuggingFace Transformers](https://huggingface.co/docs/transformers)
+`LocalHFBackend` uses [Hugging Face Transformers](https://huggingface.co/docs/transformers)
 for local inference. It is designed for experimental Mellea features — aLoRA adapters,
 constrained decoding, and span-based context — that are not yet available on
 server-based backends.
@@ -84,13 +83,13 @@ See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for
 
 ## aLoRA adapters
 
-`LocalHFBackend` supports [Activated LoRA (aLoRA)](../advanced/lora-and-alora-adapters)
+`LocalHFBackend` supports [aLoRA](../advanced/lora-and-alora-adapters)
 adapters — lightweight domain-specific requirement validators that run on local GPU
 hardware. See the aLoRA guide for training and usage.
 
-> **Tip:** For intrinsics without local GPU requirements, Granite Switch models
+> **Tip:** For adapter functions without local GPU requirements, Granite Switch models
 > serve pre-embedded adapters via vLLM and the OpenAI backend. See
-> [Intrinsics](../advanced/intrinsics) for details.
+> [Adapter functions](../advanced/intrinsics.md) for details.
 
 ## Vision support
 

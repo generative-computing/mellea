@@ -31,18 +31,43 @@ from ..mobject import MObject, Query, Transform
 
 
 class RichDocument(Component[str]):
-    """A `RichDocument` is a block of content backed by a `DoclingDocument`.
+    """A document wrapper that exposes content to a language model as Markdown.
 
-    Provides helper functions for working with the document and extracting parts
-    such as tables. Use `from_document_file` to convert PDFs or other formats,
-    and `save`/`load` for persistence.
+    The two canonical ways to create a ``RichDocument``:
+
+    * **From a file** — use :meth:`from_document_file` to convert a PDF,
+      Markdown, DOCX, or other `Docling-supported format`_ into a
+      ``RichDocument``.  Set ``do_ocr=False`` for text-based PDFs to skip
+      downloading OCR model weights.
+    * **From a saved JSON** — use :meth:`load` to restore a document previously
+      saved with :meth:`save`.
+
+    Passing a ``DoclingDocument`` directly to the constructor is intended for
+    advanced use (e.g. when you already hold a ``DoclingDocument`` produced by
+    your own Docling pipeline).  If you pass any other type a ``TypeError`` is
+    raised immediately.
+
+    .. _Docling-supported format: https://ds4sd.github.io/docling/
 
     Args:
         doc (DoclingDocument): The underlying Docling document to wrap.
+
+    Raises:
+        TypeError: If *doc* is not a ``DoclingDocument`` instance.
     """
 
     def __init__(self, doc: DoclingDocument):
-        """Initialize RichDocument by wrapping the provided DoclingDocument."""
+        """Initialize RichDocument by wrapping the provided DoclingDocument.
+
+        Raises:
+            TypeError: If *doc* is not a ``DoclingDocument`` instance.
+        """
+        if not isinstance(doc, DoclingDocument):
+            raise TypeError(
+                f"RichDocument expects a DoclingDocument, got {type(doc).__name__!r}. "
+                "To create a RichDocument from a file, use RichDocument.from_document_file(). "
+                "To restore a saved document, use RichDocument.load()."
+            )
         self._doc = doc
 
     def parts(self) -> list[Component | CBlock]:
@@ -80,7 +105,7 @@ class RichDocument(Component[str]):
         """
         return self._doc
 
-    def to_markdown(self):
+    def to_markdown(self) -> str:
         """Get the full text of the document as markdown."""
         return self._doc.export_to_markdown()
 
@@ -125,11 +150,28 @@ class RichDocument(Component[str]):
     ) -> RichDocument:
         """Convert a document file to a `RichDocument` using Docling.
 
+        Supported formats include PDF, Markdown, DOCX, PPTX, HTML, and any
+        other format that the installed version of Docling supports.
+
+        **Limitations to be aware of:**
+
+        * PDF pipeline options (image scaling, picture extraction, OCR) are
+          always configured internally. For non-PDF formats Docling ignores
+          these options, so they have no effect on Markdown or DOCX conversion.
+        * ``do_ocr=True`` (the default) causes Docling to download OCR model
+          weights on the *first* call, which can be several hundred MB. Pass
+          ``do_ocr=False`` for text-based PDFs or any format that does not
+          require OCR to avoid this download.
+        * Remote URLs (e.g. ``"https://arxiv.org/pdf/…"``) are accepted by
+          Docling but require network access and may be slow or fail if the
+          remote is unavailable.
+
         Args:
-            source (str | Path | DocumentStream): Path or stream for the
-                source document (e.g. a PDF or Markdown file).
-            do_ocr (bool): Whether to run OCR on the document. Disable for
-                text-based PDFs to avoid downloading OCR model weights.
+            source (str | Path | DocumentStream): Path, URL, or stream for the
+                source document.
+            do_ocr (bool): Whether to run OCR on the document. Defaults to
+                ``True``. Set to ``False`` for text-based PDFs or when you want
+                to avoid downloading OCR model weights.
 
         Returns:
             RichDocument: A new `RichDocument` wrapping the converted document.
@@ -282,7 +324,7 @@ class Table(MObject):
         else:
             return None
 
-    def parts(self):
+    def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this table component.
 
         The current implementation always returns an empty list because the

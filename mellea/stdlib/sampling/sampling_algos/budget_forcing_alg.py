@@ -8,8 +8,6 @@ answer pass (bounded by `answer_max_tokens`), using the raw completions API of a
 `OllamaModelBackend`.
 """
 
-from typing import Any
-
 from ....backends import ModelOption
 from ....backends.ollama import OllamaModelBackend
 from ....core import (
@@ -69,8 +67,8 @@ async def think_budget_forcing(
         ModelOutputThunk: The assembled thinking and answer response.
 
     Raises:
-        Exception: If the backend returns generation results without the
-            required `meta` information (e.g. token usage counts).
+        RuntimeError: If a sub-call's `generation.usage` is `None` (no token
+            counts available to accumulate against the budget).
 
     Assumptions:
         -  The chat template is applied on prompt, with think mode enabled
@@ -97,7 +95,7 @@ async def think_budget_forcing(
     gen_tok_count = 0
     curr_prompt = prompt
     _generate_logs: list[GenerateLog | None] = []
-    _meta_logs: list[dict[str, Any]] = []
+    _prompt_tokens: int | None = None  # captured from the first sub-call
     min_char_len = 10
 
     # think block indefinite multi-step operation to satisfy user's budget
@@ -114,11 +112,15 @@ async def think_budget_forcing(
             format=format,
         )
         _generate_logs.append(result[0]._generate_log)
-        if result[0]._meta is None:
-            raise Exception("Requires meta information in generation results.")
-
-        _meta_logs.append(result[0]._meta)
-        gen_tok_count += result[0]._meta["usage"]["completion_tokens"]
+        usage = result[0].generation.usage
+        if usage is None:
+            raise RuntimeError(
+                "think_budget_forcing requires per-call token counts; "
+                "backend returned `mot.generation.usage = None`."
+            )
+        if _prompt_tokens is None:
+            _prompt_tokens = usage["prompt_tokens"]
+        gen_tok_count += usage["completion_tokens"]
         rem_toks = think_max_tokens - gen_tok_count
         response = result[0].value if result[0].value else ""
 
@@ -147,15 +149,18 @@ async def think_budget_forcing(
     response = "".join(responses)
 
     if answer_suffix is None:
+        if _prompt_tokens is None:
+            raise RuntimeError(
+                "think_budget_forcing produced no generations; "
+                "check `think_max_tokens` and `answer_suffix`."
+            )
         # create response ModelOutputThunk object
-        _meta = _meta_logs[-1]  # Initialize using the last meta object
-        _meta["usage"]["completion_tokens"] = gen_tok_count
-        # the first prompt is the true prompt
-        _meta["usage"]["prompt_tokens"] = _meta_logs[0]["usage"]["prompt_tokens"]
-        _meta["usage"]["total_tokens"] = (
-            _meta["usage"]["prompt_tokens"] + _meta["usage"]["completion_tokens"]
-        )
-        _res = ModelOutputThunk(value=response, meta=_meta)
+        _res = ModelOutputThunk(value=response)
+        _res.generation.usage = {
+            "prompt_tokens": _prompt_tokens,
+            "completion_tokens": gen_tok_count,
+            "total_tokens": _prompt_tokens + gen_tok_count,
+        }
         # we will simply take the last log output as a representative log, alternatively we can merge the logs but that function is not available yet
         _res._generate_log = _generate_logs[-1]
         return _res
@@ -188,17 +193,23 @@ async def think_budget_forcing(
     )
     _generate_logs.append(result[0]._generate_log)
     response += result[0].value if result[0].value else ""
-    _meta_logs.append(result[0]._meta)
-    gen_tok_count += result[0]._meta["usage"]["completion_tokens"]
+    usage = result[0].generation.usage
+    if usage is None:
+        raise RuntimeError(
+            "think_budget_forcing requires per-call token counts; "
+            "backend returned `mot.generation.usage = None`."
+        )
+    if _prompt_tokens is None:
+        # zero-think case: capture prompt count from this answer pass.
+        _prompt_tokens = usage["prompt_tokens"]
+    gen_tok_count += usage["completion_tokens"]
     # create response ModelOutputThunk object
-    _meta = _meta_logs[-1]  # Initialize using the last meta object
-    _meta["usage"]["completion_tokens"] = gen_tok_count
-    # the first prompt is the true prompt
-    _meta["usage"]["prompt_tokens"] = _meta_logs[0]["usage"]["prompt_tokens"]
-    _meta["usage"]["total_tokens"] = (
-        _meta["usage"]["prompt_tokens"] + _meta["usage"]["completion_tokens"]
-    )
-    _res = ModelOutputThunk(value=response, meta=_meta)
+    _res = ModelOutputThunk(value=response)
+    _res.generation.usage = {
+        "prompt_tokens": _prompt_tokens,
+        "completion_tokens": gen_tok_count,
+        "total_tokens": _prompt_tokens + gen_tok_count,
+    }
     # we will simply take the last log output as a representative log, alternatively we can merge the logs but that function is not available yet
     _res._generate_log = _generate_logs[-1]
     return _res

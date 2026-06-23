@@ -4,8 +4,8 @@ import asyncio
 import datetime
 import functools
 import json
-from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, overload
+from collections.abc import Coroutine, Sequence
+from typing import Any
 
 try:
     import litellm
@@ -33,6 +33,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
@@ -41,10 +42,6 @@ from ..helpers import (
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
-from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_raw,
-    start_generate_span,
-)
 from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -54,6 +51,7 @@ from .tools import (
     convert_tools_to_json,
     validate_tool_arguments,
 )
+from .utils import populate_response_metadata_openai_shape
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -66,8 +64,12 @@ class LiteLLMBackend(FormatterBackend):
             `"<provider>/<model_creator>/<model_name>"`.
         formatter (ChatFormatter | None): Formatter for rendering components.
             Defaults to `TemplateFormatter`.
-        base_url (str | None): Base URL for the LLM API endpoint; defaults to
-            the Ollama local endpoint.
+        base_url (str | None): Base URL for the LLM API endpoint. When set,
+            forwarded as ``api_base`` to LiteLLM. When ``None`` (default),
+            LiteLLM infers the endpoint from the model prefix (e.g.
+            ``ollama_chat/`` → localhost:11434, ``anthropic/`` → Anthropic API).
+            Use ``None`` for cloud providers; set explicitly for local servers
+            such as vLLM or a non-default Ollama port.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
@@ -81,7 +83,7 @@ class LiteLLMBackend(FormatterBackend):
         self,
         model_id: str = "ollama_chat/" + str(model_ids.IBM_GRANITE_4_1_3B.ollama_name),
         formatter: ChatFormatter | None = None,
-        base_url: str | None = "http://localhost:11434",
+        base_url: str | None = None,
         model_options: dict | None = None,
     ):
         """Initialize a LiteLLM-compatible backend for the given model ID and endpoint."""
@@ -97,11 +99,15 @@ class LiteLLMBackend(FormatterBackend):
 
         assert isinstance(model_id, str), "Model ID must be a string."
         self._model_id = model_id
+        self._provider: str = "litellm"
 
-        if base_url is None:
-            self._base_url = "http://localhost:11434/v1"  # ollama
-        else:
-            self._base_url = base_url
+        # _explicit_base_url tracks whether the caller provided a base_url.
+        # api_base is only forwarded to litellm when explicit — otherwise litellm
+        # infers the endpoint from the model prefix (correct for cloud providers).
+        self._explicit_base_url = base_url is not None
+        self._base_url = (
+            base_url if base_url is not None else "http://localhost:11434/v1"
+        )
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -165,9 +171,6 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        span = start_generate_span(
-            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        )
 
         _model_id_str = str(getattr(self, "model_id", "unknown"))
         with with_context(request_id=generate_request_id(), model_id=_model_id_str):
@@ -178,10 +181,6 @@ class LiteLLMBackend(FormatterBackend):
                 model_options=model_options,
                 tool_calls=tool_calls,
             )
-
-        # Store span for telemetry recording in post_processing
-        if span is not None:
-            mot._meta["_telemetry_span"] = span
 
         return mot, ctx.add(action).add(mot)
 
@@ -308,7 +307,7 @@ class LiteLLMBackend(FormatterBackend):
         # Add the final message.
         match action:
             case ALoraRequirement():
-                raise Exception("The LiteLLM backend does not support activated LoRAs.")
+                raise Exception("The LiteLLM backend does not support aLoRA adapters.")
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
 
@@ -341,16 +340,65 @@ class LiteLLMBackend(FormatterBackend):
         if model_opts.get(ModelOption.STREAM, False):
             extra_params["stream_options"] = {"include_usage": True}
 
+        # Map THINKING to the correct backend parameter(s). Two mechanisms:
+        # - chat_template_kwargs.enable_thinking: vLLM/Qwen3/Gemma4 (bool toggle)
+        # - reasoning_effort: LiteLLM/OpenAI-compatible (string level, or True → "medium")
+        # Both are set for True so each server picks up whichever it understands.
+        # NOTE: don't pass reasoning_effort=False — it is invalid; absence disables reasoning.
         thinking = model_opts.get(ModelOption.THINKING, None)
-        if type(thinking) is bool and thinking:
-            # OpenAI uses strings for its reasoning levels.
-            thinking = "medium"
+        original_thinking = thinking  # preserve raw caller value for the generate log
+        reasoning_params: dict[str, Any] = {}
+        if thinking is not None:
+            if type(thinking) is bool:
+                ctk_body: dict[str, Any] = extra_params.get("extra_body", {}) or {}
+                ctk: dict[str, Any] = ctk_body.get("chat_template_kwargs", {}) or {}
+                ctk["enable_thinking"] = thinking
+                ctk_body["chat_template_kwargs"] = ctk
+                extra_params["extra_body"] = ctk_body
+                if thinking:
+                    reasoning_params["reasoning_effort"] = "medium"
+                # False: do not send reasoning_effort — absent param disables reasoning;
+                # passing False would be invalid.
+            else:
+                reasoning_params["reasoning_effort"] = thinking
 
         # Append tool call information if applicable.
         tools = self._extract_tools(action, _format, model_opts, tool_calls, ctx)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        # Merge any user-supplied extra_body from model_specific_options so there is
+        # a single extra_body source in extra_params (two spread dicts with the same
+        # key would raise TypeError at call time).
+        # Deep-merge chat_template_kwargs so enable_thinking (set above) and any
+        # user-supplied chat_template_kwargs keys both survive.
+        # Copy before mutating — model_specific_options holds references into the
+        # caller's dict; popping from the originals would silently corrupt reused
+        # model_options on the next call.
+        user_extra_body = model_specific_options.pop("extra_body", None)
+        if user_extra_body:
+            user_extra_body = dict(user_extra_body)
+            eb = dict(extra_params.get("extra_body") or {})
+            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
+            eb.update(user_extra_body)
+            if user_ctk is not None:
+                eb["chat_template_kwargs"] = {
+                    **eb.get("chat_template_kwargs", {}),
+                    **user_ctk,
+                }
+            extra_params["extra_body"] = eb
+
+        # Pop api_base from model_specific_options before the call so an explicit
+        # user-supplied value doesn't collide with the positional api_base kwarg;
+        # let the user's value take precedence over the backend default.
+        user_api_base = model_specific_options.pop("api_base", None)
+        # Only forward api_base when the caller explicitly set a base_url (or model_options
+        # contains one). Sending the default localhost URL to a cloud provider (Anthropic,
+        # Watsonx, etc.) would override LiteLLM's provider-default endpoint inference.
+        resolved_api_base = user_api_base or (
+            self._base_url if self._explicit_base_url else None
+        )
 
         if self._has_potential_event_loop_errors():
             MelleaLogger.get_logger().warning(
@@ -363,9 +411,10 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            reasoning_effort=thinking,  # type: ignore
+            api_base=resolved_api_base,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
             **extra_params,
+            **reasoning_params,  # type: ignore
             **model_specific_options,
         )
 
@@ -382,13 +431,13 @@ class LiteLLMBackend(FormatterBackend):
             self.post_processing,
             conversation=conversation,
             tools=tools,
-            thinking=thinking,
+            thinking=original_thinking,
             _format=_format,
         )
 
         # Set model/provider early so they are available in the error path
-        output.generation.model = str(self.model_id)
-        output.generation.provider = "litellm"
+        output.generation.model = self._model_id
+        output.generation.provider = self._provider
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -397,7 +446,13 @@ class LiteLLMBackend(FormatterBackend):
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -562,28 +617,12 @@ class LiteLLMBackend(FormatterBackend):
             mot.generation.usage = usage
 
         # Populate model and provider metadata
-        mot.generation.model = str(self.model_id)
-        mot.generation.provider = "litellm"
+        mot.generation.model = self._model_id
+        mot.generation.provider = self._provider
 
-        # Record telemetry now that response is available
-        span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import (
-                record_response_metadata,
-                record_token_usage,
-            )
-
-            response = mot._meta.get("litellm_chat_response")
-            if response:
-                # LiteLLM responses have usage information
-                if usage:
-                    record_token_usage(span, usage)
-                record_response_metadata(span, response)
-            # Close the span now that async operation is complete
-            end_backend_span(span)
-            # Clean up the span reference
-            del mot._meta["_telemetry_span"]
+        # Populate response-side metadata for telemetry
+        if isinstance(full_response, dict):
+            populate_response_metadata_openai_shape(mot, full_response)
 
     @staticmethod
     def _extract_tools(
@@ -605,29 +644,7 @@ class LiteLLMBackend(FormatterBackend):
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C]],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C]]: ...
-
-    @overload
-    async def generate_from_raw(
-        self,
-        actions: list[Component[C] | CBlock],
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> list[ModelOutputThunk[C | str]]: ...
-
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -635,11 +652,12 @@ class LiteLLMBackend(FormatterBackend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         """Generate completions for multiple actions without chat templating via LiteLLM.
 
         Passes formatted prompt strings directly to LiteLLM's text completion endpoint.
-        Tool calling is not supported on this endpoint.
+        Tool calling is not supported on this endpoint. Per-MOT `mot.generation.usage`
+        stays `None` because LiteLLM's text completion API only reports whole-batch usage.
 
         Args:
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
@@ -650,43 +668,54 @@ class LiteLLMBackend(FormatterBackend):
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
-            list[ModelOutputThunk]: A list of model output thunks, one per action.
+            tuple[list[ModelOutputThunk], dict | None]: `(results, usage)` where
+                `results` is a list of model output thunks, one per action, and
+                `usage` is the whole-batch token-usage dict or `None`.
         """
-        with instrument_generate_from_raw(
-            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
-        ):
-            await self.do_generate_walks(list(actions))
-            extra_body = {}
-            if format is not None:
-                MelleaLogger.get_logger().warning(
-                    "The official OpenAI completion api does not accept response format / structured decoding; "
-                    "it will be passed as an extra arg."
-                )
-
-                # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-                extra_body["guided_json"] = format.model_json_schema()  # type: ignore
-            if tool_calls:
-                MelleaLogger.get_logger().warning(
-                    "The completion endpoint does not support tool calling."
-                )
-
-            # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
-            model_opts = self._simplify_and_merge(model_options)
-            model_specific_options = self._make_backend_specific_and_remove(model_opts)
-
-            if self._has_potential_event_loop_errors():
-                MelleaLogger.get_logger().warning(
-                    "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
-                )
-
-            prompts = [self.formatter.print(action) for action in actions]
-
-            completion_response = await litellm.atext_completion(
-                model=self._model_id, prompt=prompts, **model_specific_options
+        await self.do_generate_walks(list(actions))
+        extra_body = {}
+        if format is not None:
+            MelleaLogger.get_logger().warning(
+                "The official OpenAI completion api does not accept response format / structured decoding; "
+                "it will be passed as an extra arg."
             )
+
+            # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
+            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
+        if tool_calls:
+            MelleaLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling."
+            )
+
+        # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
+        model_opts = self._simplify_and_merge(model_options)
+        model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        if self._has_potential_event_loop_errors():
+            MelleaLogger.get_logger().warning(
+                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+            )
+
+        prompts = [self.formatter.print(action) for action in actions]
+
+        user_api_base_raw = model_specific_options.pop("api_base", None)
+
+        completion_response = await litellm.atext_completion(
+            model=self._model_id,
+            prompt=prompts,
+            api_base=user_api_base_raw
+            or (self._base_url if self._explicit_base_url else None),
+            **model_specific_options,
+        )
 
         # Necessary for type checker.
         assert isinstance(completion_response, litellm.TextCompletionResponse)  # type: ignore
+
+        usage_dump = (
+            completion_response.usage.model_dump()
+            if completion_response.usage
+            else None
+        )
 
         results = []
         date = datetime.datetime.now()
@@ -701,12 +730,9 @@ class LiteLLMBackend(FormatterBackend):
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {
-                "litellm_chat_response": res.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
-            }
+            output._meta = {"litellm_chat_response": res.model_dump()}
+            output.generation.model = self._model_id
+            output.generation.provider = self._provider
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value
@@ -724,7 +750,7 @@ class LiteLLMBackend(FormatterBackend):
 
             results.append(output)
 
-        return results
+        return results, usage_dump
 
     def _extract_model_tool_requests(
         self,

@@ -260,7 +260,7 @@ class Requirement(Component[str]):
             # Python validation strategy
             return self.validation_fn(ctx)
         else:
-            # LLMaJ validation strategy. This includes ALora because the backend generate call will appropriately dispatch.
+            # LLMaJ validation strategy. This includes aLoRA because the backend generate call will appropriately dispatch.
             assert self.output_to_bool is not None
             last_output = ctx.last_output()
             assert isinstance(last_output, ModelOutputThunk), (

@@ -1,9 +1,8 @@
 name: Docs
 
-# Builds, validates, and deploys documentation to orphan deployment branches.
-# Mintlify reads from these branches — main stays clean of generated artifacts.
-#
-# See docs/PUBLISHING.md for the full architecture and strategy.
+# Builds, validates, and deploys Docusaurus documentation to GitHub Pages.
+# Fork (planetf1/mellea) → https://planetf1.github.io/mellea/ (baseUrl: /mellea/)
+# Upstream (generative-computing/mellea) → https://docs.mellea.ai (baseUrl: /)
 
 on:
   push:
@@ -15,6 +14,9 @@ on:
       - "tooling/docs-autogen/**"
       - ".github/workflows/docs-publish.yml"
 
+  # Fires for manually-created GitHub Releases only. Automated releases use
+  # GITHUB_TOKEN, which cannot trigger new workflow runs — those are handled
+  # by an explicit workflow_dispatch from the snapshot-docs job instead.
   release:
     types: [published]
 
@@ -33,18 +35,9 @@ on:
         description: "Deploy even from a non-main context (for testing)"
         type: boolean
         default: false
-      target_branch:
-        description: "Override deploy target branch (default: docs/preview)"
-        type: string
-        default: "docs/preview"
-      strict_validation:
-        description: "Fail the build if validation checks fail"
-        type: boolean
-        default: false
       release_tag:
         description: >-
-          Set to a release tag (e.g. `v0.6.0`) to run the
-          deploy-on-release flow. Used by release.sh.
+          Set to a release tag (e.g. v0.6.0) to run the deploy-on-release flow.
         type: string
         default: ""
 
@@ -57,6 +50,9 @@ concurrency:
 env:
   UV_FROZEN: "1"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # baseUrl: /mellea/ on fork, / on upstream
+  DOCS_BASE_URL: ${{ github.repository == 'generative-computing/mellea' && '/' || '/mellea/' }}
+  DOCS_SITE_URL: ${{ github.repository == 'generative-computing/mellea' && 'https://docs.mellea.ai' || 'https://planetf1.github.io' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -81,8 +77,19 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: Install dependencies
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "docs/package-lock.json"
+
+      - name: Install Python dependencies
         run: uv sync --frozen --all-extras --group dev
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: docs
 
       # -- Generate API documentation ------------------------------------------
 
@@ -102,17 +109,17 @@ jobs:
           set -o pipefail
           npx --yes markdownlint-cli "docs/docs/**/*.md" --config docs/docs/.markdownlint.json 2>&1 \
             | tee /tmp/markdownlint.log
-        continue-on-error: ${{ inputs.strict_validation != true }}
+        continue-on-error: true
 
       # -- Validate generated API docs -----------------------------------------
 
-      - name: Validate MDX syntax and links
-        id: validate_mdx
+      - name: Validate generated API docs
+        id: validate_api
         run: |
           set -o pipefail
-          uv run python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage --docs-root docs 2>&1 \
-            | tee /tmp/validate_mdx.log
-        continue-on-error: ${{ inputs.strict_validation != true }}
+          uv run python tooling/docs-autogen/validate.py docs/docs/api 2>&1 \
+            | tee /tmp/validate_api.log
+        continue-on-error: true
 
       - name: Audit API coverage
         id: audit_coverage
@@ -120,7 +127,7 @@ jobs:
           set -o pipefail
           uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 2>&1 \
             | tee /tmp/audit_coverage.log
-        continue-on-error: ${{ inputs.strict_validation != true }}
+        continue-on-error: true
 
       - name: Docstring quality gate
         id: quality_gate
@@ -129,11 +136,19 @@ jobs:
           uv run python tooling/docs-autogen/audit_coverage.py \
             --docs-dir docs/docs/api \
             --quality --fail-on-quality --threshold 100 \
-            --orphans \
             --output /tmp/quality_report.json 2>&1 \
             | tee /tmp/quality_gate.log
 
-      # -- Upload artifact for deploy job --------------------------------------
+      # -- Build Docusaurus site -----------------------------------------------
+
+      - name: Build Docusaurus site
+        id: build_site
+        run: npm run build
+        working-directory: docs
+        env:
+          DOCS_BASE_URL: ${{ env.DOCS_BASE_URL }}
+
+      # -- Upload artifacts ----------------------------------------------------
 
       - name: Upload quality report
         if: always()
@@ -143,176 +158,39 @@ jobs:
           path: /tmp/quality_report.json
           retention-days: 30
 
-      - name: Upload docs artifact
-        if: success() || (inputs.strict_validation != true)
+      - name: Upload built site artifact
+        if: success()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: docs-site
-          path: docs/docs/
+          path: docs/build/
           retention-days: 7
 
       # -- Write job summary ---------------------------------------------------
 
       - name: Write job summary
         if: always()
-        run: |
-          python3 - <<'PYEOF'
-          import os, re
-
-          def icon(outcome):
-              return "✅" if outcome == "success" else ("❌" if outcome == "failure" else "⏭️")
-
-          def read_log(path):
-              try:
-                  raw = open(path).read().strip()
-                  # Strip ANSI escape codes (colour output from uv/pytest etc.)
-                  return re.sub(r'\x1b\[[0-9;]*[mK]', '', raw)
-              except FileNotFoundError:
-                  return ""
-
-          markdownlint_outcome = os.environ.get("STEPS_MARKDOWNLINT_OUTCOME", "")
-          validate_outcome = os.environ.get("STEPS_VALIDATE_MDX_OUTCOME", "")
-          coverage_outcome = os.environ.get("STEPS_AUDIT_COVERAGE_OUTCOME", "")
-          quality_gate_outcome = os.environ.get("STEPS_QUALITY_GATE_OUTCOME", "")
-          lint_log = read_log("/tmp/markdownlint.log")
-          validate_log = read_log("/tmp/validate_mdx.log")
-          coverage_log = read_log("/tmp/audit_coverage.log")
-          quality_gate_log = read_log("/tmp/quality_gate.log")
-
-          # Count markdownlint issues (lines matching file:line:col format)
-          lint_issues = len([l for l in lint_log.splitlines() if re.match(r'.+:\d+:\d+ ', l)])
-          lint_detail = f"{lint_issues} issue(s)" if lint_issues else "no issues"
-
-          # Extract coverage stats from audit_coverage output
-          cov_pct = re.search(r"Coverage:\s+(\S+%)", coverage_log)
-          cov_sym = re.search(r"Documented:\s+(\d+)", coverage_log)
-          cov_tot = re.search(r"Total classes \+ functions:\s+(\d+)", coverage_log)
-          cov_detail = (
-              f"{cov_pct.group(1)} ({cov_sym.group(1)}/{cov_tot.group(1)} symbols)"
-              if cov_pct and cov_sym and cov_tot else ""
-          )
-
-          # Parse per-check error counts from validate output.
-          # Each check prints "N errors found" on the next line when it fails.
-          def parse_validate_detail(log):
-              counts = {}
-              for label, key in [
-                  ("Source links", "source"), ("MDX syntax", "syntax"),
-                  ("Internal links", "links"), ("Anchor collisions", "anchors"),
-                  ("Stale files", "stale"),
-              ]:
-                  m = re.search(rf"{label}: (?:PASS|FAIL)(?:\s+(\d+) errors found)?", log, re.DOTALL)
-                  if m:
-                      counts[key] = int(m.group(1)) if m.group(1) else 0
-              total = sum(counts.values())
-              if not total:
-                  return "no issues"
-              parts = []
-              if counts.get("syntax"):  parts.append(f"{counts['syntax']} syntax error(s)")
-              if counts.get("links"):   parts.append(f"{counts['links']} broken link(s)")
-              if counts.get("anchors"): parts.append(f"{counts['anchors']} anchor collision(s)")
-              if counts.get("source"):  parts.append(f"{counts['source']} source link error(s)")
-              if counts.get("stale"):   parts.append(f"{counts['stale']} stale file(s)")
-              return ", ".join(parts)
-
-          mdx_detail = parse_validate_detail(validate_log)
-
-          # Parse per-kind counts from the quality gate log.
-          # _print_quality_report emits section headers like:
-          #   "  Missing docstrings (12)"
-          #   "  Missing Args section (5)"
-          # Capture label -> count from those lines, then build a compact
-          # per-kind breakdown for the summary table cell.
-          kind_short = {
-              "Missing docstrings":       "missing",
-              "Short docstrings":         "short",
-              "Missing Args section":     "no_args",
-              "Missing Returns section":  "no_returns",
-              "Missing Yields section (generator)": "no_yields",
-              "Missing Raises section":   "no_raises",
-              "Missing class Args section": "no_class_args",
-              "Duplicate Args: in class + __init__ (Option C violation)": "dup_init_args",
-              "Param name mismatches (documented but not in signature)": "param_mismatch",
-              "TypedDict phantom fields (documented but not declared)": "td_phantom",
-              "TypedDict undocumented fields (declared but missing from Attributes:)": "td_undoc",
-              "Missing parameter type annotations (type absent from API docs)": "missing_param_type",
-              "Missing return type annotations (type absent from API docs)": "missing_return_type",
-              "Param type mismatch (docstring vs annotation)": "param_type_mismatch",
-              "Return type mismatch (docstring vs annotation)": "return_type_mismatch",
-          }
-          section_re = re.compile(r"^\s{2}(.+?)\s+\((\d+)\)\s*$", re.MULTILINE)
-          kind_counts = {}
-          for m in section_re.finditer(quality_gate_log):
-              label, count = m.group(1), int(m.group(2))
-              short = kind_short.get(label)
-              if short:
-                  kind_counts[short] = count
-
-          if kind_counts:
-              parts = [f"{v} {k}" for k, v in kind_counts.items()]
-              quality_gate_detail = ", ".join(parts)
-          else:
-              # Fall back to the summary annotation message
-              qm = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", quality_gate_log)
-              quality_gate_detail = re.sub(r"\s*—\s*see job summary.*$", "", qm.group(2)) if qm else ""
-
-          CONTRIB_URL = (
-              "https://github.com/generative-computing/mellea/blob/main"
-              "/docs/CONTRIBUTING_DOCS.md"
-          )
-          REPO = os.environ.get("GITHUB_REPOSITORY", "")
-          RUN_ID = os.environ.get("GITHUB_RUN_ID", "")
-          ARTIFACT_URL = f"https://github.com/{REPO}/actions/runs/{RUN_ID}#artifacts"
-
-          lines = [
-              "## Docs Build — Validation Summary\n",
-              "| Check | Result | Details |",
-              "|-------|--------|---------|",
-              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome} | {lint_detail} |",
-              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome} | {mdx_detail} |",
-              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome} | {cov_detail} |",
-              f"| Docstring Quality | {icon(quality_gate_outcome)} {quality_gate_outcome} | {quality_gate_detail} |",
-          ]
-          lines.append("")
-
-          # When the quality gate fails, surface a direct link to the fix reference.
-          # Per-kind Ref: URLs in the log output are inside a ```text``` block and
-          # don't render as links there.
-          if quality_gate_outcome == "failure":
-              lines += [
-                  "> ❌ **Docstring quality gate failed.**  "
-                  f"See the [CI docstring checks reference]({CONTRIB_URL}#ci-docstring-checks-reference) "
-                  "for per-kind fix instructions, or expand **Docstring quality details** below for the full list.  \n"
-                  f"> The full machine-readable report is available as the [`docstring-quality-report` artifact]({ARTIFACT_URL}).",
-                  "",
-              ]
-
-          for title, log, limit in [
-              ("Markdownlint output", lint_log, 5_000),
-              ("MDX validation output", validate_log, 5_000),
-              ("API coverage output", coverage_log, 5_000),
-              ("Docstring quality details", quality_gate_log, 1_000_000),
-          ]:
-              if log:
-                  lines += [
-                      f"<details><summary>{title}</summary>\n",
-                      "```text",
-                      log[:limit] + (" [truncated]" if len(log) > limit else ""),
-                      "```",
-                      "</details>\n",
-                  ]
-
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-              f.write("\n".join(lines))
-          PYEOF
         env:
-          STEPS_MARKDOWNLINT_OUTCOME: ${{ steps.markdownlint.outcome }}
-          STEPS_VALIDATE_MDX_OUTCOME: ${{ steps.validate_mdx.outcome }}
-          STEPS_AUDIT_COVERAGE_OUTCOME: ${{ steps.audit_coverage.outcome }}
-          STEPS_QUALITY_GATE_OUTCOME: ${{ steps.quality_gate.outcome }}
+          MARKDOWNLINT_OUTCOME: ${{ steps.markdownlint.outcome }}
+          VALIDATE_API_OUTCOME: ${{ steps.validate_api.outcome }}
+          AUDIT_COVERAGE_OUTCOME: ${{ steps.audit_coverage.outcome }}
+          QUALITY_GATE_OUTCOME: ${{ steps.quality_gate.outcome }}
+          BUILD_SITE_OUTCOME: ${{ steps.build_site.outcome }}
+        run: |
+          {
+            echo "## Docs Build Summary"
+            echo ""
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            echo "| Markdownlint | ${MARKDOWNLINT_OUTCOME} |"
+            echo "| API Validation | ${VALIDATE_API_OUTCOME} |"
+            echo "| API Coverage | ${AUDIT_COVERAGE_OUTCOME} |"
+            echo "| Docstring Quality | ${QUALITY_GATE_OUTCOME} |"
+            echo "| Docusaurus Build | ${BUILD_SITE_OUTCOME} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
-  # Deploy to orphan branch
+  # Deploy to GitHub Pages
   # ---------------------------------------------------------------------------
   deploy:
     needs: build-and-validate
@@ -321,31 +199,22 @@ jobs:
       contents: write
     timeout-minutes: 10
 
-    # Deploy on: push to main, release event, force_publish or release_tag
-    # via dispatch, or PRs labelled "docs-preview" (→ docs/preview branch).
-    # The runtime latest-final-by-semver check below prevents older-branch
-    # patches from overwriting production docs.
+    # Deploy on: push to main, release event, force_publish via dispatch
     if: >-
       github.event_name == 'push' ||
       github.event_name == 'release' ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'docs-preview')) ||
       (github.event_name == 'workflow_dispatch' && (inputs.force_publish || inputs.release_tag != ''))
 
     steps:
-      - name: Download docs artifact
+      - name: Download site artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: docs-site
           path: docs-site/
 
-      # For release events, confirm the published tag is the latest final by
-      # semver across all release branches. Without this, publishing v0.6.1
-      # after v0.7.0 already exists would incorrectly downgrade docs/production
-      # to the older minor's docs.
+      # For release events, confirm the published tag is the latest final by semver.
       - name: Check release is latest final
         id: latest_check
-        # Fail open: deploy if the check succeeded (true) or a transient API
-        # error left the output empty. Only skip on an explicit 'false'.
         continue-on-error: true
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         env:
@@ -380,8 +249,6 @@ jobs:
               print(f"error: current tag {current} is not a valid version")
               sys.exit(1)
 
-          # include the current release itself (the API may not include it
-          # yet if eventing races with the release event)
           candidates.append((current_version, current))
           latest_version, latest_tag = max(candidates)
           is_latest = (latest_tag == current or latest_version == current_version)
@@ -392,90 +259,37 @@ jobs:
           print(f"current={current} latest={latest_tag} is_latest={is_latest}")
           PY
 
-      - name: Determine target branch
-        id: target
-        run: |
-          if [ "$EVENT_NAME" = "release" ] || [ -n "${INPUTS_RELEASE_TAG}" ]; then
-            echo "branch=docs/production" >> "$GITHUB_OUTPUT"
-          elif [ "$EVENT_NAME" = "pull_request" ]; then
-            echo "branch=docs/preview" >> "$GITHUB_OUTPUT"
-          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUTS_TARGET_BRANCH}" ]; then
-            echo "branch=${INPUTS_TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
-          else
-            echo "branch=docs/staging" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUTS_TARGET_BRANCH: ${{ inputs.target_branch }}
-          INPUTS_RELEASE_TAG: ${{ inputs.release_tag }}
-
-      - name: Add DO NOT EDIT warning
-        run: |
-          cat > docs-site/_DO_NOT_EDIT.md << 'EOF'
-          # DO NOT EDIT THIS BRANCH
-
-          This branch is **fully automated**. Every file here is generated by
-          the `docs-publish` GitHub Actions workflow and force-pushed on each run.
-
-          **Any manual edits will be overwritten without warning.**
-
-          To change documentation:
-          - Static guides: edit files under `docs/docs/` on `main`
-          - API reference: improve docstrings in Python source (`mellea/`, `cli/`)
-          - Pipeline config: see `tooling/docs-autogen/` on `main`
-
-          For details, see `docs/PUBLISHING.md` on `main`.
-          EOF
-
-      - name: Deploy to ${{ steps.target.outputs.branch }}
-        # Skip production deploy when a release is not the latest final by
-        # semver (e.g. a patch on an older release branch). The latest_check
-        # step runs for both `release` events and workflow_dispatch with
-        # release_tag set; either path can request the skip.
+      - name: Deploy to GitHub Pages (gh-pages branch)
         if: >-
           steps.latest_check.conclusion == 'skipped' ||
           steps.latest_check.outputs.is_latest_final != 'false'
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: ${{ steps.target.outputs.branch }}
+          publish_branch: gh-pages
           publish_dir: docs-site/
           force_orphan: true
+          cname: ${{ github.repository == 'generative-computing/mellea' && 'docs.mellea.ai' || '' }}
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: |
             docs: publish from ${{ github.sha }}
 
             Branch:  ${{ github.ref_name }}
-            Trigger: ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) }}
+            Trigger: ${{ github.event_name }}
             Run:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Write deploy summary
         if: always()
         run: |
-          TARGET="${STEPS_TARGET_OUTPUTS_BRANCH}"
-          REPO="${GITHUB_REPOSITORY}"
-          SHA="${GITHUB_SHA}"
-          if [ "${JOB_STATUS}" = "success" ]; then
-            STATUS="✅ Deployed"
-            DETAIL="Published to [\`${TARGET}\`](https://github.com/${REPO}/tree/${TARGET})"
-          else
-            STATUS="❌ Failed"
-            DETAIL="Attempted deploy to \`${TARGET}\`"
-          fi
-          cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          ## Docs Deploy — ${STATUS}
-
-          | | |
-          |-|-|
-          | Branch | \`${TARGET}\` |
-          | Source | \`${SHA:0:7}\` |
-          | Trigger | ${EVENT_NAME}${PR_SUFFIX} |
-
-          ${DETAIL}
-          EOF
+          {
+            echo "## Docs Deploy"
+            echo ""
+            echo "| | |"
+            echo "|-|-|"
+            echo "| Branch | \`gh-pages\` |"
+            echo "| Source | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Base URL | \`${DOCS_BASE_URL}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
-          STEPS_TARGET_OUTPUTS_BRANCH: ${{ steps.target.outputs.branch }}
-          JOB_STATUS: ${{ job.status }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_SUFFIX: "${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) }}"
+          DOCS_BASE_URL: ${{ env.DOCS_BASE_URL }}

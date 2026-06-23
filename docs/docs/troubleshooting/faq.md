@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/troubleshooting/faq"
 title: "FAQ"
 description: "Answers to frequently asked questions about Mellea installation, backends, and generative functions."
 # diataxis: reference
@@ -74,14 +73,14 @@ m = MelleaSession(
 ## Can I use Mellea without Ollama?
 
 Yes. Ollama is the default backend but not the only one. Mellea ships with
-backends for OpenAI-compatible APIs, HuggingFace local inference, IBM WatsonX,
+backends for OpenAI-compatible APIs, Hugging Face local inference, IBM WatsonX,
 and LiteLLM (which itself proxies dozens of providers).
 
 Install the backend you need:
 
 ```bash
 pip install "mellea[litellm]"    # LiteLLM multi-provider
-pip install "mellea[hf]"         # HuggingFace / local inference
+pip install "mellea[hf]"         # Hugging Face / local inference
 pip install "mellea[watsonx]"    # IBM WatsonX
 ```
 
@@ -245,8 +244,8 @@ attributes on the spans.
 For a quick local inspection without a trace backend, enable console tracing:
 
 ```bash
-export MELLEA_TRACE_BACKEND=true
-export MELLEA_TRACE_CONSOLE=true
+export MELLEA_TRACES_ENABLED=true
+export MELLEA_TRACES_CONSOLE=true
 python your_script.py
 ```
 

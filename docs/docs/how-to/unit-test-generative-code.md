@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/how-to/unit-test-generative-code"
 title: "Unit Test Generative Code"
 description: "Write reliable tests for @generative functions using pytest markers and output validation."
 # diataxis: how-to
@@ -8,7 +7,8 @@ description: "Write reliable tests for @generative functions using pytest marker
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally, `pytest` installed.
 
-> **Contributing to Mellea itself?** See the [Contributing Guide](../community/contributing-guide#testing)
+> **Contributing to Mellea itself?** See
+> [`test/README.md`](https://github.com/generative-computing/mellea/blob/main/test/README.md)
 > for Mellea's own test markers, fixtures, and CI setup.
 
 Testing generative code requires you to separate concerns: some assertions are
@@ -220,8 +220,9 @@ def test_instruct_returns_string(session):
 
 ### Inspecting logged model options
 
-`_generate_log.model_options` lets you confirm that options you passed were
-forwarded to the model. This is useful when testing custom model option handling:
+`result.generate_log.model_options` lets you confirm that options you passed
+were forwarded to the model. This is useful when testing custom model option
+handling:
 
 ```python
 # Requires: mellea, pytest
@@ -239,12 +240,12 @@ def test_model_options_forwarded(session):
         "Write a one-sentence summary.",
         model_options=model_options,
     )
-    assert "custom_param" in res._generate_log.model_options
+    assert "custom_param" in res.generate_log.model_options
 ```
 
-> **Note:** `_generate_log` is an internal attribute. Its structure may change
-> between Mellea versions. Use it for debugging and option-forwarding tests, not
-> as a primary correctness check.
+> **Note:** `GenerateLog` is recorded for every generation, but its field set
+> may change between Mellea versions. Use it for debugging and
+> option-forwarding tests, not as a primary correctness check.
 
 ## Using `simple_validate` for deterministic checks
 
@@ -436,5 +437,5 @@ pytest -m qualitative
   `Requirement`, `simple_validate`, and `check` interact with the IVR loop
 - [Handling Exceptions](../how-to/handling-exceptions) —
   catch and diagnose errors that occur during generation
-- [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
+- [Evaluate with LLM-as-a-Judge](/how-to/evaluate-with-llm-as-a-judge) —
   the `Requirement`-based approach for inline judge evaluation

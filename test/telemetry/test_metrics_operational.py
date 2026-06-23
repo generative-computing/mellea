@@ -6,6 +6,8 @@ Unit tests verify no-op behaviour when metrics are disabled.
 
 import pytest
 
+from test.telemetry.conftest import reset_metrics_state
+
 try:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -24,14 +26,9 @@ def clean_metrics_env(monkeypatch):
     """Enable metrics and reset all module state for each test."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
-
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
     yield
-    importlib.reload(mellea.telemetry.metrics)
+    reset_metrics_state()
 
 
 def _setup_in_memory_provider(metrics_module):
@@ -312,12 +309,10 @@ def test_record_tool_call_multiple_tools(clean_metrics_env):
 
 def test_record_sampling_attempt_noop_when_disabled(monkeypatch):
     """record_sampling_attempt is a no-op when metrics are disabled."""
-    import importlib
-
     import mellea.telemetry.metrics as m
 
-    importlib.reload(m)
-    monkeypatch.setattr(m, "_METRICS_ENABLED", False)
+    reset_metrics_state()
+    monkeypatch.setattr(m, "_meter", None)
 
     # Should not raise and should not create any counter
     m.record_sampling_attempt("RejectionSamplingStrategy")
@@ -326,12 +321,10 @@ def test_record_sampling_attempt_noop_when_disabled(monkeypatch):
 
 def test_record_sampling_outcome_noop_when_disabled(monkeypatch):
     """record_sampling_outcome is a no-op when metrics are disabled."""
-    import importlib
-
     import mellea.telemetry.metrics as m
 
-    importlib.reload(m)
-    monkeypatch.setattr(m, "_METRICS_ENABLED", False)
+    reset_metrics_state()
+    monkeypatch.setattr(m, "_meter", None)
 
     m.record_sampling_outcome("RejectionSamplingStrategy", success=True)
     assert m._sampling_successes_counter is None
@@ -339,12 +332,10 @@ def test_record_sampling_outcome_noop_when_disabled(monkeypatch):
 
 def test_record_requirement_check_noop_when_disabled(monkeypatch):
     """record_requirement_check is a no-op when metrics are disabled."""
-    import importlib
-
     import mellea.telemetry.metrics as m
 
-    importlib.reload(m)
-    monkeypatch.setattr(m, "_METRICS_ENABLED", False)
+    reset_metrics_state()
+    monkeypatch.setattr(m, "_meter", None)
 
     m.record_requirement_check("LLMaJRequirement")
     assert m._requirement_checks_counter is None
@@ -352,12 +343,10 @@ def test_record_requirement_check_noop_when_disabled(monkeypatch):
 
 def test_record_requirement_failure_noop_when_disabled(monkeypatch):
     """record_requirement_failure is a no-op when metrics are disabled."""
-    import importlib
-
     import mellea.telemetry.metrics as m
 
-    importlib.reload(m)
-    monkeypatch.setattr(m, "_METRICS_ENABLED", False)
+    reset_metrics_state()
+    monkeypatch.setattr(m, "_meter", None)
 
     m.record_requirement_failure("LLMaJRequirement", "reason")
     assert m._requirement_failures_counter is None
@@ -365,12 +354,10 @@ def test_record_requirement_failure_noop_when_disabled(monkeypatch):
 
 def test_record_tool_call_noop_when_disabled(monkeypatch):
     """record_tool_call is a no-op when metrics are disabled."""
-    import importlib
-
     import mellea.telemetry.metrics as m
 
-    importlib.reload(m)
-    monkeypatch.setattr(m, "_METRICS_ENABLED", False)
+    reset_metrics_state()
+    monkeypatch.setattr(m, "_meter", None)
 
     m.record_tool_call("search", "success")
     assert m._tool_calls_counter is None

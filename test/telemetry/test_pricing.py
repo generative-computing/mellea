@@ -1,27 +1,21 @@
 """Unit tests for the litellm-backed pricing module."""
 
-import importlib
 import json
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from mellea.telemetry import pricing
+from test.telemetry.conftest import reset_pricing_state
 
 
 @pytest.fixture()
 def restore_pricing(monkeypatch):
-    """Restore litellm import state and reload pricing module after each test."""
-    original_litellm = sys.modules.get("litellm", ...)
+    """Restore pricing module state after each test."""
     yield
     monkeypatch.delenv("MELLEA_PRICING_ENABLED", raising=False)
     monkeypatch.delenv("MELLEA_PRICING_FILE", raising=False)
-    if original_litellm is ...:
-        sys.modules.pop("litellm", None)
-    else:
-        sys.modules["litellm"] = original_litellm
-    importlib.reload(pricing)
+    reset_pricing_state()
 
 
 @pytest.fixture()
@@ -45,16 +39,16 @@ def mock_litellm_pricing():
 def test_tri_state_false_disables_explicitly(monkeypatch, restore_pricing):
     """MELLEA_PRICING_ENABLED=false disables pricing regardless of litellm."""
     monkeypatch.setenv("MELLEA_PRICING_ENABLED", "false")
-    monkeypatch.setitem(sys.modules, "litellm", MagicMock())
-    importlib.reload(pricing)
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", True)
+    reset_pricing_state()
     assert pricing._PRICING_ENABLED is False
 
 
 def test_tri_state_true_with_litellm_enables(monkeypatch, restore_pricing):
     """MELLEA_PRICING_ENABLED=true with litellm present enables pricing."""
     monkeypatch.setenv("MELLEA_PRICING_ENABLED", "true")
-    monkeypatch.setitem(sys.modules, "litellm", MagicMock())
-    importlib.reload(pricing)
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", True)
+    reset_pricing_state()
     assert pricing._PRICING_ENABLED is True
 
 
@@ -63,17 +57,17 @@ def test_tri_state_true_without_litellm_warns_and_disables(
 ):
     """MELLEA_PRICING_ENABLED=true without litellm emits a warning and disables."""
     monkeypatch.setenv("MELLEA_PRICING_ENABLED", "true")
-    monkeypatch.setitem(sys.modules, "litellm", None)
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", False)
     with pytest.warns(UserWarning, match="litellm is not installed"):
-        importlib.reload(pricing)
+        reset_pricing_state()
     assert pricing._PRICING_ENABLED is False
 
 
 def test_tri_state_unset_with_litellm_auto_enables(monkeypatch, restore_pricing):
     """Unset MELLEA_PRICING_ENABLED with litellm present auto-enables pricing."""
     monkeypatch.delenv("MELLEA_PRICING_ENABLED", raising=False)
-    monkeypatch.setitem(sys.modules, "litellm", MagicMock())
-    importlib.reload(pricing)
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", True)
+    reset_pricing_state()
     assert pricing._PRICING_ENABLED is True
 
 
@@ -82,8 +76,8 @@ def test_tri_state_unset_without_litellm_silent_disable(
 ):
     """Unset MELLEA_PRICING_ENABLED without litellm silently disables (no warning)."""
     monkeypatch.delenv("MELLEA_PRICING_ENABLED", raising=False)
-    monkeypatch.setitem(sys.modules, "litellm", None)
-    importlib.reload(pricing)
+    monkeypatch.setattr(pricing, "_LITELLM_AVAILABLE", False)
+    reset_pricing_state()
     assert pricing._PRICING_ENABLED is False
     assert not any("litellm is not installed" in str(w.message) for w in recwarn.list)
 

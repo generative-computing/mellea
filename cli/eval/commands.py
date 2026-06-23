@@ -71,7 +71,7 @@ def eval_run(
         m eval run tests.jsonl --backend ollama --model granite3.3:2b
 
     See Also:
-        guide: evaluation-and-observability/evaluate-with-llm-as-a-judge
+        guide: how-to/evaluate-with-llm-as-a-judge
 
     Args:
         test_files: Paths to JSON/JSONL files containing test cases.

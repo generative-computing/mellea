@@ -30,6 +30,9 @@ class ModelOption:
         THINKING (str): Sentinel key for enabling/configuring reasoning/thinking mode.
         SEED (str): Sentinel key for the random seed for reproducible generation.
         STREAM (str): Sentinel key for enabling streaming responses.
+        STREAM_TIMEOUT (str): Sentinel key for the per-chunk streaming timeout in seconds
+            (applied to every chunk, including time-to-first-token).
+            ``None`` disables the timeout. Defaults to ``120.0`` when not set.
         STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
             encountered in the model output, cause generation to halt.
     """
@@ -45,8 +48,27 @@ class ModelOption:
     TEMPERATURE = "temperature"
     CONTEXT_WINDOW = "@@@context_window@@@"
     THINKING = "@@@thinking@@@"
+    """Enable or configure reasoning/thinking mode.
+
+    Accepted values:
+
+    * ``True`` — sets ``chat_template_kwargs.enable_thinking=True`` (vLLM,
+      Ollama OpenAI-compat) **and** ``reasoning_effort="medium"`` (OpenAI
+      o-series, DeepSeek). Use this to engage reasoning on vLLM-served models
+      such as Qwen3, Gemma 4, and GLM-4.5 — ``"medium"`` alone is silently
+      ignored by those servers.
+    * ``False`` — sets ``chat_template_kwargs.enable_thinking=False`` to
+      suppress the think block. ``reasoning_effort`` is not sent (passing
+      ``False`` would be an invalid value for OpenAI).
+    * ``"low"`` / ``"medium"`` / ``"high"`` — passed directly as
+      ``reasoning_effort`` (OpenAI/DeepSeek only; no-op on vLLM).
+    """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
+    STREAM_TIMEOUT = "@@@stream_timeout@@@"
+    """Per-chunk timeout in seconds (applied to every chunk, including time-to-first-token).
+    If no chunk arrives within this window the stream is aborted with ``TimeoutError``.
+    ``None`` disables the timeout. Defaults to ``120.0`` seconds when not set."""
     STOP_SEQUENCES = "@@@stop_sequences@@@"
     """Must be a `list[str]`. Generation halts when the model emits any of these strings.
 

@@ -1,10 +1,11 @@
 """Unit tests for Ollama backend pure-logic helpers — no Ollama server required.
 
 Covers _simplify_and_merge, _make_backend_specific_and_remove,
-chat_response_delta_merge, and generate_from_raw exception propagation.
+chat_response_delta_merge, timeout wiring, and generate_from_raw
+empty-response handling (#599).
 """
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import ollama
 import pytest
@@ -15,25 +16,10 @@ from mellea.core import CBlock, ModelOutputThunk
 from mellea.stdlib.context import SimpleContext
 
 
-def _make_backend(
-    model_options: dict | None = None, timeout: float | None = None
-) -> OllamaModelBackend:
-    """Return an OllamaModelBackend with all network calls patched."""
-    with (
-        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
-        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
-        patch("mellea.backends.ollama.ollama.Client", return_value=MagicMock()),
-        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
-    ):
-        return OllamaModelBackend(
-            model_id="granite3.3:8b", model_options=model_options, timeout=timeout
-        )
-
-
 @pytest.fixture
-def backend():
+def backend(mock_ollama_backend):
     """Return an OllamaModelBackend with no pre-set model options."""
-    return _make_backend()
+    return mock_ollama_backend(model_id="granite3.3:8b")
 
 
 # --- Map consistency ---
@@ -46,6 +32,68 @@ def test_from_mellea_keys_are_subset_of_to_mellea_values(backend):
     assert from_keys <= to_values, (
         f"from_mellea has keys absent from to_mellea values: {from_keys - to_values}"
     )
+
+
+# --- _strip_data_uri_prefix ---
+
+
+def test_strip_data_uri_prefix_removes_prefix():
+    """_strip_data_uri_prefix removes data URI prefix from base64 strings."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = [
+        "data:image/png;base64,iVBORw0KGgo...",
+        "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+    ]
+    result = _strip_data_uri_prefix(images)
+    assert result[0] == "iVBORw0KGgo..."
+    assert result[1] == "/9j/4AAQSkZJRg..."
+
+
+def test_strip_data_uri_prefix_handles_already_stripped():
+    """_strip_data_uri_prefix leaves already-stripped base64 strings unchanged."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = ["iVBORw0KGgo...", "/9j/4AAQSkZJRg..."]
+    result = _strip_data_uri_prefix(images)
+    assert result[0] == "iVBORw0KGgo..."
+    assert result[1] == "/9j/4AAQSkZJRg..."
+
+
+def test_strip_data_uri_prefix_mixed_input():
+    """_strip_data_uri_prefix handles mixed prefixed and unprefixed strings."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = [
+        "data:image/png;base64,iVBORw0KGgo...",
+        "already-stripped-base64",
+        "data:image/webp;base64,UklGRiQAAABXRUJQ...",
+    ]
+    result = _strip_data_uri_prefix(images)
+    assert result[0] == "iVBORw0KGgo..."
+    assert result[1] == "already-stripped-base64"
+    assert result[2] == "UklGRiQAAABXRUJQ..."
+
+
+def test_strip_data_uri_prefix_empty_list():
+    """_strip_data_uri_prefix handles empty list."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    result = _strip_data_uri_prefix([])
+    assert result == []
+
+
+def test_strip_data_uri_prefix_preserves_order():
+    """_strip_data_uri_prefix preserves the order of images."""
+    from mellea.backends.ollama import _strip_data_uri_prefix
+
+    images = [
+        "data:image/png;base64,first",
+        "data:image/png;base64,second",
+        "data:image/png;base64,third",
+    ]
+    result = _strip_data_uri_prefix(images)
+    assert result == ["first", "second", "third"]
 
 
 # --- _simplify_and_merge ---
@@ -73,9 +121,11 @@ def test_simplify_and_merge_remaps_num_predict(backend):
     assert result[ModelOption.MAX_NEW_TOKENS] == 128
 
 
-def test_simplify_and_merge_per_call_overrides_backend():
+def test_simplify_and_merge_per_call_overrides_backend(mock_ollama_backend):
     # Backend sets num_predict=128; per-call value of 256 must win.
-    b = _make_backend(model_options={"num_predict": 128})
+    b = mock_ollama_backend(
+        model_id="granite3.3:8b", model_options={"num_predict": 128}
+    )
     result = b._simplify_and_merge({"num_predict": 256})
     assert result[ModelOption.MAX_NEW_TOKENS] == 256
 
@@ -157,8 +207,8 @@ def test_delta_merge_thinking_concatenated():
 # --- timeout wiring ---
 
 
-def test_timeout_default_not_passed_to_clients():
-    """When timeout is omitted, it must not be forwarded to the Ollama clients."""
+def test_timeout_default_forwarded_to_clients():
+    """When timeout is omitted, the 300 s default must be forwarded to both Ollama clients."""
     with (
         patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
         patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
@@ -166,6 +216,22 @@ def test_timeout_default_not_passed_to_clients():
         patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
     ):
         OllamaModelBackend(model_id="granite3.3:8b")
+
+    _, sync_kwargs = mock_client.call_args
+    assert sync_kwargs.get("timeout") == 300.0
+    _, async_kwargs = mock_async_client.call_args
+    assert async_kwargs.get("timeout") == 300.0
+
+
+def test_timeout_none_not_forwarded_to_clients():
+    """Explicit timeout=None must omit the key — preserves the upstream SDK default (no timeout)."""
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client") as mock_client,
+        patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client,
+    ):
+        OllamaModelBackend(model_id="granite3.3:8b", timeout=None)
 
     _, sync_kwargs = mock_client.call_args
     assert "timeout" not in sync_kwargs
@@ -189,9 +255,9 @@ def test_timeout_forwarded_to_sync_and_async_clients():
     assert async_kwargs.get("timeout") == 12.5
 
 
-def test_timeout_forwarded_to_new_async_clients_per_event_loop():
+def test_timeout_forwarded_to_new_async_clients_per_event_loop(mock_ollama_backend):
     """Newly created AsyncClients (one per event loop) must inherit the timeout."""
-    backend = _make_backend(timeout=7.0)
+    backend = mock_ollama_backend(model_id="granite3.3:8b", timeout=7.0)
     with patch(
         "mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()
     ) as mock_async_client:
@@ -202,55 +268,109 @@ def test_timeout_forwarded_to_new_async_clients_per_event_loop():
     assert async_kwargs.get("timeout") == 7.0
 
 
-# --- generate_from_raw exception propagation (#597) ---
+# --- generate_from_raw empty-response handling (#599) ---
 
 
-async def test_generate_from_raw_propagates_exception(backend):
-    """Exceptions from individual Ollama requests must propagate to the caller.
+async def test_generate_from_raw_empty_response_soft_fails(mock_ollama_backend) -> None:
+    """Empty done Ollama response soft-fails instead of raising.
 
-    Regression test for #597: previously, exceptions were silently converted to
-    ModelOutputThunk(value="") via asyncio.gather(return_exceptions=True).
+    The result list must have the same length as the input actions so that
+    sibling results from the same gather call are not discarded. The failing
+    slot must have value="" and carry the RuntimeError on `mot.error`.
     """
-    error = ConnectionError("ollama server unavailable")
-    mock_async_client = MagicMock()
-    mock_async_client.generate = AsyncMock(side_effect=error)
+    backend = mock_ollama_backend()
+    empty = ollama.GenerateResponse(response="", done=True)
 
-    with patch.object(
-        type(backend),
-        "_async_client",
-        new_callable=PropertyMock,
-        return_value=mock_async_client,
+    with (
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
+        patch(
+            "mellea.backends.ollama.asyncio.gather", new=AsyncMock(return_value=[empty])
+        ),
     ):
-        with pytest.raises(ConnectionError, match="ollama server unavailable"):
-            await backend.generate_from_raw(
-                actions=[CBlock(value="what is 1+1?")], ctx=SimpleContext()
-            )
+        results = await backend.generate_from_raw(
+            actions=[CBlock("What is 1+1?")], ctx=SimpleContext()
+        )
 
-
-async def test_generate_from_raw_multi_action_fail_fast(backend):
-    """Any failure in a multi-action batch raises immediately; no partial results.
-
-    Documents the all-or-nothing batch semantics introduced by #597. Previously
-    the failed slot was silently replaced with ModelOutputThunk(value="") and
-    the caller received a partial list. Now the first exception propagates and
-    the caller receives nothing.
-    """
-    mock_async_client = MagicMock()
-    mock_async_client.generate = AsyncMock(
-        side_effect=ConnectionError("request failed")
+    assert len(results) == 1, (
+        "result list must match action count even on empty response"
+    )
+    assert results[0].value == "", "empty-response slot should have value=''"
+    err = results[0].error
+    assert isinstance(err, RuntimeError), (
+        f"expected RuntimeError on mot.error, got {err!r}"
+    )
+    assert "599" in str(err), "error message should reference issue #599"
+    assert "16326" in str(err), "error message should reference upstream Ollama issue"
+    assert results[0].cancelled is False, (
+        "soft-fail must not flip the cancelled flag — it is a sibling channel"
     )
 
-    with patch.object(
-        type(backend),
-        "_async_client",
-        new_callable=PropertyMock,
-        return_value=mock_async_client,
+
+async def test_generate_from_raw_thinking_response_not_flagged(
+    mock_ollama_backend,
+) -> None:
+    """A thinking-model response with response="" and non-empty thinking is not an error.
+
+    Thinking models legitimately return an empty response string alongside a non-empty
+    thinking field — this must not be treated as an empty-response soft-fail.
+    """
+    backend = mock_ollama_backend()
+    thinking_response = ollama.GenerateResponse(
+        response="", thinking="Let me work this out...", done=True
+    )
+
+    with (
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
+        patch(
+            "mellea.backends.ollama.asyncio.gather",
+            new=AsyncMock(return_value=[thinking_response]),
+        ),
     ):
-        with pytest.raises(ConnectionError):
-            await backend.generate_from_raw(
-                actions=[CBlock("a"), CBlock("b"), CBlock("c")], ctx=SimpleContext()
-            )
+        results = await backend.generate_from_raw(
+            actions=[CBlock("What is 1+1?")], ctx=SimpleContext()
+        )
+
+    assert len(results) == 1
+    assert results[0].error is None, (
+        "thinking-only response should not be flagged as a model-load race"
+    )
+
+
+async def test_generate_from_raw_preserves_sibling_results_on_empty(
+    mock_ollama_backend,
+) -> None:
+    """One empty response in a batch of three does not discard the other two results."""
+    backend = mock_ollama_backend()
+    good = ollama.GenerateResponse(
+        response="2", done=True, eval_count=1, prompt_eval_count=5
+    )
+    empty = ollama.GenerateResponse(response="", done=True)
+
+    with (
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
+        patch(
+            "mellea.backends.ollama.asyncio.gather",
+            new=AsyncMock(return_value=[good, empty, good]),
+        ),
+    ):
+        results = await backend.generate_from_raw(
+            actions=[CBlock("q1"), CBlock("q2"), CBlock("q3")], ctx=SimpleContext()
+        )
+
+    assert len(results) == 3, "all three slots should be returned"
+    assert results[0].value == "2"
+    assert results[0].error is None
+    assert results[1].value == ""
+    assert results[1].error is not None
+    assert results[2].value == "2"
+    assert results[2].error is None
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+"""Unit tests for Ollama backend pure-logic helpers — no Ollama server required.
+
+Covers _simplify_and_merge, _make_backend_specific_and_remove,
+chat_response_delta_merge, _strip_data_uri_prefix, and generate_from_raw exception propagation.
+"""

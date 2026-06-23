@@ -59,7 +59,10 @@ def _build_policies() -> dict[str, Any]:
         "generation_pre_call": HookPayloadPolicy(
             writable_fields=frozenset({"model_options", "tool_calls", "format"})
         ),
-        # generation_post_call: observe-only
+        "generation_batch_pre_call": HookPayloadPolicy(
+            writable_fields=frozenset({"model_options", "tool_calls", "format"})
+        ),
+        # generation_post_call, generation_batch_post_call: observe-only
         # Validation
         "validation_pre_check": HookPayloadPolicy(
             writable_fields=frozenset({"requirements", "model_options"})

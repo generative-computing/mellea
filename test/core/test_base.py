@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import CBlock, Component, ImageBlock, ModelOutputThunk
+from mellea.core import CBlock, Component, ImageBlock, ImageUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Message
 
 
@@ -125,6 +125,47 @@ def test_image_block_invalid_value_raises():
         ImageBlock(value="not-a-png")
 
 
+# --- ImageUrlBlock ---
+
+
+def test_image_url_block_valid_https():
+    block = ImageUrlBlock("https://example.com/image.png")
+    assert block.value == "https://example.com/image.png"
+
+
+def test_image_url_block_valid_http():
+    block = ImageUrlBlock("http://example.com/image.png")
+    assert block.value == "http://example.com/image.png"
+
+
+def test_image_url_block_invalid_scheme_raises():
+    with pytest.raises(ValueError, match="http"):
+        ImageUrlBlock("ftp://example.com/image.png")
+
+
+def test_image_url_block_base64_raises():
+    b64 = _make_png_b64()
+    with pytest.raises(ValueError, match="http"):
+        ImageUrlBlock(b64)
+
+
+def test_message_accepts_image_url_block():
+    from mellea.stdlib.components import Message
+
+    block = ImageUrlBlock("https://example.com/cat.png")
+    msg = Message("user", "look at this", images=[block])
+    assert msg.images == [block]
+
+
+def test_message_mixed_image_types():
+    from mellea.stdlib.components import Message
+
+    url_block = ImageUrlBlock("https://example.com/cat.png")
+    b64_block = ImageBlock(_make_png_b64())
+    msg = Message("user", "two images", images=[url_block, b64_block])
+    assert len(msg.images) == 2  # type: ignore[arg-type]
+
+
 # --- ModelOutputThunk._copy_from ---
 
 
@@ -187,6 +228,51 @@ def test_mot_deep_copy_clones_generation():
     assert deepcopied.generation.provider == "test-provider"
     assert deepcopied.generation.streaming is True
     assert deepcopied.generation.ttfb_ms == 42.0
+
+
+# --- Public error / generate_log surface ---
+
+
+def test_mot_generate_log_property_aliases_private_attr() -> None:
+    """`mot.generate_log` returns the same object as `_generate_log`."""
+    from mellea.core.base import GenerateLog
+
+    mot = ModelOutputThunk(value="x")
+    assert mot.generate_log is None
+    glog = GenerateLog()
+    mot._generate_log = glog
+    assert mot.generate_log is glog
+
+
+def test_mot_error_and_cancelled_are_independent_channels() -> None:
+    """Setting `_error` must not flip `cancelled`, and vice versa."""
+    soft_failed = ModelOutputThunk(value="")
+    soft_failed._error = RuntimeError("backend soft-failure")
+    assert soft_failed.error is not None
+    assert soft_failed.cancelled is False
+
+    cancelled = ModelOutputThunk(value="partial")
+    cancelled._cancelled = True
+    assert cancelled.cancelled is True
+    assert cancelled.error is None
+
+
+def test_mot_error_carried_by_copy_methods() -> None:
+    """`_error` survives `copy`, `deepcopy`, and `_copy_from`."""
+    mot = ModelOutputThunk(value="")
+    err = RuntimeError("recorded")
+    mot._error = err
+
+    shallow = copy.copy(mot)
+    assert shallow.error is err
+
+    deep = copy.deepcopy(mot)
+    assert isinstance(deep.error, RuntimeError)
+    assert str(deep.error) == "recorded"
+
+    target = ModelOutputThunk(value=None)
+    target._copy_from(mot)
+    assert target.error is err
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..core import CBlock, Component, Context, MelleaLogger, ModelToolCall
-from ..core.base import AbstractMelleaTool
+from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
 from ..stdlib.components import Message
 from .tools import parse_tools, validate_tool_arguments
@@ -37,6 +37,34 @@ def get_value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
     return getattr(obj, key, None)
+
+
+def populate_response_metadata_openai_shape(
+    mot: ModelOutputThunk, response: Any
+) -> None:
+    """Populate response-side fields on `mot.generation` from an OpenAI-shaped response.
+
+    Sets `response_model`, `response_id`, and `finish_reasons` from a
+    chat-completion response. Reads `response.model`, `response.id`, and
+    `response.choices[*].finish_reason`, tolerating both dict and object
+    access. Silently no-ops on fields the response does not carry. Backends
+    whose response shape diverges from the OpenAI shape (e.g. Ollama's
+    `done_reason`, no `choices`) populate `mot.generation` directly instead
+    of calling this helper.
+
+    Args:
+        mot: The `ModelOutputThunk` whose `generation` field to populate.
+        response: Provider response; dict or object with OpenAI-style fields.
+    """
+    if response is None:
+        return
+
+    mot.generation.response_model = get_value(response, "model")
+    mot.generation.response_id = get_value(response, "id")
+    choices = get_value(response, "choices") or []
+    finish_reasons = [r for c in choices if (r := get_value(c, "finish_reason"))]
+    if finish_reasons:
+        mot.generation.finish_reasons = finish_reasons
 
 
 def to_chat(

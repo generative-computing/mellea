@@ -8,6 +8,8 @@ pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]
 
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
 from mellea.plugins.hooks.generation import (
+    GenerationBatchErrorPayload,
+    GenerationBatchPostCallPayload,
     GenerationErrorPayload,
     GenerationPostCallPayload,
 )
@@ -93,6 +95,69 @@ async def test_record_token_metrics_missing_model_provider(token_plugin):
 
     with patch("mellea.telemetry.metrics.record_token_usage_metrics") as mock_record:
         await token_plugin.record_token_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            input_tokens=10, output_tokens=5, model="unknown", provider="unknown"
+        )
+
+
+# TokenMetricsPlugin batch tests
+
+
+def _make_batch_post_payload(
+    usage=None, model="batch-model", provider="batch-provider", latency_ms=300.0
+):
+    """Create a GenerationBatchPostCallPayload."""
+    return GenerationBatchPostCallPayload(
+        generation_id="batch-1",
+        model_outputs=[],
+        usage=usage,
+        model=model,
+        provider=provider,
+        latency_ms=latency_ms,
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_batch_token_metrics_with_usage(token_plugin):
+    """Batch token metrics are recorded from payload.usage."""
+    payload = _make_batch_post_payload(
+        usage={"prompt_tokens": 50, "completion_tokens": 25, "total_tokens": 75}
+    )
+
+    with patch("mellea.telemetry.metrics.record_token_usage_metrics") as mock_record:
+        await token_plugin.record_batch_token_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            input_tokens=50,
+            output_tokens=25,
+            model="batch-model",
+            provider="batch-provider",
+        )
+
+
+@pytest.mark.asyncio
+async def test_record_batch_token_metrics_no_usage(token_plugin):
+    """Batch token metrics are not recorded when usage is None."""
+    payload = _make_batch_post_payload(usage=None)
+
+    with patch("mellea.telemetry.metrics.record_token_usage_metrics") as mock_record:
+        await token_plugin.record_batch_token_metrics(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_record_batch_token_metrics_missing_model_provider(token_plugin):
+    """Batch fallback to 'unknown' when model/provider are None."""
+    payload = _make_batch_post_payload(
+        usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        model=None,
+        provider=None,
+    )
+
+    with patch("mellea.telemetry.metrics.record_token_usage_metrics") as mock_record:
+        await token_plugin.record_batch_token_metrics(payload, {})
 
         mock_record.assert_called_once_with(
             input_tokens=10, output_tokens=5, model="unknown", provider="unknown"
@@ -194,6 +259,42 @@ async def test_latency_missing_model_provider(latency_plugin):
         )
 
 
+# LatencyMetricsPlugin batch tests
+
+
+@pytest.mark.asyncio
+async def test_batch_latency_records_duration_non_streaming(latency_plugin):
+    """Batch generations record duration with streaming=False."""
+    payload = _make_batch_post_payload(latency_ms=1500.0)
+
+    with (
+        patch("mellea.telemetry.metrics.record_request_duration") as mock_dur,
+        patch("mellea.telemetry.metrics.record_ttfb") as mock_ttfb,
+    ):
+        await latency_plugin.record_batch_latency_metrics(payload, {})
+
+        mock_dur.assert_called_once_with(
+            duration_s=1.5,
+            model="batch-model",
+            provider="batch-provider",
+            streaming=False,
+        )
+        mock_ttfb.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_latency_missing_model_provider(latency_plugin):
+    """Batch model/provider default to 'unknown' when None."""
+    payload = _make_batch_post_payload(latency_ms=400.0, model=None, provider=None)
+
+    with patch("mellea.telemetry.metrics.record_request_duration") as mock_dur:
+        await latency_plugin.record_batch_latency_metrics(payload, {})
+
+        mock_dur.assert_called_once_with(
+            duration_s=0.4, model="unknown", provider="unknown", streaming=False
+        )
+
+
 # ErrorMetricsPlugin tests
 
 
@@ -272,6 +373,70 @@ async def test_error_plugin_handles_none_model_output(error_plugin):
             model="unknown",
             provider="unknown",
             exception_class="RuntimeError",
+        )
+
+
+# ErrorMetricsPlugin batch tests
+
+
+def _make_batch_error_payload(exc, model="batch-model", provider="batch-provider"):
+    """Create a GenerationBatchErrorPayload wrapping the given exception."""
+    return GenerationBatchErrorPayload(
+        generation_id="batch-err",
+        exception=exc,
+        model=model,
+        provider=provider,
+        latency_ms=10.0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_error_plugin_records_correct_type(error_plugin):
+    """Batch plugin classifies the exception and calls record_error correctly."""
+    payload = _make_batch_error_payload(TimeoutError("timed out"))
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_batch_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_TIMEOUT,
+            model="batch-model",
+            provider="batch-provider",
+            exception_class="TimeoutError",
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_error_plugin_unknown_exception(error_plugin):
+    """Batch plugin classifies unknown exceptions correctly."""
+    payload = _make_batch_error_payload(ValueError("nope"))
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_batch_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_UNKNOWN,
+            model="batch-model",
+            provider="batch-provider",
+            exception_class="ValueError",
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_error_plugin_unknown_model_provider_fallback(error_plugin):
+    """Batch model/provider fall back to 'unknown' when None."""
+    payload = _make_batch_error_payload(
+        ConnectionError("refused"), model=None, provider=None
+    )
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_batch_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_TRANSPORT_ERROR,
+            model="unknown",
+            provider="unknown",
+            exception_class="ConnectionError",
         )
 
 
@@ -400,6 +565,125 @@ async def test_cost_plugin_unknown_model_provider_fallback(cost_plugin):
         mock_cost.assert_called_once_with(
             model="unknown",
             provider=None,  # gen.provider is None; "unknown" fallback only used for record_cost
+            prompt_tokens=10,
+            completion_tokens=5,
+            cached_tokens=0,
+            cache_creation_tokens=0,
+        )
+        mock_record.assert_called_once_with(
+            cost=0.001, model="unknown", provider="unknown"
+        )
+
+
+# CostMetricsPlugin batch tests
+
+
+@pytest.mark.asyncio
+async def test_batch_cost_plugin_records_cost_for_known_model(cost_plugin):
+    """Batch plugin calls record_cost when compute_cost returns a value."""
+    payload = _make_batch_post_payload(
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    )
+
+    with (
+        patch(
+            "mellea.telemetry.pricing.compute_cost", return_value=0.0042
+        ) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_batch_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="batch-model",
+            provider="batch-provider",
+            prompt_tokens=100,
+            completion_tokens=50,
+            cached_tokens=0,
+            cache_creation_tokens=0,
+        )
+        mock_record.assert_called_once_with(
+            cost=0.0042, model="batch-model", provider="batch-provider"
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_cost_plugin_cache_tokens_forwarded(cost_plugin):
+    """Batch plugin forwards cache token fields to compute_cost correctly."""
+    payload = _make_batch_post_payload(
+        usage={
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 50},
+            "cache_creation_input_tokens": 10,
+        }
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=0.005) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost"),
+    ):
+        await cost_plugin.record_batch_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="batch-model",
+            provider="batch-provider",
+            prompt_tokens=100,
+            completion_tokens=20,
+            cached_tokens=50,
+            cache_creation_tokens=10,
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_cost_plugin_skips_unknown_model(cost_plugin):
+    """Batch plugin does not call record_cost when compute_cost returns None."""
+    payload = _make_batch_post_payload(
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=None),
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_batch_cost_metrics(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_cost_plugin_skips_none_usage(cost_plugin):
+    """Batch plugin does not call record_cost when payload.usage is None."""
+    payload = _make_batch_post_payload(usage=None)
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost") as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_batch_cost_metrics(payload, {})
+
+        mock_cost.assert_not_called()
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_cost_plugin_unknown_model_provider_fallback(cost_plugin):
+    """Batch model/provider fall back to 'unknown' when None on the payload."""
+    payload = _make_batch_post_payload(
+        usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        model=None,
+        provider=None,
+    )
+
+    with (
+        patch("mellea.telemetry.pricing.compute_cost", return_value=0.001) as mock_cost,
+        patch("mellea.telemetry.metrics.record_cost") as mock_record,
+    ):
+        await cost_plugin.record_batch_cost_metrics(payload, {})
+
+        mock_cost.assert_called_once_with(
+            model="unknown",
+            provider=None,
             prompt_tokens=10,
             completion_tokens=5,
             cached_tokens=0,

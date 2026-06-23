@@ -3,7 +3,7 @@
 This module contains plugins that hook into the generation pipeline to
 automatically record metrics when enabled. Currently includes:
 
-- TokenMetricsPlugin: Records token usage statistics from ModelOutputThunk.generation.usage
+- TokenMetricsPlugin: Records token usage statistics from generation usage data
 - LatencyMetricsPlugin: Records request duration and TTFB latency histograms
 - ErrorMetricsPlugin: Records LLM error counts categorized by semantic error type
 - CostMetricsPlugin: Records estimated request cost in USD from pricing registry
@@ -16,13 +16,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mellea.core.base import GenerationMetadata
 from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
 from mellea.plugins.types import PluginMode
 
 if TYPE_CHECKING:
+    from mellea.core.base import GenerationMetadata
     from mellea.plugins.hooks.generation import (
+        GenerationBatchErrorPayload,
+        GenerationBatchPostCallPayload,
         GenerationErrorPayload,
         GenerationPostCallPayload,
     )
@@ -37,9 +39,9 @@ if TYPE_CHECKING:
 class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
     """Records token usage metrics from generation outputs.
 
-    This plugin hooks into the generation_post_call event to automatically
-    record token usage metrics when the usage field is populated on
-    ModelOutputThunk instances.
+    This plugin hooks into the generation_post_call and
+    generation_batch_post_call events to automatically record token usage
+    metrics when usage data is present.
 
     The plugin reads the standardized usage field (OpenAI-compatible format)
     and records metrics following OpenTelemetry Gen-AI semantic conventions.
@@ -69,13 +71,36 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
             provider=gen.provider or "unknown",
         )
 
+    @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_batch_token_metrics(
+        self, payload: GenerationBatchPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record token metrics after a batch generation completes.
+
+        Args:
+            payload: Contains the batch-level usage dict, model, and provider.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_token_usage_metrics
+
+        if payload.usage is None:
+            return
+
+        record_token_usage_metrics(
+            input_tokens=payload.usage.get("prompt_tokens"),
+            output_tokens=payload.usage.get("completion_tokens"),
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+        )
+
 
 class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=51):
     """Records request duration and TTFB latency metrics from generation outputs.
 
-    This plugin hooks into the generation_post_call event to automatically
-    record latency metrics. It records total request duration for every request
-    and time-to-first-token (TTFB) for streaming requests.
+    This plugin hooks into the generation_post_call and
+    generation_batch_post_call events to automatically record latency
+    metrics. It records total request duration for every request and
+    time-to-first-token (TTFB) for streaming requests.
     """
 
     @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
@@ -106,12 +131,35 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=51):
         if gen.streaming and gen.ttfb_ms is not None:
             record_ttfb(ttfb_s=gen.ttfb_ms / 1000.0, model=model, provider=provider)
 
+    @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_batch_latency_metrics(
+        self, payload: GenerationBatchPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record request duration after a batch generation completes.
+
+        Batch generations (`generate_from_raw`) are non-streaming, so only the
+        total request duration is recorded; TTFB does not apply.
+
+        Args:
+            payload: Contains latency_ms, model, and provider for the batch.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_request_duration
+
+        record_request_duration(
+            duration_s=payload.latency_ms / 1000.0,
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+            streaming=False,
+        )
+
 
 class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
     """Records LLM error counts from generation errors.
 
-    This plugin hooks into the generation_error event to classify exceptions
-    by semantic error type and increment the `mellea.llm.errors` counter.
+    This plugin hooks into the generation_error and generation_batch_error
+    events to classify exceptions by semantic error type and increment the
+    `mellea.llm.errors` counter.
     """
 
     @hook("generation_error", mode=PluginMode.FIRE_AND_FORGET)
@@ -124,6 +172,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
             payload: Contains the exception and the ModelOutputThunk at the time of the error.
             context: Plugin context (unused).
         """
+        from mellea.core.base import GenerationMetadata
         from mellea.telemetry.metrics import classify_error, record_error
 
         gen = (
@@ -139,13 +188,34 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
             exception_class=type(payload.exception).__name__,
         )
 
+    @hook("generation_batch_error", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_batch_error_metrics(
+        self, payload: GenerationBatchErrorPayload, context: dict[str, Any]
+    ) -> None:
+        """Record error metrics when a batch generation fails.
+
+        Args:
+            payload: Contains the exception, model, and provider for the batch.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import classify_error, record_error
+
+        error_type = classify_error(payload.exception)
+        record_error(
+            error_type=error_type,
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+            exception_class=type(payload.exception).__name__,
+        )
+
 
 class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
     """Records estimated request cost metrics from generation outputs.
 
-    This plugin hooks into the generation_post_call event to automatically
-    record cost metrics when token usage and model pricing data are available.
-    Cost is skipped and a warning is logged for models not in the pricing registry.
+    This plugin hooks into the generation_post_call and
+    generation_batch_post_call events to automatically record cost metrics
+    when token usage and model pricing data are available. Cost is skipped
+    and a warning is logged for models not in the pricing registry.
     """
 
     @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
@@ -178,6 +248,41 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
             provider=gen.provider,
             prompt_tokens=prompt_tokens,
             completion_tokens=gen.usage.get("completion_tokens"),
+            cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation,
+        )
+        if cost is not None:
+            record_cost(cost=cost, model=model, provider=provider)
+
+    @hook("generation_batch_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_batch_cost_metrics(
+        self, payload: GenerationBatchPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record cost metrics after a batch generation completes.
+
+        Args:
+            payload: Contains the batch-level usage dict, model, and provider.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_cost
+        from mellea.telemetry.pricing import compute_cost
+
+        if payload.usage is None:
+            return
+
+        model = payload.model or "unknown"
+        provider = payload.provider or "unknown"
+        details = payload.usage.get("prompt_tokens_details")
+        cached_tokens = (
+            details.get("cached_tokens") if isinstance(details, dict) else 0
+        ) or 0
+        cache_creation = payload.usage.get("cache_creation_input_tokens") or 0
+        prompt_tokens = payload.usage.get("prompt_tokens") or 0
+        cost = compute_cost(
+            model=model,
+            provider=payload.provider,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=payload.usage.get("completion_tokens"),
             cached_tokens=cached_tokens,
             cache_creation_tokens=cache_creation,
         )

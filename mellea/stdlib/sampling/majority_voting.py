@@ -121,7 +121,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
-            SamplingResult: A result object indicating the success or failure of the sampling process.
+            SamplingResult[S]: A result object indicating the success or failure of the sampling process.
         """
         # execute sampling concurrently
         tasks: list[asyncio.Task[SamplingResult]] = []
@@ -189,6 +189,8 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
 class MajorityVotingStrategyForMath(BaseMBRDSampling):
     """MajorityVoting Sampling Strategy for Math Expressions.
+
+    For free-text outputs, use `MBRDRougeLStrategy` instead.
 
     Args:
         number_of_samples (int): Number of samples to generate. Defaults to `8`.
@@ -289,6 +291,8 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
 
 class MBRDRougeLStrategy(BaseMBRDSampling):
     """Sampling Strategy that uses RougeL to compute symbol-level distances for majority voting.
+
+    This is the general-purpose majority voting strategy for text outputs.
 
     Args:
         number_of_samples (int): Number of samples to generate. Defaults to `8`.

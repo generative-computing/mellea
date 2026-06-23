@@ -1,13 +1,12 @@
 ---
-canonical: "https://docs.mellea.ai/integrations/smolagents"
 title: "smolagents"
-description: "Use HuggingFace smolagents tools inside a Mellea session."
+description: "Use Hugging Face smolagents tools inside a Mellea session."
 # diataxis: how-to
 ---
 
 `MelleaTool.from_smolagents()` wraps any [smolagents](https://huggingface.co/docs/smolagents)
 `Tool` instance so it can be passed to any [`MelleaSession`](../reference/glossary#melleasession)
-call. The HuggingFace ecosystem provides many pre-built tools — `PythonInterpreterTool`,
+call. The Hugging Face ecosystem provides many pre-built tools — `PythonInterpreterTool`,
 `DuckDuckGoSearchTool`, `WikipediaSearchTool`, and others.
 
 **Prerequisites:** `pip install 'mellea[smolagents]'`

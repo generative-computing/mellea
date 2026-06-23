@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/advanced/template-formatting"
 title: "Template formatting"
 description: "How Mellea's TemplateFormatter converts Python objects into model-ready text using Jinja2 templates."
 # diataxis: explanation

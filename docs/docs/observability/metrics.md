@@ -1,5 +1,4 @@
 ---
-canonical: "https://docs.mellea.ai/observability/metrics"
 title: "Metrics"
 description: "Automatically collect LLM metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
 # diataxis: how-to
@@ -55,10 +54,7 @@ All token metrics include these attributes following Gen-AI semantic conventions
 | Ollama | Yes | Yes | `prompt_eval_count` and `eval_count` |
 | WatsonX | No | Yes | `input_token_count` and `generated_token_count` (streaming API limitation) |
 | LiteLLM | Yes | Yes | `usage.prompt_tokens` and `usage.completion_tokens` |
-| HuggingFace | Yes | Yes | Calculated from input_ids and output sequences |
-
-> **Note:** Token usage metrics are only tracked for `generate_from_context`
-> requests. `generate_from_raw` calls do not record token metrics.
+| Hugging Face | Yes | Yes | Calculated from input_ids and output sequences |
 
 ### Token recording timing
 
@@ -197,7 +193,7 @@ is available. No code changes are required.
 Cost metrics use `litellm` (`mellea[litellm]`) as a pricing library. This is
 independent of the LiteLLM backend — pricing works with any Mellea backend, but
 cost is only recorded for models that `litellm` has pricing data for. Local and
-private model IDs (Ollama, HuggingFace, custom deployments) will log a one-time
+private model IDs (Ollama, Hugging Face, custom deployments) will log a one-time
 warning per model and produce no cost metric.
 
 Pricing is auto-enabled when `litellm` is installed. Use `MELLEA_PRICING_ENABLED`
@@ -270,12 +266,12 @@ All sampling metrics include:
 | `requirement` | Requirement class name | `LLMaJRequirement`, `PythonExecutionReq`, `ALoraRequirement`, `GuardianCheck` *(deprecated v0.4)* |
 | `reason` | Human-readable failure reason (`mellea.requirement.failures` only) | `"Output did not satisfy constraint"`, `"unknown"` |
 
-> **Guardian Intrinsics and metrics:** `guardian_check()`, `policy_guardrails()`,
+> **Guardian adapter functions and metrics:** `guardian_check()`, `policy_guardrails()`,
 > `factuality_detection()`, and `factuality_correction()` are not `Requirement`
 > subclasses and do not emit `mellea.requirement.checks` or
 > `mellea.requirement.failures` metrics. If you migrate from `GuardianCheck` to
-> Guardian Intrinsics, Guardian-related requirement counters will stop appearing
-> in your metrics. Wrap Guardian Intrinsic calls in a custom `Requirement` subclass
+> Guardian adapter functions, Guardian-related requirement counters will stop appearing
+> in your metrics. Wrap Guardian adapter function calls in a custom `Requirement` subclass
 > if you need to preserve this telemetry.
 
 ### Tool counter
