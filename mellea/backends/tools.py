@@ -32,7 +32,7 @@ class MelleaTool(AbstractMelleaTool[P, R]):
     """Tool class to represent a callable tool with an OpenAI-compatible JSON schema.
 
     Wraps a Python callable alongside its JSON schema representation so it can be
-    registered with backends that support tool calling (OpenAI, Ollama, HuggingFace, etc.).
+    registered with backends that support tool calling (OpenAI, Ollama, Hugging Face, etc.).
 
     Type parameters:
         P: Parameter specification for the underlying callable
@@ -127,7 +127,7 @@ class MelleaTool(AbstractMelleaTool[P, R]):
 
     @classmethod
     def from_smolagents(cls, tool: Any) -> "MelleaTool[..., Any]":
-        """Create a Tool from a HuggingFace smolagents tool object.
+        """Create a Tool from a Hugging Face smolagents tool object.
 
         Args:
             tool: A smolagents.Tool instance

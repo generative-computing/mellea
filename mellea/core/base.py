@@ -416,7 +416,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             None  # Currently only used by hf.
         )
         # Optional cooperative-cancel hook called before asyncio task cancellation.
-        # Backends that run generation in a thread (e.g. HuggingFace via
+        # Backends that run generation in a thread (e.g. Hugging Face via
         # asyncio.to_thread) set this to a non-blocking callable (e.g.
         # threading.Event.set) so the thread receives a stop signal before the
         # task wrapper is cancelled. Must be non-blocking; exceptions are logged

@@ -73,7 +73,7 @@ class ModelOption:
     """Must be a `list[str]`. Generation halts when the model emits any of these strings.
 
     Backends translate this to their native parameter (`stop` for OpenAI/Ollama/LiteLLM
-    chat backends, `stop_strings` for HuggingFace, `stop_sequences` for the WatsonX
+    chat backends, `stop_strings` for Hugging Face, `stop_sequences` for the WatsonX
     text-generation endpoint).
     """
 

@@ -3,7 +3,7 @@
 `FormatterBackend` extends the abstract `Backend` with a `ChatFormatter` and
 a `ModelIdentifier`, bridging mellea's generative programming primitives to models
 that do not yet natively support spans or structured fine-tuning. Concrete backend
-implementations (e.g. Ollama, HuggingFace, OpenAI) subclass `FormatterBackend` and
+implementations (e.g. Ollama, Hugging Face, OpenAI) subclass `FormatterBackend` and
 supply the model-specific `generate_from_context` logic.
 """
 
