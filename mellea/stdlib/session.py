@@ -552,7 +552,8 @@ class MelleaSession:
         output_prefix: str | CBlock | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: bool = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: type[Any]
+        | None = None,  # widened: TypeVar only needed in @overload signatures
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[Any] | SamplingResult[Any]:
@@ -1047,7 +1048,8 @@ class MelleaSession:
         output_prefix: str | CBlock | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: bool = False,
-        format: type[BaseModelSubclass] | None = None,
+        format: type[Any]
+        | None = None,  # widened: TypeVar only needed in @overload signatures
         model_options: dict | None = None,
         tool_calls: bool = False,
         await_result: bool = False,
