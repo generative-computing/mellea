@@ -3,7 +3,7 @@
 import json
 
 from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType
+from ....backends.adapters import AdapterMixin, AdapterType, IOContract
 from ....core import Backend
 from ....stdlib import functional as mfuncs
 from ...components import Document
@@ -92,11 +92,18 @@ def call_intrinsic(
     /,
     kwargs: dict | None = None,
     model_options: dict | None = None,
+    io_contract: IOContract | None = None,
 ):
     """Invoke an adapter function via the backend, returning parsed JSON output.
 
     Uses :meth:`~mellea.backends.adapters.AdapterMixin.resolve_adapter` to find
     or lazily register the adapter, then executes via ``mfuncs.act``.
+
+    When *io_contract* is provided its :meth:`~mellea.backends.adapters.IOContract.parse`
+    method is called on the raw output string before returning.  The contract validates
+    required fields and raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`
+    on contract-breaking deltas; forward-compatible additions (extra optional fields) do
+    not raise.  When *io_contract* is ``None`` the raw ``json.loads`` result is returned.
 
     Args:
         intrinsic_name (str): Capability name of the adapter function
@@ -106,9 +113,11 @@ def call_intrinsic(
         kwargs (dict | None): Extra keyword arguments forwarded to the
             adapter function's input template.
         model_options (dict | None): Model options that override defaults.
+        io_contract (IOContract | None): Output contract to validate and parse the
+            raw model output.  When ``None``, ``json.loads`` is used directly.
 
     Returns:
-        dict: Parsed JSON output from the adapter function.
+        dict: Parsed (and optionally validated) JSON output from the adapter function.
     """
     # Ensure the adapter is registered; resolve_adapter creates it if absent.
     backend.resolve_adapter(intrinsic_name)
@@ -140,4 +149,6 @@ def call_intrinsic(
     result_str = model_output_thunk.value
     if result_str is None:
         raise ValueError("Model output is None.")
+    if io_contract is not None:
+        return io_contract.parse(result_str)
     return json.loads(result_str)
