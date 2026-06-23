@@ -320,7 +320,7 @@ Guardian adapter functions return a numeric score (or label string) rather than 
 [`Requirement`](../reference/glossary#requirement) instance, so they cannot be
 passed to `m.validate()` or wired into `RepairTemplateStrategy` the way the
 deprecated `GuardianCheck` could. The practical workaround is to call
-`guardian_check()` (or another Intrinsic) manually after generation and
+`guardian_check()` (or another adapter function) manually after generation and
 re-invoke `m.instruct()` with an additional requirement when the score crosses
 your threshold. A `Requirement`-backed wrapper is tracked in
 [#1071](https://github.com/generative-computing/mellea/issues/1071).
