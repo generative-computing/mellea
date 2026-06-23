@@ -150,9 +150,10 @@ def test__bind_model_does_not_mutate_original():
 
 
 def test__bind_model_preserves_window_size():
-    ctx = ChatContext(window_size=5)
+    ctx = ChatContext(window_size=5, token_context_length_limit=200)
     bound = ctx._bind_model(IBM_GRANITE_4_1_8B)
     assert bound._window_size == 5
+    assert bound._token_context_length_limit == 200
 
 
 def test__bind_model_raises_on_non_root_context():
@@ -248,6 +249,52 @@ def test_view_for_generation_unknown_model_returns_full_history():
     assert len(result) == 5
 
 
+def test_view_for_generation_token_context_length_limit_truncates():
+    # Each item is a 100-char string → cost = 101 // 4 = 25 tokens.
+    # token_context_length_limit=130: effective budget = int(130 * 0.75) = 97.
+    # Fits 3 items (75 tokens); the 4th would push spent to 100 > 97.
+    ctx = ChatContext(token_context_length_limit=130)
+    for i in range(7):
+        ctx = ctx.add(CBlock("x" * 100 + str(i)))
+    result = ctx.view_for_generation()
+    assert len(result) == 3
+    assert str(result[-1]).endswith("6")
+
+
+def test_view_for_generation_token_context_length_limit_beats_model():
+    # Explicit token limit should override the model-derived one.
+    # Model has a large context; token_context_length_limit=130 forces truncation.
+    ctx = ChatContext(token_context_length_limit=130, model_id=IBM_GRANITE_4_1_8B)
+    for i in range(7):
+        ctx = ctx.add(CBlock("x" * 100 + str(i)))
+    result = ctx.view_for_generation()
+    assert len(result) == 3
+
+
+def test_view_for_generation_window_size_beats_token_context_length_limit():
+    # window_size wins over token_context_length_limit.
+    ctx = ChatContext(window_size=2, token_context_length_limit=130)
+    for i in range(7):
+        ctx = ctx.add(CBlock("x" * 100 + str(i)))
+    result = ctx.view_for_generation()
+    assert len(result) == 2
+
+
+def test_token_context_length_limit_propagates_through_add():
+    ctx = ChatContext(token_context_length_limit=130)
+    ctx = ctx.add(CBlock("hello"))
+    assert ctx._token_context_length_limit == 130
+
+
+def test_new_instance_preserves_token_context_length_limit():
+    ctx = ChatContext(token_context_length_limit=130)
+    for i in range(3):
+        ctx = ctx.add(CBlock(f"msg {i}"))
+    new_ctx = ctx.new_instance()
+    assert new_ctx._token_context_length_limit == 130
+    assert new_ctx.is_root_node
+
+
 # ---------------------------------------------------------------------------
 # reset_to_new and session.reset()
 # ---------------------------------------------------------------------------
@@ -273,12 +320,15 @@ def test_reset_to_new_classmethod_does_not_preserve_config():
 
 
 def test_new_instance_preserves_model_id_and_window_size():
-    ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B, window_size=5)
+    ctx = ChatContext(
+        model_id=IBM_GRANITE_4_1_8B, window_size=5, token_context_length_limit=200
+    )
     for i in range(3):
         ctx = ctx.add(CBlock(f"msg {i}"))
     new_ctx = ctx.new_instance()
     assert new_ctx.model_id is IBM_GRANITE_4_1_8B
     assert new_ctx._window_size == 5
+    assert new_ctx._token_context_length_limit == 200
 
 
 def test_session_reset_rebinds_model_id():
