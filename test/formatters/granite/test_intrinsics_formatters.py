@@ -884,6 +884,7 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                             r["response_end"],
                             r["attribution_begin"],
                             r["attribution_end"],
+                            r["attribution_doc_id"],
                         )
 
                     expected_keys = {_key(r) for r in e_json}
