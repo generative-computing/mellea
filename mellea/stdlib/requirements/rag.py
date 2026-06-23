@@ -596,7 +596,7 @@ class GroundednessRequirement(Requirement):
             "For each span, determine if the citations fully support, partially support, "
             "or do not support the span. Consider the full context from the source documents "
             "where the citations appear.\n\n"
-            "Respond with a flat JSON array (no nested arrays). Example output:\n"
+            "Respond with a flat JSON array (no nested arrays), with one object for each span. Example output:\n"
             '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}]\n\n'
             "Support levels must be ONLY one of: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED.\n\n"
             f"{documents_section}"
@@ -680,6 +680,17 @@ class GroundednessRequirement(Requirement):
             judgments = self._extract_and_repair_json_array(output_text)
             logger.debug(f"Parsed {len(judgments)} judgments from batch output")
 
+            # Normalize each nested citation through the same substring
+            # logic the flat path uses below, so near-miss labels like
+            # "FULLY SUPPORTED" (space) aren't silently downgraded.
+            def _norm(raw: str | None) -> str:
+                raw = (raw or "").upper().strip()
+                if "FULLY" in raw and "SUPPORTED" in raw:
+                    return "FULLY_SUPPORTED"
+                if "PARTIALLY" in raw and "SUPPORTED" in raw:
+                    return "PARTIALLY_SUPPORTED"
+                return "NOT_SUPPORTED" if raw else ""
+
             # Process judgments
             for judgment in judgments:
                 if not isinstance(judgment, dict):
@@ -696,10 +707,13 @@ class GroundednessRequirement(Requirement):
                 # so the result is deterministic regardless of citation order.
                 if not support_level_raw:
                     nested_levels = {
-                        (cit.get("support_level") or "").upper().strip()
+                        _norm(cit.get("support_level"))
                         for cit in (judgment.get("citations") or [])
                         if isinstance(cit, dict)
                     }
+                    nested_levels.discard("")
+                    # Pessimistic ordering: NOT_SUPPORTED beats PARTIALLY beats
+                    # FULLY, so the result is deterministic regardless of order.
                     for pessimistic in (
                         "NOT_SUPPORTED",
                         "PARTIALLY_SUPPORTED",

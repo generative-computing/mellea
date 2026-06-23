@@ -837,8 +837,8 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                     # See issue #1291 for full analysis.
                     t_json = t_json["requirement_check"]
                     e_json = e_json["requirement_check"]
-                    actual_dir = t_json["score"] >= 0.5
-                    expected_dir = e_json["score"] >= 0.5
+                    actual_dir = t_json["score"] > 0.5
+                    expected_dir = e_json["score"] > 0.5
                     assert actual_dir == expected_dir, (
                         f"requirement_check binary direction mismatch: "
                         f"actual score={t_json['score']:.4f} (>0.5? {actual_dir}), "
@@ -850,8 +850,8 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                     # The "uncertainty" adapter is a binary classifier.
                     # The score is a token-level log-probability which is inherently
                     # non-deterministic on GPU (cuDNN reduction order, softmax, layer norm).
-                    # Production code only checks direction (>=0.5), never the exact
-                    # float value.
+                    # This test uses a coarse direction bucket (>=0.5) to tolerate that
+                    # variance — production code (check_certainty) uses the raw float.
                     # See issue #1291 for full analysis.
                     actual_dir = t_json["certainty"] >= 0.5
                     expected_dir = e_json["certainty"] >= 0.5
@@ -864,9 +864,12 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
 
                 elif "context_relevance" in cfg.short_name:
                     # context_relevance (non-alora): label is non-deterministic on GPU
-                    # hardware. No assertion for now — see issue #1301 for full analysis
-                    # and decision on whether to keep or remove this adapter.
-                    continue
+                    # hardware. xfail rather than a bare `continue` so the case
+                    # surfaces in the report instead of silently passing with no
+                    # assertion — see issue #1301 for the keep/remove decision.
+                    pytest.xfail(
+                        "context_relevance label non-deterministic on GPU — see issue #1301"
+                    )
 
                 elif cfg.short_name == "context-attribution":
                     # Context-attribution produces a non-deterministic number and ordering
