@@ -364,6 +364,28 @@ class GenerationMetadata:
     """
 
 
+@dataclass
+class RawProviderResponse:
+    """Backend-native response payload from the provider's SDK.
+
+    Reading these fields couples your code to a specific provider's response
+    shape. For portable access prefer `mot.value`, `mot.parsed_repr`,
+    `mot.tool_calls`, or `mot.generation`.
+
+    Args:
+        provider: Name of the provider that produced `response`; the same value
+            as `mot.generation.provider`. Read it to know how to interpret
+            `response`.
+        response: Full SDK response object. Shape depends on `provider`.
+        streamed_chunks: Per-chunk SDK objects from streaming responses.
+            `None` for non-streaming requests.
+    """
+
+    provider: str | None = None
+    response: Any | None = None
+    streamed_chunks: list[Any] | None = None
+
+
 class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
 
@@ -397,6 +419,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._thinking: str | None = None
         self.generation: GenerationMetadata = GenerationMetadata()
         """Backend execution metadata populated during generation."""
+
+        self.raw: RawProviderResponse = RawProviderResponse()
+        """Backend-native provider response populated during generation."""
 
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
@@ -596,6 +621,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.tool_calls = other.tool_calls
         self._thinking = other._thinking
         self.generation = other.generation
+        self.raw = other.raw
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
         self._error = other._error
@@ -835,6 +861,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
         copied.generation = copy(self.generation)
+        copied.raw = copy(self.raw)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -870,6 +897,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._generate_log = copy(self._generate_log)
         deepcopied._model_options = copy(self._model_options)
         deepcopied.generation = deepcopy(self.generation)
+        deepcopied.raw = deepcopy(self.raw)
         return deepcopied
 
 

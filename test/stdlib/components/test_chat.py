@@ -2,7 +2,12 @@ import logging
 
 import pytest
 
-from mellea.core import CBlock, ModelOutputThunk, TemplateRepresentation
+from mellea.core import (
+    CBlock,
+    ModelOutputThunk,
+    RawProviderResponse,
+    TemplateRepresentation,
+)
 from mellea.formatters.template_formatter import TemplateFormatter
 from mellea.helpers import message_to_openai_message, messages_to_docs
 from mellea.stdlib.components import Document, Message
@@ -134,7 +139,7 @@ def test_parse_ollama_chat_response():
             )()
         },
     )()
-    mot._meta["chat_response"] = fake_response
+    mot.raw = RawProviderResponse(provider="ollama", response=fake_response)
     result = msg._parse(mot)
     assert result.role == "assistant"
     assert result.content == "ollama answer"
@@ -143,12 +148,31 @@ def test_parse_ollama_chat_response():
 def test_parse_openai_chat_response():
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v")
-    mot._meta["oai_chat_response"] = {
-        "choices": [{"message": {"role": "assistant", "content": "openai answer"}}]
-    }
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "choices": [{"message": {"role": "assistant", "content": "openai answer"}}]
+        },
+    )
     result = msg._parse(mot)
     assert result.role == "assistant"
     assert result.content == "openai answer"
+
+
+def test_parse_openai_streamed_choice_shape():
+    """Streaming stores the merged choice dict (no top-level `choices` wrapper)."""
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": "streamed answer"},
+        },
+    )
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.content == "streamed answer"
 
 
 # --- Message._parse — with tool calls ---
@@ -163,7 +187,7 @@ def test_parse_tool_calls_ollama():
         (),
         {"message": type("Msg", (), {"role": "assistant", "tool_calls": fake_calls})()},
     )()
-    mot._meta["chat_response"] = fake_response
+    mot.raw = RawProviderResponse(provider="ollama", response=fake_response)
     result = msg._parse(mot)
     assert result.role == "assistant"
     assert "some_fn" in result.content
@@ -172,22 +196,48 @@ def test_parse_tool_calls_ollama():
 def test_parse_tool_calls_openai():
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
-    mot._meta["oai_chat_response"] = {
-        "choices": [
-            {
-                "message": {
-                    "role": "assistant",
-                    "tool_calls": [{"function": {"name": "fn"}}],
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "tool_calls": [{"function": {"name": "fn"}}],
+                    }
                 }
-            }
-        ]
-    }
+            ]
+        },
+    )
     result = msg._parse(mot)
     assert result.role == "assistant"
 
 
+def test_parse_tool_calls_openai_streamed_choice_shape():
+    """Streamed tool calls store the merged choice dict, not a top-level envelope.
+
+    Regression test: the tool branch previously indexed `response["choices"][0]`
+    unconditionally and raised `KeyError` on the streaming choice-level shape.
+    """
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "finish_reason": "tool_calls",
+            "message": {
+                "role": "assistant",
+                "tool_calls": [{"function": {"name": "fn"}}],
+            },
+        },
+    )
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert "fn" in result.content
+
+
 def test_parse_tool_calls_fallback_uses_value():
-    """No chat_response or oai_chat_response — falls back to computed.value."""
+    """No raw provider info — falls back to computed.value."""
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="<tool_call>fn()</tool_call>", tool_calls={"fn": None})
     result = msg._parse(mot)

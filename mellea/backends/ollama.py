@@ -23,6 +23,7 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
+    RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
@@ -608,9 +609,9 @@ class OllamaModelBackend(FormatterBackend):
                         "completion_tokens": n_out,
                         "total_tokens": n_in + n_out,
                     }
-                result = ModelOutputThunk(
-                    value=response.response,
-                    meta={"generate_response": response.model_dump()},
+                result = ModelOutputThunk(value=response.response)
+                result.raw = RawProviderResponse(
+                    provider=self._provider, response=response.model_dump()
                 )
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
@@ -684,9 +685,9 @@ class OllamaModelBackend(FormatterBackend):
     ):
         """Accumulate text and tool calls from a single Ollama ChatResponse chunk.
 
-        Called for each streaming or non-streaming ``ollama.ChatResponse``. Also
+        Called for each streaming or non-streaming `ollama.ChatResponse`. Also
         extracts tool call requests inline and merges the chunk into the running
-        aggregated response stored in ``mot._meta["chat_response"]``.
+        aggregated response stored in `mot.raw.response`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -751,7 +752,7 @@ class OllamaModelBackend(FormatterBackend):
         generate_log.backend = f"ollama::{self._model_id}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
-        generate_log.model_output = mot._meta["chat_response"]
+        generate_log.model_output = mot.raw.response
         generate_log.extra = {
             "format": _format,
             "thinking": mot._model_options.get(ModelOption.THINKING, None),
@@ -766,7 +767,7 @@ class OllamaModelBackend(FormatterBackend):
         mot._generate = None
 
         # Extract token counts from response
-        response = mot._meta.get("chat_response")
+        response = mot.raw.response
         prompt_tokens = (
             getattr(response, "prompt_eval_count", None) if response else None
         )
@@ -783,6 +784,7 @@ class OllamaModelBackend(FormatterBackend):
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
         # Populate response-side metadata for telemetry
         if response is not None:
@@ -798,11 +800,11 @@ def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse)
         mot: the ModelOutputThunk that the deltas are being used to populated.
         delta: the most recent ollama ChatResponse.
     """
-    if mot._meta.get("chat_response", None) is None:
-        mot._meta["chat_response"] = delta
+    if mot.raw.response is None:
+        mot.raw.response = delta
         return  # Return early, no need to merge.
 
-    merged: ollama.ChatResponse = mot._meta["chat_response"]
+    merged: ollama.ChatResponse = mot.raw.response
     if not merged.done:
         merged.done = delta.done
     if merged.done_reason is None:

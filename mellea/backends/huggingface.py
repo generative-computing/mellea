@@ -1233,7 +1233,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             mot._underlying_value += chunk
         elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
-            mot._meta["hf_output"] = chunk
+            mot.raw.response = chunk
             mot._underlying_value += cast(
                 str,
                 self._tokenizer.decode(
@@ -1269,18 +1269,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs; used to compute token counts and for
                 KV cache bookkeeping.
         """
-        if mot._meta.get("hf_output", None) is None:
+        if mot.raw.response is None:
             if mot._generate_extra is not None:
                 full_output = await mot._generate_extra
                 assert isinstance(full_output, GenerateDecoderOnlyOutput)
-                mot._meta["hf_output"] = full_output
+                mot.raw.response = full_output
 
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
-        # Store KV cache in LRU separately (not in mot._meta) to enable proper cleanup on eviction.
+        # Store KV cache in LRU separately (not on the MOT) to enable proper cleanup on eviction.
         # This prevents GPU memory from being held by ModelOutputThunk references.
-        hf_output = mot._meta.get("hf_output", None)
+        hf_output = mot.raw.response
         if (
             self._use_caches
             and isinstance(hf_output, GenerateDecoderOnlyOutput)
@@ -1320,7 +1320,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # Derive token counts from the output sequences (HF models have no usage object).
-        hf_output = mot._meta.get("hf_output")
+        hf_output = mot.raw.response
         n_prompt, n_completion = None, None
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
@@ -1375,20 +1375,21 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
-        # When caching is disabled, clear hf_output from meta to free GPU memory.
+        # When caching is disabled, clear hf_output from raw to free GPU memory.
         # The sequences tensor is on GPU and accumulates if not cleared.
         if not self._use_caches and isinstance(
-            mot._meta.get("hf_output"), GenerateDecoderOnlyOutput
+            mot.raw.response, GenerateDecoderOnlyOutput
         ):
             import gc
 
-            hf_out = mot._meta["hf_output"]
+            hf_out = mot.raw.response
             if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
                 del hf_out.sequences
             if hasattr(hf_out, "scores") and hf_out.scores is not None:
                 del hf_out.scores
-            del mot._meta["hf_output"]
+            mot.raw.response = None
 
             # Force Python GC and return CUDA memory to device
             gc.collect()
@@ -1521,6 +1522,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
             result.generation.provider = self._provider
+            result.raw.provider = self._provider
 
             action = actions[i]
             result.parsed_repr = (

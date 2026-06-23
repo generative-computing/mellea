@@ -173,35 +173,35 @@ def test_delta_merge_first_sets_chat_response():
     mot = ModelOutputThunk(value=None)
     delta = _make_delta("Hello")
     chat_response_delta_merge(mot, delta)
-    assert mot._meta["chat_response"] is delta
+    assert mot.raw.response is delta
 
 
 def test_delta_merge_second_appends_content():
     mot = ModelOutputThunk(value=None)
     chat_response_delta_merge(mot, _make_delta("Hello"))
     chat_response_delta_merge(mot, _make_delta(" world"))
-    assert mot._meta["chat_response"].message.content == "Hello world"
+    assert mot.raw.response.message.content == "Hello world"
 
 
 def test_delta_merge_done_propagated():
     mot = ModelOutputThunk(value=None)
     chat_response_delta_merge(mot, _make_delta("partial", done=False))
     chat_response_delta_merge(mot, _make_delta("", done=True))
-    assert mot._meta["chat_response"].done is True
+    assert mot.raw.response.done is True
 
 
 def test_delta_merge_role_set_from_first_delta():
     mot = ModelOutputThunk(value=None)
     chat_response_delta_merge(mot, _make_delta("hi", role="assistant"))
     chat_response_delta_merge(mot, _make_delta(" there", role=""))
-    assert mot._meta["chat_response"].message.role == "assistant"
+    assert mot.raw.response.message.role == "assistant"
 
 
 def test_delta_merge_thinking_concatenated():
     mot = ModelOutputThunk(value=None)
     chat_response_delta_merge(mot, _make_delta("reply", thinking="step 1"))
     chat_response_delta_merge(mot, _make_delta("", thinking=" step 2"))
-    assert mot._meta["chat_response"].message.thinking == "step 1 step 2"
+    assert mot.raw.response.message.thinking == "step 1 step 2"
 
 
 # --- timeout wiring ---
