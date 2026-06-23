@@ -1397,11 +1397,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if (
             self._use_caches
             and isinstance(hf_output, GenerateDecoderOnlyOutput)
-            and (
-                hf_output.past_key_values is not None
-                or hf_output.scores is not None
-                or hf_output.logits is not None
-            )
+            and (hf_output.past_key_values is not None or hf_output.scores is not None)
         ):
             output_complete = hf_output.sequences[0]
             kv_cache: DynamicCache | None = hf_output.past_key_values  # type: ignore
@@ -1421,17 +1417,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             cache_key = id(mot.value)
             self.cache_put(cache_key, cache_info)
 
-            # Surface logits before clearing — scores move to LRU cache; when
-            # LOGITS/RAW_LOGITS=True the tuple views also keep them alive via generation.
-            if mot._model_options:
-                self._surface_logits(mot, hf_output)
-
             # Clear KV cache and scores from HF output; retained via LRU cache above.
             hf_output.past_key_values = None
             hf_output.scores = None
-            hf_output.logits = None
-        elif isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._model_options:
-            # Caching disabled — surface scores/raw logits directly if requested.
+
+        # Surface logits and clear the raw logits tensor in all cases.
+        if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._model_options:
             self._surface_logits(mot, hf_output)
             hf_output.logits = None
 
@@ -1516,6 +1507,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 del hf_out.sequences
             if hasattr(hf_out, "scores") and hf_out.scores is not None:
                 del hf_out.scores
+            if hasattr(hf_out, "logits") and hf_out.logits is not None:
+                del hf_out.logits
             mot.raw.response = None
 
             # Force Python GC and return CUDA memory to device
