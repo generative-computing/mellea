@@ -49,19 +49,19 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
 
-    likelihood = req_dict.get("requirement_check", None)
-    if not isinstance(likelihood, dict):
+    req_check = req_dict.get("requirement_check", None)
+    if not isinstance(req_check, dict):
         raise AdapterSchemaMismatchError(
             name="requirement-check",
             observed_keys=frozenset(req_dict.keys()),
             expected_keys=frozenset({"requirement_check"}),
         )
 
-    score = likelihood.get("score", None)
+    score = req_check.get("score", None)
     if not isinstance(score, (int, float)) or isinstance(score, bool):
         raise AdapterSchemaMismatchError(
             name="requirement-check",
-            observed_keys=frozenset(likelihood.keys()),
+            observed_keys=frozenset(req_check.keys()),
             expected_keys=frozenset({"score"}),
         )
 

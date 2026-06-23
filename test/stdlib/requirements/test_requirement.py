@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -205,6 +205,28 @@ def test_alora_requirement_custom_intrinsic(mock_intrinsic_init):
         intrinsic_name="custom_check",
         intrinsic_kwargs={"requirement": "must be valid"},
     )
+
+
+@patch("mellea.stdlib.requirements.requirement.Intrinsic.__init__")
+async def test_alora_validate_propagates_schema_mismatch(mock_intrinsic_init):
+    """AdapterSchemaMismatchError from output_to_bool propagates uncaught through validate().
+
+    This documents that the LLMaJ fallback in ALoraRequirement covers only
+    generation errors, not output-parsing schema mismatches.
+    """
+    mock_intrinsic_init.return_value = None
+    req = ALoraRequirement("must satisfy requirement")
+
+    mock_thunk = MagicMock()
+    mock_thunk.__str__ = MagicMock(return_value='{"requirement_likelihood": 0.9}')
+    mock_thunk.avalue = AsyncMock(return_value=None)
+    mock_thunk.value = '{"requirement_likelihood": 0.9}'
+
+    mock_backend = MagicMock()
+    mock_backend.generate_from_context = AsyncMock(return_value=(mock_thunk, ctx))
+
+    with pytest.raises(AdapterSchemaMismatchError):
+        await req.validate(mock_backend, ctx=ctx)
 
 
 if __name__ == "__main__":

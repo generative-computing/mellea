@@ -3,14 +3,18 @@
 import collections.abc
 from typing import cast
 
-from ....backends.adapters import AdapterMixin
+from ....backends.adapters import AdapterMixin, AdapterSchemaMismatchError
 from ...components import Document, Message
 from ...context import ChatContext
 from ..docs.document import _coerce_to_documents
 from ._util import _resolve_response, call_intrinsic
 
 
-def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
+def check_certainty(
+    context: ChatContext,
+    backend: AdapterMixin,
+    model_options: dict | None = None,
+) -> float:
     """Estimate the model's certainty about its last response.
 
     Adapter function that evaluates how certain the model is about the
@@ -20,12 +24,15 @@ def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
     Args:
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
+        model_options: Optional model-level overrides forwarded to the backend
+            (e.g. ``{ModelOption.MAX_NEW_TOKENS: 64}``). When ``None``, defaults
+            apply.
 
     Returns:
         Certainty score as a float (higher = more certain).
     """
-    result_json = call_intrinsic("uncertainty", context, backend)
-    return cast(float, result_json["certainty"])
+    result_json = call_intrinsic("uncertainty", context, backend, model_options=model_options)
+    return result_json["certainty"]
 
 
 def requirement_check(
@@ -51,7 +58,10 @@ def requirement_check(
 
     Returns:
         Score as a float between 0.0 and 1.0 (higher = more likely satisfied).
-        Raw adapter output contract: ``{"requirement_check": {"score": <float>}}``.
+
+    Raises:
+        AdapterSchemaMismatchError: If the adapter output does not match the
+            expected ``{"requirement_check": {"score": <float>}}`` contract.
     """
     result_json = call_intrinsic(
         "requirement-check",
@@ -60,9 +70,21 @@ def requirement_check(
         kwargs={"requirement": requirement},
         model_options=model_options,
     )
-    return cast(
-        float, cast(dict[str, object], result_json["requirement_check"])["score"]
-    )
+    req_check = result_json.get("requirement_check")
+    if not isinstance(req_check, dict):
+        raise AdapterSchemaMismatchError(
+            name="requirement-check",
+            observed_keys=frozenset(result_json.keys()),
+            expected_keys=frozenset({"requirement_check"}),
+        )
+    score = req_check.get("score")
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
+        raise AdapterSchemaMismatchError(
+            name="requirement-check",
+            observed_keys=frozenset(req_check.keys()),
+            expected_keys=frozenset({"score"}),
+        )
+    return score
 
 
 def find_context_attributions(
@@ -70,6 +92,7 @@ def find_context_attributions(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    model_options: dict | None = None,
 ) -> list[dict]:
     """Find sentences in conversation history and documents that most influence an LLM's response.
 
@@ -89,6 +112,9 @@ def find_context_attributions(
         context (ChatContext): Dialog context between user and assistant, ending with
             a user query.
         backend (AdapterMixin): Backend that supports intrinsic adapters.
+        model_options: Optional model-level overrides forwarded to the backend
+            (e.g. ``{ModelOption.MAX_NEW_TOKENS: 64}``). When ``None``, defaults
+            apply.
 
     Returns:
         list[dict]: Records with fields `response_begin`, `response_end`,
@@ -108,5 +134,6 @@ def find_context_attributions(
             )
         ),
         backend,
+        model_options=model_options,
     )
     return cast(list[dict], result_json)
