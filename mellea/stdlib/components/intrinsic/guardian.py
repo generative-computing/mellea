@@ -9,11 +9,16 @@ any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
 resolved kwargs through.
 """
 
+import collections.abc
 import warnings
+from typing import cast
 
 from ....backends.adapters import AdapterMixin
 from ....core.utils import MelleaLogger
+from ...components import Document
+from ...components.docs.document import _coerce_to_documents
 from ...context import ChatContext
+from ..chat import Message
 from ._util import call_intrinsic
 
 _UNSET: object = object()
@@ -28,35 +33,39 @@ _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_respons
 def policy_guardrails(
     context: ChatContext, backend: AdapterMixin, policy_text: str
 ) -> str:
-    """Checks whether text complied with specified policy.
+    """Check whether the last context turn complies with a policy.
 
-    Uses the policy_guardrails LoRA adapter to judge whether the scenario
-    described in the last message in `context` is compliant with the given `policy_text`.
+    Uses the policy-guardrails LoRA adapter to judge whether the scenario
+    described in the last message in `context` is compliant with the given
+    `policy_text`.
 
     Args:
-        context (ChatContext): Chat context containing the conversation to evaluate.
-        backend (AdapterMixin): Backend instance that supports LoRA adapters.
-        policy_text (str): Policy against which compliance is to be checked.
+        context: Chat context containing the conversation to evaluate.
+        backend: Backend instance that supports LoRA adapters.
+        policy_text: Policy text against which compliance is checked.
 
     Returns:
-        str: Compliance as a `"Yes"` / `"No"` / `"Ambiguous"` label (`"Yes"` = compliant).
+        Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (Yes = compliant).
+
+    Raises:
+        ValueError: If the adapter returns a result with neither or both of
+            `"label"` and `"score"` fields.
     """
     result_json = call_intrinsic(
         "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
     )
 
-    if "label" not in result_json.keys() and "score" not in result_json.keys():
-        raise Exception(
+    has_label = "label" in result_json
+    has_score = "score" in result_json
+    if has_label == has_score:
+        if has_label:
+            raise ValueError(
+                "Expected Guardian result to have label xor score, but found both."
+            )
+        raise ValueError(
             "Expected Guardian result to have label xor score, but found neither."
         )
-    elif "label" not in result_json.keys() and "score" in result_json.keys():
-        return result_json["score"]
-    elif "label" in result_json.keys() and "score" not in result_json.keys():
-        return result_json["label"]
-    else:
-        raise Exception(
-            "Expected Guardian result to have label xor score, but found both."
-        )
+    return result_json["label"] if has_label else result_json["score"]
 
 
 SCORING_SCHEMA_BANK = {
@@ -243,36 +252,151 @@ def guardian_check(
     return result_json["guardian"]["score"]
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
-    """Determine is the last response is factually incorrect.
+def factuality_detection(
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
+) -> str:
+    """Determine whether the last assistant response is factually incorrect.
 
-    Adapter function that evaluates the factuality of the
-    assistant's response to a user's question. The context should end with
-    a user question followed by an assistant answer.
+    Adapter function that evaluates the factuality of the assistant's response
+    to a user's question. The context should end with a user question followed
+    by an assistant answer.
+
+    Reference documents can be supplied in three ways (in precedence order):
+
+    1. Pass them explicitly via ``documents=``.
+    2. Include them on messages already in ``context``
+       (e.g. ``Message("assistant", response, documents=[doc])``).
+    3. Perform retrieval and add the resulting documents to ``context``
+       before calling this function.
 
     Args:
-        context (ChatContext): Chat context containing user question and assistant answer.
-        backend (AdapterMixin): Backend instance that supports LoRA/aLoRA adapters.
+        context: Chat context ending with a user question and an assistant
+            answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
+        documents: Optional reference documents used to ground the factuality
+            check.  Each element may be a :class:`~mellea.stdlib.components.Document`
+            or a plain string (automatically wrapped in ``Document``).
+            When ``None``, any documents already present in ``context`` are
+            used.
 
     Returns:
-        str: Factuality score as a `"yes"` / `"no"` label (`"yes"` = factually incorrect).
+        Factuality label: ``"yes"`` if the response is factually incorrect,
+        ``"no"`` if it is correct.
+
+    Raises:
+        ValueError: If ``documents`` is provided but ``context`` does not end
+            with an assistant turn whose content can be extracted.
     """
+    if documents is not None:
+        context = _inject_documents(context, documents)
     result_json = call_intrinsic("factuality-detection", context, backend)
     return result_json["score"]
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
-    """Corrects the last response so that it is factually correct.
+def factuality_correction(
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
+) -> str:
+    """Correct the last assistant response to make it factually accurate.
 
-    Adapter function that corrects the assistant's response to a user's
-    question relative to the given contextual information.
+    Adapter function that rewrites the assistant's response to a user's
+    question so that it is consistent with the supplied reference documents.
+    The context should end with a user question followed by an assistant answer.
+
+    Reference documents can be supplied in three ways (in precedence order):
+
+    1. Pass them explicitly via ``documents=``.
+    2. Include them on messages already in ``context``
+       (e.g. ``Message("assistant", response, documents=[doc])``).
+    3. Perform retrieval and add the resulting documents to ``context``
+       before calling this function.
 
     Args:
-        context (ChatContext): Chat context containing user question and assistant answer.
-        backend (AdapterMixin): Backend instance that supports LoRA/aLoRA adapters.
+        context: Chat context ending with a user question and an assistant
+            answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
+        documents: Optional reference documents used to ground the correction.
+            Each element may be a :class:`~mellea.stdlib.components.Document`
+            or a plain string (automatically wrapped in ``Document``).
+            When ``None``, any documents already present in ``context`` are
+            used.
 
     Returns:
-        str: Corrected assistant response.
+        Corrected assistant response as a plain string.
+
+    Raises:
+        ValueError: If ``documents`` is provided but ``context`` does not end
+            with an assistant turn whose content can be extracted.
     """
+    if documents is not None:
+        context = _inject_documents(context, documents)
     result_json = call_intrinsic("factuality-correction", context, backend)
     return result_json["correction"]
+
+
+def _inject_documents(
+    context: ChatContext, documents: collections.abc.Iterable[str | Document]
+) -> ChatContext:
+    """Return a copy of *context* with *documents* attached to the last assistant turn.
+
+    Supports both session-generated contexts (where the last turn is a
+    :class:`ModelOutputThunk`) and manually-constructed contexts (where the
+    last turn is a :class:`Message` added directly via
+    :meth:`ChatContext.add`).
+
+    Args:
+        context: Chat context whose last element is an assistant response.
+        documents: Reference documents to attach.
+
+    Returns:
+        New context identical to the input except the last assistant turn now
+        carries the supplied documents.
+
+    Raises:
+        ValueError: If the last element of *context* is not an assistant
+            response that can be extracted.
+    """
+    turn = context.last_turn()
+    if turn is None:
+        raise ValueError(
+            "Context is empty; cannot attach documents to an assistant turn."
+        )
+
+    if turn.output is not None and turn.output.value is not None:
+        # Session-generated response stored as a ModelOutputThunk
+        response_text: str = turn.output.value
+        prev_ctx = context.previous_node
+    elif (
+        turn.model_input is not None
+        and isinstance(turn.model_input, Message)
+        and turn.model_input.role == "assistant"
+    ):
+        # Manually-added assistant Message (e.g. built from test fixtures)
+        response_text = turn.model_input.content  # type: ignore[assignment]
+        prev_ctx = context.previous_node
+    else:
+        raise ValueError(
+            "Cannot attach documents: the last context element is not an "
+            "assistant response. Ensure the context ends with an assistant "
+            "message before passing documents= to factuality_detection or "
+            "factuality_correction."
+        )
+
+    if prev_ctx is None:
+        raise ValueError(
+            "Context has no previous node; cannot reconstruct context with documents."
+        )
+
+    return cast(
+        ChatContext,
+        prev_ctx.add(
+            Message(
+                "assistant", response_text, documents=_coerce_to_documents(documents)
+            )
+        ),
+    )
