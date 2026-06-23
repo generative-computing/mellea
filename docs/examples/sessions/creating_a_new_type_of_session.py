@@ -6,9 +6,10 @@ from typing import Literal
 from PIL import Image as PILImage
 
 from mellea import MelleaSession
+from mellea.backends.adapters import AdapterMixin
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
-from mellea.core import Backend, BaseModelSubclass, Context, ImageBlock, ImageUrlBlock
+from mellea.core import BaseModelSubclass, Context, ImageBlock, ImageUrlBlock
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
@@ -20,7 +21,7 @@ from mellea.stdlib.context import ChatContext
 class ChatCheckingSession(MelleaSession):
     # Add new parameters to support applying guardian criteria to chat messages.
     def __init__(
-        self, criteria: list[str], backend: Backend, ctx: Context | None = None
+        self, criteria: list[str], backend: AdapterMixin, ctx: Context | None = None
     ):
         super().__init__(backend, ctx)
         self._criteria = criteria
@@ -49,7 +50,7 @@ class ChatCheckingSession(MelleaSession):
         for criterion in self._criteria:
             score = guardian.guardian_check(
                 check_ctx,
-                self.backend,  # type: ignore[arg-type]
+                self.backend,  # type: ignore[arg-type]  # constructor ensures AdapterMixin; MelleaSession.backend is typed Backend
                 criteria=criterion,
                 scoring_schema="user_prompt",
             )

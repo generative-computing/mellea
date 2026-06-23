@@ -1,6 +1,7 @@
-"""Unit tests for the ``documents=`` kwarg on factuality_detection and factuality_correction.
+"""Unit tests for guardian adapter functions that require no model.
 
-All tests monkeypatch ``call_intrinsic`` so no model is required.
+Covers: ``documents=`` kwarg on factuality_detection/factuality_correction,
+and the policy_guardrails XOR validation logic.
 """
 
 import pytest
@@ -198,3 +199,36 @@ def test_factuality_detection_thunk_attaches_doc_to_assistant_turn(capture_intri
     doc_parts = [p for p in last.parts() if isinstance(p, Document)]
     assert len(doc_parts) == 1
     assert doc_parts[0].text == "Ozzy Osbourne passed away."
+
+
+# ---------------------------------------------------------------------------
+# policy_guardrails: XOR validation error paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def capture_policy(monkeypatch):
+    """Return a factory that makes call_intrinsic return a controlled result dict."""
+
+    def _make(result: dict):
+        monkeypatch.setattr(
+            guardian,
+            "call_intrinsic",
+            lambda name, ctx, backend, /, kwargs=None, model_options=None: result,
+        )
+
+    return _make
+
+
+def test_policy_guardrails_raises_when_both_label_and_score_present(capture_policy):
+    capture_policy({"label": "Yes", "score": 0.9})
+    ctx = ChatContext().add(Message("user", "Hello"))
+    with pytest.raises(ValueError, match="found both"):
+        guardian.policy_guardrails(ctx, object(), policy_text="no hate speech")
+
+
+def test_policy_guardrails_raises_when_neither_label_nor_score_present(capture_policy):
+    capture_policy({})
+    ctx = ChatContext().add(Message("user", "Hello"))
+    with pytest.raises(ValueError, match="found neither"):
+        guardian.policy_guardrails(ctx, object(), policy_text="no hate speech")
