@@ -85,11 +85,11 @@ class TestSendToQueue:
 
         async def _stalling_gen():
             yield "first"
-            await asyncio.sleep(10)  # longer than chunk_timeout
+            await asyncio.sleep(1)  # longer than chunk_timeout
             yield "never"  # pragma: no cover
 
         q: asyncio.Queue = asyncio.Queue()
-        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.5)
+        await send_to_queue(_stalling_gen(), q, chunk_timeout=0.05)
 
         assert await q.get() == "first"
         item = await q.get()
@@ -113,8 +113,8 @@ class TestSendToQueue:
         assert await q.get() is None  # sentinel present on clean completion
 
     def test_default_chunk_timeout_value(self):
-        """DEFAULT_CHUNK_TIMEOUT is 60 seconds."""
-        assert DEFAULT_CHUNK_TIMEOUT == 60.0
+        """DEFAULT_CHUNK_TIMEOUT is 120 seconds."""
+        assert DEFAULT_CHUNK_TIMEOUT == 120.0
 
 
 # --- get_current_event_loop ---

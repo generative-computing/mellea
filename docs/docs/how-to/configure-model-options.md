@@ -119,7 +119,7 @@ non-deterministic session.
 | `ModelOption.SEED` | `int` | `None` | Random seed for reproducible output. |
 | `ModelOption.SYSTEM_PROMPT` | `str` | `None` | System prompt prepended to every call on the session. |
 | `ModelOption.STREAM` | `bool` | `False` | Enable streaming output. |
-| `ModelOption.STREAM_TIMEOUT` | `float \| None` | `60.0` | Timeout in seconds applied to every chunk, including time-to-first-token. If no chunk arrives within this window the stream aborts with a `TimeoutError`. Set to `None` to disable. Increase for slow local inference. |
+| `ModelOption.STREAM_TIMEOUT` | `float \| None` | `120.0` | Timeout in seconds applied to every chunk, including time-to-first-token. Only applies to streaming responses; non-streaming calls are unaffected. If no chunk arrives within this window the stream aborts with a `TimeoutError`. Set to `None` to disable. Increase for slow local inference. |
 | `ModelOption.STOP_SEQUENCES` | `list[str]` | `None` | Strings that halt generation when produced by the model. |
 | `ModelOption.THINKING` | varies | `None` | Enable or configure reasoning/thinking mode (model-dependent). |
 | `ModelOption.CONTEXT_WINDOW` | `int` | backend default | Context window size override. |
@@ -145,11 +145,12 @@ value the model sees depends on the backend's own defaults.
 
 ## Streaming timeout
 
-By default Mellea waits up to 60 seconds for each chunk, including the first
+By default Mellea waits up to 120 seconds for each chunk, including the first
 (time-to-first-token). If the backend stops sending without closing the connection
-the stream aborts with a `TimeoutError` rather than hanging indefinitely.
+the stream aborts with a `TimeoutError` rather than hanging indefinitely. This
+timeout only applies to streaming responses; non-streaming calls are unaffected.
 
-> **Note for slow or local backends:** The 60 s default covers time-to-first-token.
+> **Note for slow or local backends:** The 120 s default covers time-to-first-token.
 > Large models on CPU, long prompts, or heavily loaded servers can take longer than
 > this before producing the first token. Use a higher value or `None` for those
 > deployments.

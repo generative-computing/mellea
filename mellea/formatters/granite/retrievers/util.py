@@ -50,6 +50,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
 
 
 MB = 1048576  # 1MB in bytes
+_MAX_PARTS = 50  # largest corpus currently has 20 parts; 50 gives headroom for growth
 
 
 def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
@@ -130,9 +131,6 @@ def download_mtrag_embeddings(
 
     part_num = 1
     repo_root = "https://github.com/frreiss/mt-rag-embeddings"
-    _MAX_PARTS = (
-        50  # the largest corpus currently has 20 parts; 50 gives headroom for growth
-    )
     while (
         part_num <= _MAX_PARTS + 1
     ):  # +1 so a corpus of exactly _MAX_PARTS parts can fetch the terminating 404

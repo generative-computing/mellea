@@ -145,7 +145,7 @@ How `astream()` behaves:
 
 ### Streaming timeout
 
-Mellea waits up to 60 seconds for each chunk by default, including the first
+Mellea waits up to 120 seconds for each chunk by default, including the first
 (time-to-first-token). If the backend stops sending without closing the connection
 the stream aborts with a `TimeoutError` rather than hanging indefinitely.
 

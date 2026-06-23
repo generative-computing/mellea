@@ -32,7 +32,7 @@ class ModelOption:
         STREAM (str): Sentinel key for enabling streaming responses.
         STREAM_TIMEOUT (str): Sentinel key for the per-chunk streaming timeout in seconds
             (applied to every chunk, including time-to-first-token).
-            ``None`` disables the timeout. Defaults to ``60.0`` when not set.
+            ``None`` disables the timeout. Defaults to ``120.0`` when not set.
         STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
             encountered in the model output, cause generation to halt.
     """
@@ -53,7 +53,7 @@ class ModelOption:
     STREAM_TIMEOUT = "@@@stream_timeout@@@"
     """Per-chunk timeout in seconds (applied to every chunk, including time-to-first-token).
     If no chunk arrives within this window the stream is aborted with ``TimeoutError``.
-    ``None`` disables the timeout. Defaults to ``60.0`` seconds when not set."""
+    ``None`` disables the timeout. Defaults to ``120.0`` seconds when not set."""
     STOP_SEQUENCES = "@@@stop_sequences@@@"
     """Must be a `list[str]`. Generation halts when the model emits any of these strings.
 
