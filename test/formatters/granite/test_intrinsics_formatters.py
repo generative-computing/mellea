@@ -857,12 +857,12 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                     expected_dir = e_json["certainty"] >= 0.5
                     assert actual_dir == expected_dir, (
                         f"uncertainty binary direction mismatch: "
-                        f"actual score={t_json['certainty']:.4f} (>0.5? {actual_dir}), "
-                        f"expected score={e_json['certainty']:.4f} (>0.5? {expected_dir})"
+                        f"actual score={t_json['certainty']:.4f} (>=0.5? {actual_dir}), "
+                        f"expected score={e_json['certainty']:.4f} (>=0.5? {expected_dir})"
                     )
                     continue
 
-                elif "context_relevance" in cfg.short_name:
+                elif cfg.short_name == "context_relevance":
                     # context_relevance (non-alora): label is non-deterministic on GPU
                     # hardware. xfail rather than a bare `continue` so the case
                     # surfaces in the report instead of silently passing with no
