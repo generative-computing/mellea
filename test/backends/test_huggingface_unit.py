@@ -281,7 +281,7 @@ async def test_logits_populated_when_option_set():
     mot = ModelOutputThunk(value="hi")
     mot._action = Message("user", "noop")
     mot._model_options = {ModelOption.LOGITS: True}
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
         logits=None,
@@ -309,7 +309,7 @@ async def test_raw_logits_populated_when_option_set():
     mot = ModelOutputThunk(value="hi")
     mot._action = Message("user", "noop")
     mot._model_options = {ModelOption.RAW_LOGITS: True}
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=None,
         logits=fake_raw_logits,
@@ -339,7 +339,7 @@ async def test_raw_logits_and_logits_both_populated_when_both_options_set():
     mot = ModelOutputThunk(value="hi")
     mot._action = Message("user", "noop")
     mot._model_options = {ModelOption.LOGITS: True, ModelOption.RAW_LOGITS: True}
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
         logits=fake_raw_logits,
@@ -368,7 +368,7 @@ async def test_logits_populated_when_option_set_caching_enabled():
     mot = ModelOutputThunk(value="hi")
     mot._action = Message("user", "noop")
     mot._model_options = {ModelOption.LOGITS: True}
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
         logits=None,
@@ -396,7 +396,7 @@ async def test_logits_not_populated_when_option_not_set():
     mot = ModelOutputThunk(value="hi")
     mot._action = Message("user", "noop")
     mot._model_options = {}
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
         logits=None,
@@ -542,7 +542,7 @@ async def test_logits_none_when_stream_and_logits_both_set():
     mot._action = Message("user", "noop")
     mot._model_options = {ModelOption.LOGITS: True, ModelOption.STREAM: True}
     # Streaming output carries no scores — hf_output.scores is None.
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=None,
         logits=None,
@@ -662,7 +662,7 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
         output._computed = True
 
     # hf_output should now be stashed by granite_formatters_processing.
-    assert output._meta.get("hf_output") is fake_hf_output, (
+    assert output.raw.response is fake_hf_output, (
         "proxy must have captured the raw GenerateDecoderOnlyOutput"
     )
     input_ids = torch.tensor([[1]])

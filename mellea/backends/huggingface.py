@@ -62,8 +62,6 @@ from ..helpers import (
     messages_to_docs,
     send_to_queue,
 )
-from ..plugins.manager import has_plugins, invoke_hook
-from ..plugins.types import HookType
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
@@ -664,7 +662,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # generate_with_transformers produces internally but never returns (it wraps
         # everything into a ChatCompletionResponse). We proxy self._model so that
         # .generate() stores the raw output in raw_hf_output_cell before returning it;
-        # granite_formatters_processing then writes it to mot._meta["hf_output"] for
+        # granite_formatters_processing then writes it to mot.raw.response for
         # _surface_logits in post_processing.
         raw_hf_output_cell: list[GenerateDecoderOnlyOutput | None] = [None]
 
@@ -726,7 +724,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # post_processing/_surface_logits can populate generation.logits/raw_logits.
             if want_scores:
                 if raw_hf_output_cell[0] is not None:
-                    mot._meta["hf_output"] = raw_hf_output_cell[0]
+                    mot.raw.response = raw_hf_output_cell[0]
                 else:
                     warn_key = "intrinsic_no_hf_output"
                     if warn_key not in self._warned_about:
@@ -1398,7 +1396,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Surface logits before the caching branch clears hf_output.scores/logits.
         if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._model_options:
             self._surface_logits(mot, hf_output)
-
 
         if (
             self._use_caches
