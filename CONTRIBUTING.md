@@ -416,7 +416,7 @@ When submitting a PR review, pick one of GitHub's three states. Using them consi
 **`REQUEST CHANGES`** — the PR should not merge in its current form. Use when:
 - There is an actual blocking or breaking issue (correctness, regression, missing tests, etc.).
 - The reviewer needs to validate a concrete concern (a suspected regression, an incomplete change) before the PR merges, and is withholding approval until the next round. Wanting another pass without a specific concern isn't on its own a reason to block; coordinate with the author by comment instead.
-- Important follow-up issues have not yet been opened, and the reviewer doesn't want them forgotten. The expectation here is that the issues get filed, not that the PR itself changes.
+- Important follow-up issues have not yet been opened, and the reviewer doesn't want them forgotten. The resolution is to file the issues, not to change the PR; once they're filed the reviewer re-approves to clear the block.
 
 **`COMMENT`** — for everything else. Use when:
 - Posting a follow-up review that shouldn't change the PR's status from a prior `APPROVE` or `REQUEST CHANGES` (e.g., re-reviewing after a push when nothing material changed).
