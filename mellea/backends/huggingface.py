@@ -67,12 +67,7 @@ from ..plugins.types import HookType
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
-from .adapters import (
-    AdapterMixin,
-    IntrinsicAdapter,
-    LocalHFAdapter,
-    get_adapter_for_intrinsic,
-)
+from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -587,9 +582,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         docs = messages_to_docs(ctx_as_message_list)
 
-        adapter = get_adapter_for_intrinsic(
-            action.intrinsic_name, action.adapter_types, self._added_adapters
-        )
+        allowed_types = tuple(at.value for at in action.adapter_types)
+        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(
                 f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
