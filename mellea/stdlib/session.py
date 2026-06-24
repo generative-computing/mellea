@@ -287,16 +287,42 @@ class MelleaSession:
         *,
         session_id: str | None = None,
     ):
-        """Initialize MelleaSession with a backend and optional conversation context."""
+        """Initialize MelleaSession with a backend and optional conversation context.
+
+        Note:
+            When *ctx* is a bare (unbound, empty) `ChatContext` and *backend*
+            exposes a `model_id`, the constructor replaces `self.ctx` with a
+            re-bound copy that carries the model identifier.  After construction,
+            `session.ctx is ctx` will therefore be `False`.
+        """
         import uuid
 
-        self.id = session_id if session_id is not None else str(uuid.uuid4())
+        self._init_fields(
+            session_id if session_id is not None else str(uuid.uuid4()),
+            backend,
+            ctx if ctx is not None else SimpleContext(),
+        )
+        self._auto_bind_model()
+
+    def _init_fields(self, session_id: str, backend: Backend, ctx: Context) -> None:
+        """Set all instance fields. Shared by __init__ and __copy__ so neither diverges."""
+        self.id = session_id
         self.backend = backend
-        self.ctx: Context = ctx if ctx is not None else SimpleContext()
+        self.ctx: Context = ctx
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
         self._log_context_token = None
         self._exit_stack: contextlib.ExitStack | None = None
+
+    def _auto_bind_model(self) -> None:
+        """Bind the backend's model_id to a bare ChatContext, enabling auto context-window sizing."""
+        if (
+            isinstance(self.ctx, ChatContext)
+            and self.ctx.model_id is None
+            and self.ctx.is_root_node
+            and getattr(self.backend, "model_id", None) is not None
+        ):
+            self.ctx = self.ctx._bind_model(getattr(self.backend, "model_id"))
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -344,10 +370,11 @@ class MelleaSession:
 
     def __copy__(self):
         """Use self.clone. Copies the current session but keeps references to the backend and context."""
-        new = MelleaSession(backend=self.backend, ctx=self.ctx)
-        new._session_logger = self._session_logger
-        # Explicitly don't copy over the _context_token.
+        import uuid
 
+        new = object.__new__(MelleaSession)
+        new._init_fields(str(uuid.uuid4()), self.backend, self.ctx)
+        # Do not call _auto_bind_model: the session state is already settled.
         return new
 
     def clone(self) -> MelleaSession:
@@ -379,8 +406,10 @@ class MelleaSession:
         """Reset the context state to a fresh, empty context of the same type.
 
         Fires the `SESSION_RESET` plugin hook if any plugins are registered, then
-        replaces `self.ctx` with the result of `ctx.reset_to_new()`, discarding
-        all accumulated conversation history.
+        replaces `self.ctx` with a fresh empty context, discarding all accumulated
+        conversation history. For `ChatContext`, uses `new_instance()` so the
+        `model_id` and `window_size` bindings are preserved; for all other context
+        types, uses `reset_to_new()`.
         """
         if has_plugins(HookType.SESSION_RESET):
             from ..plugins.hooks.session import SessionResetPayload
@@ -389,7 +418,7 @@ class MelleaSession:
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
-        self.ctx = self.ctx.reset_to_new()
+        self.ctx = self.ctx.new_instance()
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
         """Clean up session resources and deregister session-scoped plugins.
