@@ -165,7 +165,7 @@ with `PydanticModel.model_validate_json(str(result))`.
 > parse explicitly with `model_validate_json`. When `return_sampling_results=True`,
 > unwrap first: `MyModel.model_validate_json(str(result.result))`.
 
-`act(format=...)` follows the same contract — see [act() and aact()](./act-and-aact.md)
+`act(format=...)` follows the same JSON-string contract — see [act() and aact()](./act-and-aact.md)
 for a worked example.
 
 ## Validating structured output content

@@ -933,9 +933,9 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     def value(self) -> str:
         """The raw string value produced by the model.
 
-        When ``format=`` was passed to the generating call, this is a JSON
+        When `format=` was passed to the generating call, this is a JSON
         string matching the declared schema — not a parsed model instance.
-        Use ``MyModel.model_validate_json(self.value)`` to get a typed instance.
+        Use `MyModel.model_validate_json(str(result))` to get a typed instance.
         """
         return self._underlying_value  # type: ignore
 
