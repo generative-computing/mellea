@@ -64,7 +64,7 @@ Shows how to use the `@tool` decorator for tool definition.
 from mellea.stdlib.tools import python_tool
 
 # Create the tool
-tool = python_tool(tier='docker_unsafe')
+tool = python_tool(tier="local_unsafe", name="python")
 
 # Execute code directly
 result = tool.run(code="print(1+1)")
@@ -78,9 +78,8 @@ from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.stdlib.tools import python_tool
 
-tool = python_tool(tier="local_unsafe", name="python")
 m = start_session()
-tool = python_tool(tier='docker_unsafe')
+tool = python_tool(tier="local_unsafe", name="python")
 result = m.instruct(
     "Make a plot of y=x^2",
     model_options={ModelOption.TOOLS: [tool]},
@@ -104,7 +103,7 @@ from mellea.stdlib.requirements import uses_tool
 from mellea.stdlib.tools import python_tool
 
 m = start_session()
-tool = python_tool(tier='docker_unsafe')
+tool = python_tool(tier="local_unsafe", name="python")
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
     requirements=[uses_tool("python")],
@@ -139,7 +138,7 @@ from mellea.stdlib.requirements import tool_arg_validator, uses_tool
 from mellea.stdlib.tools import python_tool
 
 m = start_session()
-tool = python_tool(tier='docker_unsafe')
+tool = python_tool(tier="local_unsafe", name="python")
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
     requirements=[
@@ -176,12 +175,6 @@ print(f"Execution success: {exec_result.success}")
 - `python_tool(tier="local_unsafe")`: Execute Python code locally (unrestricted subprocess)
 - `python_tool(tier="docker_unsafe")`: Execute Python code in Docker (no resource limits)
 - `python_tool(tier="docker")`: Execute Python code in Docker with capability policy
-
-### Python Tool
-
-- `python_tool`: Execute Python code with configurable execution tiers
-  (e.g., `tier='docker_unsafe'` for sandboxed, `tier='local'` for local
-  execution)
 
 ### Custom Tools
 
@@ -246,14 +239,12 @@ tool_arg_validator(
 ## Safety Considerations
 
 - **Tier selection**: Pass `tier=` explicitly — `"local_unsafe"` runs code as an unrestricted subprocess; use `"docker"` for real isolation
-- **Sandboxing**: Use `python_tool(tier='docker_unsafe')` for untrusted code;
-  use `tier='local'` only for trusted code
 - **Validation**: Always validate tool arguments
 - **Permissions**: Be careful with file system access
 - **Resource Limits**: Set timeouts and memory limits
 
 ## Related Documentation
 
-- See `mellea/stdlib/tools/python_tool.py` for python_tool implementation
+- See `mellea/stdlib/tools/interpreter.py` for python_tool implementation
 - See `mellea/stdlib/requirements/tool_reqs.py` for tool requirements
 - See `test/backends/test_tool_calls.py` for more examples
