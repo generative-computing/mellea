@@ -148,5 +148,8 @@ async def react(
         # Per-turn compaction hook (terminal turns skip this since `is_final` returned).
         if compactor is not None:
             context = compactor.compact(context, backend=backend)
+            assert isinstance(context, ChatContext), (
+                "react() compactor must return a ChatContext"
+            )
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")
