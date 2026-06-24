@@ -1,8 +1,7 @@
 """Backward-compatibility shim — use `mellea.stdlib.components.genstub` instead.
 
-.. deprecated::
-    The `genslot` module has been renamed to `genstub`.  This shim will be
-    removed in a future release.
+Deprecated: The `genslot` module has been renamed to `genstub`. This shim will be
+removed in a future release.
 """
 
 import warnings as _warnings

@@ -145,24 +145,58 @@ def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]
         Dictionary mapping entity types to lists of extracted entities.
 
     Example:
-        >>> extract_entities("Alice works at IBM", ["PERSON", "ORG"])
-        {"PERSON": ["Alice"], "ORG": ["IBM"]}
+        ```python
+        result = extract_entities("Alice works at IBM", ["PERSON", "ORG"])
+        # {"PERSON": ["Alice"], "ORG": ["IBM"]}
+        ```
     """
     ...
 ```
 
-#### Inline code references
+#### Code examples in docstrings
+
+Use **triple-backtick fenced code blocks** (` ```python `) for all code examples inside
+docstrings — not RST-style `Example::` notation and not `>>>` doctest prompts.
+
+**Why:** Fenced blocks render correctly in IDEs (VS Code hover cards, PyCharm quick
+docs), in the Docusaurus-based docs site, and in raw GitHub file views. Doctest-style
+`>>>` prompts mislead readers into thinking output is verified, which it is not — this
+project does not run doctests. RST directives (`Example::`, `.. deprecated::`,
+`:param:`, `:type:`) are not valid inside Google-style docstring sections; use
+Google-style section headers (`Example:`, `Raises:`, etc.) with plain Markdown instead.
+
+````python
+# Correct — triple-backtick fence inside an Example: section
+def greet(name: str) -> str:
+    """Return a greeting.
+
+    Example:
+        ```python
+        greet("world")  # "Hello, world!"
+        ```
+    """
+
+# Wrong — RST directive inside a docstring section
+def greet(name: str) -> str:
+    """Return a greeting.
+
+    Example::
+
+        greet("world")
+    """
+
+# Wrong — doctest prompts (output is not verified)
+def greet(name: str) -> str:
+    """Return a greeting.
+
+    Example:
+        >>> greet("world")
+        'Hello, world!'
+    """
+````
 
 Code references in docstrings (parameter names, variables, types, literals) use a single backtick (\`), like ``` `variable` ```— not double backticks (``` ``variable`` ```). Mellea uses Markdown-style docstrings, so a single backtick is the correct delimiter for inline code.
 
-```python
-def scale(value: float, factor: float = 1.0) -> float:
-    """Multiply `value` by `factor`.
-
-    Pass `factor` as `0.0` to zero out the result.
-    """
-    return value * factor
-```
 
 #### Class and `__init__` docstrings
 

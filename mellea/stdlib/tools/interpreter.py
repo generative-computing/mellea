@@ -1117,14 +1117,15 @@ def python_tool(
             a normal mellea installation).
         ValueError: If any entry in `packages` is empty or begins with `-`.
 
-    Example::
-
+    Example:
+        ```python
         from mellea.stdlib.tools import python_tool
 
         tool = python_tool(tier="local_unsafe", packages=["matplotlib", "numpy"])  # explicit unsafe local execution
         result = tool.run(code="import numpy as np; print(np.sqrt(4))")
         print(result.stdout)   # "2.0"
         print(result.artifacts)  # files written during execution
+        ```
     """
     from ...backends.tools import MelleaTool
 
@@ -1258,11 +1259,12 @@ def python_tool(
 def code_interpreter(code: str) -> ExecutionResult:
     """Execute Python code in a Docker sandbox (docker_unsafe tier).
 
-    .. deprecated::
-        Use :func:`python_tool` instead::
-
-            from mellea.stdlib.tools import python_tool
-            result = python_tool(tier="docker_unsafe").run(code=code)
+    Deprecated:
+        Use `python_tool` instead:
+        ```python
+        from mellea.stdlib.tools import python_tool
+        result = python_tool(tier="docker_unsafe").run(code=code)
+        ```
 
     Args:
         code: The Python code to execute.
@@ -1283,11 +1285,12 @@ def code_interpreter(code: str) -> ExecutionResult:
 def local_code_interpreter(code: str) -> ExecutionResult:
     """Execute Python code in the current process environment (local_unsafe tier).
 
-    .. deprecated::
-        Use :func:`python_tool` instead::
-
-            from mellea.stdlib.tools import python_tool
-            result = python_tool(tier="local_unsafe").run(code=code)
+    Deprecated:
+        Use `python_tool` instead:
+        ```python
+        from mellea.stdlib.tools import python_tool
+        result = python_tool(tier="local_unsafe").run(code=code)
+        ```
 
     Args:
         code: The Python code to execute.

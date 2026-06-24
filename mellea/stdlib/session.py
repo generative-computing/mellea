@@ -33,6 +33,7 @@ from ..core import (
     Context,
     GenerateLog,
     ImageBlock,
+    ImageUrlBlock,
     MelleaLogger,
     ModelOutputThunk,
     Requirement,
@@ -46,8 +47,13 @@ from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
-from ..telemetry import set_span_attribute, trace_application
 from ..telemetry.context import with_context
+from ..telemetry.tracing import (
+    finish_session_span,
+    finish_session_startup_span,
+    start_session_span,
+    start_session_startup_span,
+)
 from .components import Document, Message
 from .context import ChatContext, SimpleContext
 from .sampling import RejectionSamplingStrategy
@@ -151,6 +157,8 @@ def start_session(
         session.cleanup()
         ```
     """
+    import uuid
+
     logger = MelleaLogger.get_logger()
 
     # Validate args.
@@ -163,19 +171,24 @@ def start_session(
             "`ollama`, `hf`, `openai`, `watsonx`, `litellm`."
         )
 
-    with trace_application(
-        "start_session",
-        **{
-            "mellea.backend": backend_name,
-            "mellea.model_id": model_id_str,
-            "mellea.context_type": resolved_ctx.__class__.__name__,
-        },
-    ):
+    # Pre-generate so the startup span and session_pre_init payload share an id.
+    session_id = str(uuid.uuid4())
+
+    # Called directly, not via hook: OTel Token attach/detach is task-affine,
+    # and each hook firing runs in a separate _run_async_in_thread Task.
+    start_session_startup_span(
+        session_id,
+        backend=backend_name,
+        model_id=model_id_str,
+        context_type=resolved_ctx.__class__.__name__,
+    )
+    try:
         # --- session_pre_init hook ---
         if has_plugins(HookType.SESSION_PRE_INIT):
             from ..plugins.hooks.session import SessionPreInitPayload
 
             pre_payload = SessionPreInitPayload(
+                session_id=session_id,
                 backend_name=backend_name,
                 model_id=model_id_str,
                 model_options=model_options,
@@ -212,7 +225,7 @@ def start_session(
             + (f", model_options={model_options}" if model_options else "")
         )
 
-        session = MelleaSession(backend, resolved_ctx)
+        session = MelleaSession(backend, resolved_ctx, session_id=session_id)
 
         # Register session-scoped plugins
         if plugins:
@@ -230,8 +243,13 @@ def start_session(
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_POST_INIT, post_payload, backend=backend)
             )
+    except BaseException as exc:
+        finish_session_startup_span(session_id, exception=exc)
+        raise
+    else:
+        finish_session_startup_span(session_id)
 
-        return session
+    return session
 
 
 class MelleaSession:
@@ -262,29 +280,33 @@ class MelleaSession:
 
     ctx: Context
 
-    def __init__(self, backend: Backend, ctx: Context | None = None):
+    def __init__(
+        self,
+        backend: Backend,
+        ctx: Context | None = None,
+        *,
+        session_id: str | None = None,
+    ):
         """Initialize MelleaSession with a backend and optional conversation context."""
         import uuid
 
-        self.id = str(uuid.uuid4())
+        self.id = session_id if session_id is not None else str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
         self._log_context_token = None
-        self._session_span = None
         self._exit_stack: contextlib.ExitStack | None = None
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
-        # Start a session span that will last for the entire context manager lifetime
-        self._session_span = trace_application(
-            "session_context",
-            **{
-                "mellea.backend": self.backend.__class__.__name__,
-                "mellea.context_type": self.ctx.__class__.__name__,
-            },
-        ).__enter__()
+        # Called directly, not via hook: OTel Token attach/detach is task-affine,
+        # and each hook firing runs in a separate _run_async_in_thread Task.
+        start_session_span(
+            self.id,
+            context_type=self.ctx.__class__.__name__,
+            backend=self.backend._provider,
+        )
         self._context_token = _context_session.set(self)
         # TODO: Migrate telemetry fields from _log_context to with_context() system.
         # Currently session_id and model_id are duplicated in both systems. The
@@ -308,7 +330,7 @@ class MelleaSession:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and cleanup session."""
-        self.cleanup()
+        self.cleanup(exception=exc_val)
         if self._log_context_token is not None:
             _log_context.reset(self._log_context_token)
             self._log_context_token = None
@@ -318,9 +340,7 @@ class MelleaSession:
         if self._exit_stack is not None:
             self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
             self._exit_stack = None
-        if self._session_span is not None:
-            self._session_span.__exit__(exc_type, exc_val, exc_tb)
-            self._session_span = None
+        finish_session_span(self.id, exception=exc_val)
 
     def __copy__(self):
         """Use self.clone. Copies the current session but keeps references to the backend and context."""
@@ -371,13 +391,21 @@ class MelleaSession:
             )
         self.ctx = self.ctx.reset_to_new()
 
-    def cleanup(self) -> None:
-        """Clean up session resources and deregister session-scoped plugins."""
+    def cleanup(self, *, exception: BaseException | None = None) -> None:
+        """Clean up session resources and deregister session-scoped plugins.
+
+        Args:
+            exception: Optional exception that triggered cleanup. Forwarded
+                to plugins via `SessionCleanupPayload.exception`.
+        """
         if has_plugins(HookType.SESSION_CLEANUP):
             from ..plugins.hooks.session import SessionCleanupPayload
 
             payload = SessionCleanupPayload(
-                context=self.ctx, interaction_count=len(self.ctx.as_list())
+                session_id=self.id,
+                context=self.ctx,
+                interaction_count=len(self.ctx.as_list()),
+                exception=exception,
             )
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_CLEANUP, payload, backend=self.backend)
@@ -466,7 +494,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -485,7 +513,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -503,7 +531,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -569,7 +597,7 @@ class MelleaSession:
         content: str,
         role: Message.Role = "user",
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
@@ -817,7 +845,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -837,7 +865,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -857,7 +885,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -877,7 +905,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -896,7 +924,7 @@ class MelleaSession:
         self,
         description: str,
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -966,7 +994,7 @@ class MelleaSession:
         content: str,
         role: Message.Role = "user",
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,

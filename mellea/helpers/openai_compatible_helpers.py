@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
+from ..core.base import ImageUrlBlock
+
 if TYPE_CHECKING:
     from ..core import Formatter, ModelToolCall
     from ..core.base import AbstractMelleaTool, ModelOutputThunk
@@ -195,7 +197,12 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     if msg.images is not None:
         img_list = []
         for img in msg.images:
-            url = img if img.startswith("data:") else f"data:image/png;base64,{img}"
+            if isinstance(img, ImageUrlBlock):
+                url = img.value
+            else:
+                # ImageBlock: base64-encoded PNG
+                raw = str(img.value)
+                url = raw if raw.startswith("data:") else f"data:image/png;base64,{raw}"
             img_list.append({"type": "image_url", "image_url": {"url": url}})
 
         return {

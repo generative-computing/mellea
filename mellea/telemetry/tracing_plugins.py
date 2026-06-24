@@ -1,10 +1,12 @@
 """Tracing plugins for emitting OpenTelemetry spans via hooks.
 
-This module contains plugins that hook into the generation pipeline to
-automatically emit spans when tracing is enabled:
+This module contains plugins that hook into the generation and component
+pipelines to automatically emit spans when tracing is enabled:
 
 - BackendTracingPlugin: Emits Gen-AI semconv backend spans for every LLM
-  generation, on both chat and raw (batch) paths
+  generation, on both chat and raw (batch) paths.
+- ComponentTracingPlugin: Emits application-level spans tracking component
+  execution.
 """
 
 from __future__ import annotations
@@ -15,6 +17,11 @@ from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
 
 if TYPE_CHECKING:
+    from mellea.plugins.hooks.component import (
+        ComponentPostErrorPayload,
+        ComponentPostSuccessPayload,
+        ComponentPreExecutePayload,
+    )
     from mellea.plugins.hooks.generation import (
         GenerationBatchErrorPayload,
         GenerationBatchPostCallPayload,
@@ -25,7 +32,7 @@ if TYPE_CHECKING:
     )
 
 
-class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
+class BackendTracingPlugin(Plugin, name="backend_tracing", priority=40):
     """Emits Gen-AI semconv backend spans for every LLM generation.
 
     This plugin hooks into the generation pre-call, post-call, and error
@@ -150,5 +157,90 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=50):
         )
 
 
+class ComponentTracingPlugin(Plugin, name="component_tracing", priority=41):
+    """Emits application-level spans tracking component execution.
+
+    This plugin hooks into component pre-execute, post-success, and
+    post-error events to emit one span per component execution. Spans are
+    correlated across hooks via action_id.
+
+    All hooks run SEQUENTIAL so the OTel context token attached on each open
+    hook can be detached on the same task on the corresponding close hook.
+    """
+
+    @hook("component_pre_execute")
+    async def on_component_pre_execute(
+        self, payload: ComponentPreExecutePayload, context: dict[str, Any]
+    ) -> None:
+        """Open the action span for this component execution."""
+        if not payload.action_id:
+            return
+        from mellea.telemetry.tracing import start_action_span
+
+        action = payload.action
+        strategy = payload.strategy
+        start_action_span(
+            payload.action_id,
+            action_class_name=action.__class__.__name__ if action is not None else None,
+            has_requirements=bool(payload.requirements),
+            has_strategy=strategy is not None,
+            strategy_type=strategy.__class__.__name__ if strategy is not None else None,
+            has_format=payload.format is not None,
+            tool_calls=payload.tool_calls_enabled,
+        )
+
+    @hook("component_post_success")
+    async def on_component_post_success(
+        self, payload: ComponentPostSuccessPayload, context: dict[str, Any]
+    ) -> None:
+        """End the action span with response-side attributes."""
+        if not payload.action_id:
+            return
+        from mellea.telemetry.tracing import finish_action_span_success
+
+        result = payload.result
+        sampling = payload.sampling_results
+
+        response_text: str | None = None
+        response_length: int | None = None
+        if result is not None:
+            try:
+                response_text = (
+                    str(result.value)
+                    if hasattr(result, "value") and result.value
+                    else str(result)
+                )
+                response_length = len(response_text)
+            except Exception:
+                # Never let attribute capture fail the post hook.
+                pass
+
+        sampling_success = payload.sampling_success
+
+        num_logs = 1 if payload.generate_log is not None else 0
+        if sampling is not None:
+            num_logs = len(sampling)
+
+        finish_action_span_success(
+            payload.action_id,
+            num_generate_logs=num_logs,
+            sampling_success=sampling_success,
+            response_text=response_text,
+            response_length=response_length,
+        )
+
+    @hook("component_post_error")
+    async def on_component_post_error(
+        self, payload: ComponentPostErrorPayload, context: dict[str, Any]
+    ) -> None:
+        """End the action span with ERROR status."""
+        if not payload.action_id:
+            return
+        from mellea.telemetry.tracing import finish_action_span_error
+
+        exc = payload.error if payload.error is not None else Exception("unknown error")
+        finish_action_span_error(payload.action_id, exception=exc)
+
+
 # All tracing plugins to auto-register when tracing is enabled.
-_TRACING_PLUGIN_CLASSES = (BackendTracingPlugin,)
+_TRACING_PLUGIN_CLASSES = (BackendTracingPlugin, ComponentTracingPlugin)

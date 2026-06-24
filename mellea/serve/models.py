@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from mellea.core import ImageBlock
+from mellea.core import ImageBlock, ImageUrlBlock
 
 
 class TextContent(BaseModel):
@@ -76,26 +76,35 @@ class ChatMessage(BaseModel):
                     urls.append(url)
         return urls
 
-    def get_image_blocks(self) -> list[ImageBlock]:
-        """Extract ImageBlocks from message content.
+    def get_image_blocks(self) -> list[ImageBlock | ImageUrlBlock]:
+        """Extract image blocks from message content.
 
         Returns:
-            List of ImageBlocks from all ImageUrlContent items.
-            Empty list if content is a string or contains no images.
+            List of ``ImageBlock`` (for base64/data-URI images) or
+            ``ImageUrlBlock`` (for http/https URLs) from all ImageUrlContent
+            items. Empty list if content is a string or contains no images.
 
         Raises:
             ValueError: If an image URL is invalid or cannot be processed.
         """
         image_urls = self.get_image_urls()
-        image_blocks: list[ImageBlock] = []
+        image_blocks: list[ImageBlock | ImageUrlBlock] = []
         for url in image_urls:
-            try:
-                image_blocks.append(ImageBlock(url))
-            except AssertionError as e:
-                # Raise ValueError for invalid URLs so the client gets a clear 400 error
-                # rather than silently processing a request without the expected images
+            if url.startswith(("http://", "https://")):
+                image_blocks.append(ImageUrlBlock(url))
+            elif url.startswith("data:"):
+                try:
+                    image_blocks.append(ImageBlock(url))
+                except AssertionError as e:
+                    # Raise ValueError for invalid data so the client gets a clear 400 error
+                    # rather than silently processing a request without the expected images
+                    raise ValueError(
+                        f"Invalid image data: {url[:100]}{'...' if len(url) > 100 else ''}. "
+                        f"Error: {e}"
+                    ) from e
+            else:
                 raise ValueError(
                     f"Invalid image URL: {url[:100]}{'...' if len(url) > 100 else ''}. "
-                    f"Error: {e}"
-                ) from e
+                    "Expected an http/https URL or a data: URI."
+                )
         return image_blocks

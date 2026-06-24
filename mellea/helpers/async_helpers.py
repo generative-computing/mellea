@@ -19,15 +19,46 @@ if TYPE_CHECKING:
     from ..core import ModelOutputThunk
 
 
+DEFAULT_CHUNK_TIMEOUT: float = 120.0
+"""Default per-chunk timeout for streaming responses, in seconds.
+
+This value applies to every chunk including the first (time-to-first-token).
+Slow local inference (large models on CPU, heavily queued servers) can take
+well over 60 s before producing the first token — set ``ModelOption.STREAM_TIMEOUT``
+to a higher value or ``None`` for those deployments.
+
+This timeout only activates when the backend returns an ``AsyncIterator`` (i.e.
+streaming responses). Non-streaming coroutines that resolve to a plain response
+object bypass the per-chunk loop entirely and are unaffected by this value.
+"""
+
+
 async def send_to_queue(
-    co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, aqueue: asyncio.Queue
+    co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator,
+    aqueue: asyncio.Queue,
+    *,
+    chunk_timeout: float | None = DEFAULT_CHUNK_TIMEOUT,
 ) -> None:
     """Processes the output of an async chat request by sending the output to an async queue.
 
     Args:
         co: A coroutine or async iterator producing the backend response.
-        aqueue: The async queue to send results to. A sentinel `None` is appended on
-            completion; an exception instance is appended on error.
+        aqueue: The async queue to send results to. A sentinel ``None`` is appended on
+            normal completion; an exception instance (including ``TimeoutError``) is
+            appended on error. A timeout does **not** append a trailing sentinel — the
+            exception item is the stream terminator.
+        chunk_timeout: Maximum seconds to wait for each chunk from the backend iterator,
+            including the first (time-to-first-token). Only applies when the backend
+            response is an ``AsyncIterator``; non-streaming coroutines are unaffected.
+            If no chunk arrives within this window a ``TimeoutError`` is forwarded to
+            the queue and the stream is aborted. ``None`` disables the timeout.
+            Defaults to ``DEFAULT_CHUNK_TIMEOUT`` (120 s). Note that ``0`` sets the
+            deadline to "now" and aborts immediately — use ``None`` to disable.
+
+    Raises:
+        TimeoutError: Re-raised verbatim when the backend itself raises ``TimeoutError``
+            (i.e. the timeout did not originate from *this* function's per-chunk guard).
+            Stream-guard timeouts are forwarded into *aqueue* rather than raised.
     """
     try:
         if isinstance(co, Coroutine):
@@ -38,7 +69,37 @@ async def send_to_queue(
             aresponse = co
 
         if isinstance(aresponse, AsyncIterator):
-            async for item in aresponse:
+            ait = aiter(aresponse)
+            while True:
+                cm: asyncio.Timeout | None = None
+                try:
+                    async with asyncio.timeout(chunk_timeout) as cm:
+                        item = await anext(ait)
+                except StopAsyncIteration:
+                    break
+                except TimeoutError:
+                    if cm is None or not cm.expired():
+                        raise  # backend's own TimeoutError — forward verbatim
+                    await aqueue.put(
+                        TimeoutError(
+                            f"Stream timed out after {chunk_timeout}s without a chunk "
+                            "(covers time-to-first-token and inter-chunk gaps). "
+                            "Set ModelOption.STREAM_TIMEOUT to a larger value or None to disable."
+                        )
+                    )
+                    close = getattr(ait, "aclose", None) or getattr(ait, "close", None)
+                    if close is not None:
+                        from ..core import MelleaLogger
+
+                        try:
+                            result = close()
+                            if asyncio.iscoroutine(result):
+                                await result
+                        except Exception as e:
+                            MelleaLogger.get_logger().debug(
+                                f"Failed to close stalled stream iterator: {e}"
+                            )
+                    return
                 await aqueue.put(item)
         else:
             await aqueue.put(aresponse)

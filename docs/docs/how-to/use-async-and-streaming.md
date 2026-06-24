@@ -142,6 +142,37 @@ How `astream()` behaves:
 > **Warning:** Do not call `astream()` from multiple coroutines simultaneously on
 > the same thunk. Each thunk should have a single reader.
 
+### Streaming timeout
+
+Mellea waits up to 120 seconds for each chunk by default, including the first
+(time-to-first-token). If the backend stops sending without closing the connection
+the stream aborts with a `TimeoutError` rather than hanging indefinitely.
+
+For slow local inference or large models on CPU, increase the timeout or disable it:
+
+```python
+# Shorter timeout for a fast remote endpoint
+mot = await m.ainstruct(
+    "Summarise this document.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 10},
+)
+
+# Larger value for slow local inference
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 300},
+)
+
+# Disable entirely — original unbounded behaviour
+mot = await m.ainstruct(
+    "Write a long analysis.",
+    model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: None},
+)
+```
+
+See [Configure model options — Streaming timeout](../how-to/configure-model-options#streaming-timeout)
+for the full reference.
+
 ## Async and context
 
 Use `SimpleContext` (the default) with concurrent async requests. Using `ChatContext`
