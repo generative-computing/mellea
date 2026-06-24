@@ -30,7 +30,11 @@ _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_respons
 
 
 def policy_guardrails(
-    context: ChatContext, backend: AdapterMixin, policy_text: str
+    context: ChatContext,
+    backend: AdapterMixin,
+    policy_text: str,
+    *,
+    model_options: dict | None = None,
 ) -> str:
     """Check whether the last context turn complies with a policy.
 
@@ -42,6 +46,8 @@ def policy_guardrails(
         context: Chat context containing the conversation to evaluate.
         backend: Backend instance that supports LoRA adapters.
         policy_text: Policy text against which compliance is checked.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. ``{"temperature": 0}``).
 
     Returns:
         Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (Yes = compliant).
@@ -51,7 +57,11 @@ def policy_guardrails(
             `"label"` and `"score"` fields.
     """
     result_json = call_intrinsic(
-        "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
+        "policy-guardrails",
+        context,
+        backend,
+        kwargs={"policy_text": policy_text},
+        model_options=model_options,
     )
 
     has_label = "label" in result_json
@@ -177,6 +187,8 @@ def guardian_check(
     criteria: str,
     scoring_schema: str | object = _UNSET,
     target_role: str | None = None,
+    *,
+    model_options: dict | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
 
@@ -202,6 +214,8 @@ def guardian_check(
             :data:`SCORING_SCHEMA_BANK`. Passing both
             `scoring_schema` and `target_role` raises
             :class:`TypeError`.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. ``{"temperature": 0}``).
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
@@ -247,6 +261,7 @@ def guardian_check(
         context,
         backend,
         kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
+        model_options=model_options,
     )
     return result_json["guardian"]["score"]
 
@@ -256,6 +271,7 @@ def factuality_detection(
     backend: AdapterMixin,
     *,
     documents: collections.abc.Iterable[str | Document] | None = None,
+    model_options: dict | None = None,
 ) -> str:
     """Determine whether the last assistant response is factually incorrect.
 
@@ -284,6 +300,8 @@ def factuality_detection(
             or a plain string (automatically wrapped in ``Document``).
             When ``None``, any documents already present in ``context`` are
             used.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. ``{"temperature": 0}``).
 
     Returns:
         Factuality label: ``"yes"`` if the response is factually incorrect,
@@ -295,7 +313,9 @@ def factuality_detection(
     """
     if documents is not None:
         context = _inject_documents(context, documents)
-    result_json = call_intrinsic("factuality-detection", context, backend)
+    result_json = call_intrinsic(
+        "factuality-detection", context, backend, model_options=model_options
+    )
     return result_json["score"]
 
 
@@ -304,6 +324,7 @@ def factuality_correction(
     backend: AdapterMixin,
     *,
     documents: collections.abc.Iterable[str | Document] | None = None,
+    model_options: dict | None = None,
 ) -> str:
     """Correct the last assistant response to make it factually accurate.
 
@@ -332,6 +353,8 @@ def factuality_correction(
             or a plain string (automatically wrapped in ``Document``).
             When ``None``, any documents already present in ``context`` are
             used.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. ``{"temperature": 0}``).
 
     Returns:
         Corrected assistant response as a plain string.
@@ -342,7 +365,9 @@ def factuality_correction(
     """
     if documents is not None:
         context = _inject_documents(context, documents)
-    result_json = call_intrinsic("factuality-correction", context, backend)
+    result_json = call_intrinsic(
+        "factuality-correction", context, backend, model_options=model_options
+    )
     return result_json["correction"]
 
 

@@ -36,4 +36,6 @@ ctx = (
 )
 
 result = guardian.factuality_detection(ctx, backend)
+# Alternatively, pass documents explicitly (replaces any docs on the last assistant turn):
+#   result = guardian.factuality_detection(ctx_no_doc, backend, documents=[document])
 print(f"Result of factuality detection: {result}")  # string "yes" or "no"

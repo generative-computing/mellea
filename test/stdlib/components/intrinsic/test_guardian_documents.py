@@ -232,3 +232,36 @@ def test_policy_guardrails_raises_when_neither_label_nor_score_present(capture_p
     ctx = ChatContext().add(Message("user", "Hello"))
     with pytest.raises(ValueError, match="found neither"):
         guardian.policy_guardrails(ctx, object(), policy_text="no hate speech")
+
+
+# ---------------------------------------------------------------------------
+# model_options forwarding
+# ---------------------------------------------------------------------------
+
+
+def _make_capture(monkeypatch, result: dict):
+    """Patch call_intrinsic to capture (name, model_options) and return result."""
+    calls: list[tuple] = []
+
+    def _fake(name, ctx, backend, /, kwargs=None, model_options=None):
+        calls.append((name, model_options))
+        return result
+
+    monkeypatch.setattr(guardian, "call_intrinsic", _fake)
+    return calls
+
+
+def test_policy_guardrails_forwards_model_options(monkeypatch):
+    calls = _make_capture(monkeypatch, {"label": "Yes"})
+    ctx = ChatContext().add(Message("user", "Hello"))
+    guardian.policy_guardrails(
+        ctx, object(), policy_text="no hate", model_options={"temperature": 0}
+    )
+    assert calls[0] == ("policy-guardrails", {"temperature": 0})
+
+
+def test_factuality_detection_forwards_model_options(monkeypatch):
+    calls = _make_capture(monkeypatch, {"score": "no"})
+    ctx = ChatContext().add(Message("assistant", "The answer is 42."))
+    guardian.factuality_detection(ctx, object(), model_options={"temperature": 0})
+    assert calls[0] == ("factuality-detection", {"temperature": 0})
