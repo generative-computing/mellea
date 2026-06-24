@@ -39,9 +39,8 @@ try:
     )
 except ImportError as e:
     raise ImportError(
-        "The code_generation_and_execution example requires matplotlib support. "
-        "Please install Mellea with plotting support: `uv pip install mellea[plotting]` "
-        "or install matplotlib and numpy directly: `uv pip install matplotlib numpy`"
+        "The code_generation_and_execution example requires matplotlib and numpy. "
+        "Install them with: `uv pip install matplotlib numpy`"
     ) from e
 
 
@@ -220,9 +219,9 @@ def process_user_request(
 
     output_path = str(Path(output_dir) / f"graph_{request_number}.png")
 
-    # Sanitize user input and CSV preview to prevent prompt injection attacks.
-    # Use repr() to escape special characters and quote the values, preventing
-    # the model from interpreting user input as prompt instructions.
+    # Quote and escape user input and CSV preview to reduce accidental prompt
+    # formatting breakage. repr() wraps strings in quotes and escapes special
+    # characters, preventing markdown or code-block markers from being interpreted.
     sanitized_request = repr(user_request)
     sanitized_preview = repr(csv_preview)
 
@@ -243,7 +242,7 @@ def process_user_request(
     2. Extract the data as specified in the user request
     3. Use matplotlib with headless backend (set matplotlib.use('Agg') at start)
     4. Create the visualization (graph type) specified by the user
-    5. Save the graph to {output_path} using plt.savefig(\'{output_path}\')
+    5. Save the graph to {output_path} using plt.savefig('{output_path}')
     6. Do NOT call plt.show() - only save to file
     7. Print a message indicating success
 
@@ -272,17 +271,17 @@ def process_user_request(
     strategy = ModelFriendlyRepairStrategy(loop_budget=5, requirements=all_reqs)
 
     print("Generating code to extract data and create graph...")
-    generated = m.instruct(
-        prompt,
-        requirements=all_reqs,  # type: ignore[arg-type]
-        strategy=strategy,
-    )
+    generated = m.instruct(prompt, strategy=strategy)
 
-    if generated is None or not generated:
+    if generated is None:
         print("  ✗ Model failed to generate output (requirements loop exhausted)")
         return
 
     generated_str = str(generated)
+    if not generated_str.strip():
+        print("  ✗ Model failed to generate output")
+        return
+
     code = _extract_code_from_output(generated_str)
     if code is None:
         print("  ✗ Failed to extract Python code from model output")
@@ -298,7 +297,8 @@ def process_user_request(
     # Check if graph file was created
     graph_path = Path(output_path)
     if not graph_path.exists():
-        raise RuntimeError(f"Graph was not created at {graph_path}")
+        print(f"  ✗ Graph was not created at {graph_path}")
+        return
     print(f"\n  ✓ Graph saved to: {graph_path}")
     print(f"    File size: {graph_path.stat().st_size} bytes")
 
@@ -311,16 +311,16 @@ def main():
         epilog="""
 Examples:
   # Run with default sample data and predefined requests
-  python code_generation_and_execution.py
+  uv run python code_generation_and_execution.py
 
   # Use a custom CSV file
-  python code_generation_and_execution.py --csv /path/to/data.csv
+  uv run python code_generation_and_execution.py --csv /path/to/data.csv
 
   # Accept user input interactively
-  python code_generation_and_execution.py --interactive
+  uv run python code_generation_and_execution.py --interactive
 
   # Both custom CSV and interactive mode
-  python code_generation_and_execution.py --csv /path/to/data.csv --interactive
+  uv run python code_generation_and_execution.py --csv /path/to/data.csv --interactive
         """,
     )
     parser.add_argument("--csv", type=str, default=None, help="Path to CSV file")

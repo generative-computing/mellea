@@ -174,54 +174,13 @@ with execution:
 
 When `m.instruct()` is called with `PythonExecutionReq` (with
 `execution_tier="local"`), the requirement validation automatically
-executes the generated code in a subprocess during validation. This
-happens as a **side effect** of the validation process — before the code
-is returned to the caller.
+executes the generated code during validation. This happens as a **side effect**
+of the validation process — before the code is returned to the caller.
 
-The underlying mechanism (what `PythonExecutionReq` does under the hood):
-
-```python
-def execute_python_code(code: str, timeout: int = 10) -> dict:
-    """Execute Python code in a subprocess and capture output."""
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as f:
-            f.write(code)
-            temp_file = f.name
-
-        try:
-            result = subprocess.run(
-                [sys.executable, temp_file],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-
-            return {
-                "success": result.returncode == 0,
-                "output": result.stdout,
-                "error": result.stderr,
-                "return_code": result.returncode,
-            }
-        finally:
-            Path(temp_file).unlink()
-
-    except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "output": "",
-            "error": f"Code execution timed out after {timeout}s",
-            "return_code": -1,
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "output": "",
-            "error": str(e),
-            "return_code": -1,
-        }
-```
+`PythonExecutionReq` executes code via an `ExecutionEnvironment` built from the
+`execution_tier` and `CapabilityPolicy` you pass — that's what enforces the
+timeout and tier behavior. See `mellea/stdlib/requirements/python_reqs.py` for
+the full implementation.
 
 **Key point:** In `code_generation_and_execution.py`, after `m.instruct()`
 returns, the code has *already been executed*. To verify success, check
