@@ -12,8 +12,8 @@ into your code:
 
 | Pattern | When to use |
 | ------- | ----------- |
-| `@generative` with return type | You want a named, reusable function. The return type is declared in the signature. |
-| `instruct(format=...)` | You are building the prompt dynamically or combining structured output with `grounding_context` or `user_variables`. |
+| `@generative` with return type | You want a named, reusable function. The return type is declared in the signature. Pydantic instance returned directly — no manual parse needed. |
+| `instruct(format=...)` or `act(format=...)` | Building the prompt dynamically, or combining structured output with `grounding_context` or `user_variables`. The result's `.value` is a JSON string — parse with `model_validate_json`. |
 
 Both paths enforce the declared schema at generation time using constrained decoding
 where the backend supports it, and retry with the IVR loop if parsing fails.
@@ -160,6 +160,14 @@ The `format` parameter triggers constrained decoding. The result is a
 `ModelOutputThunk` whose `.value` is a JSON string matching the schema. Parse it
 with `PydanticModel.model_validate_json(str(result))`.
 
+> **Watch out for `cast()`**: `cast(MyModel, result.value)` passes type checking
+> but fails at runtime — `.value` is always a string, not a model instance. Always
+> parse explicitly with `model_validate_json`. When `return_sampling_results=True`,
+> unwrap first: `MyModel.model_validate_json(str(result.result))`.
+
+`act(format=...)` follows the same contract — see [act() and aact()](./act-and-aact.md)
+for a worked example.
+
 ## Validating structured output content
 
 Constrained decoding enforces schema validity — the output is always parseable JSON
@@ -263,10 +271,11 @@ You receive a `Summary` instance, not a JSON string.
 - You want a clean function signature with IDE type-checking.
 - You prefer direct attribute access (`person.name`) over manual JSON parsing.
 
-**Use `instruct(format=...)`** when:
+**Use `instruct(format=...)` or `act(format=...)`** when:
 
 - The prompt is built dynamically with `user_variables` or `grounding_context`.
 - You are retrofitting structured output onto an existing `instruct()` call.
+- You are passing a custom component to `act()` with `format=` directly.
 - You need fine-grained control over requirements and sampling alongside formatting.
 
 Both patterns support the full IVR loop, requirements, sampling strategies, and

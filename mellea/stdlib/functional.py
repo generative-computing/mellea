@@ -101,7 +101,10 @@ def act(
         requirements: used as additional requirements when a sampling strategy is provided.
         strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-        format: if set, the BaseModel to use for constrained decoding.
+        format: If set, constrains generation to JSON matching this Pydantic
+            schema. The result's ``.value`` is always a JSON string — not a
+            parsed model instance. Parse with
+            ``MyModel.model_validate_json(str(result))`` to get a typed instance.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
 
@@ -210,7 +213,10 @@ def instruct(
         output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
         strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-        format: If set, the BaseModel to use for constrained decoding.
+        format: If set, constrains generation to JSON matching this Pydantic
+            schema. The result's ``.value`` is always a JSON string — not a
+            parsed model instance. Parse with
+            ``MyModel.model_validate_json(str(result))`` to get a typed instance.
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
@@ -570,7 +576,10 @@ async def aact(
         requirements: used as additional requirements when a sampling strategy is provided
         strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-        format: if set, the BaseModel to use for constrained decoding.
+        format: If set, constrains generation to JSON matching this Pydantic
+            schema. The result's ``.value`` is always a JSON string — not a
+            parsed model instance. Parse with
+            ``MyModel.model_validate_json(str(result))`` to get a typed instance.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
@@ -856,7 +865,10 @@ async def ainstruct(
         output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
         strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-        format: If set, the BaseModel to use for constrained decoding.
+        format: If set, constrains generation to JSON matching this Pydantic
+            schema. The result's ``.value`` is always a JSON string — not a
+            parsed model instance. Parse with
+            ``MyModel.model_validate_json(str(result))`` to get a typed instance.
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
