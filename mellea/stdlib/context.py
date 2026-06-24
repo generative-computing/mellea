@@ -210,22 +210,31 @@ class ChatContext(Context):
         effective_budget = int(token_budget * 0.75)
         collected: list[Component | CBlock] = []
         spent = 0
-        total = 0
+        chain_length = 0
+        node: Context = self
+        while not node.is_root_node:
+            chain_length += 1
+            node = node.previous_node  # type: ignore[assignment]
         current: Context = self
         while not current.is_root_node:
             item = current.node_data
-            assert item is not None
+            if item is None:  # pragma: no cover
+                raise RuntimeError(
+                    "Malformed context chain: node_data is None at a non-root node"
+                )
             rendered = formatter.print(item) if formatter is not None else str(item)
             cost = max(1, len(rendered) // 4)
-            total += 1
             if spent + cost > effective_budget:
                 break
             collected.append(item)
             spent += cost
             prev = current.previous_node
-            assert prev is not None
+            if prev is None:  # pragma: no cover
+                raise RuntimeError(
+                    "Malformed context chain: previous_node is None at a non-root node"
+                )
             current = prev
-        dropped = total - len(collected)
+        dropped = chain_length - len(collected)
         if dropped:
             logger.debug(
                 "Context truncated: dropped %d item(s) to stay within %d-token budget "
