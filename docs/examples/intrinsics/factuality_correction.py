@@ -93,6 +93,7 @@ ctx = (
 )
 
 result = guardian.factuality_correction(ctx, backend)
-# Alternatively, pass documents explicitly (replaces any docs on the last assistant turn):
-#   result = guardian.factuality_correction(ctx_no_doc, backend, documents=[document])
+# Alternatively, instead of attaching the document to the context above, pass it
+# explicitly via documents= (replaces any docs on the last assistant turn):
+#   result = guardian.factuality_correction(ctx, backend, documents=[document])
 print(f"Result of factuality correction: {result}")  # corrected response string
