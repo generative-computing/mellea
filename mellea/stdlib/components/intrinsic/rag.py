@@ -317,7 +317,7 @@ def clarify_query(
             `Document`).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports the adapters that implement
-            this intrinsic.
+            this adapter function.
         model_options: Optional model-option overrides (e.g.
             ``{"temperature": 0.1}``).  Merged on top of the adapter default
             (``temperature=0.0``).
@@ -371,11 +371,11 @@ def find_citations(
             `Document` with an auto-generated `doc_id` (`"0"`, `"1"`, ...);
             for explicit control, pass `Document` objects with `doc_id` set.
             `Document` objects without `doc_id` trigger a warning because the
-            intrinsic uses `doc_id` to identify citation sources.
+            adapter function uses `doc_id` to identify citation sources.
         context: Context of the dialog between user and assistant at the point where
             the user has just asked a question that will be answered with RAG documents.
         backend: Backend that supports one of the adapters that implements this
-            intrinsic.
+            adapter function.
         model_options: Optional model-option overrides (e.g.
             ``{"temperature": 0.1}``).  Merged on top of the adapter default
             (``temperature=0.0``).
@@ -442,7 +442,7 @@ def check_context_relevance(
             string (automatically wrapped in `Document`).
         context: The chat up to the point where the user asked a question.
         backend: Backend instance that supports the adapters that implement this
-            intrinsic.
+            adapter function.
         model_options: Optional model-option overrides (e.g.
             ``{"temperature": 0.1}``).  Merged on top of the adapter default
             (``temperature=0.0``).
@@ -510,7 +510,7 @@ def flag_hallucinated_content(
             in `Document`).
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
-            intrinsic.
+            adapter function.
         model_options: Optional model-option overrides (e.g.
             ``{"temperature": 0.1}``).  Merged on top of the adapter default
             (``temperature=0.0``).
