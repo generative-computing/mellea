@@ -56,8 +56,9 @@ def test_simple_instruct(session) -> None:
         "Write an email to Hendrik trying to sell him self-sealing stembolts."
     )
     assert result.value.startswith("Subject")
-    assert "chat_response" in result._meta
-    assert result._meta["chat_response"].message.role == "assistant"
+    assert result.raw.provider == "ollama"
+    assert result.raw.response is not None
+    assert result.raw.response.message.role == "assistant"
 
     assert isinstance(result.parsed_repr, str)
 

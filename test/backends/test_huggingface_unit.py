@@ -82,7 +82,7 @@ async def test_finish_reasons_derivation(
     mot = ModelOutputThunk(value=value)
     mot._action = Message("user", "noop")
     mot._model_options = model_options
-    mot._meta["hf_output"] = GenerateDecoderOnlyOutput(
+    mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=None,
         logits=None,

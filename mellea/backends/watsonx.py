@@ -32,6 +32,7 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
+    RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
@@ -512,10 +513,8 @@ class WatsonxAIBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            # Store full chunk (includes usage information)
-            mot._meta["oai_chat_response"] = chunk
-            # Store choice separately for tool extraction
-            mot._meta["oai_chat_response_choice"] = chunk["choices"][0]
+            # Store full chunk (includes usage information).
+            mot.raw.response = chunk
 
         else:  # Streaming.
             message_delta: dict = chunk["choices"][0].get("delta", dict())
@@ -528,9 +527,9 @@ class WatsonxAIBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            if mot._meta.get("oai_chat_response_streamed", None) is None:
-                mot._meta["oai_chat_response_streamed"] = []
-            mot._meta["oai_chat_response_streamed"].append(chunk["choices"][0])
+            if mot.raw.streamed_chunks is None:
+                mot.raw.streamed_chunks = []
+            mot.raw.streamed_chunks.append(chunk["choices"][0])
 
     async def post_processing(
         self,
@@ -554,12 +553,9 @@ class WatsonxAIBackend(FormatterBackend):
             seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """
-        # Reconstruct the chat_response from chunks if streamed.
-        streamed_chunks = mot._meta.get("oai_chat_response_streamed", None)
-        if streamed_chunks is not None:
-            mot._meta["oai_chat_response"] = chat_completion_delta_merge(
-                streamed_chunks
-            )
+        # Reconstruct the top-level response from chunks if streamed.
+        if mot.raw.streamed_chunks is not None:
+            mot.raw.response = chat_completion_delta_merge(mot.raw.streamed_chunks)
 
         assert mot._action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
@@ -571,9 +567,14 @@ class WatsonxAIBackend(FormatterBackend):
         # OpenAI streamed responses give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        # Use choice for tool extraction (streaming returns choice, not full response)
-        choice_response = mot._meta.get(
-            "oai_chat_response_choice", mot._meta["oai_chat_response"]
+        # Non-streaming stores a top-level response (index into choices); streaming
+        # stores the already-merged choice dict (use directly).
+        response = mot.raw.response
+        assert response is not None
+        choice_response = (
+            response["choices"][0]
+            if isinstance(response, dict) and "choices" in response
+            else response
         )
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
@@ -583,24 +584,14 @@ class WatsonxAIBackend(FormatterBackend):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
-        # Extract token usage from response
-        response = mot._meta.get("oai_chat_response")
-        usage = None
-        if response is not None:
-            # Watsonx responses may have usage information
-            usage = (
-                response.get("usage")
-                if isinstance(response, dict)
-                else getattr(response, "usage", None)
-            )
-
-        # Populate standardized usage field (WatsonX uses OpenAI format)
-        if usage:
+        # Populate usage when the response carries it (WatsonX uses OpenAI format).
+        if usage := response.get("usage"):
             mot.generation.usage = usage
 
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
         # Populate response-side metadata for telemetry
         populate_response_metadata_openai_shape(mot, response)
@@ -611,7 +602,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.backend = f"watsonx::{self.model_id!s}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
-        generate_log.model_output = mot._meta["oai_chat_response"]
+        generate_log.model_output = response
         generate_log.extra = {
             "format": _format,
             "tools_available": tools,
@@ -688,9 +679,9 @@ class WatsonxAIBackend(FormatterBackend):
                 }
             else:
                 per_mot_usage = None
-            result = ModelOutputThunk(
-                value=output["generated_text"],
-                meta={"oai_completion_response": response["results"][0]},
+            result = ModelOutputThunk(value=output["generated_text"])
+            result.raw = RawProviderResponse(
+                provider=self._provider, response=response["results"][0]
             )
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id

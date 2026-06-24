@@ -6,7 +6,14 @@ from typing import Any
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import CBlock, Component, ImageBlock, ImageUrlBlock, ModelOutputThunk
+from mellea.core import (
+    CBlock,
+    Component,
+    ImageBlock,
+    ImageUrlBlock,
+    ModelOutputThunk,
+    RawProviderResponse,
+)
 from mellea.stdlib.components import Message
 
 
@@ -44,18 +51,15 @@ def test_parse():
             self.message = msg
 
     source = Message(role="user", content="source message")
-    result = ModelOutputThunk(
-        value="result value",
-        meta={
-            "chat_response": _ChatResponse(
-                Message(role="assistant", content="assistant reply")
-            )
-        },
+    result = ModelOutputThunk(value="result value")
+    result.raw = RawProviderResponse(
+        provider="ollama",
+        response=_ChatResponse(Message(role="assistant", content="assistant reply")),
     )
 
     result.parsed_repr = source.parse(result)
     assert isinstance(result.parsed_repr, Message), (
-        "result's parsed repr should be a message when meta includes a chat_response"
+        "result's parsed repr should be a message when raw provider is set"
     )
     assert result.parsed_repr.role == "assistant", (
         "result's parsed repr role should be assistant"
@@ -228,6 +232,60 @@ def test_mot_deep_copy_clones_generation():
     assert deepcopied.generation.provider == "test-provider"
     assert deepcopied.generation.streaming is True
     assert deepcopied.generation.ttfb_ms == 42.0
+
+
+# --- RawProviderResponse default + copy semantics ---
+
+
+def _make_mot_with_raw() -> ModelOutputThunk:
+    mot = ModelOutputThunk(value="x")
+    mot.raw.provider = "openai"
+    mot.raw.response = {"choices": [{"message": {"role": "assistant", "content": "v"}}]}
+    mot.raw.streamed_chunks = [{"delta": {"content": "v"}}]
+    return mot
+
+
+def test_raw_provider_response_default():
+    mot = ModelOutputThunk(value=None)
+    assert mot.raw == RawProviderResponse()
+    assert mot.raw.provider is None
+    assert mot.raw.response is None
+    assert mot.raw.streamed_chunks is None
+
+
+def test_raw_propagates_on_copy():
+    original = _make_mot_with_raw()
+    copied = copy.copy(original)
+    assert copied.raw.provider == "openai"
+    # Shallow copy: the response dict is shared.
+    assert copied.raw.response is original.raw.response
+    assert copied.raw.streamed_chunks is original.raw.streamed_chunks
+
+
+def test_raw_shallow_copy_provider_mutation_does_not_bleed():
+    original = _make_mot_with_raw()
+    copied = copy.copy(original)
+    copied.raw.provider = "litellm"
+    assert original.raw.provider == "openai"
+
+
+def test_raw_propagates_on_deepcopy():
+    original = _make_mot_with_raw()
+    deepcopied = copy.deepcopy(original)
+    assert deepcopied.raw is not original.raw
+    assert deepcopied.raw.provider == "openai"
+    assert deepcopied.raw.response == original.raw.response
+    assert deepcopied.raw.response is not original.raw.response
+    assert deepcopied.raw.streamed_chunks == original.raw.streamed_chunks
+    assert deepcopied.raw.streamed_chunks is not original.raw.streamed_chunks
+
+
+def test_raw_propagates_on_copy_from():
+    a = ModelOutputThunk(value=None)
+    b = _make_mot_with_raw()
+    a._copy_from(b)
+    # _copy_from is reference assignment for raw, matching .generation semantics.
+    assert a.raw is b.raw
 
 
 # --- Public error / generate_log surface ---
