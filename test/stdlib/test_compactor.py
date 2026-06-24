@@ -432,7 +432,7 @@ def scripted_summary_backend():
             mot._generate_log = GenerateLog(is_final_result=True)
             return mot, ctx.add(action).add(mot)
 
-        async def generate_from_raw(
+        async def _generate_from_raw(
             self,
             actions,
             ctx,
@@ -502,7 +502,7 @@ class TestLLMSummarizeCompactor:
                 mot._generate_log = GenerateLog(is_final_result=True)
                 return mot, ctx.add(action).add(mot)
 
-            async def generate_from_raw(self, *a, **kw):
+            async def _generate_from_raw(self, *a, **kw):
                 raise NotImplementedError
 
         other = OtherBackend()
@@ -548,7 +548,7 @@ class TestLLMSummarizeCompactor:
             ):
                 raise RuntimeError("simulated rate limit")
 
-            async def generate_from_raw(self, *a, **kw):
+            async def _generate_from_raw(self, *a, **kw):
                 raise NotImplementedError
 
         comp = LLMSummarizeCompactor(default_backend=BrokenBackend(), keep_n=1)
@@ -585,7 +585,7 @@ class TestLLMSummarizeCompactor:
             ):
                 raise TypeError("simulated programming bug")
 
-            async def generate_from_raw(self, *a, **kw):
+            async def _generate_from_raw(self, *a, **kw):
                 raise NotImplementedError
 
         comp = LLMSummarizeCompactor(default_backend=BuggyBackend(), keep_n=1)
@@ -618,7 +618,7 @@ class TestLLMSummarizeCompactor:
             ):
                 raise KeyboardInterrupt("simulated Ctrl-C")
 
-            async def generate_from_raw(self, *a, **kw):
+            async def _generate_from_raw(self, *a, **kw):
                 raise NotImplementedError
 
         comp = LLMSummarizeCompactor(default_backend=InterruptingBackend(), keep_n=1)
