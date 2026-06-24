@@ -103,9 +103,9 @@ from mellea.stdlib.requirements import uses_tool
 from mellea.stdlib.tools import python_tool
 
 m = start_session()
-tool = python_tool(tier="local_unsafe", name="python")
+tool = python_tool(tier="local_unsafe", name="python", packages=["matplotlib"])
 result = m.instruct(
-    "Use the code interpreter to make a plot of y=x^2",
+    "Use the code interpreter to make and save a plot of y=x^2",
     requirements=[uses_tool("python")],
     model_options={ModelOption.TOOLS: [tool]},
     tool_calls=True
