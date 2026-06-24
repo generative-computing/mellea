@@ -1,7 +1,7 @@
 {
-  "total_symbols": 2035,
+  "total_symbols": 2029,
   "documented_symbols": 313,
-  "coverage_percentage": 15.38,
+  "coverage_percentage": 15.43,
   "missing_symbols": {
     "mellea.model_ids": [
       "ModelIdentifier",
@@ -1063,12 +1063,6 @@
       "GraniteChatCompletion",
       "UserMessage",
       "VLLMExtraBody",
-      "Granite32ChatCompletion",
-      "Granite32InputProcessor",
-      "Granite32OutputProcessor",
-      "Granite33ChatCompletion",
-      "Granite33InputProcessor",
-      "Granite33OutputProcessor",
       "IntrinsicsResultProcessor",
       "IntrinsicsRewriter"
     ],
