@@ -262,7 +262,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             HF-specific option names.
 
     Raises:
-        OSError: If the model cannot be loaded from HuggingFace Hub (bad ID,
+        OSError: If the model cannot be loaded from Hugging Face Hub (bad ID,
             missing access, or local filesystem/cache error).
     """
 
@@ -339,7 +339,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     )
                 except OSError as e:
                     raise OSError(
-                        f"Model '{self._model_id}' could not be loaded from HuggingFace Hub. "
+                        f"Model '{self._model_id}' could not be loaded from Hugging Face Hub. "
                         "Check that the model ID is correct and that you have access to it. "
                         "If the model is gated, set the HF_TOKEN environment variable. "
                         "To browse available models, visit https://huggingface.co/models "
