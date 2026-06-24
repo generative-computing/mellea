@@ -143,7 +143,8 @@ and validation.
 
 ## Structured output
 
-Pass a Pydantic `BaseModel` as the `format` parameter for constrained decoding:
+Pass a Pydantic `BaseModel` as the `format` parameter for constrained decoding.
+The backend restricts generation to tokens that produce valid JSON matching the schema:
 
 ```python
 # Requires: mellea, pydantic
@@ -160,10 +161,29 @@ class Planet(BaseModel):
 m = start_session()
 instruction = Instruction(description="Describe Saturn.")
 result = m.act(instruction, format=Planet)
-print(result.value)  # A JSON string like '{"name": "Saturn", ...}'
-# Parse with: Planet.model_validate_json(str(result))
+
+# result.value is a JSON string — not a Planet instance
+print(result.value)
+# -> '{"name": "Saturn", "diameter_km": 120536.0, "has_rings": true}'
+
+# Validate to get a typed Planet instance:
+planet = Planet.model_validate_json(str(result))
+print(planet.name, planet.has_rings)
 # Output will vary — LLM responses depend on model and temperature.
 ```
+
+> **`format=` constrains generation, not the return type.**
+> The schema controls the JSON the model produces; the thunk still holds that
+> JSON as a string. `result.value` is always a `str`.
+>
+> A common mistake is `cast(Planet, result.value)`: the type checker accepts it
+> and the code runs, but accessing `.name` or `.has_rings` raises `AttributeError`
+> at runtime. When `return_sampling_results=True`, unwrap before parsing:
+> `Planet.model_validate_json(str(result.result))`.
+>
+> For structured output without a manual parse step, prefer `@generative` — it
+> returns the Pydantic instance directly. See
+> [Enforce Structured Output](./enforce-structured-output.md).
 
 ## The functional API
 
@@ -197,7 +217,9 @@ simpler.
 
 ## Async with `aact()`
 
-`aact()` is the async counterpart. Same signature, same return types:
+`aact()` is the async counterpart. Same signature, same return types.
+`aact(format=...)` follows the same contract as `act(format=...)` — `.value` is
+a JSON string; parse with `model_validate_json`.
 
 ```python
 # Requires: mellea
