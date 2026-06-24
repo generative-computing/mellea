@@ -12,8 +12,12 @@ into your code:
 
 | Pattern | When to use |
 | ------- | ----------- |
-| `@generative` with return type | You want a named, reusable function. The return type is declared in the signature. Pydantic instance returned directly — no manual parse needed. |
-| `instruct(format=...)` or `act(format=...)` | Building the prompt dynamically, or combining structured output with `grounding_context` or `user_variables`. The result's `.value` is a JSON string — parse with `model_validate_json`. |
+| `@generative` with return type | You want a named, reusable function. The return type is declared in the signature. |
+| `instruct(format=...)` or `act(format=...)` | Building the prompt dynamically, or combining structured output with `grounding_context` or `user_variables`. |
+
+`@generative` returns the Pydantic instance directly. `instruct(format=...)` and
+`act(format=...)` return a thunk whose `.value` is a JSON string — parse with
+`MyModel.model_validate_json(str(result))`.
 
 Both paths enforce the declared schema at generation time using constrained decoding
 where the backend supports it, and retry with the IVR loop if parsing fails.
