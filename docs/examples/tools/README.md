@@ -8,11 +8,11 @@ This directory contains examples of using tool calling (function calling) with M
 Comprehensive examples of using the code interpreter tool with LLMs.
 
 **Key Features:**
-- Direct code execution with `code_interpreter()`
+- Direct code execution with `python_tool().run()`
 - Tool integration with `m.instruct()`
 - Forcing tool use with requirements
 - Validating tool arguments
-- Local vs. sandboxed execution
+- Explicit tier selection for local execution
 
 ### smolagents_example.py
 Shows how to use pre-built tools from HuggingFace's smolagents library.
@@ -50,66 +50,74 @@ Shows how to use the `@tool` decorator for tool definition.
 
 ### Direct Tool Use
 ```python
-from mellea.stdlib.tools import code_interpreter
+from mellea.stdlib.tools import python_tool
+
+tool = python_tool(tier="local_unsafe", name="python")
 
 # Execute code directly
-result = code_interpreter("print(1+1)")
-print(result)  # Output: 2
+result = tool.run(code="print(1+1)")
+print(result.stdout)  # Output: 2
 ```
 
 ### Tool with LLM
 ```python
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.backends.tools import MelleaTool
-from mellea.stdlib.tools import code_interpreter
+from mellea.stdlib.tools import python_tool
 
+tool = python_tool(tier="local_unsafe", name="python")
 m = start_session()
 result = m.instruct(
     "Make a plot of y=x^2",
-    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(code_interpreter)]}
+    model_options={ModelOption.TOOLS: [tool]}
 )
 ```
 
 ### Forcing Tool Use
 ```python
-from mellea.backends.tools import MelleaTool
+from mellea import start_session
+from mellea.backends import ModelOption
 from mellea.stdlib.requirements import uses_tool
-from mellea.stdlib.tools import code_interpreter
+from mellea.stdlib.tools import python_tool
 
+tool = python_tool(tier="local_unsafe", name="python")
+m = start_session()
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
-    requirements=[uses_tool(code_interpreter)],
-    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(code_interpreter)]},
+    requirements=[uses_tool("python")],
+    model_options={ModelOption.TOOLS: [tool]},
     tool_calls=True
 )
 
 # Access the tool call
-code = result.tool_calls["code_interpreter"].args["code"]
+code = result.tool_calls["python"].args["code"]
 print(f"Generated code:\n{code}")
 
 # Execute the tool
-exec_result = result.tool_calls["code_interpreter"].call_func()
+exec_result = result.tool_calls["python"].call_func()
 ```
 
 ### Validating Tool Arguments
 ```python
-from mellea.backends.tools import MelleaTool
+from mellea import start_session
+from mellea.backends import ModelOption
 from mellea.stdlib.requirements import tool_arg_validator, uses_tool
-from mellea.stdlib.tools import code_interpreter
+from mellea.stdlib.tools import python_tool
 
+tool = python_tool(tier="local_unsafe", name="python")
+m = start_session()
 result = m.instruct(
     "Use the code interpreter to make a plot of y=x^2",
     requirements=[
-        uses_tool(code_interpreter),
+        uses_tool("python"),
         tool_arg_validator(
             "The plot should be written to /tmp/output.png",
-            tool_name=code_interpreter,
+            tool_name="python",
             arg_name="code",
             validation_fn=lambda code: "/tmp/output.png" in code
         )
     ],
-    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(code_interpreter)]},
+    model_options={ModelOption.TOOLS: [tool]},
     tool_calls=True
 )
 ```
@@ -117,8 +125,9 @@ result = m.instruct(
 ## Available Tools
 
 ### Code Interpreter
-- `code_interpreter`: Execute Python code (sandboxed)
-- `local_code_interpreter`: Execute Python code locally
+- `python_tool(tier="local_unsafe")`: Execute Python code locally (unrestricted subprocess)
+- `python_tool(tier="docker_unsafe")`: Execute Python code in Docker (no resource limits)
+- `python_tool(tier="docker")`: Execute Python code in Docker with capability policy
 
 ### Custom Tools
 
@@ -158,7 +167,7 @@ tool_arg_validator(
 
 ## Safety Considerations
 
-- **Sandboxing**: Use `code_interpreter` for untrusted code
+- **Tier selection**: Pass `tier=` explicitly — `"local_unsafe"` runs code as an unrestricted subprocess; use `"docker"` for real isolation
 - **Validation**: Always validate tool arguments
 - **Permissions**: Be careful with file system access
 - **Resource Limits**: Set timeouts and memory limits
