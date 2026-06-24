@@ -191,7 +191,7 @@ Adapter functions are specialized LoRA/aLoRA adapters that add task-specific cap
 | `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
 | `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
 | `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
-| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant; returns a string label (e.g. `'relevant'`, `'partially relevant'`, `'irrelevant'`). **Granite 4.0 only — no adapter for Granite 4.1.** Use `ibm-granite/granite-4.0-micro` as the backend. |
+| `rag` | `check_context_relevance(question, document, context, backend)` | **Deprecated.** Granite 4.0 only; no Granite 4.1 adapter and none planned. Will be removed in a future release. Use a prompted relevance check instead. |
 | `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
 
 ```python

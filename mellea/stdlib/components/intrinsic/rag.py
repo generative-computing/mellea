@@ -1,6 +1,7 @@
 """Adapter functions related to retrieval-augmented generation."""
 
 import collections.abc
+import warnings
 
 from ....backends.adapters import AdapterMixin
 from ...components import Document
@@ -162,6 +163,12 @@ def check_context_relevance(
 ) -> str:
     """Test whether a document is relevant to a user's question.
 
+    Deprecated: this function uses a Granite 4.0-only adapter that will not
+    receive a Granite 4.1 version and is not maintained. There is no direct
+    adapter replacement — use a @generative function for per-document relevance
+    filtering. See docs/advanced/intrinsics for a migration example. This
+    function will be removed in a future release.
+
     Adapter function that checks whether a single document contains part or all of
     the answer to a user's question. Does not consider the context in which the
     question was asked.
@@ -181,6 +188,14 @@ def check_context_relevance(
         - "irrelevant"
         - "partially relevant"
     """
+    warnings.warn(
+        "check_context_relevance() is deprecated and will be removed in a future "
+        "release. The context_relevance adapter is Granite 4.0 only and is not "
+        "maintained for newer models. Use a @generative function for per-document "
+        "relevance filtering — see docs/advanced/intrinsics for guidance.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     question, context = _resolve_question(question, context, backend)
     document = _coerce_to_document(document)
     result_json = call_intrinsic(
