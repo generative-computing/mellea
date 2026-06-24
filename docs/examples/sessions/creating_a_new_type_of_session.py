@@ -13,6 +13,7 @@ from mellea.core import (
     CBlock,
     Context,
     ImageBlock,
+    ImageUrlBlock,
     Requirement,
 )
 from mellea.stdlib.components import Document, Message
@@ -45,7 +46,7 @@ class ChatCheckingSession(MelleaSession):
         | Literal["assistant"]
         | Literal["tool"] = "user",
         *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         documents: Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,

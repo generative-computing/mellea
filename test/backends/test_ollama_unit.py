@@ -276,7 +276,7 @@ async def test_generate_from_raw_empty_response_soft_fails(mock_ollama_backend) 
 
     The result list must have the same length as the input actions so that
     sibling results from the same gather call are not discarded. The failing
-    slot must have value="" and carry the RuntimeError in generate_log.extra["error"].
+    slot must have value="" and carry the RuntimeError on `mot.error`.
     """
     backend = mock_ollama_backend()
     empty = ollama.GenerateResponse(response="", done=True)
@@ -295,15 +295,15 @@ async def test_generate_from_raw_empty_response_soft_fails(mock_ollama_backend) 
         "result list must match action count even on empty response"
     )
     assert results[0].value == "", "empty-response slot should have value=''"
-    log = results[0]._generate_log
-    assert log is not None
-    assert log.extra is not None
-    err = log.extra.get("error")
+    err = results[0].error
     assert isinstance(err, RuntimeError), (
-        f"expected RuntimeError in generate_log, got {err!r}"
+        f"expected RuntimeError on mot.error, got {err!r}"
     )
     assert "599" in str(err), "error message should reference issue #599"
     assert "16326" in str(err), "error message should reference upstream Ollama issue"
+    assert results[0].cancelled is False, (
+        "soft-fail must not flip the cancelled flag — it is a sibling channel"
+    )
 
 
 async def test_generate_from_raw_thinking_response_not_flagged(
@@ -331,10 +331,7 @@ async def test_generate_from_raw_thinking_response_not_flagged(
         )
 
     assert len(results) == 1
-    log = results[0]._generate_log
-    assert log is not None
-    assert log.extra is not None
-    assert log.extra.get("error") is None, (
+    assert results[0].error is None, (
         "thinking-only response should not be flagged as a model-load race"
     )
 
@@ -362,12 +359,11 @@ async def test_generate_from_raw_preserves_sibling_results_on_empty(
 
     assert len(results) == 3, "all three slots should be returned"
     assert results[0].value == "2"
+    assert results[0].error is None
     assert results[1].value == ""
-    log1 = results[1]._generate_log
-    assert log1 is not None
-    assert log1.extra is not None
-    assert log1.extra.get("error") is not None
+    assert results[1].error is not None
     assert results[2].value == "2"
+    assert results[2].error is None
 
 
 if __name__ == "__main__":

@@ -50,6 +50,7 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
 
 
 MB = 1048576  # 1MB in bytes
+_MAX_PARTS = 50  # largest corpus currently has 20 parts; 50 gives headroom for growth
 
 
 def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
@@ -130,7 +131,9 @@ def download_mtrag_embeddings(
 
     part_num = 1
     repo_root = "https://github.com/frreiss/mt-rag-embeddings"
-    while True:
+    while (
+        part_num <= _MAX_PARTS + 1
+    ):  # +1 so a corpus of exactly _MAX_PARTS parts can fetch the terminating 404
         # Download part_001.parquet, part_002.parquet, etc. until a download fails.
         parquet_file_name = f"part_{part_num:03d}.parquet"
         source_url = (
@@ -146,6 +149,11 @@ def download_mtrag_embeddings(
                 # Found all the parts; flow through
                 break
             raise  # 429/5xx propagate rather than silently truncating
+    else:
+        raise RuntimeError(
+            f"Corpus download exceeded {_MAX_PARTS} parts — the dataset may have grown "
+            "beyond what this guard expects. Raise _MAX_PARTS if the corpus is legitimately larger."
+        )
 
     if part_num == 1:
         raise ValueError(

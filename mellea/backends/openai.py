@@ -31,6 +31,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     _server_type,
     _ServerType,
@@ -45,13 +46,8 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
-from .adapters.adapter import (
-    Adapter,
-    AdapterMixin,
-    EmbeddedIntrinsicAdapter,
-    get_adapter_for_intrinsic,
-)
-from .adapters.catalog import AdapterType
+from .adapters._core import Adapter
+from .adapters.adapter import AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -232,6 +228,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._uses_embedded_adapters = True
         if load_embedded_adapters:
             self.register_embedded_adapter_model(self._adapter_source or self._model_id)
+
+    def __repr__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        key_repr = "'***'" if self._api_key is not None else "None"
+        return (
+            f"{self.__class__.__name__}("
+            f"model_id={self._model_id!r}, "
+            f"base_url={self._base_url!r}, "
+            f"_api_key={key_repr})"
+        )
+
+    def __str__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        return repr(self)
 
     # ------------------------------------------------------------------
     # AdapterMixin implementation
@@ -488,9 +498,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
                     alora_action = ALoraRequirement(action.description, adapter_name)
 
-                alora_req_adapter = get_adapter_for_intrinsic(
-                    adapter_name, [AdapterType.ALORA], self._added_adapters
-                )
+                alora_req_adapter = self._find_adapter(adapter_name, ("alora",))
                 if alora_req_adapter is None:
                     if reroute_to_alora and isinstance(action, ALoraRequirement):
                         MelleaLogger.get_logger().warning(
@@ -574,9 +582,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         # --- adapter lookup ------------------------------------------------
-        adapter = get_adapter_for_intrinsic(
-            action.intrinsic_name, action.adapter_types, self._added_adapters
-        )
+        allowed_types = tuple(at.value for at in action.adapter_types)
+        adapter = self._find_adapter(action.intrinsic_name, allowed_types)
         if adapter is None:
             raise ValueError(
                 f"backend ({self}) has no adapter for processing adapter function: "
@@ -759,7 +766,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # we don't have to worry about scheduling the task to a specific
             # event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_options.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -980,7 +993,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:

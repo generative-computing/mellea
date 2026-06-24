@@ -1003,6 +1003,7 @@ class TestWebhookHandler:
             handler.emit(record)
 
         assert mock_req.call_count == 1
+        assert mock_req.call_args.kwargs["timeout"] == 2
 
 
 # ---------------------------------------------------------------------------

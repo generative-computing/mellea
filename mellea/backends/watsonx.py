@@ -36,6 +36,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
     ClientCache,
     chat_completion_delta_merge,
     extract_model_tool_requests,
@@ -464,7 +465,13 @@ class WatsonxAIBackend(FormatterBackend):
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:

@@ -98,11 +98,11 @@ Mellea has two trace scopes:
 Enable tracing for full observability. Backend spans nest inside application spans:
 
 ```text
-session_context          (mellea.application)
-├── aact                 (mellea.application)
+session                  (mellea.application)
+├── action               (mellea.application)
 │   ├── chat             (mellea.backend) [gen_ai.provider.name=ollama]
 │   └── requirement_validation  (mellea.application)
-└── aact                 (mellea.application)
+└── action               (mellea.application)
     └── chat             (mellea.backend) [gen_ai.provider.name=openai]
 ```
 

@@ -22,13 +22,17 @@ def _sliding_windows(
 ) -> list[tuple[int, int]]:
     """Compute window boundaries for slicing a document into chunks.
 
-    :param token_offsets: Character offsets of the tokens, as begin, end pairs
-    :param sentence_offsets: Character offsets of sentence boundaries, as begin, end
-    :param window_size: Target maximum size of the windows, in tokens
-    :param overlap: How many tokens each window should overlap with next
-     and previous
+    Args:
+        token_offsets (list[tuple[int, int]]): Character offsets of the tokens,
+            as (begin, end) pairs.
+        sentence_offsets (list[tuple[int, int]]): Character offsets of sentence
+            boundaries, as (begin, end) pairs.
+        window_size (int): Target maximum size of windows, in tokens.
+        overlap (int): How many tokens each window should overlap with the next
+            and previous windows.
 
-    :returns: Tuples of begin and end offsets of windows
+    Returns:
+        list[tuple[int, int]]: Begin and end token-index offsets of each window.
     """
     result: list[tuple[int, int]] = []
     cur_start = 0

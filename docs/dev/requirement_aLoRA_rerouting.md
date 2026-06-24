@@ -70,3 +70,21 @@ All backends that implement the aLoRA mixin need to implement this semantics.
  * This might be a blessing in disguise. It's actually not clear that ALora context construction can be done WLOG outside of the specific backend.
  * That code is written rarely in any case.
  * Depending on the truth of the first bullet point's conjecture, we can mitigate by implementing this routing in `m.validate` so that even if a backend contributor gets this wrong the proper behavior is still usually observed by most users.
+
+## Phase 1 change (Epic #929, issue #1136)
+
+Backends now use a **capability-based lookup** to find the `requirement-check`
+adapter, replacing the old `isinstance` + `AdapterType` check:
+
+```python
+# Before (Phase 0)
+adapter = get_adapter_for_intrinsic("requirement-check", [AdapterType.ALORA], self._added_adapters)
+
+# After (Phase 1)
+adapter = self._find_adapter("requirement-check", ("alora",))
+```
+
+The logical rule (three exceptions above) is unchanged. The change is purely
+in how the matching adapter is located: capability name and adapter type are
+now read from `adapter.identity` (the new `Identity` dataclass introduced in
+Phase 0, issue #1134) rather than derived from the adapter's class hierarchy.

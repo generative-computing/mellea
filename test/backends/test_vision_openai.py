@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.openai, pytest.mark.e2e, pytest.mark.ollama]
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
-from mellea.core import ImageBlock, ModelOutputThunk
+from mellea.core import ImageBlock, ImageUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 
 
@@ -76,7 +76,7 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
 def test_image_block_in_instruction(
     m_session: MelleaSession, pil_image: Image.Image, gh_run: int
 ):
-    image_block = ImageBlock.from_pil_image(pil_image)
+    image_block: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(pil_image)
 
     # Set strategy=None here since we are directly comparing the object and sampling strategies tend to do a deepcopy.
     instr = m_session.instruct(
@@ -160,8 +160,9 @@ def test_image_block_in_chat(
     assert len(last_action.images) > 0  # type: ignore
 
     # first image in image list should be the same as the image block
-    image0_str = last_action.images[0]  # type: ignore
-    assert image0_str == ImageBlock.from_pil_image(pil_image).value
+    first_image = last_action.images[0]  # type: ignore
+    assert isinstance(first_image, ImageBlock)
+    assert first_image.value == ImageBlock.from_pil_image(pil_image).value
 
     # get prompt message
     lp = turn.output._generate_log.prompt  # type: ignore

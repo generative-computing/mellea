@@ -9,7 +9,7 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
-from mellea.core import ImageBlock
+from mellea.core import ImageBlock, ImageUrlBlock
 from mellea.stdlib.context import ChatContext
 
 # # using anthropic AI model ...
@@ -39,7 +39,7 @@ m = MelleaSession(
 # load PIL image and convert to mellea ImageBlock
 image_path = pathlib.Path(__file__).parent.joinpath("pointing_up.jpg")
 test_pil = Image.open(image_path)
-test_img = ImageBlock.from_pil_image(test_pil)
+test_img: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(test_pil)
 
 # check if model is able to do text chat
 ch = m.chat("What's 1+1?")

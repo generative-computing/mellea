@@ -24,7 +24,7 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.core import ImageBlock, ModelOutputThunk
+from mellea.core import ImageBlock, ImageUrlBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 
 # Ollama name for the target vision model; bump to the model_ids constant once
@@ -102,7 +102,7 @@ def mocked_session(mock_ollama_backend):
 def test_image_block_in_instruction(
     mocked_session: MelleaSession, pil_image: Image.Image
 ):
-    image_block = ImageBlock.from_pil_image(pil_image)
+    image_block: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(pil_image)
 
     instr = mocked_session.instruct(
         "Is this image mainly blue? Answer yes or no.",
@@ -132,6 +132,13 @@ def test_image_block_in_instruction(
     assert image_list[0] == str(image_block)
 
 
+def test_image_url_block_rejected_by_ollama(mocked_session: MelleaSession):
+    url_block: ImageUrlBlock = ImageUrlBlock("https://example.com/photo.png")
+    images: list[ImageBlock | ImageUrlBlock] = [url_block]
+    with pytest.raises(ValueError, match="ImageUrlBlock"):
+        mocked_session.chat("What is in this image?", images=images)
+
+
 def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Image):
     image_block = ImageBlock.from_pil_image(pil_image)
     ct = mocked_session.chat(
@@ -145,7 +152,9 @@ def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Ima
     assert isinstance(last_action, Message)
     assert last_action.images is not None  # type: ignore[union-attr]
     assert len(last_action.images) > 0  # type: ignore[union-attr]
-    assert last_action.images[0] == image_block.value  # type: ignore[union-attr]
+    first_image = last_action.images[0]
+    assert isinstance(first_image, ImageBlock)
+    assert first_image.value == image_block.value
 
     lp = turn.output._generate_log.prompt  # type: ignore[union-attr]
     assert isinstance(lp, list)
@@ -209,7 +218,7 @@ def test_vision_instruct_live_e2e(
     vision_session: MelleaSession, pil_image: Image.Image
 ):
     """Live vision instruct round-trip; skips until granite-vision-4.1 lands on Ollama."""
-    image_block = ImageBlock.from_pil_image(pil_image)
+    image_block: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(pil_image)
     instr = vision_session.instruct(
         "Is this image mainly blue? Answer yes or no.",
         images=[image_block],

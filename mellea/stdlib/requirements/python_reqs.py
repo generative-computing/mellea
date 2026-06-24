@@ -76,11 +76,11 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
     # Look for code blocks with python specifier
     import re
 
-    # Pattern for ``python ... `` blocks
-    python_blocks = re.findall(r"``python\s*\n(.*?)\n``", content, re.DOTALL)
+    # Pattern for ``python / ```python blocks (RST and Markdown)
+    python_blocks = re.findall(r"```?python\s*\n(.*?)\n```?", content, re.DOTALL)
 
-    # Pattern for generic ``` blocks
-    generic_blocks = re.findall(r"``\s*\n(.*?)\n``", content, re.DOTALL)
+    # Pattern for generic `` / ``` blocks (RST and Markdown)
+    generic_blocks = re.findall(r"```?\s*\n(.*?)\n```?", content, re.DOTALL)
 
     all_blocks = []
 

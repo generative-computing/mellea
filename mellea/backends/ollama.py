@@ -19,13 +19,19 @@ from ..core import (
     Context,
     GenerateLog,
     GenerateType,
+    ImageUrlBlock,
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
-from ..helpers import ClientCache, get_current_event_loop, send_to_queue
+from ..helpers import (
+    DEFAULT_CHUNK_TIMEOUT,
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.context import generate_request_id, with_context
@@ -371,6 +377,8 @@ class OllamaModelBackend(FormatterBackend):
 
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
+            ValueError: If a message contains an ``ImageUrlBlock``; Ollama requires
+                base64-encoded images — convert to an ``ImageBlock`` first.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)
@@ -393,7 +401,7 @@ class OllamaModelBackend(FormatterBackend):
                 messages.extend(self.formatter.to_chat_messages([action]))
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []
-        # We use system prompt None/empty-string semantics in a way that is consistent with huggingface and other libraries.
+        # We use system prompt None/empty-string semantics in a way that is consistent with Hugging Face and other libraries.
         # If the system prompt is None, the the default system prompt gets used.
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
@@ -401,16 +409,25 @@ class OllamaModelBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-        conversation.extend(
-            [
+        for m in messages:
+            if m.images is not None:
+                for img in m.images:
+                    if isinstance(img, ImageUrlBlock):
+                        raise ValueError(
+                            "OllamaModelBackend does not support URL images (ImageUrlBlock). "
+                            "Convert the image to a base64-encoded ImageBlock before passing it to Ollama."
+                        )
+            conversation.append(
                 {
                     "role": m.role,
                     "content": self.formatter.print(m),
-                    "images": _strip_data_uri_prefix(m.images) if m.images else None,
+                    "images": (
+                        _strip_data_uri_prefix([str(img.value) for img in m.images])
+                        if m.images
+                        else None
+                    ),
                 }
-                for m in messages
-            ]
-        )
+            )
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()
@@ -470,7 +487,13 @@ class OllamaModelBackend(FormatterBackend):
 
             # Use `create_task` so that we don't have to specifically await this task before it starts executing.
             output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
+                send_to_queue(
+                    chat_response,
+                    output._async_queue,
+                    chunk_timeout=model_opts.get(
+                        ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
+                    ),
+                )
             )
             output._generate_type = GenerateType.ASYNC
         except RuntimeError as e:
@@ -509,10 +532,9 @@ class OllamaModelBackend(FormatterBackend):
 
                 If Ollama returns an empty done response (``response=""``,
                 ``done=True``, no thinking content) for an action, that thunk
-                soft-fails: it has ``value=""``, with the ``RuntimeError`` stored
-                at ``thunk._generate_log.extra["error"]`` and the serialized
-                response dict at ``thunk._generate_log.extra["empty_response"]``.
-                Other actions in the batch are unaffected.
+                soft-fails: it has ``value=""`` and ``thunk.error`` carries the
+                ``RuntimeError`` describing the cause. Other actions in the
+                batch are unaffected.
 
         Note:
             Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
@@ -560,7 +582,6 @@ class OllamaModelBackend(FormatterBackend):
         agg_completion = 0
         for i, response in enumerate(responses):
             result = None
-            error = None
             per_mot_usage: dict[str, Any] | None = None
             if response.done and not response.response and not response.thinking:
                 # Empty done response with no thinking content. Commonly caused by the
@@ -575,7 +596,7 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 MelleaLogger.get_logger().warning(str(empty_err))
                 result = ModelOutputThunk(value="")
-                error = empty_err
+                result._error = empty_err
             else:
                 n_in = response.prompt_eval_count
                 n_out = response.eval_count
@@ -612,10 +633,6 @@ class OllamaModelBackend(FormatterBackend):
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
             generate_log.action = action
-
-            if error:
-                generate_log.extra["error"] = error
-                generate_log.extra["empty_response"] = response.model_dump()
             result._generate_log = generate_log
 
             results.append(result)

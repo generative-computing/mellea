@@ -342,7 +342,7 @@ class GuardianCheck(Requirement):
                     "think": True if self._thinking else None,
                 }
             )
-        else:  # huggingface
+        else:  # Hugging Face
             # HF chat template for Guardian expects guardian_config and (optionally) documents
             guardian_cfg: dict[str, object] = {"criteria_id": effective_risk}
             if self._custom_criteria:

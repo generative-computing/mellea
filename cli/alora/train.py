@@ -247,6 +247,8 @@ def train_model(
                     "Training 3B+ models may fail. Consider using --device cpu"
                 )
             device_map = "auto"
+        elif torch.backends.mps.is_available():
+            device_map = "auto"  # matches the explicit --device mps path below
         else:
             device_map = None
     elif device == "cpu":

@@ -3,7 +3,7 @@
 Provides ``prefill_cache_v5`` for converting a tokenized prompt into a prefilled
 ``DynamicCache``, ``merge_dynamic_caches_v5`` for concatenating multiple
 ``DynamicCache`` objects along the time axis, and ``merge_v5`` which composes
-the two. These helpers are used internally by local HuggingFace backends
+the two. These helpers are used internally by local Hugging Face backends
 (transformers v5+) that reuse cached prefix computations across multiple
 generation calls.
 """
@@ -19,7 +19,7 @@ try:
     from transformers.tokenization_utils_base import BatchEncoding
 except ImportError as e:
     raise ImportError(
-        "The HuggingFace backend requires extra dependencies. "
+        "The Hugging Face backend requires extra dependencies. "
         'Please install them with: pip install "mellea[hf]"'
     ) from e
 

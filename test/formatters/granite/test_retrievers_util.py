@@ -97,3 +97,17 @@ def test_embeddings_propagates_non_404_errors(tmp_path, code):
         with pytest.raises(urllib.error.HTTPError) as exc_info:
             download_mtrag_embeddings("model", "cloud", str(tmp_path))
     assert exc_info.value.code == code
+
+
+def test_embeddings_raises_if_corpus_exceeds_max_parts(tmp_path):
+    """If the loop exhausts _MAX_PARTS+1 attempts without a 404, RuntimeError is raised."""
+
+    def always_succeed(_url, dest):
+        open(dest, "wb").close()
+
+    with (
+        patch("mellea.formatters.granite.retrievers.util._MAX_PARTS", 2),
+        patch("urllib.request.urlretrieve", side_effect=always_succeed),
+    ):
+        with pytest.raises(RuntimeError, match="Corpus download exceeded"):
+            download_mtrag_embeddings("model", "cloud", str(tmp_path))

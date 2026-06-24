@@ -1,23 +1,28 @@
 """Adapter classes for adding fine-tuned modules to inference backends.
 
-Defines the abstract ``Adapter`` base class and its concrete subclasses
-``LocalHFAdapter`` (for locally loaded Hugging Face models) and ``IntrinsicAdapter``
-(for adapters whose metadata is stored in Mellea's adapter function catalog). Also
-provides ``get_adapter_for_intrinsic`` for resolving the right adapter class given an
-adapter function name, and ``AdapterMixin`` for backends that support runtime adapter
-loading and unloading.
+The primary public surface is :func:`AdapterMixin.resolve_adapter` (find or lazily
+register an adapter by capability name) and :meth:`AdapterMixin._find_adapter`
+(look up a registered adapter).  :class:`AdapterMixin` is mixed into backends that
+support runtime adapter loading and unloading.
+
+``LocalHFAdapter``, ``IntrinsicAdapter``, and ``EmbeddedIntrinsicAdapter`` are
+**deprecation shims** retained for backwards compatibility.  They satisfy
+``isinstance(x, _core.Adapter)`` but delegate all behaviour to the new dataclass.
+``get_adapter_for_intrinsic`` is similarly deprecated; prefer ``resolve_adapter``.
 """
 
 import abc
+import contextlib
 import pathlib
 import re
-from typing import TypeVar
+import warnings
+from typing import Literal, TypeVar, cast
 
 import yaml
 
 from ...core import Backend
 from ...formatters.granite import intrinsics as intrinsics
-from ...helpers import _ServerType
+from ._core import Adapter as _AdapterCore, Identity, IOContract, WeightsBinding
 from .catalog import AdapterType, fetch_intrinsic_metadata
 
 
@@ -76,8 +81,51 @@ class LocalHFAdapter(Adapter):
         ...
 
 
-class IntrinsicAdapter(LocalHFAdapter):
-    """Base class for adapters that implement adapter functions.
+class _ShimIOContract(IOContract):
+    """Phase 1 placeholder; Phase 2 (issue #1137) implements real I/O."""
+
+    def build_prompt(self, **kwargs: object):  # type: ignore[override]
+        raise NotImplementedError(
+            "Phase 2 (issue #1137) — IOContract not yet implemented"
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        raise NotImplementedError(
+            "Phase 2 (issue #1137) — IOContract not yet implemented"
+        )
+
+
+class _ShimWeightsBinding(WeightsBinding):
+    """Phase 1 placeholder; Phase 2 (issue #1138) wires in real lifecycle."""
+
+    def prepare(self) -> None:
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
+
+    def activate(self) -> None:
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
+
+    def deactivate(self) -> None:
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
+
+    def release(self) -> None:
+        raise NotImplementedError(
+            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+        )
+
+
+class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
+    """Deprecated shim for adapters that implement adapter functions.
+
+    .. deprecated::
+        Use :class:`~mellea.backends.adapters.Adapter` directly.
+        ``IntrinsicAdapter`` will be removed in a future release (Epic #929,
+        issue #1144).
 
     Subtype of :class:`Adapter` for models that:
 
@@ -107,7 +155,22 @@ class IntrinsicAdapter(LocalHFAdapter):
         base_model_name (str | None): Base model name provided at construction, if any.
         adapter_type (AdapterType): The adapter type (``LORA`` or ``ALORA``).
         config (dict): Parsed I/O transformation configuration for the adapter function.
+
+    .. note::
+        ``identity``, ``io_contract``, and ``weights`` are Phase 1 internal scaffolding
+        populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
+        protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
+        ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
+        (issues #1137, #1138).
     """
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Allow mutation; bypasses the frozen restriction on _AdapterCore."""
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        """Allow deletion; bypasses the frozen restriction on _AdapterCore."""
+        object.__delattr__(self, name)
 
     def __init__(
         self,
@@ -118,6 +181,11 @@ class IntrinsicAdapter(LocalHFAdapter):
         base_model_name: str | None = None,
     ):
         """Initialize IntrinsicAdapter for the named adapter function, loading its I/O configuration."""
+        warnings.warn(
+            "IntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(intrinsic_name, adapter_type)
 
         self.intrinsic_name = intrinsic_name
@@ -173,6 +241,20 @@ class IntrinsicAdapter(LocalHFAdapter):
         assert config_dict is not None  # Code above should initialize this variable
         self.config: dict = config_dict
 
+        # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
+        _AdapterCore.__init__(
+            self,
+            identity=Identity(
+                name=intrinsic_name,
+                adapter_type="alora"
+                if self.adapter_type == AdapterType.ALORA
+                else "lora",
+                capability=intrinsic_name,
+            ),
+            io_contract=_ShimIOContract(),
+            weights=_ShimWeightsBinding(),
+        )
+
     def get_local_hf_path(self, base_model_name: str) -> str:
         """Return the local filesystem path from which adapter weights should be loaded.
 
@@ -188,10 +270,10 @@ class IntrinsicAdapter(LocalHFAdapter):
         return self.download_and_get_path(base_model_name)
 
     def download_and_get_path(self, base_model_name: str) -> str:
-        """Downloads the required RAG adapter function files if necessary and returns the path to them.
+        """Download the required adapter function files if necessary and return the path to them.
 
         Args:
-            base_model_name: the base model; typically the last part of the huggingface
+            base_model_name: the base model; typically the last part of the Hugging Face
                 model id like "granite-3.3-8b-instruct"
 
         Returns:
@@ -307,9 +389,124 @@ class AdapterMixin(Backend, abc.ABC):
             f"Backend type {type(self)} does not implement list_adapters() API call."
         )
 
+    def resolve_adapter(self, name: str) -> _AdapterCore:
+        """Find or lazily register an adapter by capability name.
 
-class EmbeddedIntrinsicAdapter(Adapter):
-    """Adapter for adapter functions embedded in a Granite Switch model.
+        Default implementation preserves Phase 0 behaviour, using the internal
+        ``_added_adapters`` dict that concrete backends maintain.  Override in
+        Phase 2 (issue #1138) to implement proper lifecycle management.
+
+        Args:
+            name (str): Capability name (e.g. ``"answerability"``).
+
+        Returns:
+            _AdapterCore: The registered adapter with the given capability.
+
+        Raises:
+            ValueError: If the backend has no model ID.
+            KeyError: If the adapter cannot be found after registration.
+        """
+        found = self._find_adapter(name)
+        if found is not None:
+            return found
+
+        base = self.base_model_name
+        if base is None:
+            raise ValueError(
+                f"Backend has no model ID; cannot resolve adapter {name!r}"
+            )
+
+        # warnings.catch_warnings() modifies the process-global filter state and is not
+        # async/thread-safe.  Concurrent first-time resolves race on filter restoration;
+        # add_adapter is idempotent so the double-registration hazard is benign, but the
+        # filter race is a known Phase-1 gap: two concurrent first-time call_intrinsic
+        # calls can interleave their catch_warnings contexts, causing a DeprecationWarning
+        # to surface in user code during lazy-registration.  Phase 2 (#1138) adds a lock.
+        # Suppress DeprecationWarning: the shim constructors warn user-facing code,
+        # not internal registration paths.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            if getattr(self, "_uses_embedded_adapters", False):
+                repo_id = (
+                    getattr(self, "_adapter_source", None)
+                    or getattr(self, "_model_id", None)
+                    or base
+                )
+                for a in EmbeddedIntrinsicAdapter.from_source(
+                    repo_id, intrinsic_name=name
+                ):
+                    # EmbeddedIntrinsicAdapter is only valid for backends whose
+                    # add_adapter accepts the full Adapter type (e.g. OpenAIBackend).
+                    # LocalHFBackend.add_adapter expects LocalHFAdapter; HF backends
+                    # never set _uses_embedded_adapters=True.
+                    self.add_adapter(a)
+            else:
+                # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
+                # Every current catalog entry supports LORA.  Phase 2 (#1138) will
+                # select the type from catalog availability instead of hardcoding.
+                self.add_adapter(
+                    IntrinsicAdapter(
+                        name, adapter_type=AdapterType.LORA, base_model_name=base
+                    )
+                )
+
+        found = self._find_adapter(name)
+        if found is not None:
+            return found
+
+        raise KeyError(f"Adapter {name!r} not found after registration")
+
+    @contextlib.contextmanager
+    def adapter_scope(self, adapter: "_AdapterCore | None"):  # type: ignore[type-arg]
+        """Context manager wrapping adapter activation and deactivation.
+
+        Phase 1 stub — yields immediately (no-op). Phase 2 (issue #1138) wires
+        in ``adapter.weights.activate()`` and ``adapter.weights.deactivate()``.
+
+        Args:
+            adapter: The adapter to activate, or ``None`` (no-op in Phase 1).
+        """
+        yield
+
+    def _find_adapter(
+        self, capability: str, adapter_types: tuple[str, ...] | None = None
+    ) -> "_AdapterCore | None":
+        """Return the first registered adapter matching capability and (optionally) type.
+
+        Args:
+            capability (str): Capability name (e.g. ``"answerability"``).
+            adapter_types (tuple[str, ...] | None): Adapter type strings in
+                preference order (e.g. ``("alora", "lora")``).  When provided,
+                aLoRA is returned before LoRA if both are registered for the same
+                capability.  ``None`` matches any type (insertion order wins).
+
+        Returns:
+            _AdapterCore | None: Matching adapter, or ``None`` if not found.
+        """
+        adapters = getattr(self, "_added_adapters", {})
+        if adapter_types is None:
+            for a in adapters.values():
+                if isinstance(a, _AdapterCore) and a.identity.capability == capability:
+                    return a
+            return None
+        for preferred_type in adapter_types:
+            for a in adapters.values():
+                if (
+                    isinstance(a, _AdapterCore)
+                    and a.identity.capability == capability
+                    and a.identity.adapter_type == preferred_type
+                ):
+                    return a
+        return None
+
+
+class EmbeddedIntrinsicAdapter(_AdapterCore):
+    """Deprecated shim for adapter functions embedded in a Granite Switch model.
+
+    .. deprecated::
+        Use :class:`~mellea.backends.adapters.Adapter` directly.
+        ``EmbeddedIntrinsicAdapter`` will be removed in a future release
+        (Epic #929, issue #1144).
 
     Unlike PEFT-based adapters that are loaded into the model at runtime,
     embedded adapters are already baked into the model weights and activated
@@ -329,7 +526,22 @@ class EmbeddedIntrinsicAdapter(Adapter):
         intrinsic_name (str): Name of the adapter function this adapter implements.
         config (dict): Parsed I/O transformation configuration.
         technology (str): ``"lora"`` or ``"alora"``.
+
+    .. note::
+        ``identity``, ``io_contract``, and ``weights`` are Phase 1 internal scaffolding
+        populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
+        protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
+        ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
+        (issues #1137, #1138).
     """
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Allow mutation; bypasses the frozen restriction on _AdapterCore."""
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        """Allow deletion; bypasses the frozen restriction on _AdapterCore."""
+        object.__delattr__(self, name)
 
     def __init__(self, intrinsic_name: str, config: dict, technology: str = "lora"):
         """Initialize an embedded adapter function with its I/O config."""
@@ -337,11 +549,37 @@ class EmbeddedIntrinsicAdapter(Adapter):
             raise ValueError(
                 f"technology must be 'lora' or 'alora', got '{technology}'"
             )
+        warnings.warn(
+            "EmbeddedIntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         adapter_type = AdapterType.ALORA if technology == "alora" else AdapterType.LORA
-        super().__init__(intrinsic_name, adapter_type)
+
+        # Old-style Adapter fields — set manually since we no longer inherit from the
+        # legacy Adapter ABC.  Preserved for backward compatibility until Phase 4.
+        self.name = intrinsic_name
+        self.adapter_type = adapter_type
+        self.qualified_name = intrinsic_name + "_" + adapter_type.value
+        self.backend: Backend | None = None
+        self.path: str | None = None
+
         self.intrinsic_name = intrinsic_name
         self.config = config
         self.technology = technology
+
+        # Populate the new Adapter triple so isinstance(self, _AdapterCore) holds.
+        # technology is validated above; cast to the Literal type mypy expects.
+        _AdapterCore.__init__(
+            self,
+            identity=Identity(
+                name=intrinsic_name,
+                adapter_type=cast(Literal["lora", "alora"], technology),
+                capability=intrinsic_name,
+            ),
+            io_contract=_ShimIOContract(),
+            weights=_ShimWeightsBinding(),
+        )
 
     @staticmethod
     def from_model_directory(
@@ -505,16 +743,16 @@ class EmbeddedIntrinsicAdapter(Adapter):
 
 
 class CustomIntrinsicAdapter(IntrinsicAdapter):
-    """Special class for users to subclass when creating custom adapter functions.
+    """Deprecated shim for user-defined custom adapter functions.
 
-    The documentation says that any developer who creates an adapter function should create
-    a subclass of this class. Creating a subclass of this class appears to be a cosmetic
-    boilerplate development task that isn't actually necessary for any existing use case.
+    .. deprecated::
+        Use :class:`~mellea.backends.adapters.Adapter` directly.
+        ``CustomIntrinsicAdapter`` will be removed in a future release
+        (Epic #929, issue #1144).
 
-    This class has the same functionality as ``IntrinsicAdapter``, except that its
-    constructor monkey-patches Mellea global variables to enable the backend to load
-    the user's adapter. The code that performs this monkey-patching is marked as a
-    temporary hack.
+    This class has the same functionality as ``IntrinsicAdapter``, except that
+    its constructor monkey-patches Mellea global variables to enable the backend
+    to load the user's adapter.
 
     Args:
         model_id (str): The Hugging Face model ID used for downloading model weights;
@@ -528,8 +766,13 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
         self, *, model_id: str, intrinsic_name: str | None = None, base_model_name: str
     ):
         """Initialize CustomIntrinsicAdapter and patch the global adapter function catalog if needed."""
+        warnings.warn(
+            "CustomIntrinsicAdapter is deprecated; use Adapter directly (Epic #929, issue #1144).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         assert re.match(".*/.*", model_id), (
-            "expected a huggingface model id with format <user-id>/<repo-name>"
+            "expected a Hugging Face model id with format <user-id>/<repo-name>"
         )
         intrinsic_name = (
             intrinsic_name if intrinsic_name is not None else model_id.split("/")[1]
@@ -548,4 +791,10 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
                 e.name: e for e in catalog._INTRINSICS_CATALOG_ENTRIES
             }
 
-        super().__init__(intrinsic_name=intrinsic_name, base_model_name=base_model_name)
+        # Suppress DeprecationWarning from the IntrinsicAdapter shim: the warning we
+        # emitted above is already correctly attributed to the caller's frame.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            IntrinsicAdapter.__init__(
+                self, intrinsic_name=intrinsic_name, base_model_name=base_model_name
+            )

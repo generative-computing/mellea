@@ -43,10 +43,13 @@ class Granite33InputProcessor(Granite3InputProcessor):
     ) -> str:
         """Build the default system message for the chat completion.
 
-        :param inputs: Chat completion request that does not include a custom
-            system message.
-        :returns: The standard system message portion of the prompt for the request,
-            as a string suitable to feed to the model's tokenizer.
+        Args:
+            chat_completion (Granite33ChatCompletion): Chat completion request that
+                does not include a custom system message.
+
+        Returns:
+            str: The standard system message portion of the prompt for the request,
+                as a string suitable to feed to the model's tokenizer.
         """
         # Compute the predicates that determine exactly what default system message to
         # use.
@@ -120,8 +123,11 @@ class Granite33InputProcessor(Granite3InputProcessor):
     def _remove_special_tokens(cls, text: str) -> str:
         """Removes any special tokens from the text string.
 
-        :param text: String for removal of special tokens.
-        :returns: String with any special tokens removed.
+        Args:
+            text (str): String for removal of special tokens.
+
+        Returns:
+            str: String with any special tokens removed.
         """
         regex_roles = r"<\|start_of_role\|>.*<\|end_of_role\|>.*<\|end_of_text\|>"
         regex_tool_call = r"<\|tool_call\|>\{.*\}"

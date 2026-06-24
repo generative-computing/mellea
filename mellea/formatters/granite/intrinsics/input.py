@@ -22,11 +22,13 @@ def _needs_logprobs(transformations: list | None) -> bool:
     Subroutine to check whether input processing for a model needs to specify logprobs
     in the chat completion arguments.
 
-    :param transformations: Contents of the field by the same name in the YAML file
-    :type transformations: list
-    :return: `True` if this intrinsic produces a field for which logprobs need to be
-        enabled for downstream result decoding to succeed.
-    :rtype: bool
+    Args:
+        transformations (list | None): Contents of the `transformations` field from
+            the intrinsic's YAML configuration.
+
+    Returns:
+        bool: `True` if this intrinsic produces a field for which logprobs must be
+            enabled for downstream result decoding to succeed.
     """
     if transformations is None:
         return False
@@ -320,11 +322,12 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
 
         Should be applied BEFORE adding any instruction messages to the input.
 
-        :param chat_completion: Argument to :func:`_transform()`
-        :type chat_completion: ChatCompletion
-        :return: Copy of original chat completion with sentence boundaries marked in
-            the last message and in documents.
-        :rtype: ChatCompletion
+        Args:
+            chat_completion (ChatCompletion): Argument to `_transform()`.
+
+        Returns:
+            ChatCompletion: Copy of the original chat completion with sentence
+                boundaries marked in the last message and in documents.
         """
         # Mark sentence boundaries in the last message.
         # last_message uses its own numbering starting from 0, independent of
