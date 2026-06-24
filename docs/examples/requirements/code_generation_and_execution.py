@@ -16,7 +16,6 @@ The pipeline implements a 4-step process:
 
 import argparse
 import csv
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -55,16 +54,15 @@ def load_csv_data(csv_path: str) -> tuple[list[dict], str]:
     Returns:
         tuple of (list of dicts, CSV preview string)
     """
-    data = []
-    with open(csv_path) as f:
-        reader = csv.DictReader(f)
-        data = list(reader)
-
     preview_lines = []
+    data = []
     with open(csv_path) as f:
         for i, line in enumerate(f):
             if i < 5:
                 preview_lines.append(line.rstrip())
+        f.seek(0)
+        reader = csv.DictReader(f)
+        data = list(reader)
 
     preview = "\n".join(preview_lines)
     return data, preview
@@ -83,6 +81,10 @@ def _extract_code_from_output(generated: str) -> str | None:
     Returns:
         Extracted Python code string, or None if extraction failed.
     """
+    # Import _has_python_code_listing locally to avoid importing private functions at module level.
+    # _has_python_code_listing is a private API (leading underscore), so importing it at the top
+    # would blur the import contract, make it look like a public API, and obscure that it's an
+    # implementation detail. Local import makes the dependency on internals explicit and localized.
     from mellea.stdlib.requirements.python_reqs import _has_python_code_listing
 
     ctx = ChatContext().add(Message("assistant", generated))
@@ -216,11 +218,17 @@ def process_user_request(
 
     m = mellea.start_session()
 
-    output_path = f"{output_dir}/graph_{request_number}.png"
+    output_path = str(Path(output_dir) / f"graph_{request_number}.png")
+
+    # Sanitize user input and CSV preview to prevent prompt injection attacks.
+    # Use repr() to escape special characters and quote the values, preventing
+    # the model from interpreting user input as prompt instructions.
+    sanitized_request = repr(user_request)
+    sanitized_preview = repr(csv_preview)
 
     prompt = f"""
     The user has this request:
-    "{user_request}"
+    {sanitized_request}
 
     This request specifies BOTH:
     1. What data to extract from the CSV
@@ -228,7 +236,7 @@ def process_user_request(
 
     CSV file path: {csv_path}
     CSV preview:
-    {csv_preview}
+    {sanitized_preview}
 
     Write Python code to:
     1. Load the CSV file using csv module or pandas
@@ -269,6 +277,11 @@ def process_user_request(
         requirements=all_reqs,  # type: ignore[arg-type]
         strategy=strategy,
     )
+
+    if generated is None or not generated:
+        print("  ✗ Model failed to generate output (requirements loop exhausted)")
+        return
+
     generated_str = str(generated)
     code = _extract_code_from_output(generated_str)
     if code is None:
