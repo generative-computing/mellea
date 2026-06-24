@@ -197,7 +197,6 @@ def greet(name: str) -> str:
 
 Code references in docstrings (parameter names, variables, types, literals) use a single backtick (\`), like ``` `variable` ```— not double backticks (``` ``variable`` ```). Mellea uses Markdown-style docstrings, so a single backtick is the correct delimiter for inline code.
 
-
 #### Class and `__init__` docstrings
 
 Place `Args:` on the **class docstring only**. The `__init__` docstring should be a
