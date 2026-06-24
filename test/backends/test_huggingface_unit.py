@@ -592,6 +592,7 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     backend.model_id = "stub-model"
 
     adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
 
     class _FakeChatCompletionResponse:
         class _Choice:
@@ -619,10 +620,6 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
             return chunk
 
     with (
-        patch(
-            "mellea.backends.huggingface.get_adapter_for_intrinsic",
-            return_value=adapter,
-        ),
         patch(
             "mellea.backends.huggingface.granite_formatters.IntrinsicsRewriter",
             _FakeRewriter,
