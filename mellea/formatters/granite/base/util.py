@@ -10,7 +10,6 @@ import itertools
 import json
 import logging
 import os
-import re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -46,28 +45,6 @@ def import_optional(extra_name: str):
             extra_name,
         )
         raise
-
-
-def find_substring_in_text(substring: str, text: str) -> list[dict]:
-    """Find all substring matches in text.
-
-    Given two strings - substring and text - find and return all
-    matches of substring within text. For each match return its begin and end index.
-
-    Args:
-        substring: The string to search for.
-        text: The string to search within.
-
-    Returns:
-        List of dicts with `begin_idx` and `end_idx` for each match found.
-    """
-    span_matches = []
-
-    matches_iter = re.finditer(re.escape(substring), text)
-    for match in matches_iter:
-        span_matches.append({"begin_idx": match.start(), "end_idx": match.end()})
-
-    return span_matches
 
 
 def random_uuid() -> str:
