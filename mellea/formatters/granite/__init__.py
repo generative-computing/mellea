@@ -14,16 +14,6 @@ from .base.types import (
     UserMessage,
     VLLMExtraBody,
 )
-from .granite3.granite32 import (
-    Granite32ChatCompletion,
-    Granite32InputProcessor,
-    Granite32OutputProcessor,
-)
-from .granite3.granite33 import (
-    Granite33ChatCompletion,
-    Granite33InputProcessor,
-    Granite33OutputProcessor,
-)
 from .intrinsics import IntrinsicsResultProcessor, IntrinsicsRewriter
 
 __all__ = [
@@ -31,12 +21,6 @@ __all__ = [
     "ChatCompletion",
     "ChatCompletionResponse",
     "DocumentMessage",
-    "Granite32ChatCompletion",
-    "Granite32InputProcessor",
-    "Granite32OutputProcessor",
-    "Granite33ChatCompletion",
-    "Granite33InputProcessor",
-    "Granite33OutputProcessor",
     "GraniteChatCompletion",
     "IntrinsicsResultProcessor",
     "IntrinsicsRewriter",
