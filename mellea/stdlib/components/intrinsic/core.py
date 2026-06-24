@@ -70,6 +70,7 @@ def requirement_check(
         kwargs={"requirement": requirement},
         model_options=model_options,
     )
+    # Mirrors the validation in requirement_check_to_bool() in requirement.py; Phase 2 will consolidate via IOContract.
     req_check = result_json.get("requirement_check")
     if not isinstance(req_check, dict):
         raise AdapterSchemaMismatchError(

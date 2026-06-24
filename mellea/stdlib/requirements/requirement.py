@@ -49,6 +49,7 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
 
+    # Mirrors the validation in requirement_check() in core.py; Phase 2 will consolidate via IOContract.
     req_check = req_dict.get("requirement_check", None)
     if not isinstance(req_check, dict):
         raise AdapterSchemaMismatchError(
@@ -71,9 +72,9 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
 class ALoraRequirement(Requirement, Intrinsic):
     """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on generation error.
 
-    If the adapter **generation** step raises (e.g. the adapter cannot be
-    loaded), ``mellea`` falls back to LLMaJ for that requirement.  That is the
-    only case where LLMaJ will be used.
+    If the adapter is unavailable (e.g. cannot be loaded), ``mellea`` uses
+    LLMaJ for that requirement instead.  That is the only case where LLMaJ
+    will be used.
 
     If the adapter generates output but the output **fails schema validation**
     (``requirement_check_to_bool`` raises ``AdapterSchemaMismatchError``), the
