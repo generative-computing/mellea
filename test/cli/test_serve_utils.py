@@ -211,7 +211,7 @@ class TestExtractFinishReason:
         assert extract_finish_reason(output) == "tool_calls"
 
     def test_huggingface_falls_through_to_default(self):
-        """Test that HuggingFace (no finish_reason on response) returns default 'stop'."""
+        """Test that Hugging Face (no finish_reason on response) returns default 'stop'."""
         output = ModelOutputThunk("test response")
         output.raw = RawProviderResponse(provider="huggingface", response=Mock(spec=[]))
         assert extract_finish_reason(output) == "stop"

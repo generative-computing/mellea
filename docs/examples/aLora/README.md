@@ -32,12 +32,12 @@ m alora train \
 
 ## Upload Models
 
-If model training succeeds, you will need to upload your model as an intrinsic:
+If model training succeeds, you will need to upload your model as an adapter function:
 
 ```bash
 # WARNING: running this command will upload your model weights to huggingface.co !!!
 # The model will be private.
-# replace $HF_USERNAME with your huggingface username.
+# replace $HF_USERNAME with your Hugging Face username.
 m alora upload \
    --intrinsic \
    --name "$HF_USERNAME/stembolts" \
@@ -63,7 +63,7 @@ m alora upload \
 
 ## Generate a README
 
-After uploading your adapter, you can auto-generate a README for the HuggingFace model repository using `m alora add-readme`. This command uses Mellea to analyze your training dataset and produce documentation with a description, data examples, and integration code:
+After uploading your adapter, you can auto-generate a README for the Hugging Face model repository using `m alora add-readme`. This command uses Mellea to analyze your training dataset and produce documentation with a description, data examples, and integration code:
 
 ```bash
 m alora add-readme \
@@ -84,9 +84,9 @@ m alora add-readme \
     stembolt_failure_dataset.jsonl
 ```
 
-The generator will display the README and ask for confirmation before uploading it to your HuggingFace repo. You can also call the generator programmatically from Python -- see `test_readme_generator.py` for an example.
+The generator will display the README and ask for confirmation before uploading it to your Hugging Face repo. You can also call the generator programmatically from Python -- see `test_readme_generator.py` for an example.
 
-## Using Intrinsics
+## Using Adapter Functions
 
 You can now create a new adapter class for this model somewhere in your python project:
 
@@ -96,7 +96,7 @@ from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 class StemboltAdapter(CustomIntrinsicAdapter):
     def __init__(self, base_model_name:str="granite-4.1-3b"):
         super().__init__(
-            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
+            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGING FACE USERNAME
             intrinsic_name="stembolts",
             base_model_name=base_model_name,
         )
@@ -141,7 +141,7 @@ Demonstrates:
 - Preprocessing for training
 
 ### stembolts_intrinsic.py
-Example custom intrinsic adapter implementation.
+Example custom adapter function implementation.
 
 Demonstrates:
 - Custom adapter class definition

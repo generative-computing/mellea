@@ -785,12 +785,9 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
     responses_str = responses.model_dump_json(indent=4)
     print(responses_str[:10000])  # Limit stdout content
 
-    # context_relevance_alora: the HF io.yaml is missing max_completion_tokens, so
-    # transformers falls back to max_length=153 and truncates the JSON mid-string,
-    # causing JSONDecodeError in result_processor.transform(). Tracked in issue #1301.
-    if cfg.short_name == "context_relevance_alora":
-        pytest.xfail(
-            "context_relevance_alora io.yaml missing max_completion_tokens — see issue #1301"
+    if cfg.short_name in ("context_relevance_alora", "context_relevance"):
+        pytest.skip(
+            "context_relevance adapter deprecated (Granite 4.0 only, not maintained)"
         )
 
     # Output processing
@@ -859,15 +856,6 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
                         f"expected score={e_json['certainty']:.4f} (>=0.5? {expected_dir})"
                     )
                     continue
-
-                elif cfg.short_name == "context_relevance":
-                    # context_relevance (non-alora): label is non-deterministic on GPU
-                    # hardware. xfail rather than a bare `continue` so the case
-                    # surfaces in the report instead of silently passing with no
-                    # assertion — see issue #1301 for the keep/remove decision.
-                    pytest.xfail(
-                        "context_relevance label non-deterministic on GPU — see issue #1301"
-                    )
 
                 elif cfg.short_name == "context-attribution":
                     # Context-attribution produces a non-deterministic number and ordering

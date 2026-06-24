@@ -136,7 +136,7 @@ class Message(Component["Message"]):
                 choice = response["choices"][0] if "choices" in response else response
                 msg = choice["message"]
                 return Message(role=msg["role"], content=str(msg.get("tool_calls", [])))
-            # HuggingFace (or others). There are no guarantees on how the model represented the function calls.
+            # Hugging Face (or others). There are no guarantees on how the model represented the function calls.
             # Output it in the same format we received the tool call request.
             assert computed.value is not None
             return Message(role="assistant", content=computed.value)
@@ -153,7 +153,7 @@ class Message(Component["Message"]):
             )
             return Message(role=role, content=content)
 
-        # HuggingFace: raw.response is token tensors with no role/content to parse.
+        # Hugging Face: raw.response is token tensors with no role/content to parse.
         # Unknown provider: nothing to switch on. Both fall back to the decoded text.
         assert computed.value is not None
         return Message(role="assistant", content=computed.value)

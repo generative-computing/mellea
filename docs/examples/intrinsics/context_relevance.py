@@ -1,5 +1,9 @@
 # pytest: huggingface, e2e
 
+# Deprecated: check_context_relevance() is deprecated and will be removed in a future
+# release. The context_relevance adapter is Granite 4.0 only and is not maintained
+# for newer models. Use a prompted relevance check with a current Granite backend.
+
 """Example usage of the context relevance intrinsic for RAG applications.
 
 To run this script from the root of the Mellea source tree, use the command:

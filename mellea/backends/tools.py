@@ -32,7 +32,7 @@ class MelleaTool(AbstractMelleaTool[P, R]):
     """Tool class to represent a callable tool with an OpenAI-compatible JSON schema.
 
     Wraps a Python callable alongside its JSON schema representation so it can be
-    registered with backends that support tool calling (OpenAI, Ollama, HuggingFace, etc.).
+    registered with backends that support tool calling (OpenAI, Ollama, Hugging Face, etc.).
 
     Type parameters:
         P: Parameter specification for the underlying callable
@@ -127,7 +127,7 @@ class MelleaTool(AbstractMelleaTool[P, R]):
 
     @classmethod
     def from_smolagents(cls, tool: Any) -> "MelleaTool[..., Any]":
-        """Create a Tool from a HuggingFace smolagents tool object.
+        """Create a Tool from a Hugging Face smolagents tool object.
 
         Args:
             tool: A smolagents.Tool instance
@@ -391,7 +391,7 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
         List of OpenAI-compatible JSON tool schema dicts, one per tool.
 
     Notes:
-    - Huggingface transformers library lets you pass in an array of functions but doesn't like methods.
+    - Hugging Face transformers library lets you pass in an array of functions but doesn't like methods.
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
     - OpenAI uses the same format / schema.
     """

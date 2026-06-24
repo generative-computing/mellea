@@ -1,6 +1,6 @@
 # pytest: e2e, vllm, skip
 
-"""Example: running the answerability intrinsic via OpenAI backend with Granite Switch.
+"""Example: running the answerability adapter function via OpenAI backend with Granite Switch.
 
 Requires a vLLM server hosting a Granite Switch model.
 

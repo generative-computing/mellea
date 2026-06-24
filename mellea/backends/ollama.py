@@ -402,7 +402,7 @@ class OllamaModelBackend(FormatterBackend):
                 messages.extend(self.formatter.to_chat_messages([action]))
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []
-        # We use system prompt None/empty-string semantics in a way that is consistent with huggingface and other libraries.
+        # We use system prompt None/empty-string semantics in a way that is consistent with Hugging Face and other libraries.
         # If the system prompt is None, the the default system prompt gets used.
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":

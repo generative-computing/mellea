@@ -441,7 +441,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             None  # Currently only used by hf.
         )
         # Optional cooperative-cancel hook called before asyncio task cancellation.
-        # Backends that run generation in a thread (e.g. HuggingFace via
+        # Backends that run generation in a thread (e.g. Hugging Face via
         # asyncio.to_thread) set this to a non-blocking callable (e.g.
         # threading.Event.set) so the thread receives a stop signal before the
         # task wrapper is cancelled. Must be non-blocking; exceptions are logged
@@ -959,7 +959,12 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @property
     def value(self) -> str:
-        """Gets the value of the block."""
+        """The raw string value produced by the model.
+
+        When `format=` was passed to the generating call, this is a JSON
+        string matching the declared schema — not a parsed model instance.
+        Use `MyModel.model_validate_json(str(result))` to get a typed instance.
+        """
         return self._underlying_value  # type: ignore
 
     @value.setter
@@ -1055,6 +1060,19 @@ class Context(abc.ABC):
             ContextT: A freshly initialised root context with no data or history.
         """
         return cls()
+
+    def new_instance(self) -> Context:
+        """Return a new empty root context, preserving any subclass configuration.
+
+        The base implementation calls `reset_to_new()`, which returns a bare
+        instance with no history and no config.  Subclasses that carry
+        configuration (e.g. `ChatContext` with `model_id` and `window_size`)
+        should override this to propagate their config into the fresh instance.
+
+        Returns:
+            Context: A freshly initialised root context of the same type.
+        """
+        return self.reset_to_new()
 
     # Internal functions below this line.
 

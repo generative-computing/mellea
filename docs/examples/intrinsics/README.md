@@ -1,10 +1,10 @@
-# Intrinsics Examples
+# Adapter Functions Examples
 
-This directory contains examples for using Mellea's intrinsic functions - specialized model capabilities accessed through adapters.
+This directory contains examples for using Mellea's adapter functions - specialized model capabilities accessed through adapters.
 
 ## Concepts Demonstrated
 
-- **Intrinsic Functions**: Specialized model capabilities beyond text generation
+- **Adapter Functions**: Specialized model capabilities beyond text generation
 - **Adapter System**: Using LoRA/aLoRA adapters for specific tasks
 - **RAG Evaluation**: Assessing retrieval-augmented generation quality
 - **Quality Metrics**: Measuring relevance, groundedness, and accuracy
@@ -24,7 +24,7 @@ ctx, backend = start_backend(
 response, ctx = mfuncs.chat("What is 2 + 2?", ctx, backend)
 print(f"Response: {response.content}")
 
-# NOTE: There are additional functions for other intrinsics as well.
+# NOTE: There are additional functions for other adapter functions as well.
 result = core.check_certainty(ctx, backend)
 print(f"Certainty score: {result}")
 ```
@@ -33,12 +33,12 @@ OpenAIBackends also support a type of embedded adapter for Granite Switch models
 ```python
 backend = OpenAIBackend(
         model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
-        load_embedded_adapters=True,  # Auto-loads adapters from huggingface repo.
+        load_embedded_adapters=True,  # Auto-loads adapters from Hugging Face repo.
         ...
 )
 ```
 
-The underlying intrinsics can also be utilized directly when generating:
+The underlying adapter functions can also be utilized directly when generating:
 ```python
 from mellea.stdlib.components import Intrinsic
 import mellea.stdlib.functional as mfuncs
@@ -57,11 +57,11 @@ out, new_ctx = mfuncs.act(
 For complete runnable examples using the OpenAI backend with Granite Switch,
 see [`../granite-switch/`](../granite-switch/).
 
-> **Note:** Not all intrinsics are embedded in every Granite Switch model. You should check
+> **Note:** Not all adapter functions are embedded in every Granite Switch model. You should check
 > the model's `adapter_index.json` file for a definitive list. For granite switch models
 > pre-built by IBM, we include a list of models in the Mellea `model_id`.
 
-## Available Intrinsics
+## Available Adapter Functions
 
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
@@ -79,7 +79,7 @@ see [`../granite-switch/`](../granite-switch/).
 
 ## Example Files
 
-### RAG Intrinsics
+### RAG Adapter Functions
 
 ```bash
 uv run answerability.py
@@ -116,7 +116,7 @@ uv run query_rewrite.py
 ```
 Demonstrates rewriting queries for better retrieval.
 
-### Core Intrinsics
+### Core Adapter Functions
 
 ```bash
 uv run requirement_check.py
@@ -128,7 +128,7 @@ uv run uncertainty.py
 ```
 Demonstrates assessing model certainty about its response.
 
-### Guardian Intrinsics
+### Guardian Adapter Functions
 
 ```bash
 uv run factuality_detection.py
@@ -155,14 +155,14 @@ Demonstrates checking compliance with policies.
 ```bash
 uv run intrinsics.py
 ```
-Full example showing multiple intrinsics working together in a RAG pipeline.
+Full example showing multiple adapter functions working together in a RAG pipeline.
 
 ## Architecture
 ![Granite Libraries Software Stack Architecture in Mellea](../../docs/images/granite-libraries-mellea-architecture.png)
 
 ## Related Documentation
 
-- See `mellea/stdlib/components/intrinsic/` for intrinsic implementations
+- See `mellea/stdlib/components/intrinsic/` for adapter function implementations
 - See `mellea/backends/adapters/` for adapter system
 - See `docs/dev/intrinsics_and_adapters.md` for architecture details
 - See `docs/docs/examples/granite-switch/README.md` for more about granite-switch
