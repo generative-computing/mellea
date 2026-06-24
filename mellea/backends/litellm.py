@@ -252,6 +252,16 @@ class LiteLLMBackend(FormatterBackend):
             # OpenAI compatible endpoints should accept both (and Watsonx does accept both).
             model_opts_remapping[ModelOption.MAX_NEW_TOKENS] = "max_tokens"
 
+        for opt, field in (
+            (ModelOption.LOGITS, "generation.logits"),
+            (ModelOption.RAW_LOGITS, "generation.raw_logits"),
+        ):
+            if model_options.get(opt) and opt not in self._warned_about:
+                self._warned_about.add(opt)
+                MelleaLogger.get_logger().warning(
+                    f"{opt!r} is not supported by the LiteLLM backend; {field} will be None."
+                )
+
         backend_specific = ModelOption.replace_keys(model_options, model_opts_remapping)
         backend_specific = ModelOption.remove_special_keys(backend_specific)
 

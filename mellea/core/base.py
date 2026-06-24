@@ -23,6 +23,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     Literal,
@@ -31,6 +32,9 @@ from typing import (
     TypeVar,
     runtime_checkable,
 )
+
+if TYPE_CHECKING:
+    import torch
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -307,6 +311,8 @@ class GenerationMetadata:
         response_model: Model identifier reported on the response; may differ from the requested model.
         finish_reasons: Finish reason(s) reported on the response (typically one per choice).
         response_id: Provider-assigned identifier for the response.
+        logits: Per-token processed logit scores (post-LogitsProcessor); None if not requested or unavailable.
+        raw_logits: Per-token raw LM-head logits (pre-LogitsProcessor); None if not requested or unavailable.
     """
 
     usage: dict[str, Any] | None = None
@@ -361,6 +367,28 @@ class GenerationMetadata:
 
     Useful for cross-referencing logs/traces with provider-side records.
     `None` when the backend response does not carry an id.
+    """
+
+    logits: tuple[torch.Tensor, ...] | None = None
+    """Per-token processed logit scores from the backend (post-LogitsProcessor).
+
+    Populated when `ModelOption.LOGITS=True` and the backend supports it.
+    These are logits after the LogitsProcessor chain (temperature, top-k/top-p,
+    repetition penalty, etc.). For the HuggingFace backend this is a tuple of
+    1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
+    requested, if the backend does not support logits, or when
+    `ModelOption.STREAM=True`.
+    """
+
+    raw_logits: tuple[torch.Tensor, ...] | None = None
+    """Per-token raw LM-head logits from the backend (pre-LogitsProcessor).
+
+    Populated when `ModelOption.RAW_LOGITS=True` and the backend supports it.
+    These are the unprocessed logits straight from the LM head, before any
+    LogitsProcessor transforms. For the HuggingFace backend this is a tuple of
+    1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
+    requested, if the backend does not support raw logits, or when
+    `ModelOption.STREAM=True`.
     """
 
 
