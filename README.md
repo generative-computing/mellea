@@ -2,7 +2,6 @@
 
 # Mellea — build predictable AI without guesswork
 
-<!-- leothomas, please delete this line -->
 
 Inside every AI-powered pipeline, the unreliable part is the same: the LLM call itself.
 Silent failures, untestable outputs, no guarantees.
