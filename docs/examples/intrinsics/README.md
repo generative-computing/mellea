@@ -33,7 +33,7 @@ OpenAIBackends also support a type of embedded adapter for Granite Switch models
 ```python
 backend = OpenAIBackend(
         model_id=IBM_GRANITE_SWITCH_4_1_3B_PREVIEW.hf_model_name,
-        load_embedded_adapters=True,  # Auto-loads adapters from huggingface repo.
+        load_embedded_adapters=True,  # Auto-loads adapters from Hugging Face repo.
         ...
 )
 ```

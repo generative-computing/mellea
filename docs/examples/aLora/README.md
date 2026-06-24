@@ -37,7 +37,7 @@ If model training succeeds, you will need to upload your model as an adapter fun
 ```bash
 # WARNING: running this command will upload your model weights to huggingface.co !!!
 # The model will be private.
-# replace $HF_USERNAME with your huggingface username.
+# replace $HF_USERNAME with your Hugging Face username.
 m alora upload \
    --intrinsic \
    --name "$HF_USERNAME/stembolts" \
@@ -96,7 +96,7 @@ from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 class StemboltAdapter(CustomIntrinsicAdapter):
     def __init__(self, base_model_name:str="granite-4.1-3b"):
         super().__init__(
-            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
+            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGING FACE USERNAME
             intrinsic_name="stembolts",
             base_model_name=base_model_name,
         )

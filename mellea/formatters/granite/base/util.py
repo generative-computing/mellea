@@ -113,7 +113,7 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
         import transformers
     local_model_dir = local_or_remote_path
     if not os.path.exists(local_model_dir):
-        raise NotImplementedError("TODO: Talk to hugging face hub")
+        raise NotImplementedError("TODO: Talk to Hugging Face Hub")
     with open(f"{local_model_dir}/adapter_config.json", encoding="utf-8") as f:
         adapter_config = json.load(f)
     base_model_name = adapter_config["base_model_name_or_path"]

@@ -391,7 +391,7 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
         List of OpenAI-compatible JSON tool schema dicts, one per tool.
 
     Notes:
-    - Huggingface transformers library lets you pass in an array of functions but doesn't like methods.
+    - Hugging Face transformers library lets you pass in an array of functions but doesn't like methods.
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
     - OpenAI uses the same format / schema.
     """
