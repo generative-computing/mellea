@@ -107,7 +107,7 @@ def start_session(
     Args:
         backend_name: The backend to use. Options are:
             - "ollama": Use Ollama backend for local models
-            - "hf" or "huggingface": Use HuggingFace transformers backend
+            - "hf" or "huggingface": Use Hugging Face transformers backend
             - "openai": Use OpenAI API backend
             - "watsonx": Use IBM WatsonX backend, WARNING: this defaults to the IBM_GRANITE_4_HYBRID_SMALL model for now.
             - "litellm": Use the LiteLLM backend

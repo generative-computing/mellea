@@ -9,7 +9,7 @@ the model repo at init), this example shows how to create an OpenAIBackend with
 
 This is useful when:
 - You only need a subset of the model's embedded adapters.
-- You want to load adapters from a local directory rather than HuggingFace Hub.
+- You want to load adapters from a local directory rather than Hugging Face Hub.
 - You want more control over adapter registration.
 
 Requires a vLLM server hosting a Granite Switch model.
@@ -55,7 +55,7 @@ backend = OpenAIBackend(
     load_embedded_adapters=False,
 )
 
-# --- Option A: Load a single adapter from HuggingFace Hub ---
+# --- Option A: Load a single adapter from Hugging Face Hub ---
 adapters = EmbeddedIntrinsicAdapter.from_hub(
     SWITCH_MODEL_ID, intrinsic_name="answerability"
 )
@@ -72,7 +72,7 @@ for adapter in adapters:
 
 print(f"Registered adapters: {backend.list_adapters()}")
 
-# Now use the intrinsic as usual.
+# Now use the adapter function as usual.
 context = ChatContext().add(Message("assistant", "Hello there, how can I help you?"))
 question = "What is the square root of 4?"
 documents = [Document("The square root of 4 is 2.")]

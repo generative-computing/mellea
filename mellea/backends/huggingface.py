@@ -1,6 +1,6 @@
-"""A backend that uses the Huggingface Transformers library.
+"""A backend that uses the Hugging Face Transformers library.
 
-The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.
+The purpose of the Hugging Face backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ def _install_cancel_stopping_criteria(
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
-Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
+Hugging Face backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
 """
 TransformersTorchConfig = tuple[PreTrainedTokenizerBase, PreTrainedModel, torch.device]
 
@@ -234,7 +234,7 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
-    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
+    """The LocalHFBackend uses Hugging Face's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
 
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 
@@ -262,7 +262,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             HF-specific option names.
 
     Raises:
-        OSError: If the model cannot be loaded from HuggingFace Hub (bad ID,
+        OSError: If the model cannot be loaded from Hugging Face Hub (bad ID,
             missing access, or local filesystem/cache error).
     """
 
@@ -339,7 +339,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     )
                 except OSError as e:
                     raise OSError(
-                        f"Model '{self._model_id}' could not be loaded from HuggingFace Hub. "
+                        f"Model '{self._model_id}' could not be loaded from Hugging Face Hub. "
                         "Check that the model ID is correct and that you have access to it. "
                         "If the model is gated, set the HF_TOKEN environment variable. "
                         "To browse available models, visit https://huggingface.co/models "
@@ -358,7 +358,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         assert (
             self._llguidance_tokenizer.vocab_size
             == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
-        ), "vocab size mismatch between llguidance and huggingface tokenizers"
+        ), "vocab size mismatch between llguidance and Hugging Face tokenizers"
 
         self._use_caches = use_caches
         self._cache = (
@@ -1067,7 +1067,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_chat,
                 tools=convert_tools_to_json(tools),  # type: ignore
-                add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
+                add_generation_prompt=True,  # If we change this, must modify Hugging Face granite guardian.
                 return_tensors="pt",
                 return_dict=True,
                 **self._filter_for_chat_template(model_options),
@@ -1451,7 +1451,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             #       Test this by ensuring all outputs from this call are populated when running on mps.
             #       https://github.com/pytorch/pytorch/pull/157727
             MelleaLogger.get_logger().warning(
-                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a Hugging Face backend; ensure all ModelOutputThunks have non-empty values."
             )
 
         model_opts = self._simplify_and_merge(model_options)
@@ -1854,7 +1854,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
 
 def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
-    """When generating with a huggingface model, this can be used to ensure the correct adapters are active.
+    """When generating with a Hugging Face model, this can be used to ensure the correct adapters are active.
 
     Args:
         expected_state: the current state of the lock

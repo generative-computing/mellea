@@ -88,7 +88,7 @@ backend = OllamaModelBackend(model_id="llama2")
 from mellea.backends.openai import OpenAIBackend
 backend = OpenAIBackend(model_id="gpt-4")
 
-# HuggingFace
+# Hugging Face
 from mellea.backends.huggingface import LocalHFBackend
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.2-8b-instruct")
 
