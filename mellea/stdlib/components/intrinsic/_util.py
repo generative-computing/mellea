@@ -1,6 +1,7 @@
 """Shared utilities for intrinsic convenience wrappers."""
 
 import json
+from typing import cast
 
 from ....backends import ModelOption
 from ....backends.adapters import AdapterMixin, AdapterType
@@ -63,26 +64,76 @@ def _resolve_question(
     return text, rewound  # type: ignore[return-value]
 
 
+def _extract_last_response(context: ChatContext) -> tuple[str, ChatContext]:
+    """Extract the last assistant response text and the context preceding it.
+
+    Returns ``(response_text, prev_ctx)`` where *prev_ctx* is *context* rewound
+    to before the last assistant turn. Handles both session-generated contexts
+    (last turn is a :class:`~mellea.core.base.ModelOutputThunk`) and
+    manually-constructed contexts (last turn is an assistant
+    :class:`~mellea.stdlib.components.Message`).
+
+    Args:
+        context: Chat context whose last element is an assistant response.
+
+    Returns:
+        Tuple of the assistant response text and the rewound context.
+
+    Raises:
+        ValueError: If *context* is empty, if the last element is not an
+            assistant response, if the response has not been computed yet,
+            or if there is no preceding node.
+    """
+    from ..chat import Message
+
+    turn = context.last_turn()
+    if turn is None:
+        raise ValueError("Context is empty; cannot extract an assistant response.")
+
+    if turn.output is not None and turn.output.value is not None:
+        # Session-generated response stored as a ModelOutputThunk.
+        # Only the text value is preserved; thunk metadata is intentionally dropped.
+        response_text: str = turn.output.value
+        prev_ctx = context.previous_node
+    elif turn.output is not None and turn.output.value is None:
+        raise ValueError(
+            "Cannot extract assistant response: it has not been computed yet. "
+            "Await the response before calling this adapter function."
+        )
+    elif (
+        turn.model_input is not None
+        and isinstance(turn.model_input, Message)
+        and turn.model_input.role == "assistant"
+    ):
+        # Manually-added assistant Message (e.g. built from test fixtures).
+        response_text = turn.model_input.content
+        prev_ctx = context.previous_node
+    else:
+        raise ValueError(
+            "Cannot extract assistant response: the last context element is "
+            "not an assistant response."
+        )
+
+    if prev_ctx is None:
+        raise ValueError(
+            "Context has no previous node; cannot rewind past the assistant turn."
+        )
+
+    return response_text, cast(ChatContext, prev_ctx)
+
+
 def _resolve_response(
     response: str | None, context: ChatContext
 ) -> tuple[str, ChatContext]:
-    """Return `(response_text, context_to_use)`.
+    """Return ``(response_text, context_to_use)``.
 
-    When *response* is not `None`, returns it with *context* unchanged.
-    When `None`, extracts from the last turn's `output.value` and rewinds
-    *context* to before that output.
+    When *response* is not ``None``, returns it with *context* unchanged.
+    When ``None``, delegates to :func:`_extract_last_response` to pull the
+    text from the last assistant turn and rewind the context.
     """
     if response is not None:
         return response, context
-    turn = context.last_turn()
-    if turn is None or turn.output is None:
-        raise ValueError("response is None and context has no last turn with output")
-    if turn.output.value is None:
-        raise ValueError("response is None and last turn output has no value")
-    rewound = context.previous_node
-    if rewound is None:
-        raise ValueError("Cannot rewind context past the root node")
-    return turn.output.value, rewound  # type: ignore[return-value]
+    return _extract_last_response(context)
 
 
 def call_intrinsic(

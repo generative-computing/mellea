@@ -18,7 +18,7 @@ from ....core.utils import MelleaLogger
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from ._util import call_intrinsic
+from ._util import _extract_last_response, call_intrinsic
 
 _UNSET: object = object()
 """Sentinel distinguishing 'caller omitted scoring_schema' from 'caller passed
@@ -394,44 +394,7 @@ def _inject_documents(
             response that can be extracted, or if the assistant response
             has not been computed yet.
     """
-    turn = context.last_turn()
-    if turn is None:
-        raise ValueError(
-            "Context is empty; cannot attach documents to an assistant turn."
-        )
-
-    if turn.output is not None and turn.output.value is not None:
-        # Session-generated response stored as a ModelOutputThunk.
-        # Only the text value is preserved; thunk metadata is intentionally dropped.
-        response_text: str = turn.output.value
-        prev_ctx = context.previous_node
-    elif turn.output is not None and turn.output.value is None:
-        raise ValueError(
-            "Cannot attach documents: the assistant response has not been computed yet. "
-            "Await the response before calling factuality_detection or "
-            "factuality_correction with documents=."
-        )
-    elif (
-        turn.model_input is not None
-        and isinstance(turn.model_input, Message)
-        and turn.model_input.role == "assistant"
-    ):
-        # Manually-added assistant Message (e.g. built from test fixtures)
-        response_text = turn.model_input.content
-        prev_ctx = context.previous_node
-    else:
-        raise ValueError(
-            "Cannot attach documents: the last context element is not an "
-            "assistant response. Ensure the context ends with an assistant "
-            "message before passing documents= to factuality_detection or "
-            "factuality_correction."
-        )
-
-    if prev_ctx is None:
-        raise ValueError(
-            "Context has no previous node; cannot reconstruct context with documents."
-        )
-
+    response_text, prev_ctx = _extract_last_response(context)
     return cast(
         ChatContext,
         prev_ctx.add(Message("assistant", response_text, documents=documents)),
