@@ -83,7 +83,7 @@ def requirement_check(
     score = req_check.get("score")
     if (
         not isinstance(score, (int, float))
-        or isinstance(score, bool)
+        or isinstance(score, bool)  # bool subclasses int; exclude it explicitly
         or not math.isfinite(score)
         or not 0.0 <= score <= 1.0
     ):

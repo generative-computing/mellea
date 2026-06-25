@@ -63,7 +63,7 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     score = req_check.get("score", None)
     if (
         not isinstance(score, (int, float))
-        or isinstance(score, bool)
+        or isinstance(score, bool)  # bool subclasses int; exclude it explicitly
         or not math.isfinite(score)
         or not 0.0 <= score <= 1.0
     ):
