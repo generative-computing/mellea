@@ -87,7 +87,6 @@ class LiteLLMBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
-        num_retries: int = 0,
     ):
         """Initialize a LiteLLM-compatible backend for the given model ID and endpoint."""
         super().__init__(
@@ -111,8 +110,6 @@ class LiteLLMBackend(FormatterBackend):
         self._base_url = (
             base_url if base_url is not None else "http://localhost:11434/v1"
         )
-
-        self._num_retries = num_retries
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -427,7 +424,6 @@ class LiteLLMBackend(FormatterBackend):
             tools=formatted_tools,
             api_base=resolved_api_base,
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
-            num_retries=self._num_retries,
             **extra_params,
             **reasoning_params,  # type: ignore
             **model_specific_options,
@@ -728,7 +724,6 @@ class LiteLLMBackend(FormatterBackend):
         completion_response = await litellm.atext_completion(
             model=self._model_id,
             prompt=prompts,
-            num_retries=self._num_retries,
             api_base=user_api_base_raw
             or (self._base_url if self._explicit_base_url else None),
             **model_specific_options,

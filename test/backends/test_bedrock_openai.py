@@ -124,9 +124,6 @@ def test_litellm_backend_num_retries_single_source(mock_auth, monkeypatch):
 
     assert isinstance(backend, LiteLLMBackend)
     assert backend.model_options["num_retries"] == 7
-    # The direct LiteLLMBackend num_retries param keeps its default (0); the
-    # value flows exclusively through model_options.
-    assert backend._num_retries == 0
 
 
 @patch("mellea.backends.bedrock._assert_bedrock_auth")
