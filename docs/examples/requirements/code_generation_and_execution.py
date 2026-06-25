@@ -275,18 +275,18 @@ def process_user_request(
 
     if generated is None:
         print("  ✗ Model failed to generate output (requirements loop exhausted)")
-        return
+        sys.exit(1)
 
     generated_str = str(generated)
     if not generated_str.strip():
         print("  ✗ Model failed to generate output")
-        return
+        sys.exit(1)
 
     code = _extract_code_from_output(generated_str)
     if code is None:
         print("  ✗ Failed to extract Python code from model output")
         print(f"\nModel output:\n{generated_str}")
-        return
+        sys.exit(1)
 
     print("\nGenerated code:")
     print(code)
@@ -298,7 +298,7 @@ def process_user_request(
     graph_path = Path(output_path)
     if not graph_path.exists():
         print(f"  ✗ Graph was not created at {graph_path}")
-        return
+        sys.exit(1)
     print(f"\n  ✓ Graph saved to: {graph_path}")
     print(f"    File size: {graph_path.stat().st_size} bytes")
 
