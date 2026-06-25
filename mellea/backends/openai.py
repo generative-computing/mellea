@@ -719,10 +719,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_options
+        output._gen.start = datetime.datetime.now()
+        output._call.context = linearized_context
+        output._call.action = action
+        output._call.model_options = model_options
 
         async def granite_formatters_processing(
             mot: ModelOutputThunk,
@@ -752,13 +752,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Processing functions only pass the ModelOutputThunk (and current chunk
         # of response). Bind the other vars necessary for each processing step.
-        output._process = functools.partial(
+        output._gen.process = functools.partial(
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
         )
 
-        output._post_process = functools.partial(
+        output._gen.post_process = functools.partial(
             self.post_processing,
             tools=tools,
             conversation=conversation,
@@ -771,21 +771,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # To support lazy computation, will need to remove this create_task
             # and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing
-            # this ._generate function.
+            # this ._gen.generate function.
 
             # This function should always be called from a running event loop so
             # we don't have to worry about scheduling the task to a specific
             # event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_options.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present.
             raise e
@@ -976,15 +976,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )  # type: ignore
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_opts
+        output._gen.start = datetime.datetime.now()
+        output._call.context = linearized_context
+        output._call.action = action
+        output._call.model_options = model_opts
 
         # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
         # each processing step.
-        output._process = self.processing
-        output._post_process = functools.partial(
+        output._gen.process = self.processing
+        output._gen.post_process = functools.partial(
             self.post_processing,
             tools=tools,
             conversation=conversation,
@@ -999,20 +999,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+            # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present
             raise e
@@ -1110,10 +1110,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if mot.raw.streamed_chunks is not None:
             mot.raw.response = chat_completion_delta_merge(mot.raw.streamed_chunks)
 
-        assert mot._action is not None, (
+        assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
-        assert mot._model_options is not None, (
+        assert mot._call.model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
@@ -1141,7 +1141,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log = GenerateLog()
         generate_log.prompt = conversation
         generate_log.backend = f"openai::{self.model_id!s}"
-        generate_log.model_options = mot._model_options
+        generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         # Store the full response (includes usage info)
         generate_log.model_output = response
@@ -1152,7 +1152,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "tools_called": mot.tool_calls,
             "seed": seed,
         }
-        generate_log.action = mot._action
+        generate_log.action = mot._call.action
         generate_log.result = mot
         mot._generate_log = generate_log
 
@@ -1258,9 +1258,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             completion_response.choices, actions, prompts
         ):
             output = ModelOutputThunk(response.text)
-            output._context = None  # There is no context for generate_from_raw for now
-            output._action = action
-            output._model_options = model_opts
+            # There is no context for generate_from_raw for now
+            output._call.context = None
+            output._call.action = action
+            output._call.model_options = model_opts
             output.raw = RawProviderResponse(
                 provider=self._provider, response=response.model_dump()
             )

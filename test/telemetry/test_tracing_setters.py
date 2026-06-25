@@ -154,8 +154,8 @@ def test_set_mellea_attrs_action_class_name_from_action():
         pass
 
     mot = MagicMock()
-    mot._action = MyAction()
-    mot._context = None
+    mot._call.action = MyAction()
+    mot._call.context = None
     gen = GenerationMetadata(model="m", provider="p")
     set_mellea_attrs(span, mot, gen)
     attrs = _attrs(span)
@@ -177,13 +177,13 @@ def test_set_mellea_attrs_context_size():
 
     span = MagicMock()
     mot = MagicMock()
-    mot._action = None
-    mot._context = [1, 2, 3]
+    mot._call.action = None
+    mot._call.context = [1, 2, 3]
     set_mellea_attrs(span, mot, gen)
     assert _attrs(span)["mellea.context_size"] == 3
 
     span = MagicMock()
-    mot._context = None
+    mot._call.context = None
     set_mellea_attrs(span, mot, gen)
     assert _attrs(span)["mellea.context_size"] == 0
 
@@ -191,8 +191,8 @@ def test_set_mellea_attrs_context_size():
 def test_set_mellea_attrs_streaming_conditional():
     """`mellea.streaming` is emitted only when streaming is truthy."""
     mot = MagicMock()
-    mot._action = None
-    mot._context = None
+    mot._call.action = None
+    mot._call.context = None
 
     span = MagicMock()
     set_mellea_attrs(

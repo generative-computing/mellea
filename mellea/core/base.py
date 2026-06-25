@@ -20,7 +20,7 @@ import enum
 import logging
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import (
     TYPE_CHECKING,
@@ -414,6 +414,69 @@ class RawProviderResponse:
     streamed_chunks: list[Any] | None = None
 
 
+@dataclass
+class _CallInfo:
+    """Originating-call data for a `ModelOutputThunk`.
+
+    Preserved across `__copy__` / `__deepcopy__` because retries and sampling
+    routinely need to re-issue or inspect the call that produced a thunk.
+
+    Args:
+        action: The component or block whose generation produced this thunk.
+        context: The context passed to the originating generate call.
+        model_options: Model options passed to the originating generate call.
+        generation_id: Mellea-side hook correlation ID; distinct from the
+            provider-assigned `GenerationMetadata.response_id`.
+    """
+
+    action: Component | CBlock | None = None
+    context: list[Component | CBlock] | None = None
+    model_options: dict[str, Any] | None = None
+    generation_id: str | None = None
+
+
+@dataclass
+class _GenerationState:
+    """In-flight computation machinery for a `ModelOutputThunk`.
+
+    Reset to a fresh empty instance on `__copy__` / `__deepcopy__` — a copied
+    thunk is a distinct (non-generating) object and must not share queues,
+    tasks, or thread signals with the original.
+
+    Args:
+        queue: Single-consumer queue feeding `astream()` during generation.
+        chunk_size: Minimum number of chunks to stream at a single time.
+        first_chunk_received: Whether the first streamed chunk has arrived
+            (gates time-to-first-byte recording).
+        generate: The task driving generation. Linked to `generate_type`.
+        generate_type: Determines which functions can resolve the thunk's value.
+        generate_extra: Auxiliary generation task; currently only used by hf.
+        cancel_hook: Optional cooperative-cancel hook called before asyncio task
+            cancellation. Backends that run generation in a thread (e.g. Hugging
+            Face via `asyncio.to_thread`) set this to a non-blocking callable
+            (e.g. `threading.Event.set`) so the thread receives a stop signal
+            before the task wrapper is cancelled. Must be non-blocking;
+            exceptions are logged and suppressed. Copied thunks reset this to
+            `None` — each computation owns its own thread signal.
+        process: Backend coroutine that folds a streamed chunk into the thunk.
+        post_process: Backend coroutine run once after the value is complete.
+        on_computed: Coroutine run when the thunk becomes computed.
+        start: Wall-clock start time of generation, for latency metrics.
+    """
+
+    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
+    chunk_size: int = 3
+    first_chunk_received: bool = False
+    generate: asyncio.Task[None] | None = None
+    generate_type: GenerateType = GenerateType.NONE
+    generate_extra: asyncio.Task[Any] | None = None
+    cancel_hook: Callable[[], None] | None = None
+    process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
+    post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+    on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
+    start: datetime.datetime | None = None
+
+
 class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
 
@@ -451,56 +514,28 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.raw: RawProviderResponse = RawProviderResponse()
         """Backend-native provider response populated during generation."""
 
-        # Used for tracking generation.
-        self._context: list[Component | CBlock] | None = None
-        self._action: Component | CBlock | None = None
-        self._model_options: dict[str, Any] | None = None
+        # Originating-call data, preserved across copies. See `_CallInfo`.
+        self._call = _CallInfo()
 
-        # Used for async and async streaming.
-        self._async_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
-        self._chunk_size = 3  # Minimum number of chunks to stream at a single time.
+        # In-flight computation machinery, reset on copy. See `_GenerationState`.
+        self._gen = _GenerationState()
 
-        # _generate and _generate_type are linked. _generate will determine
-        # what gets set for _generate_type. _generate_type determines what
-        # function(s) can be used to get the value of the ModelOutputThunk.
-        self._generate: asyncio.Task[None] | None = None
-        self._generate_type: GenerateType = GenerateType.NONE
-        self._generate_extra: asyncio.Task[Any] | None = (
-            None  # Currently only used by hf.
-        )
-        # Optional cooperative-cancel hook called before asyncio task cancellation.
-        # Backends that run generation in a thread (e.g. Hugging Face via
-        # asyncio.to_thread) set this to a non-blocking callable (e.g.
-        # threading.Event.set) so the thread receives a stop signal before the
-        # task wrapper is cancelled. Must be non-blocking; exceptions are logged
-        # and suppressed. Copied MOTs reset this to None — each computation owns
-        # its own thread signal.
-        self._cancel_hook: Callable[[], None] | None = None
-        self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
-        self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
-        self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
-
-        self._start: datetime.datetime | None = None
-        self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
         # Soft-failure cause recorded by backends that return a placeholder
         # MOT instead of raising. Sibling to `_cancelled`.
         self._error: Exception | None = None
-        # Mellea-side hook correlation ID; distinct from the provider-assigned
-        # `GenerationMetadata.response_id`.
-        self._generation_id: str | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
         if (
             self.generation.streaming
-            and not self._first_chunk_received
-            and self._start is not None
+            and not self._gen.first_chunk_received
+            and self._gen.start is not None
         ):
             self.generation.ttfb_ms = (
-                datetime.datetime.now() - self._start
+                datetime.datetime.now() - self._gen.start
             ).total_seconds() * 1000
-            self._first_chunk_received = True
+            self._gen.first_chunk_received = True
 
     async def cancel_generation(self, error: Exception | None = None) -> None:
         """Cancel an in-progress streaming generation, drain the queue, and fire the `generation_error` hook.
@@ -533,34 +568,34 @@ class ModelOutputThunk(CBlock, Generic[S]):
             return
 
         def _drain() -> None:
-            while not self._async_queue.empty():
+            while not self._gen.queue.empty():
                 try:
-                    self._async_queue.get_nowait()
+                    self._gen.queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
 
         # Signal any backend thread before cancelling the asyncio task wrapper
         # so the thread can stop cooperatively instead of running to completion.
-        if self._cancel_hook is not None:
+        if self._gen.cancel_hook is not None:
             try:
-                self._cancel_hook()
+                self._gen.cancel_hook()
             except Exception as hook_exc:
                 logging.getLogger(__name__).warning(
                     "cancel_generation: _cancel_hook raised (suppressed): %r", hook_exc
                 )
 
-        if self._generate is not None and not self._generate.done():
-            self._generate.cancel()
+        if self._gen.generate is not None and not self._gen.generate.done():
+            self._gen.generate.cancel()
 
-        if self._generate_extra is not None and not self._generate_extra.done():
-            self._generate_extra.cancel()
+        if self._gen.generate_extra is not None and not self._gen.generate_extra.done():
+            self._gen.generate_extra.cancel()
 
         # Drain before awaiting — unblocks any put() the task is stuck on.
         _drain()
 
-        if self._generate is not None:
+        if self._gen.generate is not None:
             try:
-                await self._generate
+                await self._gen.generate
             except asyncio.CancelledError:
                 # Re-raise if the *outer* task is being cancelled (Python 3.11+
                 # task.cancelling() > 0) so we don't silently absorb external
@@ -572,9 +607,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             except Exception:
                 pass
 
-        if self._generate_extra is not None:
+        if self._gen.generate_extra is not None:
             try:
-                await self._generate_extra
+                await self._gen.generate_extra
             except asyncio.CancelledError:
                 cur = asyncio.current_task()
                 if cur is not None and cur.cancelling() > 0:
@@ -596,7 +631,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 GenerationErrorPayload(
                     exception=recorded,
                     model_output=self,
-                    generation_id=self._generation_id,
+                    generation_id=self._call.generation_id,
                 ),
             )
 
@@ -653,9 +688,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
         self._error = other._error
-        # _cancel_hook is deliberately not copied: _copy_from swaps output state,
-        # not backend-thread plumbing, which is tied to the original computation.
-        self._cancel_hook = None
+        # _gen.cancel_hook is deliberately not copied: _copy_from swaps output
+        # state, not backend-thread plumbing, which is tied to the original
+        # computation.
+        self._gen.cancel_hook = None
 
     def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled.
@@ -694,9 +730,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             assert self.value is not None  # If computed, the value cannot be None.
             return self.value
 
-        if not self._generate_type == GenerateType.ASYNC:
+        if not self._gen.generate_type == GenerateType.ASYNC:
             raise RuntimeError(
-                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._generate_type.name}`"
+                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._gen.generate_type.name}`"
             )
 
         while not self._computed:
@@ -735,12 +771,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Use string directly to avoid importing ModelOption from backends into core (circular import).
         # ModelOption.STREAM is defined in mellea/backends/model_options.py.
         self.generation.streaming = bool(
-            (self._model_options or {}).get("@@@stream@@@", False)
+            (self._call.model_options or {}).get("@@@stream@@@", False)
         )
 
-        if not self._generate_type == GenerateType.ASYNC:
+        if not self._gen.generate_type == GenerateType.ASYNC:
             raise RuntimeError(
-                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
+                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._gen.generate_type.name}`"
             )
         # Beginning value
         beginning_length = (
@@ -751,7 +787,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         chunks: list[Any | None] = []
         while True:
             try:
-                item = self._async_queue.get_nowait()
+                item = self._gen.queue.get_nowait()
                 chunks.append(item)
                 self._record_ttfb()
             except asyncio.QueueEmpty:
@@ -759,7 +795,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 break
 
         # Make sure we always get the minimum chunk size.
-        while len(chunks) <= self._chunk_size:
+        while len(chunks) <= self._gen.chunk_size:
             if len(chunks) > 0:
                 if chunks[-1] is None or isinstance(chunks[-1], Exception):
                     break  # Hit sentinel value or an error.
@@ -767,7 +803,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 # but that forces us to know about the chunk type here. Prefer sentinel values
                 # for now.
 
-            item = await self._async_queue.get()
+            item = await self._gen.queue.get()
             chunks.append(item)
             self._record_ttfb()
 
@@ -777,12 +813,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
             do_set_computed = True
 
             # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
-            if self._generate is not None:
-                self._generate.cancel()
-            if self._generate_extra is not None:
+            if self._gen.generate is not None:
+                self._gen.generate.cancel()
+            if self._gen.generate_extra is not None:
                 # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
-                await self._generate_extra
-                self._generate_extra.cancel()
+                await self._gen.generate_extra
+                self._gen.generate_extra.cancel()
 
             # If ModelOutputThunks get too bulky, we can do additional cleanup here
             # and set fields to None.
@@ -795,26 +831,26 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 err_payload = GenerationErrorPayload(
                     exception=chunks[-1],
                     model_output=self,
-                    generation_id=self._generation_id,
+                    generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_ERROR, err_payload)
 
             raise chunks[-1]
 
         for chunk in chunks:
-            assert self._process is not None
-            await self._process(self, chunk)
+            assert self._gen.process is not None
+            await self._gen.process(self, chunk)
 
         if do_set_computed:
             assert self._underlying_value is not None
             self._computed = True
 
-            assert self._post_process is not None
-            await self._post_process(self)
+            assert self._gen.post_process is not None
+            await self._gen.post_process(self)
 
-            match self._action:
+            match self._call.action:
                 case Component():
-                    self.parsed_repr = self._action._parse(self)
+                    self.parsed_repr = self._call.action._parse(self)
                 case CBlock():
                     assert self.value is not None, (
                         "value must be non-None since this thunk is computed"
@@ -822,7 +858,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                     self.parsed_repr = self.value  # type: ignore
                 case _:
                     raise ValueError(
-                        "attempted to astream from a model output thunk with no ._action set"
+                        "attempted to astream from a model output thunk with no ._call.action set"
                     )
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
@@ -835,15 +871,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 glog = self._generate_log
                 prompt = glog.prompt if glog and glog.prompt else ""
                 latency_ms = (
-                    (datetime.datetime.now() - self._start).total_seconds() * 1000
-                    if self._start
+                    (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
+                    if self._gen.start
                     else -1
                 )
                 post_payload = GenerationPostCallPayload(
                     prompt=prompt,
                     model_output=self,
                     latency_ms=latency_ms,
-                    generation_id=self._generation_id,
+                    generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
                 # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
@@ -866,7 +902,19 @@ class ModelOutputThunk(CBlock, Generic[S]):
         return f"ModelOutputThunk({self.value})"
 
     def __copy__(self) -> ModelOutputThunk:
-        """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
+        """Returns a shallow copy of the ModelOutputThunk.
+
+        Copies are post-generation: `_call` (originating-call data) is preserved
+        while `_gen` (in-flight machinery) is left as the fresh instance from
+        `__init__`. Copying an uncomputed thunk raises.
+
+        Raises:
+            RuntimeError: If the thunk has not been computed.
+        """
+        if not self._computed:
+            raise RuntimeError(
+                "Cannot copy an uncomputed ModelOutputThunk; copies are post-generation."
+            )
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
         )
@@ -880,20 +928,29 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._computed = self._computed
         copied._cancelled = self._cancelled
         copied._error = self._error
-        # _cancel_hook is not forwarded: a copied MOT is a distinct computation
-        # and must not share the original's backend thread signal.
-        copied._cancel_hook = None
         copied._thinking = self._thinking
-        copied._action = self._action
-        copied._context = self._context
         copied._generate_log = self._generate_log
-        copied._model_options = self._model_options
+        # _call is preserved; _gen is left as the fresh _GenerationState() from
+        # __init__ so the copy shares no queues, tasks, or thread signals.
+        copied._call = copy(self._call)
         copied.generation = copy(self.generation)
         copied.raw = copy(self.raw)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
-        """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
+        """Returns a deep copy of the ModelOutputThunk.
+
+        Like `__copy__` but deep-copies `_meta`, `parsed_repr`, and the
+        originating-call data. `_gen` is left as the fresh instance from
+        `__init__`. Copying an uncomputed thunk raises.
+
+        Raises:
+            RuntimeError: If the thunk has not been computed.
+        """
+        if not self._computed:
+            raise RuntimeError(
+                "Cannot deepcopy an uncomputed ModelOutputThunk; copies are post-generation."
+            )
         # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
         deepcopied = ModelOutputThunk(self._underlying_value)
         memo[id(self)] = deepcopied
@@ -914,16 +971,17 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._computed = self._computed
         deepcopied._cancelled = self._cancelled
         deepcopied._error = self._error
-        # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
-        # and must not share the original's backend thread signal.
-        deepcopied._cancel_hook = None
         deepcopied._thinking = self._thinking
-        deepcopied._action = deepcopy(self._action)
-        deepcopied._context = copy(
-            self._context
-        )  # The items in a context should be immutable.
         deepcopied._generate_log = copy(self._generate_log)
-        deepcopied._model_options = copy(self._model_options)
+        # action is deep-copied; context and model_options are shallow-copied
+        # (their items are immutable). _gen is left as the fresh instance from
+        # __init__ so the copy shares no queues, tasks, or thread signals.
+        deepcopied._call = _CallInfo(
+            action=deepcopy(self._call.action),
+            context=copy(self._call.context),
+            model_options=copy(self._call.model_options),
+            generation_id=self._call.generation_id,
+        )
         deepcopied.generation = deepcopy(self.generation)
         deepcopied.raw = deepcopy(self.raw)
         return deepcopied

@@ -51,11 +51,11 @@ async def _mock_post_process(_mot: ModelOutputThunk) -> None:
 
 def _make_mot() -> ModelOutputThunk:
     mot = ModelOutputThunk(value=None)
-    mot._action = CBlock("mock_action")
-    mot._generate_type = GenerateType.ASYNC
-    mot._process = _mock_process
-    mot._post_process = _mock_post_process
-    mot._chunk_size = 0
+    mot._call.action = CBlock("mock_action")
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.process = _mock_process
+    mot._gen.post_process = _mock_post_process
+    mot._gen.chunk_size = 0
     return mot
 
 
@@ -63,10 +63,10 @@ async def _feed_tokens(mot: ModelOutputThunk, response: str, token_size: int) ->
     i = 0
     while i < len(response):
         token = response[i : i + token_size]
-        await mot._async_queue.put(token)
+        await mot._gen.queue.put(token)
         await asyncio.sleep(0)
         i += token_size
-    await mot._async_queue.put(None)
+    await mot._gen.queue.put(None)
 
 
 class StreamingMockBackend(Backend):

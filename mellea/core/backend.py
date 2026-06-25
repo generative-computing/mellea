@@ -124,7 +124,7 @@ class Backend(abc.ABC):
                 )
             raise
         # Save the ID for the post_call / error hooks.
-        mot._generation_id = generation_id
+        mot._call.generation_id = generation_id
         return mot, new_ctx
 
     @abc.abstractmethod

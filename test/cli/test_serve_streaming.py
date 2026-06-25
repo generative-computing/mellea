@@ -91,7 +91,7 @@ class TestStreamingHelpers:
         """Test helper emits only incremental content fragments."""
         output = ModelOutputThunk(None)
         output._computed = False
-        output._generate_type = output._generate_type.ASYNC
+        output._gen.generate_type = output._gen.generate_type.ASYNC
 
         chunks = ["Hello", " there", "!"]
 
@@ -181,7 +181,7 @@ class TestStreamingHelpers:
         """Test helper emits an error payload and [DONE] when streaming fails."""
         output = ModelOutputThunk(None)
         output._computed = False
-        output._generate_type = output._generate_type.ASYNC
+        output._gen.generate_type = output._gen.generate_type.ASYNC
 
         async def mock_astream():
             raise RuntimeError("boom")
@@ -219,7 +219,7 @@ class TestStreamingEndpoint:
         # Create a mock output that simulates streaming
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         # Simulate streaming chunks (deltas, not accumulated)
         chunks = ["Hello", " there", "!"]
@@ -318,7 +318,7 @@ class TestStreamingEndpoint:
 
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
         mock_output.astream = AsyncMock(
             side_effect=lambda: setattr(mock_output, "_computed", True) or "done"
         )
@@ -348,7 +348,7 @@ class TestStreamingEndpoint:
         """Test streaming handles empty content chunks gracefully."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         # Simulate streaming with some empty incremental chunks
         chunks = ["", "Hello", "", " world", ""]
@@ -399,7 +399,7 @@ class TestStreamingEndpoint:
         """Test that completion ID is consistent across all chunks."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         chunks = ["A", "B"]
 
@@ -445,7 +445,7 @@ class TestStreamingEndpoint:
         """Test that streaming response ends with [DONE] marker."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         async def mock_astream():
             mock_output._computed = True
@@ -474,7 +474,7 @@ class TestStreamingEndpoint:
         """Test that model field is correctly set in streaming chunks."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         async def mock_astream():
             mock_output._computed = True
@@ -514,7 +514,7 @@ class TestStreamingEndpoint:
 
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         async def mock_astream():
             mock_output._computed = True
@@ -567,7 +567,7 @@ class TestStreamingEndpoint:
 
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         async def mock_astream():
             mock_output._computed = True
@@ -619,7 +619,7 @@ class TestStreamingEndpoint:
 
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         async def mock_astream():
             mock_output._computed = True
@@ -671,7 +671,7 @@ class TestStreamingEndpoint:
         """
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
-        mock_output._generate_type = mock_output._generate_type.ASYNC
+        mock_output._gen.generate_type = mock_output._gen.generate_type.ASYNC
 
         chunks = ["Hello", " world"]
 

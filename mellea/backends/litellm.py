@@ -440,15 +440,15 @@ class LiteLLMBackend(FormatterBackend):
         )
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_opts
+        output._gen.start = datetime.datetime.now()
+        output._call.context = linearized_context
+        output._call.action = action
+        output._call.model_options = model_opts
 
         # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
         # each processing step.
-        output._process = self.processing
-        output._post_process = functools.partial(
+        output._gen.process = self.processing
+        output._gen.post_process = functools.partial(
             self.post_processing,
             conversation=conversation,
             tools=tools,
@@ -462,20 +462,20 @@ class LiteLLMBackend(FormatterBackend):
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+            # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present
             raise e
@@ -597,10 +597,10 @@ class LiteLLMBackend(FormatterBackend):
                 mot.raw.streamed_chunks, force_all_tool_calls_separate=separate_tools
             )
 
-        assert mot._action is not None, (
+        assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
-        assert mot._model_options is not None, (
+        assert mot._call.model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
@@ -628,7 +628,7 @@ class LiteLLMBackend(FormatterBackend):
         generate_log = GenerateLog()
         generate_log.prompt = conversation
         generate_log.backend = f"litellm::{self.model_id!s}"
-        generate_log.model_options = mot._model_options
+        generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = response
         generate_log.extra = {
@@ -637,7 +637,7 @@ class LiteLLMBackend(FormatterBackend):
             "tools_called": mot.tool_calls,
             "thinking": thinking,
         }
-        generate_log.action = mot._action
+        generate_log.action = mot._call.action
         generate_log.result = mot
 
         mot._generate_log = generate_log
@@ -758,9 +758,10 @@ class LiteLLMBackend(FormatterBackend):
 
         for res, action, prompt in zip(responses, actions, prompts):
             output = ModelOutputThunk(res.text)  # type: ignore
-            output._context = None  # There is no context for generate_from_raw for now
-            output._action = action
-            output._model_options = model_opts
+            # There is no context for generate_from_raw for now
+            output._call.context = None
+            output._call.action = action
+            output._call.model_options = model_opts
             output.raw = RawProviderResponse(
                 provider=self._provider, response=res.model_dump()
             )
