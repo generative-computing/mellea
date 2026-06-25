@@ -201,3 +201,10 @@ def test_list_contract_rejects_non_list() -> None:
 def test_list_contract_rejects_non_dict_element() -> None:
     with pytest.raises(ValueError, match="must contain only JSON objects"):
         _CITATIONS_ADAPTER.io_contract.parse(json.dumps(["string_element"]))
+
+
+def test_list_contract_rejects_non_dict_element_after_valid_item() -> None:
+    with pytest.raises(ValueError, match="must contain only JSON objects"):
+        _CITATIONS_ADAPTER.io_contract.parse(
+            json.dumps([_GOOD_CITATION, "string_element"])
+        )

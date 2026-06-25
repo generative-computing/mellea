@@ -121,6 +121,8 @@ def call_intrinsic(
 
     Raises:
         ValueError: When the model output is ``None`` or is not valid JSON.
+        AdapterSchemaMismatchError: When *io_contract* is provided and the
+            model output is missing a required field.
     """
     # Ensure the adapter is registered; resolve_adapter creates it if absent.
     backend.resolve_adapter(intrinsic_name)
