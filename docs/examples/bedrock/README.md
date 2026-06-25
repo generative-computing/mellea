@@ -23,11 +23,11 @@ uv pip install mellea[litellm]
 
 ```python
 from mellea import MelleaSession
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_openai_backend
 from mellea.backends.model_ids import OPENAI_GPT_OSS_120B
 from mellea.stdlib.context import ChatContext
 
-bedrock_oai_backend = create_bedrock_mantle_backend(model_id=OPENAI_GPT_OSS_120B, region="us-east-1")
+bedrock_oai_backend = create_bedrock_openai_backend(model_id=OPENAI_GPT_OSS_120B, region="us-east-1")
 
 m = MelleaSession(backend=bedrock_oai_backend, ctx=ChatContext())
 
@@ -38,10 +38,10 @@ You can also use your own model IDs as strings, as long as they're accessible us
 
 ```python
 from mellea import MelleaSession
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_openai_backend
 from mellea.stdlib.context import ChatContext
 
-bedrock_oai_backend = create_bedrock_mantle_backend(
+bedrock_oai_backend = create_bedrock_openai_backend(
     model_id="qwen.qwen3-coder-480b-a35b-instruct", 
     region="us-east-1"
 )
