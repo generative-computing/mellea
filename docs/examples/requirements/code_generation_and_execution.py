@@ -59,6 +59,8 @@ def load_csv_data(csv_path: str) -> tuple[list[dict], str]:
         for i, line in enumerate(f):
             if i < 5:
                 preview_lines.append(line.rstrip())
+            else:
+                break
         f.seek(0)
         reader = csv.DictReader(f)
         data = list(reader)
