@@ -16,7 +16,7 @@ from mellea.stdlib.tools.interpreter import (
     make_execution_environment,
 )
 
-from ...core import Context, MelleaLogger, Requirement, ValidationResult
+from ...core import Context, MelleaLogger, ModelToolCall, Requirement, ValidationResult
 
 logger = MelleaLogger.get_logger()
 
@@ -65,37 +65,96 @@ def _score_code_block(code: str) -> int:
     return score
 
 
+def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
+    """Extract Python code from a tool call's arguments using heuristic field lookup.
+
+    Only attempts extraction from tools with "python" in their name (case-insensitive).
+    This conservative approach avoids extracting unrelated data from arbitrary tools.
+
+    Tries common code field names in order: 'code', 'script', 'command', 'source'.
+    Returns the first string value found, or None if no code-like field exists.
+
+    Args:
+        tool_call: The ModelToolCall to extract code from.
+
+    Returns:
+        str | None: Extracted code string, or None if not found, not a string, or tool
+            name doesn't suggest it handles Python.
+    """
+    # Only attempt extraction from tools that explicitly handle Python
+    if not hasattr(tool_call, "name") or "python" not in tool_call.name.lower():
+        return None
+
+    if not hasattr(tool_call, "args") or tool_call.args is None:
+        return None
+
+    # Try common field names in priority order
+    field_names = ["code", "script", "command", "source"]
+    for field in field_names:
+        if field in tool_call.args:
+            value = tool_call.args[field]
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    return None
+
+
 def _has_python_code_listing(ctx: Context) -> ValidationResult:
-    """Extract Python code from context."""
+    """Extract Python code from context, checking both text blocks and tool_calls.
+
+    First attempts to extract code from text output (markdown/rst code blocks).
+    If no text code is found, falls back to tool_calls (if present), using a
+    heuristic search for code-like argument fields in Python-capable tools.
+
+    Text-based extraction has higher priority than tool_calls to preserve
+    user-visible code in the response. Tool extraction only targets tools with
+    "python" in their name (case-insensitive).
+
+    Args:
+        ctx: Context containing model output.
+
+    Returns:
+        ValidationResult with extracted code or failure reason.
+    """
     last_output = ctx.last_output()
-    if last_output is None or last_output.value is None:
+    if last_output is None:
         return ValidationResult(result=False, reason="No output found in context")
 
-    content = last_output.value
+    all_blocks: list[tuple[str, int]] = []
 
-    # Look for code blocks with python specifier
-    import re
+    # Step 1: Try extracting from text content (highest priority)
+    if last_output.value is not None:
+        content = last_output.value
 
-    # Pattern for ``python / ```python blocks (RST and Markdown)
-    python_blocks = re.findall(r"```?python\s*\n(.*?)\n```?", content, re.DOTALL)
+        # Look for code blocks with python specifier
+        import re
 
-    # Pattern for generic `` / ``` blocks (RST and Markdown)
-    generic_blocks = re.findall(r"```?\s*\n(.*?)\n```?", content, re.DOTALL)
+        # Pattern for ```python / `python blocks (Markdown and RST)
+        python_blocks = re.findall(r"```?python\s*\n(.*?)\n```?", content, re.DOTALL)
 
-    all_blocks = []
+        # Pattern for generic ``` / ` blocks (Markdown and RST)
+        generic_blocks = re.findall(r"```?\s*\n(.*?)\n```?", content, re.DOTALL)
 
-    # Add python blocks with high priority
-    for block in python_blocks:
-        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
+        # Add python blocks with high priority
+        for block in python_blocks:
+            all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
 
-    # Add generic blocks if they look like Python
-    for block in generic_blocks:
-        block = block.strip()
-        if block and any(
-            keyword in block
-            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
-        ):
-            all_blocks.append((block, _score_code_block(block)))
+        # Add generic blocks if they look like Python
+        for block in generic_blocks:
+            block = block.strip()
+            if block and any(
+                keyword in block
+                for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
+            ):
+                all_blocks.append((block, _score_code_block(block)))
+
+    # Step 2: Fallback to tool_calls if no text code found
+    if not all_blocks and last_output.tool_calls:
+        for tool_name, tool_call in last_output.tool_calls.items():
+            extracted = _extract_code_from_tool_call(tool_call)
+            if extracted:
+                # Score tool_call code slightly lower than text blocks to preserve priority
+                all_blocks.append((extracted, _score_code_block(extracted) + 5))
 
     if not all_blocks:
         return ValidationResult(result=False, reason="No Python code blocks found")
