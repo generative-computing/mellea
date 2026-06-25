@@ -308,8 +308,9 @@ def factuality_detection(
         ``"no"`` if it is correct.
 
     Raises:
-        ValueError: If ``documents`` is provided but ``context`` does not end
-            with an assistant turn whose content can be extracted.
+        ValueError: If ``documents`` is provided but the last assistant response
+            cannot be extracted (empty context, non-assistant last turn, or
+            uncomputed response).
     """
     if documents is not None:
         context = _inject_documents(context, documents)
@@ -360,8 +361,9 @@ def factuality_correction(
         Corrected assistant response as a plain string.
 
     Raises:
-        ValueError: If ``documents`` is provided but ``context`` does not end
-            with an assistant turn whose content can be extracted.
+        ValueError: If ``documents`` is provided but the last assistant response
+            cannot be extracted (empty context, non-assistant last turn, or
+            uncomputed response).
     """
     if documents is not None:
         context = _inject_documents(context, documents)
@@ -387,7 +389,8 @@ def _inject_documents(
 
     Returns:
         New context identical to the input except the last assistant turn now
-        carries the supplied documents.
+        carries the supplied documents. Any images on the original assistant
+        turn are not preserved.
 
     Raises:
         ValueError: If the last element of *context* is not an assistant
