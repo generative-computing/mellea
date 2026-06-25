@@ -171,14 +171,14 @@ class PartialValidationResult:
         return f"PartialValidationResult({self._success!r}, reason={self._reason!r}, score={self._score!r})"
 
 
-def default_output_to_bool(x: CBlock | str) -> bool:
+def default_output_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     """Convert a model output string to a boolean by checking for a "yes" answer.
 
     Checks if the output is exactly equal to "yes" or "y" (case-insensitive). If not,
     also checks if any of the words in the output are "yes" (case-insensitive).
 
     Args:
-        x: The model output to evaluate, as a `CBlock` or plain string.
+        x: The model output to evaluate, as a `CBlock`, `ModelOutputThunk`, or plain string.
 
     Returns:
         `True` if the output indicates a "yes" answer, `False` otherwise.
@@ -203,13 +203,13 @@ class Requirement(Component[str]):
             `Instruction` prompts; use `check_only=True` to suppress this.
         validation_fn (Callable[[Context], ValidationResult] | None): If provided, this function is executed
             instead of LLM-as-a-Judge. The `bool()` of its return value defines pass/fail.
-        output_to_bool (Callable[[CBlock | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
+        output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
             Defaults to a "yes"-detection heuristic.
         check_only (bool): When `True`, the requirement description is excluded from `Instruction` prompts.
 
     Attributes:
         description (str | None): A natural-language description of the requirement.
-        output_to_bool (Callable[[CBlock | str], bool] | None): Function used to convert LLM-as-a-Judge
+        output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Function used to convert LLM-as-a-Judge
             output into a boolean pass/fail result.
         validation_fn (Callable[[Context], ValidationResult] | None): Optional custom validation
             function that bypasses the LLM-as-a-Judge strategy entirely.
@@ -222,7 +222,8 @@ class Requirement(Component[str]):
         description: str | None = None,
         validation_fn: Callable[[Context], ValidationResult] | None = None,
         *,
-        output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
+        output_to_bool: Callable[[CBlock | ModelOutputThunk | str], bool]
+        | None = default_output_to_bool,
         check_only: bool = False,
     ):
         """Initialize Requirement with an optional description, validation function, and output converter."""

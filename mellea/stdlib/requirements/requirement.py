@@ -4,7 +4,14 @@ import json
 from collections.abc import Callable
 from typing import Any, overload
 
-from ...core import CBlock, Context, MelleaLogger, Requirement, ValidationResult
+from ...core import (
+    CBlock,
+    Context,
+    MelleaLogger,
+    ModelOutputThunk,
+    Requirement,
+    ValidationResult,
+)
 from ..components.intrinsic import Intrinsic
 
 
@@ -19,7 +26,7 @@ class LLMaJRequirement(Requirement):
     use_aloras: bool = False
 
 
-def requirement_check_to_bool(x: CBlock | str) -> bool:
+def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     """Checks if a given output should be marked converted to `True`.
 
     By default, the requirement check alora outputs: `{"requirement_likelihood": 0.0}`.

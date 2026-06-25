@@ -529,7 +529,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -548,7 +549,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -566,7 +568,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -675,21 +678,21 @@ class MelleaSession:
         self,
         reqs: Requirement | list[Requirement],
         *,
-        output: CBlock | None = None,
+        output: CBlock | ModelOutputThunk | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-        input: CBlock | None = None,
+        input: CBlock | ModelOutputThunk | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
         Args:
             reqs: A single `Requirement` or a list of them to validate.
-            output: Optional model output `CBlock` to validate against instead of the context.
+            output: Optional model output to validate against instead of the context.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input `CBlock` to include alongside `output` when validating.
+            input: Optional input to include alongside `output` when validating.
 
         Returns:
             List of `ValidationResult` objects, one per requirement.
@@ -886,7 +889,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -906,7 +910,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -926,7 +931,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -946,7 +952,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -965,7 +972,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -1078,21 +1086,21 @@ class MelleaSession:
         self,
         reqs: Requirement | list[Requirement],
         *,
-        output: CBlock | None = None,
+        output: CBlock | ModelOutputThunk | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-        input: CBlock | None = None,
+        input: CBlock | ModelOutputThunk | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
         Args:
             reqs: A single `Requirement` or a list of them to validate.
-            output: Optional model output `CBlock` to validate against instead of the context.
+            output: Optional model output to validate against instead of the context.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input `CBlock` to include alongside `output` when validating.
+            input: Optional input to include alongside `output` when validating.
 
         Returns:
             List of `ValidationResult` objects, one per requirement.

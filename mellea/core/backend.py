@@ -359,6 +359,8 @@ def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputT
     match c:
         case ModelOutputThunk() if not c.is_computed():
             return [c]
+        case ModelOutputThunk():
+            return []
         case CBlock():
             return []
         case Component():

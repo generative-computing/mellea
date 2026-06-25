@@ -10,7 +10,12 @@ from mellea.stdlib.context import SimpleContext
 backend = OllamaModelBackend("granite4:latest")
 
 
-async def fib(backend: Backend, ctx: Context, x: CBlock, y: CBlock) -> ModelOutputThunk:
+async def fib(
+    backend: Backend,
+    ctx: Context,
+    x: CBlock | ModelOutputThunk,
+    y: CBlock | ModelOutputThunk,
+) -> ModelOutputThunk:
     sc = SimpleComponent(
         instruction="What is x+y? Respond with the number only.", x=x, y=y
     )
@@ -19,7 +24,7 @@ async def fib(backend: Backend, ctx: Context, x: CBlock, y: CBlock) -> ModelOutp
 
 
 async def main(backend: Backend, ctx: Context):
-    fibs = []
+    fibs: list[CBlock | ModelOutputThunk] = []
     for i in range(100):
         if i == 0 or i == 1:
             fibs.append(CBlock(f"{i}"))
