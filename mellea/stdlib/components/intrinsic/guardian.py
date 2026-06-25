@@ -4,8 +4,8 @@ The Guardian adapters (`guardian-core`, `policy-guardrails`,
 `factuality-detection`, `factuality-correction`) require a
 `<guardian>`-prefixed envelope as the last user message of the request.
 That envelope is built from the `instruction:` field of each adapter's
-`io.yaml` via :class:`IntrinsicsRewriter`; the helpers below just resolve
-any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
+`io.yaml` via `IntrinsicsRewriter`; the helpers below just resolve
+any convenience inputs (e.g. `CRITERIA_BANK` lookups) and pass the
 resolved kwargs through.
 """
 
@@ -26,7 +26,7 @@ the default value explicitly'. Used only to detect conflicts with the
 deprecated `target_role` kwarg."""
 
 _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_response"}
-"""Mapping used by the deprecated `target_role` path of :func:`guardian_check`."""
+"""Mapping used by the deprecated `target_role` path of `guardian_check`."""
 
 
 def policy_guardrails(
@@ -47,7 +47,7 @@ def policy_guardrails(
         backend: Backend instance that supports LoRA adapters.
         policy_text: Policy text against which compliance is checked.
         model_options: Optional model-generation overrides forwarded to the
-            backend (e.g. ``{"temperature": 0}``).
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
         Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (Yes = compliant).
@@ -94,7 +94,7 @@ SCORING_SCHEMA_BANK = {
         "otherwise, return 'no'."
     ),
 }
-"""Pre-baked scoring-schema phrasings for :func:`guardian_check`.
+"""Pre-baked scoring-schema phrasings for `guardian_check`.
 
 Keys can be passed directly as the `scoring_schema` parameter; any
 other string is used verbatim. Entries must resolve to a yes/no
@@ -176,7 +176,7 @@ CRITERIA_BANK = {
 }
 """Pre-baked criteria definitions from the Granite Guardian model card.
 
-Keys can be passed directly to :func:`guardian_check` as the `criteria`
+Keys can be passed directly to `guardian_check` as the `criteria`
 parameter.
 """
 
@@ -200,22 +200,22 @@ def guardian_check(
         context: Chat context containing the conversation to evaluate.
         backend: Backend instance that supports LoRA adapters.
         criteria: Description of the criteria to check against. Can be a
-            key from :data:`CRITERIA_BANK` (e.g. `"harm"`) or a custom
+            key from `CRITERIA_BANK` (e.g. `"harm"`) or a custom
             criteria string.
         scoring_schema: Sentence that tells the judge which span to
             evaluate and how to decide. Can be a key from
-            :data:`SCORING_SCHEMA_BANK` (e.g. `"user_prompt"`) or a
+            `SCORING_SCHEMA_BANK` (e.g. `"user_prompt"`) or a
             custom string. Defaults to `"assistant_response"`. Must
             still resolve to a yes/no verdict — the adapter's
             `response_format` constrains output to `"yes"`/`"no"`.
         target_role: Deprecated. Role whose last message is being
             evaluated (`"user"` or `"assistant"`). Prefer
             `scoring_schema` with a key from
-            :data:`SCORING_SCHEMA_BANK`. Passing both
+            `SCORING_SCHEMA_BANK`. Passing both
             `scoring_schema` and `target_role` raises
-            :class:`TypeError`.
+            `TypeError`.
         model_options: Optional model-generation overrides forwarded to the
-            backend (e.g. ``{"temperature": 0}``).
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
@@ -281,14 +281,14 @@ def factuality_detection(
 
     Reference documents can be supplied in any of these ways:
 
-    1. Pass them explicitly via ``documents=``.
-    2. Include them on messages already in ``context``
-       (e.g. ``Message("assistant", response, documents=[doc])``).
-    3. Perform retrieval and add the resulting documents to ``context``
+    1. Pass them explicitly via `documents=`.
+    2. Include them on messages already in `context`
+       (e.g. `Message("assistant", response, documents=[doc])`).
+    3. Perform retrieval and add the resulting documents to `context`
        before calling this function.
 
-    When ``documents=`` is given it replaces any documents already on the
-    last assistant turn; documents on other messages in ``context`` are
+    When `documents=` is given it replaces any documents already on the
+    last assistant turn; documents on other messages in `context` are
     not affected.
 
     Args:
@@ -296,19 +296,18 @@ def factuality_detection(
             answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Optional reference documents used to ground the factuality
-            check.  Each element may be a :class:`~mellea.stdlib.components.Document`
-            or a plain string (automatically wrapped in ``Document``).
-            When ``None``, any documents already present in ``context`` are
-            used.
+            check. Each element may be a `Document` or a plain string
+            (automatically wrapped in `Document`). When `None`, any documents
+            already present in `context` are used.
         model_options: Optional model-generation overrides forwarded to the
-            backend (e.g. ``{"temperature": 0}``).
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        Factuality label: ``"yes"`` if the response is factually incorrect,
-        ``"no"`` if it is correct.
+        Factuality label: `"yes"` if the response is factually incorrect,
+        `"no"` if it is correct.
 
     Raises:
-        ValueError: If ``documents`` is provided but the last assistant response
+        ValueError: If `documents` is provided but the last assistant response
             cannot be extracted (empty context, non-assistant last turn, or
             uncomputed response).
     """
@@ -335,14 +334,14 @@ def factuality_correction(
 
     Reference documents can be supplied in any of these ways:
 
-    1. Pass them explicitly via ``documents=``.
-    2. Include them on messages already in ``context``
-       (e.g. ``Message("assistant", response, documents=[doc])``).
-    3. Perform retrieval and add the resulting documents to ``context``
+    1. Pass them explicitly via `documents=`.
+    2. Include them on messages already in `context`
+       (e.g. `Message("assistant", response, documents=[doc])`).
+    3. Perform retrieval and add the resulting documents to `context`
        before calling this function.
 
-    When ``documents=`` is given it replaces any documents already on the
-    last assistant turn; documents on other messages in ``context`` are
+    When `documents=` is given it replaces any documents already on the
+    last assistant turn; documents on other messages in `context` are
     not affected.
 
     Args:
@@ -350,18 +349,17 @@ def factuality_correction(
             answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         documents: Optional reference documents used to ground the correction.
-            Each element may be a :class:`~mellea.stdlib.components.Document`
-            or a plain string (automatically wrapped in ``Document``).
-            When ``None``, any documents already present in ``context`` are
-            used.
+            Each element may be a `Document` or a plain string
+            (automatically wrapped in `Document`). When `None`, any documents
+            already present in `context` are used.
         model_options: Optional model-generation overrides forwarded to the
-            backend (e.g. ``{"temperature": 0}``).
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
         Corrected assistant response as a plain string.
 
     Raises:
-        ValueError: If ``documents`` is provided but the last assistant response
+        ValueError: If `documents` is provided but the last assistant response
             cannot be extracted (empty context, non-assistant last turn, or
             uncomputed response).
     """
@@ -379,9 +377,8 @@ def _inject_documents(
     """Return a copy of *context* with *documents* attached to the last assistant turn.
 
     Supports both session-generated contexts (where the last turn is a
-    :class:`ModelOutputThunk`) and manually-constructed contexts (where the
-    last turn is a :class:`Message` added directly via
-    :meth:`ChatContext.add`).
+    `ModelOutputThunk`) and manually-constructed contexts (where the
+    last turn is a `Message` added directly via `ChatContext.add`).
 
     Args:
         context: Chat context whose last element is an assistant response.

@@ -67,11 +67,10 @@ def _resolve_question(
 def _extract_last_response(context: ChatContext) -> tuple[str, ChatContext]:
     """Extract the last assistant response text and the context preceding it.
 
-    Returns ``(response_text, prev_ctx)`` where *prev_ctx* is *context* rewound
+    Returns `(response_text, prev_ctx)` where *prev_ctx* is *context* rewound
     to before the last assistant turn. Handles both session-generated contexts
-    (last turn is a :class:`~mellea.core.base.ModelOutputThunk`) and
-    manually-constructed contexts (last turn is an assistant
-    :class:`~mellea.stdlib.components.Message`).
+    (last turn is a `ModelOutputThunk`) and manually-constructed contexts
+    (last turn is an assistant `Message`).
 
     Args:
         context: Chat context whose last element is an assistant response.
@@ -125,10 +124,10 @@ def _extract_last_response(context: ChatContext) -> tuple[str, ChatContext]:
 def _resolve_response(
     response: str | None, context: ChatContext
 ) -> tuple[str, ChatContext]:
-    """Return ``(response_text, context_to_use)``.
+    """Return `(response_text, context_to_use)`.
 
-    When *response* is not ``None``, returns it with *context* unchanged.
-    When ``None``, delegates to :func:`_extract_last_response` to pull the
+    When *response* is not `None`, returns it with *context* unchanged.
+    When `None`, delegates to `_extract_last_response` to pull the
     text from the last assistant turn and rewind the context.
     """
     if response is not None:
@@ -146,12 +145,12 @@ def call_intrinsic(
 ):
     """Invoke an adapter function via the backend, returning parsed JSON output.
 
-    Uses :meth:`~mellea.backends.adapters.AdapterMixin.resolve_adapter` to find
-    or lazily register the adapter, then executes via ``mfuncs.act``.
+    Uses `AdapterMixin.resolve_adapter` to find or lazily register the adapter,
+    then executes via `mfuncs.act`.
 
     Args:
         intrinsic_name (str): Capability name of the adapter function
-            (e.g. ``"answerability"``).
+            (e.g. `"answerability"`).
         context (ChatContext): The current conversation context.
         backend (AdapterMixin): A backend that supports adapter functions.
         kwargs (dict | None): Extra keyword arguments forwarded to the
