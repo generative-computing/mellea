@@ -93,7 +93,7 @@ def call_intrinsic(
     kwargs: dict | None = None,
     model_options: dict | None = None,
     io_contract: IOContract | None = None,
-):
+) -> dict[str, object]:
     """Invoke an adapter function via the backend, returning parsed and optionally validated JSON output.
 
     Uses :meth:`~mellea.backends.adapters.AdapterMixin.resolve_adapter` to find
@@ -117,7 +117,7 @@ def call_intrinsic(
             raw model output.  When ``None``, ``json.loads`` is used directly.
 
     Returns:
-        dict: Parsed (and optionally validated) JSON output from the adapter function.
+        dict[str, object]: Parsed (and optionally validated) JSON output from the adapter function.
 
     Raises:
         ValueError: When the model output is ``None`` or is not valid JSON.

@@ -2,6 +2,7 @@
 
 import collections.abc
 import json
+from typing import cast
 
 from ....backends.adapters import (
     Adapter,
@@ -51,13 +52,14 @@ class _DictContract(IOContract):
             dict[str, object]: Parsed output dict, unchanged.
 
         Raises:
-            ValueError: When *raw* is not valid JSON.
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
             AdapterSchemaMismatchError: When a required key is absent.
         """
         data = json.loads(raw)
         if not isinstance(data, dict):
-            raise AdapterSchemaMismatchError(
-                self._name, frozenset(), self._required_keys
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON object, "
+                f"got {type(data).__name__}."
             )
         observed = frozenset(data.keys())
         missing = self._required_keys - observed
@@ -99,19 +101,21 @@ class _ListContract(IOContract):
                 An empty list parses to ``{"items": []}``.
 
         Raises:
-            ValueError: When *raw* is not valid JSON.
-            AdapterSchemaMismatchError: When the output is not a list, any item
-                is not a dict, or any item is missing a required key.
+            ValueError: When *raw* is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any item is missing a required key.
         """
         data = json.loads(raw)
         if not isinstance(data, list):
-            raise AdapterSchemaMismatchError(
-                self._name, frozenset(), self._required_item_keys
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON array, "
+                f"got {type(data).__name__}."
             )
         for item in data:
             if not isinstance(item, dict):
-                raise AdapterSchemaMismatchError(
-                    self._name, frozenset(), self._required_item_keys
+                raise ValueError(
+                    f"Adapter '{self._name}' output array must contain only JSON "
+                    f"objects, got a {type(item).__name__} element."
                 )
             observed = frozenset(item.keys())
             missing = self._required_item_keys - observed
@@ -243,7 +247,7 @@ def check_answerability(
         io_contract=_ANSWERABILITY_ADAPTER.io_contract,
         model_options=model_options,
     )
-    return result["answerability"]  # type: ignore[return-value]
+    return cast(str, result["answerability"])
 
 
 def rewrite_question(
@@ -288,7 +292,7 @@ def rewrite_question(
         io_contract=_QUERY_REWRITE_ADAPTER.io_contract,
         model_options=model_options,
     )
-    return result["rewritten_question"]  # type: ignore[return-value]
+    return cast(str, result["rewritten_question"])
 
 
 def clarify_query(
@@ -341,7 +345,7 @@ def clarify_query(
         io_contract=_QUERY_CLARIFY_ADAPTER.io_contract,
         model_options=model_options,
     )
-    return result["clarification"]  # type: ignore[return-value]
+    return cast(str, result["clarification"])
 
 
 def find_citations(
@@ -405,7 +409,7 @@ def find_citations(
         io_contract=_CITATIONS_ADAPTER.io_contract,
         model_options=model_options,
     )
-    return result["items"]  # type: ignore[return-value]
+    return cast(list[dict], result["items"])
 
 
 def check_context_relevance(
@@ -474,7 +478,7 @@ def check_context_relevance(
         io_contract=_CONTEXT_RELEVANCE_ADAPTER.io_contract,
         model_options=model_options,
     )
-    return result["context_relevance"]  # type: ignore[return-value]
+    return cast(str, result["context_relevance"])
 
 
 def flag_hallucinated_content(
@@ -534,4 +538,4 @@ def flag_hallucinated_content(
         io_contract=_HALLUCINATION_ADAPTER.io_contract,
         model_options=model_options,
     )
-    return result["items"]  # type: ignore[return-value]
+    return cast(list[dict], result["items"])
