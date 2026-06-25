@@ -581,7 +581,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 self._gen.cancel_hook()
             except Exception as hook_exc:
                 logging.getLogger(__name__).warning(
-                    "cancel_generation: _cancel_hook raised (suppressed): %r", hook_exc
+                    "cancel_generation: cancel_hook raised (suppressed): %r", hook_exc
                 )
 
         if self._gen.generate is not None and not self._gen.generate.done():
@@ -858,7 +858,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                     self.parsed_repr = self.value  # type: ignore
                 case _:
                     raise ValueError(
-                        "attempted to astream from a model output thunk with no ._call.action set"
+                        "attempted to astream from a model output thunk with no originating action set"
                     )
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
