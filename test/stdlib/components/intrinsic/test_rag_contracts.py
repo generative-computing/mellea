@@ -176,3 +176,28 @@ def test_find_citations_empty_list() -> None:
 def test_flag_hallucinated_content_empty_list() -> None:
     result = _HALLUCINATION_ADAPTER.io_contract.parse(json.dumps([]))
     assert result == {"items": []}
+
+
+# ---------------------------------------------------------------------------
+# Type-mismatch: ValueError raised when JSON is the wrong shape
+# ---------------------------------------------------------------------------
+
+
+def test_dict_contract_rejects_non_dict() -> None:
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        _ANSWERABILITY_ADAPTER.io_contract.parse(json.dumps(["not", "a", "dict"]))
+
+
+def test_dict_contract_error_mentions_adapter_name() -> None:
+    with pytest.raises(ValueError, match="answerability"):
+        _ANSWERABILITY_ADAPTER.io_contract.parse(json.dumps(42))
+
+
+def test_list_contract_rejects_non_list() -> None:
+    with pytest.raises(ValueError, match="must be a JSON array"):
+        _CITATIONS_ADAPTER.io_contract.parse(json.dumps({"not": "a list"}))
+
+
+def test_list_contract_rejects_non_dict_element() -> None:
+    with pytest.raises(ValueError, match="must contain only JSON objects"):
+        _CITATIONS_ADAPTER.io_contract.parse(json.dumps(["string_element"]))
