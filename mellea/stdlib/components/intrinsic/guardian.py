@@ -38,7 +38,7 @@ def policy_guardrails(
 ) -> str:
     """Check whether the last context turn complies with a policy.
 
-    Uses the policy-guardrails LoRA adapter to judge whether the scenario
+    Uses the policy-guardrails adapter (LoRA or aLoRA) to judge whether the scenario
     described in the last message in `context` is compliant with the given
     `policy_text`.
 
