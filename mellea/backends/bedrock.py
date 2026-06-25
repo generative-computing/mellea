@@ -114,7 +114,7 @@ def stringify_mantle_model_ids(region: str | None = None) -> str:
     Returns:
         Newline-separated string of model IDs prefixed with `" * "`.
     """
-    models = list_mantle_models()
+    models = list_mantle_models(region)
     model_names = "\n * ".join([str(m.id) for m in models])
     return f" * {model_names}"
 
@@ -158,16 +158,16 @@ def create_bedrock_litellm_backend(
             f"Model identifier {model_id} does not specify a bedrock_name."
         )
 
-    # Pass the resolved region through model_options so litellm picks it up even
-    # when `region` was supplied explicitly rather than via env vars.
+    # Pass num_retries and the resolved region through model_options so litellm
+    # picks them up. num_retries goes here rather than as a direct LiteLLMBackend
+    # argument so there is a single source of truth; passing it both ways would
+    # send it to litellm.acompletion twice.
     model_options: dict = {"num_retries": num_retries}
     resolved_region = _resolve_region(region)
     if resolved_region is not None:
         model_options["aws_region_name"] = resolved_region
 
-    return LiteLLMBackend(
-        model_id=model_name, model_options=model_options, num_retries=num_retries
-    )
+    return LiteLLMBackend(model_id=model_name, model_options=model_options)
 
 
 def create_bedrock_openai_backend(
