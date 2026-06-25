@@ -26,7 +26,7 @@ def _resolve_question(
     """
     if question is not None:
         return question, context
-    from ....core import CBlock, Component
+    from ....core import CBlock, Component, ModelOutputThunk
     from ..chat import Message
 
     turn = context.last_turn()
@@ -38,7 +38,7 @@ def _resolve_question(
     model_input = turn.model_input
     if isinstance(model_input, Message):
         text = model_input.content
-    elif isinstance(model_input, CBlock):
+    elif isinstance(model_input, (CBlock, ModelOutputThunk)):
         if model_input.value is None:
             raise ValueError(
                 "question is None and last turn model_input CBlock has no value"
