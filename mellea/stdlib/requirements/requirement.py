@@ -1,6 +1,7 @@
 """Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns."""
 
 import json
+import math
 from collections.abc import Callable
 from typing import Any, overload
 
@@ -42,9 +43,10 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     Raises:
         json.JSONDecodeError: If ``x`` is not valid JSON.
         AdapterSchemaMismatchError: If the parsed output does not contain the
-            expected ``requirement_check.score`` structure.  Callers that
-            previously treated ``False`` as "requirement not met" must now
-            catch this error separately.
+            expected ``requirement_check.score`` structure, or if the score is
+            not a finite number in the range 0.0-1.0.  Callers that previously
+            treated ``False`` as "requirement not met" must now catch this error
+            separately.
     """
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
@@ -59,7 +61,12 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
         )
 
     score = req_check.get("score", None)
-    if not isinstance(score, (int, float)) or isinstance(score, bool):
+    if (
+        not isinstance(score, (int, float))
+        or isinstance(score, bool)
+        or not math.isfinite(score)
+        or not 0.0 <= score <= 1.0
+    ):
         raise AdapterSchemaMismatchError(
             name="requirement-check",
             observed_keys=frozenset(req_check.keys()),

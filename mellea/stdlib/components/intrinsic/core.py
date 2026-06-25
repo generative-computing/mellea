@@ -2,6 +2,7 @@
 
 import collections.abc
 from typing import cast
+import math
 
 from ....backends.adapters import AdapterMixin, AdapterSchemaMismatchError
 from ...components import Document, Message
@@ -61,7 +62,8 @@ def requirement_check(
 
     Raises:
         AdapterSchemaMismatchError: If the adapter output does not match the
-            expected ``{"requirement_check": {"score": <float>}}`` contract.
+            expected ``{"requirement_check": {"score": <float>}}`` contract, or
+            if the score is not a finite number in the range 0.0-1.0.
     """
     result_json = call_intrinsic(
         "requirement-check",
@@ -79,7 +81,12 @@ def requirement_check(
             expected_keys=frozenset({"requirement_check"}),
         )
     score = req_check.get("score")
-    if not isinstance(score, (int, float)) or isinstance(score, bool):
+    if (
+        not isinstance(score, (int, float))
+        or isinstance(score, bool)
+        or not math.isfinite(score)
+        or not 0.0 <= score <= 1.0
+    ):
         raise AdapterSchemaMismatchError(
             name="requirement-check",
             observed_keys=frozenset(req_check.keys()),

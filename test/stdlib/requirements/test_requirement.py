@@ -124,6 +124,28 @@ def test_requirement_check_to_bool_invalid_json():
         requirement_check_to_bool("not json")
 
 
+def test_requirement_check_to_bool_nan_score_raises():
+    """NaN would silently evaluate as False without the finiteness guard."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": NaN}}')
+
+
+def test_requirement_check_to_bool_inf_score_raises():
+    """Infinite score must raise, not silently pass as True."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": Infinity}}')
+
+
+def test_requirement_check_to_bool_score_above_range_raises():
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": 1.5}}')
+
+
+def test_requirement_check_to_bool_score_below_range_raises():
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": -0.1}}')
+
+
 # --- reqify ---
 
 
