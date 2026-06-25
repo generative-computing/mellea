@@ -15,6 +15,7 @@ from mellea.core import (
     ModelOutputThunk,
     RawProviderResponse,
 )
+from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
 
 
@@ -558,3 +559,17 @@ def test_mot_is_not_shadowed_by_cblock_in_pattern_match():
     assert classify(mot) == "mot"
     assert classify(cb) == "cblock"
     assert not isinstance(mot, CBlock)
+
+
+def test_generate_walk_computed_mot_returns_empty():
+    mot = ModelOutputThunk(value="already computed")
+    assert generate_walk(mot) == []
+
+
+def test_generate_walk_uncomputed_mot_returns_self():
+    mot = ModelOutputThunk(value=None)
+    assert generate_walk(mot) == [mot]
+
+
+def test_generate_walk_cblock_returns_empty():
+    assert generate_walk(CBlock("text")) == []

@@ -10,7 +10,7 @@ from mellea.backends.model_ids import (
     MISTRALAI_MISTRAL_0_3_7B,
     ModelIdentifier,
 )
-from mellea.core import CBlock, Context
+from mellea.core import CBlock, Context, ModelOutputThunk
 from mellea.stdlib.context import ChatContext, SimpleContext
 
 
@@ -473,6 +473,13 @@ def test_build_table_raises_on_collision(monkeypatch):
     monkeypatch.setattr(_m_module, "COLLIDE_B", colliding_b, raising=False)
     with pytest.raises(ValueError, match="context_length collision"):
         _build_table()
+
+
+def test_context_add_and_retrieve_model_output_thunk():
+    mot = ModelOutputThunk(value="model output")
+    ctx = ChatContext().add(mot)
+    assert mot in ctx.as_list()
+    assert mot in ctx.view_for_generation()
 
 
 if __name__ == "__main__":
