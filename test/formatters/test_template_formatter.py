@@ -159,7 +159,7 @@ def test_no_module(tf: TemplateFormatter):
 
 def test_no_template(tf: TemplateFormatter):
     class _NoTemplate(Component[str]):
-        def parts(self) -> list[Component | CBlock]:
+        def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:

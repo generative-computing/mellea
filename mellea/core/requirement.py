@@ -334,7 +334,7 @@ class Requirement(Component[str]):
         """
         return PartialValidationResult("unknown")
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns all of the constituent parts of a Requirement.
 
         Returns:

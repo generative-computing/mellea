@@ -62,7 +62,7 @@ class Backend(abc.ABC):
     @final
     async def generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -130,7 +130,7 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,

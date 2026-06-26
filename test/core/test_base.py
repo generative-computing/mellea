@@ -14,6 +14,7 @@ from mellea.core import (
     ImageUrlBlock,
     ModelOutputThunk,
     RawProviderResponse,
+    blockify,
 )
 from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
@@ -573,3 +574,36 @@ def test_generate_walk_uncomputed_mot_returns_self():
 
 def test_generate_walk_cblock_returns_empty():
     assert generate_walk(CBlock("text")) == []
+
+
+def test_blockify_string_returns_cblock():
+    result = blockify("hello")
+    assert isinstance(result, CBlock)
+    assert result.value == "hello"
+
+
+def test_blockify_cblock_returns_unchanged():
+    cb = CBlock("hello")
+    assert blockify(cb) is cb
+
+
+def test_blockify_component_returns_unchanged():
+    class DummyComponent(Component[str]):
+        def parts(self):
+            return []
+
+        def _parse(self, computed):
+            return computed.value or ""
+
+    comp = DummyComponent()
+    assert blockify(comp) is comp
+
+
+def test_blockify_mot_returns_unchanged():
+    mot = ModelOutputThunk("hello")
+    assert blockify(mot) is mot
+
+
+def test_blockify_uncomputed_mot_returns_unchanged():
+    mot = ModelOutputThunk(value=None)
+    assert blockify(mot) is mot

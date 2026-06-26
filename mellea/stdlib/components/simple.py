@@ -22,7 +22,7 @@ class SimpleComponent(Component[str]):
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns the values of the kwargs.
 
         Returns:

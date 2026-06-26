@@ -128,23 +128,25 @@ class Instruction(Component[str]):
 
         self._description = blockify(description) if description is not None else None
         self._requirements: list[Requirement] = [reqify(r) for r in requirements]
-        self._icl_examples: list[CBlock | Component] = [
-            blockify(e) for e in icl_examples
+        self._icl_examples: list[CBlock | Component | ModelOutputThunk] = [
+            blockify(e)
+            for e in icl_examples  # type: ignore[misc]
         ]
 
         # Map all string values to CBlocks in the grounding context.
         self._grounding_context: dict[str, CBlock | ModelOutputThunk | Component] = {
-            k: blockify(v) if isinstance(v, str) else v
-            for k, v in grounding_context.items()
+            k: blockify(v) for k, v in grounding_context.items()
         }
-        self._prefix = blockify(prefix) if prefix is not None else None
-        self._output_prefix = (
-            blockify(output_prefix) if output_prefix is not None else None
+        self._prefix: CBlock | Component | None = (
+            blockify(prefix) if prefix is not None else None  # type: ignore[assignment]
+        )
+        self._output_prefix: CBlock | Component | None = (
+            blockify(output_prefix) if output_prefix is not None else None  # type: ignore[assignment]
         )
         self._images = images
         self._repair_string: str | None = None
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:  # type: ignore[override]  # wider than Protocol; grounding_context can hold MOTs
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns all of the constituent parts of an Instruction.
 
         Returns:

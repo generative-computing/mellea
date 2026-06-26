@@ -22,7 +22,7 @@ from ....core import (
 
 async def think_budget_forcing(
     backend: OllamaModelBackend,
-    action: CBlock | Component,
+    action: CBlock | Component | ModelOutputThunk,
     *,
     ctx: Context,
     format: type[BaseModelSubclass] | None = None,

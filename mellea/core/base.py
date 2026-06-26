@@ -235,12 +235,13 @@ class ComponentParseError(Exception):
 class Component(Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns the set of all constituent sub-components and content blocks of this `Component`.
 
         Returns:
-            list[Component | CBlock]: A list of child `Component` or `CBlock` objects that make
-            up this component. The list may be empty for leaf components.
+            list[Component | CBlock | ModelOutputThunk]: A list of child `Component`, `CBlock`,
+            or `ModelOutputThunk` objects that make up this component. The list may be empty for
+            leaf components.
 
         Raises:
             NotImplementedError: If the concrete subclass has not overridden this method.
@@ -871,6 +872,11 @@ class ModelOutputThunk(Generic[S]):
                         "value must be non-None since this thunk is computed"
                     )
                     self.parsed_repr = self.value  # type: ignore
+                case ModelOutputThunk():
+                    assert self.value is not None, (
+                        "value must be non-None since this thunk is computed"
+                    )
+                    self.parsed_repr = self.value  # type: ignore
                 case _:
                     raise ValueError(
                         "attempted to astream from a model output thunk with no originating action set"
@@ -1413,7 +1419,7 @@ class GenerateLog:
         backend (str | None): Identifier of the inference backend used for this generation.
         model_options (dict[str, Any] | None): Model configuration options applied to this call.
         model_output (Any | None): The raw output returned by the backend API.
-        action (Component | CBlock | None): The component or block that triggered the generation.
+        action (Component | CBlock | ModelOutputThunk | None): The component or block that triggered the generation.
         result (ModelOutputThunk | None): The `ModelOutputThunk` produced by this generation call.
         is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
         extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
@@ -1425,7 +1431,7 @@ class GenerateLog:
     backend: str | None = None
     model_options: dict[str, Any] | None = None
     model_output: Any | None = None
-    action: Component | CBlock | None = None
+    action: Component | CBlock | ModelOutputThunk | None = None
     result: ModelOutputThunk | None = None
     is_final_result: bool | None = False
     extra: dict[str, Any] | None = None
@@ -1457,17 +1463,19 @@ class ModelToolCall:
         return self.func.run(**self.args)
 
 
-def blockify(s: str | CBlock | Component) -> CBlock | Component:
-    """Turn a raw string into a `CBlock`, leaving `CBlock` and `Component` objects unchanged.
+def blockify(
+    s: str | CBlock | Component | ModelOutputThunk,
+) -> CBlock | Component | ModelOutputThunk:
+    """Turn a raw string into a `CBlock`, leaving `CBlock`, `Component`, and `ModelOutputThunk` objects unchanged.
 
     Args:
-        s: A plain string, `CBlock`, or `Component` to normalise.
+        s: A plain string, `CBlock`, `Component`, or `ModelOutputThunk` to normalise.
 
     Returns:
         A `CBlock` wrapping `s` if it was a string; otherwise `s` unchanged.
 
     Raises:
-        Exception: If `s` is not a `str`, `CBlock`, or `Component`.
+        Exception: If `s` is not a `str`, `CBlock`, `Component`, or `ModelOutputThunk`.
     """
     # noinspection PyUnreachableCode
     match s:
@@ -1476,6 +1484,8 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
         case CBlock():
             return s
         case Component():
+            return s
+        case ModelOutputThunk():
             return s
         case _:
             raise Exception("Type Error")

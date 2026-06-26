@@ -27,7 +27,7 @@ class FloatComp(Component[float]):
     def __init__(self, value: str) -> None:
         self.value = value
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         return []
 
     def format_for_llm(self) -> str:
@@ -50,7 +50,7 @@ class IntComp(FloatComp, Component[int]):
 
 
 class ExceptionRaisingComp(Component[int]):
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         return []
 
     def format_for_llm(self) -> str:

@@ -456,7 +456,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -794,7 +794,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_chat_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
@@ -833,7 +833,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_chat_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
