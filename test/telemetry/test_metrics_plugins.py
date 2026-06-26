@@ -7,6 +7,7 @@ import pytest
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
+from mellea.core.requirement import PartialValidationResult
 from mellea.plugins.hooks.generation import (
     GenerationBatchErrorPayload,
     GenerationBatchPostCallPayload,
@@ -17,8 +18,10 @@ from mellea.plugins.hooks.sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
 )
+from mellea.plugins.hooks.streaming import StreamingEndPayload, StreamingEventPayload
 from mellea.plugins.hooks.tool import ToolPostInvokePayload
 from mellea.plugins.hooks.validation import ValidationPostCheckPayload
+from mellea.stdlib.streaming import ChunkEvent, QuickCheckEvent
 from mellea.telemetry.metrics import (
     ERROR_TYPE_TIMEOUT,
     ERROR_TYPE_TRANSPORT_ERROR,
@@ -374,6 +377,38 @@ async def test_error_plugin_handles_none_model_output(error_plugin):
             provider="unknown",
             exception_class="RuntimeError",
         )
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_records_streaming_exception(error_plugin):
+    """streaming_end carrying an exception records an error with its model/provider."""
+    payload = StreamingEndPayload(
+        streaming_id="sid",
+        success=False,
+        exception=ValueError("boom"),
+        model="m",
+        provider="p",
+    )
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_streaming_error_metrics(payload, {})
+
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert kwargs["model"] == "m"
+        assert kwargs["provider"] == "p"
+        assert kwargs["exception_class"] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_skips_streaming_end_without_exception(error_plugin):
+    """A non-exception streaming_end (success or validation-fail) records no error."""
+    payload = StreamingEndPayload(streaming_id="sid", success=False, exception=None)
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_streaming_error_metrics(payload, {})
+
+        mock_record.assert_not_called()
 
 
 # ErrorMetricsPlugin batch tests
@@ -770,6 +805,28 @@ async def test_sampling_plugin_records_failure_outcome(sampling_plugin):
         mock_record.assert_called_once_with("MultiTurnStrategy", False)
 
 
+@pytest.mark.asyncio
+async def test_sampling_plugin_records_streaming_success_outcome(sampling_plugin):
+    """streaming_end with success=True records a `stream_with_chunking` success."""
+    payload = StreamingEndPayload(streaming_id="sid", success=True)
+
+    with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
+        await sampling_plugin.record_streaming_outcome(payload, {})
+
+        mock_record.assert_called_once_with("stream_with_chunking", True)
+
+
+@pytest.mark.asyncio
+async def test_sampling_plugin_records_streaming_failure_outcome(sampling_plugin):
+    """streaming_end with success=False records a `stream_with_chunking` failure."""
+    payload = StreamingEndPayload(streaming_id="sid", success=False)
+
+    with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
+        await sampling_plugin.record_streaming_outcome(payload, {})
+
+        mock_record.assert_called_once_with("stream_with_chunking", False)
+
+
 # RequirementMetricsPlugin tests
 
 
@@ -868,6 +925,61 @@ async def test_requirement_plugin_failure_with_no_reason_uses_default(
         await requirement_plugin.record_requirement_metrics(payload, {})
 
         mock_fail.assert_called_once_with("_FakeReq", "LLM judgment")
+
+
+class _LengthRequirement:
+    """Stand-in whose class name is the metric label, mirroring real requirements."""
+
+
+class _TopicRequirement:
+    """Stand-in whose class name is the metric label, mirroring real requirements."""
+
+
+@pytest.mark.asyncio
+async def test_requirement_metrics_records_per_requirement_type_on_quick_check(
+    requirement_plugin,
+):
+    qc = QuickCheckEvent(
+        chunk_index=0,
+        attempt=1,
+        passed=False,
+        results=[
+            PartialValidationResult("pass"),
+            PartialValidationResult("fail", reason="too short"),
+        ],
+    )
+    payload = StreamingEventPayload(
+        streaming_id="sid",
+        event=qc,
+        requirements=[_LengthRequirement(), _TopicRequirement()],
+    )
+
+    with (
+        patch("mellea.telemetry.metrics.record_requirement_check") as mock_check,
+        patch("mellea.telemetry.metrics.record_requirement_failure") as mock_fail,
+    ):
+        await requirement_plugin.record_streaming_requirement_metrics(payload, {})
+
+    assert mock_check.call_count == 2
+    mock_check.assert_any_call("_LengthRequirement")
+    mock_check.assert_any_call("_TopicRequirement")
+    mock_fail.assert_called_once_with("_TopicRequirement", "too short")
+
+
+@pytest.mark.asyncio
+async def test_requirement_metrics_ignores_non_quick_check_events(requirement_plugin):
+    payload = StreamingEventPayload(
+        streaming_id="sid", event=ChunkEvent(text="hi", chunk_index=0, attempt=1)
+    )
+
+    with (
+        patch("mellea.telemetry.metrics.record_requirement_check") as mock_check,
+        patch("mellea.telemetry.metrics.record_requirement_failure") as mock_fail,
+    ):
+        await requirement_plugin.record_streaming_requirement_metrics(payload, {})
+
+    mock_check.assert_not_called()
+    mock_fail.assert_not_called()
 
 
 # ToolMetricsPlugin tests

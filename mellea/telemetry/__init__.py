@@ -43,25 +43,6 @@ Configuration:
 Dependencies:
     OpenTelemetry packages are optional. If not installed, telemetry features
     are gracefully disabled. Install with: pip install mellea[telemetry]
-
-Example:
-    from mellea.telemetry import trace_application, create_counter, get_otlp_log_handler
-    import logging
-
-    # Trace application operations
-    @trace_application("my_operation")
-    def my_function():
-        pass
-
-    # Collect metrics
-    counter = create_counter("mellea.requests", unit="1")
-    counter.add(1, {"backend": "ollama"})
-
-    # Export logs via OTLP
-    logger = logging.getLogger("my_app")
-    handler = get_otlp_log_handler()
-    if handler:
-        logger.addHandler(handler)
 """
 
 from .context import (
@@ -93,14 +74,7 @@ from .metrics import (
     record_ttfb,
 )
 from .pricing import is_pricing_enabled
-from .tracing import (
-    is_content_tracing_enabled,
-    is_tracing_enabled,
-    set_span_attribute,
-    set_span_error,
-    set_span_status_error,
-    trace_application,
-)
+from .tracing import is_content_tracing_enabled, is_tracing_enabled
 
 __all__ = [
     "MelleaContextFilter",
@@ -129,9 +103,5 @@ __all__ = [
     "record_token_usage_metrics",
     "record_tool_call",
     "record_ttfb",
-    "set_span_attribute",
-    "set_span_error",
-    "set_span_status_error",
-    "trace_application",
     "with_context",
 ]

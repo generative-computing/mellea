@@ -7,6 +7,8 @@ pipelines to automatically emit spans when tracing is enabled:
   generation, on both chat and raw (batch) paths.
 - ComponentTracingPlugin: Emits application-level spans tracking component
   execution.
+- StreamingTracingPlugin: Emits an application-level orchestration span and
+  per-chunk span events for `stream_with_chunking` runs.
 """
 
 from __future__ import annotations
@@ -29,6 +31,11 @@ if TYPE_CHECKING:
         GenerationErrorPayload,
         GenerationPostCallPayload,
         GenerationPreCallPayload,
+    )
+    from mellea.plugins.hooks.streaming import (
+        StreamingEndPayload,
+        StreamingEventPayload,
+        StreamingStartPayload,
     )
 
 
@@ -242,5 +249,116 @@ class ComponentTracingPlugin(Plugin, name="component_tracing", priority=41):
         finish_action_span_error(payload.action_id, exception=exc)
 
 
+class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
+    """Emits the `stream_with_chunking` application span.
+
+    `streaming_start` opens the span; `streaming_event` records a span event for
+    each mid-stream `StreamEvent`; `streaming_end` records the `completed` span
+    event and closes the span.
+
+    All hooks run SEQUENTIAL so the OTel context Token attached in start is
+    detached on the originating asyncio task in end.
+    """
+
+    @hook("streaming_start")
+    async def on_streaming_start(
+        self, payload: StreamingStartPayload, context: dict[str, Any]
+    ) -> None:
+        """Open the stream_with_chunking span for this orchestrator invocation."""
+        if not payload.streaming_id:
+            return
+        from mellea.telemetry.tracing import start_streaming_span
+
+        start_streaming_span(
+            payload.streaming_id,
+            has_requirements=payload.has_requirements,
+            requirement_count=payload.requirement_count,
+            chunking_strategy=payload.chunking_strategy,
+        )
+
+    @hook("streaming_event")
+    async def on_streaming_event(
+        self, payload: StreamingEventPayload, context: dict[str, Any]
+    ) -> None:
+        """Record a span event for one `StreamEvent`."""
+        if not payload.streaming_id or payload.event is None:
+            return
+        from mellea.stdlib.streaming import (
+            ChunkEvent,
+            ErrorEvent,
+            FullValidationEvent,
+            QuickCheckEvent,
+            StreamingDoneEvent,
+        )
+        from mellea.telemetry.tracing import add_streaming_event
+
+        ev = payload.event
+        if isinstance(ev, QuickCheckEvent):
+            add_streaming_event(
+                payload.streaming_id,
+                event_name="quick_check",
+                attributes={
+                    "chunk_index": ev.chunk_index,
+                    "passed": ev.passed,
+                    "requirement_count": len(ev.results),
+                },
+            )
+        elif isinstance(ev, ChunkEvent):
+            add_streaming_event(
+                payload.streaming_id,
+                event_name="chunk",
+                attributes={"chunk_index": ev.chunk_index, "text_length": len(ev.text)},
+            )
+        elif isinstance(ev, StreamingDoneEvent):
+            add_streaming_event(
+                payload.streaming_id,
+                event_name="streaming_done",
+                attributes={"full_text_length": len(ev.full_text)},
+            )
+        elif isinstance(ev, FullValidationEvent):
+            add_streaming_event(
+                payload.streaming_id,
+                event_name="full_validation",
+                attributes={"passed": ev.passed, "requirement_count": len(ev.results)},
+            )
+        elif isinstance(ev, ErrorEvent):
+            add_streaming_event(
+                payload.streaming_id,
+                event_name="error",
+                attributes={"exception_type": ev.exception_type, "detail": ev.detail},
+            )
+
+    @hook("streaming_end")
+    async def on_streaming_end(
+        self, payload: StreamingEndPayload, context: dict[str, Any]
+    ) -> None:
+        """Record the `completed` span event and close the stream_with_chunking span."""
+        if not payload.streaming_id:
+            return
+        from mellea.telemetry.tracing import add_streaming_event, finish_streaming_span
+
+        add_streaming_event(
+            payload.streaming_id,
+            event_name="completed",
+            attributes={
+                "success": payload.success,
+                "full_text_length": payload.full_text_length,
+            },
+        )
+        finish_streaming_span(
+            payload.streaming_id,
+            success=payload.success,
+            failure_reason=payload.failure_reason,
+            exception=payload.exception,
+            model=payload.model,
+            provider=payload.provider,
+            full_text_length=payload.full_text_length,
+        )
+
+
 # All tracing plugins to auto-register when tracing is enabled.
-_TRACING_PLUGIN_CLASSES = (BackendTracingPlugin, ComponentTracingPlugin)
+_TRACING_PLUGIN_CLASSES = (
+    BackendTracingPlugin,
+    ComponentTracingPlugin,
+    StreamingTracingPlugin,
+)

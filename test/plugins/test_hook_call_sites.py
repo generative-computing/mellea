@@ -1721,5 +1721,136 @@ class TestSamplingLoopEndObserveOnly:
         assert observed == [False]
 
 
+# ---------------------------------------------------------------------------
+# Streaming hook call sites
+# ---------------------------------------------------------------------------
+
+
+async def _feed_tokens(mot: ModelOutputThunk, response: str) -> None:
+    for ch in response:
+        await mot._async_queue.put(ch)
+        await asyncio.sleep(0)
+    await mot._async_queue.put(None)
+
+
+class _StreamingBackend(Backend):
+    """Streams a fixed response one character at a time via an async MOT."""
+
+    def __init__(self, response: str = "Hello world. ") -> None:
+        self._response = response
+        self._model_id = "stream-mock-model"
+        self._provider = "stream-mock-provider"
+
+    async def _generate_from_context(self, action, ctx, **kwargs):
+        mot = _make_thunk()
+        mot.generation.model = self._model_id
+        mot.generation.provider = self._provider
+        task = asyncio.create_task(_feed_tokens(mot, self._response))
+        _ = task
+        return mot, ctx.add(action).add(mot)
+
+    async def _generate_from_raw(self, actions, ctx, **kwargs):
+        raise NotImplementedError
+
+
+class TestStreamingHookCallSites:
+    """STREAMING_START/EVENT/END fire in stream_with_chunking() and acomplete()."""
+
+    async def test_streaming_start_fires_once_with_payload(self) -> None:
+        """STREAMING_START fires once carrying requirement and chunking metadata."""
+        from mellea.stdlib.streaming import stream_with_chunking
+
+        observed: list[Any] = []
+
+        @hook("streaming_start")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        await stream_with_chunking(
+            CBlock("prompt"), _StreamingBackend(), SimpleContext(), chunking="sentence"
+        )
+
+        assert len(observed) == 1
+        assert observed[0].has_requirements is False
+        assert observed[0].requirement_count == 0
+        assert observed[0].chunking_strategy == "SentenceChunker"
+
+    async def test_streaming_end_fires_once_on_completion(self) -> None:
+        """acomplete() fires STREAMING_END once with success and model metadata."""
+        from mellea.stdlib.streaming import stream_with_chunking
+
+        observed: list[Any] = []
+
+        @hook("streaming_end")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        result = await stream_with_chunking(
+            CBlock("prompt"), _StreamingBackend(), SimpleContext()
+        )
+        await result.acomplete()
+
+        assert len(observed) == 1
+        assert observed[0].success is True
+        assert observed[0].model == "stream-mock-model"
+        assert observed[0].provider == "stream-mock-provider"
+
+    async def test_streaming_end_fires_once_across_repeat_acomplete(self) -> None:
+        """Repeat acomplete() calls fire STREAMING_END exactly once."""
+        from mellea.stdlib.streaming import stream_with_chunking
+
+        observed: list[Any] = []
+
+        @hook("streaming_end")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        result = await stream_with_chunking(
+            CBlock("prompt"), _StreamingBackend(), SimpleContext()
+        )
+        await result.acomplete()
+        await result.acomplete()
+
+        assert len(observed) == 1
+
+    async def test_streaming_end_fires_when_generation_raises(self) -> None:
+        """A backend failure before streaming fires STREAMING_END with no model."""
+        from mellea.stdlib.streaming import stream_with_chunking
+
+        class _RaisingBackend(Backend):
+            _model_id = "x"
+            _provider = "y"
+
+            async def _generate_from_context(self, action, ctx, **kwargs):
+                raise RuntimeError("backend down")
+
+            async def _generate_from_raw(self, actions, ctx, **kwargs):
+                raise NotImplementedError
+
+        observed: list[Any] = []
+
+        @hook("streaming_end")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload)
+            return None
+
+        register(recorder)
+        with pytest.raises(RuntimeError, match="backend down"):
+            await stream_with_chunking(
+                CBlock("prompt"), _RaisingBackend(), SimpleContext()
+            )
+
+        assert len(observed) == 1
+        assert observed[0].success is False
+        assert observed[0].model is None
+        assert observed[0].provider is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

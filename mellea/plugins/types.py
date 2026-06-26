@@ -67,6 +67,11 @@ class HookType(StrEnum):
     TOOL_PRE_INVOKE = "tool_pre_invoke"
     TOOL_POST_INVOKE = "tool_post_invoke"
 
+    # Streaming Pipeline
+    STREAMING_START = "streaming_start"
+    STREAMING_EVENT = "streaming_event"
+    STREAMING_END = "streaming_end"
+
 
 # Lazily populated mapping: hook_type -> (payload_class, result_class).
 # Populated by _build_hook_registry() on first call to _register_mellea_hooks().
@@ -102,6 +107,11 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         SessionPostInitPayload,
         SessionPreInitPayload,
         SessionResetPayload,
+    )
+    from mellea.plugins.hooks.streaming import (
+        StreamingEndPayload,
+        StreamingEventPayload,
+        StreamingStartPayload,
     )
     from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
     from mellea.plugins.hooks.validation import (
@@ -155,6 +165,10 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         # Tool Execution
         HookType.TOOL_PRE_INVOKE.value: (ToolPreInvokePayload, PluginResult),
         HookType.TOOL_POST_INVOKE.value: (ToolPostInvokePayload, PluginResult),
+        # Streaming Pipeline
+        HookType.STREAMING_START.value: (StreamingStartPayload, PluginResult),
+        HookType.STREAMING_EVENT.value: (StreamingEventPayload, PluginResult),
+        HookType.STREAMING_END.value: (StreamingEndPayload, PluginResult),
     }
 
 
