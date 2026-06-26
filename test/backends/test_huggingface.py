@@ -674,8 +674,8 @@ async def test_intrinsic_temperature_forwarded(backend) -> None:
         )
         # Don't call avalue() — the canned response lacks logprobs for the
         # answerability result processor.  We only need the generate call.
-        assert _mot._generate is not None
-        await _mot._generate
+        assert _mot._gen.generate is not None
+        await _mot._gen.generate
 
     gi = captured["generate_input"]
     assert gi["temperature"] == 0.7
@@ -707,8 +707,8 @@ async def test_intrinsic_model_options_forwarded(backend) -> None:
                 ModelOption.SYSTEM_PROMPT: "You are helpful",
             },
         )
-        assert _mot._generate is not None
-        await _mot._generate
+        assert _mot._gen.generate is not None
+        await _mot._gen.generate
 
     gi = captured["generate_input"]
     # Temperature is forwarded.
@@ -744,8 +744,8 @@ async def test_intrinsic_temperature_overrides_io_yaml(backend) -> None:
             strategy=None,
             model_options={ModelOption.TEMPERATURE: 0.3},
         )
-        assert _mot._generate is not None
-        await _mot._generate
+        assert _mot._gen.generate is not None
+        await _mot._gen.generate
 
     gi = captured["generate_input"]
     # User value (0.3) must override any io.yaml default.
@@ -787,8 +787,8 @@ async def test_intrinsic_tools_in_generate_input(backend) -> None:
                 ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)]
             },
         )
-        assert _mot._generate is not None
-        await _mot._generate
+        assert _mot._gen.generate is not None
+        await _mot._gen.generate
 
     # Decode the input tokens and verify the tool name and tool markers are present.
     input_tokens = captured["generate_input"]["input_tokens"]
@@ -855,8 +855,8 @@ async def test_intrinsic_no_system_prompt(backend) -> None:
         _mot, _ = await mfuncs.aact(
             Intrinsic("answerability"), ctx, backend, strategy=None
         )
-        assert _mot._generate is not None
-        await _mot._generate
+        assert _mot._gen.generate is not None
+        await _mot._gen.generate
 
     # Verify generation completed without error.
     assert "generate_input" in captured

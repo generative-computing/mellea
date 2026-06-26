@@ -475,15 +475,15 @@ class OllamaModelBackend(FormatterBackend):
         )  # type: ignore
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_opts
+        output._gen.start = datetime.datetime.now()
+        output._call.context = linearized_context
+        output._call.action = action
+        output._call.model_options = model_opts
 
         # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
         # each processing step.
-        output._process = functools.partial(self.processing, tools=tools)
-        output._post_process = functools.partial(
+        output._gen.process = functools.partial(self.processing, tools=tools)
+        output._gen.post_process = functools.partial(
             self.post_processing,
             conversation=conversation,
             tools=tools,
@@ -496,22 +496,22 @@ class OllamaModelBackend(FormatterBackend):
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+            # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
 
             # Use `create_task` so that we don't have to specifically await this task before it starts executing.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present
             raise e
@@ -754,10 +754,10 @@ class OllamaModelBackend(FormatterBackend):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             _format: The structured output format class used during generation, if any.
         """
-        assert mot._action is not None, (
+        assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
-        assert mot._model_options is not None, (
+        assert mot._call.model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
@@ -765,21 +765,21 @@ class OllamaModelBackend(FormatterBackend):
         generate_log = GenerateLog()
         generate_log.prompt = conversation
         generate_log.backend = f"ollama::{self._model_id}"
-        generate_log.model_options = mot._model_options
+        generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot.raw.response
         generate_log.extra = {
             "format": _format,
-            "thinking": mot._model_options.get(ModelOption.THINKING, None),
+            "thinking": mot._call.model_options.get(ModelOption.THINKING, None),
             "tools_available": tools,
             "tools_called": mot.tool_calls,
-            "seed": mot._model_options.get(ModelOption.SEED, None),
+            "seed": mot._call.model_options.get(ModelOption.SEED, None),
         }
-        generate_log.action = mot._action
+        generate_log.action = mot._call.action
         generate_log.result = mot
 
         mot._generate_log = generate_log
-        mot._generate = None
+        mot._gen.generate = None
 
         # Extract token counts from response
         response = mot.raw.response

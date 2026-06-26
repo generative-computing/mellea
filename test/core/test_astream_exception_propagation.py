@@ -24,12 +24,12 @@ async def _failing_post_process(mot):
 
 def _make_thunk(post_process=_failing_post_process):
     mot = ModelOutputThunk(value=None)
-    mot._generate_type = GenerateType.ASYNC
-    mot._process = _noop_process
-    mot._post_process = post_process
-    mot._action = CBlock("test")
-    mot._chunk_size = 0
-    mot._start = datetime.datetime.now()
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.process = _noop_process
+    mot._gen.post_process = post_process
+    mot._call.action = CBlock("test")
+    mot._gen.chunk_size = 0
+    mot._gen.start = datetime.datetime.now()
     return mot
 
 
@@ -40,7 +40,7 @@ def _make_thunk(post_process=_failing_post_process):
 async def test_astream_propagates_generation_exception(error):
     """The original generation error must propagate, not a secondary error from post_process."""
     mot = _make_thunk()
-    await mot._async_queue.put(error)
+    await mot._gen.queue.put(error)
 
     with pytest.raises(type(error), match=str(error)):
         await mot.astream()
@@ -56,7 +56,7 @@ async def test_astream_post_process_only_called_on_success():
 
     # Error path: post_process should NOT be called
     mot = _make_thunk(post_process=_tracking_post_process)
-    await mot._async_queue.put(RuntimeError("generation failed"))
+    await mot._gen.queue.put(RuntimeError("generation failed"))
 
     with pytest.raises(RuntimeError, match="generation failed"):
         await mot.astream()
@@ -68,8 +68,8 @@ async def test_astream_post_process_only_called_on_success():
     # Success path: post_process SHOULD be called
     post_process_called = False
     mot = _make_thunk(post_process=_tracking_post_process)
-    await mot._async_queue.put("hello")
-    await mot._async_queue.put(None)  # sentinel for completion
+    await mot._gen.queue.put("hello")
+    await mot._gen.queue.put(None)  # sentinel for completion
 
     await mot.astream()
 

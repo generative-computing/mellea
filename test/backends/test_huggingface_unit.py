@@ -80,8 +80,8 @@ async def test_finish_reasons_derivation(
     sequences = torch.tensor([[*range(n_completion), last_token]])
 
     mot = ModelOutputThunk(value=value)
-    mot._action = Message("user", "noop")
-    mot._model_options = model_options
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = model_options
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=None,
@@ -262,8 +262,8 @@ async def test_intrinsic_seed_with_zero_temperature_keeps_greedy(stub_backend):
             ChatContext().add(Message("user", "Is the sky blue?")),
             model_options={ModelOption.SEED: 42, ModelOption.TEMPERATURE: 0.0},
         )
-        assert output._generate is not None
-        await output._generate
+        assert output._gen.generate is not None
+        await output._gen.generate
 
     assert captured["generate_input"]["do_sample"] is False
     assert "temperature" not in captured["generate_input"]
@@ -279,8 +279,8 @@ async def test_logits_populated_when_option_set():
     fake_scores = (torch.zeros(1, 32000), torch.zeros(1, 32000))
 
     mot = ModelOutputThunk(value="hi")
-    mot._action = Message("user", "noop")
-    mot._model_options = {ModelOption.LOGITS: True}
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {ModelOption.LOGITS: True}
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
@@ -307,8 +307,8 @@ async def test_raw_logits_populated_when_option_set():
     fake_raw_logits = (torch.ones(1, vocab_size), torch.ones(1, vocab_size))
 
     mot = ModelOutputThunk(value="hi")
-    mot._action = Message("user", "noop")
-    mot._model_options = {ModelOption.RAW_LOGITS: True}
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {ModelOption.RAW_LOGITS: True}
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=None,
@@ -337,8 +337,8 @@ async def test_raw_logits_and_logits_both_populated_when_both_options_set():
     fake_raw_logits = (torch.ones(1, vocab_size), torch.ones(1, vocab_size))
 
     mot = ModelOutputThunk(value="hi")
-    mot._action = Message("user", "noop")
-    mot._model_options = {ModelOption.LOGITS: True, ModelOption.RAW_LOGITS: True}
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {ModelOption.LOGITS: True, ModelOption.RAW_LOGITS: True}
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
@@ -366,8 +366,8 @@ async def test_logits_populated_when_option_set_caching_enabled():
     fake_scores = (torch.zeros(1, 32000), torch.zeros(1, 32000))
 
     mot = ModelOutputThunk(value="hi")
-    mot._action = Message("user", "noop")
-    mot._model_options = {ModelOption.LOGITS: True}
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {ModelOption.LOGITS: True}
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
@@ -394,8 +394,8 @@ async def test_logits_not_populated_when_option_not_set():
     fake_scores = (torch.zeros(1, 32000), torch.zeros(1, 32000))
 
     mot = ModelOutputThunk(value="hi")
-    mot._action = Message("user", "noop")
-    mot._model_options = {}
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {}
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
         scores=fake_scores,
@@ -539,8 +539,8 @@ async def test_logits_none_when_stream_and_logits_both_set():
     sequences = torch.tensor([[0, 0]])
 
     mot = ModelOutputThunk(value="hi")
-    mot._action = Message("user", "noop")
-    mot._model_options = {ModelOption.LOGITS: True, ModelOption.STREAM: True}
+    mot._call.action = Message("user", "noop")
+    mot._call.model_options = {ModelOption.LOGITS: True, ModelOption.STREAM: True}
     # Streaming output carries no scores — hf_output.scores is None.
     mot.raw.response = GenerateDecoderOnlyOutput(
         sequences=sequences,
@@ -647,15 +647,15 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
             ChatContext().add(Message("user", "Is the sky blue?")),
             model_options={ModelOption.LOGITS: True},
         )
-        assert output._generate is not None
-        await output._generate
+        assert output._gen.generate is not None
+        await output._gen.generate
 
         # Drain the queue to trigger _process (granite_formatters_processing), which
         # stashes the intercepted hf_output in mot._meta["hf_output"].
-        while not output._async_queue.empty():
-            item = output._async_queue.get_nowait()
+        while not output._gen.queue.empty():
+            item = output._gen.queue.get_nowait()
             if item is not None:
-                await output._process(output, item)
+                await output._gen.process(output, item)
 
         # Simulate the sentinel-driven completion that astream() performs before
         # calling _post_process, so post_processing's assertion mot.value is not None passes.

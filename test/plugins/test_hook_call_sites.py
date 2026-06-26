@@ -28,6 +28,8 @@ from mellea.core.base import (
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
+    _CallInfo,
+    _GenerationState,
 )
 from mellea.core.requirement import Requirement, ValidationResult
 from mellea.plugins import HookType, PluginResult, hook, register
@@ -64,11 +66,13 @@ class _MockBackend(Backend):
 
     async def _generate_from_context(self, action, ctx, **kwargs):
         mot = MagicMock(spec=ModelOutputThunk)
+        mot._gen = _GenerationState()
+        mot._call = _CallInfo()
         glog = GenerateLog()
         glog.prompt = "mocked formatted prompt"
         mot._generate_log = glog
         mot.parsed_repr = None
-        mot._start = datetime.datetime.now()
+        mot._gen.start = datetime.datetime.now()
 
         async def _avalue():
             return "mocked output"
@@ -96,12 +100,12 @@ async def _noop_post_process(mot):
 
 def _make_thunk():
     mot = ModelOutputThunk(value=None)
-    mot._generate_type = GenerateType.ASYNC
-    mot._process = _noop_process
-    mot._post_process = _noop_post_process
-    mot._action = CBlock("test")
-    mot._chunk_size = 0
-    mot._start = datetime.datetime.now()
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.process = _noop_process
+    mot._gen.post_process = _noop_post_process
+    mot._call.action = CBlock("test")
+    mot._gen.chunk_size = 0
+    mot._gen.start = datetime.datetime.now()
     return mot
 
 
@@ -162,9 +166,9 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = _make_thunk()
-        await mot._async_queue.put("hello")
-        await mot._async_queue.put("goodbye")
-        await mot._async_queue.put(None)  # sentinel for being done
+        await mot._gen.queue.put("hello")
+        await mot._gen.queue.put("goodbye")
+        await mot._gen.queue.put(None)  # sentinel for being done
 
         await mot.avalue()
         assert len(observed) == 1
@@ -183,9 +187,9 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = _make_thunk()
-        await mot._async_queue.put("hello")
-        await mot._async_queue.put("goodbye")
-        await mot._async_queue.put(None)  # sentinel for being done
+        await mot._gen.queue.put("hello")
+        await mot._gen.queue.put("goodbye")
+        await mot._gen.queue.put(None)  # sentinel for being done
         await mot.avalue()
 
         assert observed[0].model_output is not None
@@ -202,9 +206,9 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = _make_thunk()
-        await mot._async_queue.put("hello")
-        await mot._async_queue.put("goodbye")
-        await mot._async_queue.put(None)  # sentinel for being done
+        await mot._gen.queue.put("hello")
+        await mot._gen.queue.put("goodbye")
+        await mot._gen.queue.put(None)  # sentinel for being done
 
         await asyncio.sleep(1)
         await mot.avalue()
@@ -323,7 +327,7 @@ class TestGenerationHookCallSites:
             CBlock("hi"), MagicMock(spec=Context)
         )
 
-        assert mot._generation_id == observed[0].generation_id
+        assert mot._call.generation_id == observed[0].generation_id
 
     async def test_generation_post_call_carries_generation_id(self) -> None:
         """astream() fires post_call with the MOT's _generation_id."""
@@ -337,9 +341,9 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = _make_thunk()
-        mot._generation_id = "gid-post-1"
-        await mot._async_queue.put("hello")
-        await mot._async_queue.put(None)
+        mot._call.generation_id = "gid-post-1"
+        await mot._gen.queue.put("hello")
+        await mot._gen.queue.put(None)
         await mot.avalue()
 
         assert observed[0].generation_id == "gid-post-1"
@@ -356,9 +360,9 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = _make_thunk()
-        mot._generation_id = "gid-err-1"
+        mot._call.generation_id = "gid-err-1"
         error = ConnectionError("server unavailable")
-        await mot._async_queue.put(error)
+        await mot._gen.queue.put(error)
 
         with pytest.raises(ConnectionError, match="server unavailable"):
             await mot.astream()
@@ -380,7 +384,7 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = ModelOutputThunk(value=None)
-        mot._generation_id = "gid-cancel-1"
+        mot._call.generation_id = "gid-cancel-1"
         cause = ValueError("validator rejected")
 
         await mot.cancel_generation(error=cause)
@@ -405,7 +409,7 @@ class TestGenerationHookCallSites:
         register(recorder)
 
         mot = ModelOutputThunk(value=None)
-        mot._generation_id = "gid-cancel-2"
+        mot._call.generation_id = "gid-cancel-2"
 
         await mot.cancel_generation()
 
@@ -1546,9 +1550,9 @@ class _MockLazyBackend(Backend):
         import asyncio
 
         mot = ModelOutputThunk(value=None)
-        mot._generate_type = GenerateType.ASYNC
-        mot._chunk_size = 0
-        mot._action = action
+        mot._gen.generate_type = GenerateType.ASYNC
+        mot._gen.chunk_size = 0
+        mot._call.action = action
 
         async def _process(thunk, chunk):
             if thunk._underlying_value is None:
@@ -1558,8 +1562,8 @@ class _MockLazyBackend(Backend):
         async def _post_process(thunk):
             pass
 
-        mot._process = _process
-        mot._post_process = _post_process
+        mot._gen.process = _process
+        mot._gen.post_process = _post_process
 
         glog = GenerateLog()
         glog.prompt = "lazy mocked prompt"
@@ -1567,10 +1571,10 @@ class _MockLazyBackend(Backend):
 
         # Simulate async generation: enqueue chunks + sentinel
         async def _generate():
-            await mot._async_queue.put("lazy output")
-            await mot._async_queue.put(None)  # sentinel
+            await mot._gen.queue.put("lazy output")
+            await mot._gen.queue.put(None)  # sentinel
 
-        mot._generate = asyncio.ensure_future(_generate())
+        mot._gen.generate = asyncio.ensure_future(_generate())
 
         return mot, SimpleContext()
 

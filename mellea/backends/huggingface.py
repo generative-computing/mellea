@@ -105,7 +105,7 @@ def _install_cancel_stopping_criteria(
     `**streaming_kwargs`), prepends an :class:`_EventStoppingCriteria` backed
     by a fresh `threading.Event`, and stores the merged list in
     *streaming_kwargs*.  Returns the event so the caller can arm
-    `output._cancel_hook = event.set`.
+    `output._gen.cancel_hook = event.set`.
     """
     cancel_event = threading.Event()
     user_sc = generate_options.pop("stopping_criteria", None)
@@ -702,10 +702,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = ctx.view_for_generation()
-        output._action = action
-        output._model_options = model_options
+        output._gen.start = datetime.datetime.now()
+        output._call.context = ctx.view_for_generation()
+        output._call.action = action
+        output._call.model_options = model_options
 
         # Add another step to the processing function.
         async def granite_formatters_processing(
@@ -740,7 +740,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 mot, res.choices[0].message.content, input_ids=input_ids
             )
 
-        output._process = functools.partial(
+        output._gen.process = functools.partial(
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
@@ -748,7 +748,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # TODO: Post-processing should release the lock for this generation.
-        output._post_process = functools.partial(
+        output._gen.post_process = functools.partial(
             self.post_processing,
             conversation=conversation,
             input_ids=generate_input["input_tokens"],
@@ -764,20 +764,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+            # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_options.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )  # type: ignore
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present.
             raise e
@@ -956,7 +956,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 try:
                     # Hugging Face uses a streaming interface that you pass to the generate call.
                     # Must be called from a running event loop. This should always be the case given the same
-                    # requirement of the ._generate function below.
+                    # requirement of the ._gen.generate function below.
                     streamer = AsyncTextIteratorStreamer(
                         self._tokenizer,  # type: ignore
                         skip_prompt=True,
@@ -1028,16 +1028,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # TODO(#1242): send_to_queue fires this hook via mot.cancel_generation() only
                 # through stream_with_chunking; direct avalue()/astream() callers do not,
                 # so the worker thread leaks on STREAM_TIMEOUT for those paths.
-                output._cancel_hook = _cancel_event.set
-            output._start = datetime.datetime.now()
-            output._context = ctx.view_for_generation()
-            output._action = action
-            output._model_options = model_options
+                output._gen.cancel_hook = _cancel_event.set
+            output._gen.start = datetime.datetime.now()
+            output._call.context = ctx.view_for_generation()
+            output._call.action = action
+            output._call.model_options = model_options
 
             # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
             # each processing step.
-            output._process = functools.partial(self.processing, input_ids=input_ids)
-            output._post_process = functools.partial(
+            output._gen.process = functools.partial(
+                self.processing, input_ids=input_ids
+            )
+            output._gen.post_process = functools.partial(
                 self.post_processing,
                 conversation=ctx_as_chat,
                 input_ids=input_ids,
@@ -1053,7 +1055,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-                # We can also support synchronous calls by adding a flag and changing this ._generate function.
+                # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
                 response: AsyncTextIteratorStreamer | Coroutine = chat_response
                 if stream and streamer is not None:
@@ -1063,20 +1065,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                     # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
                     # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
-                    output._generate_extra = asyncio.create_task(chat_response)
+                    output._gen.generate_extra = asyncio.create_task(chat_response)
 
                 # This function should always be called from a running event loop so we don't have to worry about
                 # scheduling the task to a specific event loop here.
-                output._generate = asyncio.create_task(
+                output._gen.generate = asyncio.create_task(
                     send_to_queue(
                         response,
-                        output._async_queue,
+                        output._gen.queue,
                         chunk_timeout=model_options.get(
                             ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
                 )
-                output._generate_type = GenerateType.ASYNC
+                output._gen.generate_type = GenerateType.ASYNC
             except RuntimeError as e:
                 # Most likely cause is running this function without an event loop present.
                 raise e
@@ -1153,7 +1155,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 try:
                     # Hugging Face uses a streaming interface that you pass to the generate call.
                     # Must be called from a running event loop. This should always be the case given the same
-                    # requirement of the ._generate function below.
+                    # requirement of the ._gen.generate function below.
                     streamer = AsyncTextIteratorStreamer(
                         self._tokenizer,  # type: ignore
                         skip_prompt=True,
@@ -1213,16 +1215,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # TODO(#1242): send_to_queue fires this hook via mot.cancel_generation() only
                 # through stream_with_chunking; direct avalue()/astream() callers do not,
                 # so the worker thread leaks on STREAM_TIMEOUT for those paths.
-                output._cancel_hook = _cancel_event.set
-            output._start = datetime.datetime.now()
-            output._context = ctx.view_for_generation()
-            output._action = action
-            output._model_options = model_options
+                output._gen.cancel_hook = _cancel_event.set
+            output._gen.start = datetime.datetime.now()
+            output._call.context = ctx.view_for_generation()
+            output._call.action = action
+            output._call.model_options = model_options
 
             # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
             # each processing step.
-            output._process = functools.partial(self.processing, input_ids=input_ids)
-            output._post_process = functools.partial(
+            output._gen.process = functools.partial(
+                self.processing, input_ids=input_ids
+            )
+            output._gen.post_process = functools.partial(
                 self.post_processing,
                 conversation=ctx_as_chat,
                 input_ids=input_ids,
@@ -1238,7 +1242,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-                # We can also support synchronous calls by adding a flag and changing this ._generate function.
+                # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
                 response: AsyncTextIteratorStreamer | Coroutine = chat_response
                 if stream and streamer is not None:
@@ -1248,20 +1252,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                     # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
                     # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
-                    output._generate_extra = asyncio.create_task(chat_response)
+                    output._gen.generate_extra = asyncio.create_task(chat_response)
 
                 # This function should always be called from a running event loop so we don't have to worry about
                 # scheduling the task to a specific event loop here.
-                output._generate = asyncio.create_task(
+                output._gen.generate = asyncio.create_task(
                     send_to_queue(
                         response,
-                        output._async_queue,
+                        output._gen.queue,
                         chunk_timeout=model_options.get(
                             ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
                 )
-                output._generate_type = GenerateType.ASYNC
+                output._gen.generate_type = GenerateType.ASYNC
             except RuntimeError as e:
                 # Most likely cause is running this function without an event loop present.
                 raise e
@@ -1315,7 +1319,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Populate mot.generation.logits and/or raw_logits from hf_output when requested.
 
         Checks ModelOption.LOGITS (processed scores) and ModelOption.RAW_LOGITS (raw
-        LM-head logits) in mot._model_options. Skips population when
+        LM-head logits) in mot._call.model_options. Skips population when
         num_return_sequences > 1, logging a warning the first time per backend instance.
 
         Args:
@@ -1327,7 +1331,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             (ModelOption.LOGITS, hf_output.scores, "logits"),
             (ModelOption.RAW_LOGITS, hf_output.logits, "raw_logits"),
         ):
-            if not (mot._model_options and mot._model_options.get(opt)):
+            if not (mot._call.model_options and mot._call.model_options.get(opt)):
                 continue
             if tensors is None:
                 MelleaLogger.get_logger().debug(
@@ -1381,8 +1385,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 KV cache bookkeeping.
         """
         if mot.raw.response is None:
-            if mot._generate_extra is not None:
-                full_output = await mot._generate_extra
+            if mot._gen.generate_extra is not None:
+                full_output = await mot._gen.generate_extra
                 assert isinstance(full_output, GenerateDecoderOnlyOutput)
                 mot.raw.response = full_output
 
@@ -1394,7 +1398,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         hf_output = mot.raw.response
 
         # Surface logits before the caching branch clears hf_output.scores/logits.
-        if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._model_options:
+        if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._call.model_options:
             self._surface_logits(mot, hf_output)
 
         if (
@@ -1432,10 +1436,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if _format is None and tool_calls:
             mot.tool_calls = to_tool_calls(tools, mot.value)
 
-        assert mot._action is not None, (
+        assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
-        assert mot._model_options is not None, (
+        assert mot._call.model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
@@ -1474,8 +1478,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 last_token = hf_output.sequences[0][-1].item()
                 eos = self._tokenizer.eos_token_id
                 eos_set = set(eos) if isinstance(eos, list) else {eos}
-                max_new_tokens = mot._model_options.get(ModelOption.MAX_NEW_TOKENS)
-                stop_strings = mot._model_options.get(ModelOption.STOP_SEQUENCES) or []
+                max_new_tokens = mot._call.model_options.get(ModelOption.MAX_NEW_TOKENS)
+                stop_strings = (
+                    mot._call.model_options.get(ModelOption.STOP_SEQUENCES) or []
+                )
                 ends_with_stop_string = isinstance(mot.value, str) and any(
                     mot.value.endswith(s) for s in stop_strings
                 )
@@ -1521,7 +1527,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         generate_log = GenerateLog()
         generate_log.prompt = conversation
         generate_log.backend = f"hf::{self.model_id!s}"
-        generate_log.model_options = mot._model_options
+        generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot.value
         generate_log.extra = {
@@ -1530,7 +1536,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "tools_called": mot.tool_calls,
             "seed": seed,
         }
-        generate_log.action = mot._action
+        generate_log.action = mot._call.action
         generate_log.result = mot
 
         mot._generate_log = generate_log

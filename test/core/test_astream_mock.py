@@ -29,11 +29,11 @@ async def mock_post_process(mot: ModelOutputThunk) -> None:
 def create_manual_mock_thunk() -> ModelOutputThunk:
     """Helper to create a mock ModelOutputThunk where we manually populate the queue."""
     mot = ModelOutputThunk(value=None)
-    mot._action = CBlock("mock_action")
-    mot._generate_type = GenerateType.ASYNC
-    mot._process = mock_process
-    mot._post_process = mock_post_process
-    mot._chunk_size = 0  # Read exactly what is available
+    mot._call.action = CBlock("mock_action")
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.process = mock_process
+    mot._gen.post_process = mock_post_process
+    mot._gen.chunk_size = 0  # Read exactly what is available
     return mot
 
 
@@ -43,22 +43,22 @@ async def test_astream_returns_incremental_chunks():
     mot = create_manual_mock_thunk()
 
     # Drop the first chunk and pull it
-    mot._async_queue.put_nowait("chunk1 ")
+    mot._gen.queue.put_nowait("chunk1 ")
     chunk1 = await mot.astream()
     assert chunk1 == "chunk1 "
 
     # Drop the second chunk and pull it
-    mot._async_queue.put_nowait("chunk2 ")
+    mot._gen.queue.put_nowait("chunk2 ")
     chunk2 = await mot.astream()
     assert chunk2 == "chunk2 "
 
     # Drop the third chunk and pull it
-    mot._async_queue.put_nowait("chunk3 ")
+    mot._gen.queue.put_nowait("chunk3 ")
     chunk3 = await mot.astream()
     assert chunk3 == "chunk3 "
 
     # Send completion sentinel
-    mot._async_queue.put_nowait(None)
+    mot._gen.queue.put_nowait(None)
 
     # Wait until fully consumed
     while not mot.is_computed():
@@ -75,17 +75,17 @@ async def test_astream_multiple_calls_accumulate_correctly():
     mot = create_manual_mock_thunk()
 
     # Drop multiple items at once to simulate fast network
-    mot._async_queue.put_nowait("c")
-    mot._async_queue.put_nowait("h")
-    mot._async_queue.put_nowait("u")
+    mot._gen.queue.put_nowait("c")
+    mot._gen.queue.put_nowait("h")
+    mot._gen.queue.put_nowait("u")
 
     # Calling astream should drain all currently queued items ("chu")
     chunk1 = await mot.astream()
     assert chunk1 == "chu"
 
-    mot._async_queue.put_nowait("n")
-    mot._async_queue.put_nowait("k")
-    mot._async_queue.put_nowait(None)
+    mot._gen.queue.put_nowait("n")
+    mot._gen.queue.put_nowait("k")
+    mot._gen.queue.put_nowait(None)
 
     chunk2 = await mot.astream()
     # astream() returns only the incremental content added during this call
@@ -102,11 +102,11 @@ async def test_astream_beginning_length_tracking():
     """Test that beginning_length is correctly tracked across astream calls."""
     mot = create_manual_mock_thunk()
 
-    mot._async_queue.put_nowait("AAA")
+    mot._gen.queue.put_nowait("AAA")
     chunk1 = await mot.astream()
     assert chunk1 == "AAA"
 
-    mot._async_queue.put_nowait("BBB")
+    mot._gen.queue.put_nowait("BBB")
     chunk2 = await mot.astream()
     # verify incremental length tracking works
     assert not chunk2.startswith(chunk1)
@@ -118,7 +118,7 @@ async def test_astream_empty_beginning():
     """Test astream when _underlying_value starts as None."""
     mot = create_manual_mock_thunk()
 
-    mot._async_queue.put_nowait("First")
+    mot._gen.queue.put_nowait("First")
     # At the start, _underlying_value is None, beginning_length is 0
     chunk = await mot.astream()
 
@@ -143,16 +143,16 @@ async def test_astream_final_call_returns_full_value():
     """Test that the final astream call returns the full value when computed."""
     mot = create_manual_mock_thunk()
 
-    mot._async_queue.put_nowait("part1")
+    mot._gen.queue.put_nowait("part1")
     chunk1 = await mot.astream()
     assert chunk1 == "part1"
 
-    mot._async_queue.put_nowait("part2")
+    mot._gen.queue.put_nowait("part2")
     chunk2 = await mot.astream()
     assert chunk2 == "part2"
 
-    mot._async_queue.put_nowait("part3")
-    mot._async_queue.put_nowait(None)
+    mot._gen.queue.put_nowait("part3")
+    mot._gen.queue.put_nowait(None)
 
     # Calling astream here processes "part3" and `None`, flagging it as done
     chunk3 = await mot.astream()

@@ -35,6 +35,8 @@ from mellea.core.base import (
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
+    _CallInfo,
+    _GenerationState,
 )
 from mellea.core.utils import (
     MelleaLogger,
@@ -56,11 +58,13 @@ class _MockBackend(Backend):
 
     async def _generate_from_context(self, action, ctx, **kwargs):
         mot = MagicMock(spec=ModelOutputThunk)
+        mot._gen = _GenerationState()
+        mot._call = _CallInfo()
         glog = GenerateLog()
         glog.prompt = "mocked prompt"
         mot._generate_log = glog
         mot.parsed_repr = None
-        mot._start = datetime.datetime.now()
+        mot._gen.start = datetime.datetime.now()
 
         async def _avalue():
             return "mocked output"
