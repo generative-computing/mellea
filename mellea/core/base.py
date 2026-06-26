@@ -18,7 +18,6 @@ import binascii
 import datetime
 import enum
 import logging
-import warnings
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -611,26 +610,6 @@ class ModelOutputThunk(CBlock, Generic[S]):
             `True` if the thunk value has been set, `False` otherwise.
         """
         return self._computed
-
-    @property
-    def _thinking(self) -> str | None:
-        """Deprecated alias for :attr:`thinking`.
-
-        Returns:
-            str | None: The model's reasoning/thinking trace.
-        """
-        warnings.warn(
-            "`ModelOutputThunk._thinking` is deprecated and will be removed in a "
-            "future minor release. Use `ModelOutputThunk.thinking` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.thinking
-
-    @_thinking.setter
-    def _thinking(self, value: str | None) -> None:
-        """Deprecated write alias for :attr:`thinking`."""
-        self.thinking = value
 
     @property
     def value(self) -> str | None:
