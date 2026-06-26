@@ -447,6 +447,33 @@ def test_deepcopy_resets_gen_and_preserves_call() -> None:
     assert isinstance(deep._call.action, Message)
 
 
+def test_copy_resets_gen_and_preserves_call() -> None:
+    """Shallow-copying a computed MOT yields a fresh _gen but preserves _call."""
+    mot = ModelOutputThunk(value="done")
+    mot._call.action = Message("user", "hi")
+    mot._call.context = []
+    mot._call.model_options = {"temperature": 0.5}
+    mot._call.generation_id = "gen-123"
+    # Dirty the in-flight machinery so a shared _gen would be observable.
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.chunk_size = 99
+
+    shallow = copy.copy(mot)
+
+    # _gen is a distinct, fresh instance — not shared with the original.
+    assert shallow._gen is not mot._gen
+    assert shallow._gen.queue is not mot._gen.queue
+    assert shallow._gen.generate is None
+    assert shallow._gen.generate_type is GenerateType.NONE
+    assert shallow._gen.chunk_size == 3
+
+    # _call is preserved.
+    assert shallow._call.model_options == {"temperature": 0.5}
+    assert shallow._call.generation_id == "gen-123"
+    assert shallow._call.context == []
+    assert isinstance(shallow._call.action, Message)
+
+
 @pytest.mark.asyncio
 async def test_cancel_generation_hook_exception_is_suppressed() -> None:
     """Fix 2: a faulty _cancel_hook must not mask cancel_generation itself."""
