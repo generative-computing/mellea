@@ -142,7 +142,7 @@ async def test_watsonx_processing_non_streaming_captures_reasoning_content():
 
     assert mot.thinking == "trace"
     assert mot._underlying_value == "answer content"
-    assert mot._meta["oai_chat_response_choice"] == chunk["choices"][0]
+    assert mot.raw.response["choices"][0] == chunk["choices"][0]
 
 
 @pytest.mark.asyncio
@@ -159,7 +159,7 @@ async def test_watsonx_processing_streaming_captures_reasoning_content():
 
     assert mot.thinking == "ab"
     assert mot._underlying_value == "xy"
-    assert len(mot._meta["oai_chat_response_streamed"]) == 2
+    assert len(mot.raw.streamed_chunks) == 2
 
 
 # --- HuggingFace ---
