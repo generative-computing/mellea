@@ -498,8 +498,8 @@ class LiteLLMBackend(FormatterBackend):
             chunk (litellm.ModelResponse | litellm.ModelResponseStream): A single
                 response object or streaming chunk from LiteLLM.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -518,7 +518,7 @@ class LiteLLMBackend(FormatterBackend):
             if thinking_chunk is None:
                 thinking_chunk = message.get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
@@ -545,7 +545,7 @@ class LiteLLMBackend(FormatterBackend):
             if thinking_chunk is None:
                 thinking_chunk = message_delta.get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:

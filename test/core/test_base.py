@@ -333,6 +333,12 @@ def test_mot_error_carried_by_copy_methods() -> None:
     assert target.error is err
 
 
+def test_mot_thinking_public_field_round_trip():
+    mot = ModelOutputThunk(value="x")
+    mot.thinking = "reasoning trace"
+    assert mot.thinking == "reasoning trace"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
 

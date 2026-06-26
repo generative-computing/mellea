@@ -220,7 +220,7 @@ def _vllm_chat_completion(reasoning: str, content: str | None) -> ChatCompletion
 
 
 async def test_processing_captures_vllm_reasoning_field(backend):
-    """Non-streaming: mot._thinking captures the raw ``reasoning`` key from vLLM."""
+    """Non-streaming: mot.thinking captures the raw ``reasoning`` key from vLLM."""
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     chunk = _vllm_chat_completion(reasoning="2 + 2 equals 4.", content="4")
     # Sanity check: the SDK object does not expose reasoning_content
@@ -228,7 +228,7 @@ async def test_processing_captures_vllm_reasoning_field(backend):
 
     await backend.processing(mot, chunk)
 
-    assert mot._thinking == "2 + 2 equals 4."
+    assert mot.thinking == "2 + 2 equals 4."
     assert mot._underlying_value == "4"
 
 
@@ -239,12 +239,12 @@ async def test_processing_vllm_reasoning_with_null_content(backend):
 
     await backend.processing(mot, chunk)
 
-    assert mot._thinking == "some thinking"
+    assert mot.thinking == "some thinking"
     assert mot._underlying_value == ""
 
 
 async def test_processing_streaming_captures_vllm_reasoning_field(backend):
-    """Streaming: per-chunk ``reasoning`` deltas accumulate into mot._thinking."""
+    """Streaming: per-chunk ``reasoning`` deltas accumulate into mot.thinking."""
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     chunk_a = ChatCompletionChunk.model_validate(
         {
@@ -284,7 +284,7 @@ async def test_processing_streaming_captures_vllm_reasoning_field(backend):
     await backend.processing(mot, chunk_a)
     await backend.processing(mot, chunk_b)
 
-    assert mot._thinking == "first second"
+    assert mot.thinking == "first second"
     assert mot._underlying_value == "ans"
 
 
@@ -314,7 +314,7 @@ async def test_processing_reasoning_content_still_used(backend):
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     await backend.processing(mot, chunk)
 
-    assert mot._thinking == "attribute-style trace"
+    assert mot.thinking == "attribute-style trace"
     assert mot._underlying_value == "answer"
 
 
@@ -338,7 +338,7 @@ async def test_processing_reasoning_content_takes_precedence_over_reasoning(back
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     await backend.processing(mot, chunk)
 
-    assert mot._thinking == "attr-trace"
+    assert mot.thinking == "attr-trace"
     assert mot._underlying_value == "answer"
 
 

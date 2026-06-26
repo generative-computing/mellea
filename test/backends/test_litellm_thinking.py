@@ -1,4 +1,4 @@
-"""Unit tests for LiteLLMBackend mot._thinking population.
+"""Unit tests for LiteLLMBackend mot.thinking population.
 
 Covers the vLLM case where the wire key is ``"reasoning"`` instead of
 ``"reasoning_content"``, and the case where LiteLLM has already normalised
@@ -75,7 +75,7 @@ async def test_processing_non_streaming_reasoning_content_key(backend: LiteLLMBa
         reasoning_value="France has its capital in Paris.",
     )
     await backend.processing(mot, chunk)
-    assert mot._thinking == "France has its capital in Paris."
+    assert mot.thinking == "France has its capital in Paris."
     assert mot._underlying_value == "Paris"
 
 
@@ -88,7 +88,7 @@ async def test_processing_non_streaming_reasoning_raw_key(backend: LiteLLMBacken
         reasoning_value="France has its capital in Paris.",
     )
     await backend.processing(mot, chunk)
-    assert mot._thinking == "France has its capital in Paris."
+    assert mot.thinking == "France has its capital in Paris."
     assert mot._underlying_value == "Paris"
 
 
@@ -109,7 +109,7 @@ async def test_processing_non_streaming_reasoning_content_wins_over_reasoning(
         object="chat.completion",
     )
     await backend.processing(mot, chunk)
-    assert mot._thinking == "from_reasoning_content"
+    assert mot.thinking == "from_reasoning_content"
 
 
 async def test_processing_non_streaming_no_reasoning(backend: LiteLLMBackend):
@@ -121,7 +121,7 @@ async def test_processing_non_streaming_no_reasoning(backend: LiteLLMBackend):
         reasoning_value="should be ignored",
     )
     await backend.processing(mot, chunk)
-    assert mot._thinking == ""
+    assert mot.thinking == ""
     assert mot._underlying_value == "Paris"
 
 
@@ -147,7 +147,7 @@ async def test_processing_non_streaming_empty_reasoning_content_does_not_fall_ba
         object="chat.completion",
     )
     await backend.processing(mot, chunk)
-    assert mot._thinking == ""
+    assert mot.thinking == ""
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ async def test_processing_streaming_reasoning_content_key(backend: LiteLLMBacken
             content="", reasoning_key="reasoning_content", reasoning_value=text
         )
         await backend.processing(mot, stream_chunk)
-    assert mot._thinking == "chunk1 chunk2"
+    assert mot.thinking == "chunk1 chunk2"
 
 
 async def test_processing_streaming_reasoning_raw_key(backend: LiteLLMBackend):
@@ -174,7 +174,7 @@ async def test_processing_streaming_reasoning_raw_key(backend: LiteLLMBackend):
             content="", reasoning_key="reasoning", reasoning_value=text
         )
         await backend.processing(mot, stream_chunk)
-    assert mot._thinking == "chunk1 chunk2"
+    assert mot.thinking == "chunk1 chunk2"
 
 
 async def test_processing_streaming_reasoning_content_wins_over_reasoning(
@@ -190,7 +190,7 @@ async def test_processing_streaming_reasoning_content_wins_over_reasoning(
         id="test", choices=[chunk_choice], created=0, model="openai/qwen3"
     )
     await backend.processing(mot, stream_chunk)
-    assert mot._thinking == "from_reasoning_content"
+    assert mot.thinking == "from_reasoning_content"
 
 
 async def test_processing_streaming_no_reasoning(backend: LiteLLMBackend):
@@ -200,7 +200,7 @@ async def test_processing_streaming_no_reasoning(backend: LiteLLMBackend):
         content="Paris", reasoning_key="unrelated_key", reasoning_value="ignored"
     )
     await backend.processing(mot, stream_chunk)
-    assert mot._thinking == ""
+    assert mot.thinking == ""
     assert mot._underlying_value == "Paris"
 
 
@@ -220,7 +220,7 @@ async def test_processing_streaming_empty_reasoning_content_does_not_fall_back(
         id="test", choices=[chunk_choice], created=0, model="openai/qwen3"
     )
     await backend.processing(mot, stream_chunk)
-    assert mot._thinking == ""
+    assert mot.thinking == ""
 
 
 # ---------------------------------------------------------------------------
