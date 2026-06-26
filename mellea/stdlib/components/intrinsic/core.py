@@ -1,6 +1,7 @@
 """Adapter functions for core model capabilities."""
 
 import collections.abc
+from typing import cast
 
 from ....backends.adapters import AdapterMixin
 from ...components import Document, Message
@@ -24,7 +25,7 @@ def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
         Certainty score as a float (higher = more certain).
     """
     result_json = call_intrinsic("uncertainty", context, backend)
-    return result_json["certainty"]
+    return cast(float, result_json["certainty"])
 
 
 def requirement_check(
@@ -48,7 +49,9 @@ def requirement_check(
     result_json = call_intrinsic(
         "requirement-check", context, backend, kwargs={"requirement": requirement}
     )
-    return result_json["requirement_check"]["score"]
+    return cast(
+        float, cast(dict[str, object], result_json["requirement_check"])["score"]
+    )
 
 
 def find_context_attributions(
@@ -95,4 +98,4 @@ def find_context_attributions(
         ),
         backend,
     )
-    return result_json
+    return cast(list[dict], result_json)

@@ -119,72 +119,44 @@ class Message(Component["Message"]):
         """Parse the model output into a Message."""
         # TODO: There's some specific logic for tool calls. Storing that here for now.
         # We may eventually need some generic parsing logic that gets run for all Component types...
+        provider = computed.raw.provider
+        response = computed.raw.response
+
         if computed.tool_calls is not None:
             # A tool was successfully requested.
             # Assistant responses for tool calling differ by backend. For the default formatter,
             # we put all of the function data into the content field in the same format we received it.
-
-            # Chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
-            if "chat_response" in computed._meta:
-                # Ollama.
+            if provider == "ollama" and response is not None:
                 return Message(
-                    role=computed._meta["chat_response"].message.role,
-                    content=str(computed._meta["chat_response"].message.tool_calls),
+                    role=response.message.role, content=str(response.message.tool_calls)
                 )
-            elif "oai_chat_response" in computed._meta:
-                # OpenAI and Watsonx.
-                return Message(
-                    role=computed._meta["oai_chat_response"]["choices"][0]["message"][
-                        "role"
-                    ],
-                    content=str(
-                        computed._meta["oai_chat_response"]["choices"][0][
-                            "message"
-                        ].get("tool_calls", [])
-                    ),
-                )
-            else:
-                # HuggingFace (or others). There are no guarantees on how the model represented the function calls.
-                # Output it in the same format we received the tool call request.
-                assert computed.value is not None
-                return Message(role="assistant", content=computed.value)
-
-        if "chat_response" in computed._meta:
-            # Chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
-            return Message(
-                role=computed._meta["chat_response"].message.role,
-                content=computed._meta["chat_response"].message.content,
-            )
-        elif "oai_chat_response" in computed._meta:
-            role = (
-                computed._meta["oai_chat_response"]
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("role", "")
-            )
-            if role == "":
-                role = (
-                    computed._meta["oai_chat_response"]
-                    .get("message", {})
-                    .get("role", "")
-                )
-
-            content = (
-                computed._meta["oai_chat_response"]
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-            )
-            if content == "":
-                content = (
-                    computed._meta["oai_chat_response"]
-                    .get("message", {})
-                    .get("content", "")
-                )
-            return Message(role=role, content=content)
-        else:
+            if provider in ("openai", "watsonx", "litellm") and isinstance(
+                response, dict
+            ):
+                choice = response["choices"][0] if "choices" in response else response
+                msg = choice["message"]
+                return Message(role=msg["role"], content=str(msg.get("tool_calls", [])))
+            # Hugging Face (or others). There are no guarantees on how the model represented the function calls.
+            # Output it in the same format we received the tool call request.
             assert computed.value is not None
             return Message(role="assistant", content=computed.value)
+
+        if provider == "ollama" and response is not None:
+            # Ollama can return role="tool"; preserve role recovery from the response.
+            return Message(role=response.message.role, content=response.message.content)
+        if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
+            choices = response.get("choices") or [{}]
+            msg = choices[0].get("message", {})
+            role = msg.get("role") or response.get("message", {}).get("role", "")
+            content = msg.get("content") or response.get("message", {}).get(
+                "content", ""
+            )
+            return Message(role=role, content=content)
+
+        # Hugging Face: raw.response is token tensors with no role/content to parse.
+        # Unknown provider: nothing to switch on. Both fall back to the decoded text.
+        assert computed.value is not None
+        return Message(role="assistant", content=computed.value)
 
 
 class ToolMessage(Message):

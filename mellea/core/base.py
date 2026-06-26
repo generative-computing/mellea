@@ -23,6 +23,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     Literal,
@@ -31,6 +32,9 @@ from typing import (
     TypeVar,
     runtime_checkable,
 )
+
+if TYPE_CHECKING:
+    import torch
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -307,6 +311,8 @@ class GenerationMetadata:
         response_model: Model identifier reported on the response; may differ from the requested model.
         finish_reasons: Finish reason(s) reported on the response (typically one per choice).
         response_id: Provider-assigned identifier for the response.
+        logits: Per-token processed logit scores (post-LogitsProcessor); None if not requested or unavailable.
+        raw_logits: Per-token raw LM-head logits (pre-LogitsProcessor); None if not requested or unavailable.
     """
 
     usage: dict[str, Any] | None = None
@@ -363,6 +369,50 @@ class GenerationMetadata:
     `None` when the backend response does not carry an id.
     """
 
+    logits: tuple[torch.Tensor, ...] | None = None
+    """Per-token processed logit scores from the backend (post-LogitsProcessor).
+
+    Populated when `ModelOption.LOGITS=True` and the backend supports it.
+    These are logits after the LogitsProcessor chain (temperature, top-k/top-p,
+    repetition penalty, etc.). For the HuggingFace backend this is a tuple of
+    1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
+    requested, if the backend does not support logits, or when
+    `ModelOption.STREAM=True`.
+    """
+
+    raw_logits: tuple[torch.Tensor, ...] | None = None
+    """Per-token raw LM-head logits from the backend (pre-LogitsProcessor).
+
+    Populated when `ModelOption.RAW_LOGITS=True` and the backend supports it.
+    These are the unprocessed logits straight from the LM head, before any
+    LogitsProcessor transforms. For the HuggingFace backend this is a tuple of
+    1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
+    requested, if the backend does not support raw logits, or when
+    `ModelOption.STREAM=True`.
+    """
+
+
+@dataclass
+class RawProviderResponse:
+    """Backend-native response payload from the provider's SDK.
+
+    Reading these fields couples your code to a specific provider's response
+    shape. For portable access prefer `mot.value`, `mot.parsed_repr`,
+    `mot.tool_calls`, or `mot.generation`.
+
+    Args:
+        provider: Name of the provider that produced `response`; the same value
+            as `mot.generation.provider`. Read it to know how to interpret
+            `response`.
+        response: Full SDK response object. Shape depends on `provider`.
+        streamed_chunks: Per-chunk SDK objects from streaming responses.
+            `None` for non-streaming requests.
+    """
+
+    provider: str | None = None
+    response: Any | None = None
+    streamed_chunks: list[Any] | None = None
+
 
 class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
@@ -394,9 +444,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
-        self._thinking: str | None = None
+        self.thinking: str | None = None
         self.generation: GenerationMetadata = GenerationMetadata()
         """Backend execution metadata populated during generation."""
+
+        self.raw: RawProviderResponse = RawProviderResponse()
+        """Backend-native provider response populated during generation."""
 
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
@@ -416,7 +469,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             None  # Currently only used by hf.
         )
         # Optional cooperative-cancel hook called before asyncio task cancellation.
-        # Backends that run generation in a thread (e.g. HuggingFace via
+        # Backends that run generation in a thread (e.g. Hugging Face via
         # asyncio.to_thread) set this to a non-blocking callable (e.g.
         # threading.Event.set) so the thread receives a stop signal before the
         # task wrapper is cancelled. Must be non-blocking; exceptions are logged
@@ -594,8 +647,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._meta = other._meta
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
-        self._thinking = other._thinking
+        self.thinking = other.thinking
         self.generation = other.generation
+        self.raw = other.raw
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
         self._error = other._error
@@ -829,12 +883,13 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # _cancel_hook is not forwarded: a copied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         copied._cancel_hook = None
-        copied._thinking = self._thinking
+        copied.thinking = self.thinking
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
         copied.generation = copy(self.generation)
+        copied.raw = copy(self.raw)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -862,7 +917,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
         # and must not share the original's backend thread signal.
         deepcopied._cancel_hook = None
-        deepcopied._thinking = self._thinking
+        deepcopied.thinking = self.thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
             self._context
@@ -870,6 +925,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._generate_log = copy(self._generate_log)
         deepcopied._model_options = copy(self._model_options)
         deepcopied.generation = deepcopy(self.generation)
+        deepcopied.raw = deepcopy(self.raw)
         return deepcopied
 
 
@@ -931,7 +987,12 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @property
     def value(self) -> str:
-        """Gets the value of the block."""
+        """The raw string value produced by the model.
+
+        When `format=` was passed to the generating call, this is a JSON
+        string matching the declared schema — not a parsed model instance.
+        Use `MyModel.model_validate_json(str(result))` to get a typed instance.
+        """
         return self._underlying_value  # type: ignore
 
     @value.setter
@@ -1027,6 +1088,19 @@ class Context(abc.ABC):
             ContextT: A freshly initialised root context with no data or history.
         """
         return cls()
+
+    def new_instance(self) -> Context:
+        """Return a new empty root context, preserving any subclass configuration.
+
+        The base implementation calls `reset_to_new()`, which returns a bare
+        instance with no history and no config.  Subclasses that carry
+        configuration (e.g. `ChatContext` with `model_id` and `window_size`)
+        should override this to propagate their config into the fresh instance.
+
+        Returns:
+            Context: A freshly initialised root context of the same type.
+        """
+        return self.reset_to_new()
 
     # Internal functions below this line.
 

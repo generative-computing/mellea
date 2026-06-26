@@ -195,6 +195,8 @@ def greet(name: str) -> str:
     """
 ````
 
+Code references in docstrings (parameter names, variables, types, literals) use a single backtick (\`), like ``` `variable` ```— not double backticks (``` ``variable`` ```). Mellea uses Markdown-style docstrings, so a single backtick is the correct delimiter for inline code.
+
 #### Class and `__init__` docstrings
 
 Place `Args:` on the **class docstring only**. The `__init__` docstring should be a
@@ -436,6 +438,49 @@ as it can corrupt state.
 7. **Update documentation** as needed
 8. **Push to your fork** and create a pull request to the main repository
 9. **Follow the automated PR workflow** instructions
+
+### Review Assignment
+
+When a PR is opened, a subset of the relevant CODEOWNERS are requested for review at random. A PR becomes mergeable once CI passes and it has at least one approving review from a relevant CODEOWNER.
+
+Being one of several requested reviewers does not obligate you to review every PR; one approval satisfies the merge requirement. Review when the change touches an area you maintain or when an existing approval lacks the context you need to judge it. When a PR falls in an area another maintainer owns more than you, request them as a reviewer or defer to them.
+
+### Review States
+
+When submitting a PR review, pick one of GitHub's three states. Using them consistently keeps the merge signal meaningful: an `APPROVE` should mean the reviewer is willing to support the change, and a `REQUEST CHANGES` should mean something is actually blocking.
+
+| State | Use when |
+|-------|----------|
+| `APPROVE` | You'd be fine if this merged as-is. |
+| `REQUEST CHANGES` | This PR shouldn't merge in its current form. |
+| `COMMENT` | Anything else, or a follow-up that doesn't change the prior status. |
+
+**`APPROVE`** — the reviewer is willing to support the change.
+- The PR is ready to merge as-is. Any nits or suggestions are non-blocking; the author may address or skip them with no harm. If something needs a follow-up so it isn't forgotten, that belongs under `REQUEST CHANGES` instead.
+- The standard open-source "LGTM" signal: the reviewer stands behind the change and shares responsibility for maintaining that area going forward.
+
+**`REQUEST CHANGES`** — the PR should not merge in its current form. Use when:
+- There is an actual blocking or breaking issue (correctness, regression, missing tests, etc.).
+- The reviewer needs to validate a concrete concern (a suspected regression, an incomplete change) before the PR merges, and is withholding approval until the next round. Wanting another pass without a specific concern isn't on its own a reason to block; coordinate with the author by comment instead.
+- Important follow-up issues have not yet been opened, and the reviewer doesn't want them forgotten. The resolution is to file the issues, not to change the PR; once they're filed the reviewer re-approves to clear the block.
+
+**`COMMENT`** — for everything else. Use when:
+- Posting a follow-up review that shouldn't change the PR's status from a prior `APPROVE` or `REQUEST CHANGES` (e.g., re-reviewing after a push when nothing material changed).
+- The review falls between `APPROVE` and `REQUEST CHANGES` and the reviewer doesn't want to block.
+- The reviewer wants to defer the final call to other reviewers.
+- The review is purely informational and the reviewer isn't gating on the PR at all.
+
+### Merging
+
+Merging is a maintainer action, performed by either the author or a reviewer; "merge when ready" only schedules it once requirements pass. Whoever merges confirms the PR is actually ready, not just that the queue requirements are green. CI passing and the minimum approval make a PR *mergeable*, but a concern raised in discussion that never became an explicit `REQUEST CHANGES` should still be resolved first.
+
+The `do-not-merge/hold` label blocks merging while it is applied, enforced by CI independent of review state. It is a separate mechanism from a `REQUEST CHANGES` review and is removed once the blocking condition clears.
+
+### Review comments
+
+For small nits on a `COMMENT` or `APPROVE` review, prefer a GitHub suggestion block — it lets the author apply the change in one click and keeps non-blocking feedback from adding review-cycle friction.
+
+Resolve a review conversation once its specific point is handled; prefer the reviewer who raised it to resolve it, so an unresolved thread reliably means "still open."
 
 ## Testing
 

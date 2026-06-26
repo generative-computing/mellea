@@ -74,7 +74,7 @@ def policy_guardrails(
         raise ValueError(
             "Expected Guardian result to have label xor score, but found neither."
         )
-    return result_json["label"] if has_label else result_json["score"]
+    return cast(str, result_json["label"] if has_label else result_json["score"])
 
 
 SCORING_SCHEMA_BANK = {
@@ -263,7 +263,7 @@ def guardian_check(
         kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
         model_options=model_options,
     )
-    return result_json["guardian"]["score"]
+    return cast(float, cast(dict[str, object], result_json["guardian"])["score"])
 
 
 def factuality_detection(
@@ -316,7 +316,7 @@ def factuality_detection(
     result_json = call_intrinsic(
         "factuality-detection", context, backend, model_options=model_options
     )
-    return result_json["score"]
+    return cast(str, result_json["score"])
 
 
 def factuality_correction(
@@ -368,7 +368,7 @@ def factuality_correction(
     result_json = call_intrinsic(
         "factuality-correction", context, backend, model_options=model_options
     )
-    return result_json["correction"]
+    return cast(str, result_json["correction"])
 
 
 def _inject_documents(

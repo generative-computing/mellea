@@ -17,6 +17,7 @@ except ImportError as e:
         'Please install them with: pip install "mellea[litellm]"'
     ) from e
 
+
 from ..backends import model_ids
 from ..core import (
     BaseModelSubclass,
@@ -29,6 +30,7 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
+    RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
@@ -251,6 +253,16 @@ class LiteLLMBackend(FormatterBackend):
             # OpenAI compatible endpoints should accept both (and Watsonx does accept both).
             model_opts_remapping[ModelOption.MAX_NEW_TOKENS] = "max_tokens"
 
+        for opt, field in (
+            (ModelOption.LOGITS, "generation.logits"),
+            (ModelOption.RAW_LOGITS, "generation.raw_logits"),
+        ):
+            if model_options.get(opt) and opt not in self._warned_about:
+                self._warned_about.add(opt)
+                MelleaLogger.get_logger().warning(
+                    f"{opt!r} is not supported by the LiteLLM backend; {field} will be None."
+                )
+
         backend_specific = ModelOption.replace_keys(model_options, model_opts_remapping)
         backend_specific = ModelOption.remove_special_keys(backend_specific)
 
@@ -262,9 +274,17 @@ class LiteLLMBackend(FormatterBackend):
         standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         unknown_keys = []  # Keys that are unknown to litellm.
         unsupported_openai_params = []  # OpenAI params that are known to litellm but not supported for this model/provider.
+        # Bedrock-specific pass-through params that LiteLLM accepts but doesn't list as supported OpenAI params.
+        known_provider_passthrough = {
+            "additional_model_request_fields",
+            "additional_model_response_field_paths",
+        }
+
         for key in backend_specific.keys():
             if key not in supported_params:
-                if key in standard_openai_subset:
+                if key in known_provider_passthrough:
+                    pass  # Expected provider-specific params; no warning needed.
+                elif key in standard_openai_subset:
                     # LiteLLM is pretty confident that this standard OpenAI parameter won't work.
                     unsupported_openai_params.append(key)
                 else:
@@ -289,8 +309,9 @@ class LiteLLMBackend(FormatterBackend):
         action: Component[C] | CBlock,
         ctx: Context,
         *,
-        _format: type[BaseModelSubclass]
-        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        _format: (
+            type[BaseModelSubclass] | None
+        ) = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[C]:
@@ -477,8 +498,8 @@ class LiteLLMBackend(FormatterBackend):
             chunk (litellm.ModelResponse | litellm.ModelResponseStream): A single
                 response object or streaming chunk from LiteLLM.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -497,16 +518,24 @@ class LiteLLMBackend(FormatterBackend):
             if thinking_chunk is None:
                 thinking_chunk = message.get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            # Store the full response (includes usage) as a dict
-            mot._meta["litellm_full_response"] = chunk.model_dump()
-            # Also store just the choice for backward compatibility
-            mot._meta["litellm_chat_response"] = chunk.choices[0].model_dump()
+            if getattr(choice, "logprobs", None) is not None:
+                mot._meta["logprobs"] = choice.logprobs
+
+            # In some cases (converse API) Bedrock returns logprobs via additionalModelResponseFields.
+            additional_fields = getattr(chunk, "model_extra", {}) or {}
+            if "additionalModelResponseFields" in additional_fields:
+                mot._meta["additionalModelResponseFields"] = additional_fields[
+                    "additionalModelResponseFields"
+                ]
+
+            # Store the full response (includes usage) as a dict.
+            mot.raw.response = chunk.model_dump()
 
         elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
             message_delta = chunk.choices[0].delta
@@ -516,21 +545,25 @@ class LiteLLMBackend(FormatterBackend):
             if thinking_chunk is None:
                 thinking_chunk = message_delta.get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            if mot._meta.get("litellm_chat_response_streamed", None) is None:
-                mot._meta["litellm_chat_response_streamed"] = []
-            mot._meta["litellm_chat_response_streamed"].append(
-                chunk.choices[0].model_dump()
-            )
+            stream_logprobs = getattr(chunk.choices[0], "logprobs", None)
+            if stream_logprobs is not None:
+                if "logprobs" not in mot._meta:
+                    mot._meta["logprobs"] = []
+                mot._meta["logprobs"].append(stream_logprobs)
 
-            # Store usage information from the chunk if available (typically in the last chunk)
+            if mot.raw.streamed_chunks is None:
+                mot.raw.streamed_chunks = []
+            mot.raw.streamed_chunks.append(chunk.choices[0].model_dump())
+
+            # Usage arrives on its own chunk (typically the last); record it now.
             if hasattr(chunk, "usage") and chunk.usage is not None:
-                mot._meta["litellm_streaming_usage"] = chunk.usage.model_dump()
+                mot.generation.usage = chunk.usage.model_dump()
 
     async def post_processing(
         self,
@@ -555,16 +588,13 @@ class LiteLLMBackend(FormatterBackend):
                 `None` if reasoning mode was not enabled.
             _format: The structured output format class used during generation, if any.
         """
-        # Reconstruct the chat_response from chunks if streamed.
-        streamed_chunks = mot._meta.get("litellm_chat_response_streamed", None)
-        if streamed_chunks is not None:
+        # Reconstruct the top-level response from chunks if streamed.
+        if mot.raw.streamed_chunks is not None:
             # Must handle ollama differently due to: https://github.com/BerriAI/litellm/issues/14579.
             # Check that we are targeting ollama with the model_id prefix litellm uses.
-            separate_tools = False
-            if "ollama" in self._model_id.split("/")[0]:
-                separate_tools = True
-            mot._meta["litellm_chat_response"] = chat_completion_delta_merge(
-                streamed_chunks, force_all_tool_calls_separate=separate_tools
+            separate_tools = "ollama" in self._model_id.split("/")[0]
+            mot.raw.response = chat_completion_delta_merge(
+                mot.raw.streamed_chunks, force_all_tool_calls_separate=separate_tools
             )
 
         assert mot._action is not None, (
@@ -577,9 +607,16 @@ class LiteLLMBackend(FormatterBackend):
         # OpenAI-like streamed responses potentially give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        tool_chunk = extract_model_tool_requests(
-            tools, mot._meta["litellm_chat_response"]
+        # Non-streaming stores a top-level response (index into choices); streaming
+        # stores the already-merged choice dict (use directly).
+        response = mot.raw.response
+        assert response is not None
+        choice_response = (
+            response["choices"][0]
+            if isinstance(response, dict) and "choices" in response
+            else response
         )
+        tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
@@ -593,7 +630,7 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.backend = f"litellm::{self.model_id!s}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
-        generate_log.model_output = mot._meta["litellm_chat_response"]
+        generate_log.model_output = response
         generate_log.extra = {
             "format": _format,
             "tools_available": tools,
@@ -602,27 +639,21 @@ class LiteLLMBackend(FormatterBackend):
         }
         generate_log.action = mot._action
         generate_log.result = mot
+
         mot._generate_log = generate_log
 
-        # Extract token usage from full response dict or streaming usage
-        full_response = mot._meta.get("litellm_full_response")
-        usage = full_response.get("usage") if isinstance(full_response, dict) else None
-
-        # For streaming responses, usage is stored separately
-        if usage is None:
-            usage = mot._meta.get("litellm_streaming_usage")
-
-        # Populate standardized usage field (LiteLLM uses OpenAI format)
-        if usage:
+        # Non-streaming carries usage on the response; streaming already set it.
+        if usage := response.get("usage"):
             mot.generation.usage = usage
 
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
         # Populate response-side metadata for telemetry
-        if isinstance(full_response, dict):
-            populate_response_metadata_openai_shape(mot, full_response)
+        if isinstance(response, dict):
+            populate_response_metadata_openai_shape(mot, response)
 
     @staticmethod
     def _extract_tools(
@@ -730,7 +761,9 @@ class LiteLLMBackend(FormatterBackend):
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {"litellm_chat_response": res.model_dump()}
+            output.raw = RawProviderResponse(
+                provider=self._provider, response=res.model_dump()
+            )
             output.generation.model = self._model_id
             output.generation.provider = self._provider
 

@@ -174,6 +174,7 @@ def test_citations(backend):
 
 
 @pytest.mark.qualitative
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_context_relevance(backend_4_0):
     """Verify that the context relevance intrinsic functions properly."""
     context, question, docs = _read_input_json("context_relevance.json")
@@ -306,6 +307,7 @@ def test_citations_resolve(backend):
 
 
 @pytest.mark.qualitative
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_context_relevance_resolve(backend_4_0):
     """Verify context relevance when question is resolved from context."""
     context, question, docs = _read_input_json("context_relevance.json")

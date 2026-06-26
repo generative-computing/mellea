@@ -98,6 +98,6 @@ uv pip install faiss-cpu sentence-transformers
 
 ## Related Documentation
 
-- See `intrinsics/` for RAG evaluation intrinsics
+- See `intrinsics/` for RAG evaluation adapter functions
 - See `mini_researcher/` for a complete RAG application
 - See `mellea/stdlib/components/intrinsic/rag.py` for RAG helpers

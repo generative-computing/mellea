@@ -10,7 +10,6 @@ import itertools
 import json
 import logging
 import os
-import re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -48,28 +47,6 @@ def import_optional(extra_name: str):
         raise
 
 
-def find_substring_in_text(substring: str, text: str) -> list[dict]:
-    """Find all substring matches in text.
-
-    Given two strings - substring and text - find and return all
-    matches of substring within text. For each match return its begin and end index.
-
-    Args:
-        substring: The string to search for.
-        text: The string to search within.
-
-    Returns:
-        List of dicts with `begin_idx` and `end_idx` for each match found.
-    """
-    span_matches = []
-
-    matches_iter = re.finditer(re.escape(substring), text)
-    for match in matches_iter:
-        span_matches.append({"begin_idx": match.start(), "end_idx": match.end()})
-
-    return span_matches
-
-
 def random_uuid() -> str:
     """Generate a random UUID string.
 
@@ -96,7 +73,7 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
 
     Returns:
         Tuple of `(model, tokenizer)` where `model` is the loaded LoRA model placed on
-        the best available device, and `tokenizer` is the corresponding HuggingFace
+        the best available device, and `tokenizer` is the corresponding Hugging Face
         tokenizer.
 
     Raises:
@@ -113,7 +90,7 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
         import transformers
     local_model_dir = local_or_remote_path
     if not os.path.exists(local_model_dir):
-        raise NotImplementedError("TODO: Talk to hugging face hub")
+        raise NotImplementedError("TODO: Talk to Hugging Face Hub")
     with open(f"{local_model_dir}/adapter_config.json", encoding="utf-8") as f:
         adapter_config = json.load(f)
     base_model_name = adapter_config["base_model_name_or_path"]
@@ -135,7 +112,7 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
 
 
 class _GuidanceLogitsProcessor:
-    """A HuggingFace logits processor that enforces an llguidance grammar."""
+    """A Hugging Face logits processor that enforces an llguidance grammar."""
 
     # Modified from VLLM v0.9.2 code base
     # https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
@@ -213,8 +190,8 @@ def chat_completion_request_to_transformers_inputs(
 
     Args:
         request: Request as parsed JSON or equivalent dataclass.
-        tokenizer: HuggingFace tokenizer.
-        model: HuggingFace model object. Used for `model.device` placement and
+        tokenizer: Hugging Face tokenizer.
+        model: Hugging Face model object. Used for `model.device` placement and
             when `constrained_decoding_prefix` is set.
         constrained_decoding_prefix: Optional generation prefix to append to the prompt.
         ll_tokenizer: Pre-built `llguidance.LLTokenizer`. Only used when the request
@@ -391,9 +368,9 @@ def generate_with_transformers(
     There are quite a few extra steps.
 
     Args:
-        tokenizer: HuggingFace tokenizer for the model, required at several stages
+        tokenizer: Hugging Face tokenizer for the model, required at several stages
             of generation.
-        model: Initialized HuggingFace model object.
+        model: Initialized Hugging Face model object.
         generate_input: Parameters to pass to the `generate()` method, usually
             produced by `chat_completion_request_to_transformers_inputs()`.
         other_input: Additional kwargs produced by
@@ -411,7 +388,7 @@ def generate_with_transformers(
     generate_input = generate_input.copy()
     del generate_input["input_tokens"]
 
-    generate_result = model.generate(inputs=input_tokens, **generate_input)  # type: ignore[operator]
+    generate_result = model.generate(input_ids=input_tokens, **generate_input)  # type: ignore[operator]
 
     # Result is a a 2D tensor of shape (num responses, prompt + max generated tokens)
     # containing tokens, plus a tuple of <max generated tokens> tensors of shape

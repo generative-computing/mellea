@@ -5,13 +5,13 @@ This example shows how to use GroundednessRequirement to validate that
 assistant responses are fully grounded by citations to retrieved documents.
 
 The validator implements a sophisticated 4-step pipeline:
-1. Citation Generation - Generate citations using the citations intrinsic
+1. Citation Generation - Generate citations using the citations adapter function
 2. Citation Necessity - Identify which spans need citations (LLM judgment)
 3. Citation Support - Assess support level for each span (LLM judgment)
 4. Groundedness Output - Declare response grounded iff all spans needing
    citations are fully supported
 
-Note: This example requires HuggingFace backend with GPU (8GB+ VRAM recommended)
+Note: This example requires Hugging Face backend with GPU (8GB+ VRAM recommended)
 and access to the ibm-granite/granite-4.0-micro model.
 """
 
@@ -29,8 +29,8 @@ async def main():
     print("GroundednessRequirement Example")
     print("=" * 70)
 
-    # Initialize HuggingFace backend
-    print("\nInitializing HuggingFace backend...")
+    # Initialize Hugging Face backend
+    print("\nInitializing Hugging Face backend...")
     backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents about Rupert Murdoch

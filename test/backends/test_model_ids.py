@@ -90,7 +90,9 @@ def test_ollama_model_names_exist(const_name: str, ollama_name: str) -> None:
     # Strip any tag so we query the base model name.
     base_name = ollama_name.split(":")[0]
     tag = ollama_name.split(":")[1] if ":" in ollama_name else "latest"
-    registry_url = f"https://registry.ollama.ai/v2/{base_name}/manifests/{tag}"
+    # Unnamespaced models (no "/" in base_name) live under the "library" namespace.
+    registry_name = base_name if "/" in base_name else f"library/{base_name}"
+    registry_url = f"https://registry.ollama.ai/v2/{registry_name}/manifests/{tag}"
     try:
         req = urllib.request.Request(registry_url, method="HEAD")
         urllib.request.urlopen(req, timeout=10)

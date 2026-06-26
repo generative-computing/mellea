@@ -35,31 +35,30 @@ def extract_finish_reason(output: Any) -> FinishReason:
         "function_call",
     }
 
-    # Try to get finish_reason from the response metadata
-    # Different backends store this in different places
-    if hasattr(output, "_meta") and output._meta:
-        # Ollama backend stores response in chat_response with done_reason field
-        # (ollama.ChatResponse object with done_reason attribute)
-        chat_response = output._meta.get("chat_response")
-        if chat_response and hasattr(chat_response, "done_reason"):
-            done_reason = chat_response.done_reason
+    # Try to get finish_reason from the backend-native response on mot.raw.
+    # Different backends store this in different places; switch on mot.raw.provider.
+    raw = getattr(output, "raw", None)
+    if raw is not None:
+        provider = raw.provider
+        response = raw.response
+
+        if provider == "ollama" and response is not None:
+            # ollama.ChatResponse object with done_reason attribute.
+            done_reason = getattr(response, "done_reason", None)
             if done_reason in valid_reasons:
                 return done_reason
 
-        # OpenAI backend stores full response dict in oai_chat_response
-        # (from chunk.model_dump() which includes choices array)
-        oai_response = output._meta.get("oai_chat_response")
-        if oai_response and isinstance(oai_response, dict):
-            choices = oai_response.get("choices", [])
+        elif provider in ("openai", "watsonx", "litellm") and isinstance(
+            response, dict
+        ):
+            # Chat path: full response dict, finish_reason nested under choices[0].
+            choices = response.get("choices", [])
             if choices and len(choices) > 0:
                 finish_reason = choices[0].get("finish_reason")
                 if finish_reason in valid_reasons:
                     return finish_reason
-
-        # LiteLLM backend stores response dict in litellm_chat_response
-        litellm_response = output._meta.get("litellm_chat_response")
-        if litellm_response and isinstance(litellm_response, dict):
-            finish_reason = litellm_response.get("finish_reason")
+            # Raw-completion path: single choice dict, finish_reason at top level.
+            finish_reason = response.get("finish_reason")
             if finish_reason in valid_reasons:
                 return finish_reason
 

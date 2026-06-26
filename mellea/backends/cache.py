@@ -3,7 +3,7 @@
 Defines the abstract `Cache` interface with `put`, `get`, and
 `current_size` methods, and provides a concrete `SimpleLRUCache` that evicts
 the least-recently-used entry when capacity is exceeded — optionally calling an
-`on_evict` callback (e.g. to free GPU memory). Used by local HuggingFace backends
+`on_evict` callback (e.g. to free GPU memory). Used by local Hugging Face backends
 to store and reuse KV cache state across requests.
 """
 
@@ -59,7 +59,7 @@ class SimpleLRUCache(Cache):
 
     Evicts the least-recently-used entry when capacity is exceeded, optionally
     invoking an `on_evict` callback (e.g. to free GPU memory). Used by local
-    HuggingFace backends to store and reuse KV cache state across requests.
+    Hugging Face backends to store and reuse KV cache state across requests.
 
     Args:
         capacity (int): Maximum number of items to store in the cache.

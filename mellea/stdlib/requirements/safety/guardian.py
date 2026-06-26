@@ -342,7 +342,7 @@ class GuardianCheck(Requirement):
                     "think": True if self._thinking else None,
                 }
             )
-        else:  # huggingface
+        else:  # Hugging Face
             # HF chat template for Guardian expects guardian_config and (optionally) documents
             guardian_cfg: dict[str, object] = {"criteria_id": effective_risk}
             if self._custom_criteria:
@@ -353,7 +353,7 @@ class GuardianCheck(Requirement):
                 {
                     "guardian_config": guardian_cfg,
                     "think": self._thinking,  # Passed to apply_chat_template
-                    # "add_generation_prompt": True,  # Guardian template requires a generation prompt. Mellea always does this for hugging face generation.
+                    # "add_generation_prompt": True,  # Guardian template requires a generation prompt. Mellea always does this for Hugging Face generation.
                     "max_new_tokens": 4000 if self._thinking else 50,
                     "stream": False,
                 }
@@ -389,7 +389,7 @@ class GuardianCheck(Requirement):
         await mot.avalue()
 
         # Prefer explicit thinking if available, else try to split from output text.
-        trace = getattr(mot, "_thinking", None)
+        trace = mot.thinking
         text = mot.value or ""
         if trace is None and "</think>" in text:
             parts = text.split("</think>")

@@ -452,6 +452,122 @@ def test_parse_batch_support_output():
     assert result[1] == "PARTIALLY_SUPPORTED"
 
 
+def test_parse_batch_support_output_nested_citations():
+    """Test parsing batch support output when model nests support_level inside citations.
+
+    granite-4.0-micro frequently mirrors the input span structure from the prompt
+    and nests support_level inside a 'citations' array instead of using flat format.
+    See issue #1291 for deep analysis.
+    """
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "text": "The Eiffel Tower is located in Paris, France.",
+            "citations": [
+                {
+                    "citation_id": 0,
+                    "source_document": 0,
+                    "support_level": "FULLY_SUPPORTED"
+                }
+            ]
+        },
+        {
+            "span_id": 1,
+            "text": "Another span.",
+            "citations": [
+                {
+                    "citation_id": 0,
+                    "source_document": 0,
+                    "support_level": "NOT_SUPPORTED"
+                }
+            ]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_citations_pessimistic_aggregate():
+    """Mixed nested citation support levels on one span aggregate pessimistically.
+
+    NOT_SUPPORTED beats PARTIALLY_SUPPORTED beats FULLY_SUPPORTED, regardless
+    of citation order in the LLM response.
+    """
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "text": "Mixed-support span.",
+            "citations": [
+                {"citation_id": 0, "source_document": 0, "support_level": "FULLY_SUPPORTED"},
+                {"citation_id": 1, "source_document": 0, "support_level": "NOT_SUPPORTED"},
+                {"citation_id": 2, "source_document": 0, "support_level": "PARTIALLY_SUPPORTED"}
+            ]
+        }
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert len(result) == 1
+    assert result[0] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_multiple_citations():
+    """Span with multiple nested citations of mixed levels -> pessimistic pick.
+
+    This exercises the pessimistic aggregation loop itself (the existing test
+    only has one citation per span, so the ordering never has to choose).
+    """
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {
+            "span_id": 0,
+            "citations": [
+                {"support_level": "FULLY_SUPPORTED"},
+                {"support_level": "NOT_SUPPORTED"}
+            ]
+        },
+        {"span_id": 1, "citations": []}
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    # NOT_SUPPORTED is pessimistically chosen over FULLY_SUPPORTED.
+    assert result[0] == "NOT_SUPPORTED"
+    # Empty citations list defaults to NOT_SUPPORTED.
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_nested_label_variants():
+    """Near-miss labels (space instead of underscore) must normalize, not downgrade."""
+    req = GroundednessRequirement()
+
+    output_text = """
+    [
+        {"span_id": 0, "citations": [{"support_level": "FULLY SUPPORTED"}]}
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 1)
+
+    assert result[0] == "FULLY_SUPPORTED"
+
+
 def test_parse_batch_support_output_with_recovery():
     """Test parsing batch support output with malformed JSON recovery."""
     req = GroundednessRequirement()

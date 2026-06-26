@@ -23,6 +23,7 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
+    RawProviderResponse,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
@@ -299,6 +300,16 @@ class OllamaModelBackend(FormatterBackend):
         Returns:
             a new dict
         """
+        for opt, field in (
+            (ModelOption.LOGITS, "generation.logits"),
+            (ModelOption.RAW_LOGITS, "generation.raw_logits"),
+        ):
+            if model_options.get(opt) and opt not in self._warned_about:
+                self._warned_about.add(opt)
+                MelleaLogger.get_logger().warning(
+                    f"{opt!r} is not supported by the Ollama backend; {field} will be None."
+                )
+
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
@@ -401,7 +412,7 @@ class OllamaModelBackend(FormatterBackend):
                 messages.extend(self.formatter.to_chat_messages([action]))
         # construct the conversation from our messages, adding a system prompt at the first message if one was provided.
         conversation: list[dict] = []
-        # We use system prompt None/empty-string semantics in a way that is consistent with huggingface and other libraries.
+        # We use system prompt None/empty-string semantics in a way that is consistent with Hugging Face and other libraries.
         # If the system prompt is None, the the default system prompt gets used.
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
@@ -444,6 +455,9 @@ class OllamaModelBackend(FormatterBackend):
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
             MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+        # Extract top-level Ollama params that must not be forwarded into `options`.
+        logprobs = model_opts.pop("logprobs", None)
+        top_logprobs = model_opts.pop("top_logprobs", None)
 
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[
@@ -456,6 +470,8 @@ class OllamaModelBackend(FormatterBackend):
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
             format=_format.model_json_schema() if _format is not None else None,  # type: ignore
+            logprobs=logprobs,
+            top_logprobs=top_logprobs,
         )  # type: ignore
 
         output = ModelOutputThunk(None)
@@ -608,9 +624,9 @@ class OllamaModelBackend(FormatterBackend):
                         "completion_tokens": n_out,
                         "total_tokens": n_in + n_out,
                     }
-                result = ModelOutputThunk(
-                    value=response.response,
-                    meta={"generate_response": response.model_dump()},
+                result = ModelOutputThunk(value=response.response)
+                result.raw = RawProviderResponse(
+                    provider=self._provider, response=response.model_dump()
                 )
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
@@ -684,9 +700,9 @@ class OllamaModelBackend(FormatterBackend):
     ):
         """Accumulate text and tool calls from a single Ollama ChatResponse chunk.
 
-        Called for each streaming or non-streaming ``ollama.ChatResponse``. Also
+        Called for each streaming or non-streaming `ollama.ChatResponse`. Also
         extracts tool call requests inline and merges the chunk into the running
-        aggregated response stored in ``mot._meta["chat_response"]``.
+        aggregated response stored in `mot.raw.response`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -694,11 +710,11 @@ class OllamaModelBackend(FormatterBackend):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name,
                 used for extracting tool call requests from the response.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         thinking_chunk = chunk.message.thinking
         if thinking_chunk is not None:
-            mot._thinking += thinking_chunk
+            mot.thinking += thinking_chunk
 
         if mot._underlying_value is None:
             mot._underlying_value = ""
@@ -751,7 +767,7 @@ class OllamaModelBackend(FormatterBackend):
         generate_log.backend = f"ollama::{self._model_id}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
-        generate_log.model_output = mot._meta["chat_response"]
+        generate_log.model_output = mot.raw.response
         generate_log.extra = {
             "format": _format,
             "thinking": mot._model_options.get(ModelOption.THINKING, None),
@@ -766,7 +782,7 @@ class OllamaModelBackend(FormatterBackend):
         mot._generate = None
 
         # Extract token counts from response
-        response = mot._meta.get("chat_response")
+        response = mot.raw.response
         prompt_tokens = (
             getattr(response, "prompt_eval_count", None) if response else None
         )
@@ -783,6 +799,7 @@ class OllamaModelBackend(FormatterBackend):
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
         # Populate response-side metadata for telemetry
         if response is not None:
@@ -798,11 +815,11 @@ def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse)
         mot: the ModelOutputThunk that the deltas are being used to populated.
         delta: the most recent ollama ChatResponse.
     """
-    if mot._meta.get("chat_response", None) is None:
-        mot._meta["chat_response"] = delta
+    if mot.raw.response is None:
+        mot.raw.response = delta
         return  # Return early, no need to merge.
 
-    merged: ollama.ChatResponse = mot._meta["chat_response"]
+    merged: ollama.ChatResponse = mot.raw.response
     if not merged.done:
         merged.done = delta.done
     if merged.done_reason is None:
