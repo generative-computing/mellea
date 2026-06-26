@@ -44,21 +44,29 @@ def _backend():
     cleanup_gpu_backend(backend_, "test_guardian")
 
 
-def _read_guardian_input(file_name: str) -> ChatContext:
-    """Read test input and convert to a ChatContext."""
+def _read_guardian_input(file_name: str) -> tuple[ChatContext, list[Document]]:
+    """Read test input and return a (ChatContext, documents) pair.
+
+    Builds the context from ``messages`` and extracts any documents stored
+    under ``extra_body.documents`` so callers can pass them via the
+    ``documents=`` keyword argument.
+    """
     with open(DATA_ROOT / "input_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
 
     context = ChatContext()
     for m in json_data["messages"]:
         context = context.add(Message(m["role"], m["content"]))
-    return context
+
+    raw_docs = (json_data.get("extra_body") or {}).get("documents") or []
+    documents = [Document(text=d["text"], doc_id=d.get("doc_id")) for d in raw_docs]
+    return context, documents
 
 
 @pytest.mark.qualitative
 def test_policy_guardrails(backend):
     """Verify that policy_guardrails checks scenaio compliance with policy."""
-    context = _read_guardian_input("policy_guardrails.json")
+    context, _ = _read_guardian_input("policy_guardrails.json")
 
     policy_text = 'hiring managers should steer away from any questions that directly seek information about protected classes—such as "how old are you," "where are you from," "what year did you graduate" or "what are your plans for having kids."'
 
@@ -71,7 +79,7 @@ def test_policy_guardrails(backend):
 @pytest.mark.qualitative
 def test_guardian_check_harm(backend):
     """Verify that guardian_check detects harmful prompts."""
-    context = _read_guardian_input("guardian_core.json")
+    context, _ = _read_guardian_input("guardian_core.json")
 
     # First call triggers adapter loading
     result = guardian.guardian_check(
@@ -165,18 +173,18 @@ def test_guardian_check_function_call(backend):
 @pytest.mark.qualitative
 def test_factuality_detection(backend):
     """Verify that the factuality detection intrinsic functions properly."""
-    context = _read_guardian_input("factuality_detection.json")
+    context, documents = _read_guardian_input("factuality_detection.json")
 
-    result = guardian.factuality_detection(context, backend)
+    result = guardian.factuality_detection(context, backend, documents=documents)
     assert result == "yes" or result == "no"
 
 
 @pytest.mark.qualitative
 def test_factuality_correction(backend):
     """Verify that the factuality correction intrinsic functions properly."""
-    context = _read_guardian_input("factuality_correction.json")
+    context, documents = _read_guardian_input("factuality_correction.json")
 
-    result = guardian.factuality_correction(context, backend)
+    result = guardian.factuality_correction(context, backend, documents=documents)
     assert isinstance(result, str)
 
 

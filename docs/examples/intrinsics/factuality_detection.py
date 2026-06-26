@@ -35,5 +35,9 @@ ctx = (
     .add(Message("assistant", response_text))
 )
 
+# string "yes" or "no"
 result = guardian.factuality_detection(ctx, backend)
-print(f"Result of factuality detection: {result}")  # string "yes" or "no"
+# Alternatively, instead of attaching the document to the context above, pass it
+# explicitly via documents= (replaces any docs on the last assistant turn):
+#   result = guardian.factuality_detection(ctx, backend, documents=[document])
+print(f"Result of factuality detection: {result}")
