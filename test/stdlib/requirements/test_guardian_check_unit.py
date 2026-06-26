@@ -22,8 +22,10 @@ async def test_guardian_validate_uses_thinking_trace_in_reason() -> None:
     with pytest.warns(DeprecationWarning, match="GuardianCheck is deprecated"):
         req = GuardianCheck(risk="harm", backend=backend, backend_type="ollama")
 
-    ctx = ChatContext().add(Message("user", "Is this safe?")).add(
-        Message("assistant", "Yes.")
+    ctx = (
+        ChatContext()
+        .add(Message("user", "Is this safe?"))
+        .add(Message("assistant", "Yes."))
     )
     result = await req.validate(backend, ctx)
 
