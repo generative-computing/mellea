@@ -68,7 +68,8 @@ def _score_code_block(code: str) -> int:
 def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
     """Extract Python code from a tool call's arguments using heuristic field lookup.
 
-    Only attempts extraction from tools with "python" in their name (case-insensitive).
+    Matches tools with "python" in their name, including: standalone "python", "python_tool",
+    or "python" paired with execution keywords (executor, interpreter, runner).
     This conservative approach avoids extracting unrelated data from arbitrary tools.
 
     Tries common code field names in order: 'code', 'script', 'command', 'source'.
@@ -79,13 +80,43 @@ def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
 
     Returns:
         str | None: Extracted code string, or None if not found, not a string, or tool
-            name doesn't suggest it handles Python.
+            name doesn't suggest it handles Python code execution.
     """
     # Only attempt extraction from tools that explicitly handle Python
-    if not hasattr(tool_call, "name") or "python" not in tool_call.name.lower():
+    if not hasattr(tool_call, "name"):
+        logger.debug("Tool call missing 'name' attribute, skipping extraction")
         return None
 
-    if not hasattr(tool_call, "args") or tool_call.args is None:
+    tool_name_lower = tool_call.name.lower()
+    if tool_name_lower == "python":
+        # Standalone "python" tool is a strong match
+        pass
+    elif tool_name_lower == "python_tool":
+        # "python_tool" from mellea is a strong match
+        pass
+    elif "python" in tool_name_lower and any(
+        keyword in tool_name_lower for keyword in ["executor", "interpreter", "runner"]
+    ):
+        # "python" paired with execution keywords is a strong match
+        pass
+    else:
+        logger.debug(
+            "Tool name '%s' does not match python execution pattern, skipping extraction",
+            tool_call.name,
+        )
+        return None
+
+    if not hasattr(tool_call, "args"):
+        logger.debug(
+            "Tool call '%s' missing 'args' attribute, skipping extraction",
+            tool_call.name,
+        )
+        return None
+
+    if tool_call.args is None:
+        logger.debug(
+            "Tool call '%s' has None args, skipping extraction", tool_call.name
+        )
         return None
 
     # Try common field names in priority order
@@ -94,8 +125,23 @@ def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
         if field in tool_call.args:
             value = tool_call.args[field]
             if isinstance(value, str) and value.strip():
+                logger.debug(
+                    "Extracted code from tool '%s' field '%s'", tool_call.name, field
+                )
                 return value.strip()
+            if not isinstance(value, str):
+                logger.debug(
+                    "Tool '%s' field '%s' is not a string (type: %s), skipping",
+                    tool_call.name,
+                    field,
+                    type(value).__name__,
+                )
 
+    logger.debug(
+        "No code-like fields found in tool '%s' args (available fields: %s)",
+        tool_call.name,
+        list(tool_call.args.keys()),
+    )
     return None
 
 
@@ -153,7 +199,9 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
         for tool_name, tool_call in last_output.tool_calls.items():
             extracted = _extract_code_from_tool_call(tool_call)
             if extracted:
-                # Score tool_call code slightly lower than text blocks to preserve priority
+                # Score tool_call code with +5 bonus (vs +10 for text python blocks).
+                # This keeps tool_calls below text-visible code in priority, while above
+                # generic text blocks. Text blocks are preferred since they're visible to users.
                 all_blocks.append((extracted, _score_code_block(extracted) + 5))
 
     if not all_blocks:

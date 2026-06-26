@@ -25,14 +25,14 @@ def from_model(content: str) -> Context:
 class MockPythonTool(AbstractMelleaTool):
     """Mock Python tool for testing."""
 
-    name = "python_executor"
+    name: str = "python_executor"
 
     def run(self, code: str) -> str:
         """Mock execution."""
         return f"executed: {code}"
 
     @property
-    def as_json_tool(self) -> dict:
+    def as_json_tool(self) -> dict[str, str]:
         """Return tool schema."""
         return {"name": self.name, "description": "Mock Python tool"}
 
@@ -40,22 +40,31 @@ class MockPythonTool(AbstractMelleaTool):
 class MockBashTool(AbstractMelleaTool):
     """Mock Bash tool for testing."""
 
-    name = "bash_executor"
+    name: str = "bash_executor"
 
     def run(self, command: str) -> str:
         """Mock execution."""
         return f"executed: {command}"
 
     @property
-    def as_json_tool(self) -> dict:
+    def as_json_tool(self) -> dict[str, str]:
         """Return tool schema."""
         return {"name": self.name, "description": "Mock Bash tool"}
 
 
 def from_model_with_tool_calls(
-    text_content: str | None = None, tool_calls_dict: dict | None = None
+    text_content: str | None = None,
+    tool_calls_dict: dict[str, ModelToolCall] | None = None,
 ) -> Context:
-    """Helper to create context with both text and tool_calls."""
+    """Helper to create context with both text and tool_calls.
+
+    Args:
+        text_content: Optional text content for the model output.
+        tool_calls_dict: Optional dict mapping tool names to ModelToolCall objects.
+
+    Returns:
+        Context with ModelOutputThunk containing both text and tool_calls.
+    """
     ctx = ChatContext()
     ctx = ctx.add(ModelOutputThunk(value=text_content, tool_calls=tool_calls_dict))
     return ctx
@@ -693,7 +702,7 @@ class TestToolCallsCodeExtraction:
         """Test extracted code is stripped of leading/trailing whitespace."""
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
-            name="python_tool",
+            name="python_executor",
             func=python_tool,
             args={"code": "  \n  print('hello')  \n  "},
         )
@@ -819,11 +828,11 @@ class TestToolCallsCodeExtraction:
         """Test import restrictions work with code from tool_calls."""
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
-            name="python_tool",
+            name="python_executor",
             func=python_tool,
             args={"code": "import os\nimport sys\nprint(os.getcwd())"},
         )
-        tool_calls_dict = {"python_tool": tool_call}
+        tool_calls_dict = {"python_executor": tool_call}
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict
@@ -837,11 +846,11 @@ class TestToolCallsCodeExtraction:
         """Test import restrictions catch forbidden imports in tool_calls code."""
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
-            name="python_tool",
+            name="python_executor",
             func=python_tool,
             args={"code": "import subprocess\nprint('dangerous')"},
         )
-        tool_calls_dict = {"python_tool": tool_call}
+        tool_calls_dict = {"python_executor": tool_call}
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict
