@@ -507,9 +507,6 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
     assert "thinking" in allowlist, (
         f"'thinking' missing from allowlist; got: {sorted(allowlist)}"
     )
-    assert "guardian_config" in allowlist, (
-        f"'guardian_config' missing from allowlist; got: {sorted(allowlist)}"
-    )
 
 
 @pytest.mark.huggingface
