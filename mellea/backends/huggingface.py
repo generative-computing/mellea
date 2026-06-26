@@ -238,9 +238,9 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 
     Combines two sources of truth:
 
-    - The explicit named parameters of :meth:`GenerationMixin.generate`
+    - The explicit named parameters of ``GenerationMixin.generate``
       (``stopping_criteria``, ``streamer``, ``synced_gpus``, …).
-    - Every public field on :class:`GenerationConfig`
+    - Every public field on ``GenerationConfig``
       (``temperature``, ``max_new_tokens``, ``return_dict_in_generate``, …).
 
     Anything outside this set, passed as a free kwarg to ``generate``, is either
@@ -1667,11 +1667,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         When ``for_generate`` is True (the default — and the right choice for any
         kwargs about to be splatted into ``model.generate``), the result is filtered
-        through :attr:`_generate_kwargs_allowlist` so chat-template-only variables
-        (``thinking``, ``enable_thinking``, ``custom_tools`` …) cannot leak in and
-        crash ``generate`` with ``TypeError``.  Pass ``for_generate=False`` from
-        :meth:`_filter_for_chat_template` to skip that filter — that path applies
-        the chat-template allowlist instead.
+        through the module-level ``_GENERATE_KWARGS_ALLOWLIST`` so chat-template-only
+        variables (``thinking``, ``enable_thinking``, ``custom_tools`` …) cannot leak
+        in and crash ``generate`` with ``TypeError``.  Pass ``for_generate=False`` from
+        ``_filter_for_chat_template`` to skip that filter — that path applies the
+        chat-template allowlist instead.
 
         Args:
             model_options: the model_options for this call
