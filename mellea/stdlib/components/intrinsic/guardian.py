@@ -10,6 +10,7 @@ resolved kwargs through.
 """
 
 import warnings
+from typing import cast
 
 from ....backends.adapters import AdapterMixin
 from ....core.utils import MelleaLogger
@@ -50,9 +51,9 @@ def policy_guardrails(
             "Expected Guardian result to have label xor score, but found neither."
         )
     elif "label" not in result_json.keys() and "score" in result_json.keys():
-        return result_json["score"]
+        return cast(str, result_json["score"])
     elif "label" in result_json.keys() and "score" not in result_json.keys():
-        return result_json["label"]
+        return cast(str, result_json["label"])
     else:
         raise Exception(
             "Expected Guardian result to have label xor score, but found both."
@@ -240,7 +241,7 @@ def guardian_check(
         backend,
         kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
     )
-    return result_json["guardian"]["score"]
+    return cast(float, cast(dict[str, object], result_json["guardian"])["score"])
 
 
 def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
@@ -258,7 +259,7 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
         str: Factuality score as a `"yes"` / `"no"` label (`"yes"` = factually incorrect).
     """
     result_json = call_intrinsic("factuality-detection", context, backend)
-    return result_json["score"]
+    return cast(str, result_json["score"])
 
 
 def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
@@ -275,4 +276,4 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
         str: Corrected assistant response.
     """
     result_json = call_intrinsic("factuality-correction", context, backend)
-    return result_json["correction"]
+    return cast(str, result_json["correction"])
