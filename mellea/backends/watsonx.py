@@ -502,8 +502,8 @@ class WatsonxAIBackend(FormatterBackend):
             mot (ModelOutputThunk): The output thunk being populated.
             chunk (dict): A single response dict or streaming delta from the WatsonX API.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -517,7 +517,7 @@ class WatsonxAIBackend(FormatterBackend):
 
             thinking_chunk = message.get("reasoning_content", None)
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message.get("content", "")
             if content_chunk is not None:
@@ -531,7 +531,7 @@ class WatsonxAIBackend(FormatterBackend):
 
             thinking_chunk = message_delta.get("reasoning_content", None)
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message_delta.get("content", None)
             if content_chunk is not None:

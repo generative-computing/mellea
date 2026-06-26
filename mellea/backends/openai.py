@@ -1032,8 +1032,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             chunk (ChatCompletion | ChatCompletionChunk): A single response object or
                 streaming delta from the OpenAI API.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -1046,7 +1046,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if thinking_chunk is None:
                 thinking_chunk = (message.model_extra or {}).get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
@@ -1069,7 +1069,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if thinking_chunk is None:
                 thinking_chunk = (message_delta.model_extra or {}).get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:

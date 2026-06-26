@@ -710,11 +710,11 @@ class OllamaModelBackend(FormatterBackend):
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name,
                 used for extracting tool call requests from the response.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         thinking_chunk = chunk.message.thinking
         if thinking_chunk is not None:
-            mot._thinking += thinking_chunk
+            mot.thinking += thinking_chunk
 
         if mot._underlying_value is None:
             mot._underlying_value = ""

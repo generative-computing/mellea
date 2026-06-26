@@ -204,6 +204,18 @@ def test_delta_merge_thinking_concatenated():
     assert mot.raw.response.message.thinking == "step 1 step 2"
 
 
+@pytest.mark.asyncio
+async def test_processing_initializes_and_accumulates_thinking(
+    backend: OllamaModelBackend,
+):
+    """processing() initializes thinking and accumulates chunk thinking text."""
+    mot = ModelOutputThunk(value=None)
+    await backend.processing(mot, _make_delta("answer", thinking="step 1"), {})
+
+    assert mot.thinking == "step 1"
+    assert mot._underlying_value == "answer"
+
+
 # --- timeout wiring ---
 
 

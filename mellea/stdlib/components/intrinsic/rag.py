@@ -1,14 +1,202 @@
 """Adapter functions related to retrieval-augmented generation."""
 
 import collections.abc
+import json
 import warnings
+from typing import cast
 
-from ....backends.adapters import AdapterMixin
+from ....backends.adapters import (
+    Adapter,
+    AdapterMixin,
+    AdapterSchemaMismatchError,
+    Identity,
+    IOContract,
+    LocalFileBinding,
+)
+from ....core import Component
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
 from ..docs.document import _coerce_to_document, _coerce_to_documents
 from ._util import _resolve_question, _resolve_response, call_intrinsic
+
+# ---------------------------------------------------------------------------
+# IOContract implementations
+# ---------------------------------------------------------------------------
+
+
+class _DictContract(IOContract):
+    """Validate dict-shaped adapter output against a fixed set of required keys.
+
+    Args:
+        name: Adapter capability name; included in
+            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
+        required_keys: Keys that must be present in the parsed output dict.
+    """
+
+    def __init__(self, name: str, required_keys: frozenset[str]) -> None:
+        self._name = name
+        self._required_keys = required_keys
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate dict-shaped adapter output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: Parsed output dict, unchanged.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When a required key is absent.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        observed = frozenset(data.keys())
+        missing = self._required_keys - observed
+        if missing:
+            raise AdapterSchemaMismatchError(self._name, observed, self._required_keys)
+        return data
+
+
+class _ListContract(IOContract):
+    """Validate list-of-dicts adapter output and wrap it under key ``"items"``.
+
+    Each item in the list is checked for the declared required keys.  The
+    validated list is returned wrapped in ``{"items": [...]}`` so that
+    :func:`call_intrinsic` can always return a plain ``dict``.
+
+    Args:
+        name: Adapter capability name; included in
+            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
+        required_item_keys: Keys that must be present in every item dict.
+    """
+
+    def __init__(self, name: str, required_item_keys: frozenset[str]) -> None:
+        self._name = name
+        self._required_item_keys = required_item_keys
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate a list-of-dicts adapter output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: ``{"items": [list of validated dicts]}``.
+                An empty list parses to ``{"items": []}``.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON, is not a JSON array, or
+                contains a non-object element.
+            AdapterSchemaMismatchError: When any item is missing a required key.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON array, "
+                f"got {type(data).__name__}."
+            )
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Adapter '{self._name}' output array must contain only JSON "
+                    f"objects, got a {type(item).__name__} element."
+                )
+            observed = frozenset(item.keys())
+            missing = self._required_item_keys - observed
+            if missing:
+                raise AdapterSchemaMismatchError(
+                    self._name, observed, self._required_item_keys
+                )
+        return {"items": data}
+
+
+# ---------------------------------------------------------------------------
+# Module-level Adapter constants (one per helper)
+# ---------------------------------------------------------------------------
+
+_ANSWERABILITY_ADAPTER = Adapter(
+    identity=Identity("answerability", "alora", capability="answerability"),
+    io_contract=_DictContract("answerability", frozenset({"answerability"})),
+    weights=LocalFileBinding(),
+)
+
+_QUERY_REWRITE_ADAPTER = Adapter(
+    identity=Identity("query_rewrite", "alora", capability="query_rewrite"),
+    io_contract=_DictContract("query_rewrite", frozenset({"rewritten_question"})),
+    weights=LocalFileBinding(),
+)
+
+_QUERY_CLARIFY_ADAPTER = Adapter(
+    identity=Identity("query_clarification", "alora", capability="query_clarification"),
+    io_contract=_DictContract("query_clarification", frozenset({"clarification"})),
+    weights=LocalFileBinding(),
+)
+
+_CITATIONS_ADAPTER = Adapter(
+    identity=Identity("citations", "alora", capability="citations"),
+    io_contract=_ListContract(
+        "citations",
+        frozenset(
+            {
+                "response_begin",
+                "response_end",
+                "response_text",
+                "citation_doc_id",
+                "citation_begin",
+                "citation_end",
+                "citation_text",
+            }
+        ),
+    ),
+    weights=LocalFileBinding(),
+)
+
+_CONTEXT_RELEVANCE_ADAPTER = Adapter(
+    identity=Identity("context_relevance", "alora", capability="context_relevance"),
+    io_contract=_DictContract("context_relevance", frozenset({"context_relevance"})),
+    weights=LocalFileBinding(),
+)
+
+_HALLUCINATION_ADAPTER = Adapter(
+    identity=Identity(
+        "hallucination_detection", "alora", capability="hallucination_detection"
+    ),
+    io_contract=_ListContract(
+        "hallucination_detection",
+        frozenset(
+            {
+                "response_begin",
+                "response_end",
+                "response_text",
+                "faithfulness",
+                "explanation",
+            }
+        ),
+    ),
+    weights=LocalFileBinding(),
+)
+
+
+# ---------------------------------------------------------------------------
+# High-level helper functions
+# ---------------------------------------------------------------------------
 
 
 def check_answerability(
@@ -16,11 +204,17 @@ def check_answerability(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    model_options: dict | None = None,
 ) -> str:
     """Test a user's question for answerability.
 
     Adapter function that checks whether the question in the last user turn of a
     chat can be answered by a provided set of RAG documents.
+
+    Output contract — required key: ``answerability``.  Missing the key raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
+    keys in the model output do not raise (forward-compatible).
 
     Args:
         question: Question that the user has posed in response to the last turn in
@@ -32,28 +226,46 @@ def check_answerability(
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters
             for answerability checks.
+        model_options: Optional model-option overrides (e.g.
+            ``{"temperature": 0.1}``).  Merged on top of the adapter default
+            (``temperature=0.0``).
 
     Returns:
-        A string value of either "answerable" or "unanswerable"
+        A string value of either ``"answerable"`` or ``"unanswerable"``.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            ``answerability`` field.
     """
     question, context = _resolve_question(question, context, backend)
-    result_json = call_intrinsic(
+    result = call_intrinsic(
         "answerability",
         context.add(
             Message("user", question, documents=_coerce_to_documents(documents))
         ),
         backend,
+        io_contract=_ANSWERABILITY_ADAPTER.io_contract,
+        model_options=model_options,
     )
-    return result_json["answerability"]
+    return cast(str, result["answerability"])
 
 
 def rewrite_question(
-    question: str | None, context: ChatContext, backend: AdapterMixin
+    question: str | None,
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    model_options: dict | None = None,
 ) -> str:
     """Rewrite a user's question for retrieval.
 
     Adapter function that rewrites the question in the next user turn into a
     self-contained query that can be passed to the retriever.
+
+    Output contract — required key: ``rewritten_question``.  Missing the key
+    raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`;
+    extra optional keys do not raise (forward-compatible).
 
     Args:
         question: Question that the user has posed in response to the last turn in
@@ -61,15 +273,27 @@ def rewrite_question(
             user message in `context`.
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters.
+        model_options: Optional model-option overrides (e.g.
+            ``{"temperature": 0.1}``).  Merged on top of the adapter default
+            (``temperature=0.0``).
 
     Returns:
         Rewritten version of `question`.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            ``rewritten_question`` field.
     """
     question, context = _resolve_question(question, context, backend)
-    result_json = call_intrinsic(
-        "query_rewrite", context.add(Message("user", question)), backend
+    result = call_intrinsic(
+        "query_rewrite",
+        context.add(Message("user", question)),
+        backend,
+        io_contract=_QUERY_REWRITE_ADAPTER.io_contract,
+        model_options=model_options,
     )
-    return result_json["rewritten_question"]
+    return cast(str, result["rewritten_question"])
 
 
 def clarify_query(
@@ -77,12 +301,18 @@ def clarify_query(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    model_options: dict | None = None,
 ) -> str:
     """Generate clarification for an ambiguous query.
 
     Adapter function that determines if a user's question requires clarification
     based on the retrieved documents and conversation context, and generates an
     appropriate clarification question if needed.
+
+    Output contract — required key: ``clarification``.  Missing the key raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
+    keys do not raise (forward-compatible).
 
     Args:
         question: Question that the user has posed. When `None`, the question
@@ -92,21 +322,31 @@ def clarify_query(
             `Document`).
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports the adapters that implement
-            this intrinsic.
+            this adapter function.
+        model_options: Optional model-option overrides (e.g.
+            ``{"temperature": 0.1}``).  Merged on top of the adapter default
+            (``temperature=0.0``).
 
     Returns:
-        Clarification question string (e.g., "Do you mean A or B?"), or
-        the string "CLEAR" if no clarification is needed.
+        Clarification question string (e.g., ``"Do you mean A or B?"``), or
+        the string ``"CLEAR"`` if no clarification is needed.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            ``clarification`` field.
     """
     question, context = _resolve_question(question, context, backend)
-    result_json = call_intrinsic(
+    result = call_intrinsic(
         "query_clarification",
         context.add(
             Message("user", question, documents=_coerce_to_documents(documents))
         ),
         backend,
+        io_contract=_QUERY_CLARIFY_ADAPTER.io_contract,
+        model_options=model_options,
     )
-    return result_json["clarification"]
+    return cast(str, result["clarification"])
 
 
 def find_citations(
@@ -114,11 +354,19 @@ def find_citations(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    model_options: dict | None = None,
 ) -> list[dict]:
     """Find information in documents that supports an assistant response.
 
     Adapter function that finds sentences in RAG documents that support sentences
     in a potential assistant response to a user question.
+
+    Output contract — each record must contain: ``response_begin``,
+    ``response_end``, ``response_text``, ``citation_doc_id``, ``citation_begin``,
+    ``citation_end``, ``citation_text``.  A record missing any of these keys
+    raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra
+    optional keys do not raise (forward-compatible).
 
     Args:
         response: Potential assistant response. When `None`, the response is
@@ -128,20 +376,28 @@ def find_citations(
             `Document` with an auto-generated `doc_id` (`"0"`, `"1"`, ...);
             for explicit control, pass `Document` objects with `doc_id` set.
             `Document` objects without `doc_id` trigger a warning because the
-            intrinsic uses `doc_id` to identify citation sources.
+            adapter function uses `doc_id` to identify citation sources.
         context: Context of the dialog between user and assistant at the point where
             the user has just asked a question that will be answered with RAG documents.
         backend: Backend that supports one of the adapters that implements this
-            intrinsic.
+            adapter function.
+        model_options: Optional model-option overrides (e.g.
+            ``{"temperature": 0.1}``).  Merged on top of the adapter default
+            (``temperature=0.0``).
 
     Returns:
-        List of records with the following fields: `response_begin`,
-        `response_end`, `response_text`, `citation_doc_id`, `citation_begin`,
-        `citation_end`, `citation_text`. Begin and end offsets are character
-        offsets into their respective UTF-8 strings.
+        List of records with fields ``response_begin``, ``response_end``,
+        ``response_text``, ``citation_doc_id``, ``citation_begin``,
+        ``citation_end``, ``citation_text``.  Begin and end offsets are
+        character offsets into their respective UTF-8 strings.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When any record in the output is missing a
+            required field.
     """
     response, context = _resolve_response(response, context)
-    result_json = call_intrinsic(
+    result = call_intrinsic(
         "citations",
         context.add(
             Message(
@@ -151,8 +407,10 @@ def find_citations(
             )
         ),
         backend,
+        io_contract=_CITATIONS_ADAPTER.io_contract,
+        model_options=model_options,
     )
-    return result_json
+    return cast(list[dict], result["items"])
 
 
 def check_context_relevance(
@@ -160,6 +418,8 @@ def check_context_relevance(
     document: str | Document,
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    model_options: dict | None = None,
 ) -> str:
     """Test whether a document is relevant to a user's question.
 
@@ -173,6 +433,13 @@ def check_context_relevance(
     the answer to a user's question. Does not consider the context in which the
     question was asked.
 
+    This helper uses a Granite 4.0 adapter (``ibm-granite/granite-4.0-micro``) and
+    is not available for Granite 4.1 models.
+
+    Output contract — required key: ``context_relevance``.  Missing the key raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
+    keys do not raise (forward-compatible).
+
     Args:
         question: Question that the user has posed. When `None`, the question
             is extracted from the last user message in `context`.
@@ -180,13 +447,19 @@ def check_context_relevance(
             string (automatically wrapped in `Document`).
         context: The chat up to the point where the user asked a question.
         backend: Backend instance that supports the adapters that implement this
-            intrinsic.
+            adapter function.
+        model_options: Optional model-option overrides (e.g.
+            ``{"temperature": 0.1}``).  Merged on top of the adapter default
+            (``temperature=0.0``).
 
     Returns:
         Context relevance judgement as one of the following strings:
-        - "relevant"
-        - "irrelevant"
-        - "partially relevant"
+        ``"relevant"``, ``"irrelevant"``, or ``"partially relevant"``.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            ``context_relevance`` field.
     """
     warnings.warn(
         "check_context_relevance() is deprecated and will be removed in a future "
@@ -198,14 +471,15 @@ def check_context_relevance(
     )
     question, context = _resolve_question(question, context, backend)
     document = _coerce_to_document(document)
-    result_json = call_intrinsic(
+    result = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
         backend,
-        # Target document is passed as an argument
         kwargs={"document_content": document.text},
+        io_contract=_CONTEXT_RELEVANCE_ADAPTER.io_contract,
+        model_options=model_options,
     )
-    return result_json["context_relevance"]
+    return cast(str, result["context_relevance"])
 
 
 def flag_hallucinated_content(
@@ -213,12 +487,24 @@ def flag_hallucinated_content(
     documents: collections.abc.Iterable[str | Document],
     context: ChatContext,
     backend: AdapterMixin,
+    *,
+    model_options: dict | None = None,
 ) -> list[dict]:
     """Flag potentially-hallucinated sentences in an agent's response.
 
     Adapter function that checks whether the sentences in an agent's response to a
-    user question are faithful to the retrieved document snippets. Sentences that do not
-    align with the retrieved snippets are flagged as potential hallucinations.
+    user question are faithful to the retrieved document snippets. Sentences that do
+    not align with the retrieved snippets are flagged as potential hallucinations.
+
+    The ``faithfulness`` field in each record is a string label (e.g.
+    ``"faithful"``, ``"hallucinated"``); coercion to a boolean is the caller's
+    responsibility.
+
+    Output contract — each record must contain: ``response_begin``,
+    ``response_end``, ``response_text``, ``faithfulness``, ``explanation``.  A
+    record missing any of these keys raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
+    keys do not raise (forward-compatible).
 
     Args:
         response: The assistant's response to the user's question in the last turn
@@ -229,19 +515,28 @@ def flag_hallucinated_content(
             in `Document`).
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
-            intrinsic.
+            adapter function.
+        model_options: Optional model-option overrides (e.g.
+            ``{"temperature": 0.1}``).  Merged on top of the adapter default
+            (``temperature=0.0``).
 
     Returns:
-        List of records with the following fields: `response_begin`,
-        `response_end`, `response_text`, `faithfulness`,
-        `explanation`.
+        List of records with fields ``response_begin``, ``response_end``,
+        ``response_text``, ``faithfulness``, ``explanation``.
+
+    Raises:
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When any record in the output is missing a
+            required field.
     """
     response, context = _resolve_response(response, context)
-    result_json = call_intrinsic(
+    result = call_intrinsic(
         "hallucination_detection",
         context.add(
             Message("assistant", response, documents=_coerce_to_documents(documents))
         ),
         backend,
+        io_contract=_HALLUCINATION_ADAPTER.io_contract,
+        model_options=model_options,
     )
-    return result_json
+    return cast(list[dict], result["items"])

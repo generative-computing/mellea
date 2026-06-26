@@ -389,7 +389,7 @@ class GuardianCheck(Requirement):
         await mot.avalue()
 
         # Prefer explicit thinking if available, else try to split from output text.
-        trace = getattr(mot, "_thinking", None)
+        trace = mot.thinking
         text = mot.value or ""
         if trace is None and "</think>" in text:
             parts = text.split("</think>")

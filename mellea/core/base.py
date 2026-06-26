@@ -507,7 +507,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
-        self._thinking: str | None = None
+        self.thinking: str | None = None
         self.generation: GenerationMetadata = GenerationMetadata()
         """Backend execution metadata populated during generation."""
 
@@ -682,7 +682,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._meta = other._meta
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
-        self._thinking = other._thinking
+        self.thinking = other.thinking
         self.generation = other.generation
         self.raw = other.raw
         self._generate_log = other._generate_log
@@ -928,7 +928,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._computed = self._computed
         copied._cancelled = self._cancelled
         copied._error = self._error
-        copied._thinking = self._thinking
+        copied.thinking = self.thinking
         copied._generate_log = self._generate_log
         # _call is preserved; _gen is left as the fresh _GenerationState() from
         # __init__ so the copy shares no queues, tasks, or thread signals.
@@ -971,7 +971,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._computed = self._computed
         deepcopied._cancelled = self._cancelled
         deepcopied._error = self._error
-        deepcopied._thinking = self._thinking
+        deepcopied.thinking = self.thinking
         deepcopied._generate_log = copy(self._generate_log)
         # action is deep-copied; context and model_options are shallow-copied
         # (their items are immutable). _gen is left as the fresh instance from
