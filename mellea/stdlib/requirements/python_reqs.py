@@ -1,6 +1,7 @@
 """Requirements for Python code generation validation."""
 
 import dataclasses
+import re
 import warnings
 from collections.abc import Callable
 from typing import Literal
@@ -68,7 +69,7 @@ def _score_code_block(code: str) -> int:
 def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
     """Extract Python code from a tool call's arguments using heuristic field lookup.
 
-    Matches tools with "python" in their name, including: standalone "python", "python_tool",
+    Matches tools with "python" in their name, including: standalone "python"
     or "python" paired with execution keywords (executor, interpreter, runner).
     This conservative approach avoids extracting unrelated data from arbitrary tools.
 
@@ -82,17 +83,9 @@ def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
         str | None: Extracted code string, or None if not found, not a string, or tool
             name doesn't suggest it handles Python code execution.
     """
-    # Only attempt extraction from tools that explicitly handle Python
-    if not hasattr(tool_call, "name"):
-        logger.debug("Tool call missing 'name' attribute, skipping extraction")
-        return None
-
     tool_name_lower = tool_call.name.lower()
     if tool_name_lower == "python":
         # Standalone "python" tool is a strong match
-        pass
-    elif tool_name_lower == "python_tool":
-        # "python_tool" from mellea is a strong match
         pass
     elif "python" in tool_name_lower and any(
         keyword in tool_name_lower for keyword in ["executor", "interpreter", "runner"]
@@ -103,19 +96,6 @@ def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
         logger.debug(
             "Tool name '%s' does not match python execution pattern, skipping extraction",
             tool_call.name,
-        )
-        return None
-
-    if not hasattr(tool_call, "args"):
-        logger.debug(
-            "Tool call '%s' missing 'args' attribute, skipping extraction",
-            tool_call.name,
-        )
-        return None
-
-    if tool_call.args is None:
-        logger.debug(
-            "Tool call '%s' has None args, skipping extraction", tool_call.name
         )
         return None
 
@@ -173,8 +153,6 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
         content = last_output.value
 
         # Look for code blocks with python specifier
-        import re
-
         # Pattern for ```python / `python blocks (Markdown and RST)
         python_blocks = re.findall(r"```?python\s*\n(.*?)\n```?", content, re.DOTALL)
 
@@ -196,7 +174,7 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
     # Step 2: Fallback to tool_calls if no text code found
     if not all_blocks and last_output.tool_calls:
-        for tool_name, tool_call in last_output.tool_calls.items():
+        for tool_call in last_output.tool_calls.values():
             extracted = _extract_code_from_tool_call(tool_call)
             if extracted:
                 # Score tool_call code with +5 bonus (vs +10 for text python blocks).

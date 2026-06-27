@@ -648,31 +648,41 @@ class TestToolCallsCodeExtraction:
         result = _extract_code_from_tool_call(tool_call)
         assert result == "print('case-insensitive')"
 
+    def test_extract_code_python_runner_keyword(self):
+        """Test extraction from tool with 'python' + 'runner' keyword."""
+        python_tool = MockPythonTool()
+        tool_call = ModelToolCall(
+            name="python_runner", func=python_tool, args={"code": "print('runner')"}
+        )
+
+        result = _extract_code_from_tool_call(tool_call)
+        assert result == "print('runner')"
+
     def test_extract_code_tries_field_names_in_order(self):
         """Test that common field names are tried in priority order."""
         python_tool = MockPythonTool()
 
         # Test 'code' field (highest priority)
         tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"code": "print('code')"}
+            name="python", func=python_tool, args={"code": "print('code')"}
         )
         assert _extract_code_from_tool_call(tool_call) == "print('code')"
 
         # Test 'script' field (second priority)
         tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"script": "print('script')"}
+            name="python", func=python_tool, args={"script": "print('script')"}
         )
         assert _extract_code_from_tool_call(tool_call) == "print('script')"
 
         # Test 'command' field (third priority)
         tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"command": "print('command')"}
+            name="python", func=python_tool, args={"command": "print('command')"}
         )
         assert _extract_code_from_tool_call(tool_call) == "print('command')"
 
         # Test 'source' field (fourth priority)
         tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"source": "print('source')"}
+            name="python", func=python_tool, args={"source": "print('source')"}
         )
         assert _extract_code_from_tool_call(tool_call) == "print('source')"
 
@@ -680,7 +690,7 @@ class TestToolCallsCodeExtraction:
         """Test extraction returns None when no code fields are present."""
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"other_field": "value"}
+            name="python", func=python_tool, args={"other_field": "value"}
         )
 
         result = _extract_code_from_tool_call(tool_call)
@@ -690,7 +700,7 @@ class TestToolCallsCodeExtraction:
         """Test extraction ignores non-string field values."""
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
-            name="python_tool",
+            name="python",
             func=python_tool,
             args={"code": 123, "script": None, "command": ["list"]},
         )
@@ -714,13 +724,11 @@ class TestToolCallsCodeExtraction:
         """Test extraction ignores empty or whitespace-only strings."""
         python_tool = MockPythonTool()
 
-        tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"code": ""}
-        )
+        tool_call = ModelToolCall(name="python", func=python_tool, args={"code": ""})
         assert _extract_code_from_tool_call(tool_call) is None
 
         tool_call = ModelToolCall(
-            name="python_tool", func=python_tool, args={"code": "   \n  \t  "}
+            name="python", func=python_tool, args={"code": "   \n  \t  "}
         )
         assert _extract_code_from_tool_call(tool_call) is None
 
@@ -786,6 +794,88 @@ class TestToolCallsCodeExtraction:
 
         assert result.as_bool() is True
         assert "factorial" in (result.reason or "")
+
+    def test_code_priority_ordering(self):
+        """Test that code blocks are prioritized: python_text > tool_call > generic_text.
+
+        Scoring breakdown:
+        - ```python block: base_score + 10 (highest)
+        - tool_call code: base_score + 5 (middle)
+        - generic ``` block: base_score + 0 (lowest)
+
+        This test verifies the ordering by providing multiple code sources
+        with similar complexity, ensuring the highest-priority source wins.
+        """
+        python_tool = MockPythonTool()
+
+        # Generic text block (lowest priority): simple one-liner
+        # Score: min(1, 10) + 0 = 1
+        generic_code = "x = 1"
+
+        # Tool call code (middle priority): similar complexity
+        # Score: min(1, 10) + 5 = 6
+        tool_call = ModelToolCall(
+            name="python_executor", func=python_tool, args={"code": "y = 2"}
+        )
+
+        # Python text block (highest priority): similar complexity
+        # Score: min(1, 10) + 10 = 11
+        python_text = "```python\nz = 3\n```"
+
+        text_content = f"{generic_code}\n\n{python_text}"
+        ctx = from_model_with_tool_calls(
+            text_content=text_content, tool_calls_dict={"python_executor": tool_call}
+        )
+
+        req = PythonCodeExtraction()
+        result = req.validation_fn(ctx)
+
+        assert result.as_bool() is True
+        # Should extract the python_text block (z = 3), not generic_code or tool_call
+        assert "z = 3" in (result.reason or "")
+        assert "x = 1" not in (result.reason or "")
+        assert "y = 2" not in (result.reason or "")
+
+    def test_generic_text_blocks_fallback_tier(self):
+        """Test that generic text blocks (score + 0) are extracted when available.
+
+        The code extraction hierarchy is:
+        1. Text blocks marked ```python (score + 10)
+        2. Generic text blocks that look like Python (score + 0) - patterns: def/class/import/print
+        3. Tool call code (score + 5) - only used if both 1 and 2 are absent
+
+        When both generic text blocks and tool_calls are present, generic blocks
+        take priority because they're extracted as part of text processing before
+        tool_calls are considered. Tool calls are only checked if all_blocks is empty.
+        """
+        python_tool = MockPythonTool()
+
+        # Generic text block (looks like Python): contains "import" keyword
+        text_content = """
+Some explanation text
+```
+import os
+```
+More text here
+"""
+
+        # Tool call code (would score +5 if used)
+        tool_call = ModelToolCall(
+            name="python_executor", func=python_tool, args={"code": "import sys"}
+        )
+
+        ctx = from_model_with_tool_calls(
+            text_content=text_content, tool_calls_dict={"python_executor": tool_call}
+        )
+
+        req = PythonCodeExtraction()
+        result = req.validation_fn(ctx)
+
+        assert result.as_bool() is True
+        # Generic text block is extracted (it's detected as Python-like)
+        assert "import os" in (result.reason or "")
+        # Tool call is NOT used because generic text block was found
+        assert "import sys" not in (result.reason or "")
 
     def test_syntax_validation_with_tool_calls_code(self):
         """Test syntax validation works with code from tool_calls."""
