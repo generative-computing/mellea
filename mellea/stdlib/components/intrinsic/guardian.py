@@ -10,10 +10,19 @@ resolved kwargs through.
 """
 
 import collections.abc
+import json
 import warnings
 from typing import cast
 
-from ....backends.adapters import AdapterMixin
+from ....backends.adapters import (
+    Adapter,
+    AdapterMixin,
+    AdapterSchemaMismatchError,
+    Identity,
+    IOContract,
+    LocalFileBinding,
+)
+from ....core import Component
 from ....core.utils import MelleaLogger
 from ...components import Document
 from ...context import ChatContext
@@ -29,6 +38,210 @@ _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_respons
 """Mapping used by the deprecated `target_role` path of `guardian_check`."""
 
 
+# ---------------------------------------------------------------------------
+# IOContract implementations
+# ---------------------------------------------------------------------------
+
+
+class _PolicyGuardrailsContract(IOContract):
+    """Validate policy-guardrails adapter output: exactly one of `label` or `score`.
+
+    The adapter returns either `{"label": "Yes"|"No"|"Ambiguous"}` or
+    `{"score": "Yes"|"No"|"Ambiguous"}` — never both, never neither.
+    """
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate policy-guardrails output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: Parsed output dict with exactly one of `label` or `score`.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When neither or both of `label` / `score` are present.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Adapter 'policy-guardrails' output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        has_label = "label" in data
+        has_score = "score" in data
+        if not has_label and not has_score:
+            raise AdapterSchemaMismatchError(
+                "policy-guardrails",
+                frozenset(data.keys()),
+                frozenset({"label", "score"}),
+            )
+        if has_label and has_score:
+            raise AdapterSchemaMismatchError(
+                "policy-guardrails",
+                frozenset(data.keys()),
+                frozenset({"label", "score"}),
+            )
+        return data
+
+
+class _GuardianCheckContract(IOContract):
+    """Validate guardian-core adapter output: `{"guardian": {"score": <float>}}`.
+
+    Checks that the outer `guardian` key is present and that it contains
+    a nested `score` key.
+    """
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate guardian-core output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: Parsed output dict containing `{"guardian": {"score": ...}}`.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When `guardian` key is absent or `guardian.score`
+                is absent.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Adapter 'guardian-core' output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        if "guardian" not in data:
+            raise AdapterSchemaMismatchError(
+                "guardian-core", frozenset(data.keys()), frozenset({"guardian"})
+            )
+        guardian_val = data["guardian"]
+        if not isinstance(guardian_val, dict) or "score" not in guardian_val:
+            raise AdapterSchemaMismatchError(
+                "guardian-core",
+                frozenset(guardian_val.keys())
+                if isinstance(guardian_val, dict)
+                else frozenset(),
+                frozenset({"score"}),
+            )
+        return data
+
+
+class _FactualityDetectionContract(IOContract):
+    """Validate factuality-detection output: required key `score`."""
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate factuality-detection output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: Parsed output dict with `score` key.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When `score` key is absent.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Adapter 'factuality-detection' output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        if "score" not in data:
+            raise AdapterSchemaMismatchError(
+                "factuality-detection", frozenset(data.keys()), frozenset({"score"})
+            )
+        return data
+
+
+class _FactualityCorrectionContract(IOContract):
+    """Validate factuality-correction output: required key `correction`."""
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate factuality-correction output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: Parsed output dict with `correction` key.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When `correction` key is absent.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Adapter 'factuality-correction' output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        if "correction" not in data:
+            raise AdapterSchemaMismatchError(
+                "factuality-correction",
+                frozenset(data.keys()),
+                frozenset({"correction"}),
+            )
+        return data
+
+
+# ---------------------------------------------------------------------------
+# Module-level Adapter constants (one per helper)
+# ---------------------------------------------------------------------------
+
+_POLICY_GUARDRAILS_ADAPTER = Adapter(
+    identity=Identity("policy-guardrails", "lora", capability="policy_guardrails"),
+    io_contract=_PolicyGuardrailsContract(),
+    weights=LocalFileBinding(),
+)
+
+_GUARDIAN_CHECK_ADAPTER = Adapter(
+    identity=Identity("guardian-core", "lora", capability="guardian_core"),
+    io_contract=_GuardianCheckContract(),
+    weights=LocalFileBinding(),
+)
+
+_FACTUALITY_DETECTION_ADAPTER = Adapter(
+    identity=Identity(
+        "factuality-detection", "lora", capability="factuality_detection"
+    ),
+    io_contract=_FactualityDetectionContract(),
+    weights=LocalFileBinding(),
+)
+
+_FACTUALITY_CORRECTION_ADAPTER = Adapter(
+    identity=Identity(
+        "factuality-correction", "lora", capability="factuality_correction"
+    ),
+    io_contract=_FactualityCorrectionContract(),
+    weights=LocalFileBinding(),
+)
+
+
 def policy_guardrails(
     context: ChatContext,
     backend: AdapterMixin,
@@ -42,6 +255,10 @@ def policy_guardrails(
     described in the last message in `context` is compliant with the given
     `policy_text`.
 
+    Output contract — exactly one of `label` or `score` must be present.
+    Missing both or having both raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`.
+
     Args:
         context: Chat context containing the conversation to evaluate.
         backend: Backend instance that supports LoRA adapters.
@@ -50,11 +267,11 @@ def policy_guardrails(
             backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (Yes = compliant).
+        str: Compliance as a `"Yes"` / `"No"` / `"Ambiguous"` label (`"Yes"` = compliant).
 
     Raises:
-        ValueError: If the adapter returns a result with neither or both of
-            `"label"` and `"score"` fields.
+        ValueError: When the model output is not valid JSON.
+        AdapterSchemaMismatchError: When neither or both of `label` / `score` are present.
     """
     result_json = call_intrinsic(
         "policy-guardrails",
@@ -62,19 +279,12 @@ def policy_guardrails(
         backend,
         kwargs={"policy_text": policy_text},
         model_options=model_options,
+        io_contract=_POLICY_GUARDRAILS_ADAPTER.io_contract,
     )
 
-    has_label = "label" in result_json
-    has_score = "score" in result_json
-    if has_label == has_score:
-        if has_label:
-            raise ValueError(
-                "Expected Guardian result to have label xor score, but found both."
-            )
-        raise ValueError(
-            "Expected Guardian result to have label xor score, but found neither."
-        )
-    return cast(str, result_json["label"] if has_label else result_json["score"])
+    if "label" in result_json:
+        return cast(str, result_json["label"])
+    return cast(str, result_json["score"])
 
 
 SCORING_SCHEMA_BANK = {
@@ -219,6 +429,13 @@ def guardian_check(
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
+
+    Raises:
+        TypeError: When both `scoring_schema` and `target_role` are provided.
+        ValueError: When `target_role` is not `"user"` or `"assistant"`, or
+            when the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            `guardian` key or its nested `score` key.
     """
     if target_role is not None:
         warnings.warn(
@@ -262,6 +479,7 @@ def guardian_check(
         backend,
         kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
         model_options=model_options,
+        io_contract=_GUARDIAN_CHECK_ADAPTER.io_contract,
     )
     return cast(float, cast(dict[str, object], result_json["guardian"])["score"])
 
@@ -291,6 +509,10 @@ def factuality_detection(
     last assistant turn; documents on other messages in `context` are
     not affected.
 
+    Output contract — required key: `score`.  Missing the key raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra
+    optional keys do not raise (forward-compatible).
+
     Args:
         context: Chat context ending with a user question and an assistant
             answer.
@@ -303,18 +525,23 @@ def factuality_detection(
             backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        Factuality label: `"yes"` if the response is factually incorrect,
-        `"no"` if it is correct.
+        str: Factuality score as a `"yes"` / `"no"` label (`"yes"` = factually incorrect).
 
     Raises:
         ValueError: If `documents` is provided but the last assistant response
             cannot be extracted (empty context, non-assistant last turn, or
-            uncomputed response).
+            uncomputed response). Also raised when the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            `score` field.
     """
     if documents is not None:
         context = _inject_documents(context, documents)
     result_json = call_intrinsic(
-        "factuality-detection", context, backend, model_options=model_options
+        "factuality-detection",
+        context,
+        backend,
+        model_options=model_options,
+        io_contract=_FACTUALITY_DETECTION_ADAPTER.io_contract,
     )
     return cast(str, result_json["score"])
 
@@ -344,6 +571,10 @@ def factuality_correction(
     last assistant turn; documents on other messages in `context` are
     not affected.
 
+    Output contract — required key: `correction`.  Missing the key raises
+    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra
+    optional keys do not raise (forward-compatible).
+
     Args:
         context: Chat context ending with a user question and an assistant
             answer.
@@ -356,17 +587,23 @@ def factuality_correction(
             backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        Corrected assistant response as a plain string.
+        str: Corrected assistant response.
 
     Raises:
         ValueError: If `documents` is provided but the last assistant response
             cannot be extracted (empty context, non-assistant last turn, or
-            uncomputed response).
+            uncomputed response). Also raised when the model output is not valid JSON.
+        AdapterSchemaMismatchError: When the model output is missing the required
+            `correction` field.
     """
     if documents is not None:
         context = _inject_documents(context, documents)
     result_json = call_intrinsic(
-        "factuality-correction", context, backend, model_options=model_options
+        "factuality-correction",
+        context,
+        backend,
+        model_options=model_options,
+        io_contract=_FACTUALITY_CORRECTION_ADAPTER.io_contract,
     )
     return cast(str, result_json["correction"])
 
