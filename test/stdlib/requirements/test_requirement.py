@@ -1,8 +1,9 @@
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from mellea.backends.adapters import AdapterSchemaMismatchError
 from mellea.core import ModelOutputThunk, Requirement
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import LLMaJRequirement, simple_validate
@@ -88,13 +89,61 @@ def test_requirement_check_to_bool_at_threshold():
     assert requirement_check_to_bool('{"requirement_check": {"score": 0.5}}') is False
 
 
-def test_requirement_check_to_bool_missing_key():
-    assert requirement_check_to_bool('{"other_field": 1.0}') is False
+def test_requirement_check_to_bool_raises_on_schema_mismatch():
+    """Wrong top-level key must raise, not silently return False."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"other_field": 1.0}')
+
+
+def test_pre_schema_change_output_raises():
+    """Old output shape (requirement_likelihood) must raise AdapterSchemaMismatchError."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_likelihood": 0.9}')
+
+
+def test_requirement_check_to_bool_missing_score_raises():
+    """Missing nested score key must raise AdapterSchemaMismatchError."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"other_key": 0.9}}')
+
+
+def test_requirement_check_to_bool_null_score_raises():
+    """Null score must raise AdapterSchemaMismatchError, not TypeError."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": null}}')
+
+
+def test_requirement_check_to_bool_string_score_raises():
+    """String score must raise AdapterSchemaMismatchError, not TypeError."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": "0.9"}}')
 
 
 def test_requirement_check_to_bool_invalid_json():
     with pytest.raises(json.JSONDecodeError):
         requirement_check_to_bool("not json")
+
+
+def test_requirement_check_to_bool_nan_score_raises():
+    """NaN would silently evaluate as False without the finiteness guard."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": NaN}}')
+
+
+def test_requirement_check_to_bool_inf_score_raises():
+    """Infinite score must raise, not silently pass as True."""
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": Infinity}}')
+
+
+def test_requirement_check_to_bool_score_above_range_raises():
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": 1.5}}')
+
+
+def test_requirement_check_to_bool_score_below_range_raises():
+    with pytest.raises(AdapterSchemaMismatchError):
+        requirement_check_to_bool('{"requirement_check": {"score": -0.1}}')
 
 
 # --- reqify ---
@@ -178,6 +227,28 @@ def test_alora_requirement_custom_intrinsic(mock_intrinsic_init):
         intrinsic_name="custom_check",
         intrinsic_kwargs={"requirement": "must be valid"},
     )
+
+
+@patch("mellea.stdlib.requirements.requirement.Intrinsic.__init__")
+async def test_alora_validate_propagates_schema_mismatch(mock_intrinsic_init):
+    """AdapterSchemaMismatchError from output_to_bool propagates uncaught through validate().
+
+    This documents that the LLMaJ fallback in ALoraRequirement covers only
+    generation errors, not output-parsing schema mismatches.
+    """
+    mock_intrinsic_init.return_value = None
+    req = ALoraRequirement("must satisfy requirement")
+
+    mock_thunk = MagicMock()
+    mock_thunk.__str__ = MagicMock(return_value='{"requirement_likelihood": 0.9}')
+    mock_thunk.avalue = AsyncMock(return_value=None)
+    mock_thunk.value = '{"requirement_likelihood": 0.9}'
+
+    mock_backend = MagicMock()
+    mock_backend.generate_from_context = AsyncMock(return_value=(mock_thunk, ctx))
+
+    with pytest.raises(AdapterSchemaMismatchError):
+        await req.validate(mock_backend, ctx=ctx)
 
 
 if __name__ == "__main__":

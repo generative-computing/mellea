@@ -1,9 +1,11 @@
 """Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns."""
 
 import json
+import math
 from collections.abc import Callable
 from typing import Any, overload
 
+from ...backends.adapters import AdapterSchemaMismatchError
 from ...core import (
     CBlock,
     Context,
@@ -27,54 +29,74 @@ class LLMaJRequirement(Requirement):
 
 
 def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
-    """Checks if a given output should be marked converted to `True`.
+    """Convert a ``requirement-check`` adapter output string to a boolean result.
 
-    By default, the requirement check alora outputs: `{"requirement_likelihood": 0.0}`.
-    Returns `True` if the likelihood value is > 0.5.
+    Parses the JSON output produced by the ``requirement-check`` adapter and
+    returns ``True`` when the score exceeds 0.5.
 
     Args:
-        x: ALoRA output string or CBlock containing JSON with a
-            `requirement_likelihood` field.
+        x: Adapter output string or CBlock containing JSON with the contract
+            ``{"requirement_check": {"score": <float>}}``.
 
     Returns:
-        True if the extracted likelihood exceeds 0.5, False otherwise.
+        ``True`` if the extracted score exceeds 0.5, ``False`` otherwise.
+
+    Raises:
+        json.JSONDecodeError: If ``x`` is not valid JSON.
+        AdapterSchemaMismatchError: If the parsed output does not contain the
+            expected ``requirement_check.score`` structure, or if the score is
+            not a finite number in the range 0.0-1.0.  Callers that previously
+            treated ``False`` as "requirement not met" must now catch this error
+            separately.
     """
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
 
-    likelihood = req_dict.get("requirement_check", None)
-    if not isinstance(likelihood, dict):
-        MelleaLogger.get_logger().warning(
-            f"could not get value from alora requirement output; looking for `requirement_check` in {req_dict}"
+    # Mirrors the validation in requirement_check() in core.py; Phase 2 will consolidate via IOContract.
+    req_check = req_dict.get("requirement_check", None)
+    if not isinstance(req_check, dict):
+        raise AdapterSchemaMismatchError(
+            name="requirement-check",
+            observed_keys=frozenset(req_dict.keys()),
+            expected_keys=frozenset({"requirement_check"}),
         )
-        return False
 
-    score = likelihood.get("score", None)
-    if score is None:
-        MelleaLogger.get_logger().warning(
-            f"could not get value from alora requirement output; looking for `score` in {req_dict}"
+    score = req_check.get("score", None)
+    if (
+        not isinstance(score, (int, float))
+        or isinstance(score, bool)  # bool subclasses int; exclude it explicitly
+        or not math.isfinite(score)
+        or not 0.0 <= score <= 1.0
+    ):
+        raise AdapterSchemaMismatchError(
+            name="requirement-check",
+            observed_keys=frozenset(req_check.keys()),
+            expected_keys=frozenset({"score"}),
         )
-        return False
 
-    if score > 0.5:
-        return True
-
-    return False
+    return score > 0.5
 
 
 class ALoraRequirement(Requirement, Intrinsic):
-    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on error.
+    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on generation error.
 
-    If an exception is thrown during the ALoRA execution path, `mellea` will
-    fall back to LLMaJ. That is the only case where LLMaJ will be used.
+    If the adapter is unavailable (e.g. cannot be loaded), ``mellea`` uses
+    LLMaJ for that requirement instead.  That is the only case where LLMaJ
+    will be used.
+
+    If the adapter generates output but the output **fails schema validation**
+    (``requirement_check_to_bool`` raises ``AdapterSchemaMismatchError``), the
+    exception propagates to the caller — it is not caught and does not trigger
+    the LLMaJ fallback.  This is intentional: schema drift should surface
+    loudly rather than silently return a wrong result.
 
     Args:
         description (str): Human-readable requirement description.
         intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
-            Defaults to `"requirement-check"`.
+            Defaults to ``"requirement-check"``.
 
     Attributes:
-        use_aloras (bool): Always `True`; this class always attempts to use
+        use_aloras (bool): Always ``True``; this class always attempts to use
             ALoRA adapters for validation.
     """
 

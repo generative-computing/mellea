@@ -268,13 +268,13 @@ out, _ = mfuncs.act(
     ctx,
     backend,
 )
-print(out)  # {"requirement_likelihood": 1.0}
+print(out)  # {"requirement_check": {"score": 1.0}}
 ```
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
 Hugging Face repository configuration instead of the adapter function catalog.
-Output format is task-specific — `requirement-check` returns a likelihood score.
+Output format is task-specific — `requirement-check` returns `{"requirement_check": {"score": <float>}}`.
 
 ---
 
