@@ -1,8 +1,8 @@
 """Adapter functions for core model capabilities."""
 
 import collections.abc
-from typing import cast
 import math
+from typing import cast
 
 from ....backends.adapters import AdapterMixin, AdapterSchemaMismatchError
 from ...components import Document, Message
@@ -33,7 +33,7 @@ def check_certainty(
     result_json = call_intrinsic(
         "uncertainty", context, backend, model_options=model_options
     )
-    return result_json["certainty"]
+    return cast(float, result_json["certainty"])
 
 
 def requirement_check(

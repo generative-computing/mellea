@@ -5,6 +5,7 @@ import math
 from collections.abc import Callable
 from typing import Any, overload
 
+from ...backends.adapters import AdapterSchemaMismatchError
 from ...core import (
     CBlock,
     Context,
@@ -13,7 +14,6 @@ from ...core import (
     Requirement,
     ValidationResult,
 )
-from ...backends.adapters import AdapterSchemaMismatchError
 from ..components.intrinsic import Intrinsic
 
 
@@ -30,6 +30,7 @@ class LLMaJRequirement(Requirement):
 
 def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
     """Convert a ``requirement-check`` adapter output string to a boolean result.
+
     Parses the JSON output produced by the ``requirement-check`` adapter and
     returns ``True`` when the score exceeds 0.5.
 
