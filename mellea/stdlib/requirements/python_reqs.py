@@ -177,9 +177,10 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
         for tool_call in last_output.tool_calls.values():
             extracted = _extract_code_from_tool_call(tool_call)
             if extracted:
-                # Score tool_call code with +5 bonus (vs +10 for text python blocks).
-                # This keeps tool_calls below text-visible code in priority, while above
-                # generic text blocks. Text blocks are preferred since they're visible to users.
+                # Tool_calls are a fallback: only reached when text yields no code blocks
+                # (see the `if not all_blocks` guard above). The +5 here only orders
+                # multiple tool_calls relative to each other; it never competes with text
+                # scores. Text is always preferred since it's visible to users.
                 all_blocks.append((extracted, _score_code_block(extracted) + 5))
 
     if not all_blocks:
