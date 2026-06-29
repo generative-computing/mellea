@@ -256,8 +256,7 @@ def policy_guardrails(
     `policy_text`.
 
     Output contract — exactly one of `label` or `score` must be present.
-    Missing both or having both raises
-    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`.
+    Missing both or having both raises `AdapterSchemaMismatchError`.
 
     Args:
         context: Chat context containing the conversation to evaluate.
@@ -267,7 +266,7 @@ def policy_guardrails(
             backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        str: Compliance as a `"Yes"` / `"No"` / `"Ambiguous"` label (`"Yes"` = compliant).
+        Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (`"Yes"` = compliant).
 
     Raises:
         ValueError: When the model output is not valid JSON.
@@ -510,8 +509,7 @@ def factuality_detection(
     not affected.
 
     Output contract — required key: `score`.  Missing the key raises
-    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra
-    optional keys do not raise (forward-compatible).
+    `AdapterSchemaMismatchError`; extra optional keys do not raise (forward-compatible).
 
     Args:
         context: Chat context ending with a user question and an assistant
@@ -525,7 +523,7 @@ def factuality_detection(
             backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        str: Factuality score as a `"yes"` / `"no"` label (`"yes"` = factually incorrect).
+        Factuality score: `"yes"` / `"no"` label (`"yes"` = factually incorrect).
 
     Raises:
         ValueError: If `documents` is provided but the last assistant response
@@ -572,8 +570,7 @@ def factuality_correction(
     not affected.
 
     Output contract — required key: `correction`.  Missing the key raises
-    :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra
-    optional keys do not raise (forward-compatible).
+    `AdapterSchemaMismatchError`; extra optional keys do not raise (forward-compatible).
 
     Args:
         context: Chat context ending with a user question and an assistant
@@ -587,7 +584,7 @@ def factuality_correction(
             backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        str: Corrected assistant response.
+        Corrected assistant response as a plain string.
 
     Raises:
         ValueError: If `documents` is provided but the last assistant response
