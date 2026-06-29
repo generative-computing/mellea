@@ -148,6 +148,12 @@ class Backend(abc.ABC):
 
         Returns:
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
+
+        Note:
+            The returned `ModelOutputThunk` is expected to be uncomputed and resolved through
+            `astream`, which fires the `generation_post_call` hook. An already-computed thunk
+            skips `astream`, so `generation_post_call` does not fire for that generation even
+            though `generation_pre_call` already has.
         """
         ...
 
