@@ -88,93 +88,91 @@ def test_plain_string_yes():
 
 
 # --- Binary detection for repair feedback (PR #1248) ---
-# These tests validate the binary detection logic from requirement.py:284-289
-# which is used in Requirement.validate() to replace bare "yes"/"no" responses
-# with the requirement description for more actionable repair feedback.
+# Tests for Requirement.validate() binary detection: bare "yes"/"no" responses
+# are replaced with the requirement description for more actionable repair feedback.
+# @pytest: unit
 
 
-def test_validate_reason_binary_no_uses_description():
-    """Binary 'no' should use requirement description as reason (validates production logic)."""
-    description = "The email should have a salutation"
-    judge_output = "no"
+async def _reason_for(backend, judge_value: str, description: str) -> str | None:
+    """Helper to get the reason from Requirement.validate with a mocked backend."""
+    from unittest.mock import AsyncMock, patch
 
-    reason = judge_output
-    if judge_output:
-        judge_output_str = str(judge_output).strip().lower()
-        if judge_output_str in ("yes", "no"):
-            reason = description
+    from mellea.core import ModelOutputThunk, Requirement
+    from mellea.stdlib.context import ChatContext
 
-    assert reason == description
+    req = Requirement(description)
+    ctx = ChatContext().add(ModelOutputThunk("some output"))
+    judge_thunk = ModelOutputThunk(value=judge_value)
+    val_ctx = ctx.add(judge_thunk)
+
+    with patch.object(
+        backend,
+        "generate_from_context",
+        new=AsyncMock(return_value=(judge_thunk, val_ctx)),
+    ):
+        result = await req.validate(backend, ctx)
+
+    return result.reason
 
 
-def test_validate_reason_binary_yes_uses_description():
+@pytest.fixture
+def mock_backend():
+    """Mock backend for testing Requirement.validate."""
+    from unittest.mock import MagicMock
+
+    return MagicMock()
+
+
+@pytest.mark.unit
+async def test_validate_binary_no_uses_description(mock_backend):
+    """Binary 'no' should use requirement description as reason."""
+    reason = await _reason_for(mock_backend, "no", "The email should have a salutation")
+    assert reason == "The email should have a salutation"
+
+
+@pytest.mark.unit
+async def test_validate_binary_yes_uses_description(mock_backend):
     """Binary 'yes' should use requirement description as reason."""
-    description = "The email should have a salutation"
-    judge_output = "yes"
-
-    reason = judge_output
-    if judge_output:
-        judge_output_str = str(judge_output).strip().lower()
-        if judge_output_str in ("yes", "no"):
-            reason = description
-
-    assert reason == description
+    reason = await _reason_for(
+        mock_backend, "yes", "The email should have a salutation"
+    )
+    assert reason == "The email should have a salutation"
 
 
-def test_validate_reason_detailed_answer_preserves_output():
+@pytest.mark.unit
+async def test_validate_detailed_answer_preserves_output(mock_backend):
     """Detailed judge output (not binary) should preserve the actual answer."""
-    description = "The email should have a salutation"
-    judge_output = "The email contains a proper greeting"
-
-    reason = judge_output
-    if judge_output:
-        judge_output_str = str(judge_output).strip().lower()
-        if judge_output_str in ("yes", "no"):
-            reason = description
-
-    assert reason == judge_output
+    reason = await _reason_for(
+        mock_backend,
+        "The email contains a proper greeting",
+        "The email should have a salutation",
+    )
+    assert reason == "The email contains a proper greeting"
 
 
-def test_validate_reason_binary_detection_whitespace_and_case():
+@pytest.mark.unit
+async def test_validate_binary_detection_whitespace_and_case(mock_backend):
     """Binary detection should handle whitespace and case variation."""
-    description = "Check requirement"
-    judge_output = "  NO  "
-
-    reason = judge_output
-    if judge_output:
-        judge_output_str = str(judge_output).strip().lower()
-        if judge_output_str in ("yes", "no"):
-            reason = description
-
-    assert reason == description
+    reason = await _reason_for(mock_backend, "  NO  ", "Check requirement")
+    assert reason == "Check requirement"
 
 
-def test_validate_reason_empty_string_preserves_output():
+@pytest.mark.unit
+async def test_validate_empty_string_preserves_output(mock_backend):
     """Empty string should not trigger fallback."""
-    description = "The email should have a salutation"
-    judge_output = ""
-
-    reason = judge_output
-    if judge_output:
-        judge_output_str = str(judge_output).strip().lower()
-        if judge_output_str in ("yes", "no"):
-            reason = description
-
+    reason = await _reason_for(mock_backend, "", "The email should have a salutation")
     assert reason == ""
 
 
-def test_validate_reason_yes_in_sentence_preserves_output():
+@pytest.mark.unit
+async def test_validate_yes_in_sentence_preserves_output(mock_backend):
     """'Yes' as part of sentence should preserve judge output."""
-    description = "The email should have a salutation"
-    judge_output = "Yes, the email has a salutation"
-
-    reason = judge_output
-    if judge_output:
-        judge_output_str = str(judge_output).strip().lower()
-        if judge_output_str in ("yes", "no"):
-            reason = description
-
-    assert reason == judge_output
+    reason = await _reason_for(
+        mock_backend,
+        "Yes, the email has a salutation",
+        "The email should have a salutation",
+    )
+    assert reason == "Yes, the email has a salutation"
 
 
 if __name__ == "__main__":
