@@ -93,8 +93,8 @@ def test_plain_string_yes():
 # @pytest: unit
 
 
-async def _reason_for(backend, judge_value: str, description: str) -> str | None:
-    """Helper to get the reason from Requirement.validate with a mocked backend."""
+async def _validate_result(backend, judge_value: str, description: str):
+    """Helper to get the full validation result from Requirement.validate with a mocked backend."""
     from unittest.mock import AsyncMock, patch
 
     from mellea.core import ModelOutputThunk, Requirement
@@ -112,7 +112,7 @@ async def _reason_for(backend, judge_value: str, description: str) -> str | None
     ):
         result = await req.validate(backend, ctx)
 
-    return result.reason
+    return result
 
 
 @pytest.fixture
@@ -125,54 +125,64 @@ def mock_backend():
 
 @pytest.mark.unit
 async def test_validate_binary_no_uses_description(mock_backend):
-    """Binary 'no' should use requirement description as reason."""
-    reason = await _reason_for(mock_backend, "no", "The email should have a salutation")
-    assert reason == "The email should have a salutation"
+    """Binary 'no' should fail with requirement description as reason."""
+    result = await _validate_result(
+        mock_backend, "no", "The email should have a salutation"
+    )
+    assert result.as_bool() is False
+    assert result.reason == "The email should have a salutation"
 
 
 @pytest.mark.unit
 async def test_validate_binary_yes_uses_description(mock_backend):
-    """Binary 'yes' should use requirement description as reason."""
-    reason = await _reason_for(
+    """Binary 'yes' should pass with requirement description as reason."""
+    result = await _validate_result(
         mock_backend, "yes", "The email should have a salutation"
     )
-    assert reason == "The email should have a salutation"
+    assert result.as_bool() is True
+    assert result.reason == "The email should have a salutation"
 
 
 @pytest.mark.unit
 async def test_validate_detailed_answer_preserves_output(mock_backend):
     """Detailed judge output (not binary) should preserve the actual answer."""
-    reason = await _reason_for(
+    result = await _validate_result(
         mock_backend,
-        "The email contains a proper greeting",
+        "Yes, the email contains a proper greeting",
         "The email should have a salutation",
     )
-    assert reason == "The email contains a proper greeting"
+    assert result.as_bool() is True
+    assert result.reason == "Yes, the email contains a proper greeting"
 
 
 @pytest.mark.unit
 async def test_validate_binary_detection_whitespace_and_case(mock_backend):
     """Binary detection should handle whitespace and case variation."""
-    reason = await _reason_for(mock_backend, "  NO  ", "Check requirement")
-    assert reason == "Check requirement"
+    result = await _validate_result(mock_backend, "  NO  ", "Check requirement")
+    assert result.as_bool() is False
+    assert result.reason == "Check requirement"
 
 
 @pytest.mark.unit
 async def test_validate_empty_string_preserves_output(mock_backend):
     """Empty string should not trigger fallback."""
-    reason = await _reason_for(mock_backend, "", "The email should have a salutation")
-    assert reason == ""
+    result = await _validate_result(
+        mock_backend, "", "The email should have a salutation"
+    )
+    assert result.as_bool() is False
+    assert result.reason == ""
 
 
 @pytest.mark.unit
 async def test_validate_yes_in_sentence_preserves_output(mock_backend):
     """'Yes' as part of sentence should preserve judge output."""
-    reason = await _reason_for(
+    result = await _validate_result(
         mock_backend,
         "Yes, the email has a salutation",
         "The email should have a salutation",
     )
-    assert reason == "Yes, the email has a salutation"
+    assert result.as_bool() is True
+    assert result.reason == "Yes, the email has a salutation"
 
 
 if __name__ == "__main__":
