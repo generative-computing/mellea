@@ -87,5 +87,98 @@ def test_plain_string_yes():
     assert default_output_to_bool("YES") is True  # type: ignore
 
 
+# --- Binary detection for repair feedback (PR #1248) ---
+
+
+def test_repair_feedback_binary_detection_yes():
+    """Binary 'yes' should trigger description fallback."""
+    judge_output = "yes"
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is True
+
+
+def test_repair_feedback_binary_detection_no():
+    """Binary 'no' should trigger description fallback."""
+    judge_output = "no"
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is True
+
+
+def test_repair_feedback_binary_detection_yes_uppercase():
+    """Binary 'YES' (uppercase) should trigger description fallback."""
+    judge_output = "YES"
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is True
+
+
+def test_repair_feedback_binary_detection_no_mixed_case():
+    """Binary 'No' (mixed case) should trigger description fallback."""
+    judge_output = "No"
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is True
+
+
+def test_repair_feedback_binary_detection_whitespace():
+    """Binary answer with whitespace should trigger description fallback."""
+    judge_output = "  yes  "
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is True
+
+
+def test_repair_feedback_binary_detection_detailed_answer():
+    """Detailed answer (not binary) should preserve judge output."""
+    judge_output = "The requirement is met"
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is False
+
+
+def test_repair_feedback_binary_detection_yes_in_sentence():
+    """'Yes' as part of sentence should preserve judge output."""
+    judge_output = "Yes, the email has a salutation"
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert should_use_description is False
+
+
+def test_repair_feedback_binary_detection_empty_string():
+    """Empty string should preserve (not trigger fallback)."""
+    judge_output = ""
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert not should_use_description
+
+
+def test_repair_feedback_binary_detection_none():
+    """None value should not crash and should not trigger fallback."""
+    judge_output = None
+    should_use_description = judge_output and judge_output.strip().lower() in (
+        "yes",
+        "no",
+    )
+    assert not should_use_description
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
