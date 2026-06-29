@@ -13,7 +13,14 @@ from ..backends.context_lengths import get_context_length
 from ..backends.model_ids import ModelIdentifier
 
 # Leave unused `ContextTurn` import for import ergonomics.
-from ..core import CBlock, Component, Context, ContextTurn, MelleaLogger
+from ..core import (
+    CBlock,
+    Component,
+    Context,
+    ContextTurn,
+    MelleaLogger,
+    ModelOutputThunk,
+)
 
 logger = MelleaLogger.get_logger()
 
@@ -141,11 +148,11 @@ class ChatContext(Context):
         """
         return self._make_root(self._model_id)
 
-    def add(self, c: Component | CBlock) -> ChatContext:
+    def add(self, c: Component | CBlock | ModelOutputThunk) -> ChatContext:
         """Add a new component or CBlock to the context and return the updated context.
 
         Args:
-            c (Component | CBlock): The component or content block to append.
+            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to append.
 
         Returns:
             ChatContext: A new `ChatContext` with the added entry, preserving
@@ -156,7 +163,7 @@ class ChatContext(Context):
             setattr(new, field, getattr(self, field))
         return new
 
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
         """Return the context entries to pass to the model, respecting the configured window.
 
         Window size resolution priority:
@@ -170,7 +177,7 @@ class ChatContext(Context):
         4. No limit — return the full history.
 
         Returns:
-            list[Component | CBlock] | None: Ordered list of context entries up to
+            list[Component | CBlock | ModelOutputThunk] | None: Ordered list of context entries up to
             the effective window, or `None` if the history is non-linear.
         """
         if self._window_size is not None:
@@ -186,7 +193,9 @@ class ChatContext(Context):
 
         return self.as_list(None)
 
-    def _as_list_token_budget(self, token_budget: int) -> list[Component | CBlock]:
+    def _as_list_token_budget(
+        self, token_budget: int
+    ) -> list[Component | CBlock | ModelOutputThunk]:
         """Return history items that fit within *token_budget*, dropping oldest first.
 
         Walks the linked list from newest to oldest, accumulating items until
@@ -208,7 +217,7 @@ class ChatContext(Context):
             TemplateFormatter(self._model_id) if self._model_id is not None else None
         )
         effective_budget = int(token_budget * 0.75)
-        collected: list[Component | CBlock] = []
+        collected: list[Component | CBlock | ModelOutputThunk] = []
         spent = 0
         chain_length = 0
         node: Context = self
@@ -251,11 +260,11 @@ class ChatContext(Context):
 class SimpleContext(Context):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
-    def add(self, c: Component | CBlock) -> SimpleContext:
+    def add(self, c: Component | CBlock | ModelOutputThunk) -> SimpleContext:
         """Add a new component or CBlock to the context and return the updated context.
 
         Args:
-            c (Component | CBlock): The component or content block to record.
+            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to record.
 
         Returns:
             SimpleContext: A new `SimpleContext` containing only the added entry;
@@ -263,13 +272,13 @@ class SimpleContext(Context):
         """
         return SimpleContext.from_previous(self, c)
 
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
         """Return an empty list, since `SimpleContext` does not pass history to the model.
 
         Each call to the model is treated as a stateless, independent exchange.
         No prior turns are forwarded.
 
         Returns:
-            list[Component | CBlock] | None: Always an empty list.
+            list[Component | CBlock | ModelOutputThunk] | None: Always an empty list.
         """
         return []

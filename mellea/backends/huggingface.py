@@ -424,7 +424,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -856,6 +856,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         tokens = self._tokenizer(c.value, return_tensors="pt")
                         self._cached_blocks[c.value] = self._make_dc_cache(tokens)
                         cached_block_keys.append(c.value)
+                case ModelOutputThunk():
+                    # MOTs are treated the same as non-cached CBlocks: no KV-cache entry.
+                    continue
                 case _:
                     continue
 
@@ -1128,7 +1131,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,

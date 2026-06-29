@@ -2,7 +2,9 @@
 
 Defines the building blocks that flow through every layer of the library: `CBlock`
 (a content block wrapping a string value), `Component` (an abstract composable
-generative unit), `ModelOutputThunk` (a lazily-evaluated model response),
+generative unit), `ModelOutputThunk` (a lazily-evaluated model response that is
+intentionally *not* a `CBlock` subtype — keeping them separate makes Python
+structural pattern matching order-insensitive),
 `Context` and `ContextTurn` (stateful conversation history containers),
 `TemplateRepresentation` (the structured rendering of a component for prompt
 templates), `ImageBlock`, and `ModelToolCall`. Understanding these types is
@@ -233,12 +235,13 @@ class ComponentParseError(Exception):
 class Component(Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns the set of all constituent sub-components and content blocks of this `Component`.
 
         Returns:
-            list[Component | CBlock]: A list of child `Component` or `CBlock` objects that make
-            up this component. The list may be empty for leaf components.
+            list[Component | CBlock | ModelOutputThunk]: A list of child `Component`, `CBlock`,
+            or `ModelOutputThunk` objects that make up this component. The list may be empty for
+            leaf components.
 
         Raises:
             NotImplementedError: If the concrete subclass has not overridden this method.
@@ -429,8 +432,8 @@ class _CallInfo:
             provider-assigned `GenerationMetadata.response_id`.
     """
 
-    action: Component | CBlock | None = None
-    context: list[Component | CBlock] | None = None
+    action: Component | CBlock | ModelOutputThunk | None = None
+    context: list[Component | CBlock | ModelOutputThunk] | None = None
     model_options: dict[str, Any] | None = None
     generation_id: str | None = None
 
@@ -477,8 +480,13 @@ class _GenerationState:
     start: datetime.datetime | None = None
 
 
-class ModelOutputThunk(CBlock, Generic[S]):
-    """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
+class ModelOutputThunk(Generic[S]):
+    """A `ModelOutputThunk` represents a lazily-evaluated model response. It is possible to instantiate one without the output being computed yet.
+
+    Unlike `CBlock`, `ModelOutputThunk` is not a content-block input type — it is
+    always an output.  The two classes are intentionally kept separate so that
+    Python structural pattern matching (`match`/`case`) can distinguish them
+    without order-sensitivity bugs.
 
     Args:
         value (str | None): The raw model output string, or `None` if not yet computed.
@@ -496,7 +504,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
         tool_calls: dict[str, ModelToolCall] | None = None,
     ):
         """Initialize ModelOutputThunk with an optional pre-computed value and metadata."""
-        super().__init__(value, meta)
+        if value is not None and not isinstance(value, str):
+            raise TypeError(
+                "value to a ModelOutputThunk should always be a string or None"
+            )
+        self._underlying_value = value
+        self.cache: bool = False
+        if meta is None:
+            meta = {}
+        self._meta = meta
 
         self.parsed_repr: S | None = parsed_repr
         """Will be non-`None` once computed."""
@@ -856,6 +872,11 @@ class ModelOutputThunk(CBlock, Generic[S]):
                         "value must be non-None since this thunk is computed"
                     )
                     self.parsed_repr = self.value  # type: ignore
+                case ModelOutputThunk():
+                    assert self.value is not None, (
+                        "value must be non-None since this thunk is computed"
+                    )
+                    self.parsed_repr = self.value  # type: ignore
                 case _:
                     raise ValueError(
                         "attempted to astream from a model output thunk with no originating action set"
@@ -893,6 +914,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
             if beginning_length == 0
             else self._underlying_value[beginning_length:]  # type: ignore
         )
+
+    def __str__(self) -> str:
+        """Stringifies the thunk value."""
+        return self.value if self.value else ""
 
     def __repr__(self) -> str:
         """Provides a python-parsable representation (usually).
@@ -1072,14 +1097,14 @@ class ContextTurn:
     """A turn of model input and model output.
 
     Args:
-        model_input (CBlock | Component | None): The input component or content block for this turn,
+        model_input (CBlock | Component | ModelOutputThunk | None): The input component or content block for this turn,
             or `None` for an output-only partial turn.
         output (ModelOutputThunk | None): The model's output thunk for this turn,
             or `None` for an input-only partial turn.
 
     """
 
-    model_input: CBlock | Component | None
+    model_input: CBlock | Component | ModelOutputThunk | None
     output: ModelOutputThunk | None
 
 
@@ -1095,13 +1120,13 @@ class Context(abc.ABC):
         is_root_node (bool): `True` when this context is the root (empty) node of the linked list.
         previous_node (Context | None): The context node from which this one was created,
             or `None` for the root node.
-        node_data (Component | CBlock | None): The data associated with this context node,
+        node_data (Component | CBlock | ModelOutputThunk | None): The data associated with this context node,
             or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
     """
 
     _previous: Context | None
-    _data: Component | CBlock | None
+    _data: Component | CBlock | ModelOutputThunk | None
     _is_root: bool
     _is_chat_context: bool = True
 
@@ -1115,13 +1140,15 @@ class Context(abc.ABC):
 
     @classmethod
     def from_previous(
-        cls: type[ContextT], previous: Context, data: Component | CBlock
+        cls: type[ContextT],
+        previous: Context,
+        data: Component | CBlock | ModelOutputThunk,
     ) -> ContextT:
         """Constructs a new context node linked to an existing context node.
 
         Args:
             previous (Context): The existing context to extend.
-            data (Component | CBlock): The component or content block to associate with the new node.
+            data (Component | CBlock | ModelOutputThunk): The component, content block, or model output to associate with the new node.
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
@@ -1176,7 +1203,7 @@ class Context(abc.ABC):
         return self._previous
 
     @property
-    def node_data(self) -> Component | CBlock | None:
+    def node_data(self) -> Component | CBlock | ModelOutputThunk | None:
         """Returns the data associated with this context node.
 
         Internal use: Users should not need to use this property.
@@ -1190,7 +1217,9 @@ class Context(abc.ABC):
 
     # User functions below this line.
 
-    def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
+    def as_list(
+        self, last_n_components: int | None = None
+    ) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns a list of context components sorted from earliest (first) to most recent (last).
 
         If `last_n_components` is `None`, then all components are returned.
@@ -1200,9 +1229,9 @@ class Context(abc.ABC):
                 Pass `None` to return the full history.
 
         Returns:
-            list[Component | CBlock]: Components in chronological order (oldest first).
+            list[Component | CBlock | ModelOutputThunk]: Components in chronological order (oldest first).
         """
-        context_list: list[Component | CBlock] = []
+        context_list: list[Component | CBlock | ModelOutputThunk] = []
         current_context: Context = self
 
         last_n_count = 0
@@ -1225,7 +1254,9 @@ class Context(abc.ABC):
         context_list.reverse()
         return context_list
 
-    def actions_for_available_tools(self) -> list[Component | CBlock] | None:
+    def actions_for_available_tools(
+        self,
+    ) -> list[Component | CBlock | ModelOutputThunk] | None:
         """Provides a list of actions to extract tools from for use during generation.
 
         Returns `None` if it is not possible to construct such a list. Can be used to make
@@ -1233,7 +1264,7 @@ class Context(abc.ABC):
         overridden by subclasses.
 
         Returns:
-            list[Component | CBlock] | None: The list of actions whose tools should be made
+            list[Component | CBlock | ModelOutputThunk] | None: The list of actions whose tools should be made
             available during generation, or `None` if unavailable.
         """
         return self.view_for_generation()
@@ -1281,11 +1312,11 @@ class Context(abc.ABC):
     # Abstract methods below this line.
 
     @abc.abstractmethod
-    def add(self, c: Component | CBlock) -> Context:
+    def add(self, c: Component | CBlock | ModelOutputThunk) -> Context:
         """Returns a new context obtained by appending `c` to this context.
 
         Args:
-            c (Component | CBlock): The component or content block to add to the context.
+            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to add to the context.
 
         Returns:
             Context: A new context node with `c` as its data and this context as its previous node.
@@ -1294,14 +1325,14 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
         """Provides a linear list of context components to use for generation.
 
         Returns `None` if it is not possible to construct such a list (e.g., the context
         is in an inconsistent state). Concrete subclasses define the ordering and filtering logic.
 
         Returns:
-            list[Component | CBlock] | None: An ordered list of components suitable for passing
+            list[Component | CBlock | ModelOutputThunk] | None: An ordered list of components suitable for passing
             to a backend, or `None` if generation is not currently possible.
         """
         ...
@@ -1388,7 +1419,7 @@ class GenerateLog:
         backend (str | None): Identifier of the inference backend used for this generation.
         model_options (dict[str, Any] | None): Model configuration options applied to this call.
         model_output (Any | None): The raw output returned by the backend API.
-        action (Component | CBlock | None): The component or block that triggered the generation.
+        action (Component | CBlock | ModelOutputThunk | None): The component or block that triggered the generation.
         result (ModelOutputThunk | None): The `ModelOutputThunk` produced by this generation call.
         is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
         extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
@@ -1400,7 +1431,7 @@ class GenerateLog:
     backend: str | None = None
     model_options: dict[str, Any] | None = None
     model_output: Any | None = None
-    action: Component | CBlock | None = None
+    action: Component | CBlock | ModelOutputThunk | None = None
     result: ModelOutputThunk | None = None
     is_final_result: bool | None = False
     extra: dict[str, Any] | None = None
@@ -1432,17 +1463,19 @@ class ModelToolCall:
         return self.func.run(**self.args)
 
 
-def blockify(s: str | CBlock | Component) -> CBlock | Component:
-    """Turn a raw string into a `CBlock`, leaving `CBlock` and `Component` objects unchanged.
+def blockify(
+    s: str | CBlock | Component | ModelOutputThunk,
+) -> CBlock | Component | ModelOutputThunk:
+    """Turn a raw string into a `CBlock`, leaving `CBlock`, `Component`, and `ModelOutputThunk` objects unchanged.
 
     Args:
-        s: A plain string, `CBlock`, or `Component` to normalise.
+        s: A plain string, `CBlock`, `Component`, or `ModelOutputThunk` to normalise.
 
     Returns:
         A `CBlock` wrapping `s` if it was a string; otherwise `s` unchanged.
 
     Raises:
-        Exception: If `s` is not a `str`, `CBlock`, or `Component`.
+        Exception: If `s` is not a `str`, `CBlock`, `Component`, or `ModelOutputThunk`.
     """
     # noinspection PyUnreachableCode
     match s:
@@ -1451,6 +1484,8 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
         case CBlock():
             return s
         case Component():
+            return s
+        case ModelOutputThunk():
             return s
         case _:
             raise Exception("Type Error")

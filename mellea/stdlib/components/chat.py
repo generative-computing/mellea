@@ -70,14 +70,14 @@ class Message(Component["Message"]):
         """Returns the images associated with this message."""
         return self._images
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this message, including content, documents, and images.
 
         Returns:
-            list[Component | CBlock]: A list beginning with the content block,
+            list[Component | CBlock | ModelOutputThunk]: A list beginning with the content block,
             followed by any attached documents and image blocks.
         """
-        parts: list[Component | CBlock] = [self._content_cblock]
+        parts: list[Component | CBlock | ModelOutputThunk] = [self._content_cblock]
         if self._docs is not None:
             parts.extend(self._docs)
         if self._images is not None:

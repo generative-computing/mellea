@@ -20,7 +20,13 @@ import jinja2.meta
 
 from ..backends.cache import SimpleLRUCache
 from ..backends.model_ids import ModelIdentifier
-from ..core import CBlock, Component, MelleaLogger, TemplateRepresentation
+from ..core import (
+    CBlock,
+    Component,
+    MelleaLogger,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 from .chat_formatter import ChatFormatter
 
 
@@ -70,6 +76,7 @@ class TemplateFormatter(ChatFormatter):
             str
             | Component
             | CBlock
+            | ModelOutputThunk
             | Iterable
             | Mapping
             | TemplateRepresentation
@@ -78,7 +85,7 @@ class TemplateFormatter(ChatFormatter):
     ) -> Any:
         """A recursive function that ensures an object is stringified.
 
-        For strings and CBlocks, this is just getting their value.
+        For strings, CBlocks, and ModelOutputThunks, this is just getting their value.
         For Components, this means traversing the fields of their template args dictionary and stringifying each part.
 
         Iterables and Mappings should only be encountered as parts of a component's template args. We process each item in them while maintaining the structure.
@@ -89,6 +96,9 @@ class TemplateFormatter(ChatFormatter):
         match c:
             case str():
                 return c
+
+            case ModelOutputThunk():
+                return c.value if c.value is not None else ""
 
             case CBlock():
                 assert c.value is not None
@@ -152,11 +162,11 @@ class TemplateFormatter(ChatFormatter):
 
         return template.render(stringified_template_args)
 
-    def print(self, c: Component | CBlock) -> str:
-        """Render a component or code block to a string using a Jinja2 template.
+    def print(self, c: Component | CBlock | ModelOutputThunk) -> str:
+        """Render a component, content block, or model output to a string using a Jinja2 template.
 
         Args:
-            c (Component | CBlock): The component or code block to render.
+            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to render.
 
         Returns:
             str: The rendered string representation of the component.

@@ -11,7 +11,10 @@ backend = OllamaModelBackend("granite4:latest")
 
 
 async def _fib_sample(
-    backend: Backend, ctx: Context, x: CBlock, y: CBlock
+    backend: Backend,
+    ctx: Context,
+    x: CBlock | ModelOutputThunk,
+    y: CBlock | ModelOutputThunk,
 ) -> ModelOutputThunk | None:
     sc = SimpleComponent(
         instruction="What is x+y? Respond with the number only.", x=x, y=y
@@ -30,7 +33,10 @@ async def _fib_sample(
 
 
 async def fib_sampling_version(
-    backend: Backend, ctx: Context, x: CBlock, y: CBlock
+    backend: Backend,
+    ctx: Context,
+    x: CBlock | ModelOutputThunk,
+    y: CBlock | ModelOutputThunk,
 ) -> ModelOutputThunk | None:
     for i in range(5):
         sample = await _fib_sample(backend, ctx, x, y)

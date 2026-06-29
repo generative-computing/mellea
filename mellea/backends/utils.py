@@ -68,7 +68,7 @@ def populate_response_metadata_openai_shape(
 
 
 def to_chat(
-    action: Component | CBlock,
+    action: Component | CBlock | ModelOutputThunk,
     ctx: Context,
     formatter: ChatFormatter,
     system_prompt: str | None,

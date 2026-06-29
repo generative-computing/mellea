@@ -43,7 +43,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
     _parsing_func: Callable[[str], object] | None = None
     _stringify_func: Callable[[object], str] | None = None
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent sub-components of this mified object.
 
         TODO: we need to rewrite this component to use format_for_llm and initializer correctly.
@@ -53,7 +53,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         [no-index]
 
         Returns:
-            list[Component | CBlock]: Always an empty list for mified objects.
+            list[Component | CBlock | ModelOutputThunk]: Always an empty list for mified objects.
         """
         return []
 

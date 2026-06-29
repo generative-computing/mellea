@@ -62,7 +62,7 @@ class Backend(abc.ABC):
     @final
     async def generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -130,7 +130,7 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -359,6 +359,8 @@ def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputT
     match c:
         case ModelOutputThunk() if not c.is_computed():
             return [c]
+        case ModelOutputThunk():
+            return []
         case CBlock():
             return []
         case Component():

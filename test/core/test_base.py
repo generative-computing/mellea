@@ -14,7 +14,9 @@ from mellea.core import (
     ImageUrlBlock,
     ModelOutputThunk,
     RawProviderResponse,
+    blockify,
 )
+from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
 
 
@@ -534,3 +536,74 @@ async def test_cancel_generation_propagates_outer_cancellation() -> None:
         await asyncio.wait_for(mot._gen.generate, timeout=1.0)  # type: ignore[attr-defined]
     except (TimeoutError, asyncio.CancelledError):
         pass
+
+
+def test_mot_is_not_shadowed_by_cblock_in_pattern_match():
+    """ModelOutputThunk must not be a CBlock subtype.
+
+    Before #269, ModelOutputThunk inherited CBlock, so a match block with
+    case CBlock() appearing before case ModelOutputThunk() would silently
+    consume all MOTs — the MOT branch was unreachable.
+    """
+    mot = ModelOutputThunk("hello")
+    cb = CBlock("hello")
+
+    def classify(obj):
+        match obj:
+            case CBlock():
+                return "cblock"
+            case ModelOutputThunk():
+                return "mot"
+            case _:
+                return "other"
+
+    assert classify(mot) == "mot"
+    assert classify(cb) == "cblock"
+    assert not isinstance(mot, CBlock)
+
+
+def test_generate_walk_computed_mot_returns_empty():
+    mot = ModelOutputThunk(value="already computed")
+    assert generate_walk(mot) == []
+
+
+def test_generate_walk_uncomputed_mot_returns_self():
+    mot = ModelOutputThunk(value=None)
+    assert generate_walk(mot) == [mot]
+
+
+def test_generate_walk_cblock_returns_empty():
+    assert generate_walk(CBlock("text")) == []
+
+
+def test_blockify_string_returns_cblock():
+    result = blockify("hello")
+    assert isinstance(result, CBlock)
+    assert result.value == "hello"
+
+
+def test_blockify_cblock_returns_unchanged():
+    cb = CBlock("hello")
+    assert blockify(cb) is cb
+
+
+def test_blockify_component_returns_unchanged():
+    class DummyComponent(Component[str]):
+        def parts(self):
+            return []
+
+        def _parse(self, computed):
+            return computed.value or ""
+
+    comp = DummyComponent()
+    assert blockify(comp) is comp
+
+
+def test_blockify_mot_returns_unchanged():
+    mot = ModelOutputThunk("hello")
+    assert blockify(mot) is mot
+
+
+def test_blockify_uncomputed_mot_returns_unchanged():
+    mot = ModelOutputThunk(value=None)
+    assert blockify(mot) is mot

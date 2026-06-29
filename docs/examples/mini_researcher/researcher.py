@@ -12,7 +12,7 @@ from docs.examples.mini_researcher import RAGDocument
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import CBlock, Component, Requirement, SamplingResult
+from mellea.core import CBlock, Component, ModelOutputThunk, Requirement, SamplingResult
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
@@ -129,7 +129,7 @@ def step_generate_outline(
         validation_fn=simple_validate(max_sub_sections),
     )
 
-    outline_context: dict[str, str | CBlock | Component] = {
+    outline_context: dict[str, str | CBlock | ModelOutputThunk | Component] = {
         f"Document {i + 1}": f"## Title: {d.title}, ## Source: {d.source}"
         for i, d in enumerate(context)
     }

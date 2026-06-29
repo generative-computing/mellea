@@ -70,14 +70,14 @@ class RichDocument(Component[str]):
             )
         self._doc = doc
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this document.
 
         Currently always returns an empty list. Future versions may support
         chunking the document into constituent parts.
 
         Returns:
-            list[Component | CBlock]: Always an empty list.
+            list[Component | CBlock | ModelOutputThunk]: Always an empty list.
         """
         # TODO: we could separate a DoclingDocument into chunks and then treat those chunks as parts.
         # for now, do nothing.
@@ -205,14 +205,14 @@ class TableQuery(Query):
         """Initialize TableQuery for the given table and natural-language query."""
         super().__init__(obj, query)
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this table query.
 
         Returns:
-            list[Component | CBlock]: A list containing the wrapped `Table`
+            list[Component | CBlock | ModelOutputThunk]: A list containing the wrapped `Table`
             object.
         """
-        cs: list[Component | CBlock] = [self._obj]
+        cs: list[Component | CBlock | ModelOutputThunk] = [self._obj]
         return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
@@ -252,14 +252,14 @@ class TableTransform(Transform):
         """Initialize TableTransform for the given table and transformation description."""
         super().__init__(obj, transformation)
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this table transform.
 
         Returns:
-            list[Component | CBlock]: A list containing the wrapped `Table`
+            list[Component | CBlock | ModelOutputThunk]: A list containing the wrapped `Table`
             object.
         """
-        cs: list[Component | CBlock] = [self._obj]
+        cs: list[Component | CBlock | ModelOutputThunk] = [self._obj]
         return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
@@ -324,14 +324,14 @@ class Table(MObject):
         else:
             return None
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this table component.
 
         The current implementation always returns an empty list because the
         table is rendered entirely through `format_for_llm`.
 
         Returns:
-            list[Component | CBlock]: Always an empty list.
+            list[Component | CBlock | ModelOutputThunk]: Always an empty list.
         """
         return []
 
