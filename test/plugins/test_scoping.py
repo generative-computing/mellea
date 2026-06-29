@@ -447,6 +447,90 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == count_before  # All deregistered
 
+    async def test_accepts_single_list(self) -> None:
+        """plugin_scope([a, b]) unwraps the lone list, like max()/min().
+
+        Regression test: passing a single list used to wrap it as
+        [[a, b]] and raise during registration.
+        """
+        invocations = []
+
+        @hook("session_pre_init")
+        async def hook_a(payload, ctx):
+            invocations.append("a")
+            return None
+
+        @hook("session_pre_init")
+        async def hook_b(payload, ctx):
+            invocations.append("b")
+            return None
+
+        with plugin_scope([hook_a, hook_b]):
+            await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+
+        assert "a" in invocations
+        assert "b" in invocations
+
+        count_before = len(invocations)
+        await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+        assert len(invocations) == count_before  # Both deregistered
+
+    async def test_varargs_still_works(self) -> None:
+        """plugin_scope(a, b) varargs path is unaffected by the list unwrap."""
+        invocations = []
+
+        @hook("session_pre_init")
+        async def hook_a(payload, ctx):
+            invocations.append("a")
+            return None
+
+        @hook("session_pre_init")
+        async def hook_b(payload, ctx):
+            invocations.append("b")
+            return None
+
+        with plugin_scope(hook_a, hook_b):
+            await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+
+        assert "a" in invocations
+        assert "b" in invocations
+
+        count_before = len(invocations)
+        await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+        assert len(invocations) == count_before  # Both deregistered
+
+    async def test_single_list_with_mixed_items(self) -> None:
+        """A single list mixing a hook, a class plugin, and a PluginSet works."""
+        invocations = []
+
+        @hook("session_pre_init")
+        async def standalone(payload, ctx):
+            invocations.append("standalone")
+            return None
+
+        class ClassPlugin(Plugin, name="scope-list-mixed-cls"):
+            @hook("session_pre_init")
+            async def on_pre_init(self, payload, ctx):
+                invocations.append("class")
+                return None
+
+        @hook("session_pre_init")
+        async def in_set(payload, ctx):
+            invocations.append("in_set")
+            return None
+
+        ps = PluginSet("scope-list-inner-set", [in_set])
+        with plugin_scope([standalone, ClassPlugin(), ps]):
+            await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+
+        assert "standalone" in invocations
+        assert "class" in invocations
+        assert "in_set" in invocations
+
+        count_before = len(invocations)
+        await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+        assert len(invocations) == count_before  # All deregistered
+
     async def test_async_with_fires_inside_block(self) -> None:
         invocations = []
 
