@@ -1,6 +1,7 @@
 """Requirements for Python code generation validation."""
 
 import dataclasses
+import re
 import warnings
 from collections.abc import Callable
 from typing import Literal
@@ -16,7 +17,7 @@ from mellea.stdlib.tools.interpreter import (
     make_execution_environment,
 )
 
-from ...core import Context, MelleaLogger, Requirement, ValidationResult
+from ...core import Context, MelleaLogger, ModelToolCall, Requirement, ValidationResult
 
 logger = MelleaLogger.get_logger()
 
@@ -65,37 +66,122 @@ def _score_code_block(code: str) -> int:
     return score
 
 
+def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
+    """Extract Python code from a tool call's arguments using heuristic field lookup.
+
+    Matches tools with "python" in their name, including: standalone "python"
+    or "python" paired with execution keywords (executor, interpreter, runner).
+    This conservative approach avoids extracting unrelated data from arbitrary tools.
+
+    Tries common code field names in order: 'code', 'script', 'command', 'source'.
+    Returns the first string value found, or None if no code-like field exists.
+
+    Args:
+        tool_call: The ModelToolCall to extract code from.
+
+    Returns:
+        str | None: Extracted code string, or None if not found, not a string, or tool
+            name doesn't suggest it handles Python code execution.
+    """
+    tool_name_lower = tool_call.name.lower()
+    if tool_name_lower == "python":
+        # Standalone "python" tool is a strong match
+        pass
+    elif "python" in tool_name_lower and any(
+        keyword in tool_name_lower for keyword in ["executor", "interpreter", "runner"]
+    ):
+        # "python" paired with execution keywords is a strong match
+        pass
+    else:
+        logger.debug(
+            "Tool name '%s' does not match python execution pattern, skipping extraction",
+            tool_call.name,
+        )
+        return None
+
+    # Try common field names in priority order
+    field_names = ["code", "script", "command", "source"]
+    for field in field_names:
+        if field in tool_call.args:
+            value = tool_call.args[field]
+            if isinstance(value, str) and value.strip():
+                logger.debug(
+                    "Extracted code from tool '%s' field '%s'", tool_call.name, field
+                )
+                return value.strip()
+            if not isinstance(value, str):
+                logger.debug(
+                    "Tool '%s' field '%s' is not a string (type: %s), skipping",
+                    tool_call.name,
+                    field,
+                    type(value).__name__,
+                )
+
+    logger.debug(
+        "No code-like fields found in tool '%s' args (available fields: %s)",
+        tool_call.name,
+        list(tool_call.args.keys()),
+    )
+    return None
+
+
 def _has_python_code_listing(ctx: Context) -> ValidationResult:
-    """Extract Python code from context."""
+    """Extract Python code from context, checking both text blocks and tool_calls.
+
+    First attempts to extract code from text output (markdown/rst code blocks).
+    If no text code is found, falls back to tool_calls (if present), using a
+    heuristic search for code-like argument fields in Python-capable tools.
+
+    Text-based extraction has higher priority than tool_calls to preserve
+    user-visible code in the response. Tool extraction only targets tools with
+    "python" in their name (case-insensitive).
+
+    Args:
+        ctx: Context containing model output.
+
+    Returns:
+        ValidationResult with extracted code or failure reason.
+    """
     last_output = ctx.last_output()
-    if last_output is None or last_output.value is None:
+    if last_output is None:
         return ValidationResult(result=False, reason="No output found in context")
 
-    content = last_output.value
+    all_blocks: list[tuple[str, int]] = []
 
-    # Look for code blocks with python specifier
-    import re
+    # Step 1: Try extracting from text content (highest priority)
+    if last_output.value is not None:
+        content = last_output.value
 
-    # Pattern for ``python / ```python blocks (RST and Markdown)
-    python_blocks = re.findall(r"```?python\s*\n(.*?)\n```?", content, re.DOTALL)
+        # Look for code blocks with python specifier
+        # Pattern for ```python / `python blocks (Markdown and RST)
+        python_blocks = re.findall(r"```?python\s*\n(.*?)\n```?", content, re.DOTALL)
 
-    # Pattern for generic `` / ``` blocks (RST and Markdown)
-    generic_blocks = re.findall(r"```?\s*\n(.*?)\n```?", content, re.DOTALL)
+        # Pattern for generic ``` / ` blocks (Markdown and RST)
+        generic_blocks = re.findall(r"```?\s*\n(.*?)\n```?", content, re.DOTALL)
 
-    all_blocks = []
+        # Add python blocks with high priority
+        for block in python_blocks:
+            all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
 
-    # Add python blocks with high priority
-    for block in python_blocks:
-        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
+        # Add generic blocks if they look like Python
+        for block in generic_blocks:
+            block = block.strip()
+            if block and any(
+                keyword in block
+                for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
+            ):
+                all_blocks.append((block, _score_code_block(block)))
 
-    # Add generic blocks if they look like Python
-    for block in generic_blocks:
-        block = block.strip()
-        if block and any(
-            keyword in block
-            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
-        ):
-            all_blocks.append((block, _score_code_block(block)))
+    # Step 2: Fallback to tool_calls if no text code found
+    if not all_blocks and last_output.tool_calls:
+        for tool_call in last_output.tool_calls.values():
+            extracted = _extract_code_from_tool_call(tool_call)
+            if extracted:
+                # Tool_calls are a fallback: only reached when text yields no code blocks
+                # (see the `if not all_blocks` guard above). The +5 here only orders
+                # multiple tool_calls relative to each other; it never competes with text
+                # scores. Text is always preferred since it's visible to users.
+                all_blocks.append((extracted, _score_code_block(extracted) + 5))
 
     if not all_blocks:
         return ValidationResult(result=False, reason="No Python code blocks found")
