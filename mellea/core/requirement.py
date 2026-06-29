@@ -204,7 +204,8 @@ class Requirement(Component[str]):
         validation_fn (Callable[[Context], ValidationResult] | None): If provided, this function is executed
             instead of LLM-as-a-Judge. The `bool()` of its return value defines pass/fail.
         output_to_bool (Callable[[CBlock | ModelOutputThunk | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
-            Defaults to a "yes"-detection heuristic.
+            Defaults to a "yes"-detection heuristic. May raise if the output does not match
+            the expected format — see `validate` for details.
         check_only (bool): When `True`, the requirement description is excluded from `Instruction` prompts.
 
     Attributes:
@@ -256,6 +257,14 @@ class Requirement(Component[str]):
 
         Returns:
             ValidationResult: The result of the validation, including a boolean pass/fail and optional metadata.
+
+        Raises:
+            Exception: Any exception raised by `output_to_bool` propagates to the caller.
+                Custom `output_to_bool` functions (including adapter-backed ones such as
+                `requirement_check_to_bool`) may raise on malformed output — e.g.
+                `AdapterSchemaMismatchError` when the adapter returns an unexpected schema.
+                Callers that previously treated all non-`True` outcomes as "requirement not
+                met" must now catch these exceptions separately.
         """
         if self.validation_fn is not None:
             # Python validation strategy
