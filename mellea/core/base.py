@@ -432,8 +432,8 @@ class _CallInfo:
             provider-assigned `GenerationMetadata.response_id`.
     """
 
-    action: Component | CBlock | None = None
-    context: list[Component | CBlock] | None = None
+    action: Component | CBlock | ModelOutputThunk | None = None
+    context: list[Component | CBlock | ModelOutputThunk] | None = None
     model_options: dict[str, Any] | None = None
     generation_id: str | None = None
 
