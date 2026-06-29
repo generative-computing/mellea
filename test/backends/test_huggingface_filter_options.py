@@ -479,7 +479,7 @@ def _try_load_granite_tokenizer():
 
 @pytest.mark.huggingface
 def test_granite_allowlist_includes_known_template_vars() -> None:
-    """Granite's chat template exposes 'thinking' and 'guardian_config' as Jinja vars.
+    """Granite's chat template exposes 'thinking' as a Jinja var.
 
     This test loads the real tokenizer (tokenizer files only — no GPU, no model
     weights) and asserts the computed allowlist includes the template-specific
@@ -501,9 +501,9 @@ def test_granite_allowlist_includes_known_template_vars() -> None:
 
     allowlist = b._chat_template_allowlist
 
-    # These are Granite-specific Jinja variables that must survive the filter.
-    # If either is absent the filter is over-aggressive and will break Granite
-    # think-mode and guardian calls.
+    # This is a Granite-specific Jinja variable that must survive the filter.
+    # If it is absent the filter is over-aggressive and will break Granite
+    # think-mode. It serves as a signal for params that shouldn't be dropped.
     assert "thinking" in allowlist, (
         f"'thinking' missing from allowlist; got: {sorted(allowlist)}"
     )
