@@ -59,14 +59,14 @@ class Intrinsic(Component[str]):
             else self.metadata.adapter_types
         )
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this intrinsic component.
 
         Will need to be implemented by subclasses since not all intrinsics
         produce text or message output.
 
         Returns:
-            list[Component | CBlock]: Always an empty list for the base class.
+            list[Component | CBlock | ModelOutputThunk]: Always an empty list for the base class.
         """
         return []  # TODO revisit this.
 

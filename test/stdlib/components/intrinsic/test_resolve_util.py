@@ -5,6 +5,7 @@ import pytest
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.stdlib.components import Document, Instruction, Message
 from mellea.stdlib.components.intrinsic._util import (
+    _extract_last_response,
     _resolve_question,
     _resolve_response,
 )
@@ -103,10 +104,46 @@ class TestResolveResponse:
 
     def test_empty_context_raises(self):
         ctx = ChatContext()
-        with pytest.raises(ValueError, match="no last turn"):
+        with pytest.raises(ValueError, match="Context is empty"):
             _resolve_response(None, ctx)
 
     def test_none_value_raises(self):
         ctx = ChatContext().add(ModelOutputThunk(value=None))
-        with pytest.raises(ValueError, match="no value"):
+        with pytest.raises(ValueError, match="not been computed yet"):
             _resolve_response(None, ctx)
+
+
+class TestExtractLastResponse:
+    def test_computed_thunk_returns_text_and_rewinds(self):
+        user_ctx = ChatContext().add(Message("user", "question"))
+        ctx = user_ctx.add(ModelOutputThunk(value="the answer"))
+        text, prev = _extract_last_response(ctx)
+        assert text == "the answer"
+        last = prev.last_turn()
+        assert last is not None
+        assert isinstance(last.model_input, Message)
+        assert last.model_input.role == "user"
+
+    def test_manual_assistant_message_returns_text_and_rewinds(self):
+        user_ctx = ChatContext().add(Message("user", "question"))
+        ctx = user_ctx.add(Message("assistant", "manual answer"))
+        text, prev = _extract_last_response(ctx)
+        assert text == "manual answer"
+        last = prev.last_turn()
+        assert last is not None
+        assert isinstance(last.model_input, Message)
+        assert last.model_input.role == "user"
+
+    def test_empty_context_raises(self):
+        with pytest.raises(ValueError, match="Context is empty"):
+            _extract_last_response(ChatContext())
+
+    def test_uncomputed_thunk_raises(self):
+        ctx = ChatContext().add(ModelOutputThunk(value=None))
+        with pytest.raises(ValueError, match="not been computed yet"):
+            _extract_last_response(ctx)
+
+    def test_non_assistant_last_turn_raises(self):
+        ctx = ChatContext().add(Message("user", "not an answer"))
+        with pytest.raises(ValueError, match="not an assistant response"):
+            _extract_last_response(ctx)

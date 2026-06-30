@@ -1,6 +1,6 @@
-"""A backend that uses the Huggingface Transformers library.
+"""A backend that uses the Hugging Face Transformers library.
 
-The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.
+The purpose of the Hugging Face backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ try:
     import llguidance.hf
     import llguidance.torch
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
     from transformers.cache_utils import DynamicCache
     from transformers.generation.logits_process import LogitsProcessorList
     from transformers.generation.stopping_criteria import (
@@ -30,7 +30,7 @@ try:
         StoppingCriteriaList,
     )
     from transformers.generation.streamers import AsyncTextIteratorStreamer
-    from transformers.generation.utils import GenerateDecoderOnlyOutput
+    from transformers.generation.utils import GenerateDecoderOnlyOutput, GenerationMixin
     from transformers.modeling_utils import PreTrainedModel
     from transformers.tokenization_utils_base import PreTrainedTokenizerBase
     from transformers.trainer_utils import set_seed
@@ -105,7 +105,7 @@ def _install_cancel_stopping_criteria(
     `**streaming_kwargs`), prepends an :class:`_EventStoppingCriteria` backed
     by a fresh `threading.Event`, and stores the merged list in
     *streaming_kwargs*.  Returns the event so the caller can arm
-    `output._cancel_hook = event.set`.
+    `output._gen.cancel_hook = event.set`.
     """
     cancel_event = threading.Event()
     user_sc = generate_options.pop("stopping_criteria", None)
@@ -118,7 +118,7 @@ def _install_cancel_stopping_criteria(
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
-Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
+Hugging Face backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
 """
 TransformersTorchConfig = tuple[PreTrainedTokenizerBase, PreTrainedModel, torch.device]
 
@@ -233,8 +233,45 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 )
 
 
+def _compute_generate_kwargs_allowlist() -> frozenset[str]:
+    """Names that ``transformers``' ``model.generate`` accepts as keyword arguments.
+
+    Combines two sources of truth:
+
+    - The explicit named parameters of ``GenerationMixin.generate``
+      (``stopping_criteria``, ``streamer``, ``synced_gpus``, …).
+    - Every public field on ``GenerationConfig``
+      (``temperature``, ``max_new_tokens``, ``return_dict_in_generate``, …).
+
+    Anything outside this set, passed as a free kwarg to ``generate``, is either
+    absorbed by ``**kwargs`` and forwarded to the model forward pass (rare, but
+    valid for forward-only kwargs Mellea sets explicitly — ``attention_mask``,
+    ``past_key_values``, ``cache_position``, ``token_type_ids``, ``inputs_embeds``)
+    or — far more commonly — raises ``TypeError`` because the chat template
+    variable name (``thinking``, ``enable_thinking``, ``custom_tools`` …) is not
+    a generation parameter. This allowlist is the self-maintaining filter that
+    drops those before they reach ``generate``.
+
+    Computed at import time; depends only on the installed ``transformers``
+    version.
+    """
+    import inspect
+
+    sig = inspect.signature(GenerationMixin.generate)
+    sig_kw = {
+        p.name
+        for p in sig.parameters.values()
+        if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+    } - {"self", "inputs"}
+    gc_fields = {a for a in vars(GenerationConfig()) if not a.startswith("_")}
+    return frozenset(sig_kw | gc_fields)
+
+
+_GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
+
+
 class LocalHFBackend(FormatterBackend, AdapterMixin):
-    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
+    """The LocalHFBackend uses Hugging Face's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports [aLoRA adapters](https://arxiv.org/pdf/2504.12397).
 
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 
@@ -262,7 +299,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             HF-specific option names.
 
     Raises:
-        OSError: If the model cannot be loaded from HuggingFace Hub (bad ID,
+        OSError: If the model cannot be loaded from Hugging Face Hub (bad ID,
             missing access, or local filesystem/cache error).
     """
 
@@ -339,7 +376,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     )
                 except OSError as e:
                     raise OSError(
-                        f"Model '{self._model_id}' could not be loaded from HuggingFace Hub. "
+                        f"Model '{self._model_id}' could not be loaded from Hugging Face Hub. "
                         "Check that the model ID is correct and that you have access to it. "
                         "If the model is gated, set the HF_TOKEN environment variable. "
                         "To browse available models, visit https://huggingface.co/models "
@@ -358,7 +395,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         assert (
             self._llguidance_tokenizer.vocab_size
             == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
-        ), "vocab size mismatch between llguidance and huggingface tokenizers"
+        ), "vocab size mismatch between llguidance and Hugging Face tokenizers"
 
         self._use_caches = use_caches
         self._cache = (
@@ -387,7 +424,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -649,22 +686,63 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             user_params["tokenizer"] = self._tokenizer
         generate_input.update(user_params)
 
+        want_scores = bool(
+            model_options.get(ModelOption.LOGITS)
+            or model_options.get(ModelOption.RAW_LOGITS)
+        )
+        if model_options.get(ModelOption.LOGITS):
+            generate_input["output_scores"] = True
+        if model_options.get(ModelOption.RAW_LOGITS):
+            generate_input["output_logits"] = True
+
+        # When logits are requested, intercept the raw GenerateDecoderOnlyOutput that
+        # generate_with_transformers produces internally but never returns (it wraps
+        # everything into a ChatCompletionResponse). We proxy self._model so that
+        # .generate() stores the raw output in raw_hf_output_cell before returning it;
+        # granite_formatters_processing then writes it to mot.raw.response for
+        # _surface_logits in post_processing.
+        raw_hf_output_cell: list[GenerateDecoderOnlyOutput | None] = [None]
+
+        model_arg = self._model
+        if want_scores:
+            _real_model = self._model
+
+            # Two load-bearing assumptions: (1) __getattr__ falls through for attributes
+            # accessed by generate_with_transformers (model.device, model.vocab_size,
+            # model.generation_config). (2) chat_completion_request_to_transformers_inputs
+            # always sets return_dict_in_generate=True, so .generate() always returns a
+            # GenerateDecoderOnlyOutput — if that ever changes, the cell stays None and
+            # logits silently won't be populated.
+            class _CapturingModelProxy:
+                def generate(self_proxy, *args: Any, **kwargs: Any) -> Any:
+                    result = cast(Callable[..., Any], _real_model.generate)(
+                        *args, **kwargs
+                    )
+                    if isinstance(result, GenerateDecoderOnlyOutput):
+                        raw_hf_output_cell[0] = result
+                    return result
+
+                def __getattr__(self_proxy, name: str) -> Any:
+                    return getattr(_real_model, name)
+
+            model_arg = _CapturingModelProxy()  # type: ignore[assignment]
+
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
             adapter.qualified_name,
             granite_formatters.base.util.generate_with_transformers,  # type: ignore
             # Passed as args/kwargs to generate.
             self._tokenizer,
-            self._model,
+            model_arg,
             generate_input,
             other_input,
         )
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = ctx.view_for_generation()
-        output._action = action
-        output._model_options = model_options
+        output._gen.start = datetime.datetime.now()
+        output._call.context = ctx.view_for_generation()
+        output._call.action = action
+        output._call.model_options = model_options
 
         # Add another step to the processing function.
         async def granite_formatters_processing(
@@ -679,14 +757,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             except json.JSONDecodeError as e:
                 raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
 
-            # TODO: If we want to support caches, we need to get the GenerateDecoderOnlyOutput. This means we
-            #       probably need to break out the pieces from `generate_with_transformers`.
+            # If logits were requested, stash the intercepted raw output so that
+            # post_processing/_surface_logits can populate generation.logits/raw_logits.
+            if want_scores:
+                if raw_hf_output_cell[0] is not None:
+                    mot.raw.response = raw_hf_output_cell[0]
+                else:
+                    warn_key = "intrinsic_no_hf_output"
+                    if warn_key not in self._warned_about:
+                        self._warned_about.add(warn_key)
+                        MelleaLogger.get_logger().warning(
+                            "ModelOption.LOGITS/RAW_LOGITS requested on intrinsic path but "
+                            "generate_with_transformers did not return a GenerateDecoderOnlyOutput; "
+                            "generation.logits and generation.raw_logits will be None."
+                        )
+
             # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
             return await self.processing(
                 mot, res.choices[0].message.content, input_ids=input_ids
             )
 
-        output._process = functools.partial(
+        output._gen.process = functools.partial(
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
@@ -694,7 +785,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         # TODO: Post-processing should release the lock for this generation.
-        output._post_process = functools.partial(
+        output._gen.post_process = functools.partial(
             self.post_processing,
             conversation=conversation,
             input_ids=generate_input["input_tokens"],
@@ -710,20 +801,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+            # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_options.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )  # type: ignore
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present.
             raise e
@@ -765,6 +856,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         tokens = self._tokenizer(c.value, return_tensors="pt")
                         self._cached_blocks[c.value] = self._make_dc_cache(tokens)
                         cached_block_keys.append(c.value)
+                case ModelOutputThunk():
+                    # MOTs are treated the same as non-cached CBlocks: no KV-cache entry.
+                    continue
                 case _:
                     continue
 
@@ -902,7 +996,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 try:
                     # Hugging Face uses a streaming interface that you pass to the generate call.
                     # Must be called from a running event loop. This should always be the case given the same
-                    # requirement of the ._generate function below.
+                    # requirement of the ._gen.generate function below.
                     streamer = AsyncTextIteratorStreamer(
                         self._tokenizer,  # type: ignore
                         skip_prompt=True,
@@ -917,8 +1011,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
 
-            # Filter out chat template-only options before passing to generate()
-            generate_options = self._filter_chat_template_only_options(model_options)
+            # Rename Mellea sentinels and filter to kwargs that generate() accepts.
+            # Chat-template-only variables (thinking, enable_thinking, custom_tools, …)
+            # are dropped here so they cannot crash generate() with TypeError.
+            generate_kwargs = self._make_backend_specific_and_remove(model_options)
 
             # Only install cooperative-cancel plumbing on the streaming path.
             # Non-streaming calls have no orchestrator calling cancel_generation(),
@@ -926,7 +1022,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # wrap any user-supplied stopping_criteria on every decode step.
             if stream:
                 _cancel_event = _install_cancel_stopping_criteria(
-                    generate_options, streaming_kwargs
+                    generate_kwargs, streaming_kwargs
                 )
 
             linearized_ctx = ctx.view_for_generation()
@@ -940,10 +1036,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
             )
 
-            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
             if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
                 # transformers' generate() requires a tokenizer to decode stop_strings.
                 generate_kwargs["tokenizer"] = self._tokenizer
+
+            kv_scores_kwargs: dict[str, Any] = {}
+            if model_options.get(ModelOption.LOGITS):
+                kv_scores_kwargs["output_scores"] = True
+            if model_options.get(ModelOption.RAW_LOGITS):
+                kv_scores_kwargs["output_logits"] = True
 
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
@@ -955,7 +1056,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 past_key_values=merged_cache,
                 attention_mask=attention_mask.to(self._device),
                 return_dict_in_generate=True,
-                output_scores=True,
+                **kv_scores_kwargs,
                 **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
@@ -968,16 +1069,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # TODO(#1242): send_to_queue fires this hook via mot.cancel_generation() only
                 # through stream_with_chunking; direct avalue()/astream() callers do not,
                 # so the worker thread leaks on STREAM_TIMEOUT for those paths.
-                output._cancel_hook = _cancel_event.set
-            output._start = datetime.datetime.now()
-            output._context = ctx.view_for_generation()
-            output._action = action
-            output._model_options = model_options
+                output._gen.cancel_hook = _cancel_event.set
+            output._gen.start = datetime.datetime.now()
+            output._call.context = ctx.view_for_generation()
+            output._call.action = action
+            output._call.model_options = model_options
 
             # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
             # each processing step.
-            output._process = functools.partial(self.processing, input_ids=input_ids)
-            output._post_process = functools.partial(
+            output._gen.process = functools.partial(
+                self.processing, input_ids=input_ids
+            )
+            output._gen.post_process = functools.partial(
                 self.post_processing,
                 conversation=ctx_as_chat,
                 input_ids=input_ids,
@@ -993,7 +1096,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-                # We can also support synchronous calls by adding a flag and changing this ._generate function.
+                # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
                 response: AsyncTextIteratorStreamer | Coroutine = chat_response
                 if stream and streamer is not None:
@@ -1003,20 +1106,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                     # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
                     # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
-                    output._generate_extra = asyncio.create_task(chat_response)
+                    output._gen.generate_extra = asyncio.create_task(chat_response)
 
                 # This function should always be called from a running event loop so we don't have to worry about
                 # scheduling the task to a specific event loop here.
-                output._generate = asyncio.create_task(
+                output._gen.generate = asyncio.create_task(
                     send_to_queue(
                         response,
-                        output._async_queue,
+                        output._gen.queue,
                         chunk_timeout=model_options.get(
                             ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
                 )
-                output._generate_type = GenerateType.ASYNC
+                output._gen.generate_type = GenerateType.ASYNC
             except RuntimeError as e:
                 # Most likely cause is running this function without an event loop present.
                 raise e
@@ -1028,7 +1131,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,
@@ -1067,7 +1170,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_chat,
                 tools=convert_tools_to_json(tools),  # type: ignore
-                add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
+                add_generation_prompt=True,  # If we change this, must modify Hugging Face granite guardian.
                 return_tensors="pt",
                 return_dict=True,
                 **self._filter_for_chat_template(model_options),
@@ -1093,7 +1196,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 try:
                     # Hugging Face uses a streaming interface that you pass to the generate call.
                     # Must be called from a running event loop. This should always be the case given the same
-                    # requirement of the ._generate function below.
+                    # requirement of the ._gen.generate function below.
                     streamer = AsyncTextIteratorStreamer(
                         self._tokenizer,  # type: ignore
                         skip_prompt=True,
@@ -1108,8 +1211,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
 
-            # Filter out chat template-only options before passing to generate()
-            generate_options = self._filter_chat_template_only_options(model_options)
+            # Rename Mellea sentinels and filter to kwargs that generate() accepts.
+            # Chat-template-only variables (thinking, enable_thinking, custom_tools, …)
+            # are dropped here so they cannot crash generate() with TypeError.
+            generate_kwargs = self._make_backend_specific_and_remove(model_options)
 
             # Only install cooperative-cancel plumbing on the streaming path.
             # Non-streaming calls have no orchestrator calling cancel_generation(),
@@ -1117,13 +1222,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # wrap any user-supplied stopping_criteria on every decode step.
             if stream:
                 _cancel_event = _install_cancel_stopping_criteria(
-                    generate_options, streaming_kwargs
+                    generate_kwargs, streaming_kwargs
                 )
 
-            generate_kwargs = self._make_backend_specific_and_remove(generate_options)
             if "stop_strings" in generate_kwargs and "tokenizer" not in generate_kwargs:
                 # transformers' generate() requires a tokenizer to decode stop_strings.
                 generate_kwargs["tokenizer"] = self._tokenizer
+
+            scores_kwargs: dict[str, Any] = {}
+            if model_options.get(ModelOption.LOGITS):
+                scores_kwargs["output_scores"] = True
+            if model_options.get(ModelOption.RAW_LOGITS):
+                scores_kwargs["output_logits"] = True
 
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
@@ -1134,6 +1244,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 attention_mask=input_ids["attention_mask"],
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
+                **scores_kwargs,
                 **generate_kwargs,
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
@@ -1146,16 +1257,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # TODO(#1242): send_to_queue fires this hook via mot.cancel_generation() only
                 # through stream_with_chunking; direct avalue()/astream() callers do not,
                 # so the worker thread leaks on STREAM_TIMEOUT for those paths.
-                output._cancel_hook = _cancel_event.set
-            output._start = datetime.datetime.now()
-            output._context = ctx.view_for_generation()
-            output._action = action
-            output._model_options = model_options
+                output._gen.cancel_hook = _cancel_event.set
+            output._gen.start = datetime.datetime.now()
+            output._call.context = ctx.view_for_generation()
+            output._call.action = action
+            output._call.model_options = model_options
 
             # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
             # each processing step.
-            output._process = functools.partial(self.processing, input_ids=input_ids)
-            output._post_process = functools.partial(
+            output._gen.process = functools.partial(
+                self.processing, input_ids=input_ids
+            )
+            output._gen.post_process = functools.partial(
                 self.post_processing,
                 conversation=ctx_as_chat,
                 input_ids=input_ids,
@@ -1171,7 +1284,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-                # We can also support synchronous calls by adding a flag and changing this ._generate function.
+                # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
                 response: AsyncTextIteratorStreamer | Coroutine = chat_response
                 if stream and streamer is not None:
@@ -1181,20 +1294,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                     # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
                     # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
-                    output._generate_extra = asyncio.create_task(chat_response)
+                    output._gen.generate_extra = asyncio.create_task(chat_response)
 
                 # This function should always be called from a running event loop so we don't have to worry about
                 # scheduling the task to a specific event loop here.
-                output._generate = asyncio.create_task(
+                output._gen.generate = asyncio.create_task(
                     send_to_queue(
                         response,
-                        output._async_queue,
+                        output._gen.queue,
                         chunk_timeout=model_options.get(
                             ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                         ),
                     )  # type: ignore
                 )
-                output._generate_type = GenerateType.ASYNC
+                output._gen.generate_type = GenerateType.ASYNC
             except RuntimeError as e:
                 # Most likely cause is running this function without an event loop present.
                 raise e
@@ -1233,7 +1346,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             mot._underlying_value += chunk
         elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
-            mot._meta["hf_output"] = chunk
+            mot.raw.response = chunk
             mot._underlying_value += cast(
                 str,
                 self._tokenizer.decode(
@@ -1241,6 +1354,50 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     skip_special_tokens=True,
                 ),
             )
+
+    def _surface_logits(
+        self, mot: ModelOutputThunk, hf_output: GenerateDecoderOnlyOutput
+    ) -> None:
+        """Populate mot.generation.logits and/or raw_logits from hf_output when requested.
+
+        Checks ModelOption.LOGITS (processed scores) and ModelOption.RAW_LOGITS (raw
+        LM-head logits) in mot._call.model_options. Skips population when
+        num_return_sequences > 1, logging a warning the first time per backend instance.
+
+        Args:
+            mot: The output thunk whose generation metadata will be updated.
+            hf_output: The HuggingFace generation output containing scores/logits.
+        """
+        hf_field = {ModelOption.LOGITS: "scores", ModelOption.RAW_LOGITS: "logits"}
+        for opt, tensors, attr in (
+            (ModelOption.LOGITS, hf_output.scores, "logits"),
+            (ModelOption.RAW_LOGITS, hf_output.logits, "raw_logits"),
+        ):
+            if not (mot._call.model_options and mot._call.model_options.get(opt)):
+                continue
+            if tensors is None:
+                MelleaLogger.get_logger().debug(
+                    "%s requested but hf_output.%s is None; generation.%s will not be populated.",
+                    opt,
+                    hf_field[opt],
+                    attr,
+                )
+                continue
+            warn_key = f"nrs_{opt}"
+            if tensors[0].shape[0] > 1:
+                if warn_key not in self._warned_about:
+                    self._warned_about.add(warn_key)
+                    MelleaLogger.get_logger().warning(
+                        "%s is set but num_return_sequences > 1; "
+                        "logit tensors are ambiguous across sequences and will not be populated.",
+                        opt,
+                    )
+            else:
+                setattr(
+                    mot.generation,
+                    attr,
+                    tuple(s.squeeze(0).detach().clone() for s in tensors),
+                )
 
     async def post_processing(
         self,
@@ -1269,18 +1426,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs; used to compute token counts and for
                 KV cache bookkeeping.
         """
-        if mot._meta.get("hf_output", None) is None:
-            if mot._generate_extra is not None:
-                full_output = await mot._generate_extra
+        if mot.raw.response is None:
+            if mot._gen.generate_extra is not None:
+                full_output = await mot._gen.generate_extra
                 assert isinstance(full_output, GenerateDecoderOnlyOutput)
-                mot._meta["hf_output"] = full_output
+                mot.raw.response = full_output
 
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
-        # Store KV cache in LRU separately (not in mot._meta) to enable proper cleanup on eviction.
+        # Store KV cache in LRU separately (not on the MOT) to enable proper cleanup on eviction.
         # This prevents GPU memory from being held by ModelOutputThunk references.
-        hf_output = mot._meta.get("hf_output", None)
+        hf_output = mot.raw.response
+
+        # Surface logits before the caching branch clears hf_output.scores/logits.
+        if isinstance(hf_output, GenerateDecoderOnlyOutput) and mot._call.model_options:
+            self._surface_logits(mot, hf_output)
+
         if (
             self._use_caches
             and isinstance(hf_output, GenerateDecoderOnlyOutput)
@@ -1304,23 +1466,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             cache_key = id(mot.value)
             self.cache_put(cache_key, cache_info)
 
-            # Clear KV cache and scores from HF output - they're now owned by the LRU cache
+            # Clear KV cache and scores from HF output; retained via LRU cache above.
             hf_output.past_key_values = None
             hf_output.scores = None
+
+        # Clear the raw logits tensor (scores already cleared above if cached).
+        if isinstance(hf_output, GenerateDecoderOnlyOutput):
+            hf_output.logits = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
             mot.tool_calls = to_tool_calls(tools, mot.value)
 
-        assert mot._action is not None, (
+        assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
-        assert mot._model_options is not None, (
+        assert mot._call.model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
         # Derive token counts from the output sequences (HF models have no usage object).
-        hf_output = mot._meta.get("hf_output")
+        hf_output = mot.raw.response
         n_prompt, n_completion = None, None
         if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
@@ -1354,8 +1520,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 last_token = hf_output.sequences[0][-1].item()
                 eos = self._tokenizer.eos_token_id
                 eos_set = set(eos) if isinstance(eos, list) else {eos}
-                max_new_tokens = mot._model_options.get(ModelOption.MAX_NEW_TOKENS)
-                stop_strings = mot._model_options.get(ModelOption.STOP_SEQUENCES) or []
+                max_new_tokens = mot._call.model_options.get(ModelOption.MAX_NEW_TOKENS)
+                stop_strings = (
+                    mot._call.model_options.get(ModelOption.STOP_SEQUENCES) or []
+                )
                 ends_with_stop_string = isinstance(mot.value, str) and any(
                     mot.value.endswith(s) for s in stop_strings
                 )
@@ -1375,20 +1543,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
-        # When caching is disabled, clear hf_output from meta to free GPU memory.
+        # When caching is disabled, clear hf_output from raw to free GPU memory.
         # The sequences tensor is on GPU and accumulates if not cleared.
         if not self._use_caches and isinstance(
-            mot._meta.get("hf_output"), GenerateDecoderOnlyOutput
+            mot.raw.response, GenerateDecoderOnlyOutput
         ):
             import gc
 
-            hf_out = mot._meta["hf_output"]
+            hf_out = mot.raw.response
             if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
                 del hf_out.sequences
             if hasattr(hf_out, "scores") and hf_out.scores is not None:
                 del hf_out.scores
-            del mot._meta["hf_output"]
+            if hasattr(hf_out, "logits") and hf_out.logits is not None:
+                del hf_out.logits
+            mot.raw.response = None
 
             # Force Python GC and return CUDA memory to device
             gc.collect()
@@ -1398,7 +1569,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         generate_log = GenerateLog()
         generate_log.prompt = conversation
         generate_log.backend = f"hf::{self.model_id!s}"
-        generate_log.model_options = mot._model_options
+        generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot.value
         generate_log.extra = {
@@ -1407,7 +1578,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "tools_called": mot.tool_calls,
             "seed": seed,
         }
-        generate_log.action = mot._action
+        generate_log.action = mot._call.action
         generate_log.result = mot
 
         mot._generate_log = generate_log
@@ -1431,7 +1602,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ctx (Context): The current generation context.
             format (type[BaseModelSubclass] | None): Optional Pydantic model for
                 structured output decoding via llguidance.
-            model_options (dict | None): Per-call model options.
+            model_options (dict | None): Per-call model options. Supports
+                `ModelOption.MAX_NEW_TOKENS`, `ModelOption.TEMPERATURE`,
+                `ModelOption.SEED`, `ModelOption.STOP_SEQUENCES`, and
+                `ModelOption.LOGITS` (populate `mot.generation.logits`
+                with per-token scores of shape `(vocab_size,)`).
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 
         Returns:
@@ -1451,7 +1626,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             #       Test this by ensuring all outputs from this call are populated when running on mps.
             #       https://github.com/pytorch/pytorch/pull/157727
             MelleaLogger.get_logger().warning(
-                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a Hugging Face backend; ensure all ModelOutputThunks have non-empty values."
             )
 
         model_opts = self._simplify_and_merge(model_options)
@@ -1482,6 +1657,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # transformers' generate() requires a tokenizer to decode stop_strings.
             generate_kwargs["tokenizer"] = self._tokenizer
 
+        raw_scores_kwargs: dict[str, Any] = {}
+        if model_opts.get(ModelOption.LOGITS):
+            raw_scores_kwargs["output_scores"] = True
+        if model_opts.get(ModelOption.RAW_LOGITS):
+            raw_scores_kwargs["output_logits"] = True
+
         outputs = await asyncio.to_thread(
             self._generate_with_adapter_lock,
             "",  # Empty for no adapter.
@@ -1490,7 +1671,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             return_dict_in_generate=True,
-            output_scores=True,
+            **raw_scores_kwargs,
             **generate_kwargs,
             **format_kwargs,
         )
@@ -1507,6 +1688,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         results = []
         agg_prompt = 0
         agg_completion = 0
+        want_logits = bool(model_opts and model_opts.get(ModelOption.LOGITS))
+        want_raw_logits = bool(model_opts and model_opts.get(ModelOption.RAW_LOGITS))
         for i, decoded_result in enumerate(decoded_results):
             n_prompt_tokens = int(inputs["input_ids"][i].size(0))
             n_completion_tokens = len(sequences_to_decode[i])
@@ -1521,6 +1704,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result.generation.usage = per_mot_usage
             result.generation.model = self._model_id
             result.generation.provider = self._provider
+            result.raw.provider = self._provider
+
+            if want_logits and outputs.scores is not None:
+                # Clone each slice so this MOT does not hold a view into the shared batch allocation.
+                result.generation.logits = tuple(
+                    step_scores[i].detach().clone() for step_scores in outputs.scores
+                )
+
+            if want_raw_logits and outputs.logits is not None:
+                result.generation.raw_logits = tuple(
+                    step_logits[i].detach().clone() for step_logits in outputs.logits
+                )
 
             action = actions[i]
             result.parsed_repr = (
@@ -1612,22 +1807,33 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return merged
 
     def _make_backend_specific_and_remove(
-        self, model_options: dict[str, Any]
+        self, model_options: dict[str, Any], *, for_generate: bool = True
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
-        If the caller supplied a ``SEED`` or a non-zero ``TEMPERATURE`` but did
-        not explicitly set ``do_sample``, ``do_sample`` is forced to ``True`` so
-        the underlying transformers ``generate`` call respects those parameters
-        (they are silently ignored under the default greedy ``do_sample=False``).
+        If the caller supplied a `SEED` or a non-zero `TEMPERATURE` but did
+        not explicitly set `do_sample`, `do_sample` is forced to `True` so
+        the underlying transformers `generate` call respects those parameters
+        (they are silently ignored under the default greedy `do_sample=False`).
 
-        An explicit ``TEMPERATURE`` of ``0.0`` always means greedy decoding and
+        An explicit `TEMPERATURE` of `0.0` always means greedy decoding and
         suppresses this override even when a seed is set — pairing
-        ``do_sample=True`` with ``temperature=0`` would crash transformers
+        `do_sample=True` with `temperature=0` would crash transformers
         ("temperature has to be a strictly positive float").
+
+        When ``for_generate`` is True (the default — and the right choice for any
+        kwargs about to be splatted into ``model.generate``), the result is filtered
+        through the module-level ``_GENERATE_KWARGS_ALLOWLIST`` so chat-template-only
+        variables (``thinking``, ``enable_thinking``, ``custom_tools`` …) cannot leak
+        in and crash ``generate`` with ``TypeError``.  Pass ``for_generate=False`` from
+        ``_filter_for_chat_template`` to skip that filter — that path applies the
+        chat-template allowlist instead.
 
         Args:
             model_options: the model_options for this call
+            for_generate: whether the result will be passed to
+                ``model.generate``; controls whether the generate-kwargs filter
+                runs.
 
         Returns:
             a new dict
@@ -1645,27 +1851,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             and (seed is not None or temperature is not None)
         ):
             backend_specific["do_sample"] = True
+        if for_generate:
+            backend_specific = {
+                k: v
+                for k, v in backend_specific.items()
+                if k in _GENERATE_KWARGS_ALLOWLIST
+            }
         return backend_specific
-
-    def _filter_chat_template_only_options(
-        self, model_options: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Remove options that are only for apply_chat_template, not for generate().
-
-        Args:
-            model_options: the model_options for this call
-
-        Returns:
-            a new dict without chat template-specific options
-        """
-        # Options that should only go to apply_chat_template, not generate()
-        chat_template_only = {
-            "guardian_config",
-            "think",
-            "add_generation_prompt",
-            "documents",
-        }
-        return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     @functools.cached_property
     def _chat_template_allowlist(self) -> frozenset[str]:
@@ -1675,16 +1867,16 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         find every variable the template references but does not define itself, then
         subtracts :data:`_HF_INTERNAL_TEMPLATE_VARS` (variables Hugging Face provides
         automatically). What remains is the exact set of keys a caller may legitimately
-        forward from ``model_options`` to ``apply_chat_template``.
+        forward from `model_options` to `apply_chat_template`.
 
         This is the self-maintaining alternative to a hand-written denylist: it adapts
         automatically as the loaded model's Jinja template changes without any manual
         enumeration of generate()-only option names.
 
         Returns:
-            frozenset of kwarg names valid for ``apply_chat_template`` on this tokenizer,
-            minus HF-provided variables. Empty if the tokenizer has no ``chat_template``
-            (``apply_chat_template`` would raise before kwargs matter in that case).
+            frozenset of kwarg names valid for `apply_chat_template` on this tokenizer,
+            minus HF-provided variables. Empty if the tokenizer has no `chat_template`
+            (`apply_chat_template` would raise before kwargs matter in that case).
         """
         template_str = getattr(self._tokenizer, "chat_template", None)
         if not isinstance(template_str, str) or not template_str:
@@ -1732,9 +1924,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             model_options: raw model options (may contain Mellea sentinel keys)
 
         Returns:
-            dict of kwargs safe to splat into ``apply_chat_template``
+            dict of kwargs safe to splat into `apply_chat_template`
         """
-        backend_opts = self._make_backend_specific_and_remove(model_options)
+        backend_opts = self._make_backend_specific_and_remove(
+            model_options, for_generate=False
+        )
         return {
             k: v for k, v in backend_opts.items() if k in self._chat_template_allowlist
         }
@@ -1854,7 +2048,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
 
 def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
-    """When generating with a huggingface model, this can be used to ensure the correct adapters are active.
+    """When generating with a Hugging Face model, this can be used to ensure the correct adapters are active.
 
     Args:
         expected_state: the current state of the lock

@@ -34,7 +34,7 @@ class GroundednessRequirement(Requirement):
     4. **Groundedness Output**: Declare response grounded iff all spans needing
        citations are fully supported.
 
-    **Important**: This requirement requires a HuggingFace backend (LocalHFBackend)
+    **Important**: This requirement requires a Hugging Face backend (LocalHFBackend)
     as it uses both the find_citations adapter function and LLM-as-Judge for assessment.
 
     Args:

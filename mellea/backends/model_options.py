@@ -35,6 +35,8 @@ class ModelOption:
             ``None`` disables the timeout. Defaults to ``120.0`` when not set.
         STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
             encountered in the model output, cause generation to halt.
+        LOGITS (str): Sentinel key for requesting per-token processed logit scores (post-LogitsProcessor).
+        RAW_LOGITS (str): Sentinel key for requesting per-token raw LM-head logits (pre-LogitsProcessor).
     """
 
     TOOLS = "@@@tools@@@"
@@ -73,8 +75,42 @@ class ModelOption:
     """Must be a `list[str]`. Generation halts when the model emits any of these strings.
 
     Backends translate this to their native parameter (`stop` for OpenAI/Ollama/LiteLLM
-    chat backends, `stop_strings` for HuggingFace, `stop_sequences` for the WatsonX
+    chat backends, `stop_strings` for Hugging Face, `stop_sequences` for the WatsonX
     text-generation endpoint).
+    """
+    LOGITS = "@@@logits@@@"
+    """When `True`, request per-token processed logit scores (``output_scores``).
+
+    These are logits *after* the ``LogitsProcessor`` chain has run —
+    temperature scaling, top-k/top-p masking, repetition penalty, etc.
+    Exposed on ``mot.generation.logits`` as a tuple of 1-D tensors of shape
+    ``(vocab_size,)``, one per generated token.
+
+    Only supported by the HuggingFace local backend. Backends that cannot
+    return logits (OpenAI, Ollama, LiteLLM, WatsonX) log a warning when this
+    option is set and leave ``generation.logits`` as ``None``.
+
+    **Streaming not supported**: when ``ModelOption.STREAM=True``, logit
+    scores are not available and ``mot.generation.logits`` will be ``None``.
+
+    See also ``ModelOption.RAW_LOGITS`` for unprocessed LM-head output.
+    """
+
+    RAW_LOGITS = "@@@raw_logits@@@"
+    """When `True`, request per-token raw logits (``output_logits``).
+
+    These are the raw, unprocessed logits straight from the LM head —
+    the model's actual output *before* any ``LogitsProcessor`` transforms
+    (temperature, top-k/top-p, repetition penalty, etc.).
+    Exposed on ``mot.generation.raw_logits`` as a tuple of 1-D tensors of
+    shape ``(vocab_size,)``, one per generated token.
+
+    Only supported by the HuggingFace local backend.
+
+    **Streaming not supported**: when ``ModelOption.STREAM=True``, raw
+    logits are not available and ``mot.generation.raw_logits`` will be ``None``.
+
+    See also ``ModelOption.LOGITS`` for processor-transformed scores.
     """
 
     @staticmethod

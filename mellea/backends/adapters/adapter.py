@@ -273,7 +273,7 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
         """Download the required adapter function files if necessary and return the path to them.
 
         Args:
-            base_model_name: the base model; typically the last part of the huggingface
+            base_model_name: the base model; typically the last part of the Hugging Face
                 model id like "granite-3.3-8b-instruct"
 
         Returns:
@@ -772,7 +772,7 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
             stacklevel=2,
         )
         assert re.match(".*/.*", model_id), (
-            "expected a huggingface model id with format <user-id>/<repo-name>"
+            "expected a Hugging Face model id with format <user-id>/<repo-name>"
         )
         intrinsic_name = (
             intrinsic_name if intrinsic_name is not None else model_id.split("/")[1]

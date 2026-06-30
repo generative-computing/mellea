@@ -107,11 +107,11 @@ class TestBasedEval(Component[str]):
         self.test_id = test_id
         self.input_ids = input_ids or []
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this component.
 
         Returns:
-            list[Component | CBlock]: Always an empty list; the component
+            list[Component | CBlock | ModelOutputThunk]: Always an empty list; the component
             renders entirely via `format_for_llm`.
         """
         return []

@@ -35,11 +35,11 @@ class Query(Component[str]):
         self._obj = obj
         self._query = query
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this query component.
 
         Returns:
-            list[Component | CBlock]: A list containing the wrapped object.
+            list[Component | CBlock | ModelOutputThunk]: A list containing the wrapped object.
         """
         return [self._obj]
 
@@ -93,11 +93,11 @@ class Transform(Component[str]):
         self._obj = obj
         self._transformation = transformation
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this transform component.
 
         Returns:
-            list[Component | CBlock]: A list containing the wrapped object.
+            list[Component | CBlock | ModelOutputThunk]: A list containing the wrapped object.
         """
         return [self._obj]
 
@@ -138,11 +138,11 @@ class Transform(Component[str]):
 class MObjectProtocol(Protocol):
     """Protocol to describe the necessary functionality of a MObject. Implementers should prefer inheriting from MObject than MObjectProtocol."""
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return a list of parts for this MObject.
 
         Returns:
-            list[Component | CBlock]: The constituent sub-components.
+            list[Component | CBlock | ModelOutputThunk]: The constituent sub-components.
         """
         ...
 
@@ -223,11 +223,11 @@ class MObject(Component[str]):
         self._query_type = query_type
         self._transform_type = transform_type
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """MObject has no parts because of how format_for_llm is defined.
 
         Returns:
-            list[Component | CBlock]: Always an empty list.
+            list[Component | CBlock | ModelOutputThunk]: Always an empty list.
         """
         return []
 

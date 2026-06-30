@@ -22,7 +22,7 @@ class SimpleComponent(Component[str]):
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns the values of the kwargs.
 
         Returns:
@@ -34,7 +34,7 @@ class SimpleComponent(Component[str]):
         for key in kwargs.keys():
             value = kwargs[key]
             assert issubclass(type(value), Component) or issubclass(
-                type(value), CBlock
+                type(value), (CBlock, ModelOutputThunk)
             ), f"Expected span but found {type(value)} of value: {value}"
             assert type(key) is str
         return True

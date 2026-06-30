@@ -833,7 +833,7 @@ async def stream_with_chunking(
 
     # Clone requirements before starting backend generation so that a raising
     # __copy__ (an advertised extension point on Requirement) cannot leave the
-    # backend feeder task wedged against a full _async_queue with no consumer.
+    # backend feeder task wedged against a full streaming queue with no consumer.
     cloned_reqs = [copy(req) for req in (requirements or [])]
     val_backend = validation_backend if validation_backend is not None else backend
 

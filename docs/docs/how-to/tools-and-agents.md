@@ -109,25 +109,21 @@ tool:
 # Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.backends.tools import MelleaTool
 from mellea.stdlib.requirements import uses_tool
-from mellea.stdlib.tools import local_code_interpreter
+from mellea.stdlib.tools import python_tool
 
+tool = python_tool(tier="local_unsafe", name="python")
 m = start_session()
 response = m.instruct(
     "Use the code interpreter tool to compute 7 factorial.",
-    requirements=[uses_tool(local_code_interpreter)],
-    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]},
+    requirements=[uses_tool("python")],
+    model_options={ModelOption.TOOLS: [tool]},
     tool_calls=True,
 )
-```
 
-With `tool_calls=True`, the result exposes a `.tool_calls` dict you can inspect and
-execute:
-
-```python
-code = response.tool_calls["local_code_interpreter"].args["code"]
-exec_result = response.tool_calls["local_code_interpreter"].call_func()
+# tool_calls=True makes .tool_calls available on the result
+code = response.tool_calls["python"].args["code"]
+exec_result = response.tool_calls["python"].call_func()
 print(exec_result)
 ```
 
@@ -141,25 +137,25 @@ generates for a tool call:
 # Returns: ModelOutputThunk
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.backends.tools import MelleaTool
 from mellea.stdlib.requirements import tool_arg_validator, uses_tool
-from mellea.stdlib.tools import local_code_interpreter
+from mellea.stdlib.tools import python_tool
 
+tool = python_tool(tier="local_unsafe", name="python")
 m = start_session()
 response = m.instruct(
     "Use the code interpreter to plot y=x². Save the plot to /tmp/output.png.",
     requirements=[
-        uses_tool(local_code_interpreter),
+        uses_tool("python"),
         tool_arg_validator(
             "The plot must be saved to /tmp/output.png and must not call plt.show()",
-            tool_name=local_code_interpreter,
+            tool_name="python",
             arg_name="code",
             validation_fn=lambda code: (
                 "/tmp/output.png" in code and "plt.show()" not in code
             ),
         ),
     ],
-    model_options={ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]},
+    model_options={ModelOption.TOOLS: [tool]},
     tool_calls=True,
 )
 ```
@@ -260,19 +256,22 @@ Mellea includes a built-in Python code interpreter tool:
 
 ```python
 # Requires: mellea
-# Returns: str
-from mellea.stdlib.tools import code_interpreter
+# Returns: ExecutionResult
+from mellea.stdlib.tools import python_tool
 
-result = code_interpreter("print(1 + 1)")
-print(result)  # "2"
+tool = python_tool(tier="local_unsafe")
+result = tool.run(code="print(1 + 1)")
+print(result.stdout)  # "2"
 ```
 
-Pass `local_code_interpreter` as a tool to `instruct()` to let the LLM write and
-execute code. Combine with `uses_tool` and `tool_arg_validator` to constrain what
-gets generated (see examples above).
+Pass the tool to `instruct()` to let the LLM write and execute code. Combine with
+`uses_tool` and `tool_arg_validator` to constrain what gets generated (see examples
+above).
 
-> **Warning:** `local_code_interpreter` executes Python code in the current process.
-> Do not use it in production contexts without sandboxing.
+> **Warning:** `tier="local_unsafe"` executes model-generated code as an
+> unrestricted subprocess with no container isolation or resource limits.
+> Do not use it in production contexts without sandboxing. Use
+> `tier="docker"` or `tier="docker_unsafe"` for real process isolation.
 
 ## MCP tools
 

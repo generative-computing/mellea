@@ -1,9 +1,10 @@
 """Shared utilities for intrinsic convenience wrappers."""
 
 import json
+from typing import cast
 
 from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType
+from ....backends.adapters import AdapterMixin, AdapterType, IOContract
 from ....core import Backend
 from ....stdlib import functional as mfuncs
 from ...components import Document
@@ -25,7 +26,7 @@ def _resolve_question(
     """
     if question is not None:
         return question, context
-    from ....core import CBlock, Component
+    from ....core import CBlock, Component, ModelOutputThunk
     from ..chat import Message
 
     turn = context.last_turn()
@@ -37,7 +38,7 @@ def _resolve_question(
     model_input = turn.model_input
     if isinstance(model_input, Message):
         text = model_input.content
-    elif isinstance(model_input, CBlock):
+    elif isinstance(model_input, (CBlock, ModelOutputThunk)):
         if model_input.value is None:
             raise ValueError(
                 "question is None and last turn model_input CBlock has no value"
@@ -63,26 +64,75 @@ def _resolve_question(
     return text, rewound  # type: ignore[return-value]
 
 
+def _extract_last_response(context: ChatContext) -> tuple[str, ChatContext]:
+    """Extract the last assistant response text and the context preceding it.
+
+    Returns `(response_text, prev_ctx)` where *prev_ctx* is *context* rewound
+    to before the last assistant turn. Handles both session-generated contexts
+    (last turn is a `ModelOutputThunk`) and manually-constructed contexts
+    (last turn is an assistant `Message`).
+
+    Args:
+        context: Chat context whose last element is an assistant response.
+
+    Returns:
+        Tuple of the assistant response text and the rewound context.
+
+    Raises:
+        ValueError: If *context* is empty, if the last element is not an
+            assistant response, if the response has not been computed yet,
+            or if there is no preceding node.
+    """
+    from ..chat import Message
+
+    turn = context.last_turn()
+    if turn is None:
+        raise ValueError("Context is empty; cannot extract an assistant response.")
+
+    if turn.output is not None and turn.output.value is not None:
+        # Session-generated response stored as a ModelOutputThunk.
+        # Only the text value is preserved; thunk metadata is intentionally dropped.
+        response_text: str = turn.output.value
+        prev_ctx = context.previous_node
+    elif turn.output is not None and turn.output.value is None:
+        raise ValueError(
+            "Cannot extract assistant response: it has not been computed yet. "
+            "Await the response before calling this adapter function."
+        )
+    elif (
+        turn.model_input is not None
+        and isinstance(turn.model_input, Message)
+        and turn.model_input.role == "assistant"
+    ):
+        # Manually-added assistant Message (e.g. built from test fixtures).
+        response_text = turn.model_input.content
+        prev_ctx = context.previous_node
+    else:
+        raise ValueError(
+            "Cannot extract assistant response: the last context element is "
+            "not an assistant response."
+        )
+
+    if prev_ctx is None:
+        raise ValueError(
+            "Context has no previous node; cannot rewind past the assistant turn."
+        )
+
+    return response_text, cast(ChatContext, prev_ctx)
+
+
 def _resolve_response(
     response: str | None, context: ChatContext
 ) -> tuple[str, ChatContext]:
     """Return `(response_text, context_to_use)`.
 
     When *response* is not `None`, returns it with *context* unchanged.
-    When `None`, extracts from the last turn's `output.value` and rewinds
-    *context* to before that output.
+    When `None`, delegates to `_extract_last_response` to pull the
+    text from the last assistant turn and rewind the context.
     """
     if response is not None:
         return response, context
-    turn = context.last_turn()
-    if turn is None or turn.output is None:
-        raise ValueError("response is None and context has no last turn with output")
-    if turn.output.value is None:
-        raise ValueError("response is None and last turn output has no value")
-    rewound = context.previous_node
-    if rewound is None:
-        raise ValueError("Cannot rewind context past the root node")
-    return turn.output.value, rewound  # type: ignore[return-value]
+    return _extract_last_response(context)
 
 
 def call_intrinsic(
@@ -92,23 +142,37 @@ def call_intrinsic(
     /,
     kwargs: dict | None = None,
     model_options: dict | None = None,
-):
-    """Invoke an adapter function via the backend, returning parsed JSON output.
+    io_contract: IOContract | None = None,
+) -> dict[str, object]:
+    """Invoke an adapter function via the backend, returning parsed and optionally validated JSON output.
 
-    Uses :meth:`~mellea.backends.adapters.AdapterMixin.resolve_adapter` to find
-    or lazily register the adapter, then executes via ``mfuncs.act``.
+    Uses `AdapterMixin.resolve_adapter` to find or lazily register the adapter,
+    then executes via `mfuncs.act`.
+
+    When *io_contract* is provided its :meth:`~mellea.backends.adapters.IOContract.parse`
+    method is called on the raw output string before returning.  The contract validates
+    required fields and raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`
+    on contract-breaking deltas; forward-compatible additions (extra optional fields) do
+    not raise.  When *io_contract* is ``None`` the raw ``json.loads`` result is returned.
 
     Args:
         intrinsic_name (str): Capability name of the adapter function
-            (e.g. ``"answerability"``).
+            (e.g. `"answerability"`).
         context (ChatContext): The current conversation context.
         backend (AdapterMixin): A backend that supports adapter functions.
         kwargs (dict | None): Extra keyword arguments forwarded to the
             adapter function's input template.
         model_options (dict | None): Model options that override defaults.
+        io_contract (IOContract | None): Output contract to validate and parse the
+            raw model output.  When ``None``, ``json.loads`` is used directly.
 
     Returns:
-        dict: Parsed JSON output from the adapter function.
+        dict[str, object]: Parsed (and optionally validated) JSON output from the adapter function.
+
+    Raises:
+        ValueError: When the model output is ``None`` or is not valid JSON.
+        AdapterSchemaMismatchError: When *io_contract* is provided and the
+            model output is missing a required field.
     """
     # Ensure the adapter is registered; resolve_adapter creates it if absent.
     backend.resolve_adapter(intrinsic_name)
@@ -140,4 +204,6 @@ def call_intrinsic(
     result_str = model_output_thunk.value
     if result_str is None:
         raise ValueError("Model output is None.")
+    if io_contract is not None:
+        return io_contract.parse(result_str)
     return json.loads(result_str)

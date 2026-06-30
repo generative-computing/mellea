@@ -24,7 +24,7 @@ def test_model_output_thunk_copy(m_session: MelleaSession):
     copied = copy.copy(out)
 
     assert out is not copied
-    assert copied._generate is None
+    assert copied._gen.generate is None
     assert copied._meta is out._meta
 
     empty = ModelOutputThunk("")
@@ -37,7 +37,7 @@ def test_model_output_thunk_deepcopy(m_session: MelleaSession):
     deepcopied = copy.deepcopy(out)
 
     assert out is not deepcopied
-    assert deepcopied._generate is None
+    assert deepcopied._gen.generate is None
     assert deepcopied._meta is not out._meta
 
     empty = ModelOutputThunk("")

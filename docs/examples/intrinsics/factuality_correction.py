@@ -92,5 +92,9 @@ ctx = (
     .add(Message("assistant", response_text))
 )
 
+# corrected response string
 result = guardian.factuality_correction(ctx, backend)
-print(f"Result of factuality correction: {result}")  # corrected response string
+# Alternatively, instead of attaching the document to the context above, pass it
+# explicitly via documents= (replaces any docs on the last assistant turn):
+#   result = guardian.factuality_correction(ctx, backend, documents=[document])
+print(f"Result of factuality correction: {result}")

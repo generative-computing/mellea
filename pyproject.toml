@@ -378,8 +378,9 @@ filterwarnings = [
     "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
 
 
-    # Keep Watsonx deprecation visible (important for migration)
+    # Keep specific deprecations visible (important for migration)
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
+    "default:.*check_context_relevance.*:DeprecationWarning",
 ]
 
 # -----------------------------

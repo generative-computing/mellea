@@ -511,12 +511,20 @@ def unregister(
             _unregister_single(pm, item)
 
 
-def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
+def plugin_scope(
+    *items: Callable | Any | PluginSet | list[Callable | Any | PluginSet],
+) -> _PluginScope:
     """Return a context manager that temporarily registers plugins for a block of code.
 
     Accepts the same items as `register()`: standalone `@hook`-decorated
     functions, `@plugin`-decorated class instances, `MelleaPlugin` instances,
-    and `PluginSet` instances — or any mix thereof.
+    `PluginSet` instances, or a list of any combination — passed either as
+    varargs or as a single list, mirroring `register()`:
+
+        with plugin_scope(log_hook, audit_plugin):  # varargs
+            ...
+        with plugin_scope([log_hook, audit_plugin]):  # single list
+            ...
 
     Supports both synchronous and asynchronous `with` statements::
 
@@ -529,10 +537,16 @@ def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
             result, ctx = await ainstruct("Generate code", ctx, backend)
 
     Args:
-        *items: One or more plugins to register for the duration of the block.
+        *items: One or more plugins to register for the duration of the block —
+            standalone `@hook` functions, `@plugin`-decorated class instances,
+            `MelleaPlugin` instances, `PluginSet` instances, or a list of any
+            combination.
 
     Returns:
         A context manager that registers the given plugins on entry and
         deregisters them on exit.
     """
+    # Accept both plugin_scope(a, b) and plugin_scope([a, b]).
+    if len(items) == 1 and isinstance(items[0], list):
+        return _PluginScope(list(items[0]))
     return _PluginScope(list(items))

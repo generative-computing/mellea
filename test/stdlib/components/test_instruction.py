@@ -161,6 +161,12 @@ def test_parts_includes_grounding_context_values():
     assert ins._grounding_context["doc"] in parts
 
 
+def test_parts_includes_grounding_context_model_output_thunk():
+    mot = ModelOutputThunk(value="retrieved context")
+    ins = Instruction(grounding_context={"doc": mot})
+    assert mot in ins.parts()
+
+
 def test_parts_empty_instruction():
     ins = Instruction()
     # No description, no requirements, no grounding context

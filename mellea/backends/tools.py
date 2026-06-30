@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from mellea.core.utils import MelleaLogger
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
-from ..core import CBlock, Component, TemplateRepresentation
+from ..core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from ..core.base import AbstractMelleaTool
 from .model_options import ModelOption
 
@@ -32,7 +32,7 @@ class MelleaTool(AbstractMelleaTool[P, R]):
     """Tool class to represent a callable tool with an OpenAI-compatible JSON schema.
 
     Wraps a Python callable alongside its JSON schema representation so it can be
-    registered with backends that support tool calling (OpenAI, Ollama, HuggingFace, etc.).
+    registered with backends that support tool calling (OpenAI, Ollama, Hugging Face, etc.).
 
     Type parameters:
         P: Parameter specification for the underlying callable
@@ -127,7 +127,7 @@ class MelleaTool(AbstractMelleaTool[P, R]):
 
     @classmethod
     def from_smolagents(cls, tool: Any) -> "MelleaTool[..., Any]":
-        """Create a Tool from a HuggingFace smolagents tool object.
+        """Create a Tool from a Hugging Face smolagents tool object.
 
         Args:
             tool: A smolagents.Tool instance
@@ -357,13 +357,13 @@ def add_tools_from_model_options(
 
 def add_tools_from_context_actions(
     tools_dict: dict[str, AbstractMelleaTool],
-    ctx_actions: list[Component | CBlock] | None,
+    ctx_actions: list[Component | CBlock | ModelOutputThunk] | None,
 ):
     """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
 
     Args:
         tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
-        ctx_actions: List of `Component` or `CBlock` objects whose template
+        ctx_actions: List of `Component`, `CBlock`, or `ModelOutputThunk` objects whose template
             representations may declare tools, or `None` to skip.
     """
     if ctx_actions is None:
@@ -391,7 +391,7 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
         List of OpenAI-compatible JSON tool schema dicts, one per tool.
 
     Notes:
-    - Huggingface transformers library lets you pass in an array of functions but doesn't like methods.
+    - Hugging Face transformers library lets you pass in an array of functions but doesn't like methods.
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
     - OpenAI uses the same format / schema.
     """

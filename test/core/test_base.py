@@ -6,7 +6,17 @@ from typing import Any
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import CBlock, Component, ImageBlock, ImageUrlBlock, ModelOutputThunk
+from mellea.core import (
+    CBlock,
+    Component,
+    GenerateType,
+    ImageBlock,
+    ImageUrlBlock,
+    ModelOutputThunk,
+    RawProviderResponse,
+    blockify,
+)
+from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
 
 
@@ -44,18 +54,15 @@ def test_parse():
             self.message = msg
 
     source = Message(role="user", content="source message")
-    result = ModelOutputThunk(
-        value="result value",
-        meta={
-            "chat_response": _ChatResponse(
-                Message(role="assistant", content="assistant reply")
-            )
-        },
+    result = ModelOutputThunk(value="result value")
+    result.raw = RawProviderResponse(
+        provider="ollama",
+        response=_ChatResponse(Message(role="assistant", content="assistant reply")),
     )
 
     result.parsed_repr = source.parse(result)
     assert isinstance(result.parsed_repr, Message), (
-        "result's parsed repr should be a message when meta includes a chat_response"
+        "result's parsed repr should be a message when raw provider is set"
     )
     assert result.parsed_repr.role == "assistant", (
         "result's parsed repr role should be assistant"
@@ -230,6 +237,60 @@ def test_mot_deep_copy_clones_generation():
     assert deepcopied.generation.ttfb_ms == 42.0
 
 
+# --- RawProviderResponse default + copy semantics ---
+
+
+def _make_mot_with_raw() -> ModelOutputThunk:
+    mot = ModelOutputThunk(value="x")
+    mot.raw.provider = "openai"
+    mot.raw.response = {"choices": [{"message": {"role": "assistant", "content": "v"}}]}
+    mot.raw.streamed_chunks = [{"delta": {"content": "v"}}]
+    return mot
+
+
+def test_raw_provider_response_default():
+    mot = ModelOutputThunk(value=None)
+    assert mot.raw == RawProviderResponse()
+    assert mot.raw.provider is None
+    assert mot.raw.response is None
+    assert mot.raw.streamed_chunks is None
+
+
+def test_raw_propagates_on_copy():
+    original = _make_mot_with_raw()
+    copied = copy.copy(original)
+    assert copied.raw.provider == "openai"
+    # Shallow copy: the response dict is shared.
+    assert copied.raw.response is original.raw.response
+    assert copied.raw.streamed_chunks is original.raw.streamed_chunks
+
+
+def test_raw_shallow_copy_provider_mutation_does_not_bleed():
+    original = _make_mot_with_raw()
+    copied = copy.copy(original)
+    copied.raw.provider = "litellm"
+    assert original.raw.provider == "openai"
+
+
+def test_raw_propagates_on_deepcopy():
+    original = _make_mot_with_raw()
+    deepcopied = copy.deepcopy(original)
+    assert deepcopied.raw is not original.raw
+    assert deepcopied.raw.provider == "openai"
+    assert deepcopied.raw.response == original.raw.response
+    assert deepcopied.raw.response is not original.raw.response
+    assert deepcopied.raw.streamed_chunks == original.raw.streamed_chunks
+    assert deepcopied.raw.streamed_chunks is not original.raw.streamed_chunks
+
+
+def test_raw_propagates_on_copy_from():
+    a = ModelOutputThunk(value=None)
+    b = _make_mot_with_raw()
+    a._copy_from(b)
+    # _copy_from is reference assignment for raw, matching .generation semantics.
+    assert a.raw is b.raw
+
+
 # --- Public error / generate_log surface ---
 
 
@@ -275,6 +336,12 @@ def test_mot_error_carried_by_copy_methods() -> None:
     assert target.error is err
 
 
+def test_mot_thinking_public_field_round_trip():
+    mot = ModelOutputThunk(value="x")
+    mot.thinking = "reasoning trace"
+    assert mot.thinking == "reasoning trace"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
 
@@ -306,13 +373,13 @@ async def test_cancel_generation_invokes_cancel_hook_before_task_cancel() -> Non
         thread_released.set()
 
     mot = ModelOutputThunk(value=None)
-    mot._cancel_hook = hook  # type: ignore[attr-defined]
+    mot._gen.cancel_hook = hook  # type: ignore[attr-defined]
 
     # Task that blocks in a thread until thread_released is set.
     async def spin() -> None:
         await asyncio.to_thread(thread_released.wait, 5.0)
 
-    mot._generate = asyncio.create_task(spin())  # type: ignore[attr-defined]
+    mot._gen.generate = asyncio.create_task(spin())  # type: ignore[attr-defined]
     await asyncio.sleep(0)  # let the task reach to_thread
 
     # Must return within 1 s; without the hook it would hang ~5 s.
@@ -330,17 +397,83 @@ def test_cancel_hook_not_forwarded_by_copy_methods() -> None:
         pass
 
     mot = ModelOutputThunk(value="x")
-    mot._cancel_hook = _hook  # type: ignore[attr-defined]
+    mot._gen.cancel_hook = _hook  # type: ignore[attr-defined]
 
     shallow = copy_mod.copy(mot)
-    assert shallow._cancel_hook is None, "__copy__ must reset _cancel_hook to None"  # type: ignore[attr-defined]
+    assert shallow._gen.cancel_hook is None, "__copy__ must reset _cancel_hook to None"  # type: ignore[attr-defined]
 
     deep = copy_mod.deepcopy(mot)
-    assert deep._cancel_hook is None, "__deepcopy__ must reset _cancel_hook to None"  # type: ignore[attr-defined]
+    assert deep._gen.cancel_hook is None, "__deepcopy__ must reset _cancel_hook to None"  # type: ignore[attr-defined]
 
     target = ModelOutputThunk(value="original")
     target._copy_from(mot)  # type: ignore[attr-defined]
-    assert target._cancel_hook is None, "_copy_from must reset _cancel_hook to None"  # type: ignore[attr-defined]
+    assert target._gen.cancel_hook is None, "_copy_from must reset _cancel_hook to None"  # type: ignore[attr-defined]
+
+
+def test_copy_of_uncomputed_mot_raises() -> None:
+    """Copying an uncomputed MOT raises; copies are only valid post-generation."""
+    uncomputed = ModelOutputThunk(value=None)
+    assert not uncomputed.is_computed()
+
+    with pytest.raises(RuntimeError):
+        copy.copy(uncomputed)
+
+    with pytest.raises(RuntimeError):
+        copy.deepcopy(uncomputed)
+
+
+def test_deepcopy_resets_gen_and_preserves_call() -> None:
+    """Deepcopying a computed MOT yields a fresh _gen but preserves _call."""
+    mot = ModelOutputThunk(value="done")
+    mot._call.action = Message("user", "hi")
+    mot._call.context = []
+    mot._call.model_options = {"temperature": 0.5}
+    mot._call.generation_id = "gen-123"
+    # Dirty the in-flight machinery so a shared _gen would be observable.
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.chunk_size = 99
+
+    deep = copy.deepcopy(mot)
+
+    # _gen is a distinct, fresh instance — not shared with the original.
+    assert deep._gen is not mot._gen
+    assert deep._gen.queue is not mot._gen.queue
+    assert deep._gen.generate is None
+    assert deep._gen.generate_type is GenerateType.NONE
+    assert deep._gen.chunk_size == 3
+
+    # _call is preserved.
+    assert deep._call.model_options == {"temperature": 0.5}
+    assert deep._call.generation_id == "gen-123"
+    assert deep._call.context == []
+    assert isinstance(deep._call.action, Message)
+
+
+def test_copy_resets_gen_and_preserves_call() -> None:
+    """Shallow-copying a computed MOT yields a fresh _gen but preserves _call."""
+    mot = ModelOutputThunk(value="done")
+    mot._call.action = Message("user", "hi")
+    mot._call.context = []
+    mot._call.model_options = {"temperature": 0.5}
+    mot._call.generation_id = "gen-123"
+    # Dirty the in-flight machinery so a shared _gen would be observable.
+    mot._gen.generate_type = GenerateType.ASYNC
+    mot._gen.chunk_size = 99
+
+    shallow = copy.copy(mot)
+
+    # _gen is a distinct, fresh instance — not shared with the original.
+    assert shallow._gen is not mot._gen
+    assert shallow._gen.queue is not mot._gen.queue
+    assert shallow._gen.generate is None
+    assert shallow._gen.generate_type is GenerateType.NONE
+    assert shallow._gen.chunk_size == 3
+
+    # _call is preserved.
+    assert shallow._call.model_options == {"temperature": 0.5}
+    assert shallow._call.generation_id == "gen-123"
+    assert shallow._call.context == []
+    assert isinstance(shallow._call.action, Message)
 
 
 @pytest.mark.asyncio
@@ -352,7 +485,7 @@ async def test_cancel_generation_hook_exception_is_suppressed() -> None:
         raise RuntimeError("hook exploded")
 
     mot = ModelOutputThunk(value=None)
-    mot._cancel_hook = _bad_hook  # type: ignore[attr-defined]
+    mot._gen.cancel_hook = _bad_hook  # type: ignore[attr-defined]
 
     # No _generate task — cancel_generation still runs the hook path.
     # The hook raises, but cancel_generation must complete without propagating.
@@ -364,7 +497,7 @@ async def test_cancel_generation_hook_exception_is_suppressed() -> None:
 async def test_cancel_generation_propagates_outer_cancellation() -> None:
     """Outer cancellation of the cancel_generation() task must re-raise CancelledError.
 
-    When cancel_generation() is awaiting self._generate and the *cancel_generation*
+    When cancel_generation() is awaiting self._gen.generate and the *cancel_generation*
     task is itself cancelled from outside, cur.cancelling() > 0 and the
     CancelledError must propagate — not be swallowed by the bare ``pass`` path.
     """
@@ -377,18 +510,18 @@ async def test_cancel_generation_propagates_outer_cancellation() -> None:
             await asyncio.sleep(60)
         except asyncio.CancelledError:
             # Signal that cancel_generation() has called .cancel() and is
-            # now blocked at ``await self._generate``.
+            # now blocked at ``await self._gen.generate``.
             inner_cancelled.set()
             # Absorb this cancel so cancel_generation() stays at the await.
             await asyncio.sleep(60)
 
     mot = ModelOutputThunk(value=None)
-    mot._generate = asyncio.create_task(_absorbs_first_cancel())  # type: ignore[attr-defined]
+    mot._gen.generate = asyncio.create_task(_absorbs_first_cancel())  # type: ignore[attr-defined]
     await asyncio.sleep(0)
 
     cg_task = asyncio.create_task(mot.cancel_generation())  # type: ignore[attr-defined]
     # Wait until _generate has absorbed cancel_generation()'s .cancel() call —
-    # at that point cg_task is blocked at ``await self._generate``.
+    # at that point cg_task is blocked at ``await self._gen.generate``.
     await asyncio.wait_for(inner_cancelled.wait(), timeout=2.0)
 
     # Cancel cancel_generation() from outside (simulates asyncio.wait_for timeout
@@ -398,8 +531,79 @@ async def test_cancel_generation_propagates_outer_cancellation() -> None:
         await asyncio.wait_for(cg_task, timeout=2.0)
 
     # Cleanup: stop the still-running _generate task.
-    mot._generate.cancel()  # type: ignore[attr-defined]
+    mot._gen.generate.cancel()  # type: ignore[attr-defined]
     try:
-        await asyncio.wait_for(mot._generate, timeout=1.0)  # type: ignore[attr-defined]
+        await asyncio.wait_for(mot._gen.generate, timeout=1.0)  # type: ignore[attr-defined]
     except (TimeoutError, asyncio.CancelledError):
         pass
+
+
+def test_mot_is_not_shadowed_by_cblock_in_pattern_match():
+    """ModelOutputThunk must not be a CBlock subtype.
+
+    Before #269, ModelOutputThunk inherited CBlock, so a match block with
+    case CBlock() appearing before case ModelOutputThunk() would silently
+    consume all MOTs — the MOT branch was unreachable.
+    """
+    mot = ModelOutputThunk("hello")
+    cb = CBlock("hello")
+
+    def classify(obj):
+        match obj:
+            case CBlock():
+                return "cblock"
+            case ModelOutputThunk():
+                return "mot"
+            case _:
+                return "other"
+
+    assert classify(mot) == "mot"
+    assert classify(cb) == "cblock"
+    assert not isinstance(mot, CBlock)
+
+
+def test_generate_walk_computed_mot_returns_empty():
+    mot = ModelOutputThunk(value="already computed")
+    assert generate_walk(mot) == []
+
+
+def test_generate_walk_uncomputed_mot_returns_self():
+    mot = ModelOutputThunk(value=None)
+    assert generate_walk(mot) == [mot]
+
+
+def test_generate_walk_cblock_returns_empty():
+    assert generate_walk(CBlock("text")) == []
+
+
+def test_blockify_string_returns_cblock():
+    result = blockify("hello")
+    assert isinstance(result, CBlock)
+    assert result.value == "hello"
+
+
+def test_blockify_cblock_returns_unchanged():
+    cb = CBlock("hello")
+    assert blockify(cb) is cb
+
+
+def test_blockify_component_returns_unchanged():
+    class DummyComponent(Component[str]):
+        def parts(self):
+            return []
+
+        def _parse(self, computed):
+            return computed.value or ""
+
+    comp = DummyComponent()
+    assert blockify(comp) is comp
+
+
+def test_blockify_mot_returns_unchanged():
+    mot = ModelOutputThunk("hello")
+    assert blockify(mot) is mot
+
+
+def test_blockify_uncomputed_mot_returns_unchanged():
+    mot = ModelOutputThunk(value=None)
+    assert blockify(mot) is mot

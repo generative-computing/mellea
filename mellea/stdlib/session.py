@@ -107,7 +107,7 @@ def start_session(
     Args:
         backend_name: The backend to use. Options are:
             - "ollama": Use Ollama backend for local models
-            - "hf" or "huggingface": Use HuggingFace transformers backend
+            - "hf" or "huggingface": Use Hugging Face transformers backend
             - "openai": Use OpenAI API backend
             - "watsonx": Use IBM WatsonX backend, WARNING: this defaults to the IBM_GRANITE_4_HYBRID_SMALL model for now.
             - "litellm": Use the LiteLLM backend
@@ -287,14 +287,30 @@ class MelleaSession:
         *,
         session_id: str | None = None,
     ):
-        """Initialize MelleaSession with a backend and optional conversation context."""
+        """Initialize MelleaSession with a backend and optional conversation context.
+
+        Note:
+            When *ctx* is a bare (unbound, empty) `ChatContext` and *backend*
+            exposes a `model_id`, the constructor replaces `self.ctx` with a
+            re-bound copy that carries the model identifier.  After construction,
+            `session.ctx is ctx` will therefore be `False`.
+        """
         import uuid
 
-        self.id = session_id if session_id is not None else str(uuid.uuid4())
+        self._init_fields(
+            session_id if session_id is not None else str(uuid.uuid4()),
+            backend,
+            ctx if ctx is not None else SimpleContext(),
+        )
+        self._auto_bind_model()
+
+    def _init_fields(self, session_id: str, backend: Backend, ctx: Context) -> None:
+        """Set all instance fields. Shared by __init__ and __copy__ so neither diverges."""
+        self.id = session_id
         self.backend = backend
-        # Bypass the ctx setter so the initial assignment doesn't count as an
+        # Bypass the ctx setter so this initial assignment doesn't count as an
         # interaction.
-        self._ctx: Context = ctx if ctx is not None else SimpleContext()
+        self._ctx: Context = ctx
         self._interaction_count: int = 0
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
@@ -312,11 +328,23 @@ class MelleaSession:
 
         Every model-interaction code path in this class assigns to ``self.ctx``
         with the post-interaction context, so each setter call is exactly one
-        interaction. Lifecycle paths that swap the context wholesale (``reset``)
-        write to ``self._ctx`` directly to bypass this counter.
+        interaction. Lifecycle paths that swap the context wholesale (``reset``,
+        ``_auto_bind_model``) write to ``self._ctx`` directly to bypass this
+        counter.
         """
         self._ctx = value
         self._interaction_count += 1
+
+    def _auto_bind_model(self) -> None:
+        """Bind the backend's model_id to a bare ChatContext, enabling auto context-window sizing."""
+        if (
+            isinstance(self.ctx, ChatContext)
+            and self.ctx.model_id is None
+            and self.ctx.is_root_node
+            and getattr(self.backend, "model_id", None) is not None
+        ):
+            # Bypass the setter — binding at construction is not an interaction.
+            self._ctx = self.ctx._bind_model(getattr(self.backend, "model_id"))
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -364,10 +392,11 @@ class MelleaSession:
 
     def __copy__(self):
         """Use self.clone. Copies the current session but keeps references to the backend and context."""
-        new = MelleaSession(backend=self.backend, ctx=self.ctx)
-        new._session_logger = self._session_logger
-        # Explicitly don't copy over the _context_token.
+        import uuid
 
+        new = object.__new__(MelleaSession)
+        new._init_fields(str(uuid.uuid4()), self.backend, self.ctx)
+        # Do not call _auto_bind_model: the session state is already settled.
         return new
 
     def clone(self) -> MelleaSession:
@@ -399,8 +428,10 @@ class MelleaSession:
         """Reset the context state to a fresh, empty context of the same type.
 
         Fires the `SESSION_RESET` plugin hook if any plugins are registered, then
-        replaces `self.ctx` with the result of `ctx.reset_to_new()`, discarding
-        all accumulated conversation history.
+        replaces `self.ctx` with a fresh empty context, discarding all accumulated
+        conversation history. For `ChatContext`, uses `new_instance()` so the
+        `model_id` and `window_size` bindings are preserved; for all other context
+        types, uses `reset_to_new()`.
         """
         if has_plugins(HookType.SESSION_RESET):
             from ..plugins.hooks.session import SessionResetPayload
@@ -410,7 +441,9 @@ class MelleaSession:
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
         # Bypass the setter — a reset is a lifecycle event, not an interaction.
-        self._ctx = self._ctx.reset_to_new()
+        # new_instance() preserves ChatContext config (model_id, compactor); the
+        # base Context implementation falls back to reset_to_new().
+        self._ctx = self._ctx.new_instance()
         self._interaction_count = 0
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
@@ -484,7 +517,10 @@ class MelleaSession:
             requirements: used as additional requirements when a sampling strategy is provided
             strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-            format: if set, the BaseModel to use for constrained decoding.
+            format: Constrains generation to JSON matching this Pydantic
+                schema. The result's `.value` is always a JSON string — not a
+                parsed model instance. Parse with
+                `MyModel.model_validate_json(str(result))` to get a typed instance.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
 
@@ -519,7 +555,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -538,7 +575,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -556,7 +594,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -578,7 +617,10 @@ class MelleaSession:
             output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
             strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-            format: If set, the BaseModel to use for constrained decoding.
+            format: Constrains generation to JSON matching this Pydantic
+                schema. The result's `.value` is always a JSON string — not a
+                parsed model instance. Parse with
+                `MyModel.model_validate_json(str(result))` to get a typed instance.
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
@@ -662,21 +704,21 @@ class MelleaSession:
         self,
         reqs: Requirement | list[Requirement],
         *,
-        output: CBlock | None = None,
+        output: CBlock | ModelOutputThunk | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-        input: CBlock | None = None,
+        input: CBlock | ModelOutputThunk | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
         Args:
             reqs: A single `Requirement` or a list of them to validate.
-            output: Optional model output `CBlock` to validate against instead of the context.
+            output: Optional model output to validate against instead of the context.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input `CBlock` to include alongside `output` when validating.
+            input: Optional input to include alongside `output` when validating.
 
         Returns:
             List of `ValidationResult` objects, one per requirement.
@@ -832,7 +874,10 @@ class MelleaSession:
             requirements: used as additional requirements when a sampling strategy is provided
             strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-            format: if set, the BaseModel to use for constrained decoding.
+            format: Constrains generation to JSON matching this Pydantic
+                schema. The result's `.value` is always a JSON string — not a
+                parsed model instance. Parse with
+                `MyModel.model_validate_json(str(result))` to get a typed instance.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
@@ -870,7 +915,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -890,7 +936,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -910,7 +957,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -930,7 +978,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -949,7 +998,8 @@ class MelleaSession:
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
+        | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -972,7 +1022,10 @@ class MelleaSession:
             output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
             strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-            format: If set, the BaseModel to use for constrained decoding.
+            format: Constrains generation to JSON matching this Pydantic
+                schema. The result's `.value` is always a JSON string — not a
+                parsed model instance. Parse with
+                `MyModel.model_validate_json(str(result))` to get a typed instance.
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
@@ -1059,21 +1112,21 @@ class MelleaSession:
         self,
         reqs: Requirement | list[Requirement],
         *,
-        output: CBlock | None = None,
+        output: CBlock | ModelOutputThunk | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-        input: CBlock | None = None,
+        input: CBlock | ModelOutputThunk | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
         Args:
             reqs: A single `Requirement` or a list of them to validate.
-            output: Optional model output `CBlock` to validate against instead of the context.
+            output: Optional model output to validate against instead of the context.
             format: Optional Pydantic model for constrained decoding.
             model_options: Additional model options to merge with backend defaults.
             generate_logs: Optional list to append generation logs to.
-            input: Optional input `CBlock` to include alongside `output` when validating.
+            input: Optional input to include alongside `output` when validating.
 
         Returns:
             List of `ValidationResult` objects, one per requirement.

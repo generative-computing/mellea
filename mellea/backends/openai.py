@@ -26,6 +26,7 @@ from ..core import (
     GenerateType,
     MelleaLogger,
     ModelOutputThunk,
+    RawProviderResponse,
     Requirement,
 )
 from ..core.base import AbstractMelleaTool
@@ -435,6 +436,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         backend_specific = ModelOption.replace_keys(model_options, remap_dict)
 
+        for opt, field in (
+            (ModelOption.LOGITS, "generation.logits"),
+            (ModelOption.RAW_LOGITS, "generation.raw_logits"),
+        ):
+            if model_options.get(opt) and opt not in self._warned_about:
+                self._warned_about.add(opt)
+                MelleaLogger.get_logger().warning(
+                    f"{opt!r} is not supported by the OpenAI backend; {field} will be None."
+                )
+
         # OpenAI Backend has specific filtering functionality.
         if is_chat_context:
             model_opts = self.filter_chat_completions_kwargs(backend_specific)
@@ -445,7 +456,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -708,10 +719,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # --- wire up ModelOutputThunk with intrinsic post-processing ------
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_options
+        output._gen.start = datetime.datetime.now()
+        output._call.context = linearized_context
+        output._call.action = action
+        output._call.model_options = model_options
 
         async def granite_formatters_processing(
             mot: ModelOutputThunk,
@@ -741,13 +752,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Processing functions only pass the ModelOutputThunk (and current chunk
         # of response). Bind the other vars necessary for each processing step.
-        output._process = functools.partial(
+        output._gen.process = functools.partial(
             granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
         )
 
-        output._post_process = functools.partial(
+        output._gen.post_process = functools.partial(
             self.post_processing,
             tools=tools,
             conversation=conversation,
@@ -760,21 +771,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             # To support lazy computation, will need to remove this create_task
             # and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing
-            # this ._generate function.
+            # this ._gen.generate function.
 
             # This function should always be called from a running event loop so
             # we don't have to worry about scheduling the task to a specific
             # event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_options.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present.
             raise e
@@ -783,7 +794,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_chat_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
@@ -822,7 +833,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_chat_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
@@ -965,15 +976,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )  # type: ignore
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_opts
+        output._gen.start = datetime.datetime.now()
+        output._call.context = linearized_context
+        output._call.action = action
+        output._call.model_options = model_opts
 
         # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
         # each processing step.
-        output._process = self.processing
-        output._post_process = functools.partial(
+        output._gen.process = self.processing
+        output._gen.post_process = functools.partial(
             self.post_processing,
             tools=tools,
             conversation=conversation,
@@ -988,20 +999,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+            # We can also support synchronous calls by adding a flag and changing this ._gen.generate function.
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
+            output._gen.generate = asyncio.create_task(
                 send_to_queue(
                     chat_response,
-                    output._async_queue,
+                    output._gen.queue,
                     chunk_timeout=model_opts.get(
                         ModelOption.STREAM_TIMEOUT, DEFAULT_CHUNK_TIMEOUT
                     ),
                 )
             )
-            output._generate_type = GenerateType.ASYNC
+            output._gen.generate_type = GenerateType.ASYNC
         except RuntimeError as e:
             # Most likely cause is running this function without an event loop present
             raise e
@@ -1021,8 +1032,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             chunk (ChatCompletion | ChatCompletionChunk): A single response object or
                 streaming delta from the OpenAI API.
         """
-        if mot._thinking is None:
-            mot._thinking = ""
+        if mot.thinking is None:
+            mot.thinking = ""
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -1035,21 +1046,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if thinking_chunk is None:
                 thinking_chunk = (message.model_extra or {}).get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message.content
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            # Store the full response (includes usage) as a dict
-            mot._meta["oai_chat_response"] = chunk.model_dump()
-            # Also store just the choice for backward compatibility
-            mot._meta["oai_chat_response_choice"] = chunk.choices[0].model_dump()
+            # Store the full response (includes usage) as a dict.
+            mot.raw.response = chunk.model_dump()
 
         elif isinstance(chunk, ChatCompletionChunk):
-            # Store usage information from the chunk if available (typically in the last chunk)
+            # Usage arrives on its own chunk (typically the last); record it now.
             if hasattr(chunk, "usage") and chunk.usage is not None:
-                mot._meta["oai_streaming_usage"] = chunk.usage.model_dump()
+                mot.generation.usage = chunk.usage.model_dump()
 
             # Some chunks (like the final usage chunk) may not have choices
             if len(chunk.choices) == 0:
@@ -1060,17 +1069,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if thinking_chunk is None:
                 thinking_chunk = (message_delta.model_extra or {}).get("reasoning")
             if thinking_chunk is not None:
-                mot._thinking += thinking_chunk
+                mot.thinking += thinking_chunk
 
             content_chunk = message_delta.content
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            if mot._meta.get("oai_chat_response_streamed", None) is None:
-                mot._meta["oai_chat_response_streamed"] = []
-            mot._meta["oai_chat_response_streamed"].append(
-                chunk.choices[0].model_dump()
-            )
+            if mot.raw.streamed_chunks is None:
+                mot.raw.streamed_chunks = []
+            mot.raw.streamed_chunks.append(chunk.choices[0].model_dump())
 
     async def post_processing(
         self,
@@ -1099,26 +1106,28 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """
-        # Reconstruct the chat_response from chunks if streamed.
-        streamed_chunks = mot._meta.get("oai_chat_response_streamed", None)
-        if streamed_chunks is not None:
-            mot._meta["oai_chat_response"] = chat_completion_delta_merge(
-                streamed_chunks
-            )
+        # Reconstruct the top-level response from chunks if streamed.
+        if mot.raw.streamed_chunks is not None:
+            mot.raw.response = chat_completion_delta_merge(mot.raw.streamed_chunks)
 
-        assert mot._action is not None, (
+        assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
         )
-        assert mot._model_options is not None, (
+        assert mot._call.model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
         # OpenAI streamed responses give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        # Use the choice format for tool extraction (backward compatibility)
-        choice_response = mot._meta.get(
-            "oai_chat_response_choice", mot._meta["oai_chat_response"]
+        # Non-streaming stores a top-level response (index into choices); streaming
+        # stores the already-merged choice dict (use directly).
+        response = mot.raw.response
+        assert response is not None
+        choice_response = (
+            response["choices"][0]
+            if isinstance(response, dict) and "choices" in response
+            else response
         )
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
@@ -1132,10 +1141,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log = GenerateLog()
         generate_log.prompt = conversation
         generate_log.backend = f"openai::{self.model_id!s}"
-        generate_log.model_options = mot._model_options
+        generate_log.model_options = mot._call.model_options
         generate_log.date = datetime.datetime.now()
         # Store the full response (includes usage info)
-        generate_log.model_output = mot._meta["oai_chat_response"]
+        generate_log.model_output = response
         generate_log.extra = {
             "format": _format,
             "thinking": thinking,
@@ -1143,25 +1152,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "tools_called": mot.tool_calls,
             "seed": seed,
         }
-        generate_log.action = mot._action
+        generate_log.action = mot._call.action
         generate_log.result = mot
         mot._generate_log = generate_log
 
-        # Extract token usage from response or streaming usage
-        response = mot._meta["oai_chat_response"]
-        usage = response.get("usage") if isinstance(response, dict) else None
-
-        # For streaming responses, usage is stored separately
-        if usage is None:
-            usage = mot._meta.get("oai_streaming_usage")
-
-        # Populate standardized usage field (OpenAI format already matches)
-        if usage:
+        # Non-streaming carries usage on the response; streaming already set it.
+        if usage := response.get("usage"):
             mot.generation.usage = usage
 
         # Populate model and provider metadata
         mot.generation.model = self._model_id
         mot.generation.provider = self._provider
+        mot.raw.provider = self._provider
 
         # Populate response-side metadata for telemetry
         if isinstance(response, dict):
@@ -1256,10 +1258,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             completion_response.choices, actions, prompts
         ):
             output = ModelOutputThunk(response.text)
-            output._context = None  # There is no context for generate_from_raw for now
-            output._action = action
-            output._model_options = model_opts
-            output._meta = {"oai_completion_response": response.model_dump()}
+            # There is no context for generate_from_raw for now
+            output._call.context = None
+            output._call.action = action
+            output._call.model_options = model_opts
+            output.raw = RawProviderResponse(
+                provider=self._provider, response=response.model_dump()
+            )
             output.generation.model = self._model_id
             output.generation.provider = self._provider
 

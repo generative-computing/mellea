@@ -4,17 +4,21 @@ The Guardian adapters (`guardian-core`, `policy-guardrails`,
 `factuality-detection`, `factuality-correction`) require a
 `<guardian>`-prefixed envelope as the last user message of the request.
 That envelope is built from the `instruction:` field of each adapter's
-`io.yaml` via :class:`IntrinsicsRewriter`; the helpers below just resolve
-any convenience inputs (e.g. :data:`CRITERIA_BANK` lookups) and pass the
+`io.yaml` via `IntrinsicsRewriter`; the helpers below just resolve
+any convenience inputs (e.g. `CRITERIA_BANK` lookups) and pass the
 resolved kwargs through.
 """
 
+import collections.abc
 import warnings
+from typing import cast
 
 from ....backends.adapters import AdapterMixin
 from ....core.utils import MelleaLogger
+from ...components import Document
 from ...context import ChatContext
-from ._util import call_intrinsic
+from ..chat import Message
+from ._util import _extract_last_response, call_intrinsic
 
 _UNSET: object = object()
 """Sentinel distinguishing 'caller omitted scoring_schema' from 'caller passed
@@ -22,41 +26,55 @@ the default value explicitly'. Used only to detect conflicts with the
 deprecated `target_role` kwarg."""
 
 _TARGET_ROLE_TO_SCHEMA = {"user": "user_prompt", "assistant": "assistant_response"}
-"""Mapping used by the deprecated `target_role` path of :func:`guardian_check`."""
+"""Mapping used by the deprecated `target_role` path of `guardian_check`."""
 
 
 def policy_guardrails(
-    context: ChatContext, backend: AdapterMixin, policy_text: str
+    context: ChatContext,
+    backend: AdapterMixin,
+    policy_text: str,
+    *,
+    model_options: dict | None = None,
 ) -> str:
-    """Checks whether text complied with specified policy.
+    """Check whether the last context turn complies with a policy.
 
-    Uses the policy_guardrails LoRA adapter to judge whether the scenario
-    described in the last message in `context` is compliant with the given `policy_text`.
+    Uses the policy-guardrails adapter (LoRA or aLoRA) to judge whether the scenario
+    described in the last message in `context` is compliant with the given
+    `policy_text`.
 
     Args:
-        context (ChatContext): Chat context containing the conversation to evaluate.
-        backend (AdapterMixin): Backend instance that supports LoRA adapters.
-        policy_text (str): Policy against which compliance is to be checked.
+        context: Chat context containing the conversation to evaluate.
+        backend: Backend instance that supports LoRA adapters.
+        policy_text: Policy text against which compliance is checked.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        str: Compliance as a `"Yes"` / `"No"` / `"Ambiguous"` label (`"Yes"` = compliant).
+        Compliance label as `"Yes"`, `"No"`, or `"Ambiguous"` (Yes = compliant).
+
+    Raises:
+        ValueError: If the adapter returns a result with neither or both of
+            `"label"` and `"score"` fields.
     """
     result_json = call_intrinsic(
-        "policy-guardrails", context, backend, kwargs={"policy_text": policy_text}
+        "policy-guardrails",
+        context,
+        backend,
+        kwargs={"policy_text": policy_text},
+        model_options=model_options,
     )
 
-    if "label" not in result_json.keys() and "score" not in result_json.keys():
-        raise Exception(
+    has_label = "label" in result_json
+    has_score = "score" in result_json
+    if has_label == has_score:
+        if has_label:
+            raise ValueError(
+                "Expected Guardian result to have label xor score, but found both."
+            )
+        raise ValueError(
             "Expected Guardian result to have label xor score, but found neither."
         )
-    elif "label" not in result_json.keys() and "score" in result_json.keys():
-        return result_json["score"]
-    elif "label" in result_json.keys() and "score" not in result_json.keys():
-        return result_json["label"]
-    else:
-        raise Exception(
-            "Expected Guardian result to have label xor score, but found both."
-        )
+    return cast(str, result_json["label"] if has_label else result_json["score"])
 
 
 SCORING_SCHEMA_BANK = {
@@ -76,7 +94,7 @@ SCORING_SCHEMA_BANK = {
         "otherwise, return 'no'."
     ),
 }
-"""Pre-baked scoring-schema phrasings for :func:`guardian_check`.
+"""Pre-baked scoring-schema phrasings for `guardian_check`.
 
 Keys can be passed directly as the `scoring_schema` parameter; any
 other string is used verbatim. Entries must resolve to a yes/no
@@ -158,7 +176,7 @@ CRITERIA_BANK = {
 }
 """Pre-baked criteria definitions from the Granite Guardian model card.
 
-Keys can be passed directly to :func:`guardian_check` as the `criteria`
+Keys can be passed directly to `guardian_check` as the `criteria`
 parameter.
 """
 
@@ -169,6 +187,8 @@ def guardian_check(
     criteria: str,
     scoring_schema: str | object = _UNSET,
     target_role: str | None = None,
+    *,
+    model_options: dict | None = None,
 ) -> float:
     """Check whether text meets specified safety/quality criteria.
 
@@ -180,20 +200,22 @@ def guardian_check(
         context: Chat context containing the conversation to evaluate.
         backend: Backend instance that supports LoRA adapters.
         criteria: Description of the criteria to check against. Can be a
-            key from :data:`CRITERIA_BANK` (e.g. `"harm"`) or a custom
+            key from `CRITERIA_BANK` (e.g. `"harm"`) or a custom
             criteria string.
         scoring_schema: Sentence that tells the judge which span to
             evaluate and how to decide. Can be a key from
-            :data:`SCORING_SCHEMA_BANK` (e.g. `"user_prompt"`) or a
+            `SCORING_SCHEMA_BANK` (e.g. `"user_prompt"`) or a
             custom string. Defaults to `"assistant_response"`. Must
             still resolve to a yes/no verdict — the adapter's
             `response_format` constrains output to `"yes"`/`"no"`.
         target_role: Deprecated. Role whose last message is being
             evaluated (`"user"` or `"assistant"`). Prefer
             `scoring_schema` with a key from
-            :data:`SCORING_SCHEMA_BANK`. Passing both
+            `SCORING_SCHEMA_BANK`. Passing both
             `scoring_schema` and `target_role` raises
-            :class:`TypeError`.
+            `TypeError`.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
         Risk score as a float between 0.0 (no risk) and 1.0 (risk detected).
@@ -239,40 +261,141 @@ def guardian_check(
         context,
         backend,
         kwargs={"criteria": criteria_text, "scoring_schema": scoring_schema_text},
+        model_options=model_options,
     )
-    return result_json["guardian"]["score"]
+    return cast(float, cast(dict[str, object], result_json["guardian"])["score"])
 
 
-def factuality_detection(context: ChatContext, backend: AdapterMixin) -> str:
-    """Determine is the last response is factually incorrect.
+def factuality_detection(
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
+    model_options: dict | None = None,
+) -> str:
+    """Determine whether the last assistant response is factually incorrect.
 
-    Adapter function that evaluates the factuality of the
-    assistant's response to a user's question. The context should end with
-    a user question followed by an assistant answer.
+    Adapter function that evaluates the factuality of the assistant's response
+    to a user's question. The context should end with a user question followed
+    by an assistant answer.
+
+    Reference documents can be supplied in any of these ways:
+
+    1. Pass them explicitly via `documents=`.
+    2. Include them on messages already in `context`
+       (e.g. `Message("assistant", response, documents=[doc])`).
+    3. Perform retrieval and add the resulting documents to `context`
+       before calling this function.
+
+    When `documents=` is given it replaces any documents already on the
+    last assistant turn; documents on other messages in `context` are
+    not affected.
 
     Args:
-        context (ChatContext): Chat context containing user question and assistant answer.
-        backend (AdapterMixin): Backend instance that supports LoRA/aLoRA adapters.
+        context: Chat context ending with a user question and an assistant
+            answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
+        documents: Optional reference documents used to ground the factuality
+            check. Each element may be a `Document` or a plain string
+            (automatically wrapped in `Document`). When `None`, any documents
+            already present in `context` are used.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        str: Factuality score as a `"yes"` / `"no"` label (`"yes"` = factually incorrect).
+        Factuality label: `"yes"` if the response is factually incorrect,
+        `"no"` if it is correct.
+
+    Raises:
+        ValueError: If `documents` is provided but the last assistant response
+            cannot be extracted (empty context, non-assistant last turn, or
+            uncomputed response).
     """
-    result_json = call_intrinsic("factuality-detection", context, backend)
-    return result_json["score"]
+    if documents is not None:
+        context = _inject_documents(context, documents)
+    result_json = call_intrinsic(
+        "factuality-detection", context, backend, model_options=model_options
+    )
+    return cast(str, result_json["score"])
 
 
-def factuality_correction(context: ChatContext, backend: AdapterMixin) -> str:
-    """Corrects the last response so that it is factually correct.
+def factuality_correction(
+    context: ChatContext,
+    backend: AdapterMixin,
+    *,
+    documents: collections.abc.Iterable[str | Document] | None = None,
+    model_options: dict | None = None,
+) -> str:
+    """Correct the last assistant response to make it factually accurate.
 
-    Adapter function that corrects the assistant's response to a user's
-    question relative to the given contextual information.
+    Adapter function that rewrites the assistant's response to a user's
+    question so that it is consistent with the supplied reference documents.
+    The context should end with a user question followed by an assistant answer.
+
+    Reference documents can be supplied in any of these ways:
+
+    1. Pass them explicitly via `documents=`.
+    2. Include them on messages already in `context`
+       (e.g. `Message("assistant", response, documents=[doc])`).
+    3. Perform retrieval and add the resulting documents to `context`
+       before calling this function.
+
+    When `documents=` is given it replaces any documents already on the
+    last assistant turn; documents on other messages in `context` are
+    not affected.
 
     Args:
-        context (ChatContext): Chat context containing user question and assistant answer.
-        backend (AdapterMixin): Backend instance that supports LoRA/aLoRA adapters.
+        context: Chat context ending with a user question and an assistant
+            answer.
+        backend: Backend instance that supports LoRA/aLoRA adapters.
+        documents: Optional reference documents used to ground the correction.
+            Each element may be a `Document` or a plain string
+            (automatically wrapped in `Document`). When `None`, any documents
+            already present in `context` are used.
+        model_options: Optional model-generation overrides forwarded to the
+            backend (e.g. `{"temperature": 0}`).
 
     Returns:
-        str: Corrected assistant response.
+        Corrected assistant response as a plain string.
+
+    Raises:
+        ValueError: If `documents` is provided but the last assistant response
+            cannot be extracted (empty context, non-assistant last turn, or
+            uncomputed response).
     """
-    result_json = call_intrinsic("factuality-correction", context, backend)
-    return result_json["correction"]
+    if documents is not None:
+        context = _inject_documents(context, documents)
+    result_json = call_intrinsic(
+        "factuality-correction", context, backend, model_options=model_options
+    )
+    return cast(str, result_json["correction"])
+
+
+def _inject_documents(
+    context: ChatContext, documents: collections.abc.Iterable[str | Document]
+) -> ChatContext:
+    """Return a copy of *context* with *documents* attached to the last assistant turn.
+
+    Supports both session-generated contexts (where the last turn is a
+    `ModelOutputThunk`) and manually-constructed contexts (where the
+    last turn is a `Message` added directly via `ChatContext.add`).
+
+    Args:
+        context: Chat context whose last element is an assistant response.
+        documents: Reference documents to attach.
+
+    Returns:
+        New context identical to the input except the last assistant turn now
+        carries the supplied documents. Any images on the original assistant
+        turn are not preserved.
+
+    Raises:
+        ValueError: If the last element of *context* is not an assistant
+            response that can be extracted, or if the assistant response
+            has not been computed yet.
+    """
+    response_text, prev_ctx = _extract_last_response(context)
+    return cast(
+        ChatContext,
+        prev_ctx.add(Message("assistant", response_text, documents=documents)),
+    )

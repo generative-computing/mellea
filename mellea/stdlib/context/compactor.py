@@ -265,7 +265,12 @@ class WindowCompactor(InlineCompactor):
 
         keep_body = full[pin_end:][-self.size :] if self.size > 0 else []
         compacted = full[:pin_end] + keep_body
-        return _rebuild_chat_context(compacted, compactor=ctx._compactor)
+        return _rebuild_chat_context(
+            compacted,
+            compactor=ctx._compactor,
+            token_context_length_limit=ctx._token_context_length_limit,
+            model_id=ctx._model_id,
+        )
 
 
 class ThresholdCompactor(InlineCompactor):
@@ -610,4 +615,9 @@ class LLMSummarizeCompactor:
             role="user", content=f"[CONTEXT SUMMARY]\n{result.value or ''}"
         )
         compacted = [*prefix, summary_message, *recent]
-        return _rebuild_chat_context(compacted, compactor=ctx._compactor)
+        return _rebuild_chat_context(
+            compacted,
+            compactor=ctx._compactor,
+            token_context_length_limit=ctx._token_context_length_limit,
+            model_id=ctx._model_id,
+        )

@@ -26,7 +26,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from mellea.core.backend import Backend
-from mellea.core.base import GenerateLog, ModelOutputThunk
+from mellea.core.base import GenerateLog, ModelOutputThunk, _CallInfo, _GenerationState
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.session import MelleaSession, start_session
@@ -107,11 +107,13 @@ class _MockBackend(Backend):
 
     async def _generate_from_context(self, action: Any, ctx: Any, **kwargs: Any):
         mot = MagicMock(spec=ModelOutputThunk)
+        mot._gen = _GenerationState()
+        mot._call = _CallInfo()
         glog = GenerateLog()
         glog.prompt = "mocked formatted prompt"
         mot._generate_log = glog
         mot.parsed_repr = None
-        mot._start = datetime.datetime.now()
+        mot._gen.start = datetime.datetime.now()
 
         async def _avalue() -> str:
             return "mocked output"

@@ -467,14 +467,14 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         return extracted
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this generative stub component.
 
         Includes the rendered arguments block (if arguments have been bound)
         and any requirements attached to this stub.
 
         Returns:
-            list[Component | CBlock]: List of argument blocks and requirements.
+            list[Component | CBlock | ModelOutputThunk]: List of argument blocks and requirements.
         """
         cs: list = []
         if self._arguments is not None:

@@ -181,6 +181,8 @@ _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     IntriniscsCatalogEntry(name="answerability", repo_id=_RAG_REPO, revision=_RAG_SHA),
     IntriniscsCatalogEntry(name="citations", repo_id=_RAG_REPO, revision=_RAG_SHA),
+    # Deprecated: Granite 4.0 only; no Granite 4.1 adapter planned.
+    # Removal tracked alongside check_context_relevance() in rag.py.
     IntriniscsCatalogEntry(
         name="context_relevance", repo_id=_RAG_REPO, revision=_RAG_SHA
     ),

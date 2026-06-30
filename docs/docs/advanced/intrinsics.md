@@ -74,6 +74,30 @@ print(rag.check_answerability(question, docs_not_answerable, context, backend)) 
 
 ## Context relevance
 
+:::warning Deprecated
+`check_context_relevance()` is deprecated and will be removed in a future release.
+The underlying adapter is Granite 4.0 only and will not receive a Granite 4.1 version.
+
+**There is no direct adapter replacement.** `check_answerability()` addresses a
+related but different question — it asks whether a *set* of documents can collectively
+answer a question (binary result), while `check_context_relevance()` scores a *single*
+document on a three-way scale. They operate at different stages of a RAG pipeline and
+are not interchangeable.
+
+For per-document relevance filtering, use a `@generative` function with any current
+Granite backend:
+
+```python
+from mellea import generative
+
+@generative
+def is_relevant(document: str, question: str) -> bool:
+    """Determine whether the document contains information relevant to the question."""
+```
+
+See [Build a RAG pipeline](../how-to/build-a-rag-pipeline.md) for a full example.
+:::
+
 Assess whether a document is relevant to a question:
 
 ```python
@@ -244,13 +268,13 @@ out, _ = mfuncs.act(
     ctx,
     backend,
 )
-print(out)  # {"requirement_likelihood": 1.0}
+print(out)  # {"requirement_check": {"score": 1.0}}
 ```
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 For OpenAI backends with Granite Switch, adapters are loaded from the model's
 Hugging Face repository configuration instead of the adapter function catalog.
-Output format is task-specific — `requirement-check` returns a likelihood score.
+Output format is task-specific — `requirement-check` returns `{"requirement_check": {"score": <float>}}`.
 
 ---
 

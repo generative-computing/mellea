@@ -1,5 +1,5 @@
 # pytest: ollama, e2e
-"""Example showing how to use pre-built HuggingFace smolagents tools with Mellea.
+"""Example showing how to use pre-built Hugging Face smolagents tools with Mellea.
 
 This demonstrates loading existing tools from the smolagents ecosystem,
 similar to how you can use langchain tools with MelleaTool.from_langchain().
@@ -8,7 +8,7 @@ The smolagents library provides various pre-built tools like:
 - PythonInterpreterTool for code execution
 - DuckDuckGoSearchTool for web search (requires ddgs package)
 - WikipediaSearchTool for Wikipedia queries
-- And many others from the HuggingFace ecosystem
+- And many others from the Hugging Face ecosystem
 """
 
 from mellea import start_session

@@ -357,7 +357,7 @@ Diagnose with:
 result = m.instruct("What is 2 + 2?")
 print(repr(result.value))                    # ''
 print(result.generation.usage)               # {'completion_tokens': 9, ...}
-print(result._thinking)                      # populated reasoning content, if any
+print(result.thinking)                       # populated reasoning content, if any
 ```
 
 This affects models that default to thinking mode, most commonly Qwen3 served
@@ -383,7 +383,7 @@ m = MelleaSession(
 
 Other inference servers expose the same control under different names — check
 your runtime's documentation. If you intend to use thinking mode, read the
-reasoning trace from `result._thinking` rather than `result.value`.
+reasoning trace from `result.thinking` rather than `result.value`.
 
 ---
 

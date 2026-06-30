@@ -72,11 +72,12 @@ def set_response_attrs(span: Any, gen: GenerationMetadata) -> None:
 
 def set_mellea_attrs(span: Any, mot: Any, gen: GenerationMetadata) -> None:
     """Emit `mellea.*` attributes derivable from the `ModelOutputThunk`."""
-    action = getattr(mot, "_action", None)
+    call = getattr(mot, "_call", None)
+    action = getattr(call, "action", None)
     if action is not None:
         span.set_attribute("mellea.action_type", action.__class__.__name__)
 
-    ctx = getattr(mot, "_context", None)
+    ctx = getattr(call, "context", None)
     span.set_attribute("mellea.context_size", len(ctx) if ctx else 0)
 
     if gen.streaming:

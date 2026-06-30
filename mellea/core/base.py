@@ -2,7 +2,9 @@
 
 Defines the building blocks that flow through every layer of the library: `CBlock`
 (a content block wrapping a string value), `Component` (an abstract composable
-generative unit), `ModelOutputThunk` (a lazily-evaluated model response),
+generative unit), `ModelOutputThunk` (a lazily-evaluated model response that is
+intentionally *not* a `CBlock` subtype — keeping them separate makes Python
+structural pattern matching order-insensitive),
 `Context` and `ContextTurn` (stateful conversation history containers),
 `TemplateRepresentation` (the structured rendering of a component for prompt
 templates), `ImageBlock`, and `ModelToolCall`. Understanding these types is
@@ -20,9 +22,10 @@ import enum
 import logging
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     Literal,
@@ -31,6 +34,9 @@ from typing import (
     TypeVar,
     runtime_checkable,
 )
+
+if TYPE_CHECKING:
+    import torch
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -229,12 +235,13 @@ class ComponentParseError(Exception):
 class Component(Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns the set of all constituent sub-components and content blocks of this `Component`.
 
         Returns:
-            list[Component | CBlock]: A list of child `Component` or `CBlock` objects that make
-            up this component. The list may be empty for leaf components.
+            list[Component | CBlock | ModelOutputThunk]: A list of child `Component`, `CBlock`,
+            or `ModelOutputThunk` objects that make up this component. The list may be empty for
+            leaf components.
 
         Raises:
             NotImplementedError: If the concrete subclass has not overridden this method.
@@ -307,6 +314,8 @@ class GenerationMetadata:
         response_model: Model identifier reported on the response; may differ from the requested model.
         finish_reasons: Finish reason(s) reported on the response (typically one per choice).
         response_id: Provider-assigned identifier for the response.
+        logits: Per-token processed logit scores (post-LogitsProcessor); None if not requested or unavailable.
+        raw_logits: Per-token raw LM-head logits (pre-LogitsProcessor); None if not requested or unavailable.
     """
 
     usage: dict[str, Any] | None = None
@@ -363,9 +372,121 @@ class GenerationMetadata:
     `None` when the backend response does not carry an id.
     """
 
+    logits: tuple[torch.Tensor, ...] | None = None
+    """Per-token processed logit scores from the backend (post-LogitsProcessor).
 
-class ModelOutputThunk(CBlock, Generic[S]):
-    """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
+    Populated when `ModelOption.LOGITS=True` and the backend supports it.
+    These are logits after the LogitsProcessor chain (temperature, top-k/top-p,
+    repetition penalty, etc.). For the HuggingFace backend this is a tuple of
+    1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
+    requested, if the backend does not support logits, or when
+    `ModelOption.STREAM=True`.
+    """
+
+    raw_logits: tuple[torch.Tensor, ...] | None = None
+    """Per-token raw LM-head logits from the backend (pre-LogitsProcessor).
+
+    Populated when `ModelOption.RAW_LOGITS=True` and the backend supports it.
+    These are the unprocessed logits straight from the LM head, before any
+    LogitsProcessor transforms. For the HuggingFace backend this is a tuple of
+    1-D tensors of shape `(vocab_size,)`, one per generated token. `None` if not
+    requested, if the backend does not support raw logits, or when
+    `ModelOption.STREAM=True`.
+    """
+
+
+@dataclass
+class RawProviderResponse:
+    """Backend-native response payload from the provider's SDK.
+
+    Reading these fields couples your code to a specific provider's response
+    shape. For portable access prefer `mot.value`, `mot.parsed_repr`,
+    `mot.tool_calls`, or `mot.generation`.
+
+    Args:
+        provider: Name of the provider that produced `response`; the same value
+            as `mot.generation.provider`. Read it to know how to interpret
+            `response`.
+        response: Full SDK response object. Shape depends on `provider`.
+        streamed_chunks: Per-chunk SDK objects from streaming responses.
+            `None` for non-streaming requests.
+    """
+
+    provider: str | None = None
+    response: Any | None = None
+    streamed_chunks: list[Any] | None = None
+
+
+@dataclass
+class _CallInfo:
+    """Originating-call data for a `ModelOutputThunk`.
+
+    Preserved across `__copy__` / `__deepcopy__` because retries and sampling
+    routinely need to re-issue or inspect the call that produced a thunk.
+
+    Args:
+        action: The component or block whose generation produced this thunk.
+        context: The context passed to the originating generate call.
+        model_options: Model options passed to the originating generate call.
+        generation_id: Mellea-side hook correlation ID; distinct from the
+            provider-assigned `GenerationMetadata.response_id`.
+    """
+
+    action: Component | CBlock | ModelOutputThunk | None = None
+    context: list[Component | CBlock | ModelOutputThunk] | None = None
+    model_options: dict[str, Any] | None = None
+    generation_id: str | None = None
+
+
+@dataclass
+class _GenerationState:
+    """In-flight computation machinery for a `ModelOutputThunk`.
+
+    Reset to a fresh empty instance on `__copy__` / `__deepcopy__` — a copied
+    thunk is a distinct (non-generating) object and must not share queues,
+    tasks, or thread signals with the original.
+
+    Args:
+        queue: Single-consumer queue feeding `astream()` during generation.
+        chunk_size: Minimum number of chunks to stream at a single time.
+        first_chunk_received: Whether the first streamed chunk has arrived
+            (gates time-to-first-byte recording).
+        generate: The task driving generation. Linked to `generate_type`.
+        generate_type: Determines which functions can resolve the thunk's value.
+        generate_extra: Auxiliary generation task; currently only used by hf.
+        cancel_hook: Optional cooperative-cancel hook called before asyncio task
+            cancellation. Backends that run generation in a thread (e.g. Hugging
+            Face via `asyncio.to_thread`) set this to a non-blocking callable
+            (e.g. `threading.Event.set`) so the thread receives a stop signal
+            before the task wrapper is cancelled. Must be non-blocking;
+            exceptions are logged and suppressed. Copied thunks reset this to
+            `None` — each computation owns its own thread signal.
+        process: Backend coroutine that folds a streamed chunk into the thunk.
+        post_process: Backend coroutine run once after the value is complete.
+        on_computed: Coroutine run when the thunk becomes computed.
+        start: Wall-clock start time of generation, for latency metrics.
+    """
+
+    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
+    chunk_size: int = 3
+    first_chunk_received: bool = False
+    generate: asyncio.Task[None] | None = None
+    generate_type: GenerateType = GenerateType.NONE
+    generate_extra: asyncio.Task[Any] | None = None
+    cancel_hook: Callable[[], None] | None = None
+    process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
+    post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+    on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
+    start: datetime.datetime | None = None
+
+
+class ModelOutputThunk(Generic[S]):
+    """A `ModelOutputThunk` represents a lazily-evaluated model response. It is possible to instantiate one without the output being computed yet.
+
+    Unlike `CBlock`, `ModelOutputThunk` is not a content-block input type — it is
+    always an output.  The two classes are intentionally kept separate so that
+    Python structural pattern matching (`match`/`case`) can distinguish them
+    without order-sensitivity bugs.
 
     Args:
         value (str | None): The raw model output string, or `None` if not yet computed.
@@ -383,7 +504,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
         tool_calls: dict[str, ModelToolCall] | None = None,
     ):
         """Initialize ModelOutputThunk with an optional pre-computed value and metadata."""
-        super().__init__(value, meta)
+        if value is not None and not isinstance(value, str):
+            raise TypeError(
+                "value to a ModelOutputThunk should always be a string or None"
+            )
+        self._underlying_value = value
+        self.cache: bool = False
+        if meta is None:
+            meta = {}
+        self._meta = meta
 
         self.parsed_repr: S | None = parsed_repr
         """Will be non-`None` once computed."""
@@ -394,60 +523,35 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
-        self._thinking: str | None = None
+        self.thinking: str | None = None
         self.generation: GenerationMetadata = GenerationMetadata()
         """Backend execution metadata populated during generation."""
 
-        # Used for tracking generation.
-        self._context: list[Component | CBlock] | None = None
-        self._action: Component | CBlock | None = None
-        self._model_options: dict[str, Any] | None = None
+        self.raw: RawProviderResponse = RawProviderResponse()
+        """Backend-native provider response populated during generation."""
 
-        # Used for async and async streaming.
-        self._async_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
-        self._chunk_size = 3  # Minimum number of chunks to stream at a single time.
+        # Originating-call data, preserved across copies. See `_CallInfo`.
+        self._call = _CallInfo()
 
-        # _generate and _generate_type are linked. _generate will determine
-        # what gets set for _generate_type. _generate_type determines what
-        # function(s) can be used to get the value of the ModelOutputThunk.
-        self._generate: asyncio.Task[None] | None = None
-        self._generate_type: GenerateType = GenerateType.NONE
-        self._generate_extra: asyncio.Task[Any] | None = (
-            None  # Currently only used by hf.
-        )
-        # Optional cooperative-cancel hook called before asyncio task cancellation.
-        # Backends that run generation in a thread (e.g. HuggingFace via
-        # asyncio.to_thread) set this to a non-blocking callable (e.g.
-        # threading.Event.set) so the thread receives a stop signal before the
-        # task wrapper is cancelled. Must be non-blocking; exceptions are logged
-        # and suppressed. Copied MOTs reset this to None — each computation owns
-        # its own thread signal.
-        self._cancel_hook: Callable[[], None] | None = None
-        self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
-        self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
-        self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
+        # In-flight computation machinery, reset on copy. See `_GenerationState`.
+        self._gen = _GenerationState()
 
-        self._start: datetime.datetime | None = None
-        self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
         # Soft-failure cause recorded by backends that return a placeholder
         # MOT instead of raising. Sibling to `_cancelled`.
         self._error: Exception | None = None
-        # Mellea-side hook correlation ID; distinct from the provider-assigned
-        # `GenerationMetadata.response_id`.
-        self._generation_id: str | None = None
 
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
         if (
             self.generation.streaming
-            and not self._first_chunk_received
-            and self._start is not None
+            and not self._gen.first_chunk_received
+            and self._gen.start is not None
         ):
             self.generation.ttfb_ms = (
-                datetime.datetime.now() - self._start
+                datetime.datetime.now() - self._gen.start
             ).total_seconds() * 1000
-            self._first_chunk_received = True
+            self._gen.first_chunk_received = True
 
     async def cancel_generation(self, error: Exception | None = None) -> None:
         """Cancel an in-progress streaming generation, drain the queue, and fire the `generation_error` hook.
@@ -480,34 +584,34 @@ class ModelOutputThunk(CBlock, Generic[S]):
             return
 
         def _drain() -> None:
-            while not self._async_queue.empty():
+            while not self._gen.queue.empty():
                 try:
-                    self._async_queue.get_nowait()
+                    self._gen.queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
 
         # Signal any backend thread before cancelling the asyncio task wrapper
         # so the thread can stop cooperatively instead of running to completion.
-        if self._cancel_hook is not None:
+        if self._gen.cancel_hook is not None:
             try:
-                self._cancel_hook()
+                self._gen.cancel_hook()
             except Exception as hook_exc:
                 logging.getLogger(__name__).warning(
-                    "cancel_generation: _cancel_hook raised (suppressed): %r", hook_exc
+                    "cancel_generation: cancel_hook raised (suppressed): %r", hook_exc
                 )
 
-        if self._generate is not None and not self._generate.done():
-            self._generate.cancel()
+        if self._gen.generate is not None and not self._gen.generate.done():
+            self._gen.generate.cancel()
 
-        if self._generate_extra is not None and not self._generate_extra.done():
-            self._generate_extra.cancel()
+        if self._gen.generate_extra is not None and not self._gen.generate_extra.done():
+            self._gen.generate_extra.cancel()
 
         # Drain before awaiting — unblocks any put() the task is stuck on.
         _drain()
 
-        if self._generate is not None:
+        if self._gen.generate is not None:
             try:
-                await self._generate
+                await self._gen.generate
             except asyncio.CancelledError:
                 # Re-raise if the *outer* task is being cancelled (Python 3.11+
                 # task.cancelling() > 0) so we don't silently absorb external
@@ -519,9 +623,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             except Exception:
                 pass
 
-        if self._generate_extra is not None:
+        if self._gen.generate_extra is not None:
             try:
-                await self._generate_extra
+                await self._gen.generate_extra
             except asyncio.CancelledError:
                 cur = asyncio.current_task()
                 if cur is not None and cur.cancelling() > 0:
@@ -543,7 +647,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 GenerationErrorPayload(
                     exception=recorded,
                     model_output=self,
-                    generation_id=self._generation_id,
+                    generation_id=self._call.generation_id,
                 ),
             )
 
@@ -594,14 +698,16 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._meta = other._meta
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
-        self._thinking = other._thinking
+        self.thinking = other.thinking
         self.generation = other.generation
+        self.raw = other.raw
         self._generate_log = other._generate_log
         self._cancelled = other._cancelled
         self._error = other._error
-        # _cancel_hook is deliberately not copied: _copy_from swaps output state,
-        # not backend-thread plumbing, which is tied to the original computation.
-        self._cancel_hook = None
+        # _gen.cancel_hook is deliberately not copied: _copy_from swaps output
+        # state, not backend-thread plumbing, which is tied to the original
+        # computation.
+        self._gen.cancel_hook = None
 
     def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled.
@@ -640,9 +746,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             assert self.value is not None  # If computed, the value cannot be None.
             return self.value
 
-        if not self._generate_type == GenerateType.ASYNC:
+        if not self._gen.generate_type == GenerateType.ASYNC:
             raise RuntimeError(
-                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._generate_type.name}`"
+                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._gen.generate_type.name}`"
             )
 
         while not self._computed:
@@ -681,12 +787,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Use string directly to avoid importing ModelOption from backends into core (circular import).
         # ModelOption.STREAM is defined in mellea/backends/model_options.py.
         self.generation.streaming = bool(
-            (self._model_options or {}).get("@@@stream@@@", False)
+            (self._call.model_options or {}).get("@@@stream@@@", False)
         )
 
-        if not self._generate_type == GenerateType.ASYNC:
+        if not self._gen.generate_type == GenerateType.ASYNC:
             raise RuntimeError(
-                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
+                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._gen.generate_type.name}`"
             )
         # Beginning value
         beginning_length = (
@@ -697,7 +803,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         chunks: list[Any | None] = []
         while True:
             try:
-                item = self._async_queue.get_nowait()
+                item = self._gen.queue.get_nowait()
                 chunks.append(item)
                 self._record_ttfb()
             except asyncio.QueueEmpty:
@@ -705,7 +811,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 break
 
         # Make sure we always get the minimum chunk size.
-        while len(chunks) <= self._chunk_size:
+        while len(chunks) <= self._gen.chunk_size:
             if len(chunks) > 0:
                 if chunks[-1] is None or isinstance(chunks[-1], Exception):
                     break  # Hit sentinel value or an error.
@@ -713,7 +819,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 # but that forces us to know about the chunk type here. Prefer sentinel values
                 # for now.
 
-            item = await self._async_queue.get()
+            item = await self._gen.queue.get()
             chunks.append(item)
             self._record_ttfb()
 
@@ -723,12 +829,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
             do_set_computed = True
 
             # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
-            if self._generate is not None:
-                self._generate.cancel()
-            if self._generate_extra is not None:
+            if self._gen.generate is not None:
+                self._gen.generate.cancel()
+            if self._gen.generate_extra is not None:
                 # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
-                await self._generate_extra
-                self._generate_extra.cancel()
+                await self._gen.generate_extra
+                self._gen.generate_extra.cancel()
 
             # If ModelOutputThunks get too bulky, we can do additional cleanup here
             # and set fields to None.
@@ -741,34 +847,39 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 err_payload = GenerationErrorPayload(
                     exception=chunks[-1],
                     model_output=self,
-                    generation_id=self._generation_id,
+                    generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_ERROR, err_payload)
 
             raise chunks[-1]
 
         for chunk in chunks:
-            assert self._process is not None
-            await self._process(self, chunk)
+            assert self._gen.process is not None
+            await self._gen.process(self, chunk)
 
         if do_set_computed:
             assert self._underlying_value is not None
             self._computed = True
 
-            assert self._post_process is not None
-            await self._post_process(self)
+            assert self._gen.post_process is not None
+            await self._gen.post_process(self)
 
-            match self._action:
+            match self._call.action:
                 case Component():
-                    self.parsed_repr = self._action._parse(self)
+                    self.parsed_repr = self._call.action._parse(self)
                 case CBlock():
+                    assert self.value is not None, (
+                        "value must be non-None since this thunk is computed"
+                    )
+                    self.parsed_repr = self.value  # type: ignore
+                case ModelOutputThunk():
                     assert self.value is not None, (
                         "value must be non-None since this thunk is computed"
                     )
                     self.parsed_repr = self.value  # type: ignore
                 case _:
                     raise ValueError(
-                        "attempted to astream from a model output thunk with no ._action set"
+                        "attempted to astream from a model output thunk with no originating action set"
                     )
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
@@ -781,15 +892,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 glog = self._generate_log
                 prompt = glog.prompt if glog and glog.prompt else ""
                 latency_ms = (
-                    (datetime.datetime.now() - self._start).total_seconds() * 1000
-                    if self._start
+                    (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
+                    if self._gen.start
                     else -1
                 )
                 post_payload = GenerationPostCallPayload(
                     prompt=prompt,
                     model_output=self,
                     latency_ms=latency_ms,
-                    generation_id=self._generation_id,
+                    generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
                 # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
@@ -804,6 +915,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
             else self._underlying_value[beginning_length:]  # type: ignore
         )
 
+    def __str__(self) -> str:
+        """Stringifies the thunk value."""
+        return self.value if self.value else ""
+
     def __repr__(self) -> str:
         """Provides a python-parsable representation (usually).
 
@@ -812,7 +927,19 @@ class ModelOutputThunk(CBlock, Generic[S]):
         return f"ModelOutputThunk({self.value})"
 
     def __copy__(self) -> ModelOutputThunk:
-        """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
+        """Returns a shallow copy of the ModelOutputThunk.
+
+        Copies are post-generation: `_call` (originating-call data) is preserved
+        while `_gen` (in-flight machinery) is left as the fresh instance from
+        `__init__`. Copying an uncomputed thunk raises.
+
+        Raises:
+            RuntimeError: If the thunk has not been computed.
+        """
+        if not self._computed:
+            raise RuntimeError(
+                "Cannot copy an uncomputed ModelOutputThunk; copies are post-generation."
+            )
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
         )
@@ -826,19 +953,29 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._computed = self._computed
         copied._cancelled = self._cancelled
         copied._error = self._error
-        # _cancel_hook is not forwarded: a copied MOT is a distinct computation
-        # and must not share the original's backend thread signal.
-        copied._cancel_hook = None
-        copied._thinking = self._thinking
-        copied._action = self._action
-        copied._context = self._context
+        copied.thinking = self.thinking
         copied._generate_log = self._generate_log
-        copied._model_options = self._model_options
+        # _call is preserved; _gen is left as the fresh _GenerationState() from
+        # __init__ so the copy shares no queues, tasks, or thread signals.
+        copied._call = copy(self._call)
         copied.generation = copy(self.generation)
+        copied.raw = copy(self.raw)
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
-        """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
+        """Returns a deep copy of the ModelOutputThunk.
+
+        Like `__copy__` but deep-copies `_meta`, `parsed_repr`, and the
+        originating-call data. `_gen` is left as the fresh instance from
+        `__init__`. Copying an uncomputed thunk raises.
+
+        Raises:
+            RuntimeError: If the thunk has not been computed.
+        """
+        if not self._computed:
+            raise RuntimeError(
+                "Cannot deepcopy an uncomputed ModelOutputThunk; copies are post-generation."
+            )
         # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
         deepcopied = ModelOutputThunk(self._underlying_value)
         memo[id(self)] = deepcopied
@@ -859,17 +996,19 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._computed = self._computed
         deepcopied._cancelled = self._cancelled
         deepcopied._error = self._error
-        # _cancel_hook is not forwarded: a deepcopied MOT is a distinct computation
-        # and must not share the original's backend thread signal.
-        deepcopied._cancel_hook = None
-        deepcopied._thinking = self._thinking
-        deepcopied._action = deepcopy(self._action)
-        deepcopied._context = copy(
-            self._context
-        )  # The items in a context should be immutable.
+        deepcopied.thinking = self.thinking
         deepcopied._generate_log = copy(self._generate_log)
-        deepcopied._model_options = copy(self._model_options)
+        # action is deep-copied; context and model_options are shallow-copied
+        # (their items are immutable). _gen is left as the fresh instance from
+        # __init__ so the copy shares no queues, tasks, or thread signals.
+        deepcopied._call = _CallInfo(
+            action=deepcopy(self._call.action),
+            context=copy(self._call.context),
+            model_options=copy(self._call.model_options),
+            generation_id=self._call.generation_id,
+        )
         deepcopied.generation = deepcopy(self.generation)
+        deepcopied.raw = deepcopy(self.raw)
         return deepcopied
 
 
@@ -931,7 +1070,12 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @property
     def value(self) -> str:
-        """Gets the value of the block."""
+        """The raw string value produced by the model.
+
+        When `format=` was passed to the generating call, this is a JSON
+        string matching the declared schema — not a parsed model instance.
+        Use `MyModel.model_validate_json(str(result))` to get a typed instance.
+        """
         return self._underlying_value  # type: ignore
 
     @value.setter
@@ -953,14 +1097,14 @@ class ContextTurn:
     """A turn of model input and model output.
 
     Args:
-        model_input (CBlock | Component | None): The input component or content block for this turn,
+        model_input (CBlock | Component | ModelOutputThunk | None): The input component or content block for this turn,
             or `None` for an output-only partial turn.
         output (ModelOutputThunk | None): The model's output thunk for this turn,
             or `None` for an input-only partial turn.
 
     """
 
-    model_input: CBlock | Component | None
+    model_input: CBlock | Component | ModelOutputThunk | None
     output: ModelOutputThunk | None
 
 
@@ -976,13 +1120,13 @@ class Context(abc.ABC):
         is_root_node (bool): `True` when this context is the root (empty) node of the linked list.
         previous_node (Context | None): The context node from which this one was created,
             or `None` for the root node.
-        node_data (Component | CBlock | None): The data associated with this context node,
+        node_data (Component | CBlock | ModelOutputThunk | None): The data associated with this context node,
             or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
     """
 
     _previous: Context | None
-    _data: Component | CBlock | None
+    _data: Component | CBlock | ModelOutputThunk | None
     _is_root: bool
     _is_chat_context: bool = True
 
@@ -996,13 +1140,15 @@ class Context(abc.ABC):
 
     @classmethod
     def from_previous(
-        cls: type[ContextT], previous: Context, data: Component | CBlock
+        cls: type[ContextT],
+        previous: Context,
+        data: Component | CBlock | ModelOutputThunk,
     ) -> ContextT:
         """Constructs a new context node linked to an existing context node.
 
         Args:
             previous (Context): The existing context to extend.
-            data (Component | CBlock): The component or content block to associate with the new node.
+            data (Component | CBlock | ModelOutputThunk): The component, content block, or model output to associate with the new node.
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
@@ -1028,6 +1174,19 @@ class Context(abc.ABC):
         """
         return cls()
 
+    def new_instance(self) -> Context:
+        """Return a new empty root context, preserving any subclass configuration.
+
+        The base implementation calls `reset_to_new()`, which returns a bare
+        instance with no history and no config.  Subclasses that carry
+        configuration (e.g. `ChatContext` with `model_id` and `window_size`)
+        should override this to propagate their config into the fresh instance.
+
+        Returns:
+            Context: A freshly initialised root context of the same type.
+        """
+        return self.reset_to_new()
+
     # Internal functions below this line.
 
     @property
@@ -1044,7 +1203,7 @@ class Context(abc.ABC):
         return self._previous
 
     @property
-    def node_data(self) -> Component | CBlock | None:
+    def node_data(self) -> Component | CBlock | ModelOutputThunk | None:
         """Returns the data associated with this context node.
 
         Internal use: Users should not need to use this property.
@@ -1058,7 +1217,9 @@ class Context(abc.ABC):
 
     # User functions below this line.
 
-    def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
+    def as_list(
+        self, last_n_components: int | None = None
+    ) -> list[Component | CBlock | ModelOutputThunk]:
         """Returns a list of context components sorted from earliest (first) to most recent (last).
 
         If `last_n_components` is `None`, then all components are returned.
@@ -1068,9 +1229,9 @@ class Context(abc.ABC):
                 Pass `None` to return the full history.
 
         Returns:
-            list[Component | CBlock]: Components in chronological order (oldest first).
+            list[Component | CBlock | ModelOutputThunk]: Components in chronological order (oldest first).
         """
-        context_list: list[Component | CBlock] = []
+        context_list: list[Component | CBlock | ModelOutputThunk] = []
         current_context: Context = self
 
         last_n_count = 0
@@ -1093,7 +1254,9 @@ class Context(abc.ABC):
         context_list.reverse()
         return context_list
 
-    def actions_for_available_tools(self) -> list[Component | CBlock] | None:
+    def actions_for_available_tools(
+        self,
+    ) -> list[Component | CBlock | ModelOutputThunk] | None:
         """Provides a list of actions to extract tools from for use during generation.
 
         Returns `None` if it is not possible to construct such a list. Can be used to make
@@ -1101,7 +1264,7 @@ class Context(abc.ABC):
         overridden by subclasses.
 
         Returns:
-            list[Component | CBlock] | None: The list of actions whose tools should be made
+            list[Component | CBlock | ModelOutputThunk] | None: The list of actions whose tools should be made
             available during generation, or `None` if unavailable.
         """
         return self.view_for_generation()
@@ -1149,11 +1312,11 @@ class Context(abc.ABC):
     # Abstract methods below this line.
 
     @abc.abstractmethod
-    def add(self, c: Component | CBlock) -> Context:
+    def add(self, c: Component | CBlock | ModelOutputThunk) -> Context:
         """Returns a new context obtained by appending `c` to this context.
 
         Args:
-            c (Component | CBlock): The component or content block to add to the context.
+            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to add to the context.
 
         Returns:
             Context: A new context node with `c` as its data and this context as its previous node.
@@ -1162,14 +1325,14 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
         """Provides a linear list of context components to use for generation.
 
         Returns `None` if it is not possible to construct such a list (e.g., the context
         is in an inconsistent state). Concrete subclasses define the ordering and filtering logic.
 
         Returns:
-            list[Component | CBlock] | None: An ordered list of components suitable for passing
+            list[Component | CBlock | ModelOutputThunk] | None: An ordered list of components suitable for passing
             to a backend, or `None` if generation is not currently possible.
         """
         ...
@@ -1256,7 +1419,7 @@ class GenerateLog:
         backend (str | None): Identifier of the inference backend used for this generation.
         model_options (dict[str, Any] | None): Model configuration options applied to this call.
         model_output (Any | None): The raw output returned by the backend API.
-        action (Component | CBlock | None): The component or block that triggered the generation.
+        action (Component | CBlock | ModelOutputThunk | None): The component or block that triggered the generation.
         result (ModelOutputThunk | None): The `ModelOutputThunk` produced by this generation call.
         is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
         extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
@@ -1268,7 +1431,7 @@ class GenerateLog:
     backend: str | None = None
     model_options: dict[str, Any] | None = None
     model_output: Any | None = None
-    action: Component | CBlock | None = None
+    action: Component | CBlock | ModelOutputThunk | None = None
     result: ModelOutputThunk | None = None
     is_final_result: bool | None = False
     extra: dict[str, Any] | None = None
@@ -1300,17 +1463,19 @@ class ModelToolCall:
         return self.func.run(**self.args)
 
 
-def blockify(s: str | CBlock | Component) -> CBlock | Component:
-    """Turn a raw string into a `CBlock`, leaving `CBlock` and `Component` objects unchanged.
+def blockify(
+    s: str | CBlock | Component | ModelOutputThunk,
+) -> CBlock | Component | ModelOutputThunk:
+    """Turn a raw string into a `CBlock`, leaving `CBlock`, `Component`, and `ModelOutputThunk` objects unchanged.
 
     Args:
-        s: A plain string, `CBlock`, or `Component` to normalise.
+        s: A plain string, `CBlock`, `Component`, or `ModelOutputThunk` to normalise.
 
     Returns:
         A `CBlock` wrapping `s` if it was a string; otherwise `s` unchanged.
 
     Raises:
-        Exception: If `s` is not a `str`, `CBlock`, or `Component`.
+        Exception: If `s` is not a `str`, `CBlock`, `Component`, or `ModelOutputThunk`.
     """
     # noinspection PyUnreachableCode
     match s:
@@ -1319,6 +1484,8 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
         case CBlock():
             return s
         case Component():
+            return s
+        case ModelOutputThunk():
             return s
         case _:
             raise Exception("Type Error")

@@ -62,7 +62,7 @@ class Backend(abc.ABC):
     @final
     async def generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -124,13 +124,13 @@ class Backend(abc.ABC):
                 )
             raise
         # Save the ID for the post_call / error hooks.
-        mot._generation_id = generation_id
+        mot._call.generation_id = generation_id
         return mot, new_ctx
 
     @abc.abstractmethod
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -148,6 +148,12 @@ class Backend(abc.ABC):
 
         Returns:
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
+
+        Note:
+            The returned `ModelOutputThunk` is expected to be uncomputed and resolved through
+            `astream`, which fires the `generation_post_call` hook. An already-computed thunk
+            skips `astream`, so `generation_post_call` does not fire for that generation even
+            though `generation_pre_call` already has.
         """
         ...
 
@@ -353,6 +359,8 @@ def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputT
     match c:
         case ModelOutputThunk() if not c.is_computed():
             return [c]
+        case ModelOutputThunk():
+            return []
         case CBlock():
             return []
         case Component():

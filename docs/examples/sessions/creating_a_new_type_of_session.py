@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, e2e
+# pytest: huggingface, qualitative, e2e, slow
 
 from collections.abc import Iterable
 from typing import Literal
@@ -6,36 +6,25 @@ from typing import Literal
 from PIL import Image as PILImage
 
 from mellea import MelleaSession
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import (
-    Backend,
-    BaseModelSubclass,
-    CBlock,
-    Context,
-    ImageBlock,
-    ImageUrlBlock,
-    Requirement,
-)
+from mellea.backends.adapters import AdapterMixin
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.core import BaseModelSubclass, Context, ImageBlock, ImageUrlBlock
 from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements import reqify
-from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 # This example shows how you might go about creating a new type of session.
 # Here, we want to filter out potentially harmful chat messages from the user.
 
 
 class ChatCheckingSession(MelleaSession):
-    # Add new parameters to support applying requirements to chat messages and defining the filter strategy.
+    # Add new parameters to support applying guardian criteria to chat messages.
     def __init__(
-        self,
-        requirements: list[str | Requirement],
-        backend: Backend,
-        ctx: Context | None = None,
-        check_immediately: bool = True,
+        self, criteria: list[str], backend: AdapterMixin, ctx: Context | None = None
     ):
         super().__init__(backend, ctx)
-        self._requirements: list[Requirement] = [reqify(r) for r in requirements]
+        self._criteria = criteria
 
     # Override the chat method with our new filtering chat.
     def chat(
@@ -53,20 +42,33 @@ class ChatCheckingSession(MelleaSession):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> Message:
-        # This simple check validates the user input against all the requirements. You could also
-        # do something more complex here and explicitly indicate which checks failed.
-        is_valid_input = self.validate(self._requirements, output=CBlock(content))
-        if not all(is_valid_input):
-            return Message(
-                "assistant",
-                "Incoming message did not pass chat requirements. Neither it nor this message will be appended to the context.",
-            )
+        # Build a minimal context containing only the incoming user message so
+        # that the guardian check is scoped to this turn alone.
+        check_ctx = ChatContext().add(Message("user", content))
 
-        # In this example, we still call the original MelleaSession.chat function. But there are some scenarios where you might not want to.
-        # For example, if we were doing immediate filtering of the assistant's responses, we might want to wait to add the input and output message
-        # to the context until the assistant message was checked. We could do that here by editing the context after the MelleaSession.chat was called,
-        # or we could implement a completely new chat function where the context and generation is fully handled here.
-        chat_msg = super().chat(
+        # Check each criterion and block immediately on the first hit.
+        for criterion in self._criteria:
+            score = guardian.guardian_check(
+                check_ctx,
+                self.backend,  # type: ignore[arg-type]  # constructor ensures AdapterMixin; MelleaSession.backend is typed Backend
+                criteria=criterion,
+                scoring_schema="user_prompt",
+            )
+            if score > 0.5:
+                return Message(
+                    "assistant",
+                    "Incoming message did not pass chat requirements. "
+                    "Neither it nor this message will be appended to the context.",
+                )
+
+        # In this example, we still call the original MelleaSession.chat function. But
+        # there are some scenarios where you might not want to.  For example, if we were
+        # doing immediate filtering of the assistant's responses, we might want to wait
+        # to add the input and output message to the context until the assistant message
+        # was checked.  We could do that here by editing the context after the
+        # MelleaSession.chat was called, or we could implement a completely new chat
+        # function where the context and generation is fully handled here.
+        return super().chat(
             content,
             role,
             images=images,
@@ -77,12 +79,10 @@ class ChatCheckingSession(MelleaSession):
             tool_calls=tool_calls,
         )
 
-        return chat_msg
-
 
 m = ChatCheckingSession(
-    requirements=[GuardianCheck("jailbreak"), GuardianCheck("profanity")],
-    backend=OllamaModelBackend(),
+    criteria=["jailbreak", "profanity"],
+    backend=LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B),
     ctx=ChatContext(),
 )
 
