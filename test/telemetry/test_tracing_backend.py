@@ -363,39 +363,37 @@ async def test_multiple_generations_separate_spans(span_exporter):
 @pytest.mark.ollama
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_streaming_span_duration(span_exporter):
-    """Test that streaming operations have accurate span durations."""
+async def test_stream_with_chunking_e2e(span_exporter):
+    """A real `stream_with_chunking` run wraps the backend `chat` span and times it.
 
-    from mellea.backends.model_options import ModelOption
+    Covers the streaming path end to end against a live model: the
+    `stream_with_chunking` span is the root, the backend `chat` span nests under
+    it, and that `chat` span stays open across the full stream.
+    """
+    from mellea.stdlib.streaming import stream_with_chunking
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
-    ctx = ctx.add(Message(role="user", content="Count to 3"))
+    ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
 
-    mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""),
-        ctx,
-        model_options={ModelOption.STREAM: True},
+    result = await stream_with_chunking(
+        Message(role="assistant", content=""), backend, ctx
     )
-
-    # Consume the stream
-    await mot.astream()
-    await mot.avalue()
+    async for _ in result.astream():
+        pass
+    await result.acomplete()
     await drain_background_tasks()
 
-    # Get the recorded span
     spans = span_exporter.get_finished_spans()
-    backend_span = None
-    for span in spans:
-        if span.name == "chat":  # Gen-AI convention
-            backend_span = span
-            break
+    streaming_span = next(s for s in spans if s.name == "stream_with_chunking")
+    chat_span = next(s for s in spans if s.name == "chat")
 
-    assert backend_span is not None, "Backend span not found"
+    assert streaming_span.parent is None, "streaming span should be a root"
+    assert chat_span.parent is not None
+    assert chat_span.parent.span_id == streaming_span.context.span_id, (
+        "chat span should nest under stream_with_chunking"
+    )
 
-    span_duration_ns = backend_span.end_time - backend_span.start_time
-    span_duration_s = span_duration_ns / 1e9
-
-    assert span_duration_s >= 0.1, (
-        f"Span duration too short for streaming: {span_duration_s}s"
+    chat_duration_s = (chat_span.end_time - chat_span.start_time) / 1e9
+    assert chat_duration_s >= 0.1, (
+        f"chat span duration too short for streaming: {chat_duration_s}s"
     )

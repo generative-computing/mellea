@@ -67,3 +67,26 @@ class StreamingEndPayload(MelleaBasePayload):
     model: str | None = None
     provider: str | None = None
     full_text_length: int = 0
+
+
+class StreamingOrchestrationStartPayload(MelleaBasePayload):
+    """Payload for `streaming_orchestration_start` — on the orchestration task, before the stream is drained.
+
+    Attributes:
+        streaming_id: UUID correlating with the matching `streaming_start`.
+    """
+
+    streaming_id: str = ""
+
+
+class StreamingOrchestrationEndPayload(MelleaBasePayload):
+    """Payload for `streaming_orchestration_end` — on the orchestration task, after the stream is drained.
+
+    Fires on the same task as `streaming_orchestration_start`.
+
+    Attributes:
+        streaming_id: UUID correlating with the matching
+            `streaming_orchestration_start`.
+    """
+
+    streaming_id: str = ""

@@ -1819,6 +1819,49 @@ class TestStreamingHookCallSites:
 
         assert len(observed) == 1
 
+    async def test_streaming_orchestration_start_fires_once_on_orch_task(self) -> None:
+        """STREAMING_ORCHESTRATION_START fires once, after consumption begins."""
+        from mellea.stdlib.streaming import stream_with_chunking
+
+        observed: list[Any] = []
+
+        @hook("streaming_orchestration_start")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload.streaming_id)
+            return None
+
+        register(recorder)
+        result = await stream_with_chunking(
+            CBlock("prompt"), _StreamingBackend(), SimpleContext()
+        )
+        # The hook fires inside the orchestration task, which only runs once the
+        # result is consumed — nothing observed until astream()/acomplete().
+        assert observed == []
+        await result.acomplete()
+
+        assert len(observed) == 1
+        assert observed[0] == result._streaming_id
+
+    async def test_streaming_orchestration_end_fires_once_on_completion(self) -> None:
+        """STREAMING_ORCHESTRATION_END fires once, pairing with the start hook."""
+        from mellea.stdlib.streaming import stream_with_chunking
+
+        observed: list[Any] = []
+
+        @hook("streaming_orchestration_end")
+        async def recorder(payload: Any, ctx: Any) -> Any:
+            observed.append(payload.streaming_id)
+            return None
+
+        register(recorder)
+        result = await stream_with_chunking(
+            CBlock("prompt"), _StreamingBackend(), SimpleContext()
+        )
+        await result.acomplete()
+
+        assert len(observed) == 1
+        assert observed[0] == result._streaming_id
+
     async def test_streaming_end_fires_when_generation_raises(self) -> None:
         """A backend failure before streaming fires STREAMING_END with no model."""
         from mellea.stdlib.streaming import stream_with_chunking

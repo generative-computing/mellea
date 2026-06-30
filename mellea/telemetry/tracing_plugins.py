@@ -35,6 +35,8 @@ if TYPE_CHECKING:
     from mellea.plugins.hooks.streaming import (
         StreamingEndPayload,
         StreamingEventPayload,
+        StreamingOrchestrationEndPayload,
+        StreamingOrchestrationStartPayload,
         StreamingStartPayload,
     )
 
@@ -254,7 +256,9 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
 
     `streaming_start` opens the span; `streaming_event` records a span event for
     each mid-stream `StreamEvent`; `streaming_end` records the `completed` span
-    event and closes the span.
+    event and closes the span. `streaming_orchestration_start` /
+    `streaming_orchestration_end` re-attach the span on the orchestration task
+    so mid-stream spans parent under it (see `reattach_span`).
 
     All hooks run SEQUENTIAL so the OTel context Token attached in start is
     detached on the originating asyncio task in end.
@@ -275,6 +279,28 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
             requirement_count=payload.requirement_count,
             chunking_strategy=payload.chunking_strategy,
         )
+
+    @hook("streaming_orchestration_start")
+    async def on_streaming_orchestration_start(
+        self, payload: StreamingOrchestrationStartPayload, context: dict[str, Any]
+    ) -> None:
+        """Re-attach the streaming span as the orchestration task's ambient context."""
+        if not payload.streaming_id:
+            return
+        from mellea.telemetry.tracing import reattach_span
+
+        reattach_span(payload.streaming_id)
+
+    @hook("streaming_orchestration_end")
+    async def on_streaming_orchestration_end(
+        self, payload: StreamingOrchestrationEndPayload, context: dict[str, Any]
+    ) -> None:
+        """Detach the streaming span re-attached on the orchestration task."""
+        if not payload.streaming_id:
+            return
+        from mellea.telemetry.tracing import release_reattached_span
+
+        release_reattached_span(payload.streaming_id)
 
     @hook("streaming_event")
     async def on_streaming_event(

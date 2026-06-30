@@ -71,6 +71,8 @@ class HookType(StrEnum):
     STREAMING_START = "streaming_start"
     STREAMING_EVENT = "streaming_event"
     STREAMING_END = "streaming_end"
+    STREAMING_ORCHESTRATION_START = "streaming_orchestration_start"
+    STREAMING_ORCHESTRATION_END = "streaming_orchestration_end"
 
 
 # Lazily populated mapping: hook_type -> (payload_class, result_class).
@@ -111,6 +113,8 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
     from mellea.plugins.hooks.streaming import (
         StreamingEndPayload,
         StreamingEventPayload,
+        StreamingOrchestrationEndPayload,
+        StreamingOrchestrationStartPayload,
         StreamingStartPayload,
     )
     from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
@@ -169,6 +173,14 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         HookType.STREAMING_START.value: (StreamingStartPayload, PluginResult),
         HookType.STREAMING_EVENT.value: (StreamingEventPayload, PluginResult),
         HookType.STREAMING_END.value: (StreamingEndPayload, PluginResult),
+        HookType.STREAMING_ORCHESTRATION_START.value: (
+            StreamingOrchestrationStartPayload,
+            PluginResult,
+        ),
+        HookType.STREAMING_ORCHESTRATION_END.value: (
+            StreamingOrchestrationEndPayload,
+            PluginResult,
+        ),
     }
 
 

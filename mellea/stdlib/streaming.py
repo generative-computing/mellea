@@ -551,6 +551,15 @@ async def _orchestrate_streaming(
         return False
 
     try:
+        # Inside the try so a cancellation at this await still runs the finally.
+        if has_plugins(HookType.STREAMING_ORCHESTRATION_START):
+            from ..plugins.hooks.streaming import StreamingOrchestrationStartPayload
+
+            await invoke_hook(
+                HookType.STREAMING_ORCHESTRATION_START,
+                StreamingOrchestrationStartPayload(streaming_id=result._streaming_id),
+            )
+
         while not mot.is_computed():
             try:
                 delta = await mot.astream()
@@ -677,6 +686,19 @@ async def _orchestrate_streaming(
             result.completed = False
             try:
                 await mot.cancel_generation()
+            except BaseException:
+                pass
+
+        # Shielded so a CancelledError from the hook cannot skip the terminal
+        # queue bookkeeping and _done.set() below.
+        if has_plugins(HookType.STREAMING_ORCHESTRATION_END):
+            from ..plugins.hooks.streaming import StreamingOrchestrationEndPayload
+
+            try:
+                await invoke_hook(
+                    HookType.STREAMING_ORCHESTRATION_END,
+                    StreamingOrchestrationEndPayload(streaming_id=result._streaming_id),
+                )
             except BaseException:
                 pass
 
