@@ -27,6 +27,11 @@ from .model_options import ModelOption
 P = ParamSpec("P")
 R = TypeVar("R")
 
+# Priority order for executable content field names across tool types.
+# Used by both schema inspection (get_code_field_from_schema) and fallback extraction
+# (_extract_code_from_tool_call) to ensure consistent field resolution.
+CODE_FIELD_PRIORITY = ["code", "command", "query", "script", "source"]
+
 
 class MelleaTool(AbstractMelleaTool[P, R]):
     """Tool class to represent a callable tool with an OpenAI-compatible JSON schema.
@@ -922,18 +927,18 @@ def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
     """Determine the executable content field name from a tool's JSON schema.
 
     Inspects the tool's JSON schema to find which parameter likely contains
-    executable content (code, command, query, etc.). Uses two strategies:
+    executable content (code, command, query, etc.). Uses a priority-ordered
+    search of known code-like field names:
+    'code', 'command', 'query', 'script', 'source'
 
-    1. If only one parameter is defined: return it (single-param tools always
-       contain the executable content in that parameter)
-    2. If multiple parameters: check names in priority order:
-       'code', 'command', 'query', 'script', 'source'
+    For single-parameter tools, only returns the parameter if its name matches
+    a code-like field name. This prevents extracting unrelated values (e.g.,
+    location from get_weather(location="NYC")) as executable code.
 
     This approach is more robust than hardcoding tool name patterns because:
     - It respects the tool's actual interface (what parameters it accepts)
     - Tools can use non-standard field names and still work
     - New tool types (shell, SQL, custom) work automatically without code changes
-    - Single-parameter tools are handled optimally
 
     Args:
         tool_call: The ModelToolCall containing the tool to inspect.
@@ -942,18 +947,26 @@ def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
         str | None: The parameter name for executable content, or None if:
             - The schema cannot be inspected or is malformed
             - No parameters are defined in the schema
+            - No code-like field name is found
 
     Raises:
         None: This function never raises; all errors are caught and None is returned,
             allowing fallback extraction to handle edge cases gracefully.
 
     Examples:
-        >>> from mellea.stdlib.tools import python_tool
-        >>> from mellea.core import ModelToolCall
-        >>> tool = python_tool()
-        >>> tool_call = ModelToolCall(name="python", func=tool, args={})
-        >>> get_code_field_from_schema(tool_call)
-        'code'
+        ```python
+        from mellea.backends.tools import MelleaTool, get_code_field_from_schema
+        from mellea.core import ModelToolCall
+
+        def my_tool(code: str) -> str:
+            "Execute code."
+            return f"Executed: {code}"
+
+        tool = MelleaTool.from_callable(my_tool)
+        tool_call = ModelToolCall(name="my_tool", func=tool, args={"code": "x = 1"})
+        field_name = get_code_field_from_schema(tool_call)
+        # field_name == "code"
+        ```
     """
     try:
         # Get the tool's JSON schema (assumes OpenAI-compatible format)
@@ -970,20 +983,7 @@ def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
         if not properties:
             return None
 
-        # If only one parameter is defined, it's definitely the executable content
-        param_names = list(properties.keys())
-        if len(param_names) == 1:
-            return param_names[0]
-
-        # Multiple parameters: try to find a code-like parameter name in priority order
-        # This list covers common executable content field names across tool types:
-        # - code: Python, general-purpose executables
-        # - command: bash, shell, system commands
-        # - query: SQL, search, database tools
-        # - script: legacy/alternative naming for code
-        # - source: generic executable content
-        priority_names = ["code", "command", "query", "script", "source"]
-        for field_name in priority_names:
+        for field_name in CODE_FIELD_PRIORITY:
             if field_name in properties:
                 return field_name
 
