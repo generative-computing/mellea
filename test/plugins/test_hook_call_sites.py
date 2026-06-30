@@ -1728,9 +1728,9 @@ class TestSamplingLoopEndObserveOnly:
 
 async def _feed_tokens(mot: ModelOutputThunk, response: str) -> None:
     for ch in response:
-        await mot._async_queue.put(ch)
+        await mot._gen.queue.put(ch)
         await asyncio.sleep(0)
-    await mot._async_queue.put(None)
+    await mot._gen.queue.put(None)
 
 
 class _StreamingBackend(Backend):

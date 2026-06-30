@@ -292,6 +292,11 @@ class StreamChunkingResult:
         Raises:
             Exception: Propagates any error from the background orchestration
                 task.
+
+        Note:
+            Draining `astream()` does not finalize the run; `full_text`,
+            `final_validations`, `completed`, and the `STREAMING_END` hook are
+            all driven by `acomplete()`. Call `acomplete()` after iterating.
         """
         while True:
             item = await self._chunk_queue.get()
