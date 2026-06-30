@@ -1,9 +1,12 @@
 """Unit tests for core/requirement.py pure helpers — ValidationResult, default_output_to_bool."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from mellea.core import CBlock, ModelOutputThunk
+from mellea.core import CBlock, ModelOutputThunk, Requirement
 from mellea.core.requirement import ValidationResult, default_output_to_bool
+from mellea.stdlib.context import ChatContext
 
 # --- ValidationResult ---
 
@@ -85,6 +88,90 @@ def test_random_text_fails():
 
 def test_plain_string_yes():
     assert default_output_to_bool("YES") is True  # type: ignore
+
+
+# --- Binary detection for repair feedback (PR #1248) ---
+# Tests for Requirement.validate() binary detection: bare "yes"/"no" responses
+# are replaced with the requirement description for more actionable repair feedback.
+
+
+async def _validate_result(backend, judge_value: str, description: str):
+    """Helper to get the full validation result from Requirement.validate with a mocked backend."""
+    req = Requirement(description)
+    ctx = ChatContext().add(ModelOutputThunk("some output"))
+    judge_thunk = ModelOutputThunk(value=judge_value)
+    val_ctx = ctx.add(judge_thunk)
+
+    with patch.object(
+        backend,
+        "generate_from_context",
+        new=AsyncMock(return_value=(judge_thunk, val_ctx)),
+    ):
+        result = await req.validate(backend, ctx)
+
+    return result
+
+
+@pytest.fixture
+def mock_backend():
+    """Mock backend for testing Requirement.validate."""
+    return MagicMock()
+
+
+async def test_validate_binary_no_uses_description(mock_backend):
+    """Binary 'no' should fail with requirement description as reason."""
+    result = await _validate_result(
+        mock_backend, "no", "The email should have a salutation"
+    )
+    assert result.as_bool() is False
+    assert result.reason == "The email should have a salutation"
+
+
+async def test_validate_binary_yes_uses_description(mock_backend):
+    """Binary 'yes' should pass with requirement description as reason."""
+    result = await _validate_result(
+        mock_backend, "yes", "The email should have a salutation"
+    )
+    assert result.as_bool() is True
+    assert result.reason == "The email should have a salutation"
+
+
+async def test_validate_detailed_answer_preserves_output(mock_backend):
+    """Detailed judge output (not binary) should preserve the actual answer."""
+    result = await _validate_result(
+        mock_backend,
+        "Yes, the email contains a proper greeting",
+        "The email should have a salutation",
+    )
+    assert result.as_bool() is True
+    assert result.reason == "Yes, the email contains a proper greeting"
+
+
+async def test_validate_binary_detection_whitespace_and_case(mock_backend):
+    """Binary detection should handle whitespace and case variation."""
+    result = await _validate_result(mock_backend, "  NO  ", "Check requirement")
+    assert result.as_bool() is False
+    assert result.reason == "Check requirement"
+
+
+async def test_validate_empty_string_preserves_output(mock_backend):
+    """Empty string should not trigger fallback."""
+    result = await _validate_result(
+        mock_backend, "", "The email should have a salutation"
+    )
+    assert result.as_bool() is False
+    assert result.reason == ""
+
+
+async def test_validate_yes_in_sentence_preserves_output(mock_backend):
+    """'Yes' as part of sentence should preserve judge output."""
+    result = await _validate_result(
+        mock_backend,
+        "Yes, the email has a salutation",
+        "The email should have a salutation",
+    )
+    assert result.as_bool() is True
+    assert result.reason == "Yes, the email has a salutation"
 
 
 if __name__ == "__main__":

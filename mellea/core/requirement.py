@@ -286,9 +286,21 @@ class Requirement(Component[str]):
             )
             await llm_as_a_judge_result.avalue()
 
+            # LLM-as-a-Judge validation often returns only "yes"/"no" because the
+            # prompt asks for binary classification. However, repair strategies
+            # display the reason to guide the model during repair iterations.
+            # A bare "no" is unhelpful; the requirement description is more
+            # actionable (e.g., "The email should have a salutation" vs "no").
+            judge_output = llm_as_a_judge_result.value
+            reason = judge_output
+            if judge_output:
+                judge_output_str = str(judge_output).strip().lower()
+                if judge_output_str in ("yes", "no"):
+                    reason = self.description
+
             return ValidationResult(
                 result=self.output_to_bool(llm_as_a_judge_result),
-                reason=llm_as_a_judge_result.value,
+                reason=reason,
                 thunk=llm_as_a_judge_result,
                 context=val_ctx,
             )
