@@ -10,16 +10,19 @@ no GPU, no model download required.  Two tests per helper:
 """
 
 import json
+import unittest.mock
 
 import pytest
 
-from mellea.backends.adapters import AdapterSchemaMismatchError
+from mellea.backends.adapters import AdapterMixin, AdapterSchemaMismatchError
+from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.components.intrinsic.guardian import (
     _FACTUALITY_CORRECTION_ADAPTER,
     _FACTUALITY_DETECTION_ADAPTER,
     _GUARDIAN_CHECK_ADAPTER,
     _POLICY_GUARDRAILS_ADAPTER,
 )
+from mellea.stdlib.context import ChatContext
 
 # ---------------------------------------------------------------------------
 # policy_guardrails
@@ -92,6 +95,7 @@ def test_guardian_check_contract_enforced_guardian_not_dict() -> None:
     err = exc_info.value
     assert err.name == "guardian-core"
     assert "score" in err.expected_keys
+    assert "guardian" in err.observed_keys
 
 
 def test_guardian_check_forward_compat() -> None:
@@ -190,3 +194,25 @@ def test_factuality_correction_error_mentions_adapter_name() -> None:
     with pytest.raises(AdapterSchemaMismatchError) as exc_info:
         _FACTUALITY_CORRECTION_ADAPTER.io_contract.parse(json.dumps({}))
     assert exc_info.value.name == "factuality-correction"
+
+
+# ---------------------------------------------------------------------------
+# policy_guardrails helper — score branch
+# ---------------------------------------------------------------------------
+
+
+def test_policy_guardrails_score_branch(monkeypatch) -> None:
+    """policy_guardrails returns the `score` value when the adapter omits `label`."""
+
+    def fake_call_intrinsic(
+        name, context, backend, /, kwargs=None, model_options=None, io_contract=None
+    ):
+        return {"score": "No"}
+
+    monkeypatch.setattr(guardian, "call_intrinsic", fake_call_intrinsic)
+    result = guardian.policy_guardrails(
+        ChatContext(),
+        unittest.mock.create_autospec(AdapterMixin, instance=True),
+        policy_text="any policy",
+    )
+    assert result == "No"

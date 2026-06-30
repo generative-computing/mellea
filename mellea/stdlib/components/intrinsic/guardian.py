@@ -133,7 +133,7 @@ class _GuardianCheckContract(IOContract):
                 "guardian-core",
                 frozenset(guardian_val.keys())
                 if isinstance(guardian_val, dict)
-                else frozenset(),
+                else frozenset(data.keys()),
                 frozenset({"score"}),
             )
         return data
@@ -214,20 +214,20 @@ class _FactualityCorrectionContract(IOContract):
 # ---------------------------------------------------------------------------
 
 _POLICY_GUARDRAILS_ADAPTER = Adapter(
-    identity=Identity("policy-guardrails", "lora", capability="policy_guardrails"),
+    identity=Identity("policy-guardrails", "alora", capability="policy_guardrails"),
     io_contract=_PolicyGuardrailsContract(),
     weights=LocalFileBinding(),
 )
 
 _GUARDIAN_CHECK_ADAPTER = Adapter(
-    identity=Identity("guardian-core", "lora", capability="guardian_core"),
+    identity=Identity("guardian-core", "alora", capability="guardian_core"),
     io_contract=_GuardianCheckContract(),
     weights=LocalFileBinding(),
 )
 
 _FACTUALITY_DETECTION_ADAPTER = Adapter(
     identity=Identity(
-        "factuality-detection", "lora", capability="factuality_detection"
+        "factuality-detection", "alora", capability="factuality_detection"
     ),
     io_contract=_FactualityDetectionContract(),
     weights=LocalFileBinding(),
@@ -235,7 +235,7 @@ _FACTUALITY_DETECTION_ADAPTER = Adapter(
 
 _FACTUALITY_CORRECTION_ADAPTER = Adapter(
     identity=Identity(
-        "factuality-correction", "lora", capability="factuality_correction"
+        "factuality-correction", "alora", capability="factuality_correction"
     ),
     io_contract=_FactualityCorrectionContract(),
     weights=LocalFileBinding(),
