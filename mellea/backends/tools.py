@@ -21,7 +21,7 @@ from mellea.core.utils import MelleaLogger
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
 from ..core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
-from ..core.base import AbstractMelleaTool
+from ..core.base import AbstractMelleaTool, ModelToolCall
 from .model_options import ModelOption
 
 P = ParamSpec("P")
@@ -916,6 +916,76 @@ class OllamaTool(SubscriptableBaseModel):
         parameters: Parameters | None = None
 
     function: Function | None = None
+
+
+def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
+    """Determine the executable content field name from a tool's JSON schema.
+
+    Inspects the tool's JSON schema to find which parameter likely contains
+    executable content (code, command, query, etc.). Uses two strategies:
+
+    1. If only one parameter is defined: return it (single-param tools always
+       contain the executable content in that parameter)
+    2. If multiple parameters: check names in priority order:
+       'code', 'command', 'query', 'script', 'source'
+
+    This approach is more robust than hardcoding tool name patterns because:
+    - It respects the tool's actual interface (what parameters it accepts)
+    - Tools can use non-standard field names and still work
+    - New tool types (shell, SQL, custom) work automatically without code changes
+    - Single-parameter tools are handled optimally
+
+    Args:
+        tool_call: The ModelToolCall containing the tool to inspect.
+
+    Returns:
+        str | None: The parameter name for executable content, or None if:
+            - The schema cannot be inspected or is malformed
+            - No parameters are defined in the schema
+
+    Examples:
+        >>> from mellea.stdlib.tools import python_tool
+        >>> from mellea.core import ModelToolCall
+        >>> tool = python_tool()
+        >>> tool_call = ModelToolCall(name="python", func=tool, args={})
+        >>> get_code_field_from_schema(tool_call)
+        'code'
+    """
+    try:
+        # Get the tool's JSON schema
+        schema = tool_call.func.as_json_tool
+        if not schema or "function" not in schema:
+            return None
+
+        # Extract parameter names from the schema
+        function_schema = schema.get("function", {})
+        parameters = function_schema.get("parameters", {})
+        properties = parameters.get("properties", {})
+
+        if not properties:
+            return None
+
+        # If only one parameter is defined, it's definitely the executable content
+        param_names = list(properties.keys())
+        if len(param_names) == 1:
+            return param_names[0]
+
+        # Multiple parameters: try to find a code-like parameter name in priority order
+        # This list covers common executable content field names across tool types:
+        # - code: Python, general-purpose executables
+        # - command: bash, shell, system commands
+        # - query: SQL, search, database tools
+        # - script: legacy/alternative naming for code
+        # - source: generic executable content
+        priority_names = ["code", "command", "query", "script", "source"]
+        for field_name in priority_names:
+            if field_name in properties:
+                return field_name
+
+        return None
+    except Exception:
+        # Return None on any schema inspection errors; fallback extraction will handle it
+        return None
 
 
 # https://github.com/ollama/ollama-python/blob/main/ollama/_utils.py#L13-L53
