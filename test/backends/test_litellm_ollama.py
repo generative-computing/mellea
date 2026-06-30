@@ -46,6 +46,17 @@ def session(backend):
     session.reset()
 
 
+def test_repr_shows_model_id_and_base_url():
+    backend = LiteLLMBackend(
+        model_id="ollama_chat/test-model", base_url="http://localhost:11434/v1"
+    )
+    r = repr(backend)
+    assert "LiteLLMBackend" in r
+    assert "ollama_chat/test-model" in r
+    assert "http://localhost:11434/v1" in r
+    assert "object at 0x" not in r
+
+
 # Use capsys to check that the logging is working.
 def test_make_backend_specific_and_remove():
     # Doesn't need to be a real model here; just a provider that LiteLLM knows about.

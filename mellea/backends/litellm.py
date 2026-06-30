@@ -141,6 +141,18 @@ class LiteLLMBackend(FormatterBackend):
 
         self._past_event_loops: set[int] = set()
 
+    def __repr__(self) -> str:
+        """Return a useful string representation for debugging."""
+        return (
+            f"{self.__class__.__name__}("
+            f"model_id={self._model_id!r}, "
+            f"base_url={self._base_url!r})"
+        )
+
+    def __str__(self) -> str:
+        """Return a useful string representation for debugging."""
+        return repr(self)
+
     async def _generate_from_context(
         self,
         action: Component[C] | CBlock | ModelOutputThunk,

@@ -135,6 +135,8 @@ class WatsonxAIBackend(FormatterBackend):
         if project_id is None:
             project_id = os.environ.get("WATSONX_PROJECT_ID")
         self._project_id = project_id
+        self._base_url = base_url
+        self._api_key = api_key
 
         self._creds = Credentials(url=base_url, api_key=api_key)
         self._kwargs = kwargs
@@ -177,6 +179,20 @@ class WatsonxAIBackend(FormatterBackend):
             ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
             ModelOption.STOP_SEQUENCES: "stop_sequences",
         }
+
+    def __repr__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        key_repr = "'***'" if self._api_key is not None else "None"
+        return (
+            f"{self.__class__.__name__}("
+            f"model_id={self._model_id!r}, "
+            f"base_url={self._base_url!r}, "
+            f"_api_key={key_repr})"
+        )
+
+    def __str__(self) -> str:
+        """Mask the API key to prevent accidental exposure in logs."""
+        return repr(self)
 
     @property
     def _model(self) -> ModelInference:
