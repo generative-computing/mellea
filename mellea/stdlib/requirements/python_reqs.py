@@ -118,8 +118,9 @@ def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
 
     # Fallback: try common field names if schema lookup failed or returned None
     # This handles edge cases where schema is unavailable or malformed
-    fallback_fields = ["code", "script", "command", "query", "source"]
-    for field in fallback_fields:
+    from mellea.backends.tools import CODE_FIELD_PRIORITY
+
+    for field in CODE_FIELD_PRIORITY:
         if field in tool_call.args:
             value = tool_call.args[field]
             if isinstance(value, str) and value.strip():
@@ -143,11 +144,12 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
     First attempts to extract code from text output (markdown/rst code blocks).
     If no text code is found, falls back to tool_calls (if present), using a
-    heuristic search for code-like argument fields in Python-capable tools.
+    heuristic search for code-like argument fields across all tools.
 
     Text-based extraction has higher priority than tool_calls to preserve
-    user-visible code in the response. Tool extraction only targets tools with
-    "python" in their name (case-insensitive).
+    user-visible code in the response. Tool extraction examines any tool's schema
+    for code-bearing fields, then falls back to common field names like "code",
+    "script", "command", "query", or "source".
 
     Args:
         ctx: Context containing model output.
