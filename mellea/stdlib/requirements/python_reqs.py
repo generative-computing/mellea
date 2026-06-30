@@ -67,58 +67,72 @@ def _score_code_block(code: str) -> int:
 
 
 def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
-    """Extract Python code from a tool call's arguments using heuristic field lookup.
+    """Extract executable content from a tool call's arguments.
 
-    Matches tools with "python" in their name, including: standalone "python"
-    or "python" paired with execution keywords (executor, interpreter, runner).
-    This conservative approach avoids extracting unrelated data from arbitrary tools.
+    Uses the tool's JSON schema to determine which parameter contains executable
+    content (code, command, query, etc.), making extraction work for any tool type
+    without tool-specific hardcoding. Falls back to common field names if schema
+    inspection fails.
 
-    Tries common code field names in order: 'code', 'script', 'command', 'source'.
-    Returns the first string value found, or None if no code-like field exists.
+    This approach supports Python, Shell, SQL, and custom tool types automatically
+    because it relies on the tool's declared interface (schema) rather than
+    heuristic name pattern matching.
+
+    Strategy:
+    1. Try schema-based lookup via get_code_field_from_schema() — works for all tools
+    2. Fallback to common field names if schema unavailable or malformed
 
     Args:
         tool_call: The ModelToolCall to extract code from.
 
     Returns:
-        str | None: Extracted code string, or None if not found, not a string, or tool
-            name doesn't suggest it handles Python code execution.
-    """
-    tool_name_lower = tool_call.name.lower()
-    if tool_name_lower == "python":
-        # Standalone "python" tool is a strong match
-        pass
-    elif "python" in tool_name_lower and any(
-        keyword in tool_name_lower for keyword in ["executor", "interpreter", "runner"]
-    ):
-        # "python" paired with execution keywords is a strong match
-        pass
-    else:
-        logger.debug(
-            "Tool name '%s' does not match python execution pattern, skipping extraction",
-            tool_call.name,
-        )
-        return None
+        str | None: Extracted executable content string, or None if not found,
+            not a string, or cannot be determined from schema.
 
-    # Try common field names in priority order
-    field_names = ["code", "script", "command", "source"]
-    for field in field_names:
+    Raises:
+        None: This function never raises; all errors during extraction are caught
+            and None is returned, allowing callers to handle missing code gracefully.
+    """
+    from mellea.backends.tools import get_code_field_from_schema
+
+    # Try schema-based lookup first (works for any tool type)
+    code_field = get_code_field_from_schema(tool_call)
+
+    if code_field and code_field in tool_call.args:
+        value = tool_call.args[code_field]
+        if isinstance(value, str) and value.strip():
+            logger.debug(
+                "Extracted code from tool '%s' field '%s' (via schema)",
+                tool_call.name,
+                code_field,
+            )
+            return value.strip()
+        if not isinstance(value, str):
+            logger.debug(
+                "Tool '%s' field '%s' is not a string (type: %s), skipping",
+                tool_call.name,
+                code_field,
+                type(value).__name__,
+            )
+            return None
+
+    # Fallback: try common field names if schema lookup failed or returned None
+    # This handles edge cases where schema is unavailable or malformed
+    from mellea.backends.tools import CODE_FIELD_PRIORITY
+
+    for field in CODE_FIELD_PRIORITY:
         if field in tool_call.args:
             value = tool_call.args[field]
             if isinstance(value, str) and value.strip():
                 logger.debug(
-                    "Extracted code from tool '%s' field '%s'", tool_call.name, field
-                )
-                return value.strip()
-            if not isinstance(value, str):
-                logger.debug(
-                    "Tool '%s' field '%s' is not a string (type: %s), skipping",
+                    "Extracted code from tool '%s' field '%s' (via fallback)",
                     tool_call.name,
                     field,
-                    type(value).__name__,
                 )
+                return value.strip()
 
     logger.debug(
-        "No code-like fields found in tool '%s' args (available fields: %s)",
+        "No executable content found in tool '%s' args (available: %s)",
         tool_call.name,
         list(tool_call.args.keys()),
     )
@@ -130,11 +144,12 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
     First attempts to extract code from text output (markdown/rst code blocks).
     If no text code is found, falls back to tool_calls (if present), using a
-    heuristic search for code-like argument fields in Python-capable tools.
+    heuristic search for code-like argument fields across all tools.
 
     Text-based extraction has higher priority than tool_calls to preserve
-    user-visible code in the response. Tool extraction only targets tools with
-    "python" in their name (case-insensitive).
+    user-visible code in the response. Tool extraction examines any tool's schema
+    for code-bearing fields, then falls back to common field names like "code",
+    "script", "command", "query", or "source".
 
     Args:
         ctx: Context containing model output.

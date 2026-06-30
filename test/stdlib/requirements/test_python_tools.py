@@ -32,9 +32,25 @@ class MockPythonTool(AbstractMelleaTool):
         return f"executed: {code}"
 
     @property
-    def as_json_tool(self) -> dict[str, str]:
-        """Return tool schema."""
-        return {"name": self.name, "description": "Mock Python tool"}
+    def as_json_tool(self) -> dict:
+        """Return tool schema with OpenAI-compatible format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": "Mock Python tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "description": "Python code to execute",
+                        }
+                    },
+                    "required": ["code"],
+                },
+            },
+        }
 
 
 class MockBashTool(AbstractMelleaTool):
@@ -47,9 +63,25 @@ class MockBashTool(AbstractMelleaTool):
         return f"executed: {command}"
 
     @property
-    def as_json_tool(self) -> dict[str, str]:
-        """Return tool schema."""
-        return {"name": self.name, "description": "Mock Bash tool"}
+    def as_json_tool(self) -> dict:
+        """Return tool schema with OpenAI-compatible format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": "Mock Bash tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Bash command to execute",
+                        }
+                    },
+                    "required": ["command"],
+                },
+            },
+        }
 
 
 def from_model_with_tool_calls(
@@ -626,30 +658,44 @@ class TestToolCallsCodeExtraction:
         result = _extract_code_from_tool_call(tool_call)
         assert result == "print('hello')"
 
-    def test_extract_code_ignores_non_python_tools(self):
-        """Test extraction ignores tools without 'python' in name."""
+    def test_extract_code_from_bash_tool(self):
+        """Test extraction from bash/shell tools using schema-based lookup.
+
+        With Phase 2 implementation, extraction now works for any tool type
+        (Python, bash, SQL, etc.) by inspecting the tool's JSON schema.
+        This test verifies bash tools are correctly extracted from the
+        'command' field as defined in their schema.
+        """
         bash_tool = MockBashTool()
         tool_call = ModelToolCall(
             name="bash_executor", func=bash_tool, args={"command": "echo hello"}
         )
 
         result = _extract_code_from_tool_call(tool_call)
-        assert result is None
+        assert result == "echo hello"
 
-    def test_extract_code_case_insensitive_python_match(self):
-        """Test tool name matching is case-insensitive."""
+    def test_extract_code_via_schema_inspection(self):
+        """Test extraction uses schema-based lookup, not tool name patterns.
+
+        With Phase 2, tool name is irrelevant; extraction uses the tool's
+        JSON schema to find the correct field. This test verifies extraction
+        works regardless of tool name (even unusual names like PYTHON_Interpreter).
+        """
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
             name="PYTHON_Interpreter",
             func=python_tool,
-            args={"code": "print('case-insensitive')"},
+            args={"code": "print('schema-based')"},
         )
 
         result = _extract_code_from_tool_call(tool_call)
-        assert result == "print('case-insensitive')"
+        assert result == "print('schema-based')"
 
-    def test_extract_code_python_runner_keyword(self):
-        """Test extraction from tool with 'python' + 'runner' keyword."""
+    def test_extract_code_any_tool_with_code_field(self):
+        """Test extraction from any tool having a 'code' field in schema.
+
+        Schema-based extraction finds the 'code' field regardless of tool name.
+        """
         python_tool = MockPythonTool()
         tool_call = ModelToolCall(
             name="python_runner", func=python_tool, args={"code": "print('runner')"}
@@ -658,33 +704,41 @@ class TestToolCallsCodeExtraction:
         result = _extract_code_from_tool_call(tool_call)
         assert result == "print('runner')"
 
-    def test_extract_code_tries_field_names_in_order(self):
-        """Test that common field names are tried in priority order."""
+    def test_extract_code_schema_priority_order(self):
+        """Test that schema lookup finds 'code' field (defined in MockPythonTool).
+
+        The schema inspection checks for fields in priority order:
+        code > command > query > script > source.
+        MockPythonTool schema defines 'code', so extraction returns the 'code' field.
+        """
         python_tool = MockPythonTool()
 
-        # Test 'code' field (highest priority)
+        # Test extraction uses schema-defined 'code' field
         tool_call = ModelToolCall(
             name="python", func=python_tool, args={"code": "print('code')"}
         )
         assert _extract_code_from_tool_call(tool_call) == "print('code')"
 
-        # Test 'script' field (second priority)
-        tool_call = ModelToolCall(
-            name="python", func=python_tool, args={"script": "print('script')"}
-        )
-        assert _extract_code_from_tool_call(tool_call) == "print('script')"
+    def test_extract_code_respects_schema_fields(self):
+        """Test extraction respects the tool's schema field definition.
 
-        # Test 'command' field (third priority)
+        Python tool schema defines 'code', so extraction should extract from 'code'.
+        Bash tool schema defines 'command', so extraction should extract from 'command'.
+        This ensures tool types are handled correctly based on their schema.
+        """
+        # Python tool: extracts from 'code' (in schema)
+        python_tool = MockPythonTool()
         tool_call = ModelToolCall(
-            name="python", func=python_tool, args={"command": "print('command')"}
+            name="python", func=python_tool, args={"code": "print('python')"}
         )
-        assert _extract_code_from_tool_call(tool_call) == "print('command')"
+        assert _extract_code_from_tool_call(tool_call) == "print('python')"
 
-        # Test 'source' field (fourth priority)
+        # Bash tool: extracts from 'command' (in schema)
+        bash_tool = MockBashTool()
         tool_call = ModelToolCall(
-            name="python", func=python_tool, args={"source": "print('source')"}
+            name="bash", func=bash_tool, args={"command": "ls -la"}
         )
-        assert _extract_code_from_tool_call(tool_call) == "print('source')"
+        assert _extract_code_from_tool_call(tool_call) == "ls -la"
 
     def test_extract_code_returns_none_for_missing_fields(self):
         """Test extraction returns None when no code fields are present."""
