@@ -943,6 +943,10 @@ def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
             - The schema cannot be inspected or is malformed
             - No parameters are defined in the schema
 
+    Raises:
+        None: This function never raises; all errors are caught and None is returned,
+            allowing fallback extraction to handle edge cases gracefully.
+
     Examples:
         >>> from mellea.stdlib.tools import python_tool
         >>> from mellea.core import ModelToolCall
@@ -952,12 +956,13 @@ def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
         'code'
     """
     try:
-        # Get the tool's JSON schema
+        # Get the tool's JSON schema (assumes OpenAI-compatible format)
         schema = tool_call.func.as_json_tool
         if not schema or "function" not in schema:
             return None
 
         # Extract parameter names from the schema
+        # Expected structure: {"function": {"parameters": {"properties": {...}}}}
         function_schema = schema.get("function", {})
         parameters = function_schema.get("parameters", {})
         properties = parameters.get("properties", {})
@@ -983,8 +988,11 @@ def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
                 return field_name
 
         return None
-    except Exception:
+    except Exception as e:
         # Return None on any schema inspection errors; fallback extraction will handle it
+        MelleaLogger.get_logger().debug(
+            "Schema inspection failed for tool '%s': %s", tool_call.name, e
+        )
         return None
 
 

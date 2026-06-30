@@ -88,6 +88,10 @@ def _extract_code_from_tool_call(tool_call: ModelToolCall) -> str | None:
     Returns:
         str | None: Extracted executable content string, or None if not found,
             not a string, or cannot be determined from schema.
+
+    Raises:
+        None: This function never raises; all errors during extraction are caught
+            and None is returned, allowing callers to handle missing code gracefully.
     """
     from mellea.backends.tools import get_code_field_from_schema
 
