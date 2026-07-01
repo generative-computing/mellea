@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from mellea.backends.tools import MelleaTool
 from mellea.core.backend import Backend, BaseModelSubclass
@@ -64,7 +65,7 @@ class ScriptedBackend(Backend):
 
     async def _generate_from_context(
         self,
-        action: Component[C] | CBlock,
+        action: Component[C] | CBlock | ModelOutputThunk,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -78,7 +79,7 @@ class ScriptedBackend(Backend):
         mot._generate_log = GenerateLog(is_final_result=True)
         return mot, ctx.add(action).add(mot)
 
-    async def generate_from_raw(
+    async def _generate_from_raw(
         self,
         actions: Sequence[Component[C] | CBlock],
         ctx: Context,
@@ -86,7 +87,7 @@ class ScriptedBackend(Backend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[list[ModelOutputThunk], dict[str, Any] | None]:
         raise NotImplementedError
 
 
