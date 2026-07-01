@@ -137,6 +137,23 @@ The `action` span:
 | `mellea.response` | Model response truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
 | `mellea.response_length` | Length of the model response (always recorded) |
 
+The `stream_with_chunking` span covers one streaming-generation run. It wraps
+the backend generation and any per-chunk validation:
+
+| Attribute | Description |
+| --------- | ----------- |
+| `mellea.has_requirements` | Whether requirements were supplied |
+| `mellea.requirement_count` | Number of requirements supplied |
+| `mellea.chunking_strategy` | `ChunkingStrategy` class name (e.g., `SentenceChunker`) |
+| `mellea.full_text_length` | Length of the accumulated text at completion |
+| `gen_ai.request.model` | Model ID, when known |
+| `gen_ai.provider.name` | Provider name, when known |
+
+It also records span events through the run: `quick_check` and `chunk` per
+validated chunk, `streaming_done` once the stream drains, `full_validation`
+after the final `validate()` calls, `error` on an unhandled exception, and
+`completed` when the run exits.
+
 ### Backend spans (`mellea.backend`)
 
 Backend spans cover individual LLM API calls. They follow the
@@ -188,6 +205,22 @@ session                   (mellea.application)
                           [gen_ai.provider.name=openai]
                           [gen_ai.request.model=gpt-4o]
 ```
+
+In a `stream_with_chunking` run, the backend generation and each per-chunk
+validation call nest under the `stream_with_chunking` span as sibling `chat`
+spans:
+
+```text
+stream_with_chunking      (mellea.application)
+│                         [mellea.chunking_strategy=SentenceChunker]
+├── chat                  (mellea.backend)    ← streaming generation
+│                         [gen_ai.request.model=granite4.1:3b]
+└── chat                  (mellea.backend)    ← per-chunk validation
+                          [gen_ai.request.model=granite4.1:3b]
+```
+
+The `stream_with_chunking` span itself parents under whatever span is active
+when the run starts, or is a root span when none is.
 
 ## Reading traces in a typical agent run
 

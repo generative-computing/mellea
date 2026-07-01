@@ -7,6 +7,30 @@ from typing import Any
 from mellea.core.base import GenerationMetadata
 
 
+def set_attribute_safe(span: Any, key: str, value: Any) -> None:
+    """Set an attribute on a span, coercing to an OTel-compatible type.
+
+    Args:
+        span: The span object.
+        key: Attribute key.
+        value: Attribute value; `None` is skipped, lists/tuples are stringified
+            element-wise, and other non-primitive values fall back to `str()`.
+    """
+    if value is None:
+        return
+
+    if isinstance(value, bool):
+        span.set_attribute(key, value)
+    elif isinstance(value, int | float):
+        span.set_attribute(key, value)
+    elif isinstance(value, str):
+        span.set_attribute(key, value)
+    elif isinstance(value, list | tuple):
+        span.set_attribute(key, [str(v) for v in value])
+    else:
+        span.set_attribute(key, str(value))
+
+
 def set_request_attrs(span: Any, gen: GenerationMetadata, operation: str) -> None:
     """Emit request-side `gen_ai.*` attributes."""
     if gen.provider:

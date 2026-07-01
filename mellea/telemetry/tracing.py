@@ -24,10 +24,9 @@ Configuration via environment variables:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import warnings
-from collections.abc import Generator
-from contextlib import contextmanager
 from importlib.metadata import version
 from typing import TYPE_CHECKING, Any
 
@@ -223,7 +222,75 @@ def get_backend_tracer() -> Any:
     return _backend_tracer
 
 
-_in_flight_spans: dict[str, tuple[Span, Token[Context]]] = {}
+_in_flight_spans: dict[str, tuple[Span, Token[Context], asyncio.Task[Any] | None]] = {}
+
+# reattach_span() entries, keyed by correlation key: the OTel context token plus
+# the task that attached it. Released by release_reattached_span() on that task.
+_reattached_tokens: dict[str, tuple[Token[Context], asyncio.Task[Any] | None]] = {}
+
+
+def _current_task() -> asyncio.Task[Any] | None:
+    """Return the running asyncio task, or None when no loop is running."""
+    try:
+        return asyncio.current_task()
+    except RuntimeError:
+        return None
+
+
+def _safe_detach(token: Token[Context], attach_task: asyncio.Task[Any] | None) -> None:
+    """Detach `token`, suppressing only the cross-task detach we expect and understand.
+
+    OTel context tokens are bound to the `contextvars.Context` of the task that
+    created them, so detaching from a different task fails — OTel catches the
+    `ValueError` and logs it at ERROR as "Failed to detach context". Most spans
+    attach and finish on one task and never hit this.
+
+    A cross-task detach is suppressed (skipped, since it would only fail) and
+    logged at debug only when the detaching task holds an open `reattach_span`
+    scope — the marker that this task knowingly opened a span elsewhere and
+    expects the mismatch. Any other cross-task detach is left to run so OTel
+    surfaces its ERROR with a traceback to the real origin; a warning is added
+    first to name the task mismatch OTel's message omits.
+
+    Example:
+        Under `stream_with_chunking` the backend `chat` span attaches in the
+        caller task but finishes in the orchestration task that drains the MOT.
+        To keep that span's `chat` children nesting correctly, the orchestration
+        task re-attaches the streaming span for the duration of the drain
+        (`reattach_span` / `release_reattached_span`). The cross-task `chat`
+        detach that then happens within that scope is the expected, suppressed
+        case.
+
+    Note:
+        The reattach scope is an *incomplete* proxy for "expected". It holds for
+        streaming because that case both needs sibling-nesting protection (so it
+        reattaches) and has an expected cross-task detach. A future case with the
+        same open-in-parent / close-in-child shape but no siblings to protect
+        would not reattach, so its equally-expected cross-task detach falls
+        through to the warn-and-detach path. That is harmless (the detach only
+        fails, and the task ends right after, so nothing leaks); the warning is
+        the signal that the new use needs its own way to mark the detach expected.
+
+    Args:
+        token: The OTel context token returned by the matching `attach`.
+        attach_task: The task that performed the `attach`, or None if it was
+            attached outside any running task.
+    """
+    current = _current_task()
+    if attach_task is not None and current is not attach_task:
+        from mellea.core.utils import MelleaLogger
+
+        if any(task is current for _, task in _reattached_tokens.values()):
+            MelleaLogger.get_logger().debug(
+                "Skipped expected cross-task OTel context detach within a "
+                "reattached-span scope."
+            )
+            return
+        MelleaLogger.get_logger().warning(
+            "Detaching an OTel context token across asyncio tasks; the span's "
+            "attach and detach ran on different tasks. OTel will log the failure."
+        )
+    otel_context.detach(token)
 
 
 def start_backend_span(
@@ -288,7 +355,7 @@ def start_backend_span(
     set_conversation_id(span)
 
     token = otel_context.attach(trace.set_span_in_context(span))
-    _in_flight_spans[generation_id] = (span, token)
+    _in_flight_spans[generation_id] = (span, token, _current_task())
     return span
 
 
@@ -323,7 +390,7 @@ def finish_backend_span_success(
     entry = _in_flight_spans.pop(generation_id, None)
     if entry is None:
         return
-    span, token = entry
+    span, token, attach_task = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -332,7 +399,7 @@ def finish_backend_span_success(
         if mot is not None and gen is not None:
             set_mellea_attrs(span, mot, gen)
     finally:
-        otel_context.detach(token)
+        _safe_detach(token, attach_task)
         span.end()
 
 
@@ -357,7 +424,7 @@ def finish_backend_span_error(
     entry = _in_flight_spans.pop(generation_id, None)
     if entry is None:
         return
-    span, token = entry
+    span, token, attach_task = entry
     try:
         if gen is not None:
             set_request_attrs(span, gen, operation)
@@ -365,7 +432,7 @@ def finish_backend_span_error(
         span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
         span.set_attribute("error.type", type(exception).__name__)
     finally:
-        otel_context.detach(token)
+        _safe_detach(token, attach_task)
         span.end()
 
 
@@ -382,6 +449,8 @@ def _start_application_span(
     Returns:
         The span, or `None` if the application tracer is unavailable.
     """
+    from mellea.telemetry._tracing_setters import set_attribute_safe
+
     tracer = get_application_tracer()
     if tracer is None:
         return None
@@ -389,45 +458,78 @@ def _start_application_span(
     span = tracer.start_span(name)
     for k, v in attributes.items():
         if v is not None:
-            _set_attribute_safe(span, k, v)
+            set_attribute_safe(span, k, v)
 
     token = otel_context.attach(trace.set_span_in_context(span))
-    _in_flight_spans[key] = (span, token)
+    _in_flight_spans[key] = (span, token, _current_task())
     return span
 
 
-def _finish_application_span(
-    key: str,
-    *,
-    extra_attributes: dict[str, Any] | None = None,
-    exception: BaseException | None = None,
+def _finish_application_span_success(
+    key: str, *, extra_attributes: dict[str, Any] | None = None
 ) -> None:
-    """End an in-flight application span, optionally marking it ERROR.
+    """End an in-flight application span with default (OK) status.
 
-    Detach the OTel context token before ending so subsequent work parents
+    Detaches the OTel context token before ending so subsequent work parents
     correctly. Tokens are task-affine — callers must arrange for detach to
     happen on the same task that attached.
 
     Args:
         key: Correlation key from the matching open call.
         extra_attributes: Optional response-side attributes; `None` values are skipped.
-        exception: If provided, mark the span ERROR and record the exception.
     """
+    from mellea.telemetry._tracing_setters import set_attribute_safe
+
     entry = _in_flight_spans.pop(key, None)
     if entry is None:
         return
-    span, token = entry
+    span, token, attach_task = entry
     try:
         if extra_attributes:
             for k, v in extra_attributes.items():
-                if v is not None:
-                    _set_attribute_safe(span, k, v)
+                set_attribute_safe(span, k, v)
+    finally:
+        _safe_detach(token, attach_task)
+        span.end()
+
+
+def _finish_application_span_error(
+    key: str,
+    *,
+    extra_attributes: dict[str, Any] | None = None,
+    exception: BaseException | None = None,
+    description: str | None = None,
+) -> None:
+    """End an in-flight application span with ERROR status.
+
+    Records `exception` when given (status + recorded exception + `error.type`);
+    otherwise sets ERROR status from `description` with no recorded exception.
+    Detaches the OTel context token before ending.
+
+    Args:
+        key: Correlation key from the matching open call.
+        extra_attributes: Optional response-side attributes; `None` values are skipped.
+        exception: The exception to record, when one was raised.
+        description: ERROR-status description used when `exception` is `None`.
+    """
+    from mellea.telemetry._tracing_setters import set_attribute_safe
+
+    entry = _in_flight_spans.pop(key, None)
+    if entry is None:
+        return
+    span, token, attach_task = entry
+    try:
+        if extra_attributes:
+            for k, v in extra_attributes.items():
+                set_attribute_safe(span, k, v)
         if exception is not None:
             span.record_exception(exception)
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
             span.set_attribute("error.type", type(exception).__name__)
+        else:
+            span.set_status(trace.Status(trace.StatusCode.ERROR, description or ""))
     finally:
-        otel_context.detach(token)
+        _safe_detach(token, attach_task)
         span.end()
 
 
@@ -485,7 +587,10 @@ def finish_session_startup_span(
     key = session_id + _SESSION_STARTUP_KEY_SUFFIX
     if key not in _in_flight_spans:
         return False
-    _finish_application_span(key, exception=exception)
+    if exception is not None:
+        _finish_application_span_error(key, exception=exception)
+    else:
+        _finish_application_span_success(key)
     return True
 
 
@@ -524,7 +629,10 @@ def finish_session_span(
         session_id: Correlation key from the matching open call.
         exception: If provided, mark the span ERROR.
     """
-    _finish_application_span(session_id, exception=exception)
+    if exception is not None:
+        _finish_application_span_error(session_id, exception=exception)
+    else:
+        _finish_application_span_success(session_id)
 
 
 def start_action_span(
@@ -592,7 +700,7 @@ def finish_action_span_success(
         response_value = (
             response_text[:500] + "..." if len(response_text) > 500 else response_text
         )
-    _finish_application_span(
+    _finish_application_span_success(
         action_id,
         extra_attributes={
             "mellea.num_generate_logs": num_generate_logs,
@@ -610,92 +718,136 @@ def finish_action_span_error(action_id: str, *, exception: BaseException) -> Non
         action_id: Correlation key from the matching open call.
         exception: The exception that ended the action.
     """
-    _finish_application_span(action_id, exception=exception)
+    _finish_application_span_error(action_id, exception=exception)
 
 
-@contextmanager
-def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None]:
-    """Create an application trace span if application tracing is enabled.
-
-    Args:
-        name: Name of the span.
-        **attributes: Additional attributes to add to the span.
-
-    Yields:
-        The span object if tracing is enabled, otherwise `None`.
-    """
-    tracer = get_application_tracer()
-    if tracer is not None:
-        with tracer.start_as_current_span(name) as span:
-            for key, value in attributes.items():
-                if value is not None:
-                    set_span_attribute(span, key, value)
-            yield span
-    else:
-        yield None
-
-
-def _set_attribute_safe(span: Any, key: str, value: Any) -> None:
-    """Set an attribute on a span, handling type conversions.
+def start_streaming_span(
+    streaming_id: str,
+    *,
+    has_requirements: bool | None,
+    requirement_count: int | None,
+    chunking_strategy: str | None,
+) -> Span | None:
+    """Open the `stream_with_chunking` span for one orchestration run.
 
     Args:
-        span: The span object.
-        key: Attribute key.
-        value: Attribute value (will be converted to an OTel-compatible type).
+        streaming_id: UUID correlating this streaming run across hooks.
+        has_requirements: Whether requirements were supplied.
+        requirement_count: Number of requirements supplied.
+        chunking_strategy: ChunkingStrategy class name.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
     """
-    if value is None:
+    return _start_application_span(
+        "stream_with_chunking",
+        streaming_id,
+        {
+            "mellea.has_requirements": has_requirements,
+            "mellea.requirement_count": requirement_count,
+            "mellea.chunking_strategy": chunking_strategy,
+        },
+    )
+
+
+def add_streaming_event(
+    streaming_id: str, *, event_name: str, attributes: dict[str, Any]
+) -> None:
+    """Add an OTel span event to the in-flight `stream_with_chunking` span.
+
+    Leaves the span in `_in_flight_spans` for a later `finish_streaming_span_*`
+    call to close.
+
+    Args:
+        streaming_id: Correlation key from the matching open call.
+        event_name: Span-event name.
+        attributes: Span-event attributes; `None` values are skipped.
+    """
+    entry = _in_flight_spans.get(streaming_id)
+    if entry is None:
         return
+    span = entry[0]
+    filtered = {k: v for k, v in attributes.items() if v is not None}
+    span.add_event(event_name, filtered)
 
-    if isinstance(value, bool):
-        span.set_attribute(key, value)
-    elif isinstance(value, int | float):
-        span.set_attribute(key, value)
-    elif isinstance(value, str):
-        span.set_attribute(key, value)
-    elif isinstance(value, list | tuple):
-        span.set_attribute(key, [str(v) for v in value])
+
+def reattach_span(key: str) -> None:
+    """Make the in-flight span `key` the current task's ambient context.
+
+    Spans opened by later work on this task then parent under it. Paired with
+    `release_reattached_span()`, which must run on the same task. No-op when the
+    span is not in flight. See `_safe_detach` for how this scope is used to
+    classify the cross-task detach it enables.
+
+    Args:
+        key: Correlation key of an in-flight span (the key it was stashed under).
+    """
+    entry = _in_flight_spans.get(key)
+    if entry is None:
+        return
+    span = entry[0]
+    token = otel_context.attach(trace.set_span_in_context(span))
+    _reattached_tokens[key] = (token, _current_task())
+
+
+def release_reattached_span(key: str) -> None:
+    """Release a reattached span from a matching `reattach_span()` call.
+
+    Must run on the same task that called `reattach_span()`. No-op when no token
+    is stored.
+
+    Args:
+        key: Correlation key from the matching `reattach_span()` call.
+    """
+    entry = _reattached_tokens.pop(key, None)
+    if entry is not None:
+        token, _ = entry
+        otel_context.detach(token)
+
+
+def finish_streaming_span(
+    streaming_id: str,
+    *,
+    success: bool,
+    failure_reason: str | None = None,
+    exception: BaseException | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+    full_text_length: int | None = None,
+) -> None:
+    """End the `stream_with_chunking` span, recording its outcome.
+
+    Sets OK status on success. On failure, marks the span ERROR: with the
+    exception recorded when one is given, otherwise with `failure_reason` and
+    no recorded exception.
+
+    Args:
+        streaming_id: Correlation key from the matching open call.
+        success: `True` only on a clean completion.
+        failure_reason: Human-readable ERROR-status description, used when
+            `success` is `False` and no `exception` is given.
+        exception: The exception raised by the orchestrator, when one was.
+        model: Model identifier, when known.
+        provider: Provider name, when known.
+        full_text_length: Accumulated text length at orchestrator exit.
+    """
+    extra_attributes = {
+        "mellea.full_text_length": full_text_length,
+        "gen_ai.request.model": model,
+        "gen_ai.provider.name": provider,
+    }
+
+    if success:
+        _finish_application_span_success(
+            streaming_id, extra_attributes=extra_attributes
+        )
     else:
-        span.set_attribute(key, str(value))
-
-
-def set_span_attribute(span: Any, key: str, value: Any) -> None:
-    """Set an attribute on a span if the span is not None.
-
-    Args:
-        span: The span object (may be None if tracing is disabled).
-        key: Attribute key.
-        value: Attribute value.
-    """
-    if span is not None and value is not None:
-        _set_attribute_safe(span, key, value)
-
-
-def set_span_error(span: Any, exception: BaseException) -> None:
-    """Record an exception on a span if the span is not None.
-
-    Args:
-        span: The span object (may be None if tracing is disabled).
-        exception: The exception to record.
-    """
-    if span is not None and _OTEL_AVAILABLE:
-        span.record_exception(exception)
-        span.set_status(trace.Status(trace.StatusCode.ERROR, str(exception)))
-
-
-def set_span_status_error(span: Any, description: str) -> None:
-    """Mark a span as ERROR without recording a phantom exception event.
-
-    Use this for validation failures and other non-exception error conditions
-    where the span should be marked failed but no exception was actually raised.
-    Calling `set_span_error` in these cases would create a misleading recorded
-    exception event in OTEL traces.
-
-    Args:
-        span: The span object (may be None if tracing is disabled)
-        description: Human-readable reason for the failure.
-    """
-    if span is not None and _OTEL_AVAILABLE:
-        span.set_status(trace.Status(trace.StatusCode.ERROR, description))  # type: ignore
+        _finish_application_span_error(
+            streaming_id,
+            extra_attributes=extra_attributes,
+            exception=exception,
+            description=failure_reason,
+        )
 
 
 __all__ = [
@@ -703,9 +855,5 @@ __all__ = [
     "get_backend_tracer",
     "is_content_tracing_enabled",
     "is_tracing_enabled",
-    "set_span_attribute",
-    "set_span_error",
-    "set_span_status_error",
     "start_backend_span",
-    "trace_application",
 ]
