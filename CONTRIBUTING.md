@@ -429,7 +429,9 @@ as it can corrupt state.
 
 ### Pull Request Process
 
-1. **Create an issue** describing your change (if not already exists)
+1. **Find or create an issue** for your change:
+   - **1a. Issue already exists** — add a comment asking to be assigned the issue
+   - **1b. No issue exists** — open an issue describing the change
 2. **Fork the repository** (if you haven't already)
 3. **Create a branch** in your fork using appropriate naming
 4. **Make your changes** following coding standards
