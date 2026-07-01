@@ -36,13 +36,12 @@ Environment variables
     via `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT`.
 `MELLEA_LOGS_WEBHOOK`
     HTTPS URL to forward log records to via HTTP POST.  Must use the
-    `https://` scheme and must not resolve to a loopback, link-local, or
-    private IP address.  When set a `RESTHandler` is attached.
+    `https://` scheme and must have a non-empty hostname.  When set a
+    `RESTHandler` is attached.
 """
 
 import contextlib
 import contextvars
-import ipaddress
 import json
 import logging
 import os
@@ -512,17 +511,6 @@ def _parse_bool_env(value: str, default: bool = True) -> bool:
     return default
 
 
-_SSRF_BLOCKS = (
-    ipaddress.ip_network("169.254.0.0/16"),  # link-local / AWS IMDS
-    ipaddress.ip_network("127.0.0.0/8"),  # loopback
-    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918
-    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918
-    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918
-    ipaddress.ip_network("::1/128"),  # IPv6 loopback
-    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
-)
-
-
 def _resolve_webhook_url() -> str | None:
     """Return the configured webhook URL from `MELLEA_LOGS_WEBHOOK`, or `None`.
 
@@ -531,8 +519,6 @@ def _resolve_webhook_url() -> str | None:
 
     * scheme must be `https`
     * hostname must be present and non-empty
-    * resolved IP (if the hostname is a bare IP literal) must not fall within
-      link-local, loopback, or RFC-1918 ranges (SSRF mitigation)
     """
     raw = os.environ.get("MELLEA_LOGS_WEBHOOK", "").strip()
     if not raw:
@@ -556,19 +542,6 @@ def _resolve_webhook_url() -> str | None:
             stacklevel=2,
         )
         return None
-
-    try:
-        addr = ipaddress.ip_address(hostname)
-        if any(addr in net for net in _SSRF_BLOCKS):
-            warnings.warn(
-                f"MELLEA_LOGS_WEBHOOK ignored: IP address {hostname!r} is in a "
-                "blocked range (loopback / link-local / private).",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
-    except ValueError:
-        pass  # hostname is a DNS name, not an IP literal — DNS resolution is not blocked here
 
     return raw
 

@@ -962,11 +962,9 @@ class TestResolveWebhookUrl:
         monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://example.com/logs")
         assert _resolve_webhook_url() == "https://example.com/logs"
 
-    def test_https_with_public_ip_returned(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://198.51.100.1/logs")
-        assert _resolve_webhook_url() == "https://198.51.100.1/logs"
+    def test_https_with_ip_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://8.8.8.8/logs")
+        assert _resolve_webhook_url() == "https://8.8.8.8/logs"
 
     def test_https_dns_hostname_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://my-webhook.internal/logs")
@@ -987,30 +985,6 @@ class TestResolveWebhookUrl:
             result = _resolve_webhook_url()
         assert result is None
         assert any("hostname" in str(w.message) for w in caught)
-
-    @pytest.mark.parametrize(
-        "ip",
-        [
-            "169.254.169.254",  # AWS IMDS / link-local
-            "169.254.0.1",  # link-local range
-            "127.0.0.1",  # loopback
-            "10.0.0.1",  # RFC-1918
-            "172.16.0.1",  # RFC-1918
-            "172.31.255.255",  # RFC-1918 upper bound
-            "192.168.1.1",  # RFC-1918
-            "[::1]",  # IPv6 loopback
-            "[fe80::1]",  # IPv6 link-local
-        ],
-    )
-    def test_blocked_ip_rejected(
-        self, monkeypatch: pytest.MonkeyPatch, ip: str
-    ) -> None:
-        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", f"https://{ip}/logs")
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = _resolve_webhook_url()
-        assert result is None, f"Expected {ip} to be blocked"
-        assert any("blocked" in str(w.message) for w in caught)
 
 
 # ---------------------------------------------------------------------------
