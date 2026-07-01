@@ -188,7 +188,9 @@ class TemplateFormatter(ChatFormatter):
             Exception: If there's an unexpected jinja error or the template cannot be found.
         """
         if repr.template:
-            return jinja2.Environment().from_string(repr.template)  # type: ignore
+            return jinja2.sandbox.SandboxedEnvironment(
+                undefined=jinja2.StrictUndefined
+            ).from_string(repr.template)  # type: ignore
 
         if repr.template_order is None:
             MelleaLogger.get_logger().warning(
