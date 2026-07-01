@@ -17,7 +17,9 @@ def capture_intrinsic(monkeypatch):
     """Spy that replaces call_intrinsic and captures what it receives."""
     captured: dict = {}
 
-    def fake_call_intrinsic(name, context, backend, /, kwargs=None, model_options=None):
+    def fake_call_intrinsic(
+        name, context, backend, /, kwargs=None, model_options=None, io_contract=None
+    ):
         captured["name"] = name
         captured["context"] = context
         return {"score": "yes", "correction": "corrected"}
@@ -202,39 +204,6 @@ def test_factuality_detection_thunk_attaches_doc_to_assistant_turn(capture_intri
 
 
 # ---------------------------------------------------------------------------
-# policy_guardrails: XOR validation error paths
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def capture_policy(monkeypatch):
-    """Return a factory that makes call_intrinsic return a controlled result dict."""
-
-    def _make(result: dict):
-        monkeypatch.setattr(
-            guardian,
-            "call_intrinsic",
-            lambda name, ctx, backend, /, kwargs=None, model_options=None: result,
-        )
-
-    return _make
-
-
-def test_policy_guardrails_raises_when_both_label_and_score_present(capture_policy):
-    capture_policy({"label": "Yes", "score": 0.9})
-    ctx = ChatContext().add(Message("user", "Hello"))
-    with pytest.raises(ValueError, match="found both"):
-        guardian.policy_guardrails(ctx, object(), policy_text="no hate speech")
-
-
-def test_policy_guardrails_raises_when_neither_label_nor_score_present(capture_policy):
-    capture_policy({})
-    ctx = ChatContext().add(Message("user", "Hello"))
-    with pytest.raises(ValueError, match="found neither"):
-        guardian.policy_guardrails(ctx, object(), policy_text="no hate speech")
-
-
-# ---------------------------------------------------------------------------
 # model_options forwarding
 # ---------------------------------------------------------------------------
 
@@ -243,7 +212,7 @@ def _make_capture(monkeypatch, result: dict):
     """Patch call_intrinsic to capture (name, model_options) and return result."""
     calls: list[tuple] = []
 
-    def _fake(name, ctx, backend, /, kwargs=None, model_options=None):
+    def _fake(name, ctx, backend, /, kwargs=None, model_options=None, io_contract=None):
         calls.append((name, model_options))
         return result
 

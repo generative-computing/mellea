@@ -1,7 +1,7 @@
-"""Unit tests for the deprecated ``target_role`` path of ``guardian_check``.
+"""Unit tests for the deprecated `target_role` path of `guardian_check`.
 
 Exercises the sentinel/mapping logic without touching a model. We monkeypatch
-``call_intrinsic`` and assert on (a) the ``kwargs["scoring_schema"]`` that
+`call_intrinsic` and assert on (a) the `kwargs["scoring_schema"]` that
 reaches the adapter boundary and (b) the warnings/errors the caller sees.
 """
 
@@ -18,7 +18,9 @@ def capture_kwargs(monkeypatch):
     """Replace call_intrinsic with a spy that returns a stub yes=1.0 result."""
     captured: dict = {}
 
-    def fake_call_intrinsic(name, context, backend, /, kwargs=None, model_options=None):
+    def fake_call_intrinsic(
+        name, context, backend, /, kwargs=None, model_options=None, io_contract=None
+    ):
         captured["name"] = name
         captured["kwargs"] = kwargs
         return {"guardian": {"score": 1.0}}
