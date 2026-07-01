@@ -42,8 +42,18 @@ class ChatContext(Context):
             `add`. `None` (the default) means no compaction; full history
             is kept.
         window_size (int | None): Sugar that constructs a
-            :class:`WindowCompactor`. Mutually exclusive with `compactor`.
-            `None` (the default) means no windowing.
+            `WindowCompactor(size=window_size)`, whose default
+            `pin_predicate` is `pin_system`. Mutually exclusive with
+            `compactor`. `None` (the default) means no windowing.
+
+            **Behavior change (deliberate):** before the compaction refactor,
+            `window_size=N` was a raw last-N view (`as_list(N)`) with no
+            pinning — a system message could age out and exactly `N` items
+            were returned. It now pins the system message (which therefore
+            survives) and the `size` limit counts only the non-pinned body,
+            so the returned view can exceed `N` items. To recover the old
+            drop-in semantics, pass
+            `compactor=WindowCompactor(size=N, pin_predicate=pin_nothing)`.
         token_context_length_limit (int | None): Explicit token budget cap
             for `view_for_generation`. Overrides the model-derived limit when
             set. `None` (the default) means no token cap.
