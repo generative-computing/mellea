@@ -143,10 +143,11 @@ class LiteLLMBackend(FormatterBackend):
 
     def __repr__(self) -> str:
         """Return a useful string representation for debugging."""
+        base_url_repr = self._base_url if self._explicit_base_url else None
         return (
             f"{self.__class__.__name__}("
             f"model_id={self._model_id!r}, "
-            f"base_url={self._base_url!r})"
+            f"base_url={base_url_repr!r})"
         )
 
     def __str__(self) -> str:

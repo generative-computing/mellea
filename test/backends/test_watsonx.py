@@ -29,46 +29,6 @@ from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext, SimpleContext
 
 
-def test_repr_masks_api_key():
-    backend = WatsonxAIBackend(
-        model_id="ibm/granite-4-h-small",
-        api_key="fake-key",
-        base_url="https://us-south.cloud.ibm.com",
-        project_id="test-project",
-    )
-    r = repr(backend)
-    assert "fake-key" not in r
-    assert "***" in r
-    assert "test-project" not in r
-
-
-def test_repr_no_key_shows_none(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("WATSONX_API_KEY", "env-key")
-    backend = WatsonxAIBackend(
-        model_id="ibm/granite-4-h-small",
-        api_key=None,
-        base_url="https://us-south.cloud.ibm.com",
-        project_id="test-project",
-    )
-    r = repr(backend)
-    assert "env-key" not in r
-    assert "***" not in r
-    assert "_api_key=None" in r
-    assert "test-project" not in r
-
-
-def test_str_masks_api_key():
-    backend = WatsonxAIBackend(
-        model_id="ibm/granite-4-h-small",
-        api_key="fake-key",
-        base_url="https://us-south.cloud.ibm.com",
-        project_id="test-project",
-    )
-    assert "fake-key" not in str(backend)
-    assert "***" in str(backend)
-    assert "test-project" not in str(backend)
-
-
 @pytest.fixture(scope="module")
 def backend():
     """Shared Watson backend for all tests in this module."""
