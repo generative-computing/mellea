@@ -986,6 +986,28 @@ class TestResolveWebhookUrl:
         assert result is None
         assert any("hostname" in str(w.message) for w in caught)
 
+    def test_http_allowed_when_insecure_flag_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://localhost:9000/logs")
+        monkeypatch.setenv("MELLEA_LOGGER_INSECURE_HTTP_ALLOWED", "true")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _resolve_webhook_url()
+        assert result == "http://localhost:9000/logs"
+        assert not any("HTTPS" in str(w.message) for w in caught)
+
+    def test_http_still_rejected_without_insecure_flag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://localhost:9000/logs")
+        monkeypatch.delenv("MELLEA_LOGGER_INSECURE_HTTP_ALLOWED", raising=False)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _resolve_webhook_url()
+        assert result is None
+        assert any("HTTPS" in str(w.message) for w in caught)
+
 
 # ---------------------------------------------------------------------------
 # Webhook handler (MELLEA_LOGS_WEBHOOK)

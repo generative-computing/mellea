@@ -38,6 +38,10 @@ Environment variables
     HTTPS URL to forward log records to via HTTP POST.  Must use the
     `https://` scheme and must have a non-empty hostname.  When set a
     `RESTHandler` is attached.
+`MELLEA_LOGGER_INSECURE_HTTP_ALLOWED`
+    Set to `true` / `1` / `yes` to allow plain `http://` URLs in
+    `MELLEA_LOGS_WEBHOOK`.  Intended for local development only; never
+    set this in production.
 """
 
 import contextlib
@@ -525,7 +529,10 @@ def _resolve_webhook_url() -> str | None:
         return None
 
     parsed = urllib.parse.urlparse(raw)
-    if parsed.scheme != "https":
+    insecure_allowed = _parse_bool_env(
+        os.environ.get("MELLEA_LOGGER_INSECURE_HTTP_ALLOWED", ""), default=False
+    )
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and insecure_allowed):
         warnings.warn(
             f"MELLEA_LOGS_WEBHOOK ignored: URL must use HTTPS (got {parsed.scheme!r}). "
             "Set the variable to an https:// URL to enable webhook logging.",
