@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-examples/index" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Examples | Mellea</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" name="twitter:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" property="og:url" content="https://docs.mellea.ai/examples"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="keywords" content="mellea, generative programming, AI, LLM, Python"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Examples | Mellea"><meta data-rh="true" name="description" content="Complete working programs demonstrating Mellea patterns in production-like scenarios."><meta data-rh="true" property="og:description" content="Complete working programs demonstrating Mellea patterns in production-like scenarios."><link data-rh="true" rel="icon" href="/images/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.mellea.ai/examples"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/examples" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/examples" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Examples","item":"https://docs.mellea.ai/examples/"}]}</script><script src="/analytics.js" async></script><link rel="stylesheet" href="/assets/css/styles.8178f1a9.css">
+<script src="/assets/js/runtime~main.0bf20f66.js" defer="defer"></script>
+<script src="/assets/js/main.b60ddf9f.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/"><div class="navbar__logo"><img src="/logo/logo-light.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/logo/logo-dark.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate"></b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/getting-started/installation">Docs</a><a class="navbar__item navbar__link" href="/api">API Reference</a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/examples">Next</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Community<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://mellea.ai" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">mellea.ai<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"><div class="navbar__search searchBarContainer_NW3z" dir="ltr"><input placeholder="Search" aria-label="Search" class="navbar__search-input" value=""><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/getting-started/installation"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/tutorials/your-first-generative-program"><span title="Tutorials" class="categoryLinkLabel_W154">Tutorials</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/concepts/generative-programming"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/how-to/generative-functions"><span title="How-To" class="categoryLinkLabel_W154">How-To</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/examples"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/examples"><span title="Examples" class="linkLabel_WmDU">Examples</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/examples/data-extraction-pipeline"><span title="Data Extraction Pipeline" class="linkLabel_WmDU">Data Extraction Pipeline</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/examples/legacy-code-integration"><span title="Legacy Code Integration with @mify" class="linkLabel_WmDU">Legacy Code Integration with @mify</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/examples/resilient-rag-fallback"><span title="Resilient RAG with Fallback Filtering" class="linkLabel_WmDU">Resilient RAG with Fallback Filtering</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/examples/traced-generation-loop"><span title="Traced Generation Loop" class="linkLabel_WmDU">Traced Generation Loop</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/integrations/ollama"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/observability/telemetry"><span title="Observability" class="categoryLinkLabel_W154">Observability</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/advanced/intrinsics"><span title="Advanced" class="categoryLinkLabel_W154">Advanced</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/community/contributing-guide"><span title="Community" class="categoryLinkLabel_W154">Community</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/reference/glossary"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/troubleshooting/common-errors"><span title="Troubleshooting" class="categoryLinkLabel_W154">Troubleshooting</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Examples</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Examples</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Examples</h1></header><p>Each example in this section is a complete, runnable Python program. The pages
+walk through the code section by section so you can see how the pieces fit
+together. Copy any example as a starting point for your own project.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="examples-in-this-section">Examples in this section<a href="#examples-in-this-section" class="hash-link" aria-label="Direct link to Examples in this section" title="Direct link to Examples in this section" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Example</th><th>What it shows</th></tr></thead><tbody><tr><td><a class="" href="/examples/data-extraction-pipeline">Data extraction pipeline</a></td><td>Use <code>@generative</code> with a typed return to pull structured data from unstructured text</td></tr><tr><td><a class="" href="/examples/legacy-code-integration">Legacy code integration</a></td><td>Apply <code>@mify</code> to existing Python classes so the model can act on them</td></tr><tr><td><a class="" href="/examples/resilient-rag-fallback">Resilient RAG with fallback</a></td><td>Build a FAISS retrieval pipeline with an LLM relevance filter before generation</td></tr><tr><td><a class="" href="/examples/traced-generation-loop">Traced generation loop</a></td><td>Enable OpenTelemetry application and backend traces with two environment variables</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="all-example-categories">All example categories<a href="#all-example-categories" class="hash-link" aria-label="Direct link to All example categories" title="Direct link to All example categories" translate="no">​</a></h2>
+<p>The repository contains many more runnable examples than the four documented
+above. Every category has its own <code>README.md</code> and one or more <code>.py</code> files ready
+to run.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="core-concepts">Core concepts<a href="#core-concepts" class="hash-link" aria-label="Direct link to Core concepts" title="Direct link to Core concepts" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>instruct_validate_repair/</code></td><td>The IVR loop end-to-end: basic generation, adding requirements, automatic repair on failure, custom validators</td></tr><tr><td><code>generative_stubs/</code></td><td><code>@generative</code> functions with typed returns, pipeline composition, <code>ChatContext</code> persona injection, pre/postcondition checks</td></tr><tr><td><code>context/</code></td><td>Context inspection, sampling with context trees, parallel context branches</td></tr><tr><td><code>sessions/</code></td><td>Custom session types and backend selection</td></tr><tr><td><code>async/</code></td><td>How to utilize basic async capabilities</td></tr><tr><td><code>streaming/</code></td><td><code>stream_with_chunking()</code> with per-chunk validation, typed event vocabulary, early-exit on fail</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="data-and-documents">Data and documents<a href="#data-and-documents" class="hash-link" aria-label="Direct link to Data and documents" title="Direct link to Data and documents" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>information_extraction/</code></td><td>Named entity recognition and type-safe structured extraction with Pydantic</td></tr><tr><td><code>mobject/</code></td><td>Table queries and transformations using <code>MObject</code> structured data types</td></tr><tr><td><code>mify/</code></td><td><code>@mify</code> on existing classes — custom string representations, field filtering, <code>funcs_include</code></td></tr><tr><td><code>rag/</code></td><td>FAISS vector search, <code>@generative bool</code> relevance filter, <code>grounding_context</code> for grounded generation</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="agents-and-tools">Agents and tools<a href="#agents-and-tools" class="hash-link" aria-label="Direct link to Agents and tools" title="Direct link to Agents and tools" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>agents/</code></td><td>ReACT reasoning-and-acting loop, multi-turn tool workflows</td></tr><tr><td><code>tools/</code></td><td><code>@tool</code> definition, code interpreter integration, tool argument validation, safe <code>eval</code> patterns</td></tr><tr><td><code>mini_researcher/</code></td><td>Complete research assistant: multi-model architecture, document retrieval, safety checks, custom validation pipeline</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="extensibility">Extensibility<a href="#extensibility" class="hash-link" aria-label="Direct link to Extensibility" title="Direct link to Extensibility" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>plugins/</code></td><td>Plugin system end-to-end: function hooks, class-based plugins, payload modification, scoped and session-scoped plugins, <code>PluginSet</code> composition, execution modes, tool hooks, and testing patterns</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="safety-and-validation">Safety and validation<a href="#safety-and-validation" class="hash-link" aria-label="Direct link to Safety and validation" title="Direct link to Safety and validation" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>intrinsics/</code></td><td><a class="" href="/how-to/safety-guardrails">Guardian adapter functions</a>: <code>guardian_check()</code> for harm, jailbreak, social bias, groundedness; <code>policy_guardrails()</code>; <code>factuality_detection()</code> / <code>factuality_correction()</code></td></tr><tr><td><code>safety/</code></td><td><em>(Examples removed — see <a class="" href="/how-to/safety-guardrails">Guardian how-to guide</a> for the current API. The <code>RepairTemplateStrategy</code> gap is tracked in <a href="https://github.com/generative-computing/mellea/issues/1071" target="_blank" rel="noopener noreferrer" class="">#1071</a>.)</em></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="integration-and-deployment">Integration and deployment<a href="#integration-and-deployment" class="hash-link" aria-label="Direct link to Integration and deployment" title="Direct link to Integration and deployment" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>m_serve/</code></td><td>Deploying Mellea programs as REST APIs with production deployment patterns</td></tr><tr><td><code>m_decompose/</code></td><td>Decomposing complex prompts into sub-tasks via the CLI and Python API</td></tr><tr><td><code>library_interop/</code></td><td>LangChain message conversion, OpenAI format compatibility, cross-library workflows</td></tr><tr><td><code>mcp/</code></td><td>MCP tool creation, Claude Desktop integration, Langflow integration</td></tr><tr><td><code>bedrock/</code></td><td>Amazon Bedrock backend configuration and usage</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="performance-and-advanced-sampling">Performance and advanced sampling<a href="#performance-and-advanced-sampling" class="hash-link" aria-label="Direct link to Performance and advanced sampling" title="Direct link to Performance and advanced sampling" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>aLora/</code></td><td>Training aLoRA adapters for fast constraint checking; performance optimisation</td></tr><tr><td><code>intrinsics/</code></td><td><em>(Non-Guardian)</em> Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks. For Guardian safety functions see <a href="#safety-and-validation" class="">Safety and validation</a> above</td></tr><tr><td><code>granite-switch/</code></td><td>Running adapter functions via OpenAI backend with Granite Switch embedded adapters</td></tr><tr><td><code>sofai/</code></td><td>Two-tier sampling: fast-model iteration with escalation to a slow model; cost optimisation</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="multimodal">Multimodal<a href="#multimodal" class="hash-link" aria-label="Direct link to Multimodal" title="Direct link to Multimodal" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>image_text_models/</code></td><td>Vision-language models, <code>ImageBlock</code>, multimodal prompting, backend support matrix</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="observability">Observability<a href="#observability" class="hash-link" aria-label="Direct link to Observability" title="Direct link to Observability" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>telemetry/</code></td><td>OpenTelemetry application and backend traces; span export configuration</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="experimental">Experimental<a href="#experimental" class="hash-link" aria-label="Direct link to Experimental" title="Direct link to Experimental" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>melp/</code></td><td>⚠️ Experimental lazy evaluation — thunks, deferred execution, advanced control flow</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="getting-started-and-tutorials">Getting started and tutorials<a href="#getting-started-and-tutorials" class="hash-link" aria-label="Direct link to Getting started and tutorials" title="Direct link to Getting started and tutorials" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>What it shows</th></tr></thead><tbody><tr><td><code>hello_world.py</code></td><td>Minimal single-file starting point</td></tr><tr><td><code>tutorial/</code></td><td>Python script versions of the tutorials: email generation, IVR, generative stubs, contexts, MObjects, model options, and more</td></tr><tr><td><code>notebooks/</code></td><td>Jupyter notebook versions of the same tutorials for interactive, cell-by-cell exploration</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="running-the-examples">Running the examples<a href="#running-the-examples" class="hash-link" aria-label="Direct link to Running the examples" title="Direct link to Running the examples" translate="no">​</a></h2>
+<p>All examples are in the <code>docs/examples/</code> directory of the repository. Unless
+otherwise noted, run them with:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">python docs/examples/</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">folder</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain">/</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">file</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain">.py</span><br></div></code></pre></div></div>
+<p>Some examples declare inline script dependencies using the
+<a href="https://peps.python.org/pep-0723/" target="_blank" rel="noopener noreferrer" class="">PEP 723</a> <code>/// script</code> block and can be
+run with <code>uv run</code> instead:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">uv run docs/examples/</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">folder</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain">/</span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">file</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain">.py</span><br></div></code></pre></div></div>
+<p><strong>Default backend:</strong> <code>start_session()</code> with no arguments connects to a local
+<a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" class="">Ollama</a> instance running <strong>IBM Granite 4 Micro</strong>
+(<code>granite4.1:3b</code>). Make sure Ollama is running before you execute any example.</p></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/generative-computing/mellea/edit/main/docs/examples/index.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"><span class="theme-last-updated">Last updated<!-- --> on <b><time datetime="2026-06-24T15:54:00.000Z" itemprop="dateModified">Jun 24, 2026</time></b></span></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/how-to/debug-with-plugins"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Debug with Plugins</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/examples/data-extraction-pipeline"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Data Extraction Pipeline</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#examples-in-this-section" class="table-of-contents__link toc-highlight">Examples in this section</a></li><li><a href="#all-example-categories" class="table-of-contents__link toc-highlight">All example categories</a><ul><li><a href="#core-concepts" class="table-of-contents__link toc-highlight">Core concepts</a></li><li><a href="#data-and-documents" class="table-of-contents__link toc-highlight">Data and documents</a></li><li><a href="#agents-and-tools" class="table-of-contents__link toc-highlight">Agents and tools</a></li><li><a href="#extensibility" class="table-of-contents__link toc-highlight">Extensibility</a></li><li><a href="#safety-and-validation" class="table-of-contents__link toc-highlight">Safety and validation</a></li><li><a href="#integration-and-deployment" class="table-of-contents__link toc-highlight">Integration and deployment</a></li><li><a href="#performance-and-advanced-sampling" class="table-of-contents__link toc-highlight">Performance and advanced sampling</a></li><li><a href="#multimodal" class="table-of-contents__link toc-highlight">Multimodal</a></li><li><a href="#observability" class="table-of-contents__link toc-highlight">Observability</a></li><li><a href="#experimental" class="table-of-contents__link toc-highlight">Experimental</a></li><li><a href="#getting-started-and-tutorials" class="table-of-contents__link toc-highlight">Getting started and tutorials</a></li></ul></li><li><a href="#running-the-examples" class="table-of-contents__link toc-highlight">Running the examples</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="footer__links text--center"><div class="footer__links"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="footer__link-item">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="footer__link-item">Discussions<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" class="footer__link-item">Contributing<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/issues" target="_blank" rel="noopener noreferrer" class="footer__link-item">Issues<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Mellea Contributors.</div></div></div></footer></div>
+</body>
+</html>

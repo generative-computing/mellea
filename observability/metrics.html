@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-observability/metrics" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Metrics | Mellea</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" name="twitter:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" property="og:url" content="https://docs.mellea.ai/observability/metrics"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="keywords" content="mellea, generative programming, AI, LLM, Python"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Metrics | Mellea"><meta data-rh="true" name="description" content="Automatically collect LLM metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."><meta data-rh="true" property="og:description" content="Automatically collect LLM metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."><link data-rh="true" rel="icon" href="/images/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.mellea.ai/observability/metrics"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/observability/metrics" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/observability/metrics" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Metrics","item":"https://docs.mellea.ai/observability/metrics"}]}</script><script src="/analytics.js" async></script><link rel="stylesheet" href="/assets/css/styles.8178f1a9.css">
+<script src="/assets/js/runtime~main.0bf20f66.js" defer="defer"></script>
+<script src="/assets/js/main.b60ddf9f.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/"><div class="navbar__logo"><img src="/logo/logo-light.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/logo/logo-dark.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate"></b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/getting-started/installation">Docs</a><a class="navbar__item navbar__link" href="/api">API Reference</a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/observability/metrics">Next</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Community<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://mellea.ai" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">mellea.ai<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"><div class="navbar__search searchBarContainer_NW3z" dir="ltr"><input placeholder="Search" aria-label="Search" class="navbar__search-input" value=""><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/getting-started/installation"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/tutorials/your-first-generative-program"><span title="Tutorials" class="categoryLinkLabel_W154">Tutorials</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/concepts/generative-programming"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/how-to/generative-functions"><span title="How-To" class="categoryLinkLabel_W154">How-To</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/examples"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/integrations/ollama"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/observability/telemetry"><span title="Observability" class="categoryLinkLabel_W154">Observability</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/observability/telemetry"><span title="Telemetry" class="linkLabel_WmDU">Telemetry</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/observability/tracing"><span title="Tracing" class="linkLabel_WmDU">Tracing</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/observability/metrics"><span title="Metrics" class="linkLabel_WmDU">Metrics</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/observability/logging"><span title="Logging" class="linkLabel_WmDU">Logging</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/advanced/intrinsics"><span title="Advanced" class="categoryLinkLabel_W154">Advanced</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/community/contributing-guide"><span title="Community" class="categoryLinkLabel_W154">Community</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/reference/glossary"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/troubleshooting/common-errors"><span title="Troubleshooting" class="categoryLinkLabel_W154">Troubleshooting</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Observability</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Metrics</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Metrics</h1></header><p><strong>Prerequisites:</strong> <a class="" href="/observability/telemetry">Telemetry</a>
+introduces the environment variables and telemetry architecture. This page
+covers metrics collection in detail.</p>
+<p>Mellea automatically records LLM metrics across all backends using OpenTelemetry. Metrics follow the
+<a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" target="_blank" rel="noopener noreferrer" class="">Gen-AI Semantic Conventions</a>
+for standardized observability. The metrics API also lets you create your own
+counters, histograms, and up-down counters for application-level instrumentation.</p>
+<blockquote>
+<p><strong>Note:</strong> Metrics are an optional feature. All instrument calls are no-ops
+when metrics are disabled or the <code>[telemetry]</code> extra is not installed.</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="enable-metrics">Enable metrics<a href="#enable-metrics" class="hash-link" aria-label="Direct link to Enable metrics" title="Direct link to Enable metrics" translate="no">​</a></h2>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div></code></pre></div></div>
+<p>You also need at least one exporter configured — see
+<a href="#metrics-export-configuration" class="">Metrics export configuration</a> below.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="token-usage-metrics">Token usage metrics<a href="#token-usage-metrics" class="hash-link" aria-label="Direct link to Token usage metrics" title="Direct link to Token usage metrics" translate="no">​</a></h2>
+<p>Mellea records token consumption automatically after each LLM call completes.
+No code changes are required.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="token-instruments">Token instruments<a href="#token-instruments" class="hash-link" aria-label="Direct link to Token instruments" title="Direct link to Token instruments" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.llm.tokens.input</code></td><td>Counter</td><td><code>tokens</code></td><td>Total input/prompt tokens processed</td></tr><tr><td><code>mellea.llm.tokens.output</code></td><td>Counter</td><td><code>tokens</code></td><td>Total output/completion tokens generated</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="token-attributes">Token attributes<a href="#token-attributes" class="hash-link" aria-label="Direct link to Token attributes" title="Direct link to Token attributes" translate="no">​</a></h3>
+<p>All token metrics include these attributes following Gen-AI semantic conventions:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>gen_ai.provider.name</code></td><td>Backend provider name</td><td><code>openai</code>, <code>ollama</code>, <code>watsonx</code>, <code>litellm</code>, <code>huggingface</code></td></tr><tr><td><code>gen_ai.request.model</code></td><td>Model identifier</td><td><code>gpt-4</code>, <code>llama3.2:7b</code>, <code>granite-3.1-8b-instruct</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="backend-support">Backend support<a href="#backend-support" class="hash-link" aria-label="Direct link to Backend support" title="Direct link to Backend support" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Backend</th><th>Streaming</th><th>Non-Streaming</th><th>Source</th></tr></thead><tbody><tr><td>OpenAI</td><td>Yes</td><td>Yes</td><td><code>usage.prompt_tokens</code> and <code>usage.completion_tokens</code></td></tr><tr><td>Ollama</td><td>Yes</td><td>Yes</td><td><code>prompt_eval_count</code> and <code>eval_count</code></td></tr><tr><td>WatsonX</td><td>No</td><td>Yes</td><td><code>input_token_count</code> and <code>generated_token_count</code> (streaming API limitation)</td></tr><tr><td>LiteLLM</td><td>Yes</td><td>Yes</td><td><code>usage.prompt_tokens</code> and <code>usage.completion_tokens</code></td></tr><tr><td>Hugging Face</td><td>Yes</td><td>Yes</td><td>Calculated from input_ids and output sequences</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="token-recording-timing">Token recording timing<a href="#token-recording-timing" class="hash-link" aria-label="Direct link to Token recording timing" title="Direct link to Token recording timing" translate="no">​</a></h3>
+<p>Token metrics are recorded <strong>after the full response is received</strong>, not
+incrementally during streaming:</p>
+<ul>
+<li class=""><strong>Non-streaming</strong>: Metrics recorded immediately after <code>await mot.avalue()</code> completes.</li>
+<li class=""><strong>Streaming</strong>: Metrics recorded after the stream is fully consumed (all chunks received).</li>
+</ul>
+<p>This ensures accurate token counts from the backend&#x27;s usage metadata, which
+is only available after the complete response.</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">mot</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> _ </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">await</span><span class="token plain"> backend</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">generate_from_context</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">msg</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> ctx</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Metrics NOT recorded yet (stream still in progress)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">await</span><span class="token plain"> mot</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">astream</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Metrics recorded here (after stream completion)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">await</span><span class="token plain"> mot</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">avalue</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="latency-histograms">Latency histograms<a href="#latency-histograms" class="hash-link" aria-label="Direct link to Latency histograms" title="Direct link to Latency histograms" translate="no">​</a></h2>
+<p>Mellea tracks request duration and time-to-first-token (TTFB) automatically
+after each LLM call. No code changes are required.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="latency-instruments">Latency instruments<a href="#latency-instruments" class="hash-link" aria-label="Direct link to Latency instruments" title="Direct link to Latency instruments" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.llm.request.duration</code></td><td>Histogram</td><td><code>s</code></td><td>Total request duration, from call to full response</td></tr><tr><td><code>mellea.llm.ttfb</code></td><td>Histogram</td><td><code>s</code></td><td>Time to first token (streaming requests only)</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="latency-attributes">Latency attributes<a href="#latency-attributes" class="hash-link" aria-label="Direct link to Latency attributes" title="Direct link to Latency attributes" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>gen_ai.provider.name</code></td><td>Backend provider name</td><td><code>openai</code>, <code>ollama</code>, <code>watsonx</code>, <code>litellm</code>, <code>huggingface</code></td></tr><tr><td><code>gen_ai.request.model</code></td><td>Model identifier</td><td><code>gpt-4</code>, <code>llama3.2:7b</code>, <code>granite-3.1-8b-instruct</code></td></tr><tr><td><code>streaming</code></td><td>Whether streaming mode was used (duration only)</td><td><code>True</code>, <code>False</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="histogram-buckets">Histogram buckets<a href="#histogram-buckets" class="hash-link" aria-label="Direct link to Histogram buckets" title="Direct link to Histogram buckets" translate="no">​</a></h3>
+<p>Custom bucket boundaries are configured for LLM-sized latencies:</p>
+<ul>
+<li class=""><strong><code>mellea.llm.request.duration</code></strong>: <code>0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120</code> seconds</li>
+<li class=""><strong><code>mellea.llm.ttfb</code></strong>: <code>0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10</code> seconds</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="latency-recording-timing">Latency recording timing<a href="#latency-recording-timing" class="hash-link" aria-label="Direct link to Latency recording timing" title="Direct link to Latency recording timing" translate="no">​</a></h3>
+<ul>
+<li class=""><strong><code>mellea.llm.request.duration</code></strong>: Recorded for every <code>generate_from_context</code> call,
+both streaming and non-streaming.</li>
+<li class=""><strong><code>mellea.llm.ttfb</code></strong>: Recorded only for streaming requests, measuring elapsed time
+from the <code>generate_from_context</code> call until the first chunk arrives.</li>
+</ul>
+<p>Access latency data directly from a <code>ModelOutputThunk</code>:</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> start_session</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">backends </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> ModelOption</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">with</span><span class="token plain"> start_session</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">as</span><span class="token plain"> m</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    result </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> m</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">instruct</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token string" style="color:#e3116c">&quot;Explain quantum entanglement briefly&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        model_options</span><span class="token operator" style="color:#393A34">=</span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain">ModelOption</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">STREAM</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token boolean" style="color:#36acaa">True</span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">if</span><span class="token plain"> result</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">generation</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">streaming </span><span class="token keyword" style="color:#00009f">and</span><span class="token plain"> result</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">generation</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">ttfb_ms </span><span class="token keyword" style="color:#00009f">is</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">not</span><span class="token plain"> </span><span class="token boolean" style="color:#36acaa">None</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Time to first token: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">result</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">generation</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">ttfb_ms</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">:</span><span class="token string-interpolation interpolation format-spec">.1f</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c"> ms&quot;</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="error-metrics">Error metrics<a href="#error-metrics" class="hash-link" aria-label="Direct link to Error metrics" title="Direct link to Error metrics" translate="no">​</a></h2>
+<p>Mellea records LLM errors automatically after each failed backend call. No
+code changes are required. Errors are classified into semantic categories for
+consistent filtering across providers.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="error-counter">Error counter<a href="#error-counter" class="hash-link" aria-label="Direct link to Error counter" title="Direct link to Error counter" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.llm.errors</code></td><td>Counter</td><td><code>{error}</code></td><td>Total LLM errors categorized by type</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="error-attributes">Error attributes<a href="#error-attributes" class="hash-link" aria-label="Direct link to Error attributes" title="Direct link to Error attributes" translate="no">​</a></h3>
+<p>All error metrics include these attributes:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>error_type</code></td><td>Semantic error category (mellea-specific)</td><td><code>rate_limit</code>, <code>timeout</code>, <code>auth</code>, <code>content_policy</code>, <code>invalid_request</code>, <code>transport_error</code>, <code>server_error</code>, <code>unknown</code></td></tr><tr><td><code>gen_ai.provider.name</code></td><td>Backend provider name</td><td><code>openai</code>, <code>ollama</code>, <code>watsonx</code>, <code>litellm</code>, <code>huggingface</code></td></tr><tr><td><code>gen_ai.request.model</code></td><td>Model identifier</td><td><code>gpt-4</code>, <code>llama3.2:7b</code>, <code>granite-3.1-8b-instruct</code></td></tr><tr><td><code>error.type</code></td><td>Python exception class name (standard OTel)</td><td><code>RateLimitError</code>, <code>TimeoutError</code>, <code>AuthenticationError</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="error-type-categories">Error type categories<a href="#error-type-categories" class="hash-link" aria-label="Direct link to Error type categories" title="Direct link to Error type categories" translate="no">​</a></h3>
+<p>The <code>error_type</code> attribute maps exceptions to human-friendly semantic labels:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Category</th><th>Description</th><th>Matched exceptions</th></tr></thead><tbody><tr><td><code>rate_limit</code></td><td>Request throttled by provider</td><td><code>openai.RateLimitError</code>, class names containing <code>ratelimit</code></td></tr><tr><td><code>timeout</code></td><td>Request or connection timed out</td><td><code>TimeoutError</code>, <code>openai.APITimeoutError</code>, class names containing <code>timeout</code></td></tr><tr><td><code>auth</code></td><td>Authentication or authorization failure</td><td><code>openai.AuthenticationError</code>, <code>openai.PermissionDeniedError</code>, class names containing <code>auth</code></td></tr><tr><td><code>content_policy</code></td><td>Request rejected by content moderation</td><td><code>openai.BadRequestError</code> with <code>code=&quot;content_policy_violation&quot;</code>, class names containing <code>content_policy</code></td></tr><tr><td><code>invalid_request</code></td><td>Malformed or unsupported request</td><td><code>openai.BadRequestError</code> (non-content-policy)</td></tr><tr><td><code>transport_error</code></td><td>Network or connection failure</td><td><code>ConnectionError</code>, <code>openai.APIConnectionError</code>, class names containing <code>connection</code>/<code>transport</code></td></tr><tr><td><code>server_error</code></td><td>Provider-side internal error</td><td><code>openai.InternalServerError</code>, class names containing <code>server</code></td></tr><tr><td><code>unknown</code></td><td>Unrecognized exception type</td><td>Any exception not matched above</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="when-errors-are-recorded">When errors are recorded<a href="#when-errors-are-recorded" class="hash-link" aria-label="Direct link to When errors are recorded" title="Direct link to When errors are recorded" translate="no">​</a></h3>
+<p>Error metrics are recorded when a backend raises an exception during generation,
+after the request has been dispatched to the provider. Construction-time errors
+(e.g. missing API key) are not captured by the error counter.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="cost-metrics">Cost metrics<a href="#cost-metrics" class="hash-link" aria-label="Direct link to Cost metrics" title="Direct link to Cost metrics" translate="no">​</a></h2>
+<p>Mellea estimates request cost automatically after each LLM call when pricing data
+is available. No code changes are required.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="cost-instrument">Cost instrument<a href="#cost-instrument" class="hash-link" aria-label="Direct link to Cost instrument" title="Direct link to Cost instrument" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.llm.cost.usd</code></td><td>Counter</td><td><code>USD</code></td><td>Estimated request cost in US dollars</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="cost-attributes">Cost attributes<a href="#cost-attributes" class="hash-link" aria-label="Direct link to Cost attributes" title="Direct link to Cost attributes" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>gen_ai.provider.name</code></td><td>Backend provider name</td><td><code>openai</code>, <code>ollama</code>, <code>watsonx</code>, <code>litellm</code>, <code>huggingface</code></td></tr><tr><td><code>gen_ai.request.model</code></td><td>Model identifier</td><td><code>gpt-5.4</code>, <code>claude-sonnet-4-6</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="pricing-data">Pricing data<a href="#pricing-data" class="hash-link" aria-label="Direct link to Pricing data" title="Direct link to Pricing data" translate="no">​</a></h3>
+<p>Cost metrics use <code>litellm</code> (<code>mellea[litellm]</code>) as a pricing library. This is
+independent of the LiteLLM backend — pricing works with any Mellea backend, but
+cost is only recorded for models that <code>litellm</code> has pricing data for. Local and
+private model IDs (Ollama, Hugging Face, custom deployments) will log a one-time
+warning per model and produce no cost metric.</p>
+<p>Pricing is auto-enabled when <code>litellm</code> is installed. Use <code>MELLEA_PRICING_ENABLED</code>
+to override:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th><code>MELLEA_PRICING_ENABLED</code></th><th>litellm installed</th><th>Result</th></tr></thead><tbody><tr><td><code>false</code></td><td>either</td><td>Disabled (no warning)</td></tr><tr><td><code>true</code></td><td>yes</td><td>Enabled</td></tr><tr><td><code>true</code></td><td>no</td><td>Disabled + warning</td></tr><tr><td>unset</td><td>yes</td><td>Enabled automatically</td></tr><tr><td>unset</td><td>no</td><td>Disabled (no warning)</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="custom-pricing">Custom pricing<a href="#custom-pricing" class="hash-link" aria-label="Direct link to Custom pricing" title="Direct link to Custom pricing" translate="no">​</a></h3>
+<p>Override or add pricing for any model using a JSON file with litellm&#x27;s native
+per-token schema:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_PRICING_FILE</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">/path/to/my-pricing.json</span><br></div></code></pre></div></div>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token property" style="color:#36acaa">&quot;my-custom-model&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token property" style="color:#36acaa">&quot;input_cost_per_token&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.000001</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token property" style="color:#36acaa">&quot;output_cost_per_token&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.000002</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token property" style="color:#36acaa">&quot;claude-sonnet-4-6&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token property" style="color:#36acaa">&quot;input_cost_per_token&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.000003</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token property" style="color:#36acaa">&quot;output_cost_per_token&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.000015</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token property" style="color:#36acaa">&quot;cache_read_input_token_cost&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.0000003</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token property" style="color:#36acaa">&quot;cache_creation_input_token_cost&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">0.000003750</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">}</span><br></div></code></pre></div></div>
+<p>Minimal entries with only cost fields are accepted. Errors loading the file are
+logged as warnings and litellm&#x27;s built-in pricing is used as a fallback.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="operational-metrics">Operational metrics<a href="#operational-metrics" class="hash-link" aria-label="Direct link to Operational metrics" title="Direct link to Operational metrics" translate="no">​</a></h2>
+<p>Mellea records metrics for its internal sampling, validation, and tool execution
+loops. These counters give visibility into retry behavior, validation failure
+rates, and tool call health — independent of the underlying LLM provider.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="sampling-counters">Sampling counters<a href="#sampling-counters" class="hash-link" aria-label="Direct link to Sampling counters" title="Direct link to Sampling counters" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.sampling.attempts</code></td><td>Counter</td><td><code>{attempt}</code></td><td>Sampling attempts per loop iteration</td></tr><tr><td><code>mellea.sampling.successes</code></td><td>Counter</td><td><code>{sample}</code></td><td>Sampling loops that produced a passing sample</td></tr><tr><td><code>mellea.sampling.failures</code></td><td>Counter</td><td><code>{failure}</code></td><td>Sampling loops that exhausted the loop budget without success</td></tr></tbody></table>
+<p>All sampling metrics include:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>strategy</code></td><td>Sampling strategy class name</td><td><code>RejectionSamplingStrategy</code>, <code>MultiTurnStrategy</code>, <code>RepairTemplateStrategy</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="requirement-counters">Requirement counters<a href="#requirement-counters" class="hash-link" aria-label="Direct link to Requirement counters" title="Direct link to Requirement counters" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.requirement.checks</code></td><td>Counter</td><td><code>{check}</code></td><td>Requirement validation checks performed</td></tr><tr><td><code>mellea.requirement.failures</code></td><td>Counter</td><td><code>{failure}</code></td><td>Requirement validation checks that failed</td></tr></tbody></table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>requirement</code></td><td>Requirement class name</td><td><code>LLMaJRequirement</code>, <code>PythonExecutionReq</code>, <code>ALoraRequirement</code>, <code>GuardianCheck</code> <em>(deprecated v0.4)</em></td></tr><tr><td><code>reason</code></td><td>Human-readable failure reason (<code>mellea.requirement.failures</code> only)</td><td><code>&quot;Output did not satisfy constraint&quot;</code>, <code>&quot;unknown&quot;</code></td></tr></tbody></table>
+<blockquote>
+<p><strong>Guardian adapter functions and metrics:</strong> <code>guardian_check()</code>, <code>policy_guardrails()</code>,
+<code>factuality_detection()</code>, and <code>factuality_correction()</code> are not <code>Requirement</code>
+subclasses and do not emit <code>mellea.requirement.checks</code> or
+<code>mellea.requirement.failures</code> metrics. If you migrate from <code>GuardianCheck</code> to
+Guardian adapter functions, Guardian-related requirement counters will stop appearing
+in your metrics. Wrap Guardian adapter function calls in a custom <code>Requirement</code> subclass
+if you need to preserve this telemetry.</p>
+</blockquote>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="tool-counter">Tool counter<a href="#tool-counter" class="hash-link" aria-label="Direct link to Tool counter" title="Direct link to Tool counter" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric Name</th><th>Type</th><th>Unit</th><th>Description</th></tr></thead><tbody><tr><td><code>mellea.tool.calls</code></td><td>Counter</td><td><code>{call}</code></td><td>Tool invocations by name and status</td></tr></tbody></table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Description</th><th>Example Values</th></tr></thead><tbody><tr><td><code>tool</code></td><td>Name of the invoked tool</td><td><code>&quot;search&quot;</code>, <code>&quot;calculator&quot;</code></td></tr><tr><td><code>status</code></td><td>Execution outcome</td><td><code>success</code>, <code>failure</code></td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="metrics-export-configuration">Metrics export configuration<a href="#metrics-export-configuration" class="hash-link" aria-label="Direct link to Metrics export configuration" title="Direct link to Metrics export configuration" translate="no">​</a></h2>
+<p>Mellea supports multiple metrics exporters that can be used independently or
+simultaneously.</p>
+<blockquote>
+<p><strong>Warning:</strong> If <code>MELLEA_METRICS_ENABLED=true</code> but no exporter is configured,
+Mellea logs a warning. Metrics are collected but not exported.</p>
+</blockquote>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="console-exporter-debugging">Console exporter (debugging)<a href="#console-exporter-debugging" class="hash-link" aria-label="Direct link to Console exporter (debugging)" title="Direct link to Console exporter (debugging)" translate="no">​</a></h3>
+<p>Print metrics to console for local debugging without setting up an
+observability backend:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_CONSOLE</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">python your_script.py</span><br></div></code></pre></div></div>
+<p>Metrics are printed as JSON at the configured export interval (default: 60
+seconds).</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="otlp-exporter-production">OTLP exporter (production)<a href="#otlp-exporter-production" class="hash-link" aria-label="Direct link to OTLP exporter (production)" title="Direct link to OTLP exporter (production)" translate="no">​</a></h3>
+<p>Export metrics to an OTLP collector for production observability platforms
+(Jaeger, Grafana, Datadog, etc.):</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_OTLP</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_EXPORTER_OTLP_ENDPOINT</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">http://localhost:4317</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Optional: metrics-specific endpoint (overrides general endpoint)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_EXPORTER_OTLP_METRICS_ENDPOINT</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">http://localhost:4318</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Optional: set service name</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_SERVICE_NAME</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">my-mellea-app</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Optional: adjust export interval (milliseconds, default: 60000)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_METRIC_EXPORT_INTERVAL</span><span class="token operator" style="color:#393A34">=</span><span class="token number" style="color:#36acaa">30000</span><br></div></code></pre></div></div>
+<p><strong>OTLP collector setup example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token function" style="color:#d73a49">cat</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> otel-collector-config.yaml </span><span class="token operator" style="color:#393A34">&lt;&lt;</span><span class="token string" style="color:#e3116c">EOF</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">receivers:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  otlp:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    protocols:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">      grpc:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">        endpoint: 0.0.0.0:4317</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c"></span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">exporters:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  prometheus:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    endpoint: 0.0.0.0:8889</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  debug:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    verbosity: detailed</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c"></span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">service:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  pipelines:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    metrics:</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">      receivers: [otlp]</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">      exporters: [prometheus, debug]</span><br></div><div class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">EOF</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">docker</span><span class="token plain"> run </span><span class="token parameter variable" style="color:#36acaa">-p</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">4317</span><span class="token plain">:4317 </span><span class="token parameter variable" style="color:#36acaa">-p</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">8889</span><span class="token plain">:8889 </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-v</span><span class="token plain"> </span><span class="token variable" style="color:#36acaa">$(</span><span class="token variable builtin class-name" style="color:#36acaa">pwd</span><span class="token variable" style="color:#36acaa">)</span><span class="token plain">/otel-collector-config.yaml:/etc/otelcol/config.yaml </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  otel/opentelemetry-collector:latest</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="prometheus-exporter">Prometheus exporter<a href="#prometheus-exporter" class="hash-link" aria-label="Direct link to Prometheus exporter" title="Direct link to Prometheus exporter" translate="no">​</a></h3>
+<p>Register metrics with the <code>prometheus_client</code> default registry for
+Prometheus scraping:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_PROMETHEUS</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div></code></pre></div></div>
+<p>When enabled, Mellea registers its OpenTelemetry metrics with the
+<code>prometheus_client</code> default registry via <code>PrometheusMetricReader</code>. Your
+application is responsible for exposing the registry. Common approaches:</p>
+<p><strong>Standalone HTTP server</strong> (simplest):</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> prometheus_client </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> start_http_server</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">start_http_server</span><span class="token punctuation" style="color:#393A34">(</span><span class="token number" style="color:#36acaa">9464</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<p><strong>FastAPI middleware</strong>:</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> prometheus_client </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> CONTENT_TYPE_LATEST</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> generate_latest</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> fastapi </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> FastAPI</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> Response</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">app </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> FastAPI</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token decorator annotation punctuation" style="color:#393A34">@app</span><span class="token decorator annotation punctuation" style="color:#393A34">.</span><span class="token decorator annotation punctuation" style="color:#393A34">get</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;/metrics&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">def</span><span class="token plain"> </span><span class="token function" style="color:#d73a49">metrics</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">return</span><span class="token plain"> Response</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">content</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">generate_latest</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> media_type</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">CONTENT_TYPE_LATEST</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<p><strong>Flask route</strong>:</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> prometheus_client </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> CONTENT_TYPE_LATEST</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> generate_latest</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> flask </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> Flask</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> Response</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">app </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> Flask</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">__name__</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token decorator annotation punctuation" style="color:#393A34">@app</span><span class="token decorator annotation punctuation" style="color:#393A34">.</span><span class="token decorator annotation punctuation" style="color:#393A34">route</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;/metrics&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">def</span><span class="token plain"> </span><span class="token function" style="color:#d73a49">metrics</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">return</span><span class="token plain"> Response</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain">generate_latest</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> content_type</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">CONTENT_TYPE_LATEST</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<p>Verify with:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token function" style="color:#d73a49">curl</span><span class="token plain"> http://localhost:9464/metrics</span><br></div></code></pre></div></div>
+<p><strong>Prometheus server configuration:</strong></p>
+<div class="language-yaml codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-yaml codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># prometheus.yml</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token key atrule" style="color:#00a4db">global</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token key atrule" style="color:#00a4db">scrape_interval</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> 15s</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token key atrule" style="color:#00a4db">scrape_configs</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> </span><span class="token key atrule" style="color:#00a4db">job_name</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&#x27;mellea&#x27;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token key atrule" style="color:#00a4db">static_configs</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">      </span><span class="token punctuation" style="color:#393A34">-</span><span class="token plain"> </span><span class="token key atrule" style="color:#00a4db">targets</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token string" style="color:#e3116c">&#x27;localhost:9464&#x27;</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token function" style="color:#d73a49">docker</span><span class="token plain"> run </span><span class="token parameter variable" style="color:#36acaa">-p</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">9090</span><span class="token plain">:9090 </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-v</span><span class="token plain"> </span><span class="token variable" style="color:#36acaa">$(</span><span class="token variable builtin class-name" style="color:#36acaa">pwd</span><span class="token variable" style="color:#36acaa">)</span><span class="token plain">/prometheus.yml:/etc/prometheus/prometheus.yml </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">  prom/prometheus</span><br></div></code></pre></div></div>
+<p>Access Prometheus UI at <code>http://localhost:9090</code> and query metrics like
+<code>mellea_llm_tokens_input</code>.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="multiple-exporters-simultaneously">Multiple exporters simultaneously<a href="#multiple-exporters-simultaneously" class="hash-link" aria-label="Direct link to Multiple exporters simultaneously" title="Direct link to Multiple exporters simultaneously" translate="no">​</a></h3>
+<p>You can enable multiple exporters at once:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_CONSOLE</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_OTLP</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_EXPORTER_OTLP_ENDPOINT</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">http://localhost:4317</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_PROMETHEUS</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div></code></pre></div></div>
+<p>This configuration prints metrics to console for immediate feedback, exports
+to an OTLP collector for centralized observability, and registers with the
+<code>prometheus_client</code> registry for Prometheus scraping.</p>
+<p><strong>Typical combinations:</strong></p>
+<ul>
+<li class=""><strong>Development</strong>: Console + Prometheus for local testing</li>
+<li class=""><strong>Production</strong>: OTLP + Prometheus for comprehensive monitoring</li>
+<li class=""><strong>Debugging</strong>: Console only for quick verification</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="custom-metrics">Custom metrics<a href="#custom-metrics" class="hash-link" aria-label="Direct link to Custom metrics" title="Direct link to Custom metrics" translate="no">​</a></h2>
+<p>The metrics API exposes <code>create_counter</code>, <code>create_histogram</code>, and
+<code>create_up_down_counter</code> for instrumenting your own application code. These
+return no-ops when metrics are disabled, so you can call them unconditionally.</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">telemetry </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> create_counter</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> create_histogram</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> create_up_down_counter</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Monotonically increasing values</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">requests </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> create_counter</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;myapp.requests&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> unit</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;1&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> description</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;Total requests&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">requests</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">add</span><span class="token punctuation" style="color:#393A34">(</span><span class="token number" style="color:#36acaa">1</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token string" style="color:#e3116c">&quot;backend&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;ollama&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;model&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;granite4.1:3b&quot;</span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Value distributions</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">latency </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> create_histogram</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;myapp.latency&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> unit</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;ms&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> description</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;Request latency&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">latency</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">record</span><span class="token punctuation" style="color:#393A34">(</span><span class="token number" style="color:#36acaa">120.5</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">{</span><span class="token string" style="color:#e3116c">&quot;backend&quot;</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;ollama&quot;</span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Values that increase or decrease</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">active </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> create_up_down_counter</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token string" style="color:#e3116c">&quot;myapp.sessions.active&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> unit</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;1&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> description</span><span class="token operator" style="color:#393A34">=</span><span class="token string" style="color:#e3116c">&quot;Active sessions&quot;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">active</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">add</span><span class="token punctuation" style="color:#393A34">(</span><span class="token number" style="color:#36acaa">1</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain">   </span><span class="token comment" style="color:#999988;font-style:italic"># session started</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">active</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">add</span><span class="token punctuation" style="color:#393A34">(</span><span class="token operator" style="color:#393A34">-</span><span class="token number" style="color:#36acaa">1</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain">  </span><span class="token comment" style="color:#999988;font-style:italic"># session ended</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="programmatic-access">Programmatic access<a href="#programmatic-access" class="hash-link" aria-label="Direct link to Programmatic access" title="Direct link to Programmatic access" translate="no">​</a></h2>
+<p>Check if metrics are enabled:</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">telemetry </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> is_metrics_enabled</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">if</span><span class="token plain"> is_metrics_enabled</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;Metrics are being collected&quot;</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<p>Access token usage and latency data from a <code>ModelOutputThunk</code>:</p>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> start_session</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">backends </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> ModelOption</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">with</span><span class="token plain"> start_session</span><span class="token punctuation" style="color:#393A34">(</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">as</span><span class="token plain"> m</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    result </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> m</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">instruct</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string" style="color:#e3116c">&quot;Write a haiku about programming&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">if</span><span class="token plain"> result</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">generation</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">usage</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Prompt tokens: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">result</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">generation</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">usage</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">[</span><span class="token string-interpolation interpolation string" style="color:#e3116c">&#x27;prompt_tokens&#x27;</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">]</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c">&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Completion tokens: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">result</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">generation</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">usage</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">[</span><span class="token string-interpolation interpolation string" style="color:#e3116c">&#x27;completion_tokens&#x27;</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">]</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c">&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Total tokens: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">result</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">generation</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">usage</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">[</span><span class="token string-interpolation interpolation string" style="color:#e3116c">&#x27;total_tokens&#x27;</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">]</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c">&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token comment" style="color:#999988;font-style:italic"># Streaming mode also exposes time-to-first-token</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    streamed </span><span class="token operator" style="color:#393A34">=</span><span class="token plain"> m</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">instruct</span><span class="token punctuation" style="color:#393A34">(</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token string" style="color:#e3116c">&quot;Describe the solar system&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        model_options</span><span class="token operator" style="color:#393A34">=</span><span class="token punctuation" style="color:#393A34">{</span><span class="token plain">ModelOption</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">STREAM</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"> </span><span class="token boolean" style="color:#36acaa">True</span><span class="token punctuation" style="color:#393A34">}</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Streaming: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">streamed</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">generation</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">streaming</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c">&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    </span><span class="token keyword" style="color:#00009f">if</span><span class="token plain"> streamed</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">generation</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">ttfb_ms </span><span class="token keyword" style="color:#00009f">is</span><span class="token plain"> </span><span class="token keyword" style="color:#00009f">not</span><span class="token plain"> </span><span class="token boolean" style="color:#36acaa">None</span><span class="token punctuation" style="color:#393A34">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">        </span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Time to first token: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">streamed</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">generation</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">.</span><span class="token string-interpolation interpolation">ttfb_ms</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">:</span><span class="token string-interpolation interpolation format-spec">.1f</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c"> ms&quot;</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<p>The <code>generation</code> attribute is a <code>GenerationMetadata</code> dataclass. Its <code>usage</code> field
+is a dictionary with three keys: <code>prompt_tokens</code>, <code>completion_tokens</code>, and
+<code>total_tokens</code>. All backends populate this consistently. <code>streaming</code> and <code>ttfb_ms</code>
+are set automatically based on whether streaming mode was used.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="performance">Performance<a href="#performance" class="hash-link" aria-label="Direct link to Performance" title="Direct link to Performance" translate="no">​</a></h2>
+<ul>
+<li class=""><strong>Zero overhead when disabled</strong>: When <code>MELLEA_METRICS_ENABLED=false</code> (default),
+no auto-registered metrics plugins are active and all instrument calls are no-ops.</li>
+<li class=""><strong>Minimal overhead when enabled</strong>: Counter increments and histogram recordings
+are extremely fast (~nanoseconds per operation).</li>
+<li class=""><strong>Async export</strong>: Metrics are batched and exported asynchronously (default:
+every 60 seconds).</li>
+<li class=""><strong>Non-blocking</strong>: Metric recording never blocks LLM calls.</li>
+<li class=""><strong>Automatic collection</strong>: Metrics are recorded via hooks after generation
+completes — no manual instrumentation needed.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="troubleshooting">Troubleshooting<a href="#troubleshooting" class="hash-link" aria-label="Direct link to Troubleshooting" title="Direct link to Troubleshooting" translate="no">​</a></h2>
+<p><strong>Metrics not appearing:</strong></p>
+<ol>
+<li class="">Verify <code>MELLEA_METRICS_ENABLED=true</code> is set.</li>
+<li class="">Check that at least one exporter is configured (Console, OTLP, or Prometheus).</li>
+<li class="">For OTLP: Verify <code>MELLEA_METRICS_OTLP=true</code> and the endpoint is reachable.</li>
+<li class="">For Prometheus: Verify <code>MELLEA_METRICS_PROMETHEUS=true</code> and your application
+exposes the registry (<code>curl http://localhost:PORT/metrics</code>).</li>
+<li class="">Enable console output (<code>MELLEA_METRICS_CONSOLE=true</code>) to verify metrics are
+being collected.</li>
+</ol>
+<p><strong>Missing OpenTelemetry dependency:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">ImportError: No module named &#x27;opentelemetry&#x27;</span><br></div></code></pre></div></div>
+<p>Install telemetry dependencies:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">pip </span><span class="token function" style="color:#d73a49">install</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;mellea[telemetry]&quot;</span><br></div></code></pre></div></div>
+<p><strong>OTLP connection refused:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">Failed to export metrics via OTLP</span><br></div></code></pre></div></div>
+<ol>
+<li class="">Verify the OTLP collector is running: <code>docker ps | grep otel</code></li>
+<li class="">Check the endpoint URL is correct (default: <code>http://localhost:4317</code>).</li>
+<li class="">Verify network connectivity: <code>curl http://localhost:4317</code></li>
+<li class="">Check collector logs for errors.</li>
+</ol>
+<p><strong>Metrics not updating:</strong></p>
+<ol>
+<li class="">Metrics are exported at intervals (default: 60 seconds). Wait for the
+export cycle.</li>
+<li class="">Reduce the export interval for testing:
+<code>export OTEL_METRIC_EXPORT_INTERVAL=10000</code> (10 seconds).</li>
+<li class="">For Prometheus: Metrics update on scrape, not continuously.</li>
+<li class="">Verify LLM calls are actually being made and completing successfully.</li>
+</ol>
+<p><strong>No exporter configured warning:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">WARNING: Metrics are enabled but no exporters are configured</span><br></div></code></pre></div></div>
+<p>Enable at least one exporter:</p>
+<ul>
+<li class="">Console: <code>export MELLEA_METRICS_CONSOLE=true</code></li>
+<li class="">OTLP: <code>export MELLEA_METRICS_OTLP=true</code> + endpoint</li>
+<li class="">Prometheus: <code>export MELLEA_METRICS_PROMETHEUS=true</code></li>
+</ul>
+<blockquote>
+<p><strong>Full example:</strong> <a href="https://github.com/generative-computing/mellea/blob/main/docs/examples/telemetry/metrics_example.py" target="_blank" rel="noopener noreferrer" class=""><code>docs/examples/telemetry/metrics_example.py</code></a></p>
+</blockquote>
+<hr>
+<p><strong>See also:</strong></p>
+<ul>
+<li class=""><a class="" href="/observability/telemetry">Telemetry</a> — overview of all
+telemetry features and configuration.</li>
+<li class=""><a class="" href="/observability/tracing">Tracing</a> — distributed traces
+with Gen-AI semantic conventions.</li>
+<li class=""><a class="" href="/observability/logging">Logging</a> — console logging and OTLP
+log export.</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/generative-computing/mellea/edit/main/docs/observability/metrics.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"><span class="theme-last-updated">Last updated<!-- --> on <b><time datetime="2026-06-17T08:12:21.000Z" itemprop="dateModified">Jun 17, 2026</time></b></span></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/observability/tracing"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Tracing</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/observability/logging"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Logging</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#enable-metrics" class="table-of-contents__link toc-highlight">Enable metrics</a></li><li><a href="#token-usage-metrics" class="table-of-contents__link toc-highlight">Token usage metrics</a><ul><li><a href="#token-instruments" class="table-of-contents__link toc-highlight">Token instruments</a></li><li><a href="#token-attributes" class="table-of-contents__link toc-highlight">Token attributes</a></li><li><a href="#backend-support" class="table-of-contents__link toc-highlight">Backend support</a></li><li><a href="#token-recording-timing" class="table-of-contents__link toc-highlight">Token recording timing</a></li></ul></li><li><a href="#latency-histograms" class="table-of-contents__link toc-highlight">Latency histograms</a><ul><li><a href="#latency-instruments" class="table-of-contents__link toc-highlight">Latency instruments</a></li><li><a href="#latency-attributes" class="table-of-contents__link toc-highlight">Latency attributes</a></li><li><a href="#histogram-buckets" class="table-of-contents__link toc-highlight">Histogram buckets</a></li><li><a href="#latency-recording-timing" class="table-of-contents__link toc-highlight">Latency recording timing</a></li></ul></li><li><a href="#error-metrics" class="table-of-contents__link toc-highlight">Error metrics</a><ul><li><a href="#error-counter" class="table-of-contents__link toc-highlight">Error counter</a></li><li><a href="#error-attributes" class="table-of-contents__link toc-highlight">Error attributes</a></li><li><a href="#error-type-categories" class="table-of-contents__link toc-highlight">Error type categories</a></li><li><a href="#when-errors-are-recorded" class="table-of-contents__link toc-highlight">When errors are recorded</a></li></ul></li><li><a href="#cost-metrics" class="table-of-contents__link toc-highlight">Cost metrics</a><ul><li><a href="#cost-instrument" class="table-of-contents__link toc-highlight">Cost instrument</a></li><li><a href="#cost-attributes" class="table-of-contents__link toc-highlight">Cost attributes</a></li><li><a href="#pricing-data" class="table-of-contents__link toc-highlight">Pricing data</a></li><li><a href="#custom-pricing" class="table-of-contents__link toc-highlight">Custom pricing</a></li></ul></li><li><a href="#operational-metrics" class="table-of-contents__link toc-highlight">Operational metrics</a><ul><li><a href="#sampling-counters" class="table-of-contents__link toc-highlight">Sampling counters</a></li><li><a href="#requirement-counters" class="table-of-contents__link toc-highlight">Requirement counters</a></li><li><a href="#tool-counter" class="table-of-contents__link toc-highlight">Tool counter</a></li></ul></li><li><a href="#metrics-export-configuration" class="table-of-contents__link toc-highlight">Metrics export configuration</a><ul><li><a href="#console-exporter-debugging" class="table-of-contents__link toc-highlight">Console exporter (debugging)</a></li><li><a href="#otlp-exporter-production" class="table-of-contents__link toc-highlight">OTLP exporter (production)</a></li><li><a href="#prometheus-exporter" class="table-of-contents__link toc-highlight">Prometheus exporter</a></li><li><a href="#multiple-exporters-simultaneously" class="table-of-contents__link toc-highlight">Multiple exporters simultaneously</a></li></ul></li><li><a href="#custom-metrics" class="table-of-contents__link toc-highlight">Custom metrics</a></li><li><a href="#programmatic-access" class="table-of-contents__link toc-highlight">Programmatic access</a></li><li><a href="#performance" class="table-of-contents__link toc-highlight">Performance</a></li><li><a href="#troubleshooting" class="table-of-contents__link toc-highlight">Troubleshooting</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="footer__links text--center"><div class="footer__links"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="footer__link-item">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="footer__link-item">Discussions<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" class="footer__link-item">Contributing<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/issues" target="_blank" rel="noopener noreferrer" class="footer__link-item">Issues<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Mellea Contributors.</div></div></div></footer></div>
+</body>
+</html>

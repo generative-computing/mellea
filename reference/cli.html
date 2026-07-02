@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-reference/cli" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">CLI Reference | Mellea</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" name="twitter:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" property="og:url" content="https://docs.mellea.ai/reference/cli"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="keywords" content="mellea, generative programming, AI, LLM, Python"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="CLI Reference | Mellea"><meta data-rh="true" name="description" content="Complete reference for the m command-line tool — all subcommands, flags, and defaults."><meta data-rh="true" property="og:description" content="Complete reference for the m command-line tool — all subcommands, flags, and defaults."><link data-rh="true" rel="icon" href="/images/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.mellea.ai/reference/cli"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/reference/cli" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/reference/cli" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"CLI Reference","item":"https://docs.mellea.ai/reference/cli"}]}</script><script src="/analytics.js" async></script><link rel="stylesheet" href="/assets/css/styles.8178f1a9.css">
+<script src="/assets/js/runtime~main.0bf20f66.js" defer="defer"></script>
+<script src="/assets/js/main.b60ddf9f.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/"><div class="navbar__logo"><img src="/logo/logo-light.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/logo/logo-dark.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate"></b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/getting-started/installation">Docs</a><a class="navbar__item navbar__link" href="/api">API Reference</a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/reference/cli">Next</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Community<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://mellea.ai" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">mellea.ai<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"><div class="navbar__search searchBarContainer_NW3z" dir="ltr"><input placeholder="Search" aria-label="Search" class="navbar__search-input" value=""><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/getting-started/installation"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/tutorials/your-first-generative-program"><span title="Tutorials" class="categoryLinkLabel_W154">Tutorials</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/concepts/generative-programming"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/how-to/generative-functions"><span title="How-To" class="categoryLinkLabel_W154">How-To</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/examples"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/integrations/ollama"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/observability/telemetry"><span title="Observability" class="categoryLinkLabel_W154">Observability</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/advanced/intrinsics"><span title="Advanced" class="categoryLinkLabel_W154">Advanced</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/community/contributing-guide"><span title="Community" class="categoryLinkLabel_W154">Community</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/reference/glossary"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/reference/glossary"><span title="Glossary" class="linkLabel_WmDU">Glossary</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/reference/cli"><span title="CLI Reference" class="linkLabel_WmDU">CLI Reference</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/troubleshooting/common-errors"><span title="Troubleshooting" class="categoryLinkLabel_W154">Troubleshooting</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Reference</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">CLI Reference</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>CLI Reference</h1></header><p>Mellea command-line tool for LLM-powered workflows.</p>
+<p>Provides sub-commands for serving models (<code>m serve</code>), training and uploading
+adapters (<code>m alora</code>), decomposing tasks into subtasks (<code>m decompose</code>),
+running test-based evaluation pipelines (<code>m eval</code>), and applying automated
+code migrations (<code>m fix</code>).</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-alora"><code>m alora</code><a href="#m-alora" class="hash-link" aria-label="Direct link to m-alora" title="Direct link to m-alora" translate="no">​</a></h2>
+<p>Train or upload aLoRAs for requirement validation.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-alora-add-readme"><code>m alora add-readme</code><a href="#m-alora-add-readme" class="hash-link" aria-label="Direct link to m-alora-add-readme" title="Direct link to m-alora-add-readme" translate="no">​</a></h3>
+<p>Generate and upload an INTRINSIC_README.md for a trained adapter.</p>
+<p>Uses an LLM to auto-generate documentation for a trained adapter based on
+the training data and model configuration, then uploads it to the Hugging
+Face Hub repository.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li class="">Hugging Face CLI authenticated (<code>huggingface-cli login</code>).</li>
+<li class="">An LLM backend available for README generation.</li>
+</ul>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m alora add-readme </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">DATAFILE</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--basemodel</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">value</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--promptfile</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--name</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">value</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--hints</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--io-yaml</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>DATAFILE</code></td><td>text</td><td>yes</td><td>JSONL file with item/label pairs</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--basemodel</code></td><td>text</td><td><em>required</em></td><td>Base model ID or path</td></tr><tr><td><code>--promptfile</code></td><td>text</td><td>—</td><td>Path to load the prompt format file</td></tr><tr><td><code>--name</code></td><td>text</td><td><em>required</em></td><td>Destination model name (e.g., acme/carbchecker-alora)</td></tr><tr><td><code>--hints</code></td><td>text</td><td>—</td><td>File containing any additional hints.</td></tr><tr><td><code>--io-yaml</code></td><td>text</td><td>—</td><td>Location of the io.yaml file that configures input and output processing if the model is invoked as an intrinsic.</td></tr></tbody></table>
+<p><strong>Output:</strong> Generates a README.md file, displays it for confirmation, and uploads it to the Hugging Face Hub repository specified by <code>--name</code>.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m alora add-readme data.jsonl </span><span class="token parameter variable" style="color:#36acaa">--basemodel</span><span class="token plain"> ibm-granite/granite-3.3-2b-instruct </span><span class="token parameter variable" style="color:#36acaa">--name</span><span class="token plain"> acme/my-alora</span><br></div></code></pre></div></div>
+<p><strong>See also:</strong> <a class="" href="/advanced/lora-and-alora-adapters">Lora and Alora Adapters</a></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-alora-train"><code>m alora train</code><a href="#m-alora-train" class="hash-link" aria-label="Direct link to m-alora-train" title="Direct link to m-alora-train" translate="no">​</a></h3>
+<p>Train an aLoRA or LoRA adapter on a labelled dataset.</p>
+<p>Fine-tunes a base causal language model using a JSONL dataset of item/label
+pairs. Supports both aLoRA (asymmetric LoRA) and standard LoRA adapters.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li class="">Mellea installed with adapter extras (<code>uv add mellea[adapters]</code>).</li>
+<li class="">A CUDA, MPS, or CPU device available for training.</li>
+</ul>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m alora train </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">DATAFILE</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--basemodel</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">value</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--outfile</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">value</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--promptfile</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--adapter</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--device</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--epochs</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--learning-rate</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--batch-size</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--max-length</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--grad-accum</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>DATAFILE</code></td><td>text</td><td>yes</td><td>JSONL file with item/label pairs</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--basemodel</code></td><td>text</td><td><em>required</em></td><td>Base model ID or path</td></tr><tr><td><code>--outfile</code></td><td>text</td><td><em>required</em></td><td>Path to save adapter weights</td></tr><tr><td><code>--promptfile</code></td><td>text</td><td>—</td><td>Path to load the prompt format file</td></tr><tr><td><code>--adapter</code></td><td>text</td><td><code>alora</code></td><td>Adapter type: alora or lora</td></tr><tr><td><code>--device</code></td><td>text</td><td><code>auto</code></td><td>Device: auto, cpu, cuda, or mps</td></tr><tr><td><code>--epochs</code></td><td>integer</td><td><code>6</code></td><td>Number of training epochs</td></tr><tr><td><code>--learning-rate</code></td><td>float</td><td><code>6e-06</code></td><td>Learning rate</td></tr><tr><td><code>--batch-size</code></td><td>integer</td><td><code>2</code></td><td>Per-device batch size</td></tr><tr><td><code>--max-length</code></td><td>integer</td><td><code>1024</code></td><td>Max sequence length</td></tr><tr><td><code>--grad-accum</code></td><td>integer</td><td><code>4</code></td><td>Gradient accumulation steps</td></tr></tbody></table>
+<p><strong>Output:</strong> Saves adapter weights to the path specified by <code>--outfile</code>. The output directory contains an <code>adapter_config.json</code> and the trained weight files, ready for upload or local inference.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m alora train data.jsonl </span><span class="token parameter variable" style="color:#36acaa">--basemodel</span><span class="token plain"> ibm-granite/granite-3.3-2b-instruct </span><span class="token parameter variable" style="color:#36acaa">--outfile</span><span class="token plain"> ./adapter</span><br></div></code></pre></div></div>
+<p><strong>See also:</strong> <a class="" href="/advanced/lora-and-alora-adapters">Lora and Alora Adapters</a></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-alora-upload"><code>m alora upload</code><a href="#m-alora-upload" class="hash-link" aria-label="Direct link to m-alora-upload" title="Direct link to m-alora-upload" translate="no">​</a></h3>
+<p>Upload a trained adapter to a remote model registry.</p>
+<p>Pushes adapter weights to Hugging Face Hub, optionally packaging the adapter
+as an intrinsic with an <code>io.yaml</code> configuration file.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong> Hugging Face CLI authenticated (<code>huggingface-cli login</code>).</p>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m alora upload </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">WEIGHT_PATH</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">--name</span><span class="token plain"> </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">value</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--intrinsic</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--io-yaml</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>WEIGHT_PATH</code></td><td>text</td><td>yes</td><td>Path to saved adapter weights</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--name</code></td><td>text</td><td><em>required</em></td><td>Destination model name (e.g., acme/carbchecker-alora)</td></tr><tr><td><code>--intrinsic</code></td><td>boolean</td><td><code>false</code></td><td>True if the uploaded adapter implements an intrinsic. If true, the caller must provide an io.yaml file.</td></tr><tr><td><code>--io-yaml</code></td><td>text</td><td>—</td><td>Location of the io.yaml file that configures input and output processing if the model is invoked as an intrinsic.</td></tr></tbody></table>
+<p><strong>Output:</strong> Creates or updates a Hugging Face Hub repository at the name specified by <code>--name</code> and uploads the adapter weight files.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m alora upload ./adapter </span><span class="token parameter variable" style="color:#36acaa">--name</span><span class="token plain"> acme/my-alora</span><br></div></code></pre></div></div>
+<p><strong>See also:</strong> <a class="" href="/advanced/lora-and-alora-adapters">Lora and Alora Adapters</a></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-decompose"><code>m decompose</code><a href="#m-decompose" class="hash-link" aria-label="Direct link to m-decompose" title="Direct link to m-decompose" translate="no">​</a></h2>
+<p>Utility pipeline for decomposing task prompts.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-decompose-run"><code>m decompose run</code><a href="#m-decompose-run" class="hash-link" aria-label="Direct link to m-decompose-run" title="Direct link to m-decompose-run" translate="no">​</a></h3>
+<p>Break a complex task into ordered, executable subtasks.</p>
+<p>Reads user queries from a file or interactive input, runs the LLM-driven
+decomposition pipeline for each task job, and writes one JSON file, one
+rendered Python script, and any generated validation modules under a per-job
+output directory.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li class="">Mellea installed (<code>uv add mellea</code>).</li>
+<li class="">An Ollama instance running locally, or an OpenAI-compatible endpoint configured via <code>--backend-endpoint</code>.</li>
+</ul>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m decompose run --out-dir </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">value</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--out-name</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--input-file</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--model-id</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--backend</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--backend-req-timeout</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--backend-endpoint</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--backend-api-key</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--version</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--input-var</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--log-mode</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--enable-script-run</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--out-dir</code></td><td>path</td><td><em>required</em></td><td>Path to an existing directory to save the output files.</td></tr><tr><td><code>--out-name</code></td><td>text</td><td><code>m_decomp_result</code></td><td>Name for the output files. Defaults to &quot;m_decomp_result&quot;.</td></tr><tr><td><code>--input-file</code></td><td>text</td><td>—</td><td>Path to a text file containing user queries.</td></tr><tr><td><code>--model-id</code></td><td>text</td><td><code>mistral-small3.2:latest</code></td><td>Model name/id used to run the decomposition pipeline. Defaults to &quot;mistral-small3.2:latest&quot;, valid for the &quot;ollama&quot; backend.</td></tr><tr><td><code>--backend</code></td><td>ollama | openai</td><td><code>ollama</code></td><td>Backend used for inference. Options: &quot;ollama&quot; and &quot;openai&quot;.</td></tr><tr><td><code>--backend-req-timeout</code></td><td>integer</td><td><code>300</code></td><td>Timeout in seconds for backend requests. Defaults to &quot;300&quot;.</td></tr><tr><td><code>--backend-endpoint</code></td><td>text</td><td>—</td><td>Backend endpoint / base URL. Required for &quot;openai&quot;.</td></tr><tr><td><code>--backend-api-key</code></td><td>text</td><td>—</td><td>Backend API key. Required for &quot;openai&quot;.</td></tr><tr><td><code>--version</code></td><td>latest | v1 | v2 | v3</td><td><code>latest</code></td><td>Version of the mellea program generator template to use.</td></tr><tr><td><code>--input-var</code></td><td>text</td><td>—</td><td>Optional user input variable names. You may pass this option multiple times. Each value must be a valid Python identifier.</td></tr><tr><td><code>--log-mode</code></td><td>demo | debug</td><td><code>demo</code></td><td>Readable logging mode. Options: &quot;demo&quot; or &quot;debug&quot;.</td></tr><tr><td><code>--enable-script-run</code></td><td>boolean</td><td><code>false</code></td><td>When true, generated scripts expose argparse runtime options for backend, model, endpoint, and API key overrides.</td></tr></tbody></table>
+<p><strong>Output:</strong> Creates a directory <code>&lt;out-dir&gt;/&lt;out-name&gt;/</code> containing a JSON decomposition result file, a ready-to-run Python script, and any generated validation modules. One directory per task job.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m decompose run --out-dir ./output --input-file tasks.txt</span><br></div></code></pre></div></div>
+<p><strong>See also:</strong> <a class="" href="/how-to/m-decompose">M Decompose</a>, <a class="" href="/how-to/refactor-prompts-with-cli">Refactor Prompts with Cli</a></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-eval"><code>m eval</code><a href="#m-eval" class="hash-link" aria-label="Direct link to m-eval" title="Direct link to m-eval" translate="no">​</a></h2>
+<p>LLM-as-a-judge evaluation pipelines.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-eval-run"><code>m eval run</code><a href="#m-eval-run" class="hash-link" aria-label="Direct link to m-eval-run" title="Direct link to m-eval-run" translate="no">​</a></h3>
+<p>Run LLM-as-a-judge evaluation on one or more test files.</p>
+<p>Loads test cases from JSON/JSONL files, generates candidate responses using
+the specified generation backend, scores them with a judge model, and writes
+aggregated results to a file.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li class="">Mellea installed (<code>uv add mellea</code>).</li>
+<li class="">At least one inference backend available (Ollama by default).</li>
+<li class="">A separate judge backend/model is recommended but optional (defaults to the generation backend).</li>
+</ul>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m </span><span class="token builtin class-name">eval</span><span class="token plain"> run </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token plain">TEST_FILES</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--backend</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--model</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--max-gen-tokens</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--judge-backend</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--judge-model</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--max-judge-tokens</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--output-path</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--output-format</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--continue-on-error</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>TEST_FILES</code></td><td>text</td><td>yes</td><td>List of paths to json/jsonl files containing test cases</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--backend</code>, <code>-b</code></td><td>text</td><td><code>ollama</code></td><td>Inference backend for generating candidate responses (e.g. ollama, openai)</td></tr><tr><td><code>--model</code></td><td>text</td><td>—</td><td>Model name/id for the generation backend; uses backend default if omitted</td></tr><tr><td><code>--max-gen-tokens</code></td><td>integer</td><td><code>256</code></td><td>Max tokens to generate for responses</td></tr><tr><td><code>--judge-backend</code>, <code>-jb</code></td><td>text</td><td>—</td><td>Inference backend for the judge model; reuses --backend if omitted</td></tr><tr><td><code>--judge-model</code></td><td>text</td><td>—</td><td>Model name/id for the judge; uses judge backend default if omitted</td></tr><tr><td><code>--max-judge-tokens</code></td><td>integer</td><td><code>256</code></td><td>Max tokens for the judge model&#x27;s judgement.</td></tr><tr><td><code>--output-path</code>, <code>-o</code></td><td>text</td><td><code>eval_results</code></td><td>Output path for results</td></tr><tr><td><code>--output-format</code></td><td>text</td><td><code>json</code></td><td>Either json or jsonl format for results</td></tr><tr><td><code>--continue-on-error</code></td><td>boolean</td><td><code>true</code></td><td>Skip failed test cases instead of aborting the entire run</td></tr></tbody></table>
+<p><strong>Output:</strong> Writes evaluation results to <code>&lt;output-path&gt;.&lt;output-format&gt;</code> (default <code>eval_results.json</code>). The file contains per-test-case scores, judge verdicts, and aggregate statistics.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m </span><span class="token builtin class-name">eval</span><span class="token plain"> run tests.jsonl </span><span class="token parameter variable" style="color:#36acaa">--backend</span><span class="token plain"> ollama </span><span class="token parameter variable" style="color:#36acaa">--model</span><span class="token plain"> granite3.3:2b</span><br></div></code></pre></div></div>
+<p><strong>See also:</strong> <a class="" href="/how-to/evaluate-with-llm-as-a-judge">Evaluate with Llm as a Judge</a></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-fix"><code>m fix</code><a href="#m-fix" class="hash-link" aria-label="Direct link to m-fix" title="Direct link to m-fix" translate="no">​</a></h2>
+<p>Fix code for API changes.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-fix-async"><code>m fix async</code><a href="#m-fix-async" class="hash-link" aria-label="Direct link to m-fix-async" title="Direct link to m-fix-async" translate="no">​</a></h3>
+<p>Fix async calls for the await_result default change.</p>
+<p>Scans Python source files for <code>aact</code>, <code>ainstruct</code>, and <code>aquery</code> calls
+and applies an automated migration to restore blocking behaviour after the
+<code>await_result</code> default changed from <code>True</code> to <code>False</code>.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong> Mellea installed (<code>uv add mellea</code>).</p>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m fix async </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token environment constant" style="color:#36acaa">PATH</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--mode</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--dry-run</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>PATH</code></td><td>text</td><td>yes</td><td>File or directory to scan</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--mode</code>, <code>-m</code></td><td>add-await-result | add-stream-loop</td><td><code>add-await-result</code></td><td>Fix strategy to apply</td></tr><tr><td><code>--dry-run</code></td><td>boolean</td><td><code>false</code></td><td>Report locations without modifying files</td></tr></tbody></table>
+<p><strong>Modes:</strong></p>
+<ul>
+<li class=""><strong><code>add-await-result</code></strong> — (default) Adds await_result=True to each call so it blocks until the result is ready. Use this if you don&#x27;t need to stream partial results.</li>
+<li class=""><strong><code>add-stream-loop</code></strong> — Inserts a <code>while not r.is_computed(): await r.astream()</code> loop after each call. This only works if you passed a streaming model option (e.g. stream=True) to the call; otherwise the loop will finish immediately.</li>
+</ul>
+<p><strong>Best practices:</strong></p>
+<ul>
+<li class="">Run with --dry-run first to review what will be changed.</li>
+<li class="">Only run a given mode once per file. The tool detects prior fixes and skips calls that already have await_result=True or a stream loop, but it is safest to treat it as a one-shot migration.</li>
+<li class="">Do not run both modes on the same file. If a stream loop is already present, add-await-result will skip that call (and vice versa).</li>
+</ul>
+<p><strong>Detection notes:</strong></p>
+<ul>
+<li class="">Most import styles are detected: <code>import mellea</code>, <code>from mellea import MelleaSession</code>, <code>from mellea.stdlib.functional import aact</code>, module aliases, etc.</li>
+<li class="">Calls that are already followed by <code>await r.avalue()</code>, <code>await r.astream()</code>, or a <code>while not r.is_computed()</code> loop are automatically skipped, even when nested inside if/try/for blocks.</li>
+</ul>
+<p><strong>Output:</strong> Modifies Python source files in place (unless <code>--dry-run</code>). Prints a summary of fixed call sites with file paths and line numbers.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m fix async src/ --dry-run</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-fix-genslots"><code>m fix genslots</code><a href="#m-fix-genslots" class="hash-link" aria-label="Direct link to m-fix-genslots" title="Direct link to m-fix-genslots" translate="no">​</a></h3>
+<p>Rewrite genslot imports and class names to genstub equivalents.</p>
+<p>Scans Python source files and replaces deprecated <code>GenerativeSlot</code> imports
+and class references with their <code>GenerativeStub</code> replacements.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong> Mellea installed (<code>uv add mellea</code>).</p>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m fix genslots </span><span class="token operator" style="color:#393A34">&lt;</span><span class="token environment constant" style="color:#36acaa">PATH</span><span class="token operator" style="color:#393A34">&gt;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--dry-run</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>PATH</code></td><td>text</td><td>yes</td><td>File or directory to scan</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--dry-run</code></td><td>boolean</td><td><code>false</code></td><td>Report locations without modifying files</td></tr></tbody></table>
+<p><strong>Rewrites:</strong></p>
+<ul>
+<li class="">mellea.stdlib.components.genslot → mellea.stdlib.components.genstub</li>
+<li class="">GenerativeSlot      → GenerativeStub</li>
+<li class="">SyncGenerativeSlot  → SyncGenerativeStub</li>
+<li class="">AsyncGenerativeSlot → AsyncGenerativeStub</li>
+</ul>
+<p><strong>Best practices:</strong></p>
+<ul>
+<li class="">Run with --dry-run first to review what will be changed.</li>
+<li class="">The tool is idempotent — running it twice on the same file is safe.</li>
+</ul>
+<p><strong>Output:</strong> Modifies Python source files in place (unless <code>--dry-run</code>). Prints a summary of rewritten references with file paths and line numbers.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m fix genslots src/ --dry-run</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="m-serve"><code>m serve</code><a href="#m-serve" class="hash-link" aria-label="Direct link to m-serve" title="Direct link to m-serve" translate="no">​</a></h2>
+<p>Serve a Mellea program as an OpenAI-compatible HTTP endpoint.</p>
+<p>Loads a Python file containing a <code>serve</code> function and exposes it
+via a FastAPI server implementing the OpenAI chat completions API. The server
+accepts <code>POST /v1/chat/completions</code> requests.</p>
+<blockquote>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li class="">Mellea installed with server dependency group (<code>uv add &#x27;mellea[server]&#x27;</code>).</li>
+<li class="">The python file being loaded must have a <code>serve</code> function.</li>
+</ul>
+</blockquote>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m serve </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">SCRIPT_PATH</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--host</span><span class="token punctuation" style="color:#393A34">]</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">[</span><span class="token plain">--port</span><span class="token punctuation" style="color:#393A34">]</span><br></div></code></pre></div></div>
+<p><strong>Arguments:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>SCRIPT_PATH</code></td><td>text</td><td>no</td><td>Path to the Python script to import and serve</td></tr></tbody></table>
+<p><strong>Options:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody><tr><td><code>--host</code></td><td>text</td><td><code>0.0.0.0</code></td><td>Host to bind to</td></tr><tr><td><code>--port</code></td><td>integer</td><td><code>8080</code></td><td>Port to bind to</td></tr></tbody></table>
+<p><strong>Output:</strong> Starts a long-running HTTP server on the specified host and port. The <code>/v1/chat/completions</code> endpoint accepts OpenAI-format chat completion requests and returns <code>ChatCompletion</code> JSON responses.</p>
+<p><strong>Example:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">m serve my_app.py </span><span class="token parameter variable" style="color:#36acaa">--port</span><span class="token plain"> </span><span class="token number" style="color:#36acaa">9000</span><br></div></code></pre></div></div>
+<p><strong>See also:</strong> <a class="" href="/integrations/m-serve">M Serve</a></p></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/generative-computing/mellea/edit/main/docs/reference/cli.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/reference/glossary"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Glossary</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/troubleshooting/common-errors"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Common Errors</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#m-alora" class="table-of-contents__link toc-highlight"><code>m alora</code></a><ul><li><a href="#m-alora-add-readme" class="table-of-contents__link toc-highlight"><code>m alora add-readme</code></a></li><li><a href="#m-alora-train" class="table-of-contents__link toc-highlight"><code>m alora train</code></a></li><li><a href="#m-alora-upload" class="table-of-contents__link toc-highlight"><code>m alora upload</code></a></li></ul></li><li><a href="#m-decompose" class="table-of-contents__link toc-highlight"><code>m decompose</code></a><ul><li><a href="#m-decompose-run" class="table-of-contents__link toc-highlight"><code>m decompose run</code></a></li></ul></li><li><a href="#m-eval" class="table-of-contents__link toc-highlight"><code>m eval</code></a><ul><li><a href="#m-eval-run" class="table-of-contents__link toc-highlight"><code>m eval run</code></a></li></ul></li><li><a href="#m-fix" class="table-of-contents__link toc-highlight"><code>m fix</code></a><ul><li><a href="#m-fix-async" class="table-of-contents__link toc-highlight"><code>m fix async</code></a></li><li><a href="#m-fix-genslots" class="table-of-contents__link toc-highlight"><code>m fix genslots</code></a></li></ul></li><li><a href="#m-serve" class="table-of-contents__link toc-highlight"><code>m serve</code></a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="footer__links text--center"><div class="footer__links"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="footer__link-item">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="footer__link-item">Discussions<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" class="footer__link-item">Contributing<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/issues" target="_blank" rel="noopener noreferrer" class="footer__link-item">Issues<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Mellea Contributors.</div></div></div></footer></div>
+</body>
+</html>
