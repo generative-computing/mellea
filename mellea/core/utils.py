@@ -38,7 +38,7 @@ Environment variables
     HTTPS URL to forward log records to via HTTP POST.  Must use the
     `https://` scheme and must have a non-empty hostname.  When set a
     `RESTHandler` is attached.
-`MELLEA_LOGGER_INSECURE_HTTP_ALLOWED`
+`MELLEA_LOGS_INSECURE_HTTP_ALLOWED`
     Set to `true` / `1` / `yes` to allow plain `http://` URLs in
     `MELLEA_LOGS_WEBHOOK`.  Intended for local development only; never
     set this in production.
