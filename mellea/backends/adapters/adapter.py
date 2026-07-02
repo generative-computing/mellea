@@ -626,10 +626,17 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 continue
 
             io_config_path = model_path / io_config_rel
-            if not io_config_path.exists():
+            try:
+                io_config_path = io_config_path.resolve(strict=True)
+            except (FileNotFoundError, OSError):
                 raise ValueError(
                     f"io.yaml for adapter function '{entry_name}' "
-                    f"not found at {io_config_path}"
+                    f"not found at {model_path / io_config_rel}"
+                )
+            if not io_config_path.is_relative_to(model_path.resolve()):
+                raise ValueError(
+                    f"io_config path for adapter function '{entry_name}' "
+                    f"escapes the model directory: {io_config_path}"
                 )
 
             with open(io_config_path, encoding="utf-8") as f:
