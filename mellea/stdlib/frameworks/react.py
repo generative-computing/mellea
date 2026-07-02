@@ -21,7 +21,7 @@ from mellea.stdlib.components.react import (
     ReactInitiator,
     ReactThought,
 )
-from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context import ChatContext, Compactor
 
 
 async def react(
@@ -36,6 +36,7 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
+    compactor: Compactor | None = None,
 ) -> tuple[ComputedModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
@@ -47,6 +48,21 @@ async def react(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tools: the list of tools to use
         loop_budget: the number of steps allowed; use -1 for unlimited
+        compactor: optional sync ``Compactor`` invoked once per turn after the
+            tool observation. Use this for strategies that should fire at turn
+            boundaries rather than on every component append (per-add
+            compaction is configured on ``context`` itself). Compose with
+            :func:`mellea.stdlib.components.react.pin_react_initiator` to
+            preserve the goal across compactions. Compactors that need to
+            call the backend (e.g. ``LLMSummarizeCompactor``) hide the async
+            work behind their sync ``compact`` method internally.
+
+            The ``Compactor`` protocol is generic in ``T`` bound to
+            ``Context``, so a compactor that returns a non-chat ``Context``
+            (e.g. ``SimpleContext``) type-checks here but breaks the
+            ``ChatContext`` assumptions the next ``aact`` call relies on.
+            Custom compactors used with ``react`` must return a
+            ``ChatContext``.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -128,5 +144,12 @@ async def react(
                 # The tool has already been called above.
                 step._underlying_value = str(tool_responses[0].content)
             return step, context
+
+        # Per-turn compaction hook (terminal turns skip this since `is_final` returned).
+        if compactor is not None:
+            context = compactor.compact(context, backend=backend)
+            assert isinstance(context, ChatContext), (
+                "react() compactor must return a ChatContext"
+            )
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")
