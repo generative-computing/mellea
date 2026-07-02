@@ -11,11 +11,11 @@ from mellea.backends.model_ids import (
     ModelIdentifier,
 )
 from mellea.core import CBlock, Context, ModelOutputThunk
-from mellea.stdlib.context import ChatContext, SimpleContext
+from mellea.stdlib.context import ChatContext, SimpleContext, WindowCompactor
 
 
-def context_construction(cls: type[Context]):
-    tree0 = cls()
+def context_construction(cls: type[Context], **kwargs):
+    tree0 = cls(**kwargs)
     tree1 = tree0.add(CBlock("abc"))
     assert tree1.previous_node == tree0
 
@@ -25,11 +25,13 @@ def context_construction(cls: type[Context]):
 
 def test_context_construction():
     context_construction(SimpleContext)
+    # ChatContext defaults to compactor=None (no compaction), so the linked-list
+    # shape is identical to the pre-compaction behaviour.
     context_construction(ChatContext)
 
 
-def large_context_construction(cls: type[Context]):
-    root = cls()
+def large_context_construction(cls: type[Context], **kwargs):
+    root = cls(**kwargs)
 
     full_graph: Context = root
     for i in range(1000):
@@ -41,7 +43,9 @@ def large_context_construction(cls: type[Context]):
 
 def test_large_context_construction():
     large_context_construction(SimpleContext)
-    large_context_construction(ChatContext)
+    # ChatContext now applies real compaction at add() time; pass a window
+    # large enough that all 1000 components survive.
+    large_context_construction(ChatContext, window_size=2000)
 
 
 def test_render_view_for_simple_context():
@@ -58,7 +62,9 @@ def test_render_view_for_chat_context():
     ctx = ChatContext(window_size=3)
     for i in range(5):
         ctx = ctx.add(CBlock(f"a {i}"))
-    assert len(ctx.as_list()) == 5, "Adding 5 items to context should result in 5 items"
+    # Compaction is now applied at add() time, so as_list and view_for_generation
+    # both reflect the sliding window of 3.
+    assert len(ctx.as_list()) == 3, "WindowCompactor(3) should keep 3 items"
     assert len(ctx.view_for_generation()) == 3, "Render size should be 3"  # type: ignore
 
 
@@ -128,7 +134,8 @@ def test_chat_context_existing_window_size_unchanged():
 def test_chat_context_default_no_model_id():
     ctx = ChatContext()
     assert ctx.model_id is None
-    assert ctx._window_size is None
+    # `window_size` is sugar for a WindowCompactor; the default has none.
+    assert ctx._compactor is None
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +159,8 @@ def test__bind_model_does_not_mutate_original():
 def test__bind_model_preserves_window_size():
     ctx = ChatContext(window_size=5, token_context_length_limit=200)
     bound = ctx._bind_model(IBM_GRANITE_4_1_8B)
-    assert bound._window_size == 5
+    assert isinstance(bound._compactor, WindowCompactor)
+    assert bound._compactor.size == 5
     assert bound._token_context_length_limit == 200
 
 
@@ -312,11 +320,11 @@ def test_reset_to_new_returns_empty_root():
 
 def test_reset_to_new_classmethod_does_not_preserve_config():
     # reset_to_new() is a classmethod — it returns a bare ChatContext() with
-    # no window_size or model_id, regardless of the instance it's called on.
+    # no compactor or model_id, regardless of the instance it's called on.
     ctx = ChatContext(model_id=IBM_GRANITE_4_1_8B, window_size=5)
     reset_ctx = ctx.reset_to_new()
     assert reset_ctx.model_id is None
-    assert reset_ctx._window_size is None
+    assert reset_ctx._compactor is None
 
 
 def test_new_instance_preserves_model_id_and_window_size():
@@ -327,7 +335,8 @@ def test_new_instance_preserves_model_id_and_window_size():
         ctx = ctx.add(CBlock(f"msg {i}"))
     new_ctx = ctx.new_instance()
     assert new_ctx.model_id is IBM_GRANITE_4_1_8B
-    assert new_ctx._window_size == 5
+    assert isinstance(new_ctx._compactor, WindowCompactor)
+    assert new_ctx._compactor.size == 5
     assert new_ctx._token_context_length_limit == 200
 
 

@@ -278,7 +278,7 @@ class MelleaSession:
         id (str): Unique session UUID assigned at construction.
     """
 
-    ctx: Context
+    # ``ctx`` is exposed as a property below; backing field is ``_ctx``.
 
     def __init__(
         self,
@@ -308,11 +308,32 @@ class MelleaSession:
         """Set all instance fields. Shared by __init__ and __copy__ so neither diverges."""
         self.id = session_id
         self.backend = backend
-        self.ctx: Context = ctx
+        # Bypass the ctx setter so this initial assignment doesn't count as an
+        # interaction.
+        self._ctx: Context = ctx
+        self._interaction_count: int = 0
         self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
         self._log_context_token = None
         self._exit_stack: contextlib.ExitStack | None = None
+
+    @property
+    def ctx(self) -> Context:
+        """The session's current conversation context."""
+        return self._ctx
+
+    @ctx.setter
+    def ctx(self, value: Context) -> None:
+        """Replace the context and count this as one interaction.
+
+        Every model-interaction code path in this class assigns to ``self.ctx``
+        with the post-interaction context, so each setter call is exactly one
+        interaction. Lifecycle paths that swap the context wholesale (``reset``,
+        ``_auto_bind_model``) write to ``self._ctx`` directly to bypass this
+        counter.
+        """
+        self._ctx = value
+        self._interaction_count += 1
 
     def _auto_bind_model(self) -> None:
         """Bind the backend's model_id to a bare ChatContext, enabling auto context-window sizing."""
@@ -322,7 +343,8 @@ class MelleaSession:
             and self.ctx.is_root_node
             and getattr(self.backend, "model_id", None) is not None
         ):
-            self.ctx = self.ctx._bind_model(getattr(self.backend, "model_id"))
+            # Bypass the setter — binding at construction is not an interaction.
+            self._ctx = self.ctx._bind_model(getattr(self.backend, "model_id"))
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -418,7 +440,11 @@ class MelleaSession:
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
-        self.ctx = self.ctx.new_instance()
+        # Bypass the setter — a reset is a lifecycle event, not an interaction.
+        # new_instance() preserves ChatContext config (model_id, compactor); the
+        # base Context implementation falls back to reset_to_new().
+        self._ctx = self._ctx.new_instance()
+        self._interaction_count = 0
 
     def cleanup(self, *, exception: BaseException | None = None) -> None:
         """Clean up session resources and deregister session-scoped plugins.
@@ -433,7 +459,7 @@ class MelleaSession:
             payload = SessionCleanupPayload(
                 session_id=self.id,
                 context=self.ctx,
-                interaction_count=len(self.ctx.as_list()),
+                interaction_count=self._interaction_count,
                 exception=exception,
             )
             _run_async_in_thread(
