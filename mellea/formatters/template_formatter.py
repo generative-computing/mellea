@@ -17,6 +17,7 @@ from typing import Any
 
 import jinja2
 import jinja2.meta
+import jinja2.sandbox
 
 from ..backends.cache import SimpleLRUCache
 from ..backends.model_ids import ModelIdentifier
