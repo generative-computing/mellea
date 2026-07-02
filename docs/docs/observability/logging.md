@@ -30,7 +30,8 @@ Mellea uses `MelleaLogger`, a color-coded singleton logger built on Python's
 | `MELLEA_LOGS_FILE_MAX_BYTES` | Maximum size in bytes before the log file is rotated | `10485760` (10 MB) |
 | `MELLEA_LOGS_FILE_BACKUP_COUNT` | Number of rotated backup files to keep | `5` |
 | `MELLEA_LOGS_OTLP` | Set to `true` / `1` / `yes` to export logs via OTLP. Requires `opentelemetry-sdk` and a configured OTLP endpoint | `false` |
-| `MELLEA_LOGS_WEBHOOK` | HTTP(S) URL to forward log records to via HTTP POST | unset |
+| `MELLEA_LOGS_WEBHOOK` | HTTPS URL to forward log records to via HTTP POST. Plain `http://` URLs are rejected with a `UserWarning` and ignored | unset |
+| `MELLEA_LOGGER_INSECURE_HTTP_ALLOWED` | Set to `true` / `1` / `yes` to allow a plain `http://` webhook URL (not recommended; use only in local development) | `false` |
 
 > **Note:** If `MELLEA_LOGS_FILE` is set but the path cannot be opened (for
 > example due to a permissions error or an invalid path), Mellea emits a
