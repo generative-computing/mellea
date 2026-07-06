@@ -491,6 +491,14 @@ def pytest_collection_modifyitems(config, items):
         if item.get_closest_marker("ollama"):
             if not capabilities["has_ollama"]:
                 item.add_marker(skip_ollama)
+            else:
+                # Ollama stalls a request past its read timeout on loaded
+                # runners; retry only that transient error, not real failures.
+                item.add_marker(
+                    pytest.mark.flaky(
+                        reruns=2, reruns_delay=5, only_rerun="ReadTimeout"
+                    )
+                )
 
         # Auto-apply unit marker
         if not any(item.get_closest_marker(m) for m in _NON_UNIT):

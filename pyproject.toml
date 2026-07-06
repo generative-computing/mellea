@@ -135,6 +135,7 @@ test = [
     "pytest-recording",  # For blocking network access and using canned server responses
     "pytest-xdist>=3.8.0", # For concurrent test execution (uv run pytest -n auto test/)
     "pytest-json-report",  # For JSON test reports in nightly CI
+    "pytest-rerunfailures",  # For auto-retrying transient e2e backend flakes
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "nbmake>=1.5.5",  # Notebook testing
     "sentencepiece==0.2.1",  # Necessary for test_huggingface_tools test because of Mistral model
