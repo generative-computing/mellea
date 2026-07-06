@@ -219,6 +219,52 @@ class TestFromModelDirectory:
                 model_dir, intrinsic_name="nonexistent"
             )
 
+    def test_path_traversal_in_io_config_raises(self, tmp_path):
+        """io_config paths with ../ traversal that escape model_path are rejected."""
+        outside = tmp_path / "outside.yaml"
+        outside.write_text(yaml.dump({"model": None}))
+
+        index = {
+            "adapters": [
+                {
+                    "adapter_name": "escape",
+                    "technology": "lora",
+                    "io_config": "../outside.yaml",
+                }
+            ]
+        }
+        model_dir = tmp_path / "model"
+        model_dir.mkdir()
+        (model_dir / "adapter_index.json").write_text(json.dumps(index))
+
+        with pytest.raises(ValueError, match="escapes the model directory"):
+            EmbeddedIntrinsicAdapter.from_model_directory(model_dir)
+
+    def test_symlink_escape_in_io_config_raises(self, tmp_path):
+        """io_config paths that resolve via symlink outside model_path are rejected."""
+        outside = tmp_path / "secret.yaml"
+        outside.write_text(yaml.dump({"model": None}))
+
+        model_dir = tmp_path / "model"
+        model_dir.mkdir()
+        io_dir = model_dir / "io_configs" / "evil"
+        io_dir.mkdir(parents=True)
+        (io_dir / "io.yaml").symlink_to(outside)
+
+        index = {
+            "adapters": [
+                {
+                    "adapter_name": "evil",
+                    "technology": "lora",
+                    "io_config": "io_configs/evil/io.yaml",
+                }
+            ]
+        }
+        (model_dir / "adapter_index.json").write_text(json.dumps(index))
+
+        with pytest.raises(ValueError, match="escapes the model directory"):
+            EmbeddedIntrinsicAdapter.from_model_directory(model_dir)
+
     def test_adapter_name_key(self, tmp_path):
         """Index with 'adapter_name' key is read correctly."""
         index = {

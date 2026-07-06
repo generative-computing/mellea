@@ -21,11 +21,16 @@ from mellea.core.utils import MelleaLogger
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
 from ..core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
-from ..core.base import AbstractMelleaTool
+from ..core.base import AbstractMelleaTool, ModelToolCall
 from .model_options import ModelOption
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+# Priority order for executable content field names across tool types.
+# Used by both schema inspection (get_code_field_from_schema) and fallback extraction
+# (_extract_code_from_tool_call) to ensure consistent field resolution.
+CODE_FIELD_PRIORITY = ["code", "command", "query", "script", "source"]
 
 
 class MelleaTool(AbstractMelleaTool[P, R]):
@@ -916,6 +921,79 @@ class OllamaTool(SubscriptableBaseModel):
         parameters: Parameters | None = None
 
     function: Function | None = None
+
+
+def get_code_field_from_schema(tool_call: ModelToolCall) -> str | None:
+    """Determine the executable content field name from a tool's JSON schema.
+
+    Inspects the tool's JSON schema to find which parameter likely contains
+    executable content (code, command, query, etc.). Uses a priority-ordered
+    search of known code-like field names:
+    'code', 'command', 'query', 'script', 'source'
+
+    For single-parameter tools, only returns the parameter if its name matches
+    a code-like field name. This prevents extracting unrelated values (e.g.,
+    location from get_weather(location="NYC")) as executable code.
+
+    This approach is more robust than hardcoding tool name patterns because:
+    - It respects the tool's actual interface (what parameters it accepts)
+    - Tools can use non-standard field names and still work
+    - New tool types (shell, SQL, custom) work automatically without code changes
+
+    Args:
+        tool_call: The ModelToolCall containing the tool to inspect.
+
+    Returns:
+        str | None: The parameter name for executable content, or None if:
+            - The schema cannot be inspected or is malformed
+            - No parameters are defined in the schema
+            - No code-like field name is found
+
+    Raises:
+        None: This function never raises; all errors are caught and None is returned,
+            allowing fallback extraction to handle edge cases gracefully.
+
+    Examples:
+        ```python
+        from mellea.backends.tools import MelleaTool, get_code_field_from_schema
+        from mellea.core import ModelToolCall
+
+        def my_tool(code: str) -> str:
+            "Execute code."
+            return f"Executed: {code}"
+
+        tool = MelleaTool.from_callable(my_tool)
+        tool_call = ModelToolCall(name="my_tool", func=tool, args={"code": "x = 1"})
+        field_name = get_code_field_from_schema(tool_call)
+        # field_name == "code"
+        ```
+    """
+    try:
+        # Get the tool's JSON schema (assumes OpenAI-compatible format)
+        schema = tool_call.func.as_json_tool
+        if not schema or "function" not in schema:
+            return None
+
+        # Extract parameter names from the schema
+        # Expected structure: {"function": {"parameters": {"properties": {...}}}}
+        function_schema = schema.get("function", {})
+        parameters = function_schema.get("parameters", {})
+        properties = parameters.get("properties", {})
+
+        if not properties:
+            return None
+
+        for field_name in CODE_FIELD_PRIORITY:
+            if field_name in properties:
+                return field_name
+
+        return None
+    except Exception as e:
+        # Return None on any schema inspection errors; fallback extraction will handle it
+        MelleaLogger.get_logger().debug(
+            "Schema inspection failed for tool '%s': %s", tool_call.name, e
+        )
+        return None
 
 
 # https://github.com/ollama/ollama-python/blob/main/ollama/_utils.py#L13-L53

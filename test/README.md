@@ -198,6 +198,14 @@ runs (`pytest -m ollama`) and drive auto-skip logic. **Only apply to `e2e` and
 | `litellm` | LiteLLM (wraps other backends) | Depends on underlying backend |
 | `bedrock` | AWS Bedrock | API calls, requires credentials |
 
+### Automatic retries for transient stalls
+
+`ollama`-marked tests are auto-retried up to twice (via `pytest-rerunfailures`,
+stamped in `pytest_collection_modifyitems`) when they raise a `ReadTimeout`, the
+error a loaded runner produces when it parks a request past the backend timeout.
+The `only_rerun="ReadTimeout"` gate means assertion and logic failures still fail
+on the first run; widen that regex, or the marker gate, to cover more.
+
 ### OpenAI-via-Ollama pattern
 
 Some tests use the OpenAI client pointed at Ollama's `/v1` endpoint. Mark these

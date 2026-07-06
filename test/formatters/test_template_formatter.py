@@ -3,6 +3,8 @@ import os
 import sys
 import tempfile
 
+import jinja2
+import jinja2.sandbox
 import pytest
 
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, ModelIdentifier
@@ -355,6 +357,36 @@ def test_unused_template_args_file_loaded_warns(tf: TemplateFormatter, caplog):
         )
 
     assert any("unused_key" in r.message for r in caplog.records)
+
+
+def test_inline_template_undefined_var_raises(tf: TemplateFormatter):
+    """Inline templates using SandboxedEnvironment with StrictUndefined raise on missing vars."""
+
+    class _UndefinedVarComponent(Instruction):
+        def format_for_llm(self) -> TemplateRepresentation:
+            return TemplateRepresentation(
+                obj=self,
+                args={"description": "hello"},
+                template="{{ description }} {{ missing_var }}",
+            )
+
+    with pytest.raises(jinja2.UndefinedError):
+        tf.print(_UndefinedVarComponent("hello"))
+
+
+def test_inline_template_sandboxed_blocks_unsafe_function(tf: TemplateFormatter):
+    """Inline templates use SandboxedEnvironment which blocks access to unsafe builtins."""
+
+    class _UnsafeComponent(Instruction):
+        def format_for_llm(self) -> TemplateRepresentation:
+            return TemplateRepresentation(
+                obj=self,
+                args={},
+                template="{{ ''.__class__.__mro__[1].__subclasses__() }}",
+            )
+
+    with pytest.raises((jinja2.sandbox.SecurityError, jinja2.UndefinedError)):
+        tf.print(_UnsafeComponent("hello"))
 
 
 if __name__ == "__main__":
