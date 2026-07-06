@@ -260,8 +260,10 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
     `streaming_orchestration_end` re-attach the span on the orchestration task
     so mid-stream spans parent under it (see `reattach_span`).
 
-    All hooks run SEQUENTIAL so the OTel context Token attached in start is
-    detached on the originating asyncio task in end.
+    All hooks run SEQUENTIAL: the OTel context Token attached in start is
+    detached on the originating task in end, and `streaming_orchestration_end`
+    releases the reattached span before `streaming_end` closes it
+    (FIRE_AND_FORGET would reorder these and break span nesting).
     """
 
     @hook("streaming_start")
