@@ -706,6 +706,9 @@ async def _orchestrate_streaming(
                 )
             except BaseException:
                 pass
+            # STREAMING_END is not fired here: it pairs with STREAMING_START
+            # (caller's task, pre-spawn) and a subscriber may hold task-affine
+            # state, so teardown must run on the caller's task — acomplete().
 
         completed_ev = CompletedEvent(
             success=result.completed, full_text=result.full_text, attempts_used=1
