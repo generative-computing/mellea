@@ -40,6 +40,11 @@ def test_message_with_docs():
 # --- Message init ---
 
 
+def test_message_invalid_role_raises():
+    with pytest.raises(ValueError, match="Invalid role"):
+        Message("admin", "hello")
+
+
 def test_message_basic_fields():
     msg = Message("user", "hello")
     assert msg.role == "user"

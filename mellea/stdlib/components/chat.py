@@ -11,7 +11,7 @@ configurable formatter).
 
 import logging
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from ...core import (
     CBlock,
@@ -59,6 +59,10 @@ class Message(Component["Message"]):
         documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
+        if role not in get_args(Message.Role):
+            raise ValueError(
+                f"Invalid role {role!r}. Must be one of: {list(get_args(Message.Role))}"
+            )
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
@@ -147,7 +151,9 @@ class Message(Component["Message"]):
         if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
             choices = response.get("choices") or [{}]
             msg = choices[0].get("message", {})
-            role = msg.get("role") or response.get("message", {}).get("role", "")
+            role = msg.get("role") or response.get("message", {}).get(
+                "role", "assistant"
+            )
             content = msg.get("content") or response.get("message", {}).get(
                 "content", ""
             )
