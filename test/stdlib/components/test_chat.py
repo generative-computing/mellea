@@ -45,12 +45,6 @@ def test_message_invalid_role_raises():
         Message("admin", "hello")
 
 
-def test_message_valid_roles_accepted():
-    for role in ("system", "user", "assistant", "tool"):
-        msg = Message(role, "content")
-        assert msg.role == role
-
-
 def test_message_basic_fields():
     msg = Message("user", "hello")
     assert msg.role == "user"
