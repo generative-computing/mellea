@@ -27,6 +27,8 @@ from .docs.document import Document, _coerce_to_documents
 
 _logger = logging.getLogger(__name__)
 
+_VALID_ROLES = frozenset({"system", "user", "assistant", "tool"})
+
 
 class Message(Component["Message"]):
     """A single Message in a Chat history.
@@ -59,6 +61,10 @@ class Message(Component["Message"]):
         documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
+        if role not in _VALID_ROLES:
+            raise ValueError(
+                f"Invalid role {role!r}. Must be one of: {sorted(_VALID_ROLES)}"
+            )
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
