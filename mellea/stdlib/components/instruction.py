@@ -15,6 +15,8 @@ from copy import deepcopy
 import jinja2
 
 from ...core import (
+    AudioBlock,
+    AudioUrlBlock,
     CBlock,
     Component,
     ImageBlock,
@@ -42,6 +44,7 @@ class Instruction(Component[str]):
         output_prefix (str | CBlock | None): A prefix prepended to the model's output token
             stream (currently unsupported; must be `None`).
         images (list[ImageBlock | ImageUrlBlock] | None): Images to include in the prompt.
+        audio (list[AudioBlock | AudioUrlBlock] | None): Audio clips to include in the prompt.
 
     Attributes:
         requirements (list[Requirement]): The resolved list of requirement instances
@@ -59,6 +62,7 @@ class Instruction(Component[str]):
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
         images: list[ImageBlock | ImageUrlBlock] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
     ):
         """Initialize Instruction, converting all string inputs to CBlocks and applying any Jinja2 variables."""
         requirements = [] if requirements is None else requirements
@@ -144,6 +148,7 @@ class Instruction(Component[str]):
             blockify(output_prefix) if output_prefix is not None else None  # type: ignore[assignment]
         )
         self._images = images
+        self._audio = audio
         self._repair_string: str | None = None
 
     def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
@@ -199,6 +204,7 @@ class Instruction(Component[str]):
             },
             tools=None,
             images=self._images,
+            audio=self._audio,
             template_order=["*", "Instruction"],
         )
 
