@@ -222,6 +222,10 @@ stream_with_chunking      (mellea.application)
 The `stream_with_chunking` span itself parents under whatever span is active
 when the run starts, or is a root span when none is.
 
+> **Note:** Full span nesting requires Python 3.12+. On Python 3.11 some spans
+> may appear flattened rather than nested; all spans and attributes are still
+> emitted, only the parent-child shape differs.
+
 ## Reading traces in a typical agent run
 
 When you open a trace in your backend, look for these patterns:

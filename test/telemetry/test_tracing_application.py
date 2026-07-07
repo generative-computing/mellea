@@ -40,6 +40,7 @@ from mellea.telemetry.tracing import (
     start_session_span,
     start_session_startup_span,
 )
+from mellea.telemetry.tracing_plugins import _CONTEXT_ATTACH_SUPPORTED
 from test.telemetry.conftest import reset_tracing_state
 
 # ---------------------------------------------------------------------------
@@ -434,6 +435,74 @@ def test_session_with_block_emits_session_action_nesting(span_exporter):
     # mellea.backend on the session span comes from `backend._provider`.
     assert session_span.attributes is not None
     assert session_span.attributes.get("mellea.backend") == "mock-provider"
+
+
+@pytest.mark.integration
+def test_session_action_chat_span_nesting_through_real_hooks(span_exporter):
+    """The full `session` > `action` > `chat` tree nests through the real hook path.
+
+    Extends `test_session_with_block_emits_session_action_nesting` to a real
+    (mocked-transport) `OllamaModelBackend` that fires the generation hooks, so
+    the `chat` span opens and closes and its parentage is visible — the piece the
+    `_MockBackend` case can't reach. This is the only test exercising all three
+    span levels through cpex's `invoke_hook`. See `_CONTEXT_ATTACH_SUPPORTED` for
+    why the tree differs on Python <=3.11.
+    """
+    import ollama
+
+    from mellea.backends.ollama import OllamaModelBackend
+
+    async def fake_chat(*args, **kwargs):
+        return ollama.ChatResponse(
+            model="test-model",
+            created_at=None,
+            message=ollama.Message(role="assistant", content="hi there"),
+            done=True,
+            eval_count=3,
+            prompt_eval_count=2,
+        )
+
+    mock_client = MagicMock()
+    mock_client.chat.side_effect = fake_chat
+
+    # Patch the transport for the whole block: generation runs on the session's
+    # background loop after construction, so the mock must stay live through act().
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client"),
+        patch("mellea.backends.ollama.ollama.AsyncClient", return_value=mock_client),
+        patch(
+            "mellea.stdlib.session.backend_name_to_class",
+            return_value=OllamaModelBackend,
+        ),
+    ):
+        with start_session("ollama", model_id="test-model") as m:
+            m.act(Message(role="user", content="say hi"), strategy=None)
+
+    by_name = _spans_by_name(span_exporter)
+    assert "session" in by_name, "session span not emitted"
+    assert "action" in by_name, "action span not emitted"
+    assert "chat" in by_name, "chat span not emitted"
+    session_span = by_name["session"]
+    action_span = by_name["action"]
+    chat_span = by_name["chat"]
+
+    # Action nests under session on all versions: the session span is attached
+    # directly (not via a hook), so it survives as ambient context on 3.11 too.
+    assert session_span.parent is None
+    assert action_span.parent is not None
+    assert action_span.parent.span_id == session_span.context.span_id
+
+    assert chat_span.parent is not None
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert chat_span.parent.span_id == action_span.context.span_id, (
+            "chat span should nest under the action span"
+        )
+    else:
+        assert chat_span.parent.span_id == session_span.context.span_id, (
+            "chat span should collapse to session (sibling of action) on Python <=3.11"
+        )
 
 
 @pytest.mark.integration

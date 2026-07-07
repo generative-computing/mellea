@@ -383,11 +383,16 @@ async def test_stream_with_chunking_e2e(span_exporter):
     await result.acomplete()
     await drain_background_tasks()
 
+    from mellea.telemetry.tracing_plugins import _CONTEXT_ATTACH_SUPPORTED
+
     spans = span_exporter.get_finished_spans()
     streaming_span = next(s for s in spans if s.name == "stream_with_chunking")
     chat_span = next(s for s in spans if s.name == "chat")
 
     assert streaming_span.parent is None, "streaming span should be a root"
+    if not _CONTEXT_ATTACH_SUPPORTED:
+        assert chat_span.parent is None, "chat span should be flat on Python <=3.11"
+        return
     assert chat_span.parent is not None
     assert chat_span.parent.span_id == streaming_span.context.span_id, (
         "chat span should nest under stream_with_chunking"

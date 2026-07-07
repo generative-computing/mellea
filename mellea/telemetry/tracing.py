@@ -222,11 +222,32 @@ def get_backend_tracer() -> Any:
     return _backend_tracer
 
 
-_in_flight_spans: dict[str, tuple[Span, Token[Context], asyncio.Task[Any] | None]] = {}
+_in_flight_spans: dict[
+    str, tuple[Span, Token[Context] | None, asyncio.Task[Any] | None]
+] = {}
 
 # reattach_span() entries, keyed by correlation key: the OTel context token plus
 # the task that attached it. Released by release_reattached_span() on that task.
 _reattached_tokens: dict[str, tuple[Token[Context], asyncio.Task[Any] | None]] = {}
+
+
+def _attach_span_context(span: Span, *, attach: bool) -> Token[Context] | None:
+    """Attach `span` as the current OTel context, unless `attach` is False.
+
+    When `attach` is False the span is left detached and `None` is returned,
+    signalling paired detach sites to skip detaching.
+
+    Args:
+        span: The span to activate as the ambient OTel context.
+        attach: Whether to perform the attach at all.
+
+    Returns:
+        The OTel context token to pass to a later detach, or `None` when attach
+        was skipped.
+    """
+    if not attach:
+        return None
+    return otel_context.attach(trace.set_span_in_context(span))
 
 
 def _current_task() -> asyncio.Task[Any] | None:
@@ -237,7 +258,9 @@ def _current_task() -> asyncio.Task[Any] | None:
         return None
 
 
-def _safe_detach(token: Token[Context], attach_task: asyncio.Task[Any] | None) -> None:
+def _safe_detach(
+    token: Token[Context] | None, attach_task: asyncio.Task[Any] | None
+) -> None:
     """Detach `token`, suppressing only the cross-task detach we expect and understand.
 
     OTel context tokens are bound to the `contextvars.Context` of the task that
@@ -272,10 +295,13 @@ def _safe_detach(token: Token[Context], attach_task: asyncio.Task[Any] | None) -
         the signal that the new use needs its own way to mark the detach expected.
 
     Args:
-        token: The OTel context token returned by the matching `attach`.
+        token: The OTel context token returned by the matching `attach`, or
+            `None` when attach was skipped — a no-op.
         attach_task: The task that performed the `attach`, or None if it was
             attached outside any running task.
     """
+    if token is None:
+        return
     current = _current_task()
     if attach_task is not None and current is not attach_task:
         from mellea.core.utils import MelleaLogger
@@ -304,6 +330,7 @@ def start_backend_span(
     has_format: bool | None = None,
     format_type: str | None = None,
     tool_calls_enabled: bool | None = None,
+    attach_context: bool = True,
 ) -> Span | None:
     """Open a backend span, activate it as the current OTel context, and stash both under `generation_id`.
 
@@ -325,6 +352,7 @@ def start_backend_span(
         format_type: Optional `mellea.format_type` attribute (the structured
             output class name, when `has_format` is True).
         tool_calls_enabled: Optional `mellea.tool_calls_enabled` attribute.
+        attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -354,7 +382,7 @@ def start_backend_span(
         span.set_attribute("mellea.tool_calls_enabled", tool_calls_enabled)
     set_conversation_id(span)
 
-    token = otel_context.attach(trace.set_span_in_context(span))
+    token = _attach_span_context(span, attach=attach_context)
     _in_flight_spans[generation_id] = (span, token, _current_task())
     return span
 
@@ -437,7 +465,7 @@ def finish_backend_span_error(
 
 
 def _start_application_span(
-    name: str, key: str, attributes: dict[str, Any]
+    name: str, key: str, attributes: dict[str, Any], *, attach_context: bool = True
 ) -> Span | None:
     """Open an application span, attach it to the OTel context, and stash by key.
 
@@ -445,6 +473,7 @@ def _start_application_span(
         name: Span name.
         key: Correlation key for the in-flight stash.
         attributes: Initial attributes; `None` values are skipped.
+        attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
         The span, or `None` if the application tracer is unavailable.
@@ -460,7 +489,7 @@ def _start_application_span(
         if v is not None:
             set_attribute_safe(span, k, v)
 
-    token = otel_context.attach(trace.set_span_in_context(span))
+    token = _attach_span_context(span, attach=attach_context)
     _in_flight_spans[key] = (span, token, _current_task())
     return span
 
@@ -644,6 +673,7 @@ def start_action_span(
     strategy_type: str | None,
     has_format: bool | None,
     tool_calls: bool | None,
+    attach_context: bool = True,
 ) -> Span | None:
     """Open the `action` span for a single component execution.
 
@@ -655,6 +685,7 @@ def start_action_span(
         strategy_type: Sampling strategy class name when present.
         has_format: Whether a structured-output format was supplied.
         tool_calls: Whether tool calling is enabled.
+        attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -670,6 +701,7 @@ def start_action_span(
             "mellea.has_format": has_format,
             "mellea.tool_calls": tool_calls,
         },
+        attach_context=attach_context,
     )
 
 
@@ -727,6 +759,7 @@ def start_streaming_span(
     has_requirements: bool | None,
     requirement_count: int | None,
     chunking_strategy: str | None,
+    attach_context: bool = True,
 ) -> Span | None:
     """Open the `stream_with_chunking` span for one orchestration run.
 
@@ -735,6 +768,7 @@ def start_streaming_span(
         has_requirements: Whether requirements were supplied.
         requirement_count: Number of requirements supplied.
         chunking_strategy: ChunkingStrategy class name.
+        attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
         The span, or `None` if tracing is disabled.
@@ -747,6 +781,7 @@ def start_streaming_span(
             "mellea.requirement_count": requirement_count,
             "mellea.chunking_strategy": chunking_strategy,
         },
+        attach_context=attach_context,
     )
 
 

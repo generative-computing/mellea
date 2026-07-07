@@ -13,10 +13,18 @@ pipelines to automatically emit spans when tracing is enabled:
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Any
 
 from mellea.plugins.base import Plugin
 from mellea.plugins.decorators import hook
+
+# Whether an OTel context attach performed inside a hook survives back to the
+# caller. cpex runs every hook through `asyncio.wait_for(...)`, which on Python
+# <=3.11 wraps it in a child Task with a copied contextvars Context — so the
+# attach is lost when the hook returns. Python 3.12 runs it in the caller task,
+# so the mutation survives. When False, hook spans are emitted flat (no nesting).
+_CONTEXT_ATTACH_SUPPORTED: bool = sys.version_info >= (3, 12)
 
 if TYPE_CHECKING:
     from mellea.plugins.hooks.component import (
@@ -75,6 +83,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=40):
             has_format=fmt is not None,
             format_type=fmt.__name__ if fmt is not None else None,
             tool_calls_enabled=payload.tool_calls,
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
     @hook("generation_post_call")
@@ -131,6 +140,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=40):
             has_format=fmt is not None,
             format_type=fmt.__name__ if fmt is not None else None,
             tool_calls_enabled=payload.tool_calls,
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
     @hook("generation_batch_post_call")
@@ -196,6 +206,7 @@ class ComponentTracingPlugin(Plugin, name="component_tracing", priority=41):
             strategy_type=strategy.__class__.__name__ if strategy is not None else None,
             has_format=payload.format is not None,
             tool_calls=payload.tool_calls_enabled,
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
     @hook("component_post_success")
@@ -280,6 +291,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
             has_requirements=payload.has_requirements,
             requirement_count=payload.requirement_count,
             chunking_strategy=payload.chunking_strategy,
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
     @hook("streaming_orchestration_start")
@@ -287,7 +299,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
         self, payload: StreamingOrchestrationStartPayload, context: dict[str, Any]
     ) -> None:
         """Re-attach the streaming span as the orchestration task's ambient context."""
-        if not payload.streaming_id:
+        if not payload.streaming_id or not _CONTEXT_ATTACH_SUPPORTED:
             return
         from mellea.telemetry.tracing import reattach_span
 

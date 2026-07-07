@@ -7,6 +7,7 @@ import pytest
 
 from mellea.telemetry import tracing
 from mellea.telemetry.tracing import finish_streaming_span, start_streaming_span
+from mellea.telemetry.tracing_plugins import _CONTEXT_ATTACH_SUPPORTED
 from test.telemetry.conftest import reset_tracing_state
 
 try:
@@ -463,10 +464,13 @@ async def test_stream_with_chunking_chat_span_nests_under_streaming_span(span_ex
     chat_span = next(s for s in spans if s.name == "chat")
 
     assert streaming_span.parent is None, "streaming span should be a root"
-    assert chat_span.parent is not None
-    assert chat_span.parent.span_id == streaming_span.context.span_id, (
-        "chat span should nest under stream_with_chunking"
-    )
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert chat_span.parent is not None
+        assert chat_span.parent.span_id == streaming_span.context.span_id, (
+            "chat span should nest under stream_with_chunking"
+        )
+    else:
+        assert chat_span.parent is None, "chat span should be flat on Python <=3.11"
 
 
 @pytest.mark.integration
@@ -490,9 +494,15 @@ async def test_stream_with_chunking_validation_chat_span_is_sibling_of_generatio
     assert len(chat_spans) == 2, f"expected 2 chat spans, got {len(chat_spans)}"
 
     streaming_id = streaming_span.context.span_id
-    assert all(
-        s.parent is not None and s.parent.span_id == streaming_id for s in chat_spans
-    ), "both chat spans should nest directly under stream_with_chunking"
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert all(
+            s.parent is not None and s.parent.span_id == streaming_id
+            for s in chat_spans
+        ), "both chat spans should nest directly under stream_with_chunking"
+    else:
+        assert all(s.parent is None for s in chat_spans), (
+            "chat spans should be flat on Python <=3.11"
+        )
 
     # Lifecycle events attach to the streaming span, not the chat spans.
     event_names = {e.name for e in streaming_span.events}
