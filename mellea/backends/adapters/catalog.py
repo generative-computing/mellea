@@ -48,7 +48,7 @@ class AdapterType(enum.Enum):
     ALORA = "alora"
 
 
-class IntriniscsCatalogEntry(pydantic.BaseModel):
+class IntrinsicsCatalogEntry(pydantic.BaseModel):
     """A single row in the main adapter function catalog table.
 
     We use Pydantic for this dataclass because the rest of Mellea also uses Pydantic.
@@ -161,60 +161,60 @@ _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     # Core adapter functions
     ############################################
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="context-attribution",
         capability="context_attribution",
         repo_id=_CORE_R1_REPO,
         revision=_CORE_R1_SHA,
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="requirement-check",
         capability="requirement_check",
         repo_id=_CORE_R1_REPO,
         revision=_CORE_R1_SHA,
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="uncertainty", repo_id=_CORE_R1_REPO, revision=_CORE_R1_SHA
     ),
     ############################################
     # RAG adapter functions
     ############################################
-    IntriniscsCatalogEntry(name="answerability", repo_id=_RAG_REPO, revision=_RAG_SHA),
-    IntriniscsCatalogEntry(name="citations", repo_id=_RAG_REPO, revision=_RAG_SHA),
+    IntrinsicsCatalogEntry(name="answerability", repo_id=_RAG_REPO, revision=_RAG_SHA),
+    IntrinsicsCatalogEntry(name="citations", repo_id=_RAG_REPO, revision=_RAG_SHA),
     # Deprecated: Granite 4.0 only; no Granite 4.1 adapter planned.
     # Removal tracked alongside check_context_relevance() in rag.py.
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="context_relevance", repo_id=_RAG_REPO, revision=_RAG_SHA
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="hallucination_detection", repo_id=_RAG_REPO, revision=_RAG_SHA
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="query_clarification", repo_id=_RAG_REPO, revision=_RAG_SHA
     ),
-    IntriniscsCatalogEntry(name="query_rewrite", repo_id=_RAG_REPO, revision=_RAG_SHA),
+    IntrinsicsCatalogEntry(name="query_rewrite", repo_id=_RAG_REPO, revision=_RAG_SHA),
     ############################################
     # Guardian adapter functions
     ############################################
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="policy-guardrails",
         capability="policy_guardrails",
         repo_id=_GUARDIAN_REPO,
         revision=_GUARDIAN_SHA,
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="guardian-core",
         capability="guardian_core",
         repo_id=_GUARDIAN_REPO,
         revision=_GUARDIAN_SHA,
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="factuality-detection",
         capability="factuality_detection",
         repo_id=_GUARDIAN_REPO,
         revision=_GUARDIAN_SHA,
     ),
-    IntriniscsCatalogEntry(
+    IntrinsicsCatalogEntry(
         name="factuality-correction",
         capability="factuality_correction",
         repo_id=_GUARDIAN_REPO,
@@ -245,14 +245,14 @@ def known_intrinsic_names() -> list[str]:
     return list(_INTRINSICS_CATALOG.keys())
 
 
-def fetch_intrinsic_metadata(intrinsic_name: str) -> IntriniscsCatalogEntry:
+def fetch_intrinsic_metadata(intrinsic_name: str) -> IntrinsicsCatalogEntry:
     """Retrieve catalog metadata for the adapter that implements an adapter function.
 
     Args:
         intrinsic_name (str): User-visible name of the adapter function.
 
     Returns:
-        IntriniscsCatalogEntry: Metadata about the adapter(s) that implement the
+        IntrinsicsCatalogEntry: Metadata about the adapter(s) that implement the
             adapter function.
 
     Raises:

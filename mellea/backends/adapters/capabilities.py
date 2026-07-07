@@ -7,7 +7,7 @@ adapter functions are not blocked.
 
 Deriving from the catalog (rather than hand-copying) keeps the two registries in
 sync automatically — adding a new entry to ``catalog.py`` automatically registers
-its :attr:`~mellea.backends.adapters.catalog.IntriniscsCatalogEntry.effective_capability`
+its :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.effective_capability`
 as a known capability.
 """
 

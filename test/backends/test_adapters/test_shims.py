@@ -15,13 +15,13 @@ import pytest
 from mellea.backends.adapters import Adapter, EmbeddedIntrinsicAdapter, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
 from mellea.backends.adapters.adapter import AdapterMixin
-from mellea.backends.adapters.catalog import AdapterType, IntriniscsCatalogEntry
+from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_MOCK_CATALOG_ENTRY = IntriniscsCatalogEntry(
+_MOCK_CATALOG_ENTRY = IntrinsicsCatalogEntry(
     name="answerability",
     repo_id="ibm-granite/granitelib-rag-r1.0",
     revision="abc123deadbeef",
@@ -34,7 +34,7 @@ def _make_intrinsic_adapter(intrinsic_name: str = "answerability") -> IntrinsicA
     with (
         patch(
             "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-            return_value=IntriniscsCatalogEntry(
+            return_value=IntrinsicsCatalogEntry(
                 name=intrinsic_name,
                 repo_id="ibm-granite/granitelib-rag-r1.0",
                 revision="abc123",
@@ -171,7 +171,7 @@ def test_intrinsic_identity_lora_adapter_type():
     with (
         patch(
             "mellea.backends.adapters.adapter.fetch_intrinsic_metadata",
-            return_value=IntriniscsCatalogEntry(
+            return_value=IntrinsicsCatalogEntry(
                 name="answerability",
                 repo_id="ibm-granite/granitelib-rag-r1.0",
                 revision="abc123",
@@ -273,7 +273,7 @@ def test_resolve_adapter_raises_without_base_model():
 
 def test_resolve_adapter_lazy_creates_and_returns():
     """resolve_adapter must create an IntrinsicAdapter when none is registered."""
-    mock_catalog_entry = IntriniscsCatalogEntry(
+    mock_catalog_entry = IntrinsicsCatalogEntry(
         name="answerability",
         repo_id="ibm-granite/granitelib-rag-r1.0",
         revision="abc123",
