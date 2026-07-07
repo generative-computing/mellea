@@ -151,7 +151,9 @@ class Message(Component["Message"]):
         if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
             choices = response.get("choices") or [{}]
             msg = choices[0].get("message", {})
-            role = msg.get("role") or response.get("message", {}).get("role", "")
+            role = msg.get("role") or response.get("message", {}).get(
+                "role", "assistant"
+            )
             content = msg.get("content") or response.get("message", {}).get(
                 "content", ""
             )
