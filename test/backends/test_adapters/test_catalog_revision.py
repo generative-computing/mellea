@@ -1,10 +1,10 @@
-"""Tests for IntriniscsCatalogEntry revision field and requirement-check deduplication."""
+"""Tests for IntrinsicsCatalogEntry revision field and requirement-check deduplication."""
 
 import pydantic
 import pytest
 
 from mellea.backends.adapters.catalog import (
-    IntriniscsCatalogEntry,
+    IntrinsicsCatalogEntry,
     fetch_intrinsic_metadata,
     known_intrinsic_names,
     validate_revision,
@@ -48,19 +48,19 @@ def test_revision_validation_accepts_branch_and_tag():
 
 def test_revision_field_rejects_empty_via_pydantic():
     with pytest.raises(pydantic.ValidationError):
-        IntriniscsCatalogEntry(name="x", repo_id="org/repo", revision="")
+        IntrinsicsCatalogEntry(name="x", repo_id="org/repo", revision="")
 
 
 def test_revision_field_rejects_none_via_pydantic():
     with pytest.raises(pydantic.ValidationError):
-        IntriniscsCatalogEntry(name="x", repo_id="org/repo", revision=None)  # type: ignore[arg-type]
+        IntrinsicsCatalogEntry(name="x", repo_id="org/repo", revision=None)  # type: ignore[arg-type]
 
 
 def test_revision_round_trip():
-    entry = IntriniscsCatalogEntry(name="x", repo_id="org/repo", revision=_VALID_SHA)
+    entry = IntrinsicsCatalogEntry(name="x", repo_id="org/repo", revision=_VALID_SHA)
     assert entry.revision == _VALID_SHA
 
-    entry_main = IntriniscsCatalogEntry(name="y", repo_id="org/repo", revision="main")
+    entry_main = IntrinsicsCatalogEntry(name="y", repo_id="org/repo", revision="main")
     assert entry_main.revision == "main"
 
 

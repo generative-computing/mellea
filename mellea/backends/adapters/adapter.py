@@ -151,7 +151,7 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
 
     Attributes:
         intrinsic_name (str): Name of the adapter function this adapter implements.
-        intrinsic_metadata (IntriniscsCatalogEntry): Catalog metadata for the adapter function.
+        intrinsic_metadata (IntrinsicsCatalogEntry): Catalog metadata for the adapter function.
         base_model_name (str | None): Base model name provided at construction, if any.
         adapter_type (AdapterType): The adapter type (``LORA`` or ``ALORA``).
         config (dict): Parsed I/O transformation configuration for the adapter function.
@@ -790,7 +790,7 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
 
         if intrinsic_name not in catalog._INTRINSICS_CATALOG:
             catalog._INTRINSICS_CATALOG_ENTRIES.append(
-                catalog.IntriniscsCatalogEntry(
+                catalog.IntrinsicsCatalogEntry(
                     name=intrinsic_name, repo_id=model_id, revision="main"
                 )
             )

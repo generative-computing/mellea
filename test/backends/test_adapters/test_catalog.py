@@ -5,7 +5,7 @@ import pytest
 from mellea.backends.adapters.catalog import (
     _INTRINSICS_CATALOG_ENTRIES,
     AdapterType,
-    IntriniscsCatalogEntry,
+    IntrinsicsCatalogEntry,
     fetch_intrinsic_metadata,
     known_intrinsic_names,
 )
@@ -59,7 +59,7 @@ def test_default_adapter_types():
 def test_lora_only_entry(monkeypatch):
     from mellea.backends.adapters import catalog
 
-    fake_entry = catalog.IntriniscsCatalogEntry(
+    fake_entry = catalog.IntrinsicsCatalogEntry(
         name="query_clarification",
         repo_id="ibm-granite/granitelib-rag-r1.0",
         revision="main",
@@ -130,7 +130,7 @@ def test_effective_capability_not_in_model_dump():
 
 
 def test_capability_field_used_when_constructing_directly():
-    entry = IntriniscsCatalogEntry(
+    entry = IntrinsicsCatalogEntry(
         name="my-custom-adapter",
         capability="my_custom_adapter",
         repo_id="org/repo",
@@ -140,7 +140,7 @@ def test_capability_field_used_when_constructing_directly():
 
 
 def test_capability_none_means_effective_capability_equals_name():
-    entry = IntriniscsCatalogEntry(
+    entry = IntrinsicsCatalogEntry(
         name="plain_name", repo_id="org/repo", revision="abc123def456"
     )
     assert entry.capability is None
@@ -156,35 +156,35 @@ def test_all_catalog_effective_capabilities_are_nonempty():
 
 def test_name_empty_string_rejected():
     with pytest.raises(ValueError, match="non-empty"):
-        IntriniscsCatalogEntry(name="", repo_id="org/repo", revision="abc123")
+        IntrinsicsCatalogEntry(name="", repo_id="org/repo", revision="abc123")
 
 
 def test_name_whitespace_only_rejected():
     with pytest.raises(ValueError, match="non-empty"):
-        IntriniscsCatalogEntry(name="   ", repo_id="org/repo", revision="abc123")
+        IntrinsicsCatalogEntry(name="   ", repo_id="org/repo", revision="abc123")
 
 
 def test_name_leading_trailing_whitespace_rejected():
     with pytest.raises(ValueError, match="leading or trailing whitespace"):
-        IntriniscsCatalogEntry(name="  foo  ", repo_id="org/repo", revision="abc123")
+        IntrinsicsCatalogEntry(name="  foo  ", repo_id="org/repo", revision="abc123")
 
 
 def test_capability_empty_string_rejected():
     with pytest.raises(ValueError, match="non-empty"):
-        IntriniscsCatalogEntry(
+        IntrinsicsCatalogEntry(
             name="x", capability="", repo_id="org/repo", revision="abc123"
         )
 
 
 def test_capability_whitespace_only_rejected():
     with pytest.raises(ValueError, match="non-empty"):
-        IntriniscsCatalogEntry(
+        IntrinsicsCatalogEntry(
             name="x", capability="   ", repo_id="org/repo", revision="abc123"
         )
 
 
 def test_capability_leading_trailing_whitespace_rejected():
     with pytest.raises(ValueError, match="leading or trailing whitespace"):
-        IntriniscsCatalogEntry(
+        IntrinsicsCatalogEntry(
             name="x", capability="  foo  ", repo_id="org/repo", revision="abc123"
         )
