@@ -1,9 +1,12 @@
+import base64
 import logging
 
 import pytest
 
 from mellea.backends.tools import MelleaTool
 from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
     CBlock,
     ModelOutputThunk,
     ModelToolCall,
@@ -87,6 +90,14 @@ def test_message_images_none():
     assert msg.images is None
 
 
+# --- Message audio property ---
+
+
+def test_message_audio_none():
+    msg = Message("user", "text")
+    assert msg.audio is None
+
+
 # --- Message parts() ---
 
 
@@ -104,6 +115,17 @@ def test_message_parts_with_docs():
     assert doc in parts
 
 
+def test_message_parts_with_audio():
+    audio = AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    audio_url = AudioUrlBlock("https://example.com/audio.mp3", format="mp3")
+    msg = Message("user", "hi", audio=[audio, audio_url])
+
+    parts = msg.parts()
+
+    assert audio in parts
+    assert audio_url in parts
+
+
 # --- Message format_for_llm ---
 
 
@@ -113,6 +135,17 @@ def test_message_format_for_llm_structure():
     assert isinstance(tr, TemplateRepresentation)
     assert tr.args["content"] is msg._content_cblock
     assert tr.args["documents"] is None
+
+
+def test_message_format_for_llm_preserves_audio():
+    audio: list[AudioBlock | AudioUrlBlock] = [
+        AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    ]
+    msg = Message("user", "hello", audio=audio)
+
+    tr = msg.format_for_llm()
+
+    assert tr.audio == audio
 
 
 def test_message_documents_string_coercion():
