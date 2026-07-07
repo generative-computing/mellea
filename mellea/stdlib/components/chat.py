@@ -11,7 +11,7 @@ configurable formatter).
 
 import logging
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from ...core import (
     CBlock,
@@ -26,8 +26,6 @@ from ...core import (
 from .docs.document import Document, _coerce_to_documents
 
 _logger = logging.getLogger(__name__)
-
-_VALID_ROLES = frozenset({"system", "user", "assistant", "tool"})
 
 
 class Message(Component["Message"]):
@@ -61,9 +59,9 @@ class Message(Component["Message"]):
         documents: None | Iterable[str | Document] = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
-        if role not in _VALID_ROLES:
+        if role not in get_args(Message.Role):
             raise ValueError(
-                f"Invalid role {role!r}. Must be one of: {sorted(_VALID_ROLES)}"
+                f"Invalid role {role!r}. Must be one of: {list(get_args(Message.Role))}"
             )
         self.role = role
         self.content = content  # TODO this should be private.
