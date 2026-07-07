@@ -39,6 +39,7 @@ from mellea.stdlib.streaming import (
 )
 from mellea.telemetry import tracing
 from mellea.telemetry.tracing_plugins import (
+    _CONTEXT_ATTACH_SUPPORTED,
     BackendTracingPlugin,
     ComponentTracingPlugin,
     StreamingTracingPlugin,
@@ -578,10 +579,16 @@ async def test_nested_span_during_call_parents_under_backend_span(
     tracing._tracer_provider.force_flush()
     by_name = {s.name: s for s in exporter.get_finished_spans()}
 
-    assert by_name["nested-caller-task"].parent is not None
-    assert by_name["nested-caller-task"].parent.span_id == backend_span_id
-    assert by_name["nested-background-task"].parent is not None
-    assert by_name["nested-background-task"].parent.span_id == backend_span_id
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert by_name["nested-caller-task"].parent is not None
+        assert by_name["nested-caller-task"].parent.span_id == backend_span_id
+        assert by_name["nested-background-task"].parent is not None
+        assert by_name["nested-background-task"].parent.span_id == backend_span_id
+    else:
+        assert by_name["nested-caller-task"].parent is None, (
+            "nested spans should not parent under the backend span on Python <=3.11"
+        )
+        assert by_name["nested-background-task"].parent is None
 
 
 @pytest.mark.integration
