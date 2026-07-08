@@ -1,42 +1,47 @@
 """Logging utilities for the mellea core library.
 
-Provides ``MelleaLogger``, a singleton logger with colour-coded console output,
+Provides `MelleaLogger`, a singleton logger with colour-coded console output,
 an optional rotating file handler, and optional OTLP / webhook forwarding.
-All internal mellea modules obtain their logger via ``MelleaLogger.get_logger()``.
+All internal mellea modules obtain their logger via `MelleaLogger.get_logger()`.
 
-Handler setup is performed by :func:`configure_logging`, which is called
-automatically on the first :meth:`MelleaLogger.get_logger` invocation.
+Handler setup is performed by `configure_logging`, which is called
+automatically on the first `MelleaLogger.get_logger` invocation.
 
 Environment variables
 ---------------------
-``MELLEA_LOGS_ENABLED``
-    Master switch for all logging handlers.  Set to ``false`` / ``0`` / ``no`` to
-    suppress all handlers (useful in test environments).  Defaults to ``true``.
-``MELLEA_LOGS_LEVEL``
-    Minimum log level name (e.g. ``DEBUG``, ``INFO``, ``WARNING``).  Defaults to
-    ``INFO``.
-``MELLEA_LOGS_JSON``
-    Set to any truthy value (``1``, ``true``, ``yes``) to emit structured JSON
+`MELLEA_LOGS_ENABLED`
+    Master switch for all logging handlers.  Set to `false` / `0` / `no` to
+    suppress all handlers (useful in test environments).  Defaults to `true`.
+`MELLEA_LOGS_LEVEL`
+    Minimum log level name (e.g. `DEBUG`, `INFO`, `WARNING`).  Defaults to
+    `INFO`.
+`MELLEA_LOGS_JSON`
+    Set to any truthy value (`1`, `true`, `yes`) to emit structured JSON
     instead of colour-coded human-readable text.  Applies to both the console and
     file handlers.
-``MELLEA_LOGS_CONSOLE``
-    Set to ``false`` / ``0`` / ``no`` to disable the console (stdout) handler.
-    Defaults to ``true``.
-``MELLEA_LOGS_FILE``
+`MELLEA_LOGS_CONSOLE`
+    Set to `false` / `0` / `no` to disable the console (stdout) handler.
+    Defaults to `true`.
+`MELLEA_LOGS_FILE`
     Absolute or relative path for rotating file output (e.g.
-    ``/var/log/mellea.log``).  When unset no file handler is attached.
-``MELLEA_LOGS_FILE_MAX_BYTES``
+    `/var/log/mellea.log`).  When unset no file handler is attached.
+`MELLEA_LOGS_FILE_MAX_BYTES`
     Maximum size in bytes before the log file is rotated.  Defaults to
-    ``10485760`` (10 MB).
-``MELLEA_LOGS_FILE_BACKUP_COUNT``
-    Number of rotated backup files to keep.  Defaults to ``5``.
-``MELLEA_LOGS_OTLP``
-    Set to ``true`` / ``1`` / ``yes`` to export logs via OpenTelemetry Logs
-    Protocol.  Requires ``opentelemetry-sdk`` and an OTLP endpoint configured
-    via ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``.
-``MELLEA_LOGS_WEBHOOK``
-    HTTP(S) URL to forward log records to via HTTP POST.  When set a
-    :class:`RESTHandler` is attached.
+    `10485760` (10 MB).
+`MELLEA_LOGS_FILE_BACKUP_COUNT`
+    Number of rotated backup files to keep.  Defaults to `5`.
+`MELLEA_LOGS_OTLP`
+    Set to `true` / `1` / `yes` to export logs via OpenTelemetry Logs
+    Protocol.  Requires `opentelemetry-sdk` and an OTLP endpoint configured
+    via `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT`.
+`MELLEA_LOGS_WEBHOOK`
+    HTTPS URL to forward log records to via HTTP POST.  Must use the
+    `https://` scheme and must have a non-empty hostname.  When set a
+    `RESTHandler` is attached.
+`MELLEA_LOGS_INSECURE_HTTP_ALLOWED`
+    Set to `true` / `1` / `yes` to allow plain `http://` URLs in
+    `MELLEA_LOGS_WEBHOOK`.  Intended for local development only; never
+    set this in production.
 """
 
 import contextlib
@@ -46,6 +51,7 @@ import logging
 import os
 import sys
 import threading
+import urllib.parse
 import warnings
 from collections.abc import Generator
 from logging.handlers import RotatingFileHandler as _RotatingFileHandler
@@ -107,7 +113,7 @@ def set_log_context(**fields: Any) -> None:
     """Inject extra fields into every log record emitted from this coroutine or thread.
 
     Call this at the start of a request or task to attach identifiers such as
-    ``trace_id`` or ``request_id`` without modifying individual log calls.
+    `trace_id` or `request_id` without modifying individual log calls.
 
     Note:
         Prefer `log_context` as the primary API — it guarantees cleanup
@@ -117,8 +123,8 @@ def set_log_context(**fields: Any) -> None:
         **fields: Arbitrary key-value pairs to include in log records.
 
     Raises:
-        ValueError: If any key clashes with a standard ``logging.LogRecord``
-            attribute (e.g. ``levelname``, ``module``, ``thread``).
+        ValueError: If any key clashes with a standard `logging.LogRecord`
+            attribute (e.g. `levelname`, `module`, `thread`).
     """
     invalid = frozenset(fields) & RESERVED_LOG_RECORD_ATTRS
     if invalid:
@@ -130,7 +136,7 @@ def set_log_context(**fields: Any) -> None:
 
 
 def clear_log_context() -> None:
-    """Remove all context fields set by :func:`set_log_context` for this coroutine/thread."""
+    """Remove all context fields set by `set_log_context` for this coroutine/thread."""
     _log_context.set({})
 
 
@@ -139,8 +145,8 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
     """Context manager that injects *fields* for the duration of the block.
 
     On exit — including on exceptions — the context is restored to its state
-    before the block via a ``ContextVar`` token.  This is safe for both nested
-    usage and concurrent asyncio tasks: each ``asyncio.Task`` owns an isolated
+    before the block via a `ContextVar` token.  This is safe for both nested
+    usage and concurrent asyncio tasks: each `asyncio.Task` owns an isolated
     copy of the context variable, so coroutines running on the same event-loop
     thread cannot overwrite each other's fields.
 
@@ -153,14 +159,14 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
 
     Args:
         **fields: Key-value pairs to inject.  Same restrictions as
-            :func:`set_log_context` — reserved ``LogRecord`` attribute names
-            are rejected with ``ValueError``.
+            `set_log_context` — reserved `LogRecord` attribute names
+            are rejected with `ValueError`.
 
     Yields:
         None.  The manager is used only for its enter/exit side effects.
 
     Raises:
-        ValueError: If any key clashes with a reserved ``LogRecord`` attribute.
+        ValueError: If any key clashes with a reserved `LogRecord` attribute.
     """
     invalid = frozenset(fields) & RESERVED_LOG_RECORD_ATTRS
     if invalid:
@@ -178,8 +184,8 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
 class ContextFilter(logging.Filter):
     """Logging filter that injects async-safe ContextVar fields into every record.
 
-    Fields registered via :func:`set_log_context` are copied onto the
-    ``logging.LogRecord`` before formatters see it, enabling trace/request IDs
+    Fields registered via `set_log_context` are copied onto the
+    `logging.LogRecord` before formatters see it, enabling trace/request IDs
     to appear in structured output without touching call sites.
     """
 
@@ -190,7 +196,7 @@ class ContextFilter(logging.Filter):
             record (logging.LogRecord): The log record being processed.
 
         Returns:
-            bool: Always ``True`` — the record is never suppressed.
+            bool: Always `True` — the record is never suppressed.
         """
         fields: dict[str, Any] = _log_context.get()
         for key, value in fields.items():
@@ -201,11 +207,11 @@ class ContextFilter(logging.Filter):
 class OtelTraceFilter(logging.Filter):
     """Logging filter that injects the current OpenTelemetry trace context into log records.
 
-    Adds ``trace_id`` and ``span_id`` attributes (hex strings) to every
-    ``LogRecord`` when an active span exists.  When OpenTelemetry is not
+    Adds `trace_id` and `span_id` attributes (hex strings) to every
+    `LogRecord` when an active span exists.  When OpenTelemetry is not
     installed the filter is a true no-op: it adds no attributes and takes no
     branches, so there is zero overhead on the hot logging path.  Formatters
-    use ``hasattr`` / ``getattr`` to handle the absent attributes gracefully.
+    use `hasattr` / `getattr` to handle the absent attributes gracefully.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -217,7 +223,7 @@ class OtelTraceFilter(logging.Filter):
             record (logging.LogRecord): The log record to enrich.
 
         Returns:
-            bool: Always ``True`` — the record is never suppressed.
+            bool: Always `True` — the record is never suppressed.
         """
         if _OTEL_AVAILABLE:
             ctx = otel_trace.get_current_span().get_span_context()
@@ -231,16 +237,16 @@ class RESTHandler(logging.Handler):
     """Logging handler that forwards records to an HTTP endpoint unconditionally.
 
     Attach this handler only when a webhook URL is configured; it sends every
-    record it receives.  Use :func:`configure_logging` or
-    :meth:`MelleaLogger.get_logger` to obtain a pre-configured instance.
+    record it receives.  Use `configure_logging` or
+    `MelleaLogger.get_logger` to obtain a pre-configured instance.
 
     Failures are silently suppressed to avoid disrupting the application.
 
     Args:
         api_url (str): The URL of the REST endpoint that receives log records.
-        method (str): HTTP method to use when sending records (default ``"POST"``).
+        method (str): HTTP method to use when sending records (default `"POST"`).
         headers (dict | None): HTTP headers to send; defaults to
-            ``{"Content-Type": "application/json"}`` when ``None``.
+            `{"Content-Type": "application/json"}` when `None`.
     """
 
     def __init__(
@@ -283,18 +289,18 @@ class JsonFormatter(logging.Formatter):
     """Logging formatter that serialises log records as structured JSON strings.
 
     Produces a consistent JSON schema with a fixed set of core fields.
-    Additional fields can be injected at construction time (``extra_fields``) or
-    dynamically per-thread via :func:`set_log_context` / :class:`ContextFilter`.
+    Additional fields can be injected at construction time (`extra_fields`) or
+    dynamically per-thread via `set_log_context` / `ContextFilter`.
     Includes trace_id and span_id when OpenTelemetry tracing is active.
 
     Args:
-        timestamp_format: ``strftime`` format for the ``timestamp`` field.
-            Defaults to ISO-8601 (``"%Y-%m-%dT%H:%M:%S"``).
-        include_fields: Whitelist of **core** field names to keep.  When ``None``
+        timestamp_format: `strftime` format for the `timestamp` field.
+            Defaults to ISO-8601 (`"%Y-%m-%dT%H:%M:%S"`).
+        include_fields: Whitelist of **core** field names to keep.  When `None`
             all core fields are included.  Note: this filter applies only to the
-            fields listed in ``_DEFAULT_FIELDS``; ``extra_fields`` passed to the
+            fields listed in `_DEFAULT_FIELDS`; `extra_fields` passed to the
             constructor and dynamic context fields (set via
-            :func:`set_log_context`) are **always** included regardless of this
+            `set_log_context`) are **always** included regardless of this
             setting.
         exclude_fields: Set of core field names to drop.  Applied after
             *include_fields*.
@@ -324,7 +330,7 @@ class JsonFormatter(logging.Formatter):
         extra_fields: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialises the formatter; passes remaining kwargs to ``logging.Formatter``."""
+        """Initialises the formatter; passes remaining kwargs to `logging.Formatter`."""
         super().__init__(datefmt=timestamp_format, **kwargs)
 
         if include_fields is not None:
@@ -344,7 +350,7 @@ class JsonFormatter(logging.Formatter):
     def format_as_dict(self, record: logging.LogRecord) -> dict[str, Any]:
         """Return the log record as a dictionary (public API for external callers).
 
-        Equivalent to :meth:`_build_log_dict` but part of the public interface so
+        Equivalent to `_build_log_dict` but part of the public interface so
         handlers and other callers do not need to reach into private methods.
         Includes trace_id and span_id when OpenTelemetry tracing is active.
 
@@ -429,7 +435,7 @@ class JsonFormatter(logging.Formatter):
 
         Core fields are filtered by *include_fields* / *exclude_fields*.
         Static *extra_fields* and any per-task ContextVar fields (set via
-        :func:`set_log_context`) are merged in after the core fields.
+        `set_log_context`) are merged in after the core fields.
 
         Args:
             record (logging.LogRecord): The log record to format.
@@ -472,7 +478,7 @@ class CustomFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Formats a log record using a colour-coded ANSI format string based on the record's log level.
 
-        Appends ``[trace_id=… span_id=…]`` when ``OtelTraceFilter`` has
+        Appends `[trace_id=… span_id=…]` when `OtelTraceFilter` has
         populated those fields on the record and a trace is active.
 
         Args:
@@ -510,9 +516,41 @@ def _parse_bool_env(value: str, default: bool = True) -> bool:
 
 
 def _resolve_webhook_url() -> str | None:
-    """Return the configured webhook URL from ``MELLEA_LOGS_WEBHOOK``, or ``None``."""
-    url = os.environ.get("MELLEA_LOGS_WEBHOOK", "").strip()
-    return url or None
+    """Return the configured webhook URL from `MELLEA_LOGS_WEBHOOK`, or `None`.
+
+    Returns `None` and emits a `UserWarning` when the URL fails
+    validation:
+
+    * scheme must be `https`
+    * hostname must be present and non-empty
+    """
+    raw = os.environ.get("MELLEA_LOGS_WEBHOOK", "").strip()
+    if not raw:
+        return None
+
+    parsed = urllib.parse.urlparse(raw)
+    insecure_allowed = _parse_bool_env(
+        os.environ.get("MELLEA_LOGGER_INSECURE_HTTP_ALLOWED", ""), default=False
+    )
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and insecure_allowed):
+        warnings.warn(
+            f"MELLEA_LOGS_WEBHOOK ignored: URL must use HTTPS (got {parsed.scheme!r}). "
+            "Set the variable to an https:// URL to enable webhook logging.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return None
+
+    hostname = parsed.hostname or ""
+    if not hostname:
+        warnings.warn(
+            "MELLEA_LOGS_WEBHOOK ignored: URL has no hostname.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return None
+
+    return raw
 
 
 def configure_logging(logger: logging.Logger) -> None:
@@ -520,21 +558,21 @@ def configure_logging(logger: logging.Logger) -> None:
 
     It always appends new handlers (the caller is responsible for clearing
     existing ones before re-configuring).  It is invoked automatically on the
-    first call to :meth:`MelleaLogger.get_logger`; subsequent calls return the
+    first call to `MelleaLogger.get_logger`; subsequent calls return the
     same singleton logger with its handlers already in place.  It is also
     available for programmatic use when you need to attach handlers to a custom
     logger.
 
-    When ``MELLEA_LOGS_ENABLED`` is falsy no handlers are attached; the logger
+    When `MELLEA_LOGS_ENABLED` is falsy no handlers are attached; the logger
     still exists and accepts records, but they are silently discarded.
 
-    If ``MELLEA_LOGS_FILE`` is set but the path cannot be opened (e.g. due to a
-    permissions error), a :class:`UserWarning` is emitted and file logging is
+    If `MELLEA_LOGS_FILE` is set but the path cannot be opened (e.g. due to a
+    permissions error), a `UserWarning` is emitted and file logging is
     skipped.  The remaining handlers are still attached and the application
     continues normally.
 
     Args:
-        logger: The :class:`logging.Logger` to configure.
+        logger: The `logging.Logger` to configure.
     """
     enabled_raw = os.environ.get("MELLEA_LOGS_ENABLED")
     if not _parse_bool_env(enabled_raw or "", default=True):
@@ -602,17 +640,17 @@ def configure_logging(logger: logging.Logger) -> None:
 class MelleaLogger:
     """Singleton logger with colour-coded console output and configurable handlers.
 
-    Obtain the shared logger instance via ``MelleaLogger.get_logger()``. Log level
-    defaults to ``INFO`` but can be overridden via ``MELLEA_LOGS_LEVEL``. Handler
-    setup is delegated to :func:`configure_logging`.
+    Obtain the shared logger instance via `MelleaLogger.get_logger()`. Log level
+    defaults to `INFO` but can be overridden via `MELLEA_LOGS_LEVEL`. Handler
+    setup is delegated to `configure_logging`.
 
     Attributes:
-        logger (logging.Logger | None): The shared ``logging.Logger`` instance; ``None`` until first call to ``get_logger()``.
+        logger (logging.Logger | None): The shared `logging.Logger` instance; `None` until first call to `get_logger()`.
         CRITICAL (int): Numeric level for critical log messages (50).
-        FATAL (int): Alias for ``CRITICAL`` (50).
+        FATAL (int): Alias for `CRITICAL` (50).
         ERROR (int): Numeric level for error log messages (40).
         WARNING (int): Numeric level for warning log messages (30).
-        WARN (int): Alias for ``WARNING`` (30).
+        WARN (int): Alias for `WARNING` (30).
         INFO (int): Numeric level for informational log messages (20).
         DEBUG (int): Numeric level for debug log messages (10).
         NOTSET (int): Numeric level meaning no level is set (0).
@@ -633,10 +671,10 @@ class MelleaLogger:
     def _resolve_log_level() -> int:
         """Resolves the effective log level from environment variables.
 
-        Checks ``MELLEA_LOGS_LEVEL`` and defaults to ``INFO``.
+        Checks `MELLEA_LOGS_LEVEL` and defaults to `INFO`.
 
         Returns:
-            int: A :mod:`logging` level integer.
+            int: A `logging` level integer.
         """
         level_name = os.environ.get("MELLEA_LOGS_LEVEL", "").strip().upper()
         if level_name:
@@ -647,13 +685,13 @@ class MelleaLogger:
 
     @staticmethod
     def get_logger() -> logging.Logger:
-        """Return the shared :class:`logging.Logger`, creating it on first call.
+        """Return the shared `logging.Logger`, creating it on first call.
 
         The logger is created once (singleton).  Subsequent calls return the
         cached instance.  Initialisation is protected by a module-level lock so
         concurrent callers at startup cannot create duplicate handlers.
 
-        When ``MELLEA_LOGS_ENABLED`` is falsy :func:`configure_logging` attaches
+        When `MELLEA_LOGS_ENABLED` is falsy `configure_logging` attaches
         no handlers — the logger still exists, but records are silently
         discarded (useful for tests or environments that must produce no output).
 

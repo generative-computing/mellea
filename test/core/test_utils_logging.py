@@ -27,6 +27,7 @@ from mellea.core.utils import (
     OtelTraceFilter,
     RESTHandler,
     _parse_bool_env,
+    _resolve_webhook_url,
     clear_log_context,
     configure_logging,
     log_context,
@@ -941,6 +942,74 @@ class TestParseBoolEnv:
 
 
 # ---------------------------------------------------------------------------
+# _resolve_webhook_url() validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestResolveWebhookUrl:
+    def test_empty_env_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MELLEA_LOGS_WEBHOOK", raising=False)
+        assert _resolve_webhook_url() is None
+
+    def test_whitespace_only_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "   ")
+        assert _resolve_webhook_url() is None
+
+    def test_valid_https_url_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://example.com/logs")
+        assert _resolve_webhook_url() == "https://example.com/logs"
+
+    def test_https_with_ip_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://8.8.8.8/logs")
+        assert _resolve_webhook_url() == "https://8.8.8.8/logs"
+
+    def test_https_dns_hostname_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://my-webhook.internal/logs")
+        assert _resolve_webhook_url() == "https://my-webhook.internal/logs"
+
+    def test_http_scheme_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://example.com/logs")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _resolve_webhook_url()
+        assert result is None
+        assert any("HTTPS" in str(w.message) for w in caught)
+
+    def test_no_hostname_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _resolve_webhook_url()
+        assert result is None
+        assert any("hostname" in str(w.message) for w in caught)
+
+    def test_http_allowed_when_insecure_flag_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://localhost:9000/logs")
+        monkeypatch.setenv("MELLEA_LOGGER_INSECURE_HTTP_ALLOWED", "true")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _resolve_webhook_url()
+        assert result == "http://localhost:9000/logs"
+        assert not any("HTTPS" in str(w.message) for w in caught)
+
+    def test_http_still_rejected_without_insecure_flag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://localhost:9000/logs")
+        monkeypatch.delenv("MELLEA_LOGGER_INSECURE_HTTP_ALLOWED", raising=False)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _resolve_webhook_url()
+        assert result is None
+        assert any("HTTPS" in str(w.message) for w in caught)
+
+
+# ---------------------------------------------------------------------------
 # Webhook handler (MELLEA_LOGS_WEBHOOK)
 # ---------------------------------------------------------------------------
 
@@ -973,10 +1042,10 @@ class TestWebhookHandler:
     def test_mellea_logs_webhook_attaches_rest_handler(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://example.com/logs")
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://example.com/logs")
         handlers = self._rest_handlers()
         assert len(handlers) == 1
-        assert handlers[0].api_url == "http://example.com/logs"
+        assert handlers[0].api_url == "https://example.com/logs"
 
     def test_rest_handler_emit_sends_unconditionally(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1217,7 +1286,7 @@ class TestConfigureLogging:
     ) -> None:
         log_path = str(tmp_path / "mellea.log")
         monkeypatch.setenv("MELLEA_LOGS_FILE", log_path)
-        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "http://example.com/logs")
+        monkeypatch.setenv("MELLEA_LOGS_WEBHOOK", "https://example.com/logs")
         monkeypatch.setenv("MELLEA_LOGS_CONSOLE", "true")
         monkeypatch.delenv("MELLEA_LOGS_ENABLED", raising=False)
         lg = self._make_bare_logger()
