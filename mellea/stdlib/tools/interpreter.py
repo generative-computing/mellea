@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import mimetypes
+import os
 import shutil
 import stat
 import subprocess
@@ -384,6 +385,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(code)
             temp_file = f.name
+        os.chmod(temp_file, 0o600)
 
         try:
             result = subprocess.run(
@@ -1233,7 +1235,11 @@ def python_tool(
         # No caller-supplied artifact_dir.  Create a per-call tempdir; clean it
         # up immediately when no artifacts were produced, or attach a finalizer
         # so it is removed when the result (and therefore its artifacts) is GC'd.
-        tmp_dir = Path(tempfile.mkdtemp())
+        old_umask = os.umask(0o077)
+        try:
+            tmp_dir = Path(tempfile.mkdtemp())
+        finally:
+            os.umask(old_umask)
         try:
             env = make_execution_environment(
                 resolved_tier,
