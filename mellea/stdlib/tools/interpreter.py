@@ -385,7 +385,9 @@ class UnsafeEnvironment(ExecutionEnvironment):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(code)
             temp_file = f.name
-        os.chmod(temp_file, 0o600)
+        os.chmod(
+            temp_file, 0o600
+        )  # defense-in-depth: NamedTemporaryFile is 0o600 on most POSIX, but not guaranteed
 
         try:
             result = subprocess.run(
@@ -636,6 +638,11 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             )
             return False
 
+    @staticmethod
+    def _cleanup_export_dirs(dirs: list[Path]) -> None:
+        for d in dirs:
+            shutil.rmtree(d, True)
+
     def execute(self, code: str, timeout: int | None = None) -> ExecutionResult:
         """Execute code in a Docker container.
 
@@ -737,6 +744,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             )
 
             artifacts: list[Artifact] = []
+            export_dirs: list[Path] = []
             if (
                 self.policy
                 and self.policy.artifact_export_paths
@@ -747,7 +755,10 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                         staging = Path(tmp_dir) / container_path.name
                         try:
                             self.copy_out(str(container_path), staging)
-                            dest = Path(tempfile.gettempdir()) / container_path.name
+                            export_dir = Path(tempfile.mkdtemp())
+                            os.chmod(export_dir, 0o700)
+                            export_dirs.append(export_dir)
+                            dest = export_dir / container_path.name
                             shutil.copy2(staging, dest)
                             artifacts.append(
                                 Artifact(
@@ -762,7 +773,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                                 "Failed to export artifact %s: %s", container_path, e
                             )
 
-            return ExecutionResult(
+            execution_result = ExecutionResult(
                 success=result.exit_code == 0,
                 stdout=stdout,
                 stderr=stderr,
@@ -770,6 +781,11 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 artifacts=artifacts,
                 execution_mode=self._mode(),
             )
+            if export_dirs:
+                weakref.finalize(
+                    execution_result, self._cleanup_export_dirs, export_dirs
+                )
+            return execution_result
         except Exception as e:
             return ExecutionResult(
                 success=False,
@@ -1235,11 +1251,10 @@ def python_tool(
         # No caller-supplied artifact_dir.  Create a per-call tempdir; clean it
         # up immediately when no artifacts were produced, or attach a finalizer
         # so it is removed when the result (and therefore its artifacts) is GC'd.
-        old_umask = os.umask(0o077)
-        try:
-            tmp_dir = Path(tempfile.mkdtemp())
-        finally:
-            os.umask(old_umask)
+        tmp_dir = Path(tempfile.mkdtemp())
+        os.chmod(
+            tmp_dir, 0o700
+        )  # defense-in-depth: mkdtemp is already 0o700, but explicit is safer if stdlib behavior ever changes
         try:
             env = make_execution_environment(
                 resolved_tier,

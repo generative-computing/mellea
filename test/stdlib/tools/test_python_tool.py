@@ -1,5 +1,7 @@
 """Tests for python_tool() factory and related helpers."""
 
+import os
+import stat
 import subprocess
 import warnings
 from pathlib import Path
@@ -10,6 +12,7 @@ import pytest
 import mellea.stdlib.tools.interpreter as _interpreter_mod
 from mellea.stdlib.tools import CapabilityPolicy, ExecutionResult, python_tool
 from mellea.stdlib.tools.interpreter import (
+    LLMSandboxEnvironment,
     _needs_matplotlib_preamble,
     _scan_artifacts,
     _validate_package_names,
@@ -714,6 +717,104 @@ def test_docker_oneshot_reinstalls_per_container():
     # Second call: fresh container — packages must be reinstalled, not skipped.
     result2 = tool.run(code="import cowsay; print('call2')")
     assert result2.success, result2.stderr
+
+
+# endregion
+
+
+# region security tests
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+def test_temp_script_file_is_owner_only():
+    """_execute_subprocess temp script must be mode 0o600 on POSIX systems."""
+    captured_modes: list[int] = []
+    original_chmod = os.chmod
+
+    def capturing_chmod(path: str, mode: int) -> None:
+        original_chmod(path, mode)
+        if str(path).endswith(".py"):
+            captured_modes.append(stat.S_IMODE(os.stat(path).st_mode))
+
+    with patch("mellea.stdlib.tools.interpreter.os.chmod", side_effect=capturing_chmod):
+        tool = python_tool(tier="local_unsafe")
+        tool.run(code="print('ok')")
+
+    assert captured_modes, "os.chmod was not called on the temp script file"
+    assert captured_modes[0] == 0o600, f"expected 0o600, got {oct(captured_modes[0])}"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+def test_artifact_tmpdir_is_owner_only():
+    """mkdtemp artifact dir must be mode 0o700 on POSIX systems."""
+    captured_modes: list[int] = []
+    original_chmod = os.chmod
+
+    def capturing_chmod(path: str, mode: int) -> None:
+        original_chmod(path, mode)
+        if os.path.isdir(path):
+            captured_modes.append(stat.S_IMODE(os.stat(path).st_mode))
+
+    with patch("mellea.stdlib.tools.interpreter.os.chmod", side_effect=capturing_chmod):
+        tool = python_tool(tier="local_unsafe")
+        tool.run(code="print('ok')")
+
+    assert captured_modes, "os.chmod was not called on the artifact tmpdir"
+    assert captured_modes[0] == 0o700, f"expected 0o700, got {oct(captured_modes[0])}"
+
+
+def _make_llm_sandbox_env_with_export(export_filename: str) -> LLMSandboxEnvironment:
+    """Return an LLMSandboxEnvironment with a fake session and copy_out that writes a real file."""
+    from unittest.mock import MagicMock
+
+    policy = CapabilityPolicy(artifact_export_paths=[Path(f"/out/{export_filename}")])
+    env = LLMSandboxEnvironment(policy=policy)
+
+    fake_result = MagicMock()
+    fake_result.stdout = "ok"
+    fake_result.stderr = ""
+    fake_result.exit_code = 0
+
+    fake_session = MagicMock()
+    fake_session.run.return_value = fake_result
+    env._session = fake_session
+
+    def fake_copy_out(container_path: str, host_path: Path) -> None:
+        host_path.write_text("data")
+
+    env.copy_out = fake_copy_out  # type: ignore[method-assign]
+    return env
+
+
+def test_artifact_export_path_is_randomized():
+    """Exported artifact must land in a randomized subdirectory, not directly in gettempdir()."""
+    import tempfile
+
+    env = _make_llm_sandbox_env_with_export("output.csv")
+    result = env.execute("print('ok')")
+
+    assert result.artifacts, "no artifacts returned"
+    artifact_path = result.artifacts[0].path
+    # Must be inside a subdirectory of gettempdir(), not gettempdir() itself.
+    assert artifact_path.parent != Path(tempfile.gettempdir()), (
+        f"artifact landed directly in gettempdir(): {artifact_path}"
+    )
+    # The parent directory name must not be predictable from the filename alone.
+    assert artifact_path.parent.name != "output.csv"
+    assert artifact_path.name == "output.csv"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+def test_artifact_export_dir_is_owner_only():
+    """Each per-artifact export directory must be mode 0o700 on POSIX systems."""
+    env = _make_llm_sandbox_env_with_export("output.csv")
+    result = env.execute("print('ok')")
+
+    assert result.artifacts, "no artifacts returned"
+    export_dir = result.artifacts[0].path.parent
+    assert export_dir.exists(), "export dir was removed before stat"
+    mode = stat.S_IMODE(os.stat(export_dir).st_mode)
+    assert mode == 0o700, f"expected 0o700, got {oct(mode)}"
 
 
 # endregion
