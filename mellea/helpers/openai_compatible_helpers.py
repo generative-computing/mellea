@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
-from ..core.base import ImageUrlBlock
+from ..core.base import AudioBlock, AudioUrlBlock, ImageUrlBlock
 
 if TYPE_CHECKING:
     from ..core import Formatter, ModelToolCall
@@ -195,7 +195,7 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
 
     Returns:
         A dict with `"role"` and `"content"` fields. When the message carries
-        images, `"content"` is a list of text and image-URL dicts; otherwise it
+        images or audio, `"content"` is a list of content-part dicts; otherwise
         is a plain string. For tool-only assistant turns, `"content"` is `None`
         and `"tool_calls"` carries the structured call list. When content is
         present alongside tool calls, both keys are included.
@@ -203,20 +203,48 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     content = formatter.print(msg) if formatter else msg.content
-    if msg.images is not None:
-        img_list = []
-        for img in msg.images:
-            if isinstance(img, ImageUrlBlock):
-                url = img.value
-            else:
-                # ImageBlock: base64-encoded PNG
-                raw = str(img.value)
-                url = raw if raw.startswith("data:") else f"data:image/png;base64,{raw}"
-            img_list.append({"type": "image_url", "image_url": {"url": url}})
+    if msg.images is not None or msg.audio is not None:
+        parts: list[dict] = [{"type": "text", "text": content}]
+
+        if msg.images is not None:
+            for img in msg.images:
+                if isinstance(img, ImageUrlBlock):
+                    url = str(img.value)
+                else:
+                    # ImageBlock: base64-encoded PNG
+                    raw = str(img.value)
+                    url = (
+                        raw
+                        if raw.startswith("data:")
+                        else f"data:image/png;base64,{raw}"
+                    )
+                parts.append({"type": "image_url", "image_url": {"url": url}})
+
+        if msg.audio is not None:
+            for audio in msg.audio:
+                if isinstance(audio, AudioBlock):
+                    raw = str(audio.value)
+                    # Strip data URI prefix — OpenAI expects raw base64 in the `data` field.
+                    if "base64," in raw:
+                        raw = raw.split("base64,", 1)[1]
+                    parts.append(
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": raw, "format": audio.format},
+                        }
+                    )
+                elif isinstance(audio, AudioUrlBlock):
+                    # OpenAI Chat Completions does not support audio by URL;
+                    # AudioUrlBlock cannot be serialised to this schema.
+                    raise ValueError(
+                        f"AudioUrlBlock cannot be serialised to the OpenAI Chat Completions "
+                        f"audio schema (URL: {audio.value!r}). "
+                        "Fetch the audio and use AudioBlock with base64 data instead."
+                    )
 
         result: dict[str, Any] = {
             "role": msg.role,
-            "content": [{"type": "text", "text": content}, *img_list],
+            "content": parts,
         }
     else:
         result = {"role": msg.role, "content": content}
