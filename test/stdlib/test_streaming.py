@@ -20,6 +20,11 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
+from mellea.plugins.manager import (
+    disable_background_collection,
+    drain_background_tasks,
+    enable_background_collection,
+)
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -32,6 +37,26 @@ from mellea.stdlib.streaming import (
     StreamingDoneEvent,
     stream_with_chunking,
 )
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+async def _drain_fire_and_forget_tasks():
+    """Drain FIRE_AND_FORGET plugin tasks so they run before the loop closes.
+
+    STREAMING_END (in acomplete()) schedules a background task via the suite-wide
+    `fandf` acceptance plugin, then returns with no further await — the loop tears
+    down first and the coroutine is GC'd unawaited ("coroutine never awaited").
+    Collection is global, so disable it after to leave other test files untouched.
+    """
+    enable_background_collection()
+    yield
+    await drain_background_tasks()
+    disable_background_collection()
+
 
 # ---------------------------------------------------------------------------
 # StreamingMockBackend
