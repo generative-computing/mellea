@@ -20,6 +20,11 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
+from mellea.plugins.manager import (
+    disable_background_collection,
+    drain_background_tasks,
+    enable_background_collection,
+)
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -32,6 +37,26 @@ from mellea.stdlib.streaming import (
     StreamingDoneEvent,
     stream_with_chunking,
 )
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+async def _drain_fire_and_forget_tasks():
+    """Drain FIRE_AND_FORGET plugin tasks so they run before the loop closes.
+
+    STREAMING_END (in acomplete()) schedules a background task via the suite-wide
+    `fandf` acceptance plugin, then returns with no further await — the loop tears
+    down first and the coroutine is GC'd unawaited ("coroutine never awaited").
+    Collection is global, so disable it after to leave other test files untouched.
+    """
+    enable_background_collection()
+    yield
+    await drain_background_tasks()
+    disable_background_collection()
+
 
 # ---------------------------------------------------------------------------
 # StreamingMockBackend
@@ -1523,79 +1548,6 @@ async def test_error_event_on_stream_validate_exception() -> None:
 
     assert isinstance(evts[-1], CompletedEvent)
     assert evts[-1].success is False
-
-
-# ---------------------------------------------------------------------------
-# Metric helper calls
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_record_requirement_check_called_per_chunk() -> None:
-    """record_requirement_check is called once per chunk per active requirement."""
-    response = "One. Two. "
-    backend = StreamingMockBackend(response, token_size=3)
-    req = AlwaysUnknownReq()
-
-    with patch("mellea.stdlib.streaming.record_requirement_check") as mock_check:
-        result = await stream_with_chunking(
-            _action(), backend, _ctx(), requirements=[req], chunking="sentence"
-        )
-        await result.acomplete()
-
-    assert mock_check.call_count == 2
-    for call in mock_check.call_args_list:
-        assert call.args[0] == "AlwaysUnknownReq"
-
-
-@pytest.mark.asyncio
-async def test_record_requirement_failure_called_on_fail() -> None:
-    """record_requirement_failure is called with class name and reason on fail."""
-    response = "word " * 10
-    backend = StreamingMockBackend(response, token_size=3)
-    req = FailAfterWordsReq(threshold=2)
-
-    with patch("mellea.stdlib.streaming.record_requirement_failure") as mock_fail:
-        result = await stream_with_chunking(
-            _action(), backend, _ctx(), requirements=[req], chunking="word"
-        )
-        await result.acomplete()
-
-    assert mock_fail.call_count >= 1
-    first_call = mock_fail.call_args_list[0]
-    assert first_call.args[0] == "FailAfterWordsReq"
-    assert first_call.args[1] == ""  # reason not included in metric (cardinality)
-
-
-@pytest.mark.asyncio
-async def test_record_sampling_outcome_success() -> None:
-    """record_sampling_outcome called with success=True on normal completion."""
-    response = "One sentence. "
-    backend = StreamingMockBackend(response, token_size=4)
-
-    with patch("mellea.stdlib.streaming.record_sampling_outcome") as mock_outcome:
-        result = await stream_with_chunking(
-            _action(), backend, _ctx(), chunking="sentence"
-        )
-        await result.acomplete()
-
-    mock_outcome.assert_called_once_with("stream_with_chunking", success=True)
-
-
-@pytest.mark.asyncio
-async def test_record_sampling_outcome_failure_on_early_exit() -> None:
-    """record_sampling_outcome called with success=False on early exit."""
-    response = "word " * 20
-    backend = StreamingMockBackend(response, token_size=3)
-    req = FailAfterWordsReq(threshold=1)
-
-    with patch("mellea.stdlib.streaming.record_sampling_outcome") as mock_outcome:
-        result = await stream_with_chunking(
-            _action(), backend, _ctx(), requirements=[req], chunking="word"
-        )
-        await result.acomplete()
-
-    mock_outcome.assert_called_once_with("stream_with_chunking", success=False)
 
 
 # ---------------------------------------------------------------------------

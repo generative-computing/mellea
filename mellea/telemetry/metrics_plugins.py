@@ -32,6 +32,10 @@ if TYPE_CHECKING:
         SamplingIterationPayload,
         SamplingLoopEndPayload,
     )
+    from mellea.plugins.hooks.streaming import (
+        StreamingEndPayload,
+        StreamingEventPayload,
+    )
     from mellea.plugins.hooks.tool import ToolPostInvokePayload
     from mellea.plugins.hooks.validation import ValidationPostCheckPayload
 
@@ -208,6 +212,28 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
             exception_class=type(payload.exception).__name__,
         )
 
+    @hook("streaming_end", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_streaming_error_metrics(
+        self, payload: StreamingEndPayload, context: dict[str, Any]
+    ) -> None:
+        """Record error metrics when `stream_with_chunking` ends with an exception.
+
+        Args:
+            payload: Contains the exception plus the model and provider from
+                the underlying generation.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import classify_error, record_error
+
+        if payload.exception is None:
+            return
+        record_error(
+            error_type=classify_error(payload.exception),
+            model=payload.model or "unknown",
+            provider=payload.provider or "unknown",
+            exception_class=type(payload.exception).__name__,
+        )
+
 
 class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
     """Records estimated request cost metrics from generation outputs.
@@ -325,6 +351,20 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
 
         record_sampling_outcome(payload.strategy_name or "unknown", payload.success)
 
+    @hook("streaming_end", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_streaming_outcome(
+        self, payload: StreamingEndPayload, context: dict[str, Any]
+    ) -> None:
+        """Record the `stream_with_chunking` outcome when the orchestrator finishes.
+
+        Args:
+            payload: Contains the orchestrator's success flag.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_sampling_outcome
+
+        record_sampling_outcome("stream_with_chunking", payload.success)
+
 
 class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
     """Records requirement validation check and failure metrics.
@@ -358,6 +398,32 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
                     else None
                 ) or "LLM judgment"
                 record_requirement_failure(req_name, reason)
+
+    @hook("streaming_event", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_streaming_requirement_metrics(
+        self, payload: StreamingEventPayload, context: dict[str, Any]
+    ) -> None:
+        """Record per-chunk requirement metrics for `QuickCheckEvent`s.
+
+        Args:
+            payload: Contains the streaming `StreamEvent` and, for a
+                `QuickCheckEvent`, the active `requirements` in result order.
+            context: Plugin context (unused).
+        """
+        from mellea.stdlib.streaming import QuickCheckEvent
+        from mellea.telemetry.metrics import (
+            record_requirement_check,
+            record_requirement_failure,
+        )
+
+        ev = payload.event
+        if not isinstance(ev, QuickCheckEvent):
+            return
+        for req, pvr in zip(payload.requirements, ev.results):
+            req_name = type(req).__name__
+            record_requirement_check(req_name)
+            if pvr.success == "fail":
+                record_requirement_failure(req_name, pvr.reason or "")
 
 
 class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=56):

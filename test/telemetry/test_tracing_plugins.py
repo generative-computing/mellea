@@ -11,6 +11,7 @@ pytest.importorskip(
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
+from mellea.core.requirement import PartialValidationResult, ValidationResult
 from mellea.plugins.hooks.component import (
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
@@ -24,10 +25,24 @@ from mellea.plugins.hooks.generation import (
     GenerationPostCallPayload,
     GenerationPreCallPayload,
 )
+from mellea.plugins.hooks.streaming import (
+    StreamingEndPayload,
+    StreamingEventPayload,
+    StreamingStartPayload,
+)
+from mellea.stdlib.streaming import (
+    ChunkEvent,
+    ErrorEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamingDoneEvent,
+)
 from mellea.telemetry import tracing
 from mellea.telemetry.tracing_plugins import (
+    _CONTEXT_ATTACH_SUPPORTED,
     BackendTracingPlugin,
     ComponentTracingPlugin,
+    StreamingTracingPlugin,
 )
 from test.telemetry.conftest import reset_tracing_state
 
@@ -40,6 +55,11 @@ def backend_plugin():
 @pytest.fixture
 def component_plugin():
     return ComponentTracingPlugin()
+
+
+@pytest.fixture
+def streaming_plugin():
+    return StreamingTracingPlugin()
 
 
 @pytest.fixture
@@ -61,6 +81,9 @@ def disabled_tracing(monkeypatch):
 def _attrs(span: MagicMock) -> dict:
     """Collect `span.set_attribute(k, v)` calls into a dict."""
     return {c.args[0]: c.args[1] for c in span.set_attribute.call_args_list}
+
+
+# BackendTracingPlugin tests
 
 
 @pytest.mark.asyncio
@@ -556,10 +579,16 @@ async def test_nested_span_during_call_parents_under_backend_span(
     tracing._tracer_provider.force_flush()
     by_name = {s.name: s for s in exporter.get_finished_spans()}
 
-    assert by_name["nested-caller-task"].parent is not None
-    assert by_name["nested-caller-task"].parent.span_id == backend_span_id
-    assert by_name["nested-background-task"].parent is not None
-    assert by_name["nested-background-task"].parent.span_id == backend_span_id
+    if _CONTEXT_ATTACH_SUPPORTED:
+        assert by_name["nested-caller-task"].parent is not None
+        assert by_name["nested-caller-task"].parent.span_id == backend_span_id
+        assert by_name["nested-background-task"].parent is not None
+        assert by_name["nested-background-task"].parent.span_id == backend_span_id
+    else:
+        assert by_name["nested-caller-task"].parent is None, (
+            "nested spans should not parent under the backend span on Python <=3.11"
+        )
+        assert by_name["nested-background-task"].parent is None
 
 
 @pytest.mark.integration
@@ -599,6 +628,9 @@ async def test_sequential_backend_calls_produce_siblings(
             f"backend span {s.context.span_id:x} unexpectedly has parent "
             f"{s.parent.span_id:x} — context token detach is missing"
         )
+
+
+# ComponentTracingPlugin tests
 
 
 @pytest.mark.asyncio
@@ -768,3 +800,217 @@ async def test_action_pre_execute_no_op_with_empty_action_id(
     ):
         await component_plugin.on_component_pre_execute(pre, {})
     fake_tracer.start_span.assert_not_called()
+
+
+# StreamingTracingPlugin tests
+
+
+def _events(span: MagicMock) -> list[tuple[str, dict]]:
+    """Collect `span.add_event(name, attrs)` calls into a list."""
+    return [(c.args[0], c.args[1]) for c in span.add_event.call_args_list]
+
+
+async def _open_streaming_span(
+    streaming_plugin, fake_tracer, streaming_id: str
+) -> None:
+    """Fire streaming_start so a span is stashed under streaming_id."""
+    pre = StreamingStartPayload(streaming_id=streaming_id, chunking_strategy="x")
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await streaming_plugin.on_streaming_start(pre, {})
+
+
+@pytest.mark.asyncio
+async def test_streaming_start_starts_span_and_stashes_by_streaming_id(
+    streaming_plugin, enabled_tracing
+):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    payload = StreamingStartPayload(
+        streaming_id="sid-1",
+        has_requirements=True,
+        requirement_count=2,
+        chunking_strategy="SentenceChunker",
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await streaming_plugin.on_streaming_start(payload, {})
+
+    fake_tracer.start_span.assert_called_once_with("stream_with_chunking")
+    assert "sid-1" in tracing._in_flight_spans
+    fake_span.end.assert_not_called()
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.has_requirements"] is True
+    assert attrs["mellea.requirement_count"] == 2
+    assert attrs["mellea.chunking_strategy"] == "SentenceChunker"
+    # The correlation id is the in-flight key, not a span attribute.
+    assert "mellea.streaming_id" not in attrs
+
+
+@pytest.mark.asyncio
+async def test_streaming_end_records_completed_event_then_closes_span(
+    streaming_plugin, enabled_tracing
+):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+    await _open_streaming_span(streaming_plugin, fake_tracer, "sid-2")
+
+    end = StreamingEndPayload(
+        streaming_id="sid-2",
+        success=True,
+        model="gpt-4o",
+        provider="openai",
+        full_text_length=11,
+    )
+    await streaming_plugin.on_streaming_end(end, {})
+
+    fake_span.end.assert_called_once()
+    events = _events(fake_span)
+    assert any(name == "completed" for name, _ in events)
+    completed_attrs = next(attrs for name, attrs in events if name == "completed")
+    assert completed_attrs["success"] is True
+    assert completed_attrs["full_text_length"] == 11
+
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.full_text_length"] == 11
+    assert attrs["gen_ai.request.model"] == "gpt-4o"
+    assert attrs["gen_ai.provider.name"] == "openai"
+    assert "sid-2" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_streaming_end_validation_fail_marks_span_error_without_exception(
+    streaming_plugin, enabled_tracing
+):
+    """Validation-fail early-exit: span ERROR via failure_reason, no recorded exception."""
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+    await _open_streaming_span(streaming_plugin, fake_tracer, "sid-fail")
+
+    end = StreamingEndPayload(
+        streaming_id="sid-fail",
+        success=False,
+        failure_reason="Streaming validation failed: too short",
+        full_text_length=4,
+    )
+    await streaming_plugin.on_streaming_end(end, {})
+
+    fake_span.end.assert_called_once()
+    fake_span.set_status.assert_called_once()
+    fake_span.record_exception.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_streaming_end_with_exception_records_exception(
+    streaming_plugin, enabled_tracing
+):
+    """Exception outcome: span ERROR with the exception recorded."""
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+    await _open_streaming_span(streaming_plugin, fake_tracer, "sid-err")
+
+    exc = ValueError("boom")
+    end = StreamingEndPayload(
+        streaming_id="sid-err", success=False, exception=exc, model="m", provider="p"
+    )
+    await streaming_plugin.on_streaming_end(end, {})
+
+    fake_span.end.assert_called_once()
+    fake_span.record_exception.assert_called_once_with(exc)
+    assert "sid-err" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_streaming_event_records_mid_stream_events(
+    streaming_plugin, enabled_tracing
+):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+    await _open_streaming_span(streaming_plugin, fake_tracer, "sid-ev")
+
+    qc = QuickCheckEvent(
+        chunk_index=0, attempt=1, passed=True, results=[PartialValidationResult("pass")]
+    )
+    chunk = ChunkEvent(text="hello", chunk_index=0, attempt=1)
+    done = StreamingDoneEvent(attempt=1, full_text="hello world")
+    full_val = FullValidationEvent(
+        attempt=1, passed=True, results=[ValidationResult(result=True)]
+    )
+
+    for ev in (qc, chunk, done, full_val):
+        await streaming_plugin.on_streaming_event(
+            StreamingEventPayload(streaming_id="sid-ev", event=ev), {}
+        )
+
+    events = _events(fake_span)
+    names = [name for name, _ in events]
+    assert names == ["quick_check", "chunk", "streaming_done", "full_validation"]
+    qc_attrs = events[0][1]
+    assert qc_attrs["chunk_index"] == 0
+    assert qc_attrs["passed"] is True
+    assert qc_attrs["requirement_count"] == 1
+    chunk_attrs = events[1][1]
+    assert chunk_attrs["text_length"] == 5
+
+    # streaming_event never closes the span.
+    fake_span.end.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_streaming_event_records_error_event(streaming_plugin, enabled_tracing):
+    """The `error` span event is recorded by streaming_event (the orchestrator emits ErrorEvent)."""
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+    await _open_streaming_span(streaming_plugin, fake_tracer, "sid-e")
+
+    error_event = ErrorEvent(exception_type="ValueError", detail="boom")
+    await streaming_plugin.on_streaming_event(
+        StreamingEventPayload(streaming_id="sid-e", event=error_event), {}
+    )
+
+    events = _events(fake_span)
+    assert any(name == "error" for name, _ in events)
+    error_attrs = next(attrs for name, attrs in events if name == "error")
+    assert error_attrs["exception_type"] == "ValueError"
+    assert error_attrs["detail"] == "boom"
+    fake_span.end.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_streaming_event_skipped_when_span_not_in_flight(
+    streaming_plugin, enabled_tracing
+):
+    qc = QuickCheckEvent(chunk_index=0, attempt=1, passed=True, results=[])
+    # No matching start — _in_flight_spans is empty for this id; should be a no-op.
+    await streaming_plugin.on_streaming_event(
+        StreamingEventPayload(streaming_id="sid-missing", event=qc), {}
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_start_end_skip_when_streaming_id_empty(
+    streaming_plugin, enabled_tracing
+):
+    """Empty streaming_id is a no-op so plugins don't break unrelated callers."""
+    fake_tracer = MagicMock()
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await streaming_plugin.on_streaming_start(
+            StreamingStartPayload(streaming_id=""), {}
+        )
+    fake_tracer.start_span.assert_not_called()
+
+    await streaming_plugin.on_streaming_end(
+        StreamingEndPayload(streaming_id="", success=True), {}
+    )

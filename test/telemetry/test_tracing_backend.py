@@ -1,8 +1,13 @@
 """End-to-end tests for backend tracing with Gen-AI semantic conventions."""
 
+import asyncio
+from unittest.mock import MagicMock, patch
+
+import ollama
 import pytest
 
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
+from mellea.backends.model_options import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.plugins.manager import (
     disable_background_collection,
@@ -26,11 +31,9 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
 
-pytestmark = [
-    pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
-    pytest.mark.e2e,
-    pytest.mark.ollama,
-]
+pytestmark = pytest.mark.skipif(
+    not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -76,6 +79,77 @@ def span_exporter():
     disable_background_collection()
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_streaming_span_creates_and_closes_span(span_exporter):
+    """Streaming backend call creates a chat span that closes after the stream completes.
+
+    Uses a mocked Ollama client so no server is needed.  Verifies the core
+    TracingPlugin invariant: the span must remain open for the full duration of
+    streaming and close only once all chunks are consumed.
+    """
+
+    async def fake_chat_stream(*args, **kwargs):
+        for content in ["1", " 2", " 3"]:
+            await asyncio.sleep(0.05)
+            yield ollama.ChatResponse(
+                model="test-model",
+                created_at=None,
+                message=ollama.Message(role="assistant", content=content),
+                done=False,
+            )
+        yield ollama.ChatResponse(
+            model="test-model",
+            created_at=None,
+            message=ollama.Message(role="assistant", content=""),
+            done=True,
+            eval_count=10,
+            prompt_eval_count=5,
+        )
+
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client"),
+        patch("mellea.backends.ollama.ollama.AsyncClient") as mock_async_client_cls,
+    ):
+        mock_async_instance = MagicMock()
+        mock_async_instance.chat.side_effect = fake_chat_stream
+        mock_async_client_cls.return_value = mock_async_instance
+
+        backend = OllamaModelBackend(model_id="test-model")
+        ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
+
+        mot, _ = await backend.generate_from_context(
+            Message(role="assistant", content=""),
+            ctx,
+            model_options={ModelOption.STREAM: True},
+        )
+
+        await mot.astream()
+        await mot.avalue()
+        await drain_background_tasks()
+
+    trace.get_tracer_provider().force_flush()
+
+    spans = span_exporter.get_finished_spans()
+    backend_span = next((s for s in spans if s.name == "chat"), None)
+
+    assert backend_span is not None, "Backend span not found"
+    assert backend_span.end_time > backend_span.start_time, (
+        "Span must have nonzero duration"
+    )
+
+    span_duration_s = (backend_span.end_time - backend_span.start_time) / 1e9
+    # fake stream is 3 chunks x 50 ms ~= 150 ms; >= 0.1 confirms span survived past first chunk
+    assert span_duration_s >= 0.1, (
+        f"Span closed too early — duration {span_duration_s:.3f}s is shorter than "
+        "the streaming delay, suggesting the span did not stay open for the full stream"
+    )
+
+
+@pytest.mark.e2e
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_span_duration_captures_async_operation(span_exporter):
     """Test that span duration includes the full async operation time."""
@@ -113,6 +187,8 @@ async def test_span_duration_captures_async_operation(span_exporter):
     )
 
 
+@pytest.mark.e2e
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_context_propagation_parent_child(span_exporter):
     """Test that parent-child span relationships are maintained."""
@@ -161,6 +237,8 @@ async def test_context_propagation_parent_child(span_exporter):
     )
 
 
+@pytest.mark.e2e
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_token_usage_recorded_after_completion(span_exporter):
     """Test that token usage metrics are recorded after async completion."""
@@ -209,6 +287,8 @@ async def test_token_usage_recorded_after_completion(span_exporter):
         )
 
 
+@pytest.mark.e2e
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_span_not_closed_prematurely(span_exporter):
     """Test that spans are not closed before async operations complete."""
@@ -244,6 +324,8 @@ async def test_span_not_closed_prematurely(span_exporter):
     )
 
 
+@pytest.mark.e2e
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_multiple_generations_separate_spans(span_exporter):
     """Test that multiple generations create separate spans."""
@@ -277,41 +359,46 @@ async def test_multiple_generations_separate_spans(span_exporter):
     assert len(span_ids) >= 2, "Spans should have unique IDs"
 
 
-@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.ollama
 @pytest.mark.slow
-async def test_streaming_span_duration(span_exporter):
-    """Test that streaming operations have accurate span durations."""
+@pytest.mark.asyncio
+async def test_stream_with_chunking_e2e(span_exporter):
+    """A real `stream_with_chunking` run wraps the backend `chat` span and times it.
 
-    from mellea.backends.model_options import ModelOption
+    Covers the streaming path end to end against a live model: the
+    `stream_with_chunking` span is the root, the backend `chat` span nests under
+    it, and that `chat` span stays open across the full stream.
+    """
+    from mellea.stdlib.streaming import stream_with_chunking
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_1_3B.ollama_name)  # type: ignore
-    ctx = SimpleContext()
-    ctx = ctx.add(Message(role="user", content="Count to 3"))
+    ctx = SimpleContext().add(Message(role="user", content="Count to 3"))
 
-    mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""),
-        ctx,
-        model_options={ModelOption.STREAM: True},
+    result = await stream_with_chunking(
+        Message(role="assistant", content=""), backend, ctx
     )
-
-    # Consume the stream
-    await mot.astream()
-    await mot.avalue()
+    async for _ in result.astream():
+        pass
+    await result.acomplete()
     await drain_background_tasks()
 
-    # Get the recorded span
+    from mellea.telemetry.tracing_plugins import _CONTEXT_ATTACH_SUPPORTED
+
     spans = span_exporter.get_finished_spans()
-    backend_span = None
-    for span in spans:
-        if span.name == "chat":  # Gen-AI convention
-            backend_span = span
-            break
+    streaming_span = next(s for s in spans if s.name == "stream_with_chunking")
+    chat_span = next(s for s in spans if s.name == "chat")
 
-    assert backend_span is not None, "Backend span not found"
+    assert streaming_span.parent is None, "streaming span should be a root"
+    if not _CONTEXT_ATTACH_SUPPORTED:
+        assert chat_span.parent is None, "chat span should be flat on Python <=3.11"
+        return
+    assert chat_span.parent is not None
+    assert chat_span.parent.span_id == streaming_span.context.span_id, (
+        "chat span should nest under stream_with_chunking"
+    )
 
-    span_duration_ns = backend_span.end_time - backend_span.start_time
-    span_duration_s = span_duration_ns / 1e9
-
-    assert span_duration_s >= 0.1, (
-        f"Span duration too short for streaming: {span_duration_s}s"
+    chat_duration_s = (chat_span.end_time - chat_span.start_time) / 1e9
+    assert chat_duration_s >= 0.1, (
+        f"chat span duration too short for streaming: {chat_duration_s}s"
     )

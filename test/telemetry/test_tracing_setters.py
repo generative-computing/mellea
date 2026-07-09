@@ -2,14 +2,9 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
-pytest.importorskip(
-    "opentelemetry", reason="opentelemetry not installed — install mellea[telemetry]"
-)
-
 from mellea.core.base import GenerationMetadata
 from mellea.telemetry._tracing_setters import (
+    set_attribute_safe,
     set_conversation_id,
     set_mellea_attrs,
     set_request_attrs,
@@ -20,6 +15,48 @@ from mellea.telemetry._tracing_setters import (
 
 def _attrs(span: MagicMock) -> dict:
     return {c.args[0]: c.args[1] for c in span.set_attribute.call_args_list}
+
+
+# set_attribute_safe
+
+
+def test_set_attribute_safe_none_value_no_op():
+    span = MagicMock()
+    set_attribute_safe(span, "key", None)
+    span.set_attribute.assert_not_called()
+
+
+def test_set_attribute_safe_bool():
+    span = MagicMock()
+    set_attribute_safe(span, "flag", True)
+    span.set_attribute.assert_called_once_with("flag", True)
+
+
+def test_set_attribute_safe_int():
+    span = MagicMock()
+    set_attribute_safe(span, "count", 42)
+    span.set_attribute.assert_called_once_with("count", 42)
+
+
+def test_set_attribute_safe_str():
+    span = MagicMock()
+    set_attribute_safe(span, "name", "hello")
+    span.set_attribute.assert_called_once_with("name", "hello")
+
+
+def test_set_attribute_safe_list_converted_to_string_list():
+    span = MagicMock()
+    set_attribute_safe(span, "items", [1, 2, 3])
+    span.set_attribute.assert_called_once_with("items", ["1", "2", "3"])
+
+
+def test_set_attribute_safe_unsupported_type_stringified():
+    span = MagicMock()
+    set_attribute_safe(span, "obj", {"nested": "dict"})
+    span.set_attribute.assert_called_once()
+    call_args = span.set_attribute.call_args
+    assert call_args.args[0] == "obj"
+    assert isinstance(call_args.args[1], str)
 
 
 # set_request_attrs

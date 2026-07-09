@@ -726,7 +726,7 @@ async def aact(
         else:
             return result, new_ctx
 
-    except Exception as exc:
+    except BaseException as exc:
         # --- component_post_error hook ---
         if has_plugins(HookType.COMPONENT_POST_ERROR):
             from ..plugins.hooks.component import ComponentPostErrorPayload

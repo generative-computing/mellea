@@ -6,14 +6,7 @@ pytest.importorskip(
     "opentelemetry", reason="opentelemetry not installed — install mellea[telemetry]"
 )
 
-from mellea.telemetry import (
-    is_content_tracing_enabled,
-    is_tracing_enabled,
-    set_span_attribute,
-    set_span_error,
-    trace_application,
-    tracing,
-)
+from mellea.telemetry import is_content_tracing_enabled, is_tracing_enabled, tracing
 from mellea.telemetry.tracing import get_backend_tracer
 from test.telemetry.conftest import reset_tracing_state
 
@@ -108,26 +101,3 @@ def test_otlp_falls_back_to_generic_endpoint(monkeypatch, recwarn):
         w for w in recwarn.list if "no endpoint is configured" in str(w.message)
     ]
     assert no_endpoint_warnings == []
-
-
-def test_trace_application_context_manager():
-    """Test that trace_application works as a context manager."""
-    reset_tracing_state()
-
-    # Should not raise even when tracing is disabled
-    with trace_application("test_span", test_attr="value") as span:
-        # Span will be None when tracing is disabled
-        assert span is None or hasattr(span, "set_attribute")
-
-
-def test_set_span_attribute_with_none_span():
-    """Test that set_span_attribute handles None span gracefully."""
-    # Should not raise when span is None
-    set_span_attribute(None, "key", "value")
-
-
-def test_set_span_error_with_none_span():
-    """Test that set_span_error handles None span gracefully."""
-    # Should not raise when span is None
-    exception = ValueError("test error")
-    set_span_error(None, exception)
