@@ -32,6 +32,7 @@ from ..helpers import (
     ClientCache,
     get_current_event_loop,
     send_to_queue,
+    should_replay_reasoning,
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
@@ -422,7 +423,8 @@ class OllamaModelBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-        for m in messages:
+        replay_flags = should_replay_reasoning(messages, self._provider)
+        for m, replay in zip(messages, replay_flags):
             if m.images is not None:
                 for img in m.images:
                     if isinstance(img, ImageUrlBlock):
@@ -435,17 +437,20 @@ class OllamaModelBackend(FormatterBackend):
                     "OllamaModelBackend does not support audio (AudioBlock/AudioUrlBlock). "
                     "Remove audio blocks before passing messages to Ollama."
                 )
-            conversation.append(
-                {
-                    "role": m.role,
-                    "content": self.formatter.print(m),
-                    "images": (
-                        _strip_data_uri_prefix([str(img.value) for img in m.images])
-                        if m.images
-                        else None
-                    ),
-                }
-            )
+            message_dict: dict[str, Any] = {
+                "role": m.role,
+                "content": self.formatter.print(m),
+                "images": (
+                    _strip_data_uri_prefix([str(img.value) for img in m.images])
+                    if m.images
+                    else None
+                ),
+            }
+            # Ollama's native SDK carries reasoning under the `thinking` key (see
+            # `chunk.message.thinking` on capture), not `reasoning_content`.
+            if replay and m.thinking:
+                message_dict["thinking"] = m.thinking
+            conversation.append(message_dict)
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()

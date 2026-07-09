@@ -43,6 +43,7 @@ from ..helpers import (
     message_to_openai_message,
     messages_to_docs,
     send_to_queue,
+    should_replay_reasoning,
 )
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
@@ -633,6 +634,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         conversation: list[dict] = []
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
+        # Intrinsic/adapter calls are single-shot evaluations over a rewritten
+        # conversation, not multi-turn generation, so reasoning is never replayed
+        # here (no `replay_reasoning=`) — unlike the chat path in
+        # `_generate_from_context`, which applies `should_replay_reasoning`.
         conversation.extend([message_to_openai_message(m) for m in messages])
 
         docs = messages_to_docs(messages)
@@ -859,8 +864,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
+        replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
-            [message_to_openai_message(m, self.formatter) for m in messages]
+            [
+                message_to_openai_message(m, self.formatter, replay_reasoning=replay)
+                for m, replay in zip(messages, replay_flags)
+            ]
         )
 
         extra_params: dict[str, Any] = {}

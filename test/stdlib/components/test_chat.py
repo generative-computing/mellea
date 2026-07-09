@@ -15,7 +15,11 @@ from mellea.core import (
 )
 from mellea.formatters.chat_formatter import ChatFormatter
 from mellea.formatters.template_formatter import TemplateFormatter
-from mellea.helpers import message_to_openai_message, messages_to_docs
+from mellea.helpers import (
+    message_to_openai_message,
+    messages_to_docs,
+    should_replay_reasoning,
+)
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.chat import (
     ToolMessage,
@@ -67,6 +71,16 @@ def test_message_basic_fields():
     assert msg.content == "hello"
     assert msg._images is None
     assert msg._docs is None
+
+
+def test_message_thinking_defaults_none():
+    msg = Message("assistant", "hello")
+    assert msg.thinking is None
+
+
+def test_message_thinking_stored():
+    msg = Message("assistant", "hello", thinking="step-by-step reasoning")
+    assert msg.thinking == "step-by-step reasoning"
 
 
 def test_message_content_block_created():
@@ -226,6 +240,76 @@ def test_parse_openai_streamed_choice_shape():
     assert result.content == "streamed answer"
 
 
+# --- Message._parse — reasoning (thinking) population ---
+
+
+def test_parse_plain_carries_thinking():
+    """Fallback branch (no provider) copies mot.thinking onto the parsed Message."""
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="answer")
+    mot.thinking = "let me think"
+    result = msg._parse(mot)
+    assert result.content == "answer"
+    assert result.thinking == "let me think"
+
+
+def test_parse_openai_carries_thinking():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    mot.thinking = "openai reasoning"
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "choices": [{"message": {"role": "assistant", "content": "openai answer"}}]
+        },
+    )
+    result = msg._parse(mot)
+    assert result.content == "openai answer"
+    assert result.thinking == "openai reasoning"
+
+
+def test_parse_ollama_carries_thinking():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    mot.thinking = "ollama reasoning"
+    fake_response = type(
+        "Resp",
+        (),
+        {
+            "message": type(
+                "Msg", (), {"role": "assistant", "content": "ollama answer"}
+            )()
+        },
+    )()
+    mot.raw = RawProviderResponse(provider="ollama", response=fake_response)
+    result = msg._parse(mot)
+    assert result.content == "ollama answer"
+    assert result.thinking == "ollama reasoning"
+
+
+def test_parse_ollama_tool_role_drops_thinking():
+    """A role='tool' recovery must not carry reasoning onto a tool message."""
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    mot.thinking = "should not appear"
+    fake_response = type(
+        "Resp",
+        (),
+        {"message": type("Msg", (), {"role": "tool", "content": "tool output"})()},
+    )()
+    mot.raw = RawProviderResponse(provider="ollama", response=fake_response)
+    result = msg._parse(mot)
+    assert result.role == "tool"
+    assert result.thinking is None
+
+
+def test_parse_no_thinking_stays_none():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="answer")  # mot.thinking defaults to None
+    result = msg._parse(mot)
+    assert result.thinking is None
+
+
 # --- Message._parse — with tool calls ---
 
 
@@ -362,6 +446,81 @@ def test_parse_tool_calls_fallback_uses_value():
     assert result.content == "<tool_call>fn()</tool_call>"
 
 
+# --- Message._parse — reasoning on the tool-issuing assistant turn ---
+#
+# The replay policy round-trips reasoning precisely on the turn that issued a
+# tool call, so `_parse` must carry `mot.thinking` onto that assistant Message.
+# These drive the tool-call branch (mirroring the tool-call tests above) and
+# assert `thinking` survives — the round-trip has nothing to replay otherwise.
+
+
+def test_parse_tool_calls_ollama_carries_thinking():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v", tool_calls={"some_fn": None})
+    mot.thinking = "tool-turn reasoning"
+    fake_calls = [{"name": "some_fn"}]
+    fake_response = type(
+        "Resp",
+        (),
+        {"message": type("Msg", (), {"role": "assistant", "tool_calls": fake_calls})()},
+    )()
+    mot.raw = RawProviderResponse(provider="ollama", response=fake_response)
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.thinking == "tool-turn reasoning"
+
+
+def test_parse_tool_calls_openai_carries_thinking():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot.thinking = "tool-turn reasoning"
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "tool_calls": [{"function": {"name": "fn"}}],
+                    }
+                }
+            ]
+        },
+    )
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.thinking == "tool-turn reasoning"
+
+
+def test_parse_tool_calls_openai_streamed_carries_thinking():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot.thinking = "tool-turn reasoning"
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "finish_reason": "tool_calls",
+            "message": {
+                "role": "assistant",
+                "tool_calls": [{"function": {"name": "fn"}}],
+            },
+        },
+    )
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.thinking == "tool-turn reasoning"
+
+
+def test_parse_tool_calls_fallback_carries_thinking():
+    """HF/unknown fallback also carries reasoning onto the tool-issuing turn."""
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="<tool_call>fn()</tool_call>", tool_calls={"fn": None})
+    mot.thinking = "tool-turn reasoning"
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.thinking == "tool-turn reasoning"
+
+
 # --- ToolMessage ---
 
 
@@ -421,6 +580,73 @@ def test_as_chat_history_with_parsed_mot():
     history = as_chat_history(ctx)
     assert len(history) == 2
     assert history[1].content == "reply"
+
+
+def test_as_chat_history_carries_thinking():
+    """Reasoning on a parsed assistant Message survives the chat-history round-trip."""
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    mot = ModelOutputThunk(value="reply")
+    mot.parsed_repr = Message("assistant", "reply", thinking="my reasoning")
+    ctx = ctx.add(mot)
+    history = as_chat_history(ctx)
+    assert history[1].thinking == "my reasoning"
+
+
+# --- should_replay_reasoning policy ---
+
+
+def test_replay_policy_strips_plain_assistant_turn():
+    msgs = [
+        Message("user", "q"),
+        Message("assistant", "a", thinking="t"),
+        Message("user", "q2"),
+    ]
+    assert should_replay_reasoning(msgs, "openai") == [False, False, False]
+
+
+def test_replay_policy_round_trips_after_tool_call():
+    """Assistant turn immediately followed by a tool result is replayed."""
+    msgs = [
+        Message("user", "q"),
+        Message("assistant", "a", thinking="tool reasoning"),
+        Message("tool", "tool output"),
+    ]
+    assert should_replay_reasoning(msgs, "openai") == [False, True, False]
+
+
+def test_replay_policy_assistant_without_thinking_is_false():
+    msgs = [
+        Message("user", "q"),
+        Message("assistant", "a"),  # no thinking
+        Message("tool", "out"),
+    ]
+    assert should_replay_reasoning(msgs, "openai") == [False, False, False]
+
+
+def test_replay_policy_none_provider_uses_consensus():
+    msgs = [Message("assistant", "a", thinking="t"), Message("tool", "out")]
+    assert should_replay_reasoning(msgs, None) == [True, False]
+
+
+def test_replay_policy_mixed_history():
+    """Only the tool-preceding assistant turn is replayed in a multi-turn history."""
+    msgs = [
+        Message("user", "q1"),
+        Message("assistant", "a1", thinking="plain reasoning"),  # plain → strip
+        Message("user", "q2"),
+        Message("assistant", "a2", thinking="tool reasoning"),  # before tool → keep
+        Message("tool", "tool result"),
+        Message("assistant", "a3", thinking="final reasoning"),  # plain → strip
+    ]
+    assert should_replay_reasoning(msgs, "ollama") == [
+        False,
+        False,
+        False,
+        True,
+        False,
+        False,
+    ]
 
 
 # --- as_generic_chat_history ---
@@ -640,6 +866,37 @@ class TestMessageDocumentRendering:
         assert result["role"] == "user"
         assert result["content"] == "main content"
         assert "supporting text" not in result["content"]
+
+    def test_message_to_openai_message_strips_reasoning_by_default(self):
+        """Default (replay_reasoning=False) never emits reasoning — no regression."""
+        msg = Message("assistant", "answer", thinking="secret reasoning")
+        result = message_to_openai_message(msg)
+        assert "reasoning_content" not in result
+
+    def test_message_to_openai_message_emits_reasoning_when_replayed(self):
+        msg = Message("assistant", "answer", thinking="secret reasoning")
+        result = message_to_openai_message(msg, replay_reasoning=True)
+        assert result["reasoning_content"] == "secret reasoning"
+
+    def test_message_to_openai_message_replay_without_thinking_is_noop(self):
+        """replay_reasoning=True but no thinking present emits no key."""
+        msg = Message("assistant", "answer")
+        result = message_to_openai_message(msg, replay_reasoning=True)
+        assert "reasoning_content" not in result
+
+    def test_message_to_openai_message_replay_with_images(self):
+        """Reasoning is emitted alongside multimodal content lists too."""
+        from mellea.core import ImageUrlBlock
+
+        msg = Message(
+            "assistant",
+            "answer",
+            images=[ImageUrlBlock("https://example.com/a.png")],
+            thinking="visual reasoning",
+        )
+        result = message_to_openai_message(msg, replay_reasoning=True)
+        assert isinstance(result["content"], list)
+        assert result["reasoning_content"] == "visual reasoning"
 
     def test_print_message_with_docs_renders_document_format(self, formatter):
         """Verify exact rendered format of documents within a Message."""
