@@ -108,10 +108,15 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: release
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.CI_APP_ID }}
+          private-key: ${{ secrets.CI_PRIVATE_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
           persist-credentials: false
       - name: Install uv and set the python version
@@ -127,7 +132,7 @@ jobs:
       - name: Bump version on release branch
         if: inputs.bump_type != 'none'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           BUMP_TYPE: ${{ inputs.bump_type }}
           REF_NAME: ${{ github.ref_name }}
@@ -137,7 +142,7 @@ jobs:
           git push origin "${REF_NAME}"
       - name: Run release script
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_BRANCH: ${{ github.ref_name }}
           ALLOW_MAIN_RELEASE: ${{ inputs.allow_main_release && '1' || '0' }}
           CHGLOG_FILE: CHANGELOG.md
@@ -155,10 +160,15 @@ jobs:
       contents: write
       actions: write
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.CI_APP_ID }}
+          private-key: ${{ secrets.CI_PRIVATE_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -187,10 +197,7 @@ jobs:
           git commit -m "docs: snapshot ${VERSION}"
           git push origin main
       - name: Trigger docs deploy from snapshot
-        # A GITHUB_TOKEN push does not trigger workflow runs by design, so we
-        # dispatch docs-publish.yml explicitly. workflow_dispatch is exempt from
-        # the no-re-trigger rule.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
         run: gh workflow run docs-publish.yml --ref main --field release_tag="v${VERSION}"

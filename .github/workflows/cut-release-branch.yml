@@ -3,9 +3,7 @@ name: "Cut release branch"
 # Creates a release/vX.Y branch from main and bumps main to the next minor's
 # .dev0. See RELEASE.md for the full workflow.
 #
-# Must be dispatched from the GitHub Actions UI. `github-actions[bot]` needs
-# bypass rights on main's branch-protection ruleset to push the main-side
-# dev bump.
+# Must be dispatched from the GitHub Actions UI.
 
 on:
   workflow_dispatch:
@@ -34,10 +32,15 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: release
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.CI_APP_ID }}
+          private-key: ${{ secrets.CI_PRIVATE_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
       - name: Install uv and set the python version
@@ -50,7 +53,7 @@ jobs:
         env:
           CONFIRM_MINOR: ${{ inputs.confirm_minor }}
           # Env vars for the inline rc0 release-publish step:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           CHGLOG_FILE: CHANGELOG.md
           PUBLISH_PRERELEASES: ${{ vars.PUBLISH_PRERELEASES || 'false' }}
