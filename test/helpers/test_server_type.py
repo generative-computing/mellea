@@ -45,7 +45,10 @@ def test_version_above_threshold(mock_get):
     mock_get.return_value = _mock_version_response("0.16.0")
     assert is_vllm_server_with_structured_output(BASE_URL, HEADERS) is True
     mock_get.assert_called_once_with(
-        "http://localhost:8000/version", headers=HEADERS, timeout=10
+        "http://localhost:8000/version",
+        headers=HEADERS,
+        timeout=5,
+        allow_redirects=False,
     )
 
 
@@ -144,7 +147,10 @@ def test_url_strips_v1_suffix(mock_get):
     mock_get.return_value = _mock_version_response("0.14.0")
     is_vllm_server_with_structured_output("http://myserver:9000/v1", HEADERS)
     mock_get.assert_called_once_with(
-        "http://myserver:9000/version", headers=HEADERS, timeout=10
+        "http://myserver:9000/version",
+        headers=HEADERS,
+        timeout=5,
+        allow_redirects=False,
     )
 
 
@@ -153,7 +159,10 @@ def test_url_strips_v1_slash_suffix(mock_get):
     mock_get.return_value = _mock_version_response("0.14.0")
     is_vllm_server_with_structured_output("http://myserver:9000/v1/", HEADERS)
     mock_get.assert_called_once_with(
-        "http://myserver:9000/version", headers=HEADERS, timeout=10
+        "http://myserver:9000/version",
+        headers=HEADERS,
+        timeout=5,
+        allow_redirects=False,
     )
 
 
@@ -162,8 +171,57 @@ def test_url_without_v1(mock_get):
     mock_get.return_value = _mock_version_response("0.14.0")
     is_vllm_server_with_structured_output("http://myserver:9000", HEADERS)
     mock_get.assert_called_once_with(
-        "http://myserver:9000/version", headers=HEADERS, timeout=10
+        "http://myserver:9000/version",
+        headers=HEADERS,
+        timeout=5,
+        allow_redirects=False,
     )
+
+
+# --- SSRF protection: link-local / cloud metadata hosts ---
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/v1",  # cloud metadata endpoint
+        "http://169.254.169.254:8000/v1",
+        "http://169.254.0.1/v1",  # link-local range
+        "http://[fe80::1]/v1",  # IPv6 link-local
+    ],
+)
+@patch("mellea.helpers.server_type.requests.get")
+def test_link_local_host_blocked(mock_get, url):
+    """Link-local / metadata endpoints must be denied before any request."""
+    assert is_vllm_server_with_structured_output(url, HEADERS) is False
+    mock_get.assert_not_called()
+
+
+@patch("mellea.helpers.server_type.socket.getaddrinfo")
+@patch("mellea.helpers.server_type.requests.get")
+def test_hostname_resolving_to_link_local_blocked(mock_get, mock_getaddrinfo):
+    """A hostname that resolves to a link-local address must be denied."""
+    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("169.254.169.254", 0))]
+    assert (
+        is_vllm_server_with_structured_output("http://metadata.internal/v1", HEADERS)
+        is False
+    )
+    mock_get.assert_not_called()
+
+
+@patch("mellea.helpers.server_type.socket.getaddrinfo")
+@patch("mellea.helpers.server_type.requests.get")
+def test_unresolvable_host_not_blocked(mock_get, mock_getaddrinfo):
+    """An unresolvable host is not treated as link-local; request still attempted."""
+    import socket as _socket
+
+    mock_getaddrinfo.side_effect = _socket.gaierror("name resolution failed")
+    mock_get.return_value = _mock_version_response("0.14.0")
+    assert (
+        is_vllm_server_with_structured_output("http://unresolvable.example/v1", HEADERS)
+        is True
+    )
+    mock_get.assert_called_once()
 
 
 if __name__ == "__main__":
