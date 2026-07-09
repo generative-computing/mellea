@@ -56,6 +56,12 @@ def _is_link_local_host(hostname: str) -> bool:
     is caught, not just literal IPs. Unresolvable hosts are treated as not
     link-local (the request will fail on its own).
 
+    This is a resolve-then-fetch check: `requests` resolves the host again
+    independently, so a hostname that rebinds between the two lookups (DNS
+    rebinding / TOCTOU) is not covered. Acceptable for a developer-supplied
+    `base_url`. Scoped to link-local per #1246 — provider-specific metadata
+    addresses outside that range (e.g. Alibaba `100.100.100.200`) are not caught.
+
     Args:
         hostname: The hostname or IP literal to check.
 
@@ -108,7 +114,12 @@ def is_vllm_server_with_structured_output(
             base_url.removesuffix("/v1").removesuffix("/v1/") + "/version"
         )
 
-        version_response = requests.get(version_endpoint, headers=headers, timeout=5)
+        # Disallow redirects: a benign host could 302 to a link-local address
+        # (e.g. 169.254.169.254), which requests would otherwise follow and
+        # defeat the guard above. The /version probe should not redirect.
+        version_response = requests.get(
+            version_endpoint, headers=headers, timeout=5, allow_redirects=False
+        )
         if not version_response.ok:
             return False
 
