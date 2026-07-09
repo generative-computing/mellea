@@ -8,7 +8,9 @@ introduced in vLLM ≥ 0.12.0. Used by the OpenAI-compatible backend to choose b
 `guided_json` and `structured_outputs` request formats.
 """
 
+import ipaddress
 import json
+import socket
 from collections.abc import Mapping
 from enum import Enum
 from typing import Any
@@ -45,6 +47,36 @@ def _server_type(url: str) -> _ServerType:
 VLLM_VERSION_STRUCTURED_OUTPUTS = Version("v0.12.0")
 
 
+def _is_link_local_host(hostname: str) -> bool:
+    """Return True if `hostname` resolves to a link-local address.
+
+    Link-local ranges (IPv4 `169.254.0.0/16`, IPv6 `fe80::/10`) include the
+    cloud metadata endpoint `169.254.169.254`, which is a common SSRF target.
+    Resolves the hostname first so that a name mapping to a link-local address
+    is caught, not just literal IPs. Unresolvable hosts are treated as not
+    link-local (the request will fail on its own).
+
+    Args:
+        hostname: The hostname or IP literal to check.
+
+    Returns:
+        True if the host resolves to a link-local address, False otherwise.
+    """
+    try:
+        addrinfos = socket.getaddrinfo(hostname, None)
+    except (socket.gaierror, UnicodeError):
+        return False
+
+    for family, _, _, _, sockaddr in addrinfos:
+        try:
+            addr = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            continue
+        if addr.is_link_local:
+            return True
+    return False
+
+
 def is_vllm_server_with_structured_output(
     base_url: str, headers: Mapping[str, Any]
 ) -> bool:
@@ -64,13 +96,19 @@ def is_vllm_server_with_structured_output(
     # vllm_provider_response = requests.get(vllm_provider_endpoint)
 
     try:
+        # Deny requests to link-local / cloud metadata endpoints (e.g.
+        # 169.254.169.254) before probing to avoid SSRF against them.
+        hostname = urlparse(base_url).hostname
+        if hostname is not None and _is_link_local_host(hostname):
+            return False
+
         # There's some arbitrariness in vllm endpoints. Best we can do is ensure the `/v1` that is required
         # to come before the chat and completions endpoints is removed.
         version_endpoint = (
             base_url.removesuffix("/v1").removesuffix("/v1/") + "/version"
         )
 
-        version_response = requests.get(version_endpoint, headers=headers, timeout=10)
+        version_response = requests.get(version_endpoint, headers=headers, timeout=5)
         if not version_response.ok:
             return False
 
