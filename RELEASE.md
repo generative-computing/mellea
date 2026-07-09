@@ -175,13 +175,15 @@ on the [`PUBLISH_PRERELEASES`](#the-publish_prereleases-flag) flag.
 
 ## Branch protection
 
-All three write-capable workflows authenticate via `secrets.GITHUB_TOKEN`,
-declaring scopes via inline `permissions:` blocks. The `GITHUB_TOKEN`
-identity is `github-actions[bot]`, configured as a bypass actor on the
-`main` and `release/**` rulesets so workflows can push directly:
+All three write-capable workflows authenticate via a token minted from the
+**mellea-auto-release** GitHub App (`vars.CI_APP_ID` / `secrets.CI_PRIVATE_KEY`),
+configured as a bypass actor on the `main` and `release/**` rulesets so
+workflows can push directly:
 
 - `main`: `cut-release-branch` pushes the `X.(Y+1).0.dev0` bump;
-  `publish-dev-from-main` pushes the `.dev(N+1)` advance commit.
+  `publish-dev-from-main` pushes the `.dev(N+1)` advance commit;
+  `publish-release` (snapshot-docs) pushes the versioned docs snapshot for
+  finals.
 - `release/**`: `publish-release` pushes the version-bump commit and (for
   finals) the changelog update.
 
@@ -200,8 +202,7 @@ and break `git checkout v0.4.2` semantics. Old `release/v0.3`,
 For finals and patch-finals, the `snapshot-docs` job in `publish-release.yml`
 commits a versioned snapshot of `main`'s docs to `main` immediately after the
 GitHub Release is created, then explicitly dispatches `docs-publish.yml` via
-`workflow_dispatch`. (A `GITHUB_TOKEN` push cannot trigger a new workflow run,
-so the dispatch is explicit.) This deploys production with the new version as
+`workflow_dispatch`. This deploys production with the new version as
 the default. Visitors see the released docs by default; a version dropdown in the
 navbar lets them switch to `main` (unreleased) or any prior snapshot.
 

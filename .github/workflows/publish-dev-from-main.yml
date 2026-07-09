@@ -41,10 +41,15 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: release
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.CI_APP_ID }}
+          private-key: ${{ secrets.CI_PRIVATE_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
           persist-credentials: false
       - name: Install uv and set the python version
@@ -63,7 +68,7 @@ jobs:
       # the operator sees when inspecting the branch.
       - name: Publish current .devN
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_BRANCH: main
           ALLOW_MAIN_RELEASE: "1"
           CHGLOG_FILE: CHANGELOG.md
@@ -73,7 +78,7 @@ jobs:
         shell: bash
       - name: Advance .devN counter on main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
