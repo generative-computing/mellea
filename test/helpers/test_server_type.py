@@ -45,7 +45,7 @@ def test_version_above_threshold(mock_get):
     mock_get.return_value = _mock_version_response("0.16.0")
     assert is_vllm_server_with_structured_output(BASE_URL, HEADERS) is True
     mock_get.assert_called_once_with(
-        "http://localhost:8000/version", headers=HEADERS, timeout=10
+        "http://localhost:8000/version", headers=HEADERS, timeout=5
     )
 
 
@@ -144,7 +144,7 @@ def test_url_strips_v1_suffix(mock_get):
     mock_get.return_value = _mock_version_response("0.14.0")
     is_vllm_server_with_structured_output("http://myserver:9000/v1", HEADERS)
     mock_get.assert_called_once_with(
-        "http://myserver:9000/version", headers=HEADERS, timeout=10
+        "http://myserver:9000/version", headers=HEADERS, timeout=5
     )
 
 
@@ -153,7 +153,7 @@ def test_url_strips_v1_slash_suffix(mock_get):
     mock_get.return_value = _mock_version_response("0.14.0")
     is_vllm_server_with_structured_output("http://myserver:9000/v1/", HEADERS)
     mock_get.assert_called_once_with(
-        "http://myserver:9000/version", headers=HEADERS, timeout=10
+        "http://myserver:9000/version", headers=HEADERS, timeout=5
     )
 
 
@@ -162,7 +162,7 @@ def test_url_without_v1(mock_get):
     mock_get.return_value = _mock_version_response("0.14.0")
     is_vllm_server_with_structured_output("http://myserver:9000", HEADERS)
     mock_get.assert_called_once_with(
-        "http://myserver:9000/version", headers=HEADERS, timeout=10
+        "http://myserver:9000/version", headers=HEADERS, timeout=5
     )
 
 
