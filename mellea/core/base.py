@@ -20,6 +20,8 @@ import binascii
 import datetime
 import enum
 import logging
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -193,8 +195,8 @@ class ImageUrlBlock(CBlock):
 
     Use this when the image is hosted remotely and you want to pass the URL
     directly to backends that support it (e.g. OpenAI). Backends that only
-    accept base64-encoded images (e.g. Ollama) will raise a ``ValueError``
-    rather than silently drop the image.
+    accept base64-encoded images (e.g. Ollama) download and encode the image
+    automatically, so the URL never has to be converted by hand.
 
     Args:
         value (str): A URL string pointing to the image.
@@ -206,8 +208,8 @@ class ImageUrlBlock(CBlock):
         """Initialize ImageUrlBlock with a URL string.
 
         Raises:
-            ValueError: If ``value`` does not look like a URL (does not start
-                with ``http://`` or ``https://``).
+            ValueError: If `value` does not look like a URL (does not start
+                with `http://` or `https://`).
         """
         if not value.startswith(("http://", "https://")):
             raise ValueError(
@@ -340,6 +342,89 @@ class AudioUrlBlock(CBlock):
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"AudioUrlBlock({self.value}, {self.format}, {self._meta.__repr__()})"
+
+
+def _download_image_as_base64(url: str) -> str:
+    """Download an image from a URL and return it as a base64-encoded PNG string.
+
+    Fetches the bytes at `url`, loads them through PIL to confirm they are a
+    real image, and re-encodes the result as a base64 PNG so the output is
+    consistent with `ImageBlock`'s expected format.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an image.
+
+    Returns:
+        str: The base64-encoded PNG representation of the downloaded image.
+
+    Raises:
+        ValueError: If the image cannot be downloaded or the downloaded bytes
+            cannot be decoded as an image.
+    """
+    try:
+        with urllib.request.urlopen(url) as response:  # scheme validated by caller
+            raw = response.read()
+        image = PILImage.open(BytesIO(raw))
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise ValueError(f"Failed to download or decode image from URL: {url!r}") from e
+    return ImageBlock.pil_to_base64(image)
+
+
+def make_image_block(
+    src: str | PILImage.Image,
+    *,
+    convert_to_base64: bool = False,
+    meta: dict[str, Any] | None = None,
+) -> ImageBlock | ImageUrlBlock:
+    """Create the appropriate image block from any supported image source.
+
+    Dispatches on the type and shape of `src` so callers don't have to know
+    whether they need an `ImageBlock` (base64-encoded) or an `ImageUrlBlock`
+    (URL-referenced):
+
+    - A PIL image is encoded to a base64 PNG and returned as an `ImageBlock`.
+    - An `http://`/`https://` URL is returned as an `ImageUrlBlock`, unless
+      `convert_to_base64=True`, in which case the image is downloaded and
+      returned as an `ImageBlock`.
+    - A base64-encoded PNG string (with or without a data URI prefix) is
+      returned as an `ImageBlock`.
+
+    Args:
+        src: The image source — a PIL image, an image URL, or a base64-encoded
+            PNG string.
+        convert_to_base64: If `True` and `src` is a URL, download the image and
+            return an `ImageBlock` instead of an `ImageUrlBlock`. Ignored for
+            non-URL sources.
+        meta: Optional metadata to associate with the returned block.
+
+    Returns:
+        ImageBlock | ImageUrlBlock: An `ImageBlock` for PIL images, base64
+        strings, and downloaded URLs; an `ImageUrlBlock` for URLs when
+        `convert_to_base64` is `False`.
+
+    Raises:
+        ValueError: If `src` is a string that is neither a valid URL nor a
+            valid base64-encoded PNG, or if a URL download fails.
+        TypeError: If `src` is not a PIL image or a string.
+    """
+    if isinstance(src, PILImage.Image):
+        return ImageBlock.from_pil_image(src, meta)
+
+    if isinstance(src, str):
+        if src.startswith(("http://", "https://")):
+            if convert_to_base64:
+                return ImageBlock(_download_image_as_base64(src), meta)
+            return ImageUrlBlock(src, meta)
+        if ImageBlock.is_valid_base64_png(src):
+            return ImageBlock(src, meta)
+        raise ValueError(
+            f"make_image_block could not interpret string source; expected an "
+            f"http(s) URL or a base64-encoded PNG, got: {src!r}"
+        )
+
+    raise TypeError(
+        f"make_image_block expects a PIL image or a string source, got: {type(src)!r}"
+    )
 
 
 S = typing_extensions.TypeVar("S", default=Any, covariant=True)
@@ -1623,9 +1708,9 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrl
         c: The `Component` whose `images` attribute is inspected.
 
     Returns:
-        A non-empty list of ``ImageBlock`` or ``ImageUrlBlock`` objects if the
-        component has an ``images`` attribute with at least one element;
-        ``None`` otherwise.
+        A non-empty list of `ImageBlock` or `ImageUrlBlock` objects if the
+        component has an `images` attribute with at least one element;
+        `None` otherwise.
     """
     if hasattr(c, "images"):
         imgs = c.images  # type: ignore

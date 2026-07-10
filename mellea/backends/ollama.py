@@ -25,7 +25,7 @@ from ..core import (
     ModelToolCall,
     RawProviderResponse,
 )
-from ..core.base import AbstractMelleaTool
+from ..core.base import AbstractMelleaTool, _download_image_as_base64
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
@@ -389,9 +389,10 @@ class OllamaModelBackend(FormatterBackend):
 
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
-            ValueError: If a message contains an ``ImageUrlBlock``; Ollama requires
-                base64-encoded images — convert to an ``ImageBlock`` first.
-            ValueError: If a message contains an ``AudioBlock`` or ``AudioUrlBlock``;
+            ValueError: If a message contains an `ImageUrlBlock` whose image
+                cannot be downloaded or decoded; Ollama requires base64-encoded
+                images, so URL images are fetched and encoded automatically.
+            ValueError: If a message contains an `AudioBlock` or `AudioUrlBlock`;
                 Ollama does not support audio input.
         """
         # Start by awaiting any necessary computation.
@@ -425,13 +426,16 @@ class OllamaModelBackend(FormatterBackend):
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
         replay_flags = should_replay_reasoning(messages, self._provider)
         for m, replay in zip(messages, replay_flags):
+            image_values: list[str] | None = None
             if m.images is not None:
-                for img in m.images:
-                    if isinstance(img, ImageUrlBlock):
-                        raise ValueError(
-                            "OllamaModelBackend does not support URL images (ImageUrlBlock). "
-                            "Convert the image to a base64-encoded ImageBlock before passing it to Ollama."
-                        )
+                # Ollama only accepts base64-encoded images, so URL images are
+                # downloaded and encoded on the fly rather than rejected.
+                image_values = [
+                    _download_image_as_base64(str(img.value))
+                    if isinstance(img, ImageUrlBlock)
+                    else str(img.value)
+                    for img in m.images
+                ]
             if m.audio:
                 raise ValueError(
                     "OllamaModelBackend does not support audio (AudioBlock/AudioUrlBlock). "
@@ -441,9 +445,7 @@ class OllamaModelBackend(FormatterBackend):
                 "role": m.role,
                 "content": self.formatter.print(m),
                 "images": (
-                    _strip_data_uri_prefix([str(img.value) for img in m.images])
-                    if m.images
-                    else None
+                    _strip_data_uri_prefix(image_values) if image_values else None
                 ),
             }
             # Ollama's native SDK carries reasoning under the `thinking` key (see

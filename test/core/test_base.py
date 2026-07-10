@@ -18,6 +18,7 @@ from mellea.core import (
     RawProviderResponse,
     blockify,
     get_audio_from_component,
+    make_image_block,
 )
 from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
@@ -330,6 +331,92 @@ def test_get_audio_from_component_returns_none_when_missing():
             return ""
 
     assert get_audio_from_component(_ComponentWithoutAudio()) is None
+
+
+# --- make_image_block factory ---
+
+
+def _png_bytes() -> bytes:
+    img = PILImage.new("RGB", (1, 1), color="blue")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_make_image_block_from_pil():
+    img = PILImage.new("RGB", (1, 1), color="green")
+    block = make_image_block(img)
+    assert isinstance(block, ImageBlock)
+    assert ImageBlock.is_valid_base64_png(str(block))
+
+
+def test_make_image_block_from_url_returns_url_block():
+    block = make_image_block("https://example.com/cat.png")
+    assert isinstance(block, ImageUrlBlock)
+    assert block.value == "https://example.com/cat.png"
+
+
+def test_make_image_block_from_base64_returns_image_block():
+    b64 = _make_png_b64()
+    block = make_image_block(b64)
+    assert isinstance(block, ImageBlock)
+    assert block.value == b64
+
+
+def test_make_image_block_data_uri_returns_image_block():
+    data_uri = f"data:image/png;base64,{_make_png_b64()}"
+    block = make_image_block(data_uri)
+    assert isinstance(block, ImageBlock)
+
+
+def test_make_image_block_preserves_meta():
+    b64 = _make_png_b64()
+    block = make_image_block(b64, meta={"alt": "a dot"})
+    assert block._meta == {"alt": "a dot"}
+
+
+def test_make_image_block_url_convert_to_base64(monkeypatch):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_urlopen(url):
+        class _Resp:
+            def read(self_inner):
+                return _png_bytes()
+
+        yield _Resp()
+
+    import mellea.core.base as base_mod
+
+    monkeypatch.setattr(base_mod.urllib.request, "urlopen", fake_urlopen)
+
+    block = make_image_block("https://example.com/cat.png", convert_to_base64=True)
+    assert isinstance(block, ImageBlock)
+    assert ImageBlock.is_valid_base64_png(str(block))
+
+
+def test_make_image_block_download_failure_raises(monkeypatch):
+    import urllib.error
+
+    def boom(url):
+        raise urllib.error.URLError("no network")
+
+    import mellea.core.base as base_mod
+
+    monkeypatch.setattr(base_mod.urllib.request, "urlopen", boom)
+
+    with pytest.raises(ValueError, match="Failed to download"):
+        make_image_block("https://example.com/cat.png", convert_to_base64=True)
+
+
+def test_make_image_block_invalid_string_raises():
+    with pytest.raises(ValueError, match="could not interpret"):
+        make_image_block("not-a-url-or-base64!!!")
+
+
+def test_make_image_block_invalid_type_raises():
+    with pytest.raises(TypeError, match="expects a PIL image or a string"):
+        make_image_block(12345)  # type: ignore[arg-type]
 
 
 # --- ModelOutputThunk._copy_from ---

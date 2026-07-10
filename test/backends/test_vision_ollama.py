@@ -138,11 +138,44 @@ def test_image_block_in_instruction(
     assert image_list[0] == str(image_block)
 
 
-def test_image_url_block_rejected_by_ollama(mocked_session: MelleaSession):
+def test_image_url_block_auto_downloaded_by_ollama(
+    mocked_session: MelleaSession, pil_image: Image.Image
+):
+    # Ollama only accepts base64 images, so a URL image must be downloaded and
+    # encoded transparently rather than rejected.
+    encoded = ImageBlock.from_pil_image(pil_image).value
     url_block: ImageUrlBlock = ImageUrlBlock("https://example.com/photo.png")
     images: list[ImageBlock | ImageUrlBlock] = [url_block]
-    with pytest.raises(ValueError, match="ImageUrlBlock"):
+
+    with patch(
+        "mellea.backends.ollama._download_image_as_base64", return_value=encoded
+    ) as mock_download:
         mocked_session.chat("What is in this image?", images=images)
+
+    mock_download.assert_called_once_with("https://example.com/photo.png")
+
+    turn = mocked_session.ctx.last_turn()
+    assert turn is not None
+    lp = turn.output._generate_log.prompt  # type: ignore[union-attr]
+    assert isinstance(lp, list)
+    prompt_msg = lp[0]
+    image_list = prompt_msg.get("images")
+    assert isinstance(image_list, list)
+    assert len(image_list) == 1
+    # The downloaded base64 (data-URI-stripped) is embedded in the payload.
+    assert image_list[0] == encoded
+
+
+def test_image_url_block_download_failure_raises(mocked_session: MelleaSession):
+    url_block: ImageUrlBlock = ImageUrlBlock("https://example.com/photo.png")
+    images: list[ImageBlock | ImageUrlBlock] = [url_block]
+
+    with patch(
+        "mellea.backends.ollama._download_image_as_base64",
+        side_effect=ValueError("Failed to download or decode image from URL"),
+    ):
+        with pytest.raises(ValueError, match="Failed to download"):
+            mocked_session.chat("What is in this image?", images=images)
 
 
 def test_audio_block_rejected_by_ollama(mocked_session: MelleaSession):
