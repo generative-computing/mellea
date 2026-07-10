@@ -159,7 +159,7 @@ class Message(Component["Message"]):
                 return Message(
                     role=msg["role"],
                     content=msg.get("content") or "",
-                    tool_calls=msg.get("tool_calls", []),
+                    tool_calls=msg.get("tool_calls") or None,
                 )
             # Hugging Face (or others). There are no guarantees on how the model represented the function calls.
             # Output it in the same format we received the tool call request.

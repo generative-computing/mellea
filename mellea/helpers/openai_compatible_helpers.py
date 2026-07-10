@@ -196,7 +196,9 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     Returns:
         A dict with `"role"` and `"content"` fields. When the message carries
         images, `"content"` is a list of text and image-URL dicts; otherwise it
-        is a plain string. Assistant messages may also include `"tool_calls"`.
+        is a plain string. For tool-only assistant turns, `"content"` is `None`
+        and `"tool_calls"` carries the structured call list. When content is
+        present alongside tool calls, both keys are included.
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
