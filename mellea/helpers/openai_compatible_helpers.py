@@ -214,7 +214,7 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
                 url = raw if raw.startswith("data:") else f"data:image/png;base64,{raw}"
             img_list.append({"type": "image_url", "image_url": {"url": url}})
 
-        result = {
+        result: dict[str, Any] = {
             "role": msg.role,
             "content": [{"type": "text", "text": content}, *img_list],
         }
