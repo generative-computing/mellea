@@ -156,12 +156,6 @@
 
 **Full Changelog**: https://github.com/generative-computing/mellea/compare/v0.6.0...v0.7.0
 
-## [Unreleased]
-
-### Behavior Changes
-* `ChatContext(window_size=N)` now maps to `WindowCompactor(size=N)`, whose default `pin_predicate` is `pin_system`. Previously `window_size=N` was a raw last-N view (`as_list(N)`) with no pinning. As a result the system message is now pinned (it used to be able to age out) and the `size` limit counts only the non-pinned body, so the returned view can exceed `N` items. For the previous drop-in semantics, use `compactor=WindowCompactor(size=N, pin_predicate=pin_nothing)`.
-* Context compaction is now applied at `add()` time and persists in the linked list, so `ChatContext.as_list()` (and `view_for_generation()`) return the already-windowed/compacted slice rather than the full history. Callers using `len(ctx.as_list())` as a session-wide interaction count should track counts out-of-band instead.
-
 ## [v0.6.0](https://github.com/generative-computing/mellea/releases/tag/v0.6.0) - 2026-05-19
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
