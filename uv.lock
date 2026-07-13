@@ -3233,7 +3233,7 @@ wheels = [
 
 [[package]]
 name = "mellea"
-version = "0.7.0rc0"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
