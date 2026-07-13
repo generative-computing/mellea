@@ -460,8 +460,10 @@ async def test_stream_with_chunking_chat_span_nests_under_streaming_span(span_ex
         gen.close()
 
     spans = _finished_spans(span_exporter)
-    streaming_span = next(s for s in spans if s.name == "stream_with_chunking")
-    chat_span = next(s for s in spans if s.name == "chat")
+    streaming_span = next((s for s in spans if s.name == "stream_with_chunking"), None)
+    assert streaming_span is not None, "stream_with_chunking span not emitted"
+    chat_span = next((s for s in spans if s.name == "chat"), None)
+    assert chat_span is not None, "chat span not emitted"
 
     assert streaming_span.parent is None, "streaming span should be a root"
     if _CONTEXT_ATTACH_SUPPORTED:
@@ -489,7 +491,8 @@ async def test_stream_with_chunking_validation_chat_span_is_sibling_of_generatio
         gen.close()
 
     spans = _finished_spans(span_exporter)
-    streaming_span = next(s for s in spans if s.name == "stream_with_chunking")
+    streaming_span = next((s for s in spans if s.name == "stream_with_chunking"), None)
+    assert streaming_span is not None, "stream_with_chunking span not emitted"
     chat_spans = [s for s in spans if s.name == "chat"]
     assert len(chat_spans) == 2, f"expected 2 chat spans, got {len(chat_spans)}"
 
@@ -543,8 +546,10 @@ async def test_stream_with_chunking_span_ends_error_on_early_exit(
         gen.close()
 
     streaming_span = next(
-        s for s in _finished_spans(span_exporter) if s.name == "stream_with_chunking"
+        (s for s in _finished_spans(span_exporter) if s.name == "stream_with_chunking"),
+        None,
     )
+    assert streaming_span is not None, "stream_with_chunking span not emitted"
     assert streaming_span.status.status_code == StatusCode.ERROR
     cross_task = [r for r in caplog.records if "across asyncio tasks" in r.getMessage()]
     assert not cross_task, "early exit should not warn about cross-task detach"
