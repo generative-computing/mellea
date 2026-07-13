@@ -1,0 +1,163 @@
+---
+title: "mellea.stdlib.tools.shell"
+sidebar_label: "mellea.stdlib.tools.shell"
+description: "Bash shell command execution tool and execution environments for agentic workflows."
+---
+
+Bash shell command execution tool and execution environments for agentic workflows.
+
+
+
+
+
+Provides `BashEnvironment` (abstract base for bash execution) and two concrete
+implementations: `StaticBashEnvironment` (parse and safety-check only, no execution)
+and `_LocalBashEnvironment` (subprocess execution in the current shell). All
+environments enforce a conservative safety denylist (sudo, rm -rf, git push --force,
+system paths, interactive shells). Write operations may also be constrained by
+`working_dir` and `allowed_paths`.
+
+The top-level `bash_executor` (recommended entry point) executes commands locally
+with denylist safety checks. Bash executor runs with access to the host environment;
+isolation must be provided by the application layer (containers, VMs).
+
+The function is ready to be wrapped as a [`MelleaTool`](../../backends/tools#class-melleatool) instance for ReACT or
+other agentic loops.
+
+Security note: The denylist covers inline code execution (e.g., bash -c, python -e) and
+dangerous commands in argv. However, it does not prevent execution of pre-existing
+script files (e.g., bash script.sh, python script.py), which can execute arbitrary
+code from the file. For untrusted inputs, ensure that script files are either absent
+or come from a trusted source.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `bash_executor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/shell.py#L1065" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#bash_executor}
+
+```python
+bash_executor(command: str, working_dir: str | None = None, allowed_paths: list[str] | None = None) -> ExecutionResult
+```
+
+
+Execute a bash command with denylist safety checks.
+
+This is the recommended entry point. Commands execute locally with access to
+the host environment (working directory, PATH, git repos, installed tools).
+
+Safety model: Conservative denylist applied to all commands. The denylist
+refuses sudo, interactive shells, destructive operations (rm -rf, git push
+--force), shell operators (|, >, &&), code execution paths (python -c, bash
+-c), and writes to system paths (/etc, /sys, /proc, etc.).
+
+**Args:**
+- `command`: The bash command to execute.
+- `working_dir`: Optional working directory for the command (host path).
+- `allowed_paths`: Optional explicit write allowlist. When provided,
+write-target paths must fall under one of these roots (in addition
+to passing the default dangerous-path checks).
+
+**Returns:**
+- An `ExecutionResult` with stdout, stderr, and success flag. If the
+- command was rejected for safety reasons, `skipped=True` and
+- `skip_message` contains the reason.
+
+**Examples:**
+
+Basic execution:
+```python
+>>> result = bash_executor("echo hello")
+>>> assert result.success is True
+>>> assert result.stdout == "hello"
+With working directory:
+>>> result = bash_executor("pwd", working_dir="/tmp")
+>>> assert "/tmp" in result.stdout
+With path restrictions:
+>>> result = bash_executor("touch file.txt", allowed_paths=["/tmp"])
+>>> assert result.success is True
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `BashEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/shell.py#L803" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-bashenvironment}
+
+
+Abstract environment for executing bash commands.
+
+**Args:**
+- `allowed_paths`: Optional explicit write allowlist. When
+provided, write-target paths must fall under one of these roots in
+addition to passing the default dangerous-path checks.
+- `working_dir`: Optional directory restriction for write
+operations. This is a host path where the command executes. When
+specified, writes must remain within this directory or `/tmp`.
+- `timeout`: Maximum number of seconds to allow command execution.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/shell.py#L923" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#execute}
+
+```python
+execute(self, command: str) -> ExecutionResult
+```
+
+Execute the given bash command and return the result.
+
+**Args:**
+- `command`: The bash command to execute.
+
+**Returns:**
+- Execution outcome including stdout, stderr, and
+- success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `StaticBashEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/shell.py#L935" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-staticbashenvironment}
+
+
+Safe environment that validates but does not execute bash commands.
+
+Returns `success=True, skipped=True` when validation passes (command is
+syntactically valid and passes all safety checks), indicating the command
+would be safe to execute but this environment intentionally does not run it.
+Returns `success=False, skipped=True` when validation fails (safety check
+rejection or parse error).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/shell.py#L945" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#execute}
+
+```python
+execute(self, command: str) -> ExecutionResult
+```
+
+Parse and validate command without executing.
+
+**Args:**
+- `command`: The bash command to validate.
+
+**Returns:**
+- Result with `skipped=True` and parsed argv in
+- `analysis_result` on success, or a safety-check failure on rejection.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

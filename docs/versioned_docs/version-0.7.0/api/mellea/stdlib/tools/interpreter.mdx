@@ -1,0 +1,508 @@
+---
+title: "mellea.stdlib.tools.interpreter"
+sidebar_label: "mellea.stdlib.tools.interpreter"
+description: "Code interpreter tool and execution environments for agentic workflows."
+---
+
+Code interpreter tool and execution environments for agentic workflows.
+
+
+
+
+
+Provides `ExecutionResult` (capturing stdout, stderr, exit code, artifacts, and
+optional static analysis output) and three concrete `ExecutionEnvironment`
+implementations:
+
+- `StaticAnalysisEnvironment` — parse and import-check only, no execution.
+- `UnsafeEnvironment` — subprocess execution in the current Python environment.
+- `LLMSandboxEnvironment` — Docker-isolated execution via `llm-sandbox`, with
+  `copy_in` / `copy_out` support via `docker cp`.
+
+Use `make_execution_environment` to select an environment by tier name
+(`"local_unsafe"`, `"local"`, `"docker_unsafe"`, `"docker"`) rather than
+constructing classes directly.  The top-level `code_interpreter` and
+`local_code_interpreter` functions are ready to be wrapped as [`MelleaTool`](../../backends/tools#class-melleatool)
+instances for ReACT or other agentic loops.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `make_execution_environment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L836" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#make_execution_environment}
+
+```python
+make_execution_environment(tier: ExecutionTier, policy: CapabilityPolicy | None = None, allowed_imports: list[str] | None = None, working_directory: str | None = None, _install_cache: set[str] | None = None, _failed_cache: set[str] | None = None) -> ExecutionEnvironment
+```
+
+
+Create an :class:`ExecutionEnvironment` for the given tier.
+
+The `policy` argument overrides the tier's default policy.  For unsafe
+tiers (`"local_unsafe"`, `"docker_unsafe"`) the policy defaults to
+`None` — pass an explicit policy to add declaration without changing the
+tier.
+
+**Args:**
+- `tier`: One of `"static"`, `"local_unsafe"`, `"local"`,
+`"docker_unsafe"`, or `"docker"`.
+- `policy`: Override the tier's default policy.
+`None` uses the tier default (`LOCAL_POLICY` / `DOCKER_POLICY`
+for policy tiers; `None` for unsafe tiers).
+- `allowed_imports`: Allowlist of importable top-level
+modules.  `None` allows any import.
+- `working_directory`: Directory to use as cwd during execution.
+Only honoured by `UnsafeEnvironment` (local tiers); ignored for
+Docker and static tiers.
+- `_install_cache`: Shared set of already-installed package
+names.  When provided, the environment will not reinstall packages
+already present in the set, and will add newly installed packages to
+it.  Pass the same set across multiple `make_execution_environment`
+calls to avoid redundant installs within one tool lifetime.
+- `_failed_cache`: Shared set of package names whose
+installation has already failed.  Packages in this set are skipped
+on subsequent calls; clear the set to allow a retry.  Pass the same
+set as `_install_cache` to persist failure state across calls.
+
+**Returns:**
+- Configured environment instance.
+
+**Raises:**
+- `ValueError`: If `tier` is not one of the recognised execution tier strings.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `python_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L1057" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#python_tool}
+
+```python
+python_tool(tier: ExecutionTier | None = None, packages: list[str] | None = None, artifact_dir: Path | None = None, policy: CapabilityPolicy | None = None, allowed_imports: list[str] | None = None, name: str = 'python', suppress_agg: bool = False) -> MelleaTool
+```
+
+
+Create a configurable Python execution tool that returns structured artifacts.
+
+The returned [`MelleaTool`](../../backends/tools#class-melleatool) wraps a callable with signature
+`run_python(code: str) -> ExecutionResult`.  It can be passed directly to
+`ModelOption.TOOLS` in agentic ReACT loops.
+
+For **local tiers** (`"local_unsafe"`, `"local"`), files written to
+`artifact_dir` (or to the per-call tempdir when `artifact_dir` is `None`)
+are surfaced as `Artifact` objects on the returned `ExecutionResult`.  Only
+files produced by a **successful** execution (exit code 0) are included.
+
+When the executed code imports `matplotlib`, `matplotlib.use('Agg')` is
+injected automatically as a preamble so plots are written to files rather
+than attempting interactive display.  Pass `suppress_agg=True` to disable
+this injection (e.g. when the code sets its own backend explicitly).
+
+**Args:**
+- `tier`: Execution tier — one of `"static"`,
+`"local_unsafe"`, `"local"`, `"docker_unsafe"`, or `"docker"`.
+Defaults to `None`, which resolves to `"local_unsafe"` but
+**emits a** \:class\:`UserWarning` **at construction time** to
+surface the implicit trust decision.  Pass
+`tier="local_unsafe"` explicitly to suppress the warning when
+unsafe local execution is intentional.
+- `packages`: Python packages to pre-install via
+`pip install` before the first execution.  Ignored for the
+`"static"` tier.  `None` or `[]` means no installs.
+Each specifier must be a non-empty string and must not begin
+with `-` (flag-style arguments are rejected); PEP 508 specifiers
+such as `pkg @ git+https\://...` are accepted.  Strings are
+passed directly to pip/uv — callers are responsible for trusting
+their content as if invoking `pip install` themselves.
+Not thread-safe\: the shared install/failed caches are mutated
+without a lock, so concurrent `run_python` calls on the same
+tool instance may race on first install.
+- `artifact_dir`: Directory where the executed code should
+write output files.  A per-call tempdir is used when `None`;
+that tempdir is kept alive as long as the returned
+`ExecutionResult` holds artifacts, and cleaned up immediately
+when no artifacts are produced.  Ignored for docker tiers.
+- `policy`: Override the tier's default
+`CapabilityPolicy`.  When `packages` is also provided, those
+packages are merged into this policy.
+- `allowed_imports`: Allowlist of importable top-level
+modules.  `None` disables the import check.
+- `name`: Tool name exposed to the model.  Defaults to `"python"`.
+- `suppress_agg`: When `True`, skip the automatic
+`matplotlib.use('Agg')` preamble injection.  Use this when the
+executed code sets its own matplotlib backend.  Defaults to
+`False`.
+
+**Returns:**
+- A configured tool ready for use in `ModelOption.TOOLS`.
+
+**Raises:**
+- `ImportError`: If [`MelleaTool`](../../backends/tools#class-melleatool) cannot be imported (should not happen in
+a normal mellea installation).
+- `ValueError`: If any entry in `packages` is empty or begins with `-`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `code_interpreter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L1280" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#code_interpreter}
+
+```python
+code_interpreter(code: str) -> ExecutionResult
+```
+
+
+Execute Python code in a Docker sandbox (docker_unsafe tier).
+
+**Args:**
+- `code`: The Python code to execute.
+
+**Returns:**
+- An `ExecutionResult` with stdout, stderr, and a success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `local_code_interpreter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L1306" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#local_code_interpreter}
+
+```python
+local_code_interpreter(code: str) -> ExecutionResult
+```
+
+
+Execute Python code in the current process environment (local_unsafe tier).
+
+**Args:**
+- `code`: The Python code to execute.
+
+**Returns:**
+- An `ExecutionResult` with stdout, stderr, and a success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ExecutionResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L79" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-executionresult}
+
+
+Result of code execution.
+
+Code execution can be aborted prior to spinning up an interpreter (e.g., if
+prohibited imports are used).  In these cases, `success` is `False` and
+`skipped` is `True`.
+
+If code is executed, `success` is `True` iff the exit code is 0, and
+`stdout` / `stderr` are non-`None`.
+
+**Args:**
+- `success`: `True` if execution succeeded (exit code 0 or
+static-analysis passed); `False` otherwise.
+- `stdout`: Captured standard output, or `None` if
+execution was skipped.
+- `stderr`: Captured standard error, or `None` if
+execution was skipped.
+- `skipped`: `True` when execution was not attempted.
+- `skip_message`: Explanation of why execution was skipped.
+- `analysis_result`: Optional payload from static-analysis
+environments.
+- `exit_code`: Raw process exit code, or `None` if not
+available (skipped or static analysis).
+- `timed_out`: `True` when execution was killed due to timeout.
+- `artifacts`: Files exported from the execution environment
+after execution.
+- `execution_mode`: Tier name used for this execution
+(`"local_unsafe"`, `"local"`, `"docker_unsafe"`, `"docker"`,
+`"static"`, or `"unknown"`).
+- `working_directory`: The working directory used for execution,
+or `None` if the default was used or not applicable.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_validationresult_reason` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L124" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#to_validationresult_reason}
+
+```python
+to_validationresult_reason(self) -> str
+```
+
+Map an ExecutionResult to a ValidationResult reason string.
+
+**Returns:**
+- The skip message if the execution was skipped, stdout on success,
+- or stderr on failure.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ExecutionEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L148" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-executionenvironment}
+
+
+Abstract environment for executing Python code.
+
+**Args:**
+- `allowed_imports`: Allowlist of top-level module names
+that generated code may import.  `None` disables the import check.
+- `policy`: Capability policy for this environment.
+`None` means no policy is applied (unsafe tiers).
+- `working_directory`: Directory to use as cwd during execution.
+`None` means use the process default.  Only honoured by environments
+that spawn subprocesses (`UnsafeEnvironment`); ignored otherwise.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L173" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#execute}
+
+```python
+execute(self, code: str, timeout: int | None = None) -> ExecutionResult
+```
+
+Execute the given code and return the result.
+
+**Args:**
+- `code`: The Python source code to execute.
+- `timeout`: Maximum seconds to allow the code to run.
+When `None`, the environment's policy timeout is used, or a
+built-in default if no policy is set.
+
+**Returns:**
+- Execution outcome including stdout, stderr, and
+- success flag.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `copy_in` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L194" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#copy_in}
+
+```python
+copy_in(self, host_path: Path, container_path: str) -> None
+```
+
+Copy a file from the host into the execution environment.
+
+**Args:**
+- `host_path`: Absolute path on the host filesystem.
+- `container_path`: Destination path inside the environment.
+
+**Raises:**
+- `NotImplementedError`: If this environment does not support file I/O.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `copy_out` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L209" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#copy_out}
+
+```python
+copy_out(self, container_path: str, host_path: Path) -> None
+```
+
+Copy a file from the execution environment to the host.
+
+**Args:**
+- `container_path`: Source path inside the environment.
+- `host_path`: Destination path on the host filesystem.
+
+**Raises:**
+- `NotImplementedError`: If this environment does not support file I/O.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `StaticAnalysisEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L225" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-staticanalysisenvironment}
+
+
+Safe environment that validates but does not execute code.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L228" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#execute}
+
+```python
+execute(self, code: str, timeout: int | None = None) -> ExecutionResult
+```
+
+Validate code syntax and imports without executing.
+
+**Args:**
+- `code`: The Python source code to validate.
+- `timeout`: Ignored for static analysis; present for interface
+compatibility.
+
+**Returns:**
+- Result with `skipped=True` and the parsed AST in
+- `analysis_result` on success, or a syntax-error description on
+- failure.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `UnsafeEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L277" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-unsafeenvironment}
+
+
+Environment that executes code directly via subprocess.
+
+No container isolation.  Use `policy` to declare (but not enforce)
+capabilities; `timeout` and stdout/stderr truncation from `policy`
+are actively enforced.
+
+**Args:**
+- `allowed_imports`: Allowlist of top-level module names
+that generated code may import.  `None` disables the import check.
+- `policy`: Capability policy for this environment.
+`None` means no policy is applied.
+- `working_directory`: Directory to use as cwd during execution.
+`None` means use the process default.
+- `installed_packages`: Shared set to persist the install
+cache across multiple `execute()` calls.  `None` creates a fresh set.
+- `failed_packages`: Shared set of package names whose
+installation has already failed.  Packages in this set are skipped on
+subsequent calls; clear the set to allow a retry.  `None` creates a
+fresh set.
+- `tier`: Tier name reported in `ExecutionResult.execution_mode`.
+`None` infers the tier from policy presence (`"local"` when a policy
+is set, `"local_unsafe"` otherwise).  Prefer passing an explicit value
+rather than relying on inference; `make_execution_environment` always
+supplies one.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L327" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#execute}
+
+```python
+execute(self, code: str, timeout: int | None = None) -> ExecutionResult
+```
+
+Execute code with subprocess after checking imports.
+
+**Args:**
+- `code`: The Python source code to execute.
+- `timeout`: Maximum seconds before the subprocess is killed.
+Falls back to `policy.timeout` if set, then to 30 s.
+
+**Returns:**
+- Execution outcome with captured stdout/stderr and
+- success flag, or a skipped result if imports are unauthorized.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LLMSandboxEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L444" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-llmsandboxenvironment}
+
+
+Docker-isolated execution environment via `llm-sandbox`.
+
+Supports `copy_in` and `copy_out` via `docker cp`.  Both methods require
+the environment to be used as a context manager so that a single container
+session persists across calls.
+
+When used without a context manager, `execute` opens and closes a fresh
+container per call (one-shot mode), which is sufficient when file I/O is
+not needed.
+
+**Args:**
+- `allowed_imports`: Allowlist of importable top-level
+modules.  `None` allows any import.
+- `policy`: Capability policy.  `None` means
+no policy is applied (`docker_unsafe` tier).
+- `working_directory`: Ignored for Docker tiers; present for
+interface compatibility with `ExecutionEnvironment`.
+- `installed_packages`: Shared set to persist the install
+cache across multiple `execute()` calls.  `None` creates a fresh set.
+- `failed_packages`: Shared set of package names whose
+installation has already failed.  Packages in this set are skipped on
+subsequent calls; clear the set to allow a retry.  `None` creates a
+fresh set.
+- `tier`: Tier name reported in `ExecutionResult.execution_mode`.
+`None` infers the tier from policy presence (`"docker"` when a policy
+is set, `"docker_unsafe"` otherwise).  Prefer passing an explicit value;
+`make_execution_environment` always supplies one.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `copy_in` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L535" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#copy_in}
+
+```python
+copy_in(self, host_path: Path, container_path: str) -> None
+```
+
+Copy a file from the host into the running Docker container via `docker cp`.
+
+**Args:**
+- `host_path`: Absolute path on the host filesystem.
+- `container_path`: Destination path inside the container.
+
+**Raises:**
+- `RuntimeError`: If the environment is not open as a context manager.
+- `RuntimeError`: If the container ID cannot be determined.
+- `subprocess.CalledProcessError`: If `docker cp` fails.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `copy_out` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L554" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#copy_out}
+
+```python
+copy_out(self, container_path: str, host_path: Path) -> None
+```
+
+Copy a file from the running Docker container to the host via `docker cp`.
+
+**Args:**
+- `container_path`: Source path inside the container.
+- `host_path`: Destination path on the host filesystem.
+
+**Raises:**
+- `RuntimeError`: If the environment is not open as a context manager.
+- `RuntimeError`: If the container ID cannot be determined.
+- `subprocess.CalledProcessError`: If `docker cp` fails.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/interpreter.py#L646" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#execute}
+
+```python
+execute(self, code: str, timeout: int | None = None) -> ExecutionResult
+```
+
+Execute code in a Docker container.
+
+When used as a context manager, reuses the open session.  Otherwise opens
+a fresh container, runs the code, and closes it immediately.
+
+**Args:**
+- `code`: The Python source code to execute.
+- `timeout`: Maximum seconds to allow the sandboxed process to
+run.  Falls back to `policy.timeout` if set, then to 60 s.
+
+**Returns:**
+- Execution outcome with stdout/stderr and success flag,
+- or a skipped result on import violation or sandbox error.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

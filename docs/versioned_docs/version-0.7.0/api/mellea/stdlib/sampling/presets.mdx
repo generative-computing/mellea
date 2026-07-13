@@ -1,0 +1,212 @@
+---
+title: "mellea.stdlib.sampling.presets"
+sidebar_label: "mellea.stdlib.sampling.presets"
+description: "Pre-configured sampling presets bundling requirements and strategies."
+---
+
+Pre-configured sampling presets bundling requirements and strategies.
+
+
+
+
+
+Sampling presets encapsulate common patterns for code generation validation,
+bundling a list of requirements with an optimized sampling strategy and feedback
+configuration. Use presets to reduce boilerplate when setting up common workflows
+like Python code generation or matplotlib plotting.
+
+Examples:
+    Generate Python code with automatic repair:
+
+```python
+>>> from mellea.stdlib.sampling import python_code_generation_sampling
+>>> preset = python_code_generation_sampling(allowed_imports=["numpy"])
+>>> result = session.instruct(
+...     "Write a function to compute the mean",
+...     requirements=preset.requirements,
+...     strategy=preset.strategy,
+... )
+```
+
+    Generate matplotlib plots with stricter constraints:
+
+```python
+>>> preset = python_plotting_sampling(output_path="/tmp/plot.png")
+>>> result = session.instruct(
+...     "Create a scatter plot",
+...     requirements=preset.requirements,
+...     strategy=preset.strategy,
+... )
+```
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `python_code_generation_sampling` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/presets.py#L63" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#python_code_generation_sampling}
+
+```python
+python_code_generation_sampling(loop_budget: int = 2) -> SamplingPreset
+```
+
+
+Pre-configured preset for Python code generation with repair feedback.
+
+Bundles python_code_generation_requirements() with a RepairTemplateStrategy
+optimized for Python code generation tasks. The strategy includes model-friendly
+feedback that converts validation failures into actionable repair instructions.
+
+**Args:**
+- `loop_budget`: Maximum repair attempts. Default 2 (one retry + initial attempt).
+- `allowed_imports`: Whitelist of allowed top-level module names. If None,
+all imports are allowed. Default None.
+- `output_limit_chars`: Maximum captured stdout size in characters.
+Default 10,000. Prevents excessive logging or infinite loops.
+- `timeout_seconds`: Maximum execution time per code sample in seconds.
+Default 5. Only enforced if use_sandbox=True.
+- `use_sandbox`: Use Docker-isolated execution (llm-sandbox).
+Default False. Set to True for untrusted code generation.
+
+**Returns:**
+- SamplingPreset with bundled requirements and repair strategy.
+
+**Raises:**
+- `ValueError`: If loop_budget &lt; 1, or if timeout_seconds or output_limit_chars
+are not positive (raised by python_code_generation_requirements).
+
+**Examples:**
+
+Generate code with no import restrictions:
+
+    &gt;>> preset = python_code_generation_sampling()
+```python
+>>> result = session.instruct(
+...     "Write a function to sum 1 to 100",
+...     requirements=preset.requirements,
+...     strategy=preset.strategy,
+... )
+```
+
+Generate code with strict import allowlist:
+
+```python
+>>> preset = python_code_generation_sampling(
+...     allowed_imports=["numpy", "math"],
+...     loop_budget=3,
+... )
+>>> result = session.instruct(
+...     "Write a function using numpy",
+...     requirements=preset.requirements,
+...     strategy=preset.strategy,
+... )
+```
+
+Generate code in isolated sandbox:
+
+```python
+>>> preset = python_code_generation_sampling(
+...     use_sandbox=True,
+...     timeout_seconds=10,
+... )
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `python_plotting_sampling` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/presets.py#L147" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#python_plotting_sampling}
+
+```python
+python_plotting_sampling(output_path: str | None = None, loop_budget: int = 3) -> SamplingPreset
+```
+
+
+Pre-configured preset for matplotlib plotting with repair feedback.
+
+Extends python_code_generation_sampling() with plotting-specific constraints:
+- Requires matplotlib headless backend configuration (matplotlib.use('Agg'))
+- Validates plot file output if output_path is specified
+- More conservative defaults (higher loop_budget, sandbox enabled by default)
+
+This preset is optimized for generating matplotlib code from user prompts,
+with special attention to ensuring plots can render in headless environments.
+
+**Args:**
+- `output_path`: Expected plot output file path to validate. If provided,
+a PlotFileSaved requirement is added. If None, only validates that
+plotting dependencies are available. Default None.
+- `loop_budget`: Maximum repair attempts. Default 3 (more than code_generation,
+since plotting needs rendering iterations).
+- `allowed_imports`: Whitelist of allowed module imports. Default None (all allowed).
+- `timeout_seconds`: Maximum execution time per sample in seconds.
+Default 10 (higher than code generation due to rendering).
+- `use_sandbox`: Use Docker-isolated execution. Default True (strongly recommended
+for untrusted plot generation to prevent malicious graphics operations).
+
+**Returns:**
+- SamplingPreset with bundled plotting requirements and repair strategy.
+
+**Raises:**
+- `ValueError`: If loop_budget &lt; 1, or if timeout_seconds or output_limit_chars
+are not positive.
+
+**Examples:**
+
+Generate a scatter plot:
+
+    &gt;>> preset = python_plotting_sampling(output_path="/tmp/scatter.png")
+```python
+>>> result = session.instruct(
+...     "Create a scatter plot of random points",
+...     requirements=preset.requirements,
+...     strategy=preset.strategy,
+... )
+```
+
+Generate with strict import allowlist:
+
+```python
+>>> preset = python_plotting_sampling(
+...     output_path="/tmp/plot.png",
+...     allowed_imports=["matplotlib", "numpy"],
+... )
+```
+
+Minimal sandbox (for trusted code generation):
+
+```python
+>>> preset = python_plotting_sampling(
+...     use_sandbox=False,
+...     loop_budget=2,
+... )
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingPreset` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/presets.py#L38" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-samplingpreset}
+
+
+Bundle of requirements and strategy for a specific use case.
+
+A preset encapsulates a pre-configured set of validation requirements
+with a sampling strategy optimized for that use case. Presets reduce
+boilerplate by bundling common configurations.
+
+**Args:**
+- `requirements`: List of Requirement instances to validate against.
+- `strategy`: SamplingStrategy (typically RepairTemplateStrategy).
+- `feedback_strategy_name`: Human-readable name for the feedback approach
+(e.g., "python_code_repair", "matplotlib_plotting_repair").
+Default "default".
+- `description`: Optional one-line description of the preset's purpose.
+Default None.
+- `example_usage`: Optional usage example code snippet. Default None.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

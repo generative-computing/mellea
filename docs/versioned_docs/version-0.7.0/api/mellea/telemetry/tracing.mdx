@@ -1,0 +1,435 @@
+---
+title: "mellea.telemetry.tracing"
+sidebar_label: "mellea.telemetry.tracing"
+description: "OpenTelemetry tracing instrumentation for Mellea."
+---
+
+OpenTelemetry tracing instrumentation for Mellea.
+
+
+
+
+
+Provides distributed tracing with two independent tracer scopes:
+
+1. Application Trace (`mellea.application`) - User-facing operations
+2. Backend Trace (`mellea.backend`) - LLM backend interactions
+
+Follows OpenTelemetry Gen-AI semantic conventions:
+https://opentelemetry.io/docs/specs/semconv/gen-ai/
+
+Configuration via environment variables:
+
+- `MELLEA_TRACES_ENABLED`: Enable tracing (default: `false`).
+- `MELLEA_TRACES_OTLP`: Enable OTLP span exporter (default: `false`).
+- `MELLEA_TRACES_CONSOLE`: Print spans to console (default: `false`).
+- `MELLEA_TRACES_CONTENT`: Capture prompt/response content on spans (default:
+  `false`). Content may include PII; enable only in controlled environments.
+  Also recognised: `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`
+  (OTel standard).
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: Trace-specific OTLP endpoint (optional).
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: General OTLP endpoint (fallback).
+- `OTEL_SERVICE_NAME`: Service name for traces (default: `mellea`).
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_tracing_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L152" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#is_tracing_enabled}
+
+```python
+is_tracing_enabled() -> bool
+```
+
+
+Check if tracing is enabled.
+
+**Returns:**
+- True if `MELLEA_TRACES_ENABLED` is truthy AND OpenTelemetry is installed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_content_tracing_enabled` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L188" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#is_content_tracing_enabled}
+
+```python
+is_content_tracing_enabled() -> bool
+```
+
+
+Check if content capture is enabled.
+
+Content capture records prompt and response text on spans and may contain
+PII; enable only in controlled environments.
+
+**Returns:**
+- True if enabled via `MELLEA_TRACES_CONTENT` or
+- `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_application_tracer` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L205" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_application_tracer}
+
+```python
+get_application_tracer() -> Any
+```
+
+
+Return the application tracer.
+
+**Returns:**
+- Tracer instance for application-level spans, or None if tracing is
+- disabled or OpenTelemetry is not available.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_backend_tracer` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L215" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_backend_tracer}
+
+```python
+get_backend_tracer() -> Any
+```
+
+
+Return the backend tracer.
+
+**Returns:**
+- Tracer instance for backend-level spans, or None if tracing is
+- disabled or OpenTelemetry is not available.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_backend_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L322" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#start_backend_span}
+
+```python
+start_backend_span(operation: str, generation_id: str) -> Span | None
+```
+
+
+Open a backend span, activate it as the current OTel context, and stash both under `generation_id`.
+
+The span is also attached as the current OTel context so nested
+OTel-instrumented work (HTTP clients, framework wrappers, etc.) parents
+under it. Activation propagates to asyncio tasks spawned after this
+call: each new task snapshots the current context at creation time.
+
+**Args:**
+- `operation`: Span name (`"chat"` or `"text_completion"`).
+- `generation_id`: Correlation key for the matching finish call.
+- `model`: Model identifier, or `None` if not yet known (chat path
+populates this in post_processing).
+- `provider`: Provider name, or `None` if not yet known.
+- `action_class_name`: Optional `mellea.action_type` attribute (chat).
+- `num_actions`: Optional `mellea.num_actions` attribute (batch).
+- `has_format`: Optional `mellea.has_format` attribute (whether structured
+output was requested).
+- `format_type`: Optional `mellea.format_type` attribute (the structured
+output class name, when `has_format` is True).
+- `tool_calls_enabled`: Optional `mellea.tool_calls_enabled` attribute.
+- `attach_context`: Whether to attach the span as the ambient OTel context.
+
+**Returns:**
+- The span, or `None` if tracing is disabled.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_backend_span_success` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L390" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_backend_span_success}
+
+```python
+finish_backend_span_success(generation_id: str) -> None
+```
+
+
+Add response-side attrs and end the in-flight backend span.
+
+Refreshes request-side attrs from `gen` first, since chat-path backends
+populate `model`/`provider` on the MOT only after the API call
+returns.
+
+**Args:**
+- `generation_id`: Correlation key from the matching pre-call.
+- `operation`: Span name used to refresh request attrs.
+- `usage`: Aggregate token-usage dict (OpenAI shape).
+- `mot`: The fully-computed [`ModelOutputThunk`](../core/base#class-modeloutputthunk), or `None`.
+- `gen`: The [`GenerationMetadata`](../core/base#class-generationmetadata) from the MOT, or `None`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_backend_span_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L434" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_backend_span_error}
+
+```python
+finish_backend_span_error(generation_id: str) -> None
+```
+
+
+Set ERROR status, record the exception, and end the in-flight span.
+
+**Args:**
+- `generation_id`: Correlation key from the matching pre-call.
+- `operation`: Span name used to refresh request attrs (chat path may
+have late-populated model/provider on the MOT before the error).
+- `exception`: The exception raised by the backend.
+- `gen`: Optional [`GenerationMetadata`](../core/base#class-generationmetadata) for refreshing request attrs.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_session_startup_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L568" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#start_session_startup_span}
+
+```python
+start_session_startup_span(session_id: str) -> Span | None
+```
+
+
+Open the `start_session` span around backend construction.
+
+Carries construction-time attributes (`mellea.session_id`,
+`mellea.backend`, `mellea.model_id`, `mellea.context_type`). Stashed
+under a derived key so it doesn't collide with the long-lived
+`session` span when both share a `session_id`.
+
+**Args:**
+- `session_id`: Session UUID. The in-flight key is derived from this.
+- `backend`: Backend identifier (e.g. `"ollama"`); stamped as `mellea.backend`.
+- `model_id`: Resolved model id string.
+- `context_type`: Context class name (e.g. `"SimpleContext"`).
+
+**Returns:**
+- The span, or `None` if tracing is disabled.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_session_startup_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L603" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_session_startup_span}
+
+```python
+finish_session_startup_span(session_id: str) -> bool
+```
+
+
+End the nested `start_session` span if one is in flight.
+
+**Args:**
+- `session_id`: Session UUID from the matching open call. The in-flight
+key is derived from this.
+- `exception`: If provided, mark the span ERROR.
+
+**Returns:**
+- True if a child span was open and was finished; False if no-op.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_session_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L626" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#start_session_span}
+
+```python
+start_session_span(session_id: str) -> Span | None
+```
+
+
+Open the long-lived `session` span over a session's lifetime.
+
+**Args:**
+- `session_id`: Session UUID, used as the correlation key and stamped
+as `mellea.session_id`.
+- `context_type`: Context class name.
+- `backend`: Backend identifier (e.g. `"ollama"`); stamped as
+`mellea.backend` when provided.
+
+**Returns:**
+- The span, or `None` if tracing is disabled.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_session_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L652" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_session_span}
+
+```python
+finish_session_span(session_id: str) -> None
+```
+
+
+End the long-lived `session` span.
+
+**Args:**
+- `session_id`: Correlation key from the matching open call.
+- `exception`: If provided, mark the span ERROR.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_action_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L667" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#start_action_span}
+
+```python
+start_action_span(action_id: str) -> Span | None
+```
+
+
+Open the `action` span for a single component execution.
+
+**Args:**
+- `action_id`: UUID correlating this component execution across hooks.
+- `action_class_name`: Class name of the component being executed.
+- `has_requirements`: Whether requirements were supplied.
+- `has_strategy`: Whether a sampling strategy was supplied.
+- `strategy_type`: Sampling strategy class name when present.
+- `has_format`: Whether a structured-output format was supplied.
+- `tool_calls`: Whether tool calling is enabled.
+- `attach_context`: Whether to attach the span as the ambient OTel context.
+
+**Returns:**
+- The span, or `None` if tracing is disabled.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_action_span_success` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L708" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_action_span_success}
+
+```python
+finish_action_span_success(action_id: str) -> None
+```
+
+
+End the action span with response-side attributes.
+
+`mellea.response` is recorded only when `is_content_tracing_enabled()`
+returns true; the helper truncates to 500 chars before recording.
+`mellea.response_length` is always recorded (a non-content metric).
+
+**Args:**
+- `action_id`: Correlation key from the matching open call.
+- `num_generate_logs`: `mellea.num_generate_logs`.
+- `sampling_success`: `mellea.sampling_success` (set when a strategy ran).
+- `response_text`: Raw response text. Recorded as `mellea.response` only
+when content tracing is enabled.
+- `response_length`: `mellea.response_length` (always safe; ungated).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_action_span_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L746" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_action_span_error}
+
+```python
+finish_action_span_error(action_id: str) -> None
+```
+
+
+End the action span with ERROR status.
+
+**Args:**
+- `action_id`: Correlation key from the matching open call.
+- `exception`: The exception that ended the action.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_streaming_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L756" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#start_streaming_span}
+
+```python
+start_streaming_span(streaming_id: str) -> Span | None
+```
+
+
+Open the `stream_with_chunking` span for one orchestration run.
+
+**Args:**
+- `streaming_id`: UUID correlating this streaming run across hooks.
+- `has_requirements`: Whether requirements were supplied.
+- `requirement_count`: Number of requirements supplied.
+- `chunking_strategy`: ChunkingStrategy class name.
+- `attach_context`: Whether to attach the span as the ambient OTel context.
+
+**Returns:**
+- The span, or `None` if tracing is disabled.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_streaming_event` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L788" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#add_streaming_event}
+
+```python
+add_streaming_event(streaming_id: str) -> None
+```
+
+
+Add an OTel span event to the in-flight `stream_with_chunking` span.
+
+Leaves the span in `_in_flight_spans` for a later `finish_streaming_span_*`
+call to close.
+
+**Args:**
+- `streaming_id`: Correlation key from the matching open call.
+- `event_name`: Span-event name.
+- `attributes`: Span-event attributes; `None` values are skipped.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reattach_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L809" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#reattach_span}
+
+```python
+reattach_span(key: str) -> None
+```
+
+
+Make the in-flight span `key` the current task's ambient context.
+
+Spans opened by later work on this task then parent under it. Paired with
+`release_reattached_span()`, which must run on the same task. No-op when the
+span is not in flight. See `_safe_detach` for how this scope is used to
+classify the cross-task detach it enables.
+
+**Args:**
+- `key`: Correlation key of an in-flight span (the key it was stashed under).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `release_reattached_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L828" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#release_reattached_span}
+
+```python
+release_reattached_span(key: str) -> None
+```
+
+
+Release a reattached span from a matching `reattach_span()` call.
+
+Must run on the same task that called `reattach_span()`. No-op when no token
+is stored.
+
+**Args:**
+- `key`: Correlation key from the matching `reattach_span()` call.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `finish_streaming_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/telemetry/tracing.py#L843" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#finish_streaming_span}
+
+```python
+finish_streaming_span(streaming_id: str) -> None
+```
+
+
+End the `stream_with_chunking` span, recording its outcome.
+
+Sets OK status on success. On failure, marks the span ERROR: with the
+exception recorded when one is given, otherwise with `failure_reason` and
+no recorded exception.
+
+**Args:**
+- `streaming_id`: Correlation key from the matching open call.
+- `success`: `True` only on a clean completion.
+- `failure_reason`: Human-readable ERROR-status description, used when
+`success` is `False` and no `exception` is given.
+- `exception`: The exception raised by the orchestrator, when one was.
+- `model`: Model identifier, when known.
+- `provider`: Provider name, when known.
+- `full_text_length`: Accumulated text length at orchestrator exit.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

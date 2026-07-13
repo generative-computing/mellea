@@ -1,0 +1,206 @@
+---
+title: "mellea.stdlib.sampling.majority_voting"
+sidebar_label: "mellea.stdlib.sampling.majority_voting"
+description: "Sampling Strategies for Minimum Bayes Risk Decoding (MBRD)."
+---
+
+Sampling Strategies for Minimum Bayes Risk Decoding (MBRD).
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `BaseMBRDSampling` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L22" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-basembrdsampling}
+
+
+Abstract Minimum Bayes Risk Decoding (MBRD) Sampling Strategy.
+
+**Args:**
+- `number_of_samples`: Number of samples to generate and use for
+majority voting. Defaults to `8`.
+- `weighted`: Not yet implemented. If `True`, weights scores
+before majority vote.
+- `loop_budget`: Inner rejection-sampling loop count. Must be > 0.
+- `requirements`: Requirements to validate
+against. If `None`, uses per-call requirements.
+
+**Attributes:**
+- `symmetric`: Whether the similarity metric is symmetric, allowing
+the upper-triangle score matrix to be mirrored; always `True` for
+this base class.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `compare_strings` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L63" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#compare_strings}
+
+```python
+compare_strings(self, ref: str, pred: str) -> float
+```
+
+Compute a similarity score between a reference and a predicted string.
+
+Subclasses must implement this to define the MBRD similarity metric.
+
+**Args:**
+- `ref`: The reference string to compare against.
+- `pred`: The predicted string to evaluate.
+
+**Returns:**
+- A similarity score, typically in `[0.0, 1.0]` where `1.0`
+- indicates a perfect match.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `maybe_apply_weighted` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L77" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#maybe_apply_weighted}
+
+```python
+maybe_apply_weighted(self, scr: np.ndarray) -> np.ndarray
+```
+
+Apply per-sample weights to the score vector if `self.weighted` is `True`.
+
+Currently not implemented; the input array is returned unchanged when
+`self.weighted` is `True`.
+
+**Args:**
+- `scr`: 1-D array of aggregated similarity scores, one
+entry per candidate sample.
+
+**Returns:**
+- np.ndarray: The (possibly weighted) score array.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sample` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L97" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#sample}
+
+```python
+sample(self, action: Component[S], context: Context, backend: Backend, requirements: list[Requirement] | None) -> SamplingResult[S]
+```
+
+Samples using majority voting.
+
+**Args:**
+- `action `: The action object to be sampled.
+- `context`: The context to be passed to the sampling strategy.
+- `backend`: The backend used for generating samples.
+- `requirements`: List of requirements to test against (merged with global requirements).
+- `validation_ctx`: Optional context to use for validation. If None, validation_ctx = ctx.
+- `format`: output format for structured outputs; ignored for this sampling strategy.
+- `model_options`: model options to pass to the backend during generation / validation.
+- `tool_calls`: True if tool calls should be used during this sampling strategy.
+- `show_progress`: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+
+**Returns:**
+- SamplingResult[S]: A result object indicating the success or failure of the sampling process.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MajorityVotingStrategyForMath` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L190" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-majorityvotingstrategyformath}
+
+
+MajorityVoting Sampling Strategy for Math Expressions.
+
+For free-text outputs, use `MBRDRougeLStrategy` instead.
+
+**Args:**
+- `number_of_samples`: Number of samples to generate. Defaults to `8`.
+- `float_rounding`: Decimal places for float comparison. Defaults to `6`.
+- `strict`: Enforce strict comparison mode. Defaults to `True`.
+- `allow_set_relation_comp`: Allow set-relation comparisons. Defaults
+to `False`.
+- `weighted`: Not yet implemented. Defaults to `False`.
+- `loop_budget`: Rejection-sampling loop count. Defaults to `1`.
+- `requirements`: Requirements to validate against.
+
+**Attributes:**
+- `match_types`: Extraction target types used for parsing math
+expressions; always `["latex", "axpr"]`, computed at init.
+- `symmetric`: Inherited from `BaseMBRDSampling`; always `True`
+for this strategy (set explicitly at init).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `compare_strings` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L254" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#compare_strings}
+
+```python
+compare_strings(self, ref: str, pred: str) -> float
+```
+
+Compare two strings using math-aware extraction and verification.
+
+Parses both strings into mathematical expressions using the configured
+`match_types` (latex and/or expr), then verifies equivalence via
+`math_verify.verify`.
+
+**Args:**
+- `ref`: The reference (gold) string containing a math expression.
+- `pred`: The predicted string to compare against the reference.
+
+**Returns:**
+- `1.0` if the expressions are considered equivalent,
+- `0.0` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MBRDRougeLStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L292" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-mbrdrougelstrategy}
+
+
+Sampling Strategy that uses RougeL to compute symbol-level distances for majority voting.
+
+This is the general-purpose majority voting strategy for text outputs.
+
+**Args:**
+- `number_of_samples`: Number of samples to generate. Defaults to `8`.
+- `weighted`: Not yet implemented. Defaults to `False`.
+- `loop_budget`: Rejection-sampling loop count. Defaults to `1`.
+- `requirements`: Requirements to validate against.
+
+**Attributes:**
+- `match_types`: Rouge metric names used for scoring (`["rougeL"]`).
+- `scorer`: Pre-configured `RougeScorer` instance used for
+pairwise string comparison.
+- `symmetric`: Inherited from `BaseMBRDSampling`; always `True` for
+RougeL (the score is symmetric by construction).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `compare_strings` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/majority_voting.py#L338" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#compare_strings}
+
+```python
+compare_strings(self, ref: str, pred: str) -> float
+```
+
+Compare two strings using the RougeL F-measure.
+
+**Args:**
+- `ref`: The reference string to score against.
+- `pred`: The predicted string to evaluate.
+
+**Returns:**
+- RougeL F-measure score in the range `[0.0, 1.0]`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

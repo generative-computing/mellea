@@ -1,0 +1,159 @@
+---
+title: "mellea.helpers.async_helpers"
+sidebar_label: "mellea.helpers.async_helpers"
+description: "Async helper functions for managing concurrent model output thunks."
+---
+
+Async helper functions for managing concurrent model output thunks.
+
+
+
+
+
+Provides `send_to_queue`, which feeds a backend response coroutine or async iterator
+into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
+which gathers multiple [`ModelOutputThunk`](../core/base#class-modeloutputthunk) computations in a single `asyncio.gather`
+call; and `get_current_event_loop`, a safe wrapper that returns `None` instead of
+raising when no event loop is running. These utilities are used internally by backends
+that operate in async contexts.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `send_to_queue` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L36" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#send_to_queue}
+
+```python
+send_to_queue(co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, aqueue: asyncio.Queue) -> None
+```
+
+
+Processes the output of an async chat request by sending the output to an async queue.
+
+**Args:**
+- `co`: A coroutine or async iterator producing the backend response.
+- `aqueue`: The async queue to send results to. A sentinel `None` is appended on
+normal completion; an exception instance (including `TimeoutError`) is
+appended on error. A timeout does **not** append a trailing sentinel — the
+exception item is the stream terminator.
+- `chunk_timeout`: Maximum seconds to wait for each chunk from the backend iterator,
+including the first (time-to-first-token). Only applies when the backend
+response is an `AsyncIterator`; non-streaming coroutines are unaffected.
+If no chunk arrives within this window a `TimeoutError` is forwarded to
+the queue and the stream is aborted. `None` disables the timeout.
+Defaults to `DEFAULT_CHUNK_TIMEOUT` (120 s). Note that `0` sets the
+deadline to "now" and aborts immediately — use `None` to disable.
+
+**Raises:**
+- `TimeoutError`: Re-raised verbatim when the backend itself raises `TimeoutError`
+(i.e. the timeout did not originate from *this* function's per-chunk guard).
+Stream-guard timeouts are forwarded into *aqueue* rather than raised.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `wait_for_all_mots` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L117" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#wait_for_all_mots}
+
+```python
+wait_for_all_mots(mots: list[ModelOutputThunk]) -> None
+```
+
+
+Helper function to make waiting for multiple ModelOutputThunks to be computed easier.
+
+All ModelOutputThunks must be from the same event loop. This should always be the case in sampling
+functions, session functions, and top-level mellea functions.
+
+**Args:**
+- `mots`: List of [`ModelOutputThunk`](../core/base#class-modeloutputthunk) objects to await concurrently.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_current_event_loop` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L133" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_current_event_loop}
+
+```python
+get_current_event_loop() -> None | asyncio.AbstractEventLoop
+```
+
+
+Get the current event loop without having to catch exceptions.
+
+**Returns:**
+- The running event loop, or `None` if no loop is running.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ClientCache` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L147" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-clientcache}
+
+
+A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache.
+
+Used to keep track of clients for backends where the client is tied to a specific event loop.
+
+**Args:**
+- `capacity`: Maximum number of entries to hold before evicting the least recently used.
+
+**Attributes:**
+- `cache`: Ordered dictionary storing cached key-value pairs in LRU
+order; always initialised empty at construction.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `current_size` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L165" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#current_size}
+
+```python
+current_size(self) -> int
+```
+
+Just return the size of the key set. This isn't necessarily safe.
+
+**Returns:**
+- Number of entries currently in the cache.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L173" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get}
+
+```python
+get(self, key: int) -> Any | None
+```
+
+Gets a value from the cache.
+
+**Args:**
+- `key`: Integer cache key.
+
+**Returns:**
+- The cached value, or `None` if the key is not present.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `put` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/helpers/async_helpers.py#L190" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#put}
+
+```python
+put(self, key: int, value: Any) -> None
+```
+
+Put a value into the cache.
+
+**Args:**
+- `key`: Integer cache key.
+- `value`: Value to store.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,237 @@
+---
+title: "mellea.stdlib.sampling.feedback"
+sidebar_label: "mellea.stdlib.sampling.feedback"
+description: "Model-friendly feedback formatters for validation failures."
+---
+
+Model-friendly feedback formatters for validation failures.
+
+
+
+
+
+This module converts generic validation failure reasons into actionable guidance
+that language models can understand and act upon. Different requirement types
+(syntax errors, import violations, execution failures, etc.) receive specialized
+formatting that highlights what went wrong and suggests concrete fixes.
+
+The key insight is that LLM repair performs better when feedback is:
+1. **Specific**: Names the exact error location and type
+2. **Actionable**: Suggests concrete steps to fix it
+3. **Concise**: Avoids unnecessary details that confuse the model
+
+For example:
+- Generic: "Syntax error at line 5"
+- Model-friendly: "Your code has a syntax error on line 5. Try: Add a colon ':'
+  at the end of your if statement."
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ModelFriendlyFeedbackFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L58" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-modelfriendlyfeedbackformatter}
+
+
+Converts validation failures into model-friendly repair instructions.
+
+This class provides static methods to format each requirement type's error
+messages into actionable guidance. Each formatter takes a ValidationResult
+and produces a concise, model-understandable message.
+
+The formatters are designed to be called from sampling strategies (like
+RepairTemplateStrategy) to improve the quality of repair feedback.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_python_syntax_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L70" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_python_syntax_error}
+
+```python
+format_python_syntax_error(validation_result: ValidationResult) -> str
+```
+
+Format syntax errors into actionable guidance.
+
+Input: "Syntax error at line 5: Expected ':' token"
+Output: "Your code has a syntax error on line 5. Try: Add a colon ':' at
+         the end of your statement."
+
+**Args:**
+- `validation_result`: ValidationResult from PythonSyntaxValid.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_import_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L108" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_import_error}
+
+```python
+format_import_error(validation_result: ValidationResult) -> str
+```
+
+Format import restriction violations into actionable guidance.
+
+Input: "Forbidden imports detected: subprocess, socket"
+Output: "Your code imports forbidden modules: subprocess, socket. These are
+         not available. Try: Use only allowed modules like numpy, json."
+
+**Args:**
+- `validation_result`: ValidationResult from ImportRestrictions.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_execution_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L140" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_execution_error}
+
+```python
+format_execution_error(validation_result: ValidationResult) -> str
+```
+
+Format runtime/execution errors into actionable guidance.
+
+Input: "Traceback: NameError: name 'x' is not defined at line 8"
+Output: "Your code has a runtime error: variable 'x' is not defined on line 8.
+         Try: Check that all variables are defined before use."
+
+**Args:**
+- `validation_result`: ValidationResult from PythonExecutionReq.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_output_size_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L206" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_output_size_error}
+
+```python
+format_output_size_error(validation_result: ValidationResult) -> str
+```
+
+Format output size limit violations into actionable guidance.
+
+Input: "Output size (50000 chars) exceeds limit (10000)."
+Output: "Your code produces too much output (50000 chars, limit is 10000).
+         Try: Reduce printed output or logging."
+
+**Args:**
+- `validation_result`: ValidationResult from OutputSizeLimit.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_matplotlib_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L237" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_matplotlib_error}
+
+```python
+format_matplotlib_error(validation_result: ValidationResult) -> str
+```
+
+Format matplotlib-specific errors into actionable guidance.
+
+Input: "matplotlib.use() call not found in code"
+Output: "Your code doesn't set up a headless backend. Try: Add
+         'import matplotlib; matplotlib.use('Agg')' at the start."
+
+**Args:**
+- `validation_result`: ValidationResult from matplotlib requirements.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_extraction_error` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L279" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_extraction_error}
+
+```python
+format_extraction_error(validation_result: ValidationResult) -> str
+```
+
+Format code extraction errors into actionable guidance.
+
+Input: "No Python code blocks found in response"
+Output: "Your response doesn't contain a code block. Try: Make sure to
+         include your code in a `python ... ` block."
+
+**Args:**
+- `validation_result`: ValidationResult from PythonCodeExtraction.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_requirement_reason` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L307" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_requirement_reason}
+
+```python
+format_requirement_reason(cls, requirement: Requirement, validation_result: ValidationResult) -> str
+```
+
+Intelligently format feedback based on requirement type.
+
+Dispatches to specific formatter methods based on the requirement's
+type. Falls back to generic formatting if no specific handler exists.
+
+**Args:**
+- `requirement`: The Requirement instance that failed.
+- `validation_result`: The ValidationResult from the failed check.
+
+**Returns:**
+- Model-friendly feedback string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ModelFriendlyRepairStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L348" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-modelfriendlyrepairstrategy}
+
+
+RepairTemplateStrategy with model-friendly feedback formatting.
+
+Extends RepairTemplateStrategy to use ModelFriendlyFeedbackFormatter for
+converting validation failures into actionable repair guidance. This typically
+improves LLM performance on repair tasks compared to generic validation reasons.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `repair` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/feedback.py#L365" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#repair}
+
+```python
+repair(old_ctx: Context, new_ctx: Context, past_actions: list[Component], past_results: list[Any], past_val: list[list[tuple[Requirement, ValidationResult]]]) -> tuple[Component, Context]
+```
+
+Repair with model-friendly feedback formatting.
+
+Identical to RepairTemplateStrategy.repair() but uses
+ModelFriendlyFeedbackFormatter to format each failure reason.
+
+**Args:**
+- `old_ctx`: Context without the failed action output.
+- `new_ctx`: Context including the failed action output.
+- `past_actions`: Previous actions executed.
+- `past_results`: Previous generation results.
+- `past_val`: Previous validation results for each requirement.
+
+**Returns:**
+- Tuple of (repaired action component, original context).
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

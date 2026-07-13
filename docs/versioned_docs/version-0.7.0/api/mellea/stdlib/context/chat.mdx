@@ -1,0 +1,138 @@
+---
+title: "mellea.stdlib.context.chat"
+sidebar_label: "mellea.stdlib.context.chat"
+description: "Chat-style context with pluggable compaction."
+---
+
+Chat-style context with pluggable compaction.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatContext` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/chat.py#L18" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-chatcontext}
+
+
+Chat context that accumulates turns and optionally compacts on each `add`.
+
+By default the context performs **no compaction** — the full history is
+retained. Compaction is opt-in: pass `compactor=` for a custom
+strategy, or `window_size=` as sugar for `WindowCompactor(size=...)`.
+
+Independently of compaction, a token budget can cap what
+`view_for_generation` forwards to the model: pass
+`token_context_length_limit=` for an explicit cap, or `model_id=` to
+derive the cap from the model's known context length. These operate at
+view time (newest-first, dropping oldest) and compose on top of any
+compaction already applied at `add` time.
+
+**Args:**
+- `compactor`: The compactor invoked on every
+`add`. `None` (the default) means no compaction; full history
+is kept.
+- `window_size`: Sugar that constructs a
+`WindowCompactor(size=window_size)`, whose default
+`pin_predicate` is `pin_system`. Mutually exclusive with
+`compactor`. `None` (the default) means no windowing.
+
+**Behavior change (deliberate)\:** before the compaction refactor,
+`window_size=N` was a raw last-N view (`as_list(N)`) with no
+pinning — a system message could age out and exactly `N` items
+were returned. It now pins the system message (which therefore
+survives) and the `size` limit counts only the non-pinned body,
+so the returned view can exceed `N` items. To recover the old
+drop-in semantics, pass
+`compactor=WindowCompactor(size=N, pin_predicate=pin_nothing)`.
+- `token_context_length_limit`: Explicit token budget cap
+for `view_for_generation`. Overrides the model-derived limit when
+set. `None` (the default) means no token cap.
+- `model_id`: Optional model identifier
+used for automatic context-window sizing. When set and
+`token_context_length_limit` is not provided,
+`view_for_generation` looks up the model's known context length
+and uses it as the token budget.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `model_id` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/chat.py#L112" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#model_id}
+
+```python
+model_id(self) -> str | ModelIdentifier | None
+```
+
+The model identifier bound to this context, or `None` if unbound.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `new_instance` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/chat.py#L153" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#new_instance}
+
+```python
+new_instance(self) -> ChatContext
+```
+
+Return a new empty root `ChatContext`, preserving compactor, token budget, and `model_id`.
+
+Use this instead of `reset_to_new()` when you need to preserve the
+configuration of an existing instance. `reset_to_new()` is a classmethod
+that returns a bare `ChatContext()` with no configuration.
+
+**Returns:**
+- A fresh root context with the same compactor,
+- `token_context_length_limit`, and `model_id` as this instance, but
+- no history.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/chat.py#L167" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#add}
+
+```python
+add(self, c: Component | CBlock | ModelOutputThunk) -> ChatContext
+```
+
+Append `c` and run the compactor; return the resulting context.
+
+**Args:**
+- `c`: The component, content
+block, or model output to append.
+
+**Returns:**
+- A new `ChatContext` carrying the same configuration.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/chat.py#L184" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#view_for_generation}
+
+```python
+view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None
+```
+
+Return the components to forward to the model.
+
+Compaction is applied at `add` time (Pattern 1), so the stored history
+is already post-compaction. A token budget, if configured, is applied
+here on top of that:
+
+1. Explicit `token_context_length_limit` — token cap, overrides model table.
+2. Model-derived context length looked up via `model_id`.
+3. No token limit — return the full (post-compaction) history.
+
+`None` is returned when the underlying history is non-linear.
+
+**Returns:**
+- list\[Component | CBlock | ModelOutputThunk] | None: Ordered list of
+- context entries, or `None` if the history is non-linear.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

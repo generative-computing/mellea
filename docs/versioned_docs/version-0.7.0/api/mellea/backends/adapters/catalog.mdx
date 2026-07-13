@@ -1,0 +1,158 @@
+---
+title: "mellea.backends.adapters.catalog"
+sidebar_label: "mellea.backends.adapters.catalog"
+description: "Catalog of available adapter functions."
+---
+
+Catalog of available adapter functions.
+
+
+
+
+
+Catalog of adapter functions currently known to Mellea, including metadata about where
+to find LoRA and aLoRA adapters that implement them.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `validate_revision` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/backends/adapters/catalog.py#L12" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#validate_revision}
+
+```python
+validate_revision(revision: str) -> str
+```
+
+
+Validate a Hugging Face revision value.
+
+Accepts any non-empty string. Hugging Face's `revision` parameter takes a
+branch name, tag, or commit SHA; this validator mirrors that contract.
+Catalogue entries pin to commit SHAs by convention; that is enforced by
+review and (optionally) build-time drift checks rather than by this
+validator.
+
+**Args:**
+- `revision`: Any non-empty string accepted by Hugging Face as a
+revision (branch name, tag, or commit SHA).
+
+**Returns:**
+- The validated revision unchanged.
+
+**Raises:**
+- `ValueError`: If `revision` is empty, whitespace-only, or has leading
+or trailing whitespace.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `known_intrinsic_names` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/backends/adapters/catalog.py#L239" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#known_intrinsic_names}
+
+```python
+known_intrinsic_names() -> list[str]
+```
+
+
+Return all known user-visible names for adapter functions.
+
+**Returns:**
+- List of all known user-visible adapter function names.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `fetch_intrinsic_metadata` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/backends/adapters/catalog.py#L248" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#fetch_intrinsic_metadata}
+
+```python
+fetch_intrinsic_metadata(intrinsic_name: str) -> IntrinsicsCatalogEntry
+```
+
+
+Retrieve catalog metadata for the adapter that implements an adapter function.
+
+**Args:**
+- `intrinsic_name`: User-visible name of the adapter function.
+
+**Returns:**
+- Metadata about the adapter(s) that implement the
+adapter function.
+
+**Raises:**
+- `ValueError`: If `intrinsic_name` is not a known adapter function name.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `AdapterType` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/backends/adapters/catalog.py#L39" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-adaptertype}
+
+
+Possible types of adapters for a backend.
+
+**Attributes:**
+- `LORA`: Standard LoRA adapter; value `"lora"`.
+- `ALORA`: aLoRA adapter (shares model KV cache across adapter functions); value `"alora"`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `IntrinsicsCatalogEntry` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/backends/adapters/catalog.py#L51" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-intrinsicscatalogentry}
+
+
+A single row in the main adapter function catalog table.
+
+We use Pydantic for this dataclass because the rest of Mellea also uses Pydantic.
+
+**Attributes:**
+- `name`: User-visible name of the adapter function. May contain hyphens when
+that matches the upstream adapter name; prefer `effective_capability`
+to form the stable capability token. Must be non-empty with no leading
+or trailing whitespace.
+- `capability`: Stable Mellea-level capability token, independent
+of the upstream adapter name. Uses underscores. When `None`,
+\:attr\:`effective_capability` falls back to `name`. When set, must be
+non-empty with no leading or trailing whitespace.
+- `internal_name`: Internal name used for adapter loading, or
+`None` if the same as `name`.
+- `repo_id`: Hugging Face repository where adapters for the adapter function
+are located.
+- `revision`: Hugging Face revision — branch name, tag, or commit SHA.
+Catalogue entries pin to commit SHAs by convention so loads are
+reproducible; the validator itself only requires a non-empty string.
+Note\: this field is stored in the catalogue but not yet forwarded to
+the Hugging Face download call; wiring it through is deferred to a
+subsequent phase of the adapter-lifecycle epic (#929).
+- `adapter_types`: Adapter types known to be
+available for this adapter function; defaults to
+`(AdapterType.LORA, AdapterType.ALORA)`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `effective_capability` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/backends/adapters/catalog.py#L137" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#effective_capability}
+
+```python
+effective_capability(self) -> str
+```
+
+Return the stable capability token for this adapter function.
+
+Returns `capability` when explicitly set; falls back to `name`
+otherwise. Use this property — not `name` — whenever building the
+capability vocabulary or resolving an
+:class:`~mellea.backends.adapters.Identity` capability.
+
+**Returns:**
+- Capability token, guaranteed non-empty.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

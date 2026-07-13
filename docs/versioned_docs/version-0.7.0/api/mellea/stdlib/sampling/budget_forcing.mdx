@@ -1,0 +1,81 @@
+---
+title: "mellea.stdlib.sampling.budget_forcing"
+sidebar_label: "mellea.stdlib.sampling.budget_forcing"
+description: "Sampling Strategies for budget forcing generation."
+---
+
+Sampling Strategies for budget forcing generation.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `BudgetForcingSamplingStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/budget_forcing.py#L26" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-budgetforcingsamplingstrategy}
+
+
+Sampling strategy that enforces a token budget for chain-of-thought reasoning.
+
+Extends `RejectionSamplingStrategy` with explicit control over the `<think>`
+block size and the answer block size. On each loop iteration,
+`think_budget_forcing` interleaves forced-thinking and final-answer generation,
+after which the standard rejection-sampling validation pass determines whether to
+accept or retry.
+
+Currently only supports the `OllamaModelBackend`.
+
+**Args:**
+- `think_max_tokens`: Tokens allocated for the thinking block.
+Defaults to `4096`.
+- `answer_max_tokens`: Tokens allocated for the answer block.
+`None` means unbounded.
+- `start_think_token`: Token opening the thinking block.
+Defaults to `"<think>"`.
+- `end_think_token`: Token closing the thinking block.
+Defaults to `"</think>"`.
+- `begin_response_token`: Optional token opening the response
+block. Defaults to `""`.
+- `end_response_token`: Token closing the response block.
+- `think_more_suffix`: Suffix to force continued thinking.
+Empty string disables forcing.
+- `answer_suffix`: Suffix to elicit a final answer.
+- `loop_budget`: Rejection-sampling loop count. Must be > 0.
+- `requirements`: Requirements to validate against.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sample` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/sampling/budget_forcing.py#L95" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#sample}
+
+```python
+sample(self, action: Component[S], context: Context, backend: Backend, requirements: list[Requirement] | None) -> SamplingResult[S]
+```
+
+This method performs a sampling operation based on the given instruction.
+
+**Args:**
+- `action `: The action object to be sampled.
+- `context`: The context to be passed to the sampling strategy.
+- `backend`: The backend used for generating samples.
+- `requirements`: List of requirements to test against (merged with global requirements).
+- `validation_ctx`: Optional context to use for validation. If None, validation_ctx = ctx.
+- `format`: output format for structured outputs.
+- `model_options`: model options to pass to the backend during generation / validation.
+- `tool_calls`: True if tool calls should be used during this sampling strategy.
+- `show_progress`: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+
+**Returns:**
+- SamplingResult[S]: A result object indicating the success or failure of the sampling process.
+
+**Raises:**
+- `AssertionError`: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

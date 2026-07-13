@@ -1,0 +1,34 @@
+---
+title: "mellea.stdlib.requirements.md"
+sidebar_label: "mellea.stdlib.requirements.md"
+description: "This file contains various requirements for Markdown-formatted files."
+---
+
+This file contains various requirements for Markdown-formatted files.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_markdown_list` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/md.py#L27" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#as_markdown_list}
+
+```python
+as_markdown_list(ctx: Context) -> list[str] | None
+```
+
+
+Attempts to format the last_output of the given context as a markdown list.
+
+**Args:**
+- `ctx`: The current conversation context whose last output will be parsed.
+
+**Returns:**
+- List of rendered list-item strings if the output is a markdown list,
+- or `None` if parsing fails or the output is not a list.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,64 @@
+---
+title: "mellea.stdlib.frameworks.react"
+sidebar_label: "mellea.stdlib.frameworks.react"
+description: "ReACT (Reason + Act) agentic pattern implementation."
+---
+
+ReACT (Reason + Act) agentic pattern implementation.
+
+
+
+
+
+Provides the `react()` async function, which drives a tool-use loop: the model
+reasons about a goal, selects a tool, receives the result as an observation, and
+repeats until it calls `final_answer` or the `loop_budget` is exhausted. Accepts
+any list of `AbstractMelleaTool` instances and a `ChatContext` for multi-turn
+history tracking. Raises `RuntimeError` if the loop ends without a final answer.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `react` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/frameworks/react.py#L27" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#react}
+
+```python
+react(goal: str, context: ChatContext, backend: Backend) -> tuple[ComputedModelOutputThunk[str], ChatContext]
+```
+
+
+Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
+
+**Args:**
+- `goal`: the goal to be accomplished or the question to answer
+- `context`: the context being used; a type of ChatContext
+- `backend`: the backend used to generate the response.
+- `format`: if set, the BaseModel to use for constrained decoding.
+- `model_options`: additional model options, which will upsert into the model/backend's defaults.
+- `tools`: the list of tools to use
+- `loop_budget`: the number of steps allowed; use -1 for unlimited
+- `compactor`: optional sync `Compactor` invoked once per turn after the
+tool observation. Use this for strategies that should fire at turn
+boundaries rather than on every component append (per-add
+compaction is configured on `context` itself). Compose with
+\:func\:`mellea.stdlib.components.react.pin_react_initiator` to
+preserve the goal across compactions. Compactors that need to
+call the backend (e.g. `LLMSummarizeCompactor`) hide the async
+work behind their sync `compact` method internally.
+
+The `Compactor` protocol is generic in `T` bound to
+[`Context`](../../core/base#class-context), so a compactor that returns a non-chat [`Context`](../../core/base#class-context)
+(e.g. `SimpleContext`) type-checks here but breaks the
+`ChatContext` assumptions the next `aact` call relies on.
+Custom compactors used with `react` must return a
+`ChatContext`.
+
+**Returns:**
+- A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a [`SamplingResult`](../../core/sampling#class-samplingresult).
+
+**Raises:**
+- `RuntimeError`: if the loop ends before a final answer is found
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

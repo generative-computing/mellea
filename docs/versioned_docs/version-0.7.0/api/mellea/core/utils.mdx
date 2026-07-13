@@ -1,0 +1,431 @@
+---
+title: "mellea.core.utils"
+sidebar_label: "mellea.core.utils"
+description: "Logging utilities for the mellea core library."
+---
+
+Logging utilities for the mellea core library.
+
+
+
+
+
+Provides `MelleaLogger`, a singleton logger with colour-coded console output,
+an optional rotating file handler, and optional OTLP / webhook forwarding.
+All internal mellea modules obtain their logger via `MelleaLogger.get_logger()`.
+
+Handler setup is performed by `configure_logging`, which is called
+automatically on the first `MelleaLogger.get_logger` invocation.
+
+Environment variables
+---------------------
+`MELLEA_LOGS_ENABLED`
+    Master switch for all logging handlers.  Set to `false` / `0` / `no` to
+    suppress all handlers (useful in test environments).  Defaults to `true`.
+`MELLEA_LOGS_LEVEL`
+    Minimum log level name (e.g. `DEBUG`, `INFO`, `WARNING`).  Defaults to
+    `INFO`.
+`MELLEA_LOGS_JSON`
+    Set to any truthy value (`1`, `true`, `yes`) to emit structured JSON
+    instead of colour-coded human-readable text.  Applies to both the console and
+    file handlers.
+`MELLEA_LOGS_CONSOLE`
+    Set to `false` / `0` / `no` to disable the console (stdout) handler.
+    Defaults to `true`.
+`MELLEA_LOGS_FILE`
+    Absolute or relative path for rotating file output (e.g.
+    `/var/log/mellea.log`).  When unset no file handler is attached.
+`MELLEA_LOGS_FILE_MAX_BYTES`
+    Maximum size in bytes before the log file is rotated.  Defaults to
+    `10485760` (10 MB).
+`MELLEA_LOGS_FILE_BACKUP_COUNT`
+    Number of rotated backup files to keep.  Defaults to `5`.
+`MELLEA_LOGS_OTLP`
+    Set to `true` / `1` / `yes` to export logs via OpenTelemetry Logs
+    Protocol.  Requires `opentelemetry-sdk` and an OTLP endpoint configured
+    via `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT`.
+`MELLEA_LOGS_WEBHOOK`
+    HTTPS URL to forward log records to via HTTP POST.  Must use the
+    `https://` scheme and must have a non-empty hostname.  When set a
+    `RESTHandler` is attached.
+`MELLEA_LOGS_INSECURE_HTTP_ALLOWED`
+    Set to `true` / `1` / `yes` to allow plain `http://` URLs in
+    `MELLEA_LOGS_WEBHOOK`.  Intended for local development only; never
+    set this in production.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `set_log_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L112" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#set_log_context}
+
+```python
+set_log_context(**fields: Any) -> None
+```
+
+
+Inject extra fields into every log record emitted from this coroutine or thread.
+
+Call this at the start of a request or task to attach identifiers such as
+`trace_id` or `request_id` without modifying individual log calls.
+
+**Args:**
+- `**fields`: Arbitrary key-value pairs to include in log records.
+
+**Raises:**
+- `ValueError`: If any key clashes with a standard `logging.LogRecord`
+attribute (e.g. `levelname`, `module`, `thread`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `clear_log_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L138" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#clear_log_context}
+
+```python
+clear_log_context() -> None
+```
+
+
+Remove all context fields set by `set_log_context` for this coroutine/thread.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L144" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_context}
+
+```python
+log_context(**fields: Any) -> Generator[None, None, None]
+```
+
+
+Context manager that injects *fields* for the duration of the block.
+
+On exit — including on exceptions — the context is restored to its state
+before the block via a `ContextVar` token.  This is safe for both nested
+usage and concurrent asyncio tasks: each `asyncio.Task` owns an isolated
+copy of the context variable, so coroutines running on the same event-loop
+thread cannot overwrite each other's fields.
+
+**Args:**
+- `**fields`: Key-value pairs to inject.  Same restrictions as
+`set_log_context` — reserved `LogRecord` attribute names
+are rejected with `ValueError`.
+
+**Raises:**
+- `ValueError`: If any key clashes with a reserved `LogRecord` attribute.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `configure_logging` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L556" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#configure_logging}
+
+```python
+configure_logging(logger: logging.Logger) -> None
+```
+
+
+Attach log handlers to *logger* based on current environment variables.
+
+It always appends new handlers (the caller is responsible for clearing
+existing ones before re-configuring).  It is invoked automatically on the
+first call to `MelleaLogger.get_logger`; subsequent calls return the
+same singleton logger with its handlers already in place.  It is also
+available for programmatic use when you need to attach handlers to a custom
+logger.
+
+When `MELLEA_LOGS_ENABLED` is falsy no handlers are attached; the logger
+still exists and accepts records, but they are silently discarded.
+
+If `MELLEA_LOGS_FILE` is set but the path cannot be opened (e.g. due to a
+permissions error), a `UserWarning` is emitted and file logging is
+skipped.  The remaining handlers are still attached and the application
+continues normally.
+
+**Args:**
+- `logger`: The `logging.Logger` to configure.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ContextFilter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L184" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-contextfilter}
+
+
+Logging filter that injects async-safe ContextVar fields into every record.
+
+Fields registered via `set_log_context` are copied onto the
+`logging.LogRecord` before formatters see it, enabling trace/request IDs
+to appear in structured output without touching call sites.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `filter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L192" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#filter}
+
+```python
+filter(self, record: logging.LogRecord) -> bool
+```
+
+Attach async-safe ContextVar fields to *record* and allow it through.
+
+**Args:**
+- `record`: The log record being processed.
+
+**Returns:**
+- Always `True` — the record is never suppressed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `OtelTraceFilter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L207" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-oteltracefilter}
+
+
+Logging filter that injects the current OpenTelemetry trace context into log records.
+
+Adds `trace_id` and `span_id` attributes (hex strings) to every
+`LogRecord` when an active span exists.  When OpenTelemetry is not
+installed the filter is a true no-op: it adds no attributes and takes no
+branches, so there is zero overhead on the hot logging path.  Formatters
+use `hasattr` / `getattr` to handle the absent attributes gracefully.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `filter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L217" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#filter}
+
+```python
+filter(self, record: logging.LogRecord) -> bool
+```
+
+Adds trace_id and span_id to the log record from the current OTel span.
+
+No-op when OpenTelemetry is not installed or when there is no active span.
+
+**Args:**
+- `record`: The log record to enrich.
+
+**Returns:**
+- Always `True` — the record is never suppressed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `RESTHandler` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L236" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-resthandler}
+
+
+Logging handler that forwards records to an HTTP endpoint unconditionally.
+
+Attach this handler only when a webhook URL is configured; it sends every
+record it receives.  Use `configure_logging` or
+`MelleaLogger.get_logger` to obtain a pre-configured instance.
+
+Failures are silently suppressed to avoid disrupting the application.
+
+**Args:**
+- `api_url`: The URL of the REST endpoint that receives log records.
+- `method`: HTTP method to use when sending records (default `"POST"`).
+- `headers`: HTTP headers to send; defaults to
+`\{"Content-Type"\: "application/json"\}` when `None`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `emit` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L261" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#emit}
+
+```python
+emit(self, record: logging.LogRecord) -> None
+```
+
+Forward *record* to the configured REST endpoint.
+
+Silently suppresses any network or HTTP errors to avoid disrupting
+the application.
+
+**Args:**
+- `record`: The log record to forward.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `JsonFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L288" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-jsonformatter}
+
+
+Logging formatter that serialises log records as structured JSON strings.
+
+Produces a consistent JSON schema with a fixed set of core fields.
+Additional fields can be injected at construction time (`extra_fields`) or
+dynamically per-thread via `set_log_context` / `ContextFilter`.
+Includes trace_id and span_id when OpenTelemetry tracing is active.
+
+**Args:**
+- `timestamp_format`: `strftime` format for the `timestamp` field.
+Defaults to ISO-8601 (`"%Y-%m-%dT%H\:%M\:%S"`).
+- `include_fields`: Whitelist of **core** field names to keep.  When `None`
+all core fields are included.  Note\: this filter applies only to the
+fields listed in `_DEFAULT_FIELDS`; `extra_fields` passed to the
+constructor and dynamic context fields (set via
+`set_log_context`) are **always** included regardless of this
+setting.
+- `exclude_fields`: Set of core field names to drop.  Applied after
+*include_fields*.
+- `extra_fields`: Static key-value pairs merged into every log record.
+
+**Attributes:**
+- `_DEFAULT_FIELDS`: Canonical ordered list of core field
+names produced by this formatter.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_as_dict` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L350" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format_as_dict}
+
+```python
+format_as_dict(self, record: logging.LogRecord) -> dict[str, Any]
+```
+
+Return the log record as a dictionary (public API for external callers).
+
+Equivalent to `_build_log_dict` but part of the public interface so
+handlers and other callers do not need to reach into private methods.
+Includes trace_id and span_id when OpenTelemetry tracing is active.
+
+**Args:**
+- `record`: The log record to convert.
+
+**Returns:**
+- A dictionary ready for JSON serialisation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L433" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format}
+
+```python
+format(self, record: logging.LogRecord) -> str
+```
+
+Formats a log record as a JSON string.
+
+Core fields are filtered by *include_fields* / *exclude_fields*.
+Static *extra_fields* and any per-task ContextVar fields (set via
+`set_log_context`) are merged in after the core fields.
+
+**Args:**
+- `record`: The log record to format.
+
+**Returns:**
+- A JSON-serialised log record.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CustomFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L449" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-customformatter}
+
+
+A nice custom formatter copied from [Sergey Pleshakov's post on StackOverflow](https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output).
+
+**Attributes:**
+- `cyan`: ANSI escape code for cyan text, used for DEBUG messages.
+- `grey`: ANSI escape code for grey text, used for INFO messages.
+- `yellow`: ANSI escape code for yellow text, used for WARNING messages.
+- `red`: ANSI escape code for red text, used for ERROR messages.
+- `bold_red`: ANSI escape code for bold red text, used for CRITICAL messages.
+- `reset`: ANSI escape code to reset text colour.
+- `FORMATS`: Mapping from logging level integer to the colour-formatted format string.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L478" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#format}
+
+```python
+format(self, record: logging.LogRecord) -> str
+```
+
+Formats a log record using a colour-coded ANSI format string based on the record's log level.
+
+Appends `[trace_id=… span_id=…]` when `OtelTraceFilter` has
+populated those fields on the record and a trace is active.
+
+**Args:**
+- `record`: The log record to format.
+
+**Returns:**
+- The formatted log record string with ANSI colour codes applied.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MelleaLogger` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L640" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-mellealogger}
+
+
+Singleton logger with colour-coded console output and configurable handlers.
+
+Obtain the shared logger instance via `MelleaLogger.get_logger()`. Log level
+defaults to `INFO` but can be overridden via `MELLEA_LOGS_LEVEL`. Handler
+setup is delegated to `configure_logging`.
+
+**Attributes:**
+- `logger`: The shared `logging.Logger` instance; `None` until first call to `get_logger()`.
+- `CRITICAL`: Numeric level for critical log messages (50).
+- `FATAL`: Alias for `CRITICAL` (50).
+- `ERROR`: Numeric level for error log messages (40).
+- `WARNING`: Numeric level for warning log messages (30).
+- `WARN`: Alias for `WARNING` (30).
+- `INFO`: Numeric level for informational log messages (20).
+- `DEBUG`: Numeric level for debug log messages (10).
+- `NOTSET`: Numeric level meaning no level is set (0).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_logger` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/core/utils.py#L687" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_logger}
+
+```python
+get_logger() -> logging.Logger
+```
+
+Return the shared `logging.Logger`, creating it on first call.
+
+The logger is created once (singleton).  Subsequent calls return the
+cached instance.  Initialisation is protected by a module-level lock so
+concurrent callers at startup cannot create duplicate handlers.
+
+When `MELLEA_LOGS_ENABLED` is falsy `configure_logging` attaches
+no handlers — the logger still exists, but records are silently
+discarded (useful for tests or environments that must produce no output).
+
+**Returns:**
+- Configured logger instance.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

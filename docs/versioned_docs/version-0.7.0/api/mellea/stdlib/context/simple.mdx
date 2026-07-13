@@ -1,0 +1,63 @@
+---
+title: "mellea.stdlib.context.simple"
+sidebar_label: "mellea.stdlib.context.simple"
+description: "Stateless single-turn context (no history is forwarded to the model)."
+---
+
+Stateless single-turn context (no history is forwarded to the model).
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SimpleContext` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/simple.py#L8" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-simplecontext}
+
+
+A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved..
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/simple.py#L11" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#add}
+
+```python
+add(self, c: Component | CBlock | ModelOutputThunk) -> SimpleContext
+```
+
+Add a new component or CBlock to the context and return the updated context.
+
+**Args:**
+- `c`: The component, content
+block, or model output to record.
+
+**Returns:**
+- A new `SimpleContext` containing only the added entry;
+- prior history is not retained.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/context/simple.py#L24" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#view_for_generation}
+
+```python
+view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None
+```
+
+Return an empty list, since `SimpleContext` does not pass history to the model.
+
+Each call to the model is treated as a stateless, independent exchange.
+No prior turns are forwarded.
+
+**Returns:**
+- list\[Component | CBlock | ModelOutputThunk] | None: Always an empty list.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
