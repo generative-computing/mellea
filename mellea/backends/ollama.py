@@ -387,11 +387,13 @@ class OllamaModelBackend(FormatterBackend):
         Returns:
             ModelOutputThunk[C]: A thunk holding the (lazy) model output.
 
+        Ollama requires base64-encoded images, so any `ImageUrlBlock` in a
+        message is fetched and encoded automatically before the request.
+
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
             ValueError: If a message contains an `ImageUrlBlock` whose image
-                cannot be downloaded or decoded; Ollama requires base64-encoded
-                images, so URL images are fetched and encoded automatically.
+                cannot be downloaded or decoded.
             ValueError: If a message contains an `AudioBlock` or `AudioUrlBlock`;
                 Ollama does not support audio input.
         """
@@ -429,13 +431,20 @@ class OllamaModelBackend(FormatterBackend):
             image_values: list[str] | None = None
             if m.images is not None:
                 # Ollama only accepts base64-encoded images, so URL images are
-                # downloaded and encoded on the fly rather than rejected.
-                image_values = [
-                    _download_image_as_base64(str(img.value))
+                # downloaded and encoded on the fly rather than rejected. The
+                # download is blocking, so offload each one to a thread and run
+                # them concurrently to avoid stalling the event loop; non-URL
+                # images already carry their base64 value.
+                image_values = [str(img.value) for img in m.images]
+                url_downloads = {
+                    i: asyncio.to_thread(_download_image_as_base64, str(img.value))
+                    for i, img in enumerate(m.images)
                     if isinstance(img, ImageUrlBlock)
-                    else str(img.value)
-                    for img in m.images
-                ]
+                }
+                if url_downloads:
+                    downloaded = await asyncio.gather(*url_downloads.values())
+                    for i, value in zip(url_downloads.keys(), downloaded):
+                        image_values[i] = value
             if m.audio:
                 raise ValueError(
                     "OllamaModelBackend does not support audio (AudioBlock/AudioUrlBlock). "

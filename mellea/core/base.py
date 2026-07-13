@@ -19,9 +19,10 @@ import base64
 import binascii
 import datetime
 import enum
+import ipaddress
 import logging
-import urllib.error
-import urllib.request
+import socket
+import urllib.parse
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -40,6 +41,7 @@ from typing import (
 if TYPE_CHECKING:
     import torch
 
+import requests
 import typing_extensions
 from PIL import Image as PILImage
 
@@ -344,12 +346,61 @@ class AudioUrlBlock(CBlock):
         return f"AudioUrlBlock({self.value}, {self.format}, {self._meta.__repr__()})"
 
 
+_IMAGE_DOWNLOAD_TIMEOUT_S: float = 10.0
+"""Socket timeout (seconds) applied to image URL downloads."""
+
+_IMAGE_DOWNLOAD_MAX_BYTES: int = 25 * 1024 * 1024
+"""Maximum accepted size (bytes) of a downloaded image body."""
+
+
+def _assert_public_url(url: str) -> None:
+    """Reject a URL whose host resolves to a non-public IP address.
+
+    Resolves every address the host maps to and rejects the download if any is
+    private, loopback, link-local, reserved, or multicast. This blocks
+    server-side request forgery (SSRF) against cloud metadata endpoints
+    (`169.254.169.254`), localhost services, and RFC 1918 ranges.
+
+    Args:
+        url: The `http://`/`https://` URL to validate.
+
+    Raises:
+        ValueError: If the host is missing or resolves to a non-public IP.
+    """
+    host = urllib.parse.urlsplit(url).hostname
+    if not host:
+        raise ValueError(f"URL has no host to validate: {url!r}")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError(f"Could not resolve host for URL: {url!r}") from e
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"Refusing to download from non-public address {ip} for URL: {url!r}"
+            )
+
+
 def _download_image_as_base64(url: str) -> str:
     """Download an image from a URL and return it as a base64-encoded PNG string.
 
     Fetches the bytes at `url`, loads them through PIL to confirm they are a
     real image, and re-encodes the result as a base64 PNG so the output is
     consistent with `ImageBlock`'s expected format.
+
+    The download is hardened against abuse: the host is validated against
+    non-public IP ranges before connecting (SSRF), redirects are refused so the
+    validation cannot be bypassed, a timeout bounds slow responses, and the body
+    is streamed with a size cap to guard against memory-exhaustion. This function
+    is blocking; async callers should offload it with `asyncio.to_thread`.
 
     Args:
         url: An `http://` or `https://` URL pointing to an image.
@@ -358,15 +409,34 @@ def _download_image_as_base64(url: str) -> str:
         str: The base64-encoded PNG representation of the downloaded image.
 
     Raises:
-        ValueError: If the image cannot be downloaded or the downloaded bytes
-            cannot be decoded as an image.
+        ValueError: If the host resolves to a non-public address, the response
+            exceeds the size cap, or the image cannot be downloaded or decoded.
     """
+    _assert_public_url(url)
     try:
-        with urllib.request.urlopen(url) as response:  # scheme validated by caller
-            raw = response.read()
+        with requests.get(  # scheme validated by caller
+            url,
+            timeout=_IMAGE_DOWNLOAD_TIMEOUT_S,
+            allow_redirects=False,  # a redirect could bypass the IP guard
+            stream=True,
+        ) as response:
+            response.raise_for_status()
+            declared = response.headers.get("Content-Length")
+            if declared is not None and int(declared) > _IMAGE_DOWNLOAD_MAX_BYTES:
+                raise ValueError(
+                    f"Image at {url!r} exceeds the {_IMAGE_DOWNLOAD_MAX_BYTES}-byte limit"
+                )
+            # Stream so an undeclared/lying Content-Length can't exhaust memory.
+            raw = response.raw.read(_IMAGE_DOWNLOAD_MAX_BYTES + 1, decode_content=True)
+        if len(raw) > _IMAGE_DOWNLOAD_MAX_BYTES:
+            raise ValueError(
+                f"Image at {url!r} exceeds the {_IMAGE_DOWNLOAD_MAX_BYTES}-byte limit"
+            )
         image = PILImage.open(BytesIO(raw))
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise ValueError(f"Failed to download or decode image from URL: {url!r}") from e
+    except (requests.RequestException, OSError, ValueError) as e:
+        raise ValueError(
+            f"Failed to download or decode image from URL {url!r}: {e}"
+        ) from e
     return ImageBlock.pil_to_base64(image)
 
 

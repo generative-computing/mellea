@@ -205,6 +205,59 @@ def test_audio_url_block_rejected_by_ollama(mocked_session: MelleaSession):
         mocked_session.chat("Transcribe this.", audio=[url_block])
 
 
+def test_image_url_block_drives_real_download(
+    mocked_session: MelleaSession, pil_image: Image.Image
+):
+    """Exercise the real `_download_image_as_base64` through the Ollama path.
+
+    Patches only the network layer (`requests.get` + `getaddrinfo`) so the
+    import alias, thread-offload, and payload wiring are all covered — this
+    catches regressions the fully-mocked download tests cannot.
+    """
+    buf = BytesIO()
+    pil_image.save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    url_block: ImageUrlBlock = ImageUrlBlock("https://example.com/photo.png")
+    images: list[ImageBlock | ImageUrlBlock] = [url_block]
+
+    class _FakeRaw:
+        def read(self, amt=None, decode_content=False):
+            return png_bytes if amt is None else png_bytes[:amt]
+
+    class _FakeResponse:
+        headers: dict[str, str] = {}
+        raw = _FakeRaw()
+
+        def raise_for_status(self):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    with (
+        patch(
+            "mellea.core.base.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 0))],
+        ),
+        patch("mellea.core.base.requests.get", return_value=_FakeResponse()),
+    ):
+        mocked_session.chat("What is in this image?", images=images)
+
+    turn = mocked_session.ctx.last_turn()
+    assert turn is not None
+    lp = turn.output._generate_log.prompt  # type: ignore[union-attr]
+    assert isinstance(lp, list)
+    image_list = lp[0].get("images")
+    assert isinstance(image_list, list)
+    assert len(image_list) == 1
+    # The real helper re-encodes as base64 PNG (data-URI-stripped in the payload).
+    assert base64.b64decode(image_list[0])
+
+
 def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Image):
     image_block = ImageBlock.from_pil_image(pil_image)
     ct = mocked_session.chat(
