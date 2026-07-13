@@ -1,5 +1,22 @@
 """Shared test helpers for the `mellea.telemetry` submodules."""
 
+import os
+
+import pytest
+
+_TELEMETRY_DIR = os.path.dirname(__file__)
+
+
+def pytest_collection_modifyitems(items):
+    """Ignore the duplicate-registration warning that the reset helpers provoke.
+
+    The hook receives the whole session's items even from a subdir conftest, so
+    scope the marker to this directory by path.
+    """
+    for item in items:
+        if str(item.fspath).startswith(_TELEMETRY_DIR):
+            item.add_marker(pytest.mark.filterwarnings("ignore:.*already registered"))
+
 
 def reset_metrics_state() -> None:
     """Reset metrics module state and re-run setup so env-var changes take effect."""
@@ -23,7 +40,8 @@ def reset_metrics_state() -> None:
     metrics._requirement_checks_counter = None
     metrics._requirement_failures_counter = None
     metrics._tool_calls_counter = None
-    # _plugins_registered intentionally NOT reset — registry is process-global.
+    # Re-register: another test's shutdown_plugins() may have emptied the manager.
+    metrics._plugins_registered = False
     metrics._setup_metrics()
 
 
@@ -38,6 +56,8 @@ def reset_tracing_state() -> None:
     tracing._backend_tracer = None
     tracing._in_flight_spans.clear()
     tracing._reattached_tokens.clear()
+    # Re-register: another test's shutdown_plugins() may have emptied the manager.
+    tracing._plugins_registered = False
     tracing._setup_tracing()
 
 

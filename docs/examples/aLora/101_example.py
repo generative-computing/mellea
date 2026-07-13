@@ -1,4 +1,5 @@
-# pytest: huggingface, e2e
+# pytest: skip, huggingface, e2e
+# SKIP REASON: broken stembolts adapter/example, pending rewrite to new intrinsics API (#385).
 
 import time
 
