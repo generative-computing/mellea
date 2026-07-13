@@ -1,8 +1,10 @@
 """Shared test helpers for the `mellea.telemetry` submodules."""
 
+import os
+
 import pytest
 
-_TELEMETRY_DIR = __file__.rsplit("/", 1)[0]
+_TELEMETRY_DIR = os.path.dirname(__file__)
 
 
 def pytest_collection_modifyitems(items):
