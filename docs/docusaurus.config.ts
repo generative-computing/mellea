@@ -37,7 +37,7 @@ const config: Config = {
           editUrl: 'https://github.com/generative-computing/mellea/edit/main/',
           includeCurrentVersion: true,
           // set-last-version.mjs matches this line with an exact regex — do not reformat
-          lastVersion: 'current',
+          lastVersion: '0.7.0',
           versions: {
             current: {
               banner: 'none',
