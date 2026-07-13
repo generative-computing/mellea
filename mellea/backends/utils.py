@@ -98,6 +98,10 @@ def to_chat(
 
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+    # NOTE: reasoning is never replayed on the HF chat path — we serialize only `content` and never
+    # consult `should_replay_reasoning` (unlike the OpenAI/LiteLLM/Watsonx/Ollama chat paths). This is
+    # acceptable today because HF has a capture gap (per #1201) and never populates `Message.thinking`
+    # to begin with; when that gap is closed, replay must be wired in here.
     ctx_as_conversation: list = [
         {"role": m.role, "content": formatter.print(m)} for m in ctx_as_message_list
     ]
