@@ -142,10 +142,12 @@ def _register_tracing_plugins() -> None:
     for plugin_cls in _TRACING_PLUGIN_CLASSES:
         try:
             register(plugin_cls())
-        except ValueError:
-            # Already registered in a previous invocation (e.g. after a
-            # state reset in tests). Silent — registry remains correct.
-            pass
+        except ValueError as e:
+            warnings.warn(
+                f"{plugin_cls.__name__} already registered: {e}",
+                UserWarning,
+                stacklevel=2,
+            )
     _plugins_registered = True
 
 
