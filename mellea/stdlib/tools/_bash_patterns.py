@@ -97,7 +97,11 @@ class ShellOperatorPattern(BashSecurityPattern):
 
         for arg in argv:
             # Exact match: standalone operators like "&&", "|"
+            # Exception: standalone ";" is safe (used by find -exec, etc.)
             if arg in shell_operators:
+                if arg == ";":
+                    # Standalone semicolon is safe when passed via argv (not shell interpretation)
+                    continue
                 rule = SHELL_OPERATOR_RULES.get(arg)
                 reason = rule.rationale if rule else "Shell operator is not allowed"
                 return True, reason
@@ -105,13 +109,17 @@ class ShellOperatorPattern(BashSecurityPattern):
             # Prefix match: operators with content like ">&2", ">file"
             for op in shell_operators:
                 if arg.startswith(op) and len(arg) > len(op):
+                    # Skip if this is the semicolon substring check (handled below)
+                    if op == ";":
+                        continue
                     rule = SHELL_OPERATOR_RULES.get(op)
                     reason = rule.rationale if rule else "Shell operator is not allowed"
                     return True, reason
 
-            # Semicolon: substring check (dangerous even in some quote contexts)
-            # Allow escaped semicolons (\;) used in find -exec syntax
-            if ";" in arg and "\\;" not in arg:
+            # Semicolon: reject any arg containing semicolon (except standalone `;` from find -exec)
+            # After shlex.split(), escaped semicolons become bare `;` tokens, making them safe
+            # because they're passed to subprocess as argv elements, not shell strings.
+            if ";" in arg and arg != ";":
                 return True, "Command chaining (;) is not allowed"
 
         return False, ""

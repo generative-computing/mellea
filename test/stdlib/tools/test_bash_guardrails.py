@@ -175,10 +175,20 @@ class TestShellOperatorPattern:
         is_dangerous, _ = pattern.check(["cmd1", "&&", "cmd2"])
         assert is_dangerous is True
 
-    def test_semicolon_rejected(self) -> None:
-        """Semicolon chaining should be rejected."""
+    def test_semicolon_standalone_allowed(self) -> None:
+        """Standalone semicolon should be allowed (used by find -exec)."""
         pattern = ShellOperatorPattern()
-        is_dangerous, _ = pattern.check(["cmd1", ";", "cmd2"])
+        # After shlex.split("find -exec cat {} \;"), we get [..., ";"]
+        # This is safe because subprocess.run(..., shell=False) doesn't interpret it
+        is_dangerous, _ = pattern.check(["find", "-exec", "cat", "{}", ";"])
+        assert is_dangerous is False
+
+    def test_semicolon_embedded_rejected(self) -> None:
+        """Embedded semicolon in argument should be rejected."""
+        pattern = ShellOperatorPattern()
+        # After shlex.split("echo 'hello;rm'"), we get ["echo", "hello;rm"]
+        # Embedded semicolon could indicate LLM trying to hide a command
+        is_dangerous, _ = pattern.check(["echo", "hello;rm"])
         assert is_dangerous is True
 
     def test_quoted_pipe_in_string_allowed(self) -> None:

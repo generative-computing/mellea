@@ -162,20 +162,27 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
         # for legitimate patterns like regex or AWK/sed code.
 
         # Exact match first (standalone operators like "&&", "|", etc.)
+        # Exception: standalone ";" is safe (used by find -exec, etc.)
         if arg in shell_operators:
+            if arg == ";":
+                # Standalone semicolon is safe when passed via argv (not shell interpretation)
+                continue
             return True, f"Shell operator '{arg}' is not allowed"
 
         # Check if argument starts with a shell operator (e.g., ">&2", ">file", "2>&1")
         for op in shell_operators:
             if arg.startswith(op) and len(arg) > len(op):
+                # Skip semicolon here (handled below)
+                if op == ";":
+                    continue
                 # Token starts with operator and has additional content (e.g., ">&2", ">file")
                 # This is a shell redirection/operator usage
                 return True, f"Shell operator '{op}' is not allowed"
 
-        # Note: semicolon is already in shell_operators, but we check for it separately
-        # as a substring because semicolon can be dangerous even in patterns.
-        # Unlike && or ||, semicolon rarely appears legitimately in arguments.
-        if ";" in arg:
+        # Semicolon: reject any arg containing semicolon (except standalone `;` from find -exec)
+        # After shlex.split(), escaped semicolons become bare `;` tokens, making them safe
+        # because they're passed to subprocess as argv elements, not shell strings.
+        if ";" in arg and arg != ";":
             return True, "Command chaining (;) is not allowed"
 
     # Check for command substitution (backticks, $(...))
