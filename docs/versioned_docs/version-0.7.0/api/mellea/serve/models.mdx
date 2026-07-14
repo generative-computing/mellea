@@ -1,0 +1,99 @@
+---
+title: "mellea.serve.models"
+sidebar_label: "mellea.serve.models"
+description: "User-facing types for `m serve`."
+---
+
+User-facing types for `m serve`.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `TextContent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/serve/models.py#L10" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-textcontent}
+
+
+Text content in a multimodal message.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ImageUrlContent` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/serve/models.py#L17" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-imageurlcontent}
+
+
+Image URL content in a multimodal message.
+
+Supports both data URIs (base64-encoded images) and HTTP(S) URLs.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatMessage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/serve/models.py#L32" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-chatmessage}
+
+
+Chat message with support for text-only or multimodal content.
+
+The content field can be:
+- A string (text-only, backward compatible)
+- None (for messages without content)
+- A list of content objects (multimodal: text, images)
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_text_content` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/serve/models.py#L47" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_text_content}
+
+```python
+get_text_content(self) -> str
+```
+
+Extract text content from message, handling both string and multimodal formats.
+
+**Returns:**
+- Concatenated text from all TextContent items, or empty string if no text.
+- Images are ignored (handled separately via extraction utilities).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_image_urls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/serve/models.py#L62" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_image_urls}
+
+```python
+get_image_urls(self) -> list[str]
+```
+
+Extract image URLs from message content.
+
+**Returns:**
+- List of image URL strings from all ImageUrlContent items.
+- Empty list if content is a string or contains no images.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_image_blocks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/serve/models.py#L79" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#get_image_blocks}
+
+```python
+get_image_blocks(self) -> list[ImageBlock | ImageUrlBlock]
+```
+
+Extract image blocks from message content.
+
+**Returns:**
+- List of [`ImageBlock`](../core/base#class-imageblock) (for base64/data-URI images) or
+- [`ImageUrlBlock`](../core/base#class-imageurlblock) (for http/https URLs) from all ImageUrlContent
+- items. Empty list if content is a string or contains no images.
+
+**Raises:**
+- `ValueError`: If an image URL is invalid or cannot be processed.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

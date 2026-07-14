@@ -1,0 +1,179 @@
+---
+title: "mellea.stdlib.requirements.requirement"
+sidebar_label: "mellea.stdlib.requirements.requirement"
+description: "Requirements are a special type of Component used as input to the \"validate\" step in Instruct/Validate/Repair design patterns."
+---
+
+Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `requirement_check_to_bool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L31" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#requirement_check_to_bool}
+
+```python
+requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool
+```
+
+
+Convert a `requirement-check` adapter output string to a boolean result.
+
+Parses the JSON output produced by the `requirement-check` adapter and
+returns `True` when the score exceeds 0.5.
+
+**Args:**
+- `x`: Adapter output string or CBlock containing JSON with the contract
+`\{"requirement_check"\: \{"score"\: <float>\}\}`.
+
+**Returns:**
+- `True` if the extracted score exceeds 0.5, `False` otherwise.
+
+**Raises:**
+- `json.JSONDecodeError`: If `x` is not valid JSON.
+- `AdapterSchemaMismatchError`: If the parsed output does not contain the
+expected `requirement_check.score` structure, or if the score is
+not a finite number in the range 0.0-1.0.  Callers that previously
+treated `False` as "requirement not met" must now catch this error
+separately.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reqify` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L122" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#reqify}
+
+```python
+reqify(r: str | Requirement) -> Requirement
+```
+
+
+Map strings to Requirements.
+
+This is a utility method for functions that allow you to pass in Requirements as either explicit Requirement objects or strings that you intend to be interpreted as requirements.
+
+**Args:**
+- `r`: A [`Requirement`](../../core/requirement#class-requirement) object or a plain string description to wrap as one.
+
+**Returns:**
+- A [`Requirement`](../../core/requirement#class-requirement) instance.
+
+**Raises:**
+- `Exception`: If `r` is neither a `str` nor a [`Requirement`](../../core/requirement#class-requirement) instance.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `req` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L144" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#req}
+
+```python
+req(*args, **kwargs) -> Requirement
+```
+
+
+Shorthand for `Requirement.__init__`.
+
+**Args:**
+- `*args`: Positional arguments forwarded to `Requirement.__init__`.
+- `**kwargs`: Keyword arguments forwarded to `Requirement.__init__`.
+
+**Returns:**
+- A new [`Requirement`](../../core/requirement#class-requirement) instance.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `check` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L157" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#check}
+
+```python
+check(*args, **kwargs) -> Requirement
+```
+
+
+Shorthand for `Requirement.__init__(..., check_only=True)`.
+
+**Args:**
+- `*args`: Positional arguments forwarded to `Requirement.__init__`.
+- `**kwargs`: Keyword arguments forwarded to `Requirement.__init__`.
+
+**Returns:**
+- A new [`Requirement`](../../core/requirement#class-requirement) instance with `check_only=True`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `simple_validate` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L182" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#simple_validate}
+
+```python
+simple_validate(fn: Callable[[str], Any]) -> Callable[[Context], ValidationResult]
+```
+
+
+Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
+
+This is useful when your validation logic only depends upon the most recent model output. For example:
+
+`Requirement("Answer 'yes' or 'no'", simple_validate(lambda x: x == 'yes' or x == 'no')`
+
+Validation functions operate over [`Context`](../../core/base#class-context). Often you do not care about the entire context, and just want to consider the most recent output from the model.
+
+**Args:**
+- `fn`: the simple validation function that takes a string and returns either a bool or (bool, str)
+- `reason`: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
+
+**Returns:**
+- A validation function that takes a [`Context`](../../core/base#class-context) and returns a [`ValidationResult`](../../core/requirement#class-validationresult).
+
+**Raises:**
+- `ValueError`: If `fn` returns a type other than `bool` or
+`tuple[bool, str]`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LLMaJRequirement` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L20" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-llmajrequirement}
+
+
+A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored.
+
+**Attributes:**
+- `use_aloras`: Always `False` for this class; ALoRA adapters are
+never used even if they are available.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ALoraRequirement` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/requirement.py#L80" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-alorarequirement}
+
+
+A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on generation error.
+
+If the adapter is unavailable (e.g. cannot be loaded), `mellea` uses
+LLMaJ for that requirement instead.  That is the only case where LLMaJ
+will be used.
+
+If the adapter generates output but the output **fails schema validation**
+(`requirement_check_to_bool` raises `AdapterSchemaMismatchError`), the
+exception propagates to the caller — it is not caught and does not trigger
+the LLMaJ fallback.  This is intentional: schema drift should surface
+loudly rather than silently return a wrong result.
+
+**Args:**
+- `description`: Human-readable requirement description.
+- `intrinsic_name`: Name of the ALoRA intrinsic to use.
+Defaults to `"requirement-check"`.
+
+**Attributes:**
+- `use_aloras`: Always `True`; this class always attempts to use
+ALoRA adapters for validation.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

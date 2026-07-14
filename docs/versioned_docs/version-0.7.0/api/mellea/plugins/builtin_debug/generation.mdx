@@ -1,0 +1,66 @@
+---
+title: "mellea.plugins.builtin_debug.generation"
+sidebar_label: "mellea.plugins.builtin_debug.generation"
+description: "Built-in debug plugin for generation pipeline (pre-call and post-call)."
+---
+
+Built-in debug plugin for generation pipeline (pre-call and post-call).
+
+
+
+
+
+Provides tracing for all LLM backend calls. Use for debugging model invocations,
+tracking latency, and understanding request/response flow.
+
+Examples:
+    Enable generation tracing:
+
+        from mellea.plugins.builtin_debug.generation import (
+            log_generation_pre_call,
+            log_generation_post_call,
+        )
+        from mellea import start_session
+        from mellea.plugins import register
+
+        register([log_generation_pre_call, log_generation_post_call])
+
+        with start_session() as m:
+            result = m.instruct("...")  # Tracing fires automatically
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_generation_pre_call` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/builtin_debug/generation.py#L106" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_generation_pre_call}
+
+```python
+log_generation_pre_call(payload: GenerationPreCallPayload, ctx: PluginContext) -> None
+```
+
+
+Log request details before calling the LLM.
+
+**Args:**
+- `payload`: GenerationPreCallPayload containing action, generation_id.
+- `ctx`: Plugin context for hook execution; backend_name is in global_context.state.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_generation_post_call` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/builtin_debug/generation.py#L160" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_generation_post_call}
+
+```python
+log_generation_post_call(payload: GenerationPostCallPayload, ctx: PluginContext) -> None
+```
+
+
+Log response details after LLM returns.
+
+**Args:**
+- `payload`: GenerationPostCallPayload containing model_output, generation_id, latency_ms.
+- `ctx`: Plugin context for hook execution; backend_name is in global_context.state.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,23 @@
+---
+title: "mellea.stdlib.context"
+sidebar_label: "mellea.stdlib.context"
+description: "Concrete [`Context`](../core/base#class-context) implementations and the `Compactor` protocol."
+---
+
+Concrete [`Context`](../core/base#class-context) implementations and the `Compactor` protocol.
+
+
+
+
+
+Provides:
+
+- :class:`ChatContext` — accumulates all turns in a chat history (with an
+  optional sliding window).
+- :class:`SimpleContext` — stateless, single-turn exchange (no prior history is
+  passed to the model).
+- :class:`Compactor` — generic protocol for shrinking any [`Context`](../core/base#class-context) subtype.
+
+The names :class:[`Context`](../core/base#class-context), :class:[`ContextTurn`](../core/base#class-contextturn), :class:[`CBlock`](../core/base#class-cblock), and
+:class:[`Component`](../core/base#class-component) are re-exported from :mod:`mellea.core` for the convenience
+of callers that import them via `mellea.stdlib.context`.

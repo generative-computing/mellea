@@ -1,0 +1,78 @@
+---
+title: "mellea.stdlib.requirements.rag"
+sidebar_label: "mellea.stdlib.requirements.rag"
+description: "Requirements for RAG (Retrieval-Augmented Generation) workflows."
+---
+
+Requirements for RAG (Retrieval-Augmented Generation) workflows.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GroundednessRequirement` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/rag.py#L22" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-groundednessrequirement}
+
+
+Requirement that validates LLM responses are grounded by citations.
+
+This requirement implements a sophisticated 4-step validation pipeline to ensure
+that LLM responses are fully grounded by citations to provided documents:
+
+1. **Citation Generation**: Generate citations for the response using the
+   find_citations adapter function.
+2. **Citation Necessity**: Identify which response spans require citations (vs.
+   conversational/inference text that doesn't need citations).
+3. **Citation Support**: For spans that need citations, assess the level of
+   citation support: fully, partially, or not supported.
+4. **Groundedness Output**: Declare response grounded iff all spans needing
+   citations are fully supported.
+
+**Important**: This requirement requires a Hugging Face backend (LocalHFBackend)
+as it uses both the find_citations adapter function and LLM-as-Judge for assessment.
+
+**Args:**
+- `documents`: Optional documents to validate against. Can be Document
+objects or strings (will be converted to Documents). If provided,
+these documents will be used instead of documents attached to
+messages in the context. Default is None (use context documents).
+- `allow_partial_support`: Whether to accept partially supported spans as
+grounded. If False (default), response is grounded iff all spans
+needing citations are FULLY supported. If True, response is grounded
+if spans are fully or partially supported.
+- `max_new_tokens`: Maximum tokens for LLM judgment outputs. Increase this
+if LLM outputs are being truncated (particularly for complex
+responses with many spans). Default is 500.
+- `description`: Custom description for the requirement. If None,
+generates a default description.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `validate` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/rag.py#L106" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#validate}
+
+```python
+validate(self, backend: Backend, ctx: Context) -> ValidationResult
+```
+
+Validate groundedness of the response using the 4-step pipeline.
+
+**Args:**
+- `backend`: Backend to use for citation detection and LLM judgment.
+Must be LocalHFBackend as this uses find_citations adapter function.
+- `ctx`: Context containing the conversation history
+- `format`: Unused for this requirement
+- `model_options`: Unused for this requirement
+
+**Returns:**
+- ValidationResult with pass/fail status and detailed reason
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,71 @@
+---
+title: "mellea.plugins.hooks.session"
+sidebar_label: "mellea.plugins.hooks.session"
+description: "Session lifecycle hook payloads."
+---
+
+Session lifecycle hook payloads.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SessionPreInitPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/hooks/session.py#L13" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-sessionpreinitpayload}
+
+
+Payload for `session_pre_init` — before backend initialization.
+
+**Attributes:**
+- `session_id`: UUID string identifying this session.
+- `backend_name`: Name of the backend (e.g. `"ollama"`, `"openai"`).
+- `model_id`: Model identifier string (writable).
+- `model_options`: Optional dict of model options like temperature, max_tokens (writable).
+- `context_type`: Class name of the context being used (e.g. `"SimpleContext"`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SessionPostInitPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/hooks/session.py#L30" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-sessionpostinitpayload}
+
+
+Payload for `session_post_init` — after session is fully initialized.
+
+**Attributes:**
+- `session_id`: UUID string identifying this session.
+- `model_id`: Model identifier used by the backend (e.g. `"granite4.1\:3b"`).
+- `context`: The initial [`Context`](../../core/base#class-context) instance for this session.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SessionResetPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/hooks/session.py#L44" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-sessionresetpayload}
+
+
+Payload for `session_reset` — when session context is reset.
+
+**Attributes:**
+- `previous_context`: The [`Context`](../../core/base#class-context) that is about to be discarded (observe-only).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SessionCleanupPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/hooks/session.py#L55" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-sessioncleanuppayload}
+
+
+Payload for `session_cleanup` — before session cleanup/teardown.
+
+**Attributes:**
+- `context`: The [`Context`](../../core/base#class-context) at the time of cleanup (observe-only).
+- `interaction_count`: Number of model-interaction turns committed during
+the session (each `self.ctx = ...` assignment in `MelleaSession`
+counts as one). Reset to 0 by `MelleaSession.reset()`. Stable
+under any context-compaction strategy.
+- `exception`: The exception that triggered cleanup, or `None` for normal
+teardown. Set when `MelleaSession.__exit__` propagates an error.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

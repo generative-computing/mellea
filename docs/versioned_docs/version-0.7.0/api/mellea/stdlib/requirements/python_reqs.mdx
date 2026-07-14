@@ -1,0 +1,59 @@
+---
+title: "mellea.stdlib.requirements.python_reqs"
+sidebar_label: "mellea.stdlib.requirements.python_reqs"
+description: "Requirements for Python code generation validation."
+---
+
+Requirements for Python code generation validation.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PythonExecutionReq` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/requirements/python_reqs.py#L263" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-pythonexecutionreq}
+
+
+Verifies that Python code runs without raising exceptions.
+
+Optionally validates that captured stdout does not exceed a size limit,
+eliminating the double-execution cost of separate OutputSizeLimit checks.
+
+Extracts the highest-scoring Python code block from the model's last output
+and validates or executes it according to the configured execution tier.
+
+Use `execution_tier` to select behavior by intent:
+
+- `"static"` (default) — parse and import-check only, no execution.
+- `"local_unsafe"` — subprocess execution, no policy restrictions.
+- `"local"` — subprocess execution with a declared capability policy.
+- `"docker_unsafe"` — Docker-isolated execution, no policy restrictions.
+- `"docker"` — Docker-isolated execution with a declared capability policy.
+
+**Args:**
+- `execution_tier`: One of `"static"`, `"local_unsafe"`, `"local"`,
+`"docker_unsafe"`, or `"docker"`.  Defaults to `"static"`.
+- `policy`: Override the tier's default policy.
+Ignored for `"static"` and unsafe tiers unless explicitly provided.
+- `allowed_imports`: Allowlist of importable top-level
+modules.  `None` allows any import.
+- `max_output_chars`: Maximum allowed stdout size in characters.
+None = no size check (default). When set, adds output size validation
+in the same execution pass, avoiding the double-execution cost of using
+OutputSizeLimit. Only enforced for tiers that execute code (local_unsafe,
+local, docker_unsafe, docker); static tier skips output check.
+- `timeout`: Deprecated.  Pass `policy=CapabilityPolicy(timeout=N)`
+instead.  When provided, overrides the policy timeout.
+- `allow_unsafe_execution`: Deprecated.  Use
+`execution_tier="local_unsafe"` instead.
+- `use_sandbox`: Deprecated.  Use `execution_tier="docker"` instead.
+
+**Attributes:**
+- `validation_fn`: The validation
+function attached to this requirement; always non-`None`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

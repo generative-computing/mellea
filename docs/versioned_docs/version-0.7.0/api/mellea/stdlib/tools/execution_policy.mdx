@@ -1,0 +1,137 @@
+---
+title: "mellea.stdlib.tools.execution_policy"
+sidebar_label: "mellea.stdlib.tools.execution_policy"
+description: "Capability policy, artifact model, and compatibility matrix for code execution environments."
+---
+
+Capability policy, artifact model, and compatibility matrix for code execution environments.
+
+
+
+
+
+Four execution tiers are available, selectable by intent rather than by class name:
+
+- `"local_unsafe"`  — subprocess in the current Python env, no policy applied.
+- `"local"`         — subprocess in the current Python env, policy declared and partially enforced.
+- `"docker_unsafe"` — Docker-isolated execution via llm-sandbox, no policy applied.
+- `"docker"`        — Docker-isolated execution via llm-sandbox, policy declared and partially enforced.
+
+`CapabilityPolicy` declares what a code execution environment is *allowed* to do.
+Enforcement is honest: each capability has a companion `ENFORCED_*` class attribute
+indicating whether the declared value is actively enforced at runtime or is informational
+only.
+
+`Artifact` represents a file produced by execution and exported from the environment.
+
+`COMPATIBILITY_MATRIX` records which capabilities each tier supports.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Artifact` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/execution_policy.py#L29" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-artifact}
+
+
+A file produced by code execution and exported from the execution environment.
+
+**Args:**
+- `path`: Absolute path on the host where the artifact was written.
+- `size_bytes`: File size in bytes, or `None` if unknown.
+- `content_type`: MIME type or informal label (e.g. `"text/csv"`,
+`"image/png"`), or `None` if undetermined.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CapabilityPolicy` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/execution_policy.py#L45" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#class-capabilitypolicy}
+
+
+Declared capabilities and resource limits for a code execution environment.
+
+The enforcement gap — the difference between what is *declared* and what is
+*actively enforced at runtime* — is made explicit through per-field
+`ENFORCED_*` class attributes.  Callers and UX layers can read these to
+decide whether to prompt the user ("allow once / allow always") or display
+a warning.
+
+.. warning::
+    **Most fields are declarative only and are not enforced at runtime.**
+    Setting `network_access=False`, `package_installation=False`,
+    `subprocess_execution=False`, or `env_var_access=False` does *not*
+    block those capabilities in the current implementation — the declared
+    value is informational only.  Check the `ENFORCED_*` class attributes
+    to see what is actively enforced.  For stronger isolation use a
+    `"docker"` execution tier.
+
+    `filesystem_read_roots` and `filesystem_write_roots` emit a
+    :class:`UserWarning` at construction time when set to a non-`None`
+    value, because those restrictions are also unenforced.
+
+**Args:**
+- `filesystem_read_roots`: Host paths the environment may
+read.  `None` means unrestricted.  **Declared only — not enforced.**
+A \:class\:`UserWarning` is emitted when this is set to a non-`None`
+value.
+- `filesystem_write_roots`: Host paths the environment may
+write.  `None` means unrestricted.  **Declared only — not enforced.**
+A \:class\:`UserWarning` is emitted when this is set to a non-`None`
+value.
+- `network_access`: Whether outbound network connections are allowed.
+Defaults to `False`.  **Declared only — not enforced.**
+- `package_installation`: Whether the environment may install packages.
+**Declared only — not enforced.**
+- `subprocess_execution`: Whether spawning child processes is allowed.
+**Declared only — not enforced.**
+- `env_var_access`: Whether environment variables are readable.
+**Declared only — not enforced.**
+- `timeout`: Wall-clock seconds before execution is killed.  Enforced.
+- `stdout_max_bytes`: Truncate stdout to this byte count; `None`
+disables truncation.  Enforced.
+- `stderr_max_bytes`: Truncate stderr to this byte count; `None`
+disables truncation.  Enforced.
+- `artifact_export_paths`: Paths inside the container/environment
+to copy out after execution as `Artifact` objects.  Enforced.
+- `packages`: Python packages to install (via `pip install`) before
+execution.  Enforced — the runtime installs packages prior to executing
+user code and aborts with a skipped `ExecutionResult` if installation
+fails.  Failed packages are not retried on subsequent calls (clear
+`_failed_packages` on the environment to force a retry).  Local tiers
+use `uv pip install` / `python -m pip`; Docker tiers run
+`pip install` inside the container.  Defaults to `[]`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `unenforced_capabilities` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/execution_policy.py#L164" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#unenforced_capabilities}
+
+```python
+unenforced_capabilities(self) -> list[str]
+```
+
+Return capability names that are declared but not enforced at runtime.
+
+**Returns:**
+- list\[str]: Field names whose declared values are informational only.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `enforced_capabilities` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/stdlib/tools/execution_policy.py#L176" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#enforced_capabilities}
+
+```python
+enforced_capabilities(self) -> list[str]
+```
+
+Return capability names that are actively enforced at runtime.
+
+**Returns:**
+- list\[str]: Field names whose declared values are honoured by the runtime.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

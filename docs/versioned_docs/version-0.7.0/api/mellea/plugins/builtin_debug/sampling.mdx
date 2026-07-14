@@ -1,0 +1,104 @@
+---
+title: "mellea.plugins.builtin_debug.sampling"
+sidebar_label: "mellea.plugins.builtin_debug.sampling"
+description: "Built-in debug plugin for sampling pipeline."
+---
+
+Built-in debug plugin for sampling pipeline.
+
+
+
+
+
+Provides tracing for sampling strategies including iteration tracking, validation
+results, repair events, and success/failure analysis.
+
+Examples:
+    Enable sampling tracing:
+
+        from mellea.plugins.builtin_debug.sampling import (
+            log_sampling_loop_start,
+            log_sampling_iteration,
+            log_sampling_repair,
+            log_sampling_loop_end,
+        )
+        from mellea.plugins import register
+
+        register([
+            log_sampling_loop_start,
+            log_sampling_iteration,
+            log_sampling_repair,
+            log_sampling_loop_end,
+        ])
+
+        with start_session() as m:
+            result = m.instruct("...", strategy=SamplingStrategy(...))
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_sampling_loop_start` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/builtin_debug/sampling.py#L48" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_sampling_loop_start}
+
+```python
+log_sampling_loop_start(payload: SamplingLoopStartPayload, ctx: PluginContext) -> None
+```
+
+
+Log sampling strategy initialization with budget and requirement count.
+
+**Args:**
+- `payload`: SamplingLoopStartPayload with strategy_name, loop_budget, requirements.
+- `ctx`: Plugin context for hook execution.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_sampling_iteration` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/builtin_debug/sampling.py#L73" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_sampling_iteration}
+
+```python
+log_sampling_iteration(payload: SamplingIterationPayload, ctx: PluginContext) -> None
+```
+
+
+Log validation results for each sampling attempt.
+
+**Args:**
+- `payload`: SamplingIterationPayload with iteration, valid_count, validation_results.
+- `ctx`: Plugin context for hook execution.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_sampling_repair` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/builtin_debug/sampling.py#L111" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_sampling_repair}
+
+```python
+log_sampling_repair(payload: SamplingRepairPayload, ctx: PluginContext) -> None
+```
+
+
+Log when repair is triggered during sampling iterations.
+
+**Args:**
+- `payload`: SamplingRepairPayload with repair_iteration, repair_type, failed_validations.
+- `ctx`: Plugin context for hook execution.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `log_sampling_loop_end` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.7.0/mellea/plugins/builtin_debug/sampling.py#L134" target="_blank"><Icon icon="github" style="width: 0.85em; height: 0.85em;" /></a></sup> {#log_sampling_loop_end}
+
+```python
+log_sampling_loop_end(payload: SamplingLoopEndPayload, ctx: PluginContext) -> None
+```
+
+
+Log sampling completion with success status and attempt statistics.
+
+**Args:**
+- `payload`: SamplingLoopEndPayload with success, iterations_used, all_results, all_validations.
+- `ctx`: Plugin context for hook execution.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
