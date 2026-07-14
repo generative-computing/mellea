@@ -78,7 +78,14 @@ def extract_model_tool_requests(
             args = {}
             if tool_args is not None:
                 # Returns the args as a string. Parse it here.
-                args = json.loads(tool_args)
+                try:
+                    args = json.loads(tool_args)
+                except json.JSONDecodeError:
+                    MelleaLogger.get_logger().warning(
+                        f"model returned malformed JSON arguments for tool {tool_name!r} "
+                        f"(possibly truncated during streaming); skipping this tool call: {tool_args!r}"
+                    )
+                    continue
 
             # Validate and coerce argument types
             validated_args = validate_tool_arguments(func, args, strict=False)
@@ -189,7 +196,9 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
     Returns:
         A dict with `"role"` and `"content"` fields. When the message carries
         images, `"content"` is a list of text and image-URL dicts; otherwise it
-        is a plain string.
+        is a plain string. For tool-only assistant turns, `"content"` is `None`
+        and `"tool_calls"` carries the structured call list. When content is
+        present alongside tool calls, both keys are included.
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
@@ -205,28 +214,19 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
                 url = raw if raw.startswith("data:") else f"data:image/png;base64,{raw}"
             img_list.append({"type": "image_url", "image_url": {"url": url}})
 
-        return {
+        result: dict[str, Any] = {
             "role": msg.role,
             "content": [{"type": "text", "text": content}, *img_list],
         }
     else:
-        return {"role": msg.role, "content": content}
-        # Target format:
-        # {
-        #     "role": "user",
-        #     "content": [
-        #       {
-        #         "type": "text",
-        #         "text": "What's in this picture?"
-        #       },
-        #       {
-        #         "type": "image_url",
-        #         "image_url": {
-        #           "url": "data:image/jpeg;base64,<base64_string>"
-        #         }
-        #       }
-        #     ]
-        #   }
+        result = {"role": msg.role, "content": content}
+
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls:
+        result["tool_calls"] = tool_calls
+        if msg.images is None and not content:
+            result["content"] = None
+    return result
 
 
 def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:

@@ -11,7 +11,7 @@ configurable formatter).
 
 import logging
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal, get_args
+from typing import Any, Literal, cast, get_args
 
 from ...core import (
     CBlock,
@@ -42,6 +42,8 @@ class Message(Component["Message"]):
             backends that require base64 will raise a ``ValueError``).
         documents (list[Document] | None): Optional documents associated with
             the message.
+        tool_calls (list[dict[str, Any]] | None): Optional OpenAI-compatible
+            assistant tool calls associated with the message.
 
     Attributes:
         Role (type): Type alias for the allowed role literals: `"system"`,
@@ -57,6 +59,7 @@ class Message(Component["Message"]):
         *,
         images: None | list[ImageBlock | ImageUrlBlock] = None,
         documents: None | Iterable[str | Document] = None,
+        tool_calls: list[dict[str, Any]] | None = None,
     ):
         """Initialize a Message with a role, text content, and optional images and documents."""
         if role not in get_args(Message.Role):
@@ -68,11 +71,17 @@ class Message(Component["Message"]):
         self._content_cblock = CBlock(self.content)
         self._images = images
         self._docs = _coerce_to_documents(documents)
+        self._tool_calls = tool_calls
 
     @property
     def images(self) -> None | list[ImageBlock | ImageUrlBlock]:
         """Returns the images associated with this message."""
         return self._images
+
+    @property
+    def tool_calls(self) -> list[dict[str, Any]] | None:
+        """Returns the OpenAI-compatible tool calls associated with this message."""
+        return self._tool_calls
 
     def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
         """Return the constituent parts of this message, including content, documents, and images.
@@ -128,18 +137,30 @@ class Message(Component["Message"]):
 
         if computed.tool_calls is not None:
             # A tool was successfully requested.
-            # Assistant responses for tool calling differ by backend. For the default formatter,
-            # we put all of the function data into the content field in the same format we received it.
+            # Assistant responses for tool calling differ by backend. Preserve
+            # OpenAI-compatible tool calls separately from message content when
+            # the provider gives us structured tool-call data.
             if provider == "ollama" and response is not None:
+                from ...helpers.openai_compatible_helpers import build_tool_calls
+
+                tool_calls = cast(
+                    list[dict[str, Any]], build_tool_calls(computed) or []
+                )
                 return Message(
-                    role=response.message.role, content=str(response.message.tool_calls)
+                    role=response.message.role,
+                    content=getattr(response.message, "content", "") or "",
+                    tool_calls=tool_calls,
                 )
             if provider in ("openai", "watsonx", "litellm") and isinstance(
                 response, dict
             ):
                 choice = response["choices"][0] if "choices" in response else response
                 msg = choice["message"]
-                return Message(role=msg["role"], content=str(msg.get("tool_calls", [])))
+                return Message(
+                    role=msg["role"],
+                    content=msg.get("content") or "",
+                    tool_calls=msg.get("tool_calls") or None,
+                )
             # Hugging Face (or others). There are no guarantees on how the model represented the function calls.
             # Output it in the same format we received the tool call request.
             assert computed.value is not None

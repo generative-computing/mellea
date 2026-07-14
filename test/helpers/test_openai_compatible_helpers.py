@@ -135,13 +135,42 @@ class TestExtractModelToolRequests:
         assert len(result) == 1
         assert "get_weather" in result
 
-    def test_malformed_json_arguments_raises(self):
-        """Malformed JSON from the model propagates as JSONDecodeError."""
+    def test_malformed_json_arguments_skipped(self, caplog):
+        """Malformed JSON from the model skips that tool call."""
         tool = _make_tool("get_weather")
         tools = {"get_weather": tool}
-        response = _response_with_tool_calls([_tool_call("get_weather", '{"broken')])
-        with pytest.raises(json.JSONDecodeError):
-            extract_model_tool_requests(tools, response)
+        response = _response_with_tool_calls([_tool_call("get_weather", '{"path": "')])
+
+        with caplog.at_level("WARNING", logger="mellea"):
+            result = extract_model_tool_requests(tools, response)
+
+        assert result is None
+        assert any(
+            "malformed JSON arguments for tool 'get_weather'" in record.message
+            for record in caplog.records
+        )
+
+    def test_mixed_valid_and_malformed_json_arguments(self, caplog):
+        """Valid tool calls are extracted while malformed calls are skipped."""
+        tool = _make_tool("get_weather")
+        tools = {"get_weather": tool}
+        response = _response_with_tool_calls(
+            [
+                _tool_call("get_weather", json.dumps({"location": "LA"})),
+                _tool_call("get_weather", '{"location": "'),
+            ]
+        )
+
+        with caplog.at_level("WARNING", logger="mellea"):
+            result = extract_model_tool_requests(tools, response)
+
+        assert result is not None
+        assert len(result) == 1
+        assert result["get_weather"].args["location"] == "LA"
+        assert any(
+            "malformed JSON arguments for tool 'get_weather'" in record.message
+            for record in caplog.records
+        )
 
 
 # --- chat_completion_delta_merge ---
@@ -294,6 +323,24 @@ class TestMessageToOpenaiMessage:
         msg = Message(role="user", content="hello")
         result = message_to_openai_message(msg)
         assert result == {"role": "user", "content": "hello"}
+
+    def test_tool_calls_with_empty_content(self):
+        tool_calls = [
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ]
+        msg = Message(role="assistant", content="", tool_calls=tool_calls)
+
+        result = message_to_openai_message(msg)
+
+        assert result == {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": tool_calls,
+        }
 
     def test_with_images(self):
         img = ImageBlock(_B64_PNG)

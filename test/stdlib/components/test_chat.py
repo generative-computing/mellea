@@ -2,12 +2,15 @@ import logging
 
 import pytest
 
+from mellea.backends.tools import MelleaTool
 from mellea.core import (
     CBlock,
     ModelOutputThunk,
+    ModelToolCall,
     RawProviderResponse,
     TemplateRepresentation,
 )
+from mellea.formatters.chat_formatter import ChatFormatter
 from mellea.formatters.template_formatter import TemplateFormatter
 from mellea.helpers import message_to_openai_message, messages_to_docs
 from mellea.stdlib.components import Document, Message
@@ -17,6 +20,16 @@ from mellea.stdlib.components.chat import (
     as_generic_chat_history,
 )
 from mellea.stdlib.context import ChatContext
+
+
+def _make_tool_call(name: str, args: dict[str, object] | None = None) -> ModelToolCall:
+    """Create a ModelToolCall with a simple backing tool for tests."""
+
+    def test_tool(location: str = "LA") -> str:
+        return f"result for {location}"
+
+    tool = MelleaTool.from_callable(test_tool, name)
+    return ModelToolCall(name=name, func=tool, args=args or {"location": "LA"})
 
 
 def test_message_with_docs():
@@ -185,22 +198,43 @@ def test_parse_openai_streamed_choice_shape():
 
 def test_parse_tool_calls_ollama():
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="v", tool_calls={"some_fn": None})
+    mot = ModelOutputThunk(
+        value="v", tool_calls={"some_fn": _make_tool_call("some_fn")}
+    )
     fake_calls = [{"name": "some_fn"}]
     fake_response = type(
         "Resp",
         (),
-        {"message": type("Msg", (), {"role": "assistant", "tool_calls": fake_calls})()},
+        {
+            "message": type(
+                "Msg",
+                (),
+                {"role": "assistant", "content": None, "tool_calls": fake_calls},
+            )()
+        },
     )()
     mot.raw = RawProviderResponse(provider="ollama", response=fake_response)
     result = msg._parse(mot)
     assert result.role == "assistant"
-    assert "some_fn" in result.content
+    assert result.content == ""
+    assert result.tool_calls is not None
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0]["id"].startswith("call_")
+    assert result.tool_calls[0]["type"] == "function"
+    assert result.tool_calls[0]["function"]["name"] == "some_fn"
+    assert result.tool_calls[0]["function"]["arguments"] == '{"location": "LA"}'
 
 
 def test_parse_tool_calls_openai():
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    tool_calls = [
+        {
+            "id": "call_openai",
+            "type": "function",
+            "function": {"name": "fn", "arguments": "{}"},
+        }
+    ]
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
@@ -208,7 +242,8 @@ def test_parse_tool_calls_openai():
                 {
                     "message": {
                         "role": "assistant",
-                        "tool_calls": [{"function": {"name": "fn"}}],
+                        "content": None,
+                        "tool_calls": tool_calls,
                     }
                 }
             ]
@@ -216,6 +251,8 @@ def test_parse_tool_calls_openai():
     )
     result = msg._parse(mot)
     assert result.role == "assistant"
+    assert result.content == ""
+    assert result.tool_calls == tool_calls
 
 
 def test_parse_tool_calls_openai_streamed_choice_shape():
@@ -226,19 +263,61 @@ def test_parse_tool_calls_openai_streamed_choice_shape():
     """
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    tool_calls = [
+        {
+            "id": "call_streamed",
+            "type": "function",
+            "function": {"name": "fn", "arguments": "{}"},
+        }
+    ]
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
             "finish_reason": "tool_calls",
-            "message": {
-                "role": "assistant",
-                "tool_calls": [{"function": {"name": "fn"}}],
-            },
+            "message": {"role": "assistant", "content": None, "tool_calls": tool_calls},
         },
     )
     result = msg._parse(mot)
     assert result.role == "assistant"
-    assert "fn" in result.content
+    assert result.content == ""
+    assert result.tool_calls == tool_calls
+
+
+def test_tool_call_message_survives_formatter_to_openai_history():
+    """Tool-only assistant turns survive chat formatting and OpenAI serialization."""
+    tool_calls = [
+        {
+            "id": "call_history",
+            "type": "function",
+            "function": {"name": "fn", "arguments": "{}"},
+        }
+    ]
+    prompt = Message("user", "call fn")
+    mot = ModelOutputThunk(value="", tool_calls={"fn": None})
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "finish_reason": "tool_calls",
+            "message": {"role": "assistant", "content": None, "tool_calls": tool_calls},
+        },
+    )
+    mot.parsed_repr = prompt._parse(mot)
+    ctx = ChatContext().add(prompt).add(mot)
+
+    # ChatFormatter is abstract (print()); to_chat_messages is what this test
+    # exercises, so use a minimal concrete subclass that stubs print().
+    class _ChatFormatter(ChatFormatter):
+        def print(self, c):
+            return ""
+
+    messages = _ChatFormatter().to_chat_messages(ctx.as_list())
+    serialized = [message_to_openai_message(message) for message in messages]
+
+    assert serialized[1] == {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": tool_calls,
+    }
 
 
 def test_parse_tool_calls_fallback_uses_value():
