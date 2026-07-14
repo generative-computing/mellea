@@ -595,7 +595,18 @@ def pytest_runtest_setup(item):
             logger.info(
                 "Warming up ollama models before ollama group (keep_alive=-1)..."
             )
-            for model in ["granite4.1:3b", "granite3.2-vision"]:
+            # Only pin models that CI actually exercises. granite3.2-vision was
+            # removed: no CI-collected test uses it (Ollama vision e2e is skipped
+            # until granite-vision-4.1 lands in the Ollama library, and the
+            # OpenAI vision test uses granite4.1:3b under gh_run==1), and pinning
+            # a second model with keep_alive=-1 alongside concurrent-request
+            # tests inflated resident memory enough to segfault llama-server on
+            # memory-limited runners.
+            # WHEN REACTIVATING VISION (see #1187): pin the vision model
+            # *sequentially* — evict granite4.1:3b first, then pin the vision
+            # model for the vision tests — do NOT add it back to this list to be
+            # pinned in parallel, or the segfault cascade returns.
+            for model in ["granite4.1:3b"]:
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",
@@ -621,7 +632,9 @@ def pytest_runtest_setup(item):
                 port = os.environ.get("OLLAMA_PORT", "11434")
                 ollama_base = f"http://{host_str}:{port}"
             logger.info("Evicting ollama models from VRAM after ollama group...")
-            for model in ["granite4.1:3b", "granite3.2-vision"]:
+            # Keep in sync with the warmup pin list above. granite3.2-vision
+            # dropped — see the warmup comment and #1187 for reactivation.
+            for model in ["granite4.1:3b"]:
                 try:
                     requests.post(
                         f"{ollama_base}/api/generate",
