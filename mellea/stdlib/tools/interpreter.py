@@ -31,7 +31,7 @@ import weakref
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from ...backends.tools import MelleaTool
@@ -469,6 +469,14 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             `None` infers the tier from policy presence (`"docker"` when a policy
             is set, `"docker_unsafe"` otherwise).  Prefer passing an explicit value;
             `make_execution_environment` always supplies one.
+        export_dir (Path | None): Host directory under which exported artifacts are
+            placed.  When set, each copied-out file lands in a randomized `0o700`
+            subdirectory of this directory and is left in place for the caller to
+            read.  When `None`, artifacts land in a randomized subdirectory of the
+            system temp directory that is removed once the returned
+            `ExecutionResult` is garbage collected.  An empty or cwd-equivalent
+            path (`Path("")` or `Path(".")`) is treated as `None` rather than
+            scattering export subdirectories into the current working directory.
     """
 
     def __init__(
@@ -479,8 +487,9 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         installed_packages: set[str] | None = None,
         failed_packages: set[str] | None = None,
         tier: str | None = None,
+        export_dir: Path | None = None,
     ):
-        """Initialize the Docker sandbox environment with optional install caches and tier override."""
+        """Initialize the Docker sandbox environment with optional install caches, tier override, and artifact export directory."""
         super().__init__(
             allowed_imports=allowed_imports,
             policy=policy,
@@ -495,6 +504,15 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             failed_packages if failed_packages is not None else set()
         )
         self._tier: str | None = tier
+        # Normalize an empty/cwd path (Path("") or Path("."), both str "." ) to
+        # None: such a path is truthy and `is not None`, but resolves to the
+        # current working directory, so mkdtemp(dir=...) would scatter export
+        # subdirs into cwd and mkdir(...) is a silent no-op.  Treat it as "no
+        # export dir" so those artifacts fall through to the auto-cleaned system
+        # temp; a caller who wants cwd should pass an explicit named subdir.
+        self._export_dir: Path | None = (
+            None if export_dir is None or str(export_dir) == "." else export_dir
+        )
 
     def _mode(self) -> str:
         if self._tier is not None:
@@ -745,26 +763,47 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
 
             artifacts: list[Artifact] = []
             export_dirs: list[Path] = []
+            # When a host export_dir is configured, artifacts persist there for
+            # the caller and are NOT auto-cleaned; otherwise they land in a
+            # randomized system-tempdir subdir removed once the result is GC'd.
+            caller_owns_exports = self._export_dir is not None
+            # Only surface artifacts from a successful run, consistent with the
+            # local tier (see UnsafeEnvironment.execute).  A failed run must not
+            # leak partial or stale container output.
             if (
                 self.policy
                 and self.policy.artifact_export_paths
                 and self._session is not None
+                and result.exit_code == 0
             ):
+                if caller_owns_exports:
+                    self._export_dir.mkdir(parents=True, exist_ok=True)  # type: ignore[union-attr]
                 for container_path in self.policy.artifact_export_paths:
                     with tempfile.TemporaryDirectory() as tmp_dir:
                         staging = Path(tmp_dir) / container_path.name
                         try:
                             self.copy_out(str(container_path), staging)
-                            export_dir = Path(tempfile.mkdtemp())
+                            export_dir = Path(
+                                tempfile.mkdtemp(dir=self._export_dir)
+                                if caller_owns_exports
+                                else tempfile.mkdtemp()
+                            )
                             os.chmod(export_dir, 0o700)
-                            export_dirs.append(export_dir)
+                            if not caller_owns_exports:
+                                export_dirs.append(export_dir)
                             dest = export_dir / container_path.name
-                            shutil.copy2(staging, dest)
+                            # copy_out may bring back a directory tree (e.g. an
+                            # artifact_export_path pointing at a folder); handle
+                            # both files and directories.
+                            if staging.is_dir():
+                                shutil.copytree(staging, dest)
+                            else:
+                                shutil.copy2(staging, dest)
                             artifacts.append(
                                 Artifact(
                                     path=dest,
                                     size_bytes=dest.stat().st_size
-                                    if dest.exists()
+                                    if dest.is_file()
                                     else None,
                                 )
                             )
@@ -840,6 +879,7 @@ def make_execution_environment(
     working_directory: str | None = None,
     _install_cache: set[str] | None = None,
     _failed_cache: set[str] | None = None,
+    export_dir: Path | None = None,
 ) -> ExecutionEnvironment:
     """Create an :class:`ExecutionEnvironment` for the given tier.
 
@@ -868,6 +908,10 @@ def make_execution_environment(
             installation has already failed.  Packages in this set are skipped
             on subsequent calls; clear the set to allow a retry.  Pass the same
             set as `_install_cache` to persist failure state across calls.
+        export_dir (Path | None): Host directory under which Docker tiers place
+            exported artifacts.  Ignored by non-Docker tiers.  `None` uses a
+            randomized system-tempdir subdirectory that is cleaned up when the
+            `ExecutionResult` is garbage collected.
 
     Returns:
         ExecutionEnvironment: Configured environment instance.
@@ -908,6 +952,7 @@ def make_execution_environment(
                 installed_packages=_install_cache,
                 failed_packages=_failed_cache,
                 tier="docker_unsafe",
+                export_dir=export_dir,
             )
         case "docker":
             resolved_policy = policy if policy is not None else DOCKER_POLICY
@@ -918,6 +963,7 @@ def make_execution_environment(
                 installed_packages=_install_cache,
                 failed_packages=_failed_cache,
                 tier="docker",
+                export_dir=export_dir,
             )
         case _:
             raise ValueError(
@@ -1075,10 +1121,17 @@ def python_tool(
     files produced by a **successful** execution (exit code 0) are included.
 
     Note:
-        **Docker tiers** (`"docker"`, `"docker_unsafe"`) do not support
-        artifact scanning.  `artifact_dir` is ignored for these tiers and
-        `result.artifacts` is always `[]`.  A `RuntimeWarning` is emitted if
-        `artifact_dir` is passed with a docker tier.
+        **Docker tiers** (`"docker"`, `"docker_unsafe"`) surface artifacts only
+        when the policy's `artifact_export_paths` lists the container paths to
+        copy out — Docker has no host-shared working directory to scan, so
+        `artifact_dir` alone cannot drive export.  When `artifact_export_paths`
+        is set, a persistent container session is opened once for the tool's
+        lifetime, copied-out files are returned on `result.artifacts`, and
+        `artifact_dir` (when provided) is used as the host destination.  As with
+        local tiers, only files from a **successful** execution (exit code 0)
+        are exported.  Passing `artifact_dir` with a docker tier but no
+        `artifact_export_paths` emits a `RuntimeWarning` and yields
+        `result.artifacts == []`.
 
         **Local tiers are always unenforced.** ``CapabilityPolicy`` boolean
         restrictions (``network_access``, ``subprocess_execution``, etc.)
@@ -1115,7 +1168,12 @@ def python_tool(
             write output files.  A per-call tempdir is used when `None`;
             that tempdir is kept alive as long as the returned
             `ExecutionResult` holds artifacts, and cleaned up immediately
-            when no artifacts are produced.  Ignored for docker tiers.
+            when no artifacts are produced.  For docker tiers this is the host
+            destination for files copied out via `artifact_export_paths`; each
+            such file lands in a randomized `0o700` subdirectory of
+            `artifact_dir` (not directly in it) to prevent collisions and
+            preserve owner-only permissions.  It has no effect on docker tiers
+            when `artifact_export_paths` is unset.
         policy (CapabilityPolicy | None): Override the tier's default
             `CapabilityPolicy`.  When `packages` is also provided, those
             packages are merged into this policy.
@@ -1132,8 +1190,28 @@ def python_tool(
 
     Raises:
         ImportError: If `MelleaTool` cannot be imported (should not happen in
-            a normal mellea installation).
+            a normal mellea installation), or, for a docker tier with
+            `artifact_export_paths` set, if `llm-sandbox` is not installed —
+            the persistent container session is opened at construction time.
         ValueError: If any entry in `packages` is empty or begins with `-`.
+        Exception: If a docker tier with `artifact_export_paths` set cannot
+            open its container session at construction time, the underlying
+            docker/llm-sandbox error (e.g. the Docker daemon is unreachable)
+            propagates unchanged.
+
+    Note:
+        For a docker tier with `artifact_export_paths`, the container is opened
+        eagerly when the tool is constructed (so it can be reused across
+        `run_python` calls), so daemon/availability errors surface here rather
+        than on the first `run`.
+
+        Because that container persists and `artifact_export_paths` are fixed,
+        a later successful run that does not touch an export path will still
+        `copy_out` a file left there by an earlier run and surface it as the
+        current run's artifact.  This mirrors the persistent-local
+        `artifact_dir` behavior, but the reused container makes it easy to hit
+        in a ReACT loop — callers should treat exported artifacts as
+        potentially stale unless the run wrote to the export path.
 
     Example:
         ```python
@@ -1218,15 +1296,49 @@ def python_tool(
     _install_cache: set[str] = set()
     _failed_cache: set[str] = set()
 
-    if resolved_tier in _DOCKER_TIERS and artifact_dir is not None:
+    # Docker tiers export artifacts only via artifact_export_paths (there is no
+    # host-shared cwd to scan).  When those paths are set, open ONE persistent
+    # container session for the tool's lifetime so copy_out runs on a live
+    # container across every run_python() call — one-shot mode closes the
+    # container before export can happen.
+    docker_export = bool(
+        resolved_tier in _DOCKER_TIERS
+        and effective_policy
+        and effective_policy.artifact_export_paths
+    )
+
+    if (
+        resolved_tier in _DOCKER_TIERS
+        and artifact_dir is not None
+        and not docker_export
+    ):
         warnings.warn(
-            f"artifact_dir is ignored for the {resolved_tier!r} tier — "
-            "LLMSandboxEnvironment does not scan the container filesystem for "
-            "artifacts.  result.artifacts will always be [].  "
-            "Use a local tier to surface output files as structured artifacts.",
+            f"artifact_dir was passed with the {resolved_tier!r} tier but no "
+            "artifact_export_paths are set on the policy.  Docker tiers have no "
+            "host-shared working directory to scan, so result.artifacts will be "
+            "[].  Set CapabilityPolicy.artifact_export_paths to the container "
+            "paths to copy out; artifact_dir will then be used as the host "
+            "destination.",
             RuntimeWarning,
             stacklevel=2,
         )
+
+    persistent_env: LLMSandboxEnvironment | None = None
+    if docker_export:
+        # A docker tier always yields an LLMSandboxEnvironment; cast rather than
+        # assert so the invariant survives `python -O` (which strips asserts).
+        persistent_env = cast(
+            LLMSandboxEnvironment,
+            make_execution_environment(
+                resolved_tier,
+                policy=effective_policy,
+                allowed_imports=allowed_imports,
+                _install_cache=_install_cache,
+                _failed_cache=_failed_cache,
+                export_dir=artifact_dir,
+            ),
+        )
+        persistent_env.__enter__()  # open the container; closed by the finalizer below
 
     def run_python(code: str) -> ExecutionResult:
         """Execute Python code and return the result with any output artifacts."""
@@ -1235,6 +1347,10 @@ def python_tool(
             if not suppress_agg
             else ""
         ) + code
+
+        if persistent_env is not None:
+            # Docker tier with artifact export: reuse the open container session.
+            return persistent_env.execute(patched_code)
 
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -1274,7 +1390,13 @@ def python_tool(
             weakref.finalize(result, shutil.rmtree, tmp_dir, True)
         return result
 
-    return MelleaTool.from_callable(run_python, name=name)
+    tool = MelleaTool.from_callable(run_python, name=name)
+    if persistent_env is not None:
+        # Tie the container's lifetime to the tool: close it when the tool is
+        # garbage collected.  The finalizer holds the only strong reference the
+        # callback needs, so it cannot itself keep the tool alive.
+        weakref.finalize(tool, persistent_env.__exit__, None, None, None)
+    return tool
 
 
 def code_interpreter(code: str) -> ExecutionResult:
