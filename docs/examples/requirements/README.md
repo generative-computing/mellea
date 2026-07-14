@@ -9,7 +9,8 @@ and code generation tasks like plotting.
 ### code_generation_and_execution.py
 
 Demonstrates the complete pipeline of code generation, data extraction, and graph
-visualization.
+visualization. **NOTE: Uses `execution_tier="local"` for fast development. For production
+with untrusted code, use `execution_tier="docker"`. See file docstring for guidance.**
 
 **Key Features:**
 
@@ -165,6 +166,55 @@ result = req.validation_fn(context)
 print(result.as_bool())  # True if matplotlib and numpy are available
 ```
 
+## Execution Tiers & Safety Model
+
+### Available Execution Tiers
+
+When executing generated code via `PythonExecutionReq`, you can choose an execution tier that
+balances safety, isolation, and performance:
+
+| Tier | Isolation | Speed | Use Case |
+|------|-----------|-------|----------|
+| `"static"` | Analysis only (no execution) | Fastest | Fast validation before execution |
+| `"local_unsafe"` | None (direct subprocess) | Fast | Trusted code only, max performance |
+| `"local"` | None (policy control only) | Fast | Trusted code with resource limits (timeout, memory) |
+| `"docker_unsafe"` | Container isolation | Slower | Untrusted code, no policy restrictions |
+| `"docker"` | Container isolation + policy | Slower | RECOMMENDED: Untrusted/LLM code with resource limits |
+
+### When to Use Each Tier
+
+**Use `"local"` or `"local_unsafe"`:**
+- Code source is trusted (internal development)
+- Running in already-sandboxed environment (CI/CD, Docker container)
+- Performance is critical and isolation overhead is unacceptable
+- Development/demonstration purposes
+
+**Use `"docker"` (RECOMMENDED for production):**
+- Code is LLM-generated or from untrusted sources
+- Running in shared environments or production
+- Security is more important than speed
+- Need container-level process isolation and resource limits
+
+### Safety Example
+
+For production with LLM-generated code:
+
+```python
+from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
+from mellea.stdlib.tools.execution_policy import CapabilityPolicy
+
+# Safe: Container isolation + timeout control
+req = PythonExecutionReq(
+    execution_tier="docker",  # Container-isolated execution
+    policy=CapabilityPolicy(
+        timeout=30,           # Kill after 30 seconds
+        network_access=False, # No network access
+        package_installation=False,  # No pip install
+    ),
+    max_output_chars=10_000,  # Limit output size
+)
+```
+
 ## Code Generation and Execution
 
 The `code_generation_and_execution.py` example demonstrates end-to-end code generation
@@ -219,20 +269,20 @@ Extract employee distribution across work locations and create a pie chart
 
 **When to Use:**
 
-- ✅ Generating data visualization code from natural language
-- ✅ Extracting specific data from CSV files with LLM assistance
-- ✅ Creating reproducible data analysis pipelines
-- ✅ Generating plotting code that must run on servers (headless)
-- ✅ Validating plots are saved to files (not displayed interactively)
-- ✅ Ensuring code can run in CI/CD environments
-- ✅ Verifying required data science libraries are available
-- ✅ Code quality gates for machine learning notebooks
+- Generating data visualization code from natural language
+- Extracting specific data from CSV files with LLM assistance
+- Creating reproducible data analysis pipelines
+- Generating plotting code that must run on servers (headless)
+- Validating plots are saved to files (not displayed interactively)
+- Ensuring code can run in CI/CD environments
+- Verifying required data science libraries are available
+- Code quality gates for machine learning notebooks
 
 **When NOT to Use:**
 
-- ❌ Interactive plotting applications
-- ❌ Jupyter notebooks meant for display (use `nbAgg` backend instead)
-- ❌ Desktop applications with display servers
+- Interactive plotting applications
+- Jupyter notebooks meant for display (use `nbAgg` backend instead)
+- Desktop applications with display servers
 
 ## Related Documentation
 
