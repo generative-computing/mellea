@@ -112,6 +112,9 @@ Implementing and composing requirements for output validation.
 - Custom requirement definitions
 - Requirement composition
 - Validation with requirements
+- Python code generation and execution with `bash_executor`
+- CLI data processing with shell commands
+- Safe subprocess execution with `python_tool`
 
 ### Integration & Deployment
 

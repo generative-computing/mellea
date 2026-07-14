@@ -110,7 +110,8 @@ class ShellOperatorPattern(BashSecurityPattern):
                     return True, reason
 
             # Semicolon: substring check (dangerous even in some quote contexts)
-            if ";" in arg:
+            # Allow escaped semicolons (\;) used in find -exec syntax
+            if ";" in arg and "\\;" not in arg:
                 return True, "Command chaining (;) is not allowed"
 
         return False, ""

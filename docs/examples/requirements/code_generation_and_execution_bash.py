@@ -1,16 +1,16 @@
 # pytest: e2e, ollama, qualitative, slow
-"""Example demonstrating Bash code generation for CLI data processing tasks.
+"""Example demonstrating Python code generation for CLI data processing tasks.
 
 This example shows how to use Mellea to:
 1. Accept user input specifying file/directory management and CLI tasks
-2. Generate Bash code for data processing workflows
-3. Execute the code using bash_executor() from mellea.stdlib.tools.shell
+2. Generate Python code with bash_executor() calls for data processing workflows
+3. Execute the generated Python code to orchestrate multiple bash_executor calls
 
 The pipeline implements a 4-step process:
 1. User Input - Accept natural language request for file/CLI operations
 2. Context Loading - Load file listings and sample data
-3. Code Generation - Generate Bash code for data processing workflows
-4. Code Execution - Execute the code safely using bash_executor()
+3. Code Generation - Generate Python code with sequential bash_executor calls
+4. Code Execution - Execute the generated Python code to process data
 
 Example tasks:
 - Find and process files matching patterns
@@ -18,6 +18,8 @@ Example tasks:
 - Extract and aggregate data from multiple files
 - Generate reports from log files or data files
 - Search and filter data across multiple files
+
+This approach avoids shell operators (pipes, redirects) by generating Python control flow instead.
 """
 
 import argparse
@@ -27,32 +29,29 @@ import tempfile
 from pathlib import Path
 
 import mellea
-from mellea.stdlib.requirements.python_tools import (
-    PythonCodeExtraction,
-    PythonSyntaxValid,
-)
+from mellea.stdlib.requirements.python_tools import PythonSyntaxValid
 from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
+from mellea.stdlib.tools.interpreter import python_tool
 from mellea.stdlib.tools.shell import bash_executor
 
 
-def _extract_bash_code_from_output(generated: str) -> str | None:
-    """Extract Bash code block from model output.
+def _extract_python_code_from_output(generated: str) -> str | None:
+    """Extract Python code block from model output.
 
-    Looks for code blocks marked with ```bash or ``` markers.
-    Falls back to returning entire output if it looks like shell code.
+    Looks for code blocks marked with ```python or ``` markers.
 
     Args:
         generated: Raw model output string.
 
     Returns:
-        Extracted Bash code string, or None if extraction failed.
+        Extracted Python code string, or None if extraction failed.
     """
     lines = generated.split("\n")
     in_code_block = False
     code_lines = []
 
     for line in lines:
-        if line.strip().startswith("```bash"):
+        if line.strip().startswith("```python"):
             in_code_block = True
             continue
         elif line.strip().startswith("```") and in_code_block:
@@ -65,14 +64,6 @@ def _extract_bash_code_from_output(generated: str) -> str | None:
         code = "\n".join(code_lines).strip()
         if code:
             return code
-
-    # Fallback: if output looks like shell code, return it
-    if any(
-        line.strip().startswith(p)
-        for line in lines
-        for p in ["find ", "grep ", "awk ", "sed ", "cut ", "cat ", "sort "]
-    ):
-        return generated.strip()
 
     return None
 
@@ -168,7 +159,7 @@ def process_user_request(
     workspace_context = get_workspace_context(workspace_dir)
     sanitized_request = repr(user_request)
 
-    prompt = f"""You are a Bash command generator for file and directory operations.
+    prompt = f"""You are a Python code generator that uses bash_executor for CLI operations.
 
 User request:
 {sanitized_request}
@@ -176,38 +167,102 @@ User request:
 Current workspace context:
 {workspace_context}
 
-Generate a single Bash command that:
-1. Performs the requested file/directory operations and transformations
-2. Uses standard CLI tools (find, grep, awk, sed, cut, sort, cat, ls, etc.)
-3. Processes files and data according to the user request
-4. Outputs results to stdout
-
-The command will be executed in: {workspace_dir}
+Generate Python code that:
+1. Imports bash_executor from mellea.stdlib.tools.shell
+2. Uses sequential bash_executor() calls to process files and data
+3. Breaks complex tasks into multiple simple commands (NO pipes, redirects, or shell chaining)
+4. Uses Python loops, conditionals, and string operations to orchestrate commands
+5. Processes intermediate results in Python variables
+6. Prints the final results
 
 IMPORTANT CONSTRAINTS:
-- Generate ONLY valid Bash code in a code block
-- Use simple, single commands - NO pipes (|), redirects (>, >>), or semicolons (;)
-- Each command should be self-contained and executable
-- Use grep, find, cat, awk, sort, uniq, wc, head, tail, cut commands
-- Do NOT use complex shell syntax or chaining
+- NO shell operators (pipes |, redirects >, >>, semicolons ;)
+- Each bash_executor call executes ONE simple command
+- Use Python control flow (for loops, if statements) to sequence commands
+- Extract and process bash_executor output in Python
+- Working directory is: {workspace_dir}
 
-Examples of valid commands:
-```bash
-find logs -name "*.log"
+IMPORTANT API DETAILS:
+- bash_executor() returns an ExecutionResult object
+- Check result.success (bool) to verify command executed successfully
+- Check result.stdout (str) for command output (or None if failed)
+- Check result.skipped (bool) to see if command was blocked by guardrails
+- Check result.skip_message (str) for why a command was skipped
+
+IMPORTANT PARSING NOTES:
+- wc -l FILE outputs: "N FILE" (number + filename), extract the first word only
+- grep -c PATTERN FILE outputs just the count (easier to parse)
+- grep PATTERN FILE outputs matching lines (use for displaying content)
+- cat FILE outputs entire file contents (use for showing all data)
+- Always strip() output and check if parsing will work
+- When in doubt, use commands that output just data without filenames
+
+DIRECTORY STRUCTURE:
+The workspace contains:
+- logs/ — log files (*.log)
+- data/ — data files (*.txt, *.csv)
+- config/ — configuration files
+
+COMMON FILE OPERATIONS:
+- Show file contents: cat data/sales_2024_q1.txt
+- Find files: find data -name '*.txt' or find data -name '*.csv'
+- Search in files: grep PATTERN filename (finds lines containing PATTERN anywhere)
+- Count matching lines: grep -c PATTERN filename (outputs just the number)
+- Count all lines: wc -l filename (output: "N filename", extract first word)
+
+GREP PATTERN TIPS:
+- To find lines containing a word: grep -c ERROR logs/app.log (matches ERROR anywhere in line)
+- Do NOT use anchors like ^ERROR or ^WARN unless you know the line starts with that text
+- For log files with timestamps: use grep -c ERROR (without ^) to match anywhere in the line
+- Example log format: "2024-01-15 10:24:05 ERROR Database failed" → grep ERROR will match
+- grep -c outputs just the count, perfect for parsing with int()
+
+BANNED OPERATIONS (will be blocked):
+- Input/output redirection: >, >>, <, 2>&1, >&2
+- Pipes: |, |&
+- Command chaining: ;, &&, ||
+- Variable expansion: $(...), `...`, ${{...}}
+- Code execution: python -c, bash -c, etc.
+
+Example pattern for showing file contents:
+```python
+from mellea.stdlib.tools.shell import bash_executor
+
+# Step 1: Find all data files in data directory
+result = bash_executor("find data -name '*.txt'", working_dir="{workspace_dir}")
+if not result.success:
+    print(f"Failed: {{result.skip_message}}")
+else:
+    files = result.stdout.strip().split('\\n')
+
+    # Step 2: Display each file's contents
+    for file in files:
+        if file:
+            result = bash_executor(f"cat {{file}}", working_dir="{workspace_dir}")
+            if result.success:
+                print(f"\\nContents of {{file}}:")
+                print(result.stdout)
 ```
-```bash
-grep ERROR logs/app_1.log
+
+Example pattern for counting with grep (CORRECT - no anchors):
+```python
+# Count ERROR entries - use grep -c ERROR (NOT ^ERROR)
+result = bash_executor(f"grep -c ERROR {{file}}", working_dir="{workspace_dir}")
+if result.success:
+    count = int(result.stdout.strip())  # grep -c outputs just the number
+    print(f"{{file}}: {{count}} errors")
+
+# WRONG: Do NOT use this - anchors won't match timestamped logs:
+# result = bash_executor(f"grep -c ^ERROR {{file}}", ...)  # WRONG!
 ```
-```bash
-cat data/sales_2024_q1.txt
-```
-"""
 
-    all_reqs = [PythonCodeExtraction(), PythonSyntaxValid()]
+ALWAYS use working_dir="{workspace_dir}" (the main workspace), NOT subdirectories like "logs/" or "data/".
 
-    strategy = ModelFriendlyRepairStrategy(loop_budget=3, requirements=all_reqs)
+Generate the Python code now:"""
 
-    print("Generating Bash code for data processing...")
+    print("Generating Python code for data processing...")
+    requirements: list = [PythonSyntaxValid()]
+    strategy = ModelFriendlyRepairStrategy(loop_budget=3, requirements=requirements)
     generated = m.instruct(prompt, strategy=strategy)
 
     if generated is None:
@@ -219,34 +274,45 @@ cat data/sales_2024_q1.txt
         print("  ✗ Model failed to generate output")
         return
 
-    code = _extract_bash_code_from_output(generated_str)
+    code = _extract_python_code_from_output(generated_str)
     if code is None:
-        print("  ✗ Failed to extract Bash code from model output")
+        print("  ✗ Failed to extract Python code from model output")
         print(f"\nModel output:\n{generated_str}")
         return
 
-    print("\nGenerated Bash code:")
+    print("\nGenerated Python code:")
     print(code)
 
-    # Execute the generated Bash code using bash_executor
+    # Execute the generated Python code using python_tool
     print("\nExecuting generated code...")
-    result = bash_executor(code, working_dir=workspace_dir)
+
+    # Create a python execution tool that allows bash_executor imports
+    tool = python_tool(
+        tier="local_unsafe", allowed_imports=["mellea"], name="bash_executor_runner"
+    )
+
+    # Prepend the bash_executor import if not already present
+    if "from mellea.stdlib.tools.shell import bash_executor" not in code:
+        code = "from mellea.stdlib.tools.shell import bash_executor\n" + code
+
+    # Execute the code
+    result = tool.run(code=code)
 
     if result.skipped:
-        print(f"  ✗ Command execution was skipped: {result.skip_message}")
+        print(f"  ✗ Code execution was skipped: {result.skip_message}")
         return
 
     if not result.success:
-        print("  ✗ Command execution failed")
+        print("  ✗ Code execution failed")
         if result.stderr:
             print(f"  Error: {result.stderr}")
+        if result.exit_code is not None:
+            print(f"  Exit code: {result.exit_code}")
         return
 
-    print("\nExecution output:")
+    # Print any output from the code
     if result.stdout:
         print(result.stdout)
-    else:
-        print("  (no output)")
 
     print("\n  ✓ Code executed successfully")
 
@@ -283,7 +349,7 @@ Examples:
     args = parser.parse_args()
 
     print("=" * 70)
-    print("Bash Code Generation: CLI Data Processing and File Operations")
+    print("Python Code Generation: CLI Data Processing and File Operations")
     print("=" * 70)
 
     # Use provided workspace or create temporary one
@@ -305,9 +371,9 @@ Examples:
         print("=" * 70)
         print("\nExamples of requests:")
         print("  - Find all ERROR entries in log files and count them")
-        print("  - List all files in the data directory")
-        print("  - Count total revenue from all sales files")
-        print("  - Find all products mentioned across all files")
+        print("  - Count the total number of lines in all log files")
+        print("  - Find all WARN entries and show which files contain them")
+        print("  - Count how many log files contain ERROR entries")
 
         request_number = 1
         while True:
@@ -327,13 +393,13 @@ Examples:
             request_number += 1
 
     else:
-        # Use predefined requests - focusing on commands that work with bash_executor constraints
+        # Use predefined requests that benefit from Python orchestration
         user_requests = [
-            "Find all ERROR entries in the log files",
-            "Find all WARN entries in the log files",
-            "List all files in the logs directory",
-            "Show the contents of the first data file",
-            "Count lines in all log files",
+            "Find all ERROR entries in the log files and count them",
+            "List all log files and count the total number of lines across all of them",
+            "Show the contents of all data files in the data directory",
+            "Find all WARN entries in the log files and display the files containing them",
+            "Count how many log files contain ERROR entries",
         ]
 
         # Process each user request
