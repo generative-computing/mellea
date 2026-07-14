@@ -474,7 +474,9 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             subdirectory of this directory and is left in place for the caller to
             read.  When `None`, artifacts land in a randomized subdirectory of the
             system temp directory that is removed once the returned
-            `ExecutionResult` is garbage collected.
+            `ExecutionResult` is garbage collected.  An empty or cwd-equivalent
+            path (`Path("")` or `Path(".")`) is treated as `None` rather than
+            scattering export subdirectories into the current working directory.
     """
 
     def __init__(
@@ -502,7 +504,15 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             failed_packages if failed_packages is not None else set()
         )
         self._tier: str | None = tier
-        self._export_dir: Path | None = export_dir
+        # Normalize an empty/cwd path (Path("") or Path("."), both str "." ) to
+        # None: such a path is truthy and `is not None`, but resolves to the
+        # current working directory, so mkdtemp(dir=...) would scatter export
+        # subdirs into cwd and mkdir(...) is a silent no-op.  Treat it as "no
+        # export dir" so those artifacts fall through to the auto-cleaned system
+        # temp; a caller who wants cwd should pass an explicit named subdir.
+        self._export_dir: Path | None = (
+            None if export_dir is None or str(export_dir) == "." else export_dir
+        )
 
     def _mode(self) -> str:
         if self._tier is not None:
@@ -1184,15 +1194,24 @@ def python_tool(
             `artifact_export_paths` set, if `llm-sandbox` is not installed —
             the persistent container session is opened at construction time.
         ValueError: If any entry in `packages` is empty or begins with `-`.
-        RuntimeError: If a docker tier with `artifact_export_paths` set cannot
-            open its container session at construction time (e.g. the Docker
-            daemon is unreachable).
+        Exception: If a docker tier with `artifact_export_paths` set cannot
+            open its container session at construction time, the underlying
+            docker/llm-sandbox error (e.g. the Docker daemon is unreachable)
+            propagates unchanged.
 
     Note:
         For a docker tier with `artifact_export_paths`, the container is opened
         eagerly when the tool is constructed (so it can be reused across
         `run_python` calls), so daemon/availability errors surface here rather
         than on the first `run`.
+
+        Because that container persists and `artifact_export_paths` are fixed,
+        a later successful run that does not touch an export path will still
+        `copy_out` a file left there by an earlier run and surface it as the
+        current run's artifact.  This mirrors the persistent-local
+        `artifact_dir` behavior, but the reused container makes it easy to hit
+        in a ReACT loop — callers should treat exported artifacts as
+        potentially stale unless the run wrote to the export path.
 
     Example:
         ```python

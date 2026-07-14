@@ -400,6 +400,25 @@ def test_python_tool_rejects_flag_package():
         python_tool(tier="local_unsafe", packages=["-r"])
 
 
+@pytest.mark.parametrize("empty_path", [Path(""), Path(".")])
+def test_export_dir_empty_path_normalized_to_none(empty_path: Path):
+    """An empty/cwd export_dir must normalize to None, not scatter temp dirs into cwd.
+
+    Path("") and Path(".") are both truthy and `is not None`, so neither a
+    falsey nor an `is not None` check catches them; they resolve to cwd, so
+    mkdtemp(dir=...) would litter the working directory.  The constructor must
+    treat them as "no export dir".
+    """
+    env = LLMSandboxEnvironment(export_dir=empty_path)
+    assert env._export_dir is None
+
+
+def test_export_dir_real_path_preserved(tmp_path: Path):
+    """A genuine export_dir must be preserved unchanged."""
+    env = LLMSandboxEnvironment(export_dir=tmp_path)
+    assert env._export_dir == tmp_path
+
+
 # endregion
 
 
