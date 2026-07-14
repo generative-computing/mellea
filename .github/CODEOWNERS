@@ -1,6 +1,2 @@
 # Default: request review from maintainers
 * @generative-computing/mellea-maintainers
-
-# Mellea Intrinsics
-/mellea/formatters/granite @generative-computing/mellea-intrinsics
-/test/formatters/granite @generative-computing/mellea-intrinsics
