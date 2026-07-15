@@ -23,7 +23,7 @@ from mellea.formatters.granite import (
     ChatCompletionResponse,
     IntrinsicsResultProcessor,
 )
-from mellea.formatters.granite.intrinsics import json_util
+from mellea.formatters.granite.intrinsics import _json_util
 
 _TEST_DATA_DIR = pathlib.Path(__file__).parent / "testdata"
 _CANNED_INPUT_DIR = _TEST_DATA_DIR / "test_canned_input"
@@ -44,14 +44,14 @@ def _round_floats(json_data, num_digits: int = 2):
     strings (recursive).
     """
     result = copy.deepcopy(json_data)
-    for path in json_util.scalar_paths(result):
-        value = json_util.fetch_path(result, path)
+    for path in _json_util.scalar_paths(result):
+        value = _json_util.fetch_path(result, path)
         if isinstance(value, float):
-            json_util.replace_path(result, path, round(value, num_digits))
+            _json_util.replace_path(result, path, round(value, num_digits))
         elif isinstance(value, str):
             try:
                 str_as_float = float(value)
-                json_util.replace_path(result, path, round(str_as_float, num_digits))
+                _json_util.replace_path(result, path, round(str_as_float, num_digits))
             except ValueError:
                 pass
 
@@ -60,7 +60,7 @@ def _round_floats(json_data, num_digits: int = 2):
                     str_as_json = json.loads(value)
                     rounded_json = _round_floats(str_as_json, num_digits)
                     rounded_json_as_str = json.dumps(rounded_json)
-                    json_util.replace_path(result, path, rounded_json_as_str)
+                    _json_util.replace_path(result, path, rounded_json_as_str)
                 except json.JSONDecodeError:
                     pass
     return result

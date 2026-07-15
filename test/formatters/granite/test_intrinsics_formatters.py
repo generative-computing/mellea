@@ -29,7 +29,7 @@ from mellea.formatters.granite import (
     IntrinsicsRewriter,
 )
 from mellea.formatters.granite.base import util as base_util
-from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
+from mellea.formatters.granite.intrinsics import _json_util, util as intrinsics_util
 from test.conftest import hf_skip
 
 
@@ -672,9 +672,11 @@ def test_reparse_json(reparse_json_file):
     json_str = _read_file(json_file)
 
     parsed_json = json.loads(json_str)
-    reparsed_json = json_util.reparse_json_with_offsets(json_str)
+    reparsed_json = _json_util.reparse_json_with_offsets(json_str)
 
-    assert json_util.scalar_paths(parsed_json) == json_util.scalar_paths(reparsed_json)
+    assert _json_util.scalar_paths(parsed_json) == _json_util.scalar_paths(
+        reparsed_json
+    )
 
 
 def _round_floats(json_data, num_digits: int = 2):
@@ -686,16 +688,16 @@ def _round_floats(json_data, num_digits: int = 2):
     :returns: Copy of the input with all floats rounded
     """
     result = copy.deepcopy(json_data)
-    for path in json_util.scalar_paths(result):
-        value = json_util.fetch_path(result, path)
+    for path in _json_util.scalar_paths(result):
+        value = _json_util.fetch_path(result, path)
         if isinstance(value, float):
-            json_util.replace_path(result, path, round(value, num_digits))
+            _json_util.replace_path(result, path, round(value, num_digits))
         elif isinstance(value, str):
             # Test for floating-point number encoded as a string.
             # In Python this test is supposed to use exceptions as control flow.
             try:
                 str_as_float = float(value)
-                json_util.replace_path(result, path, round(str_as_float, num_digits))
+                _json_util.replace_path(result, path, round(str_as_float, num_digits))
             except ValueError:
                 # flow through
                 pass
@@ -706,7 +708,7 @@ def _round_floats(json_data, num_digits: int = 2):
                     str_as_json = json.loads(value)
                     rounded_json = _round_floats(str_as_json, num_digits)
                     rounded_json_as_str = json.dumps(rounded_json)
-                    json_util.replace_path(result, path, rounded_json_as_str)
+                    _json_util.replace_path(result, path, rounded_json_as_str)
                 except json.JSONDecodeError:
                     # flow through
                     pass
@@ -806,11 +808,11 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
         # Correct for floating point rounding.
         # Can't use pytest.approx() because of lists
         transformed_json = _round_floats(
-            json_util.parse_inline_json(transformed_responses.model_dump()),
+            _json_util.parse_inline_json(transformed_responses.model_dump()),
             num_digits=2,
         )
         expected_json = _round_floats(
-            json_util.parse_inline_json(expected.model_dump()), num_digits=2
+            _json_util.parse_inline_json(expected.model_dump()), num_digits=2
         )
         if transformed_json != expected_json:
             # Simple comparison failed.
@@ -978,10 +980,10 @@ def test_run_ollama(yaml_json_combo_for_ollama):
     # Correct for floating point rounding.
     # Can't use pytest.approx() because of lists
     transformed_json = _round_floats(
-        json_util.parse_inline_json(transformed_responses.model_dump()), num_digits=2
+        _json_util.parse_inline_json(transformed_responses.model_dump()), num_digits=2
     )
     expected_json = _round_floats(
-        json_util.parse_inline_json(expected.model_dump()), num_digits=2
+        _json_util.parse_inline_json(expected.model_dump()), num_digits=2
     )
     if transformed_json != expected_json:
         # Simple comparison failed.
