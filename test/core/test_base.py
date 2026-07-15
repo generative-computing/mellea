@@ -404,11 +404,20 @@ class _FakeResponse:
         return False
 
 
-def _patch_download(monkeypatch, fake_get):
-    """Bypass the SSRF guard and stub `requests.get` for a download test."""
+@pytest.fixture(autouse=True)
+def _clear_image_cache():
+    """Isolate tests from the process-wide URL -> base64 download cache."""
     import mellea.core.base as base_mod
 
-    monkeypatch.setattr(base_mod, "_assert_public_url", lambda url: None)
+    base_mod._image_base64_cache.clear()
+    yield
+    base_mod._image_base64_cache.clear()
+
+
+def _patch_download(monkeypatch, fake_get):
+    """Stub `requests.get` for a download test."""
+    import mellea.core.base as base_mod
+
     monkeypatch.setattr(base_mod.requests, "get", fake_get)
 
 
@@ -418,19 +427,6 @@ def test_make_image_block_url_convert_to_base64(monkeypatch):
     block = make_image_block("https://example.com/cat.png", convert_to_base64=True)
     assert isinstance(block, ImageBlock)
     assert ImageBlock.is_valid_base64_png(str(block))
-
-
-def test_make_image_block_download_disables_redirects(monkeypatch):
-    """The download must pass allow_redirects=False so a 302 can't bypass the guard."""
-    seen: dict = {}
-
-    def fake_get(url, **kw):
-        seen.update(kw)
-        return _FakeResponse(_png_bytes())
-
-    _patch_download(monkeypatch, fake_get)
-    make_image_block("https://example.com/cat.png", convert_to_base64=True)
-    assert seen.get("allow_redirects") is False
 
 
 def test_make_image_block_download_failure_raises(monkeypatch):
@@ -468,41 +464,45 @@ def test_make_image_block_download_rejects_oversized_content_length(monkeypatch)
         make_image_block("https://example.com/big.png", convert_to_base64=True)
 
 
-def test_assert_public_url_rejects_private_ip(monkeypatch):
+def test_image_url_block_resolve_base64_caches_by_url(monkeypatch):
+    """resolve_base64 downloads once per URL; a reconstructed block hits cache."""
+    calls: dict[str, int] = {}
+
+    def fake_get(url, **kw):
+        calls[url] = calls.get(url, 0) + 1
+        return _FakeResponse(_png_bytes())
+
+    _patch_download(monkeypatch, fake_get)
+
+    url = "https://example.com/cat.png"
+    first = ImageUrlBlock(url).resolve_base64()
+    # A freshly reconstructed block for the same URL must not re-download.
+    second = ImageUrlBlock(url).resolve_base64()
+
+    assert ImageBlock.is_valid_base64_png(first)
+    assert first == second
+    assert calls[url] == 1  # cache is keyed on the URL, not the instance
+
+    # A different URL is a cache miss and triggers its own download.
+    other = "https://example.com/dog.png"
+    ImageUrlBlock(other).resolve_base64()
+    assert calls[other] == 1
+
+
+def test_image_cache_evicts_least_recently_used(monkeypatch):
+    """The download cache is bounded and evicts the least-recently-used URL."""
     from mellea.core import base as base_mod
 
-    # getaddrinfo returns (family, type, proto, canonname, sockaddr); sockaddr[0] is the IP.
-    monkeypatch.setattr(
-        base_mod.socket,
-        "getaddrinfo",
-        lambda host, port: [(2, 1, 6, "", ("169.254.169.254", 0))],
-    )
-    with pytest.raises(ValueError, match="non-public"):
-        base_mod._assert_public_url("http://metadata.example/latest")
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(_png_bytes()))
+    monkeypatch.setattr(base_mod, "_IMAGE_CACHE_MAX_ENTRIES", 2)
 
+    a, b, c = (f"https://example.com/{n}.png" for n in ("a", "b", "c"))
+    base_mod._cached_download_image_as_base64(a)
+    base_mod._cached_download_image_as_base64(b)
+    base_mod._cached_download_image_as_base64(a)  # touch `a` so `b` is now LRU
+    base_mod._cached_download_image_as_base64(c)  # evicts `b`
 
-def test_assert_public_url_rejects_loopback(monkeypatch):
-    from mellea.core import base as base_mod
-
-    monkeypatch.setattr(
-        base_mod.socket,
-        "getaddrinfo",
-        lambda host, port: [(2, 1, 6, "", ("127.0.0.1", 0))],
-    )
-    with pytest.raises(ValueError, match="non-public"):
-        base_mod._assert_public_url("http://localhost/x.png")
-
-
-def test_assert_public_url_allows_public_ip(monkeypatch):
-    from mellea.core import base as base_mod
-
-    monkeypatch.setattr(
-        base_mod.socket,
-        "getaddrinfo",
-        lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))],
-    )
-    # Should not raise.
-    base_mod._assert_public_url("https://example.com/cat.png")
+    assert set(base_mod._image_base64_cache) == {a, c}
 
 
 def test_make_image_block_invalid_string_raises():

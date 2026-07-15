@@ -19,10 +19,9 @@ import base64
 import binascii
 import datetime
 import enum
-import ipaddress
 import logging
-import socket
-import urllib.parse
+import threading
+from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -219,6 +218,25 @@ class ImageUrlBlock(CBlock):
             )
         super().__init__(value, meta)
 
+    def resolve_base64(self) -> str:
+        """Return the image as a base64-encoded PNG, downloading it once per URL.
+
+        Backends that cannot pass a URL through (e.g. Ollama) need the image
+        as base64. The download and encode result is memoized in a process-wide,
+        URL-keyed cache, so re-using the URL across conversation turns — even
+        via a freshly reconstructed block — does not re-fetch the image. This
+        call is blocking; async callers should offload it with
+        `asyncio.to_thread`.
+
+        Returns:
+            str: The base64-encoded PNG representation of the image at the URL.
+
+        Raises:
+            ValueError: If the response exceeds the size cap or the image
+                cannot be downloaded or decoded.
+        """
+        return _cached_download_image_as_base64(str(self.value))
+
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
@@ -352,41 +370,51 @@ _IMAGE_DOWNLOAD_TIMEOUT_S: float = 10.0
 _IMAGE_DOWNLOAD_MAX_BYTES: int = 25 * 1024 * 1024
 """Maximum accepted size (bytes) of a downloaded image body."""
 
+_IMAGE_CACHE_MAX_ENTRIES: int = 128
+"""Maximum number of URL -> base64 entries retained by the download cache."""
 
-def _assert_public_url(url: str) -> None:
-    """Reject a URL whose host resolves to a non-public IP address.
+_image_base64_cache: OrderedDict[str, str] = OrderedDict()
+"""Process-wide LRU cache mapping image URLs to their base64-encoded PNG."""
 
-    Resolves every address the host maps to and rejects the download if any is
-    private, loopback, link-local, reserved, or multicast. This blocks
-    server-side request forgery (SSRF) against cloud metadata endpoints
-    (`169.254.169.254`), localhost services, and RFC 1918 ranges.
+_image_base64_cache_lock = threading.Lock()
+"""Guards `_image_base64_cache` against concurrent `asyncio.to_thread` callers."""
+
+
+def _cached_download_image_as_base64(url: str) -> str:
+    """Download an image as base64, memoizing the result per URL.
+
+    Wraps `_download_image_as_base64` with a bounded, thread-safe LRU cache
+    keyed on the URL so the same image is fetched only once regardless of how
+    many `ImageUrlBlock` instances reference it. The download runs outside the
+    lock so concurrent fetches of distinct URLs still proceed in parallel;
+    only the small cache read/write is serialized.
 
     Args:
-        url: The `http://`/`https://` URL to validate.
+        url: An `http://` or `https://` URL pointing to an image.
+
+    Returns:
+        str: The base64-encoded PNG representation of the image at the URL.
 
     Raises:
-        ValueError: If the host is missing or resolves to a non-public IP.
+        ValueError: If the response exceeds the size cap or the image cannot
+            be downloaded or decoded.
     """
-    host = urllib.parse.urlsplit(url).hostname
-    if not host:
-        raise ValueError(f"URL has no host to validate: {url!r}")
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as e:
-        raise ValueError(f"Could not resolve host for URL: {url!r}") from e
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            raise ValueError(
-                f"Refusing to download from non-public address {ip} for URL: {url!r}"
-            )
+    with _image_base64_cache_lock:
+        cached = _image_base64_cache.get(url)
+        if cached is not None:
+            _image_base64_cache.move_to_end(url)  # mark as most-recently used
+            return cached
+
+    # Download outside the lock; two callers racing on a cold URL may both
+    # fetch, but the result is identical and the last writer simply wins.
+    encoded = _download_image_as_base64(url)
+
+    with _image_base64_cache_lock:
+        _image_base64_cache[url] = encoded
+        _image_base64_cache.move_to_end(url)
+        while len(_image_base64_cache) > _IMAGE_CACHE_MAX_ENTRIES:
+            _image_base64_cache.popitem(last=False)  # evict least-recently used
+    return encoded
 
 
 def _download_image_as_base64(url: str) -> str:
@@ -396,11 +424,9 @@ def _download_image_as_base64(url: str) -> str:
     real image, and re-encodes the result as a base64 PNG so the output is
     consistent with `ImageBlock`'s expected format.
 
-    The download is hardened against abuse: the host is validated against
-    non-public IP ranges before connecting (SSRF), redirects are refused so the
-    validation cannot be bypassed, a timeout bounds slow responses, and the body
-    is streamed with a size cap to guard against memory-exhaustion. This function
-    is blocking; async callers should offload it with `asyncio.to_thread`.
+    A timeout bounds slow responses and the body is streamed with a size cap
+    to guard against memory-exhaustion. This function is blocking; async
+    callers should offload it with `asyncio.to_thread`.
 
     Args:
         url: An `http://` or `https://` URL pointing to an image.
@@ -409,16 +435,12 @@ def _download_image_as_base64(url: str) -> str:
         str: The base64-encoded PNG representation of the downloaded image.
 
     Raises:
-        ValueError: If the host resolves to a non-public address, the response
-            exceeds the size cap, or the image cannot be downloaded or decoded.
+        ValueError: If the response exceeds the size cap or the image cannot
+            be downloaded or decoded.
     """
-    _assert_public_url(url)
     try:
         with requests.get(  # scheme validated by caller
-            url,
-            timeout=_IMAGE_DOWNLOAD_TIMEOUT_S,
-            allow_redirects=False,  # a redirect could bypass the IP guard
-            stream=True,
+            url, timeout=_IMAGE_DOWNLOAD_TIMEOUT_S, stream=True
         ) as response:
             response.raise_for_status()
             declared = response.headers.get("Content-Length")

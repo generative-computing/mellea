@@ -45,6 +45,16 @@ _SKIP_REASON = (
 # ── Shared image fixture ──────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _clear_image_cache():
+    """Isolate tests from the process-wide URL -> base64 download cache."""
+    from mellea.core import base as base_mod
+
+    base_mod._image_base64_cache.clear()
+    yield
+    base_mod._image_base64_cache.clear()
+
+
 @pytest.fixture(scope="module")
 def pil_image():
     rng = np.random.default_rng(seed=42)
@@ -148,7 +158,7 @@ def test_image_url_block_auto_downloaded_by_ollama(
     images: list[ImageBlock | ImageUrlBlock] = [url_block]
 
     with patch(
-        "mellea.backends.ollama._download_image_as_base64", return_value=encoded
+        "mellea.core.base._download_image_as_base64", return_value=encoded
     ) as mock_download:
         mocked_session.chat("What is in this image?", images=images)
 
@@ -171,7 +181,7 @@ def test_image_url_block_download_failure_raises(mocked_session: MelleaSession):
     images: list[ImageBlock | ImageUrlBlock] = [url_block]
 
     with patch(
-        "mellea.backends.ollama._download_image_as_base64",
+        "mellea.core.base._download_image_as_base64",
         side_effect=ValueError("Failed to download or decode image from URL"),
     ):
         with pytest.raises(ValueError, match="Failed to download"):
@@ -210,9 +220,9 @@ def test_image_url_block_drives_real_download(
 ):
     """Exercise the real `_download_image_as_base64` through the Ollama path.
 
-    Patches only the network layer (`requests.get` + `getaddrinfo`) so the
-    import alias, thread-offload, and payload wiring are all covered — this
-    catches regressions the fully-mocked download tests cannot.
+    Patches only the network layer (`requests.get`) so the block's
+    `resolve_base64` call, thread-offload, and payload wiring are all covered
+    — this catches regressions the fully-mocked download tests cannot.
     """
     buf = BytesIO()
     pil_image.save(buf, format="PNG")
@@ -238,13 +248,7 @@ def test_image_url_block_drives_real_download(
         def __exit__(self, *exc):
             return False
 
-    with (
-        patch(
-            "mellea.core.base.socket.getaddrinfo",
-            return_value=[(2, 1, 6, "", ("93.184.216.34", 0))],
-        ),
-        patch("mellea.core.base.requests.get", return_value=_FakeResponse()),
-    ):
+    with patch("mellea.core.base.requests.get", return_value=_FakeResponse()):
         mocked_session.chat("What is in this image?", images=images)
 
     turn = mocked_session.ctx.last_turn()

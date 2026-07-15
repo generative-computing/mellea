@@ -25,7 +25,7 @@ from ..core import (
     ModelToolCall,
     RawProviderResponse,
 )
-from ..core.base import AbstractMelleaTool, _download_image_as_base64
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
@@ -431,13 +431,15 @@ class OllamaModelBackend(FormatterBackend):
             image_values: list[str] | None = None
             if m.images is not None:
                 # Ollama only accepts base64-encoded images, so URL images are
-                # downloaded and encoded on the fly rather than rejected. The
-                # download is blocking, so offload each one to a thread and run
-                # them concurrently to avoid stalling the event loop; non-URL
-                # images already carry their base64 value.
+                # downloaded and encoded on the fly rather than rejected.
+                # `resolve_base64` memoizes on the block, so re-using the same
+                # block across turns downloads only once. The download is
+                # blocking, so offload each one to a thread and run them
+                # concurrently to avoid stalling the event loop; non-URL images
+                # already carry their base64 value.
                 image_values = [str(img.value) for img in m.images]
                 url_downloads = {
-                    i: asyncio.to_thread(_download_image_as_base64, str(img.value))
+                    i: asyncio.to_thread(img.resolve_base64)
                     for i, img in enumerate(m.images)
                     if isinstance(img, ImageUrlBlock)
                 }
