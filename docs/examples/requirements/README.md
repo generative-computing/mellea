@@ -177,7 +177,7 @@ balances safety, isolation, and performance:
 |------|-----------|-------|----------|
 | `"static"` | Analysis only (no execution) | Fastest | Fast validation before execution |
 | `"local_unsafe"` | None (direct subprocess) | Fast | Trusted code only, max performance |
-| `"local"` | None (policy control only) | Fast | Trusted code with resource limits (timeout, memory) |
+| `"local"` | None (policy control only) | Fast | Trusted code with resource limits (timeout, stdout/stderr limits) |
 | `"docker_unsafe"` | Container isolation | Slower | Untrusted code, no policy restrictions |
 | `"docker"` | Container isolation + policy | Slower | RECOMMENDED: Untrusted/LLM code with resource limits |
 
