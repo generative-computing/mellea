@@ -2,7 +2,13 @@
 
 from typing import Any, assert_type, cast
 
-from mellea.core import ComputedModelOutputThunk, ModelOutputThunk, SamplingResult
+from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
+    ComputedModelOutputThunk,
+    ModelOutputThunk,
+    SamplingResult,
+)
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.session import MelleaSession
 
@@ -53,3 +59,16 @@ async def check_aquery_uncomputed() -> None:
 def check_query_sync() -> None:
     r = s.query("obj", "q")
     assert_type(r, ComputedModelOutputThunk[Any])
+
+
+async def check_ainstruct_audio_accepted() -> None:
+    """Verify audio param is present on all ainstruct overload variants."""
+    audio: list[AudioBlock | AudioUrlBlock] = []
+    r1 = await s.ainstruct("test", strategy=None, await_result=True, audio=audio)
+    assert_type(r1, ComputedModelOutputThunk[str])
+
+    r2 = await s.ainstruct("test", strategy=None, audio=audio)
+    assert_type(r2, ModelOutputThunk[str])
+
+    r3 = await s.ainstruct("test", return_sampling_results=True, audio=audio)
+    assert_type(r3, SamplingResult[str])

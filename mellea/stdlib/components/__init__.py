@@ -2,6 +2,8 @@
 
 # Import from core for ergonomics.
 from ...core import (
+    AudioBlock,
+    AudioUrlBlock,
     CBlock,
     Component,
     ComponentParseError,
@@ -20,6 +22,8 @@ from .mobject import MObject, MObjectProtocol, Query, Transform
 from .simple import SimpleComponent
 
 __all__ = [
+    "AudioBlock",
+    "AudioUrlBlock",
     "CBlock",
     "Component",
     "ComponentParseError",
