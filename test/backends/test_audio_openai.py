@@ -2,30 +2,36 @@
 
 These tests require a local llama-server with an audio-capable model.
 
-Setup::
+**Setup:**
 
-    llama-server \
-        --model gemma-4-12b-it-Q8_0.gguf \
-        --mmproj mmproj-F16.gguf \
-        --n-gpu-layers 99 \
-        --ctx-size 32768 \
-        --flash-attn on \
-        --parallel 1 \
-        --cache-type-k q8_0 \
-        --cache-type-v q8_0 \
-        --temp 0.1 --top-k 1 \
-        --jinja \
-        --host 0.0.0.0 --port 8088
+```bash
+llama-server \
+    --model gemma-4-12b-it-Q8_0.gguf \
+    --mmproj mmproj-F16.gguf \
+    --n-gpu-layers 99 \
+    --ctx-size 32768 \
+    --flash-attn on \
+    --parallel 1 \
+    --cache-type-k q8_0 \
+    --cache-type-v q8_0 \
+    --temp 0.1 --top-k 1 \
+    --jinja \
+    --host 0.0.0.0 --port 8088
+```
 
-Environment variables (all optional)::
+**Environment variables** (all optional):
 
-    LLAMA_SERVER_URL   base URL of the server  (default: http://localhost:8088/v1)
-    LLAMA_SERVER_API_KEY  API key              (default: default)
-    LLAMA_SERVER_MODEL    model name           (default: gemma-4-12b-it-Q8_0.gguf)
+```
+LLAMA_SERVER_URL   base URL of the server  (default: http://localhost:8088/v1)
+LLAMA_SERVER_API_KEY  API key              (default: default)
+LLAMA_SERVER_MODEL    model name           (default: gemma-4-12b-it-Q8_0.gguf)
+```
 
-Run these tests explicitly::
+**Run these tests explicitly:**
 
-    LLAMA_SERVER_URL=http://localhost:8088/v1 uv run pytest test/backends/test_audio_openai.py -v
+```bash
+LLAMA_SERVER_URL=http://localhost:8088/v1 uv run pytest test/backends/test_audio_openai.py -v
+```
 """
 
 import base64
