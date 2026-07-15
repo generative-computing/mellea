@@ -1583,3 +1583,103 @@ def test_tool_wrapping() -> None:
         assert callable(tool.run)
     except ImportError:
         pytest.skip("MelleaTool not available")
+
+
+class TestBashValidationBugFixes:
+    """Tests for bash validation bug fixes (issue #1398).
+
+    These tests verify that security bugs in bash validation are fixed:
+    1. Interactive shell --login flag detection
+    2. Git push --force variants (--force-with-lease, --force-if-includes)
+    3. Dangerous package manager flags (apt/yum)
+    """
+
+    def test_interactive_bash_login_flag(self) -> None:
+        """bash --login should be rejected as interactive shell."""
+        env = StaticBashEnvironment()
+        result = env.execute("bash --login")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "Interactive shell" in result.skip_message
+
+    def test_interactive_sh_login_flag(self) -> None:
+        """sh --login should be rejected as interactive shell."""
+        env = StaticBashEnvironment()
+        result = env.execute("sh --login")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "Interactive shell" in result.skip_message
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_interactive_zsh_login_flag(self) -> None:
+        """zsh --login should be rejected as interactive shell."""
+        env = StaticBashEnvironment()
+        result = env.execute("zsh --login")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_push_force_with_lease(self) -> None:
+        """git push --force-with-lease should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push --force-with-lease")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "Destructive" in result.skip_message
+
+    def test_git_push_force_if_includes(self) -> None:
+        """git push --force-if-includes should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push --force-if-includes")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "Destructive" in result.skip_message
+
+    def test_apt_with_force_flag(self) -> None:
+        """apt with -f (force) flag should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("apt install -f package")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert (
+            "dangerous" in result.skip_message.lower()
+            or "not allowed" in result.skip_message.lower()
+        )
+
+    def test_apt_with_recursive_flag(self) -> None:
+        """apt with -r (recursive) flag should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("apt remove -r package")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_yum_with_force_flag(self) -> None:
+        """yum with -f (force) flag should be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("yum install -f package")
+
+        assert result.skipped is True
+        assert result.success is False
+
+    def test_git_push_short_force_still_rejected(self) -> None:
+        """git push -f (short form) should still be rejected."""
+        env = StaticBashEnvironment()
+        result = env.execute("git push -f")
+
+        assert result.skipped is True
+        assert result.success is False
+        assert result.skip_message is not None
+        assert "Destructive" in result.skip_message

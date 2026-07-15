@@ -51,7 +51,7 @@ class DangerousCommandPattern(BashSecurityPattern):
         if cmd in COMMAND_RULES:
             # Special case: interactive shells are only dangerous with -i flag
             if cmd in ("bash", "sh", "zsh", "ksh", "tcsh"):
-                if any(arg in ("-i", "--interactive", "-l", "-login") for arg in argv):
+                if any(arg in ("-i", "--interactive", "-l", "--login") for arg in argv):
                     return True, f"Interactive shell '{cmd}' is not allowed"
             else:
                 return True, f"Command '{cmd}' is not allowed"
@@ -203,19 +203,25 @@ class DestructiveGitPattern(BashSecurityPattern):
         if not argv or argv[0].split("/")[-1] != "git":
             return False, ""
 
-        # git push --force
-        if "push" in argv and any(arg in ("--force", "-f") for arg in argv):
-            return True, "Destructive git operation is not allowed"
+        # git push --force (including variants like --force-with-lease, --force-if-includes)
+        if "push" in argv:
+            for arg in argv:
+                if arg == "-f" or arg.startswith("--force"):
+                    return True, "Destructive git operation is not allowed"
 
         # git reset --hard
         if "reset" in argv and "--hard" in argv:
             return True, "Destructive git operation is not allowed"
 
-        # git clean -f/-d
+        # git clean -f/-d (including long forms like --force and --force-*)
         if "clean" in argv:
             for arg in argv:
                 if arg in ("-f", "-d", "-fd", "-df"):
                     return True, "Destructive git operation is not allowed"
+                # Long form flags: --force, --force-*, --directory
+                if arg.startswith("--force") or arg == "--directory":
+                    return True, "Destructive git operation is not allowed"
+                # Short combined flags like -fd, -ddf, etc. (not starting with --)
                 if arg.startswith("-") and not arg.startswith("--"):
                     if "f" in arg or "d" in arg:
                         return True, "Destructive git operation is not allowed"
@@ -243,6 +249,33 @@ class DestructiveRmPattern(BashSecurityPattern):
         return False, ""
 
 
+class DangerousPackageManagerPattern(BashSecurityPattern):
+    """Detects dangerous package manager operations with risky flags.
+
+    Package managers with force/recursive flags can perform destructive operations
+    or bypass important safety checks.
+    """
+
+    category = "destructive"
+    severity = "HIGH"
+
+    def check(self, argv: list[str]) -> tuple[bool, str]:
+        """Check for dangerous package manager operations."""
+        if not argv:
+            return False, ""
+
+        cmd = argv[0].split("/")[-1]
+        if cmd not in ("apt", "yum"):
+            return False, ""
+
+        # Check for dangerous flags: -f (force), -r (recursive)
+        dangerous_flags = {"-f", "--force", "-r", "--recursive", "--force-all"}
+        if any(flag in argv for flag in dangerous_flags):
+            return True, f"Command '{cmd}' with dangerous flags is not allowed"
+
+        return False, ""
+
+
 # Registry of all security patterns. New patterns can be added here.
 SECURITY_PATTERNS: list[BashSecurityPattern] = [
     DangerousCommandPattern(),
@@ -251,6 +284,7 @@ SECURITY_PATTERNS: list[BashSecurityPattern] = [
     CodeExecutionPattern(),
     DestructiveGitPattern(),
     DestructiveRmPattern(),
+    DangerousPackageManagerPattern(),
 ]
 
 

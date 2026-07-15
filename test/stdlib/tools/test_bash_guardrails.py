@@ -21,6 +21,7 @@ from mellea.stdlib.tools._bash_patterns import (
     CodeExecutionPattern,
     CommandSubstitutionPattern,
     DangerousCommandPattern,
+    DangerousPackageManagerPattern,
     DestructiveGitPattern,
     DestructiveRmPattern,
     ShellOperatorPattern,
@@ -651,3 +652,185 @@ class TestBashAuditTrail:
         assert len(pattern_and_severity) == 2, (
             "Should match both shell operators with HIGH severity"
         )
+
+
+class TestBashPatternImprovements:
+    """Tests for bash pattern improvements (issue #1398).
+
+    Verifies that new patterns and improved patterns work correctly:
+    1. Interactive shell --login flag detection
+    2. Git push --force variants
+    3. Dangerous package manager flags
+    """
+
+    def test_dangerous_package_manager_pattern_exists(self) -> None:
+        """DangerousPackageManagerPattern should be in the pattern registry."""
+        from mellea.stdlib.tools._bash_patterns import DangerousPackageManagerPattern
+
+        pattern_names = get_pattern_names()
+        assert "DangerousPackageManagerPattern" in pattern_names
+
+    def test_interactive_shell_login_flag(self) -> None:
+        """Interactive shell --login flag should be detected."""
+        # bash --login
+        is_dangerous, reason = check_all_patterns(["bash", "--login"])
+        assert is_dangerous is True
+        assert "Interactive shell" in reason
+
+        # sh --login
+        is_dangerous, reason = check_all_patterns(["sh", "--login"])
+        assert is_dangerous is True
+
+        # zsh --login
+        is_dangerous, reason = check_all_patterns(["zsh", "--login"])
+        assert is_dangerous is True
+
+    def test_git_push_force_variants(self) -> None:
+        """Git push --force variants should be detected."""
+        # --force-with-lease
+        is_dangerous, reason = check_all_patterns(["git", "push", "--force-with-lease"])
+        assert is_dangerous is True
+        assert "Destructive" in reason
+
+        # --force-if-includes
+        is_dangerous, reason = check_all_patterns(
+            ["git", "push", "--force-if-includes"]
+        )
+        assert is_dangerous is True
+        assert "Destructive" in reason
+
+        # Regular --force (should still work)
+        is_dangerous, reason = check_all_patterns(["git", "push", "--force"])
+        assert is_dangerous is True
+
+        # Short form -f (should still work)
+        is_dangerous, reason = check_all_patterns(["git", "push", "-f"])
+        assert is_dangerous is True
+
+    def test_dangerous_package_manager_apt(self) -> None:
+        """apt with dangerous flags should be detected."""
+        # apt with -f
+        is_dangerous, reason = check_all_patterns(["apt", "install", "-f", "package"])
+        assert is_dangerous is True
+        assert "apt" in reason.lower()
+
+        # apt with --force
+        is_dangerous, reason = check_all_patterns(
+            ["apt", "install", "--force", "package"]
+        )
+        assert is_dangerous is True
+
+        # apt with -r
+        is_dangerous, reason = check_all_patterns(["apt", "install", "-r", "package"])
+        assert is_dangerous is True
+
+    def test_dangerous_package_manager_yum(self) -> None:
+        """yum with dangerous flags should be detected."""
+        # yum with -f
+        is_dangerous, reason = check_all_patterns(["yum", "install", "-f", "package"])
+        assert is_dangerous is True
+        assert "yum" in reason.lower()
+
+        # yum with --force
+        is_dangerous, reason = check_all_patterns(
+            ["yum", "install", "--force", "package"]
+        )
+        assert is_dangerous is True
+
+        # yum with -r
+        is_dangerous, reason = check_all_patterns(["yum", "install", "-r", "package"])
+        assert is_dangerous is True
+
+    def test_safe_apt_commands(self) -> None:
+        """Safe apt commands should pass."""
+        # apt install without dangerous flags
+        is_dangerous, _ = check_all_patterns(["apt", "install", "package"])
+        assert is_dangerous is False
+
+        # apt search (no flags)
+        is_dangerous, _ = check_all_patterns(["apt", "search", "package"])
+        assert is_dangerous is False
+
+
+class TestAuditTrailCoverage:
+    """Tests verifying that violations are properly recorded in the audit trail.
+
+    Phase 2 ensures that check_all_patterns() is the canonical entry point
+    and that all violations are recorded for auditing purposes.
+    """
+
+    def test_violations_recorded_via_patterns(self) -> None:
+        """Violations detected by patterns should be recorded."""
+        from mellea.stdlib.tools._bash_audit import get_bash_violations
+
+        # Get initial count
+        initial_count = len(get_bash_violations())
+
+        # Trigger a violation via patterns
+        is_dangerous, reason = check_all_patterns(["bash", "-c", "echo hello"])
+
+        # Verify violation was recorded
+        assert is_dangerous is True
+        assert "code execution" in reason.lower() or "not allowed" in reason.lower()
+
+        # Check that violation was added to trail
+        violations = get_bash_violations()
+        assert len(violations) > initial_count, (
+            "Violation should be recorded in audit trail"
+        )
+
+    def test_interactive_shell_violation_recorded(self) -> None:
+        """Interactive shell violations should be recorded with metadata."""
+        from mellea.stdlib.tools._bash_audit import get_bash_violations
+
+        initial_count = len(get_bash_violations())
+
+        # Trigger a dangerous command violation
+        is_dangerous, _ = check_all_patterns(["bash", "-i"])
+
+        assert is_dangerous is True
+        violations = get_bash_violations()
+        assert len(violations) > initial_count
+
+        # Verify the most recent violation has proper metadata
+        latest = violations[-1]
+        assert latest.pattern == "DangerousCommandPattern"
+        assert latest.severity == "HIGH"
+        assert latest.category == "interactive"
+
+    def test_git_violation_recorded_with_category(self) -> None:
+        """Git violations should be recorded with proper category."""
+        from mellea.stdlib.tools._bash_audit import get_bash_violations
+
+        initial_count = len(get_bash_violations())
+
+        # Trigger a git violation
+        is_dangerous, _ = check_all_patterns(["git", "push", "--force-with-lease"])
+
+        assert is_dangerous is True
+        violations = get_bash_violations()
+        assert len(violations) > initial_count
+
+        # Verify metadata
+        latest = violations[-1]
+        assert latest.pattern == "DestructiveGitPattern"
+        assert latest.severity == "HIGH"
+        assert latest.category == "destructive"
+
+    def test_package_manager_violation_recorded(self) -> None:
+        """Package manager violations should be recorded."""
+        from mellea.stdlib.tools._bash_audit import get_bash_violations
+
+        initial_count = len(get_bash_violations())
+
+        # Trigger a package manager violation
+        is_dangerous, _ = check_all_patterns(["apt", "install", "-f", "package"])
+
+        assert is_dangerous is True
+        violations = get_bash_violations()
+        assert len(violations) > initial_count
+
+        # Verify metadata
+        latest = violations[-1]
+        assert latest.pattern == "DangerousPackageManagerPattern"
+        assert latest.category == "destructive"
