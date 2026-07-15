@@ -256,7 +256,18 @@ class AudioBlock(CBlock):
         )
         if format is None and "data:" in value and "base64," in value:
             mime = value.split(";")[0].split("data:")[1]  # e.g. "audio/wav"
-            format = mime.split("/")[-1]  # e.g. "wav"
+            subtype = mime.split("/")[-1]  # e.g. "wav"
+            # Normalise non-standard / legacy MIME subtypes to OpenAI format tokens.
+            # OpenAI Chat Completions input_audio.format accepts: wav, mp3, ogg, flac.
+            _MIME_SUBTYPE_TO_OPENAI_FORMAT: dict[str, str] = {
+                "x-wav": "wav",
+                "wave": "wav",
+                "mpeg": "mp3",
+                "x-mpeg": "mp3",
+                "x-mp3": "mp3",
+                "x-flac": "flac",
+            }
+            format = _MIME_SUBTYPE_TO_OPENAI_FORMAT.get(subtype, subtype)
         if not (format and format.strip()):
             raise ValueError(
                 "AudioBlock format must be a non-empty string (e.g. 'wav'). "

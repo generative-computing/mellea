@@ -217,7 +217,30 @@ def test_audio_block_format_auto_detected_mp3():
     mp3_b64 = base64.b64encode(b"fake mp3 bytes").decode()
     data_uri = f"data:audio/mpeg;base64,{mp3_b64}"
     block = AudioBlock(data_uri)
-    assert block.format == "mpeg"
+    assert block.format == "mp3"
+
+
+@pytest.mark.parametrize(
+    "mime_subtype,expected_format",
+    [
+        ("x-wav", "wav"),
+        ("wave", "wav"),
+        ("mpeg", "mp3"),
+        ("x-mpeg", "mp3"),
+        ("x-mp3", "mp3"),
+        ("x-flac", "flac"),
+        ("ogg", "ogg"),
+        ("flac", "flac"),
+        ("wav", "wav"),
+    ],
+)
+def test_audio_block_mime_subtype_normalisation(
+    mime_subtype: str, expected_format: str
+):
+    b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/{mime_subtype};base64,{b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == expected_format
 
 
 def test_audio_block_missing_format_raises():
