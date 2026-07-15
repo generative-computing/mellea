@@ -595,6 +595,10 @@ def test_as_chat_history_carries_thinking():
 
 # --- should_replay_reasoning policy ---
 
+_TOOL_CALLS = [
+    {"id": "call_1", "type": "function", "function": {"name": "fn", "arguments": "{}"}}
+]
+
 
 def test_replay_policy_strips_plain_assistant_turn():
     msgs = [
@@ -605,37 +609,57 @@ def test_replay_policy_strips_plain_assistant_turn():
     assert should_replay_reasoning(msgs, "openai") == [False, False, False]
 
 
-def test_replay_policy_round_trips_after_tool_call():
-    """Assistant turn immediately followed by a tool result is replayed."""
+def test_replay_policy_round_trips_tool_call_turn():
+    """An assistant turn carrying tool calls is replayed."""
     msgs = [
         Message("user", "q"),
-        Message("assistant", "a", thinking="tool reasoning"),
+        Message("assistant", "a", thinking="tool reasoning", tool_calls=_TOOL_CALLS),
         Message("tool", "tool output"),
     ]
     assert should_replay_reasoning(msgs, "openai") == [False, True, False]
 
 
+def test_replay_policy_round_trips_tool_call_never_executed():
+    """A tool-requesting turn is replayed even when the tool was never executed.
+
+    Regression test (PR #1201 review): keying off the assistant message's own
+    `tool_calls` field rather than a trailing `tool`-role message means reasoning
+    is still replayed when no tool result follows.
+    """
+    msgs = [
+        Message("user", "q"),
+        Message("assistant", "a", thinking="tool reasoning", tool_calls=_TOOL_CALLS),
+        # No tool result follows — the tool was requested but never executed.
+    ]
+    assert should_replay_reasoning(msgs, "openai") == [False, True]
+
+
 def test_replay_policy_assistant_without_thinking_is_false():
     msgs = [
         Message("user", "q"),
-        Message("assistant", "a"),  # no thinking
+        Message("assistant", "a", tool_calls=_TOOL_CALLS),  # no thinking
         Message("tool", "out"),
     ]
     assert should_replay_reasoning(msgs, "openai") == [False, False, False]
 
 
 def test_replay_policy_none_provider_uses_consensus():
-    msgs = [Message("assistant", "a", thinking="t"), Message("tool", "out")]
+    msgs = [
+        Message("assistant", "a", thinking="t", tool_calls=_TOOL_CALLS),
+        Message("tool", "out"),
+    ]
     assert should_replay_reasoning(msgs, None) == [True, False]
 
 
 def test_replay_policy_mixed_history():
-    """Only the tool-preceding assistant turn is replayed in a multi-turn history."""
+    """Only the tool-call assistant turn is replayed in a multi-turn history."""
     msgs = [
         Message("user", "q1"),
         Message("assistant", "a1", thinking="plain reasoning"),  # plain → strip
         Message("user", "q2"),
-        Message("assistant", "a2", thinking="tool reasoning"),  # before tool → keep
+        Message(
+            "assistant", "a2", thinking="tool reasoning", tool_calls=_TOOL_CALLS
+        ),  # tool call → keep
         Message("tool", "tool result"),
         Message("assistant", "a3", thinking="final reasoning"),  # plain → strip
     ]

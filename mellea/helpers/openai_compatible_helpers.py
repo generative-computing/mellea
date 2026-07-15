@@ -191,9 +191,11 @@ def should_replay_reasoning(
 
     Implements the cross-provider consensus rule from issue #1201: an assistant
     message's reasoning is round-tripped only when that turn issued a tool call —
-    detected by a `tool`-role message immediately following it — and stripped on
-    plain follow-up turns. Non-assistant messages and assistant messages without
-    reasoning always return `False`.
+    detected by the message's own `tool_calls` field — and stripped on plain
+    follow-up turns. Keying off `tool_calls` rather than a trailing `tool`-role
+    message means reasoning is still replayed for a turn that requested a tool
+    call even if the tool was never executed. Non-assistant messages and
+    assistant messages without reasoning always return `False`.
 
     Args:
         messages: The conversation in order, as it will be serialised.
@@ -208,15 +210,13 @@ def should_replay_reasoning(
         message's reasoning should be included in the serialised payload.
     """
     flags: list[bool] = []
-    for i, msg in enumerate(messages):
+    for msg in messages:
         if msg.role != "assistant" or not msg.thinking:
             flags.append(False)
             continue
-        # The prior turn "had a tool call" iff the next message is a tool result.
-        prior_turn_had_tool_call = (
-            i + 1 < len(messages) and messages[i + 1].role == "tool"
-        )
-        flags.append(prior_turn_had_tool_call)
+        # The turn "had a tool call" iff the assistant message itself carries
+        # tool calls — independent of whether the tool was later executed.
+        flags.append(bool(msg.tool_calls))
     return flags
 
 
