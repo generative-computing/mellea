@@ -5,8 +5,8 @@ follow-up turn, exercising issue #1201's consensus replay rule end-to-end
 through each backend's conversation-construction path:
 
 - reasoning is **stripped** on a plain follow-up turn, and
-- **round-tripped** when the immediately-prior assistant turn issued a tool call
-  (detected by a following ``role="tool"`` message).
+- **round-tripped** when the prior assistant turn issued a tool call
+  (detected by that assistant message's own ``tool_calls`` field).
 
 The provider ``create``/``acompletion`` call is mocked, so no endpoint is
 required. A separate CI-skipped e2e test (``test_reasoning_replay_e2e.py``)
@@ -69,6 +69,13 @@ def _assistant_messages(messages: list[dict]) -> list[dict]:
     return [m for m in messages if m.get("role") == "assistant"]
 
 
+# A tool-issuing assistant turn is detected by its own `tool_calls` field (not a
+# trailing `tool`-role message), matching `should_replay_reasoning`'s policy.
+_TOOL_CALLS = [
+    {"id": "call_1", "type": "function", "function": {"name": "fn", "arguments": "{}"}}
+]
+
+
 # ---------------------------------------------------------------------------
 # OpenAI-compatible path (reasoning_content wire key)
 # ---------------------------------------------------------------------------
@@ -96,7 +103,14 @@ async def test_openai_round_trips_reasoning_after_tool_call(
     ctx = (
         ChatContext()
         .add(Message("user", "use a tool"))
-        .add(Message("assistant", "calling tool", thinking="tool-turn reasoning"))
+        .add(
+            Message(
+                "assistant",
+                "calling tool",
+                thinking="tool-turn reasoning",
+                tool_calls=_TOOL_CALLS,
+            )
+        )
         .add(Message("tool", "tool output"))
     )
     messages = await _capture_messages(openai_backend, ctx)
@@ -109,13 +123,20 @@ async def test_openai_round_trips_reasoning_after_tool_call(
 
 
 async def test_openai_only_tool_turn_reasoning_replayed(openai_backend: OpenAIBackend):
-    """In a mixed history only the tool-preceding assistant turn carries reasoning."""
+    """In a mixed history only the tool-call assistant turn carries reasoning."""
     ctx = (
         ChatContext()
         .add(Message("user", "q1"))
         .add(Message("assistant", "plain answer", thinking="plain reasoning"))
         .add(Message("user", "q2"))
-        .add(Message("assistant", "calling tool", thinking="tool reasoning"))
+        .add(
+            Message(
+                "assistant",
+                "calling tool",
+                thinking="tool reasoning",
+                tool_calls=_TOOL_CALLS,
+            )
+        )
         .add(Message("tool", "tool output"))
     )
     messages = await _capture_messages(openai_backend, ctx)
@@ -125,7 +146,7 @@ async def test_openai_only_tool_turn_reasoning_replayed(openai_backend: OpenAIBa
         if "reasoning_content" in m
     ]
     assert replayed == ["tool reasoning"], (
-        "exactly the tool-preceding assistant turn's reasoning should be replayed"
+        "exactly the tool-call assistant turn's reasoning should be replayed"
     )
 
 
@@ -223,7 +244,14 @@ def _tool_ctx() -> ChatContext:
     return (
         ChatContext()
         .add(Message("user", "use a tool"))
-        .add(Message("assistant", "calling tool", thinking="tool-turn reasoning"))
+        .add(
+            Message(
+                "assistant",
+                "calling tool",
+                thinking="tool-turn reasoning",
+                tool_calls=_TOOL_CALLS,
+            )
+        )
         .add(Message("tool", "tool output"))
     )
 

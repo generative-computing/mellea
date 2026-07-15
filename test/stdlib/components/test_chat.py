@@ -456,7 +456,9 @@ def test_parse_tool_calls_fallback_uses_value():
 
 def test_parse_tool_calls_ollama_carries_thinking():
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="v", tool_calls={"some_fn": None})
+    mot = ModelOutputThunk(
+        value="v", tool_calls={"some_fn": _make_tool_call("some_fn")}
+    )
     mot.thinking = "tool-turn reasoning"
     fake_calls = [{"name": "some_fn"}]
     fake_response = type(
