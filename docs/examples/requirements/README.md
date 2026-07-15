@@ -204,14 +204,17 @@ from mellea.stdlib.requirements.python_reqs import PythonExecutionReq
 from mellea.stdlib.tools.execution_policy import CapabilityPolicy
 
 # Safe: Container isolation + timeout control
+# Note: Most policy fields are declared only (not enforced at runtime).
+# The docker tier enforces: timeout, resource limits, and artifact export paths.
+# Check CapabilityPolicy.ENFORCED_* class attributes for enforcement status.
 req = PythonExecutionReq(
     execution_tier="docker",  # Container-isolated execution
     policy=CapabilityPolicy(
-        timeout=30,           # Kill after 30 seconds
-        network_access=False, # No network access
-        package_installation=False,  # No pip install
+        timeout=30,           # Kill after 30 seconds (enforced)
+        network_access=False, # Declared; not enforced at runtime
+        package_installation=False,  # Declared; not enforced at runtime
     ),
-    max_output_chars=10_000,  # Limit output size
+    max_output_chars=10_000,  # Limit output size (enforced)
 )
 ```
 
