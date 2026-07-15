@@ -29,6 +29,7 @@ import tempfile
 from pathlib import Path
 
 import mellea
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.python_tools import PythonSyntaxValid
 from mellea.stdlib.sampling import ModelFriendlyRepairStrategy
 from mellea.stdlib.tools.interpreter import python_tool
@@ -38,7 +39,17 @@ from mellea.stdlib.tools.shell import bash_executor
 def _extract_python_code_from_output(generated: str) -> str | None:
     """Extract Python code block from model output.
 
-    Looks for code blocks marked with ```python or ``` markers.
+    Uses Mellea's internal _has_python_code_listing() utility to ensure consistent
+    code extraction behavior across the framework. This utility:
+    - Handles both markdown and RST code block delimiters
+    - Scores multiple code blocks and selects the best one
+    - Falls back to tool_calls if text blocks are not found
+    - Is the same utility used by PythonCodeExtraction and other validators
+
+    We import this internal function (not public API) because examples should align
+    with framework patterns. Other validators like matplotlib_repair.py already use
+    this same utility. Local import keeps the dependency explicit and avoids
+    suggesting it's a public API.
 
     Args:
         generated: Raw model output string.
@@ -46,24 +57,22 @@ def _extract_python_code_from_output(generated: str) -> str | None:
     Returns:
         Extracted Python code string, or None if extraction failed.
     """
-    lines = generated.split("\n")
-    in_code_block = False
-    code_lines = []
+    # Import _has_python_code_listing locally to avoid importing private functions
+    # at module level. Local import makes the dependency on internals explicit.
+    from mellea.core import ModelOutputThunk
+    from mellea.stdlib.requirements.python_reqs import _has_python_code_listing
 
-    for line in lines:
-        if line.strip().startswith("```python"):
-            in_code_block = True
-            continue
-        elif line.strip().startswith("```") and in_code_block:
-            in_code_block = False
-            break
-        elif in_code_block:
-            code_lines.append(line)
+    # Wrap the text output in a ChatContext using ModelOutputThunk, which is what
+    # Mellea uses internally to represent model output for code extraction.
+    ctx = ChatContext().add(ModelOutputThunk(value=generated))
 
-    if code_lines:
-        code = "\n".join(code_lines).strip()
-        if code:
-            return code
+    # Use Mellea's internal code extraction (same utility as PythonCodeExtraction)
+    extraction_result = _has_python_code_listing(ctx)
+
+    if extraction_result.as_bool():
+        # extraction_result.reason contains the extracted code string
+        code = extraction_result.reason
+        return code if code else None
 
     return None
 
