@@ -435,15 +435,10 @@ def _imported_submodules(init_path: Path) -> set[str] | None:
 # the parent __init__.py does not import from any submodule (so the
 # import-based filter cannot determine intent automatically).
 #
-# Long-term fix: rename these files with a leading ``_`` (e.g. ``_json_util.py``)
-# so the doc generator skips them automatically per Python convention.
-# Tracked in: TODO open issue
-_CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset(
-    {
-        # Granite intrinsics internal JSON parser — not part of the public API
-        "mellea/formatters/granite/intrinsics/json_util"
-    }
-)
+# Prefer renaming an internal module with a leading ``_`` (e.g. ``_json_util.py``)
+# so the doc generator skips it automatically per Python convention; only add
+# an entry here when a rename is not feasible.
+_CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset()
 
 
 def remove_internal_modules(source_root: Path) -> None:

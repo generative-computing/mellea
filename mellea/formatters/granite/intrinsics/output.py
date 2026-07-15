@@ -25,7 +25,7 @@ from ..base.types import (
 )
 
 # Local
-from . import json_util
+from . import _json_util
 from .input import sentence_delimiter
 from .util import make_config_dict
 
@@ -102,7 +102,7 @@ class TransformationRule(abc.ABC):
             list[tuple]: Paths within `parsed_json` that match this rule's input
                 path spec.
         """
-        return [p for p in json_util.all_paths(parsed_json) if self._is_input_path(p)]
+        return [p for p in _json_util.all_paths(parsed_json) if self._is_input_path(p)]
 
     def rule_name(self) -> str:
         """Return the YAML name that identifies this transformation rule.
@@ -146,10 +146,10 @@ class TransformationRule(abc.ABC):
 
         Args:
             parsed_json (Any): Output of running model results through
-                :func:`json.loads()`, plus applying zero or more prior
+                `json.loads()`, plus applying zero or more prior
                 transformation rules.
             reparsed_json (Any): Output of running the same model results
-                through :func:`json_util.reparse_json_with_offsets()`,
+                through `_json_util.reparse_json_with_offsets()`,
                 preserving position information on literal values.
             logprobs (ChatCompletionLogProbs | None): Optional logprobs result
                 associated with the original model output string, or `None`
@@ -202,9 +202,9 @@ class InPlaceTransformation(TransformationRule):
     """
 
     def _apply_at_path(self, result: Any, path: tuple, prepare_output: dict) -> Any:
-        original_value = json_util.fetch_path(result, path)
+        original_value = _json_util.fetch_path(result, path)
         transformed_value = self._transform(original_value, path, prepare_output)
-        result = json_util.replace_path(result, path, transformed_value)
+        result = _json_util.replace_path(result, path, transformed_value)
         return result
 
     @abc.abstractmethod
@@ -252,7 +252,7 @@ class AddFieldsTransformation(TransformationRule):
             )
 
         parent_path = path[:-1]
-        parent_object = json_util.fetch_path(result, parent_path)
+        parent_object = _json_util.fetch_path(result, parent_path)
         if not isinstance(parent_object, dict):
             raise TypeError(
                 f"Expected JSON object at path {parent_path} but found value of type "
@@ -264,7 +264,7 @@ class AddFieldsTransformation(TransformationRule):
 
         # Make a copy, just in case.
         new_parent = parent_object.copy() | new_values
-        result = json_util.replace_path(result, parent_path, new_parent)
+        result = _json_util.replace_path(result, parent_path, new_parent)
         return result
 
     @abc.abstractmethod
@@ -334,7 +334,7 @@ class TokenToFloat(InPlaceTransformation):
             )
         if logprobs is None:
             raise TypeError("This rule requires logprobs.  Received None for logprobs.")
-        begin_to_token = json_util.make_begin_to_token_table(logprobs)
+        begin_to_token = _json_util.make_begin_to_token_table(logprobs)
 
         return {
             "begin_to_token": begin_to_token,
@@ -348,8 +348,8 @@ class TokenToFloat(InPlaceTransformation):
         logprobs = prepare_output["logprobs"]
         reparsed_json = prepare_output["reparsed_json"]
 
-        json_literal = json_util.fetch_path(reparsed_json, path)
-        if not isinstance(json_literal, json_util.JsonLiteralWithPosition):
+        json_literal = _json_util.fetch_path(reparsed_json, path)
+        if not isinstance(json_literal, _json_util.JsonLiteralWithPosition):
             raise TypeError(
                 f"Expected literal with position, but received '{value}' "
                 f"of type {type(value)}"
@@ -1322,7 +1322,7 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
         # Note that we don't currently check schema, as that would require an additional
         # library dependency.
         parsed_json = json.loads(content)
-        reparsed_json = json_util.reparse_json_with_offsets(content)
+        reparsed_json = _json_util.reparse_json_with_offsets(content)
         for rule in self.rules:
             parsed_json = rule.apply(
                 parsed_json, reparsed_json, logprobs, chat_completion
