@@ -49,10 +49,11 @@ class TemplateFormatter(ChatFormatter):
             if you plan to change `model_id` or `template_path` after construction.
             Defaults to `True`.
 
-    Example::
-
+    Example:
+        ```python
         formatter = TemplateFormatter(model_id="my-model", template_path="/path/to/templates")
         text = formatter.print(my_component)
+        ```
     """
 
     def __init__(

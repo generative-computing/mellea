@@ -317,8 +317,7 @@ class StreamChunkingResult:
         Each yielded object is a :class:`StreamEvent` subclass describing a
         point in the orchestration lifecycle.  Consumers can dispatch on type:
 
-        .. code-block:: python
-
+        ```python
             async for event in result.events():
                 match event:
                     case ChunkEvent():
@@ -327,6 +326,7 @@ class StreamChunkingResult:
                         print(f"chunk {event.chunk_index} failed validation")
                     case CompletedEvent():
                         print(f"done — success={event.success}")
+        ```
 
         Typical event order (natural completion with requirements):
 
