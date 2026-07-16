@@ -24,7 +24,13 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.core import ImageBlock, ImageUrlBlock, ModelOutputThunk
+from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
+    ImageBlock,
+    ImageUrlBlock,
+    ModelOutputThunk,
+)
 from mellea.stdlib.components import Instruction, Message
 
 # Ollama name for the target vision model; bump to the model_ids constant once
@@ -137,6 +143,33 @@ def test_image_url_block_rejected_by_ollama(mocked_session: MelleaSession):
     images: list[ImageBlock | ImageUrlBlock] = [url_block]
     with pytest.raises(ValueError, match="ImageUrlBlock"):
         mocked_session.chat("What is in this image?", images=images)
+
+
+def test_audio_block_rejected_by_ollama(mocked_session: MelleaSession):
+    """AudioBlock raises ValueError — Ollama does not support audio input."""
+    import base64
+    import struct
+
+    silent = struct.pack("<h", 0)
+    header = (
+        b"RIFF"
+        + struct.pack("<I", 36 + len(silent))
+        + b"WAVEfmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+        + b"data"
+        + struct.pack("<I", len(silent))
+    )
+    b64_wav = base64.b64encode(header + silent).decode()
+    audio = AudioBlock(b64_wav, format="wav")
+    with pytest.raises(ValueError, match="audio"):
+        mocked_session.chat("Transcribe this.", audio=[audio])
+
+
+def test_audio_url_block_rejected_by_ollama(mocked_session: MelleaSession):
+    """AudioUrlBlock raises ValueError — Ollama does not support audio input."""
+    url_block = AudioUrlBlock("https://example.com/audio.wav", format="wav")
+    with pytest.raises(ValueError, match="audio"):
+        mocked_session.chat("Transcribe this.", audio=[url_block])
 
 
 def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Image):
