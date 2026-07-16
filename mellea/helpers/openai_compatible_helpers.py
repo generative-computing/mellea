@@ -199,6 +199,11 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
         is a plain string. For tool-only assistant turns, `"content"` is `None`
         and `"tool_calls"` carries the structured call list. When content is
         present alongside tool calls, both keys are included.
+
+    Raises:
+        ValueError: If the message contains an `AudioUrlBlock`. The OpenAI Chat
+            Completions audio schema does not support audio by URL; fetch the
+            audio and pass it as an `AudioBlock` with base64 data instead.
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
