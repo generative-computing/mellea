@@ -257,8 +257,11 @@ class AudioBlock(CBlock):
         if format is None and "data:" in value and "base64," in value:
             mime = value.split(";")[0].split("data:")[1]  # e.g. "audio/wav"
             subtype = mime.split("/")[-1]  # e.g. "wav"
-            # Normalise non-standard / legacy MIME subtypes to OpenAI format tokens.
-            # OpenAI Chat Completions input_audio.format accepts: wav, mp3, ogg, flac.
+            # Normalise non-standard / legacy MIME subtypes to canonical format tokens.
+            # OpenAI Chat Completions input_audio.format accepts only: wav, mp3.
+            # Some mime subtypes need to be mapped (in particular mpeg -> mp3)
+            # Unknown subtypes are passed through unchanged — other backends may
+            # accept additional formats (e.g. flac, ogg) that OpenAI does not.
             _MIME_SUBTYPE_TO_OPENAI_FORMAT: dict[str, str] = {
                 "x-wav": "wav",
                 "wave": "wav",
