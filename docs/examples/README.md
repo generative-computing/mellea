@@ -141,6 +141,12 @@ Working with vision-language models.
 - Multimodal prompting
 - Vision model backends
 
+**[audio_text_models/](audio_text_models/)**
+Working with audio-language models (audio-text-to-text).
+- Passing audio to `session.instruct()` and `session.chat()`
+- `AudioBlock` data URI construction
+- OpenAI-compatible backends (llama-server with Gemma 4)
+
 ### Complete Applications
 
 **[mini_researcher/](mini_researcher/)**
@@ -223,6 +229,10 @@ Utility functions used across examples.
 - [instruct_validate_repair/](instruct_validate_repair/) - Email generation
 - [generative_stubs/](generative_stubs/) - Summarization
 - [tutorial/sentiment_classifier.py](tutorial/) - Classification
+
+### Audio & Multimodal
+- [audio_text_models/](audio_text_models/) - Audio understanding with `AudioBlock`
+- [image_text_models/](image_text_models/) - Vision-language models
 
 ### Data Processing
 - [information_extraction/](information_extraction/) - Entity extraction
