@@ -1214,6 +1214,34 @@ class ModelOutputThunk(Generic[S]):
             else self._underlying_value[beginning_length:]  # type: ignore
         )
 
+    def __aiter__(self) -> ModelOutputThunk[S]:
+        """Iterate the streamed deltas with `async for`.
+
+        Wraps `astream()` in the async-iterator protocol so callers can write
+        `async for delta in mot:` rather than the manual
+        `while not mot.is_computed(): await mot.astream()` loop. Each iteration
+        yields a delta (the new text since the previous one); iteration ends when
+        generation completes. Subject to the same single-consumer constraint as
+        `astream()` — do not iterate the same thunk from multiple tasks.
+
+        Returns:
+            ModelOutputThunk[S]: This thunk, acting as its own iterator.
+        """
+        return self
+
+    async def __anext__(self) -> str:
+        """Return the next streamed delta, or stop when generation is complete.
+
+        Returns:
+            str: The new text received since the previous delta.
+
+        Raises:
+            StopAsyncIteration: When the thunk is already computed.
+        """
+        if self._computed:
+            raise StopAsyncIteration
+        return await self.astream()
+
     def __str__(self) -> str:
         """Stringifies the thunk value."""
         return self.value if self.value else ""
