@@ -6,6 +6,117 @@ and code generation tasks like plotting.
 
 ## Files
 
+### code_generation_and_execution_bash.py
+
+Demonstrates Python code generation with `bash_executor` for CLI data processing tasks.
+Uses `python_tool` for safe code execution and shows how to orchestrate multiple bash
+commands via Python control flow.
+
+**Key Features:**
+
+- Generate Python code that orchestrates multiple bash_executor calls
+- Avoid shell operators (pipes, redirects, semicolons) by using Python control flow
+- Use `PythonSyntaxValid` requirement to validate generated code
+- Execute via `python_tool` with configurable execution tiers
+- Process bash command output in Python variables for aggregation/transformation
+- Import allowlisting to restrict which modules can be imported
+
+**Prerequisites:**
+
+Before running this example, ensure you have:
+
+1. Ollama running with the granite4.1:3b model:
+   ```bash
+   ollama serve  # in one terminal
+   ollama pull granite4.1:3b  # in another terminal (if not already downloaded)
+   ```
+
+2. Required dependencies installed:
+   ```bash
+   uv sync  # installs all mellea dependencies
+   ```
+
+**Usage Examples:**
+
+```bash
+# Run with default sample workspace and predefined requests
+uv run python docs/examples/requirements/code_generation_and_execution_bash.py
+
+# Use a custom workspace directory
+uv run python docs/examples/requirements/code_generation_and_execution_bash.py \
+  --workspace /path/to/workspace
+
+# Accept user input interactively
+uv run python docs/examples/requirements/code_generation_and_execution_bash.py \
+  --interactive
+```
+
+**Pipeline Steps:**
+
+1. Create sample workspace with logs, data, and config directories
+2. Accept natural language request for file/CLI operations
+3. Generate Python code with sequential `bash_executor()` calls
+4. Validate syntax using `PythonSyntaxValid` requirement
+5. Execute generated code using `python_tool` tier "local_unsafe"
+6. Display results from command outputs
+
+**Example Requests:**
+
+```text
+Find all ERROR entries in the log files and count them
+List all log files and count the total number of lines across all of them
+Show the contents of all data files in the data directory
+Find all WARN entries in the log files and display the files containing them
+Count how many log files contain ERROR entries
+```
+
+**Generated Code Pattern:**
+
+The LLM generates Python code that looks like:
+
+```python
+from mellea.stdlib.tools.shell import bash_executor
+
+# Step 1: Find files
+result = bash_executor("find logs -name '*.log'", working_dir=workspace_dir)
+if not result.success:
+    print(f"Failed: {result.skip_message}")
+else:
+    files = result.stdout.strip().split('\n')
+
+    # Step 2: Process each file
+    for file in files:
+        if file:
+            result = bash_executor(f"grep -c ERROR {file}", working_dir=workspace_dir)
+            if result.success:
+                print(f"{file}: {result.stdout} errors")
+```
+
+**Key Design Principles:**
+
+1. **No Shell Operators** - Avoid pipes (`|`), redirects (`>`, `>>`), and semicolons (`;`)
+2. **Python Control Flow** - Use loops, conditionals, and variables instead
+3. **ExecutionResult API** - Check `result.success`, `result.stdout`, `result.skip_message`
+4. **Safe Execution** - Use `python_tool` tier to run code in subprocess
+5. **Output Parsing** - Extract and transform command output in Python
+
+**Output Examples:**
+
+Example 1 output:
+```
+logs/app_1.log: 2 ERROR entries
+logs/app_2.log: 2 ERROR entries
+logs/app_3.log: 2 ERROR entries
+Total ERROR entries found in all logs: 6
+```
+
+Example 4 output:
+```
+logs/app_1.log: contains 2 WARN entries
+logs/app_2.log: contains 2 WARN entries
+logs/app_3.log: contains 2 WARN entries
+```
+
 ### code_generation_and_execution.py
 
 Demonstrates the complete pipeline of code generation, data extraction, and graph
