@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Compute and commit the next release version.
 
 Reads the current version from pyproject.toml, computes the next version per

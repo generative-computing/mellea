@@ -1,3 +1,6 @@
+// Copyright IBM Corp. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import {readFileSync, writeFileSync} from 'node:fs';
 
 const [, , version] = process.argv;
