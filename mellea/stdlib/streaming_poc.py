@@ -24,16 +24,48 @@ from ..backends.model_options import ModelOption
 from ..core.backend import Backend
 from ..core.base import CBlock, Component, Context, ModelOutputThunk
 from ..core.requirement import PartialValidationResult, Requirement, ValidationResult
-from ..plugins.hooks.streaming import StreamingEndPayload, StreamingStartPayload
+from ..plugins.hooks.streaming import (
+    StreamingEndPayload,
+    StreamingEventPayload,
+    StreamingStartPayload,
+)
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker
+
+# POC: reuse the Phase 1 event dataclasses rather than redefining them here.
+from .streaming import (
+    ChunkEvent,
+    CompletedEvent,
+    ErrorEvent,
+    FullValidationEvent,
+    QuickCheckEvent,
+    StreamEvent,
+    StreamingDoneEvent,
+)
 
 _CHUNKING_ALIASES: dict[str, type[ChunkingStrategy]] = {
     "sentence": SentenceChunker,
     "word": WordChunker,
     "paragraph": ParagraphChunker,
 }
+
+
+async def _emit_event(
+    streaming_id: str, ev: StreamEvent, *, requirements: list[Requirement] | None = None
+) -> None:
+    """Fire the STREAMING_EVENT hook for `ev`.
+
+    For a `QuickCheckEvent`, `requirements` carries the active requirement
+    instances in result order so a subscriber can attribute each result.
+    """
+    if has_plugins(HookType.STREAMING_EVENT):
+        await invoke_hook(
+            HookType.STREAMING_EVENT,
+            StreamingEventPayload(
+                streaming_id=streaming_id, event=ev, requirements=requirements or []
+            ),
+        )
 
 
 class Streamer:
@@ -83,6 +115,7 @@ class Streamer:
 async def _validate_chunk(
     streamer: Streamer,
     chunk: str,
+    chunk_index: int,
     requirements: list[Requirement],
     validation_backend: Backend,
     ctx: Context,
@@ -100,15 +133,24 @@ async def _validate_chunk(
     """
     if not requirements:
         return True
-    results = await asyncio.gather(
-        *[
-            req.stream_validate(chunk, backend=validation_backend, ctx=ctx)
-            for req in requirements
-        ]
+    results = list(
+        await asyncio.gather(
+            *[
+                req.stream_validate(chunk, backend=validation_backend, ctx=ctx)
+                for req in requirements
+            ]
+        )
     )
     failures = [
         (req, r) for req, r in zip(requirements, results) if r.success == "fail"
     ]
+    await _emit_event(
+        streamer.streaming_id,
+        QuickCheckEvent(
+            chunk_index=chunk_index, attempt=1, passed=not failures, results=results
+        ),
+        requirements=requirements,
+    )
     if not failures:
         return True
     streamer.failed_early = True
@@ -140,6 +182,7 @@ async def _drive(
     """
     accumulated = ""
     prev_chunk_count = 0
+    chunk_index = 0
     success = False
     error: Exception | None = None
 
@@ -168,10 +211,15 @@ async def _drive(
 
             for c in new_chunks:
                 if not await _validate_chunk(
-                    streamer, c, requirements, validation_backend, ctx
+                    streamer, c, chunk_index, requirements, validation_backend, ctx
                 ):
                     return
                 yield c
+                await _emit_event(
+                    streamer.streaming_id,
+                    ChunkEvent(text=c, chunk_index=chunk_index, attempt=1),
+                )
+                chunk_index += 1
 
             # Snapshot after a delta fully passes so `full_text` excludes any
             # unvalidated chunk on early exit.
@@ -183,14 +231,28 @@ async def _drive(
         if chunking is not None:
             for c in chunking.flush(accumulated):
                 if not await _validate_chunk(
-                    streamer, c, requirements, validation_backend, ctx, on_flush=True
+                    streamer,
+                    c,
+                    chunk_index,
+                    requirements,
+                    validation_backend,
+                    ctx,
+                    on_flush=True,
                 ):
                     return
                 yield c
+                await _emit_event(
+                    streamer.streaming_id,
+                    ChunkEvent(text=c, chunk_index=chunk_index, attempt=1),
+                )
+                chunk_index += 1
 
         # Natural completion: capture the flushed fragment the snapshot missed.
         streamer.full_text = accumulated
         streamer.mot = mot
+        await _emit_event(
+            streamer.streaming_id, StreamingDoneEvent(attempt=1, full_text=accumulated)
+        )
 
         # Reached only on natural completion, so every requirement is still
         # unfailed and gets a full-output validate().
@@ -200,17 +262,37 @@ async def _drive(
                     *[req.validate(validation_backend, ctx) for req in requirements]
                 )
             )
+            await _emit_event(
+                streamer.streaming_id,
+                FullValidationEvent(
+                    attempt=1,
+                    passed=all(v.as_bool() for v in streamer.final_validations),
+                    results=streamer.final_validations,
+                ),
+            )
         success = True
     except Exception as exc:
         # Record for the STREAMING_END span, then re-raise so the exception
         # still propagates to the caller through the `async for`.
         error = exc
+        await _emit_event(
+            streamer.streaming_id,
+            ErrorEvent(exception_type=type(exc).__name__, detail=str(exc)),
+        )
         raise
     finally:
         # Cancel on any early/broken exit so the backend producer never wedges
         # on a full queue; no-op once the stream is fully drained.
         if not mot.is_computed():
             await mot.cancel_generation()
+
+        # Always the last StreamEvent, on every exit path.
+        await _emit_event(
+            streamer.streaming_id,
+            CompletedEvent(
+                success=success, full_text=streamer.full_text, attempts_used=1
+            ),
+        )
 
         if has_plugins(HookType.STREAMING_END):
             await invoke_hook(
