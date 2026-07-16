@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
 from __future__ import annotations

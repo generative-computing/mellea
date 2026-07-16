@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Hook payload policies for Mellea hooks."""
 
 from __future__ import annotations

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """generate-ast.py — mdxify + postprocess docs pipeline.
 
 Runs mdxify against the project's mellea package then postprocesses

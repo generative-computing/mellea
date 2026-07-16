@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Capability policy, artifact model, and compatibility matrix for code execution environments.
 
 Four execution tiers are available, selectable by intent rather than by class name:

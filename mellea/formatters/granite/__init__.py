@@ -1,3 +1,4 @@
+# Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Input and output processing code for Granite models and for Granite intrinsics."""

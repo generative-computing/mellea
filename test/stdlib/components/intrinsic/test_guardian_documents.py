@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for guardian adapter functions that require no model.
 
 Covers: ``documents=`` kwarg on factuality_detection/factuality_correction,

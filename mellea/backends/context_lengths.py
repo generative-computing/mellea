@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Model context-length lookup table.
 
 Maps known model identifiers to their maximum context window in tokens.

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for ChunkingStrategy ABC and built-in chunker implementations."""
 
 import pytest

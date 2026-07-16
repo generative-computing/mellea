@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for schema helper functions in tools.py.
 
 Tests for _resolve_ref and _is_complex_anyof functions that handle

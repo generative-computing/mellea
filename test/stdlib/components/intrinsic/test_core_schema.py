@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for requirement_check schema validation in core.py.
 
 These tests mock call_intrinsic so they run without a GPU or HF backend.

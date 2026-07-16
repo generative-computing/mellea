@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """A method to generate outputs based on python functions and a Generative Stub function."""
 
 import abc

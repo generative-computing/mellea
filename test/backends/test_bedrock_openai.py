@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for bedrock helpers — URI construction, ModelIdentifier matching, env var validation.
 
 These tests cover the pure-logic helpers and error paths in bedrock.py without

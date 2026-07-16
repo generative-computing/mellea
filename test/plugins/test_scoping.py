@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for plugin scoping: session-scoped and with-block-scoped."""
 
 from typing import Any

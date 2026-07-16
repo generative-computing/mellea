@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests verifying that hooks fire at actual Mellea call sites.
 
 Each test registers a hook recorder, triggers the actual code path (Backend,

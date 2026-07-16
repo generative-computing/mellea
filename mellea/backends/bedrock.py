@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Helpers for creating bedrock backends from openai/litellm."""
 
 import logging

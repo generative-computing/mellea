@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`ModelIdentifier` dataclass and a catalog of pre-defined model IDs.
 
 `ModelIdentifier` is a frozen dataclass that groups the platform-specific name

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tracing plugins for emitting OpenTelemetry spans via hooks.
 
 This module contains plugins that hook into the generation and component

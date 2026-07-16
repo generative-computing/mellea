@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Mypy overload-resolution checks for MelleaSession methods."""
 
 from typing import Any, assert_type, cast

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Verification that streaming tool call deltas include required index field.
 
 This test demonstrates that our streaming implementation is compatible with

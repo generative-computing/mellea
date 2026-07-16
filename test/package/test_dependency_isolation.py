@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests that verify each optional dependency group installs and imports correctly in isolation.
 
 Each test uses ``uv run --isolated`` to create a throwaway environment with only the

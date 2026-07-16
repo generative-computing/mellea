@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Metrics plugins for recording telemetry data via hooks.
 
 This module contains plugins that hook into the generation pipeline to

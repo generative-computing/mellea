@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """A simple app that runs an OpenAI compatible server wrapped around a M program."""
 
 import asyncio

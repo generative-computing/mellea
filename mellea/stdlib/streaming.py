@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Streaming generation with per-chunk validation.
 
 Provides :func:`stream_with_chunking`, the core orchestration primitive that

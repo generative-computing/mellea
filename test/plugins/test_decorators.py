@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the @hook decorator and Plugin base class."""
 
 from mellea.plugins.base import Plugin, PluginMeta

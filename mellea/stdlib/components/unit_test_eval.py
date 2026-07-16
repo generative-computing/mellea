@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """LLM Evaluation with Unit Tests in Mellea."""
 
 import json

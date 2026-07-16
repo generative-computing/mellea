@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`MelleaSession`: the primary entry point for running generative programs.
 
 `MelleaSession` wraps a `Backend` and a `Context` and exposes high-level methods

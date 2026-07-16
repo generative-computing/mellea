@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for cost counter metrics recording.
 
 These tests verify that record_cost() correctly records counter metrics with

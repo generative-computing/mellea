@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Audit trail for bash guardrails violations.
 
 Records all command rejections with pattern, severity, category, and execution

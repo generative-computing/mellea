@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for LocalHFBackend chat-template kwarg filtering.
 
 These tests verify that _filter_for_chat_template passes only the variables the

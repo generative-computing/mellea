@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Helper for event loop management. Allows consistently running async generate requests in sync code."""
 
 import asyncio

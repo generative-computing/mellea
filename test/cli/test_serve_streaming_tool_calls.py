@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for streaming with tool calls, usage fields, and error handling.
 
 This file contains new tests added in the tool-calling PR. The main streaming

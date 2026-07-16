@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Low-level helpers and utilities supporting mellea backends.
 
 This package provides the internal plumbing used by the built-in backend

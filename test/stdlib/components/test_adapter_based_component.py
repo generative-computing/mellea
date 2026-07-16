@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the AdapterBasedComponent placeholder (issue #1134)."""
 
 from mellea.stdlib.components.adapter_based_component import AdapterBasedComponent

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for functional.py pure helpers — no backend, no LLM required.
 
 Covers _parse_and_clean_image_args image preprocessing and chat() document forwarding.

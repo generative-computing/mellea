@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """OpenTelemetry metrics instrumentation for Mellea.
 
 Provides metrics collection using OpenTelemetry Metrics API with support for:

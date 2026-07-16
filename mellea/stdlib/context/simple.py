@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Stateless single-turn context (no history is forwarded to the model)."""
 
 from __future__ import annotations

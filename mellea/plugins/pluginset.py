@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """PluginSet — composable groups of hooks and plugins."""
 
 from __future__ import annotations

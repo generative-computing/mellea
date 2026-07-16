@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """decorate_api_mdx.py — Step 2 of the API docs pipeline.
 
 Applies a series of decoration passes to the raw MDX files produced by

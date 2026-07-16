@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for aLoRA/LoRA training configuration."""
 
 from unittest.mock import MagicMock, Mock, patch

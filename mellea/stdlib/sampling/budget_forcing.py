@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Sampling Strategies for budget forcing generation."""
 
 from copy import deepcopy

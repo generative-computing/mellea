@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """OpenTelemetry instrumentation for Mellea.
 
 This package provides observability capabilities for Mellea through OpenTelemetry,

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Execution engine for the test-based LLM evaluation pipeline.
 
 Loads JSON test files into `TestBasedEval` objects and, for each test, runs a

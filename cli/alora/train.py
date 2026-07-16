@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Fine-tune a causal language model to produce a LoRA or aLoRA adapter.
 
 Loads a JSONL dataset of `item`/`label` pairs, applies an 80/20 train/validation

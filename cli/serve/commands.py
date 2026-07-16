@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Typer command definition for `m serve`.
 
 Separates the CLI interface (typer annotations) from the server implementation

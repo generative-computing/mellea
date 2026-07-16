@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """CLI commands for `m fix async` and `m fix genslots`."""
 
 from pathlib import Path

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Built-in debug plugin for validation pipeline.
 
 Provides tracing for requirement validation including pre-check setup, post-check

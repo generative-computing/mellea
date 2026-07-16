@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Async helper functions for managing concurrent model output thunks.
 
 Provides `send_to_queue`, which feeds a backend response coroutine or async iterator

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Async-safe context propagation for Mellea telemetry.
 
 Carries `session_id`, `request_id`, `model_id`, and `sampling_iteration`

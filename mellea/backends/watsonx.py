@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """A generic WatsonX.ai compatible backend that wraps around the watson_machine_learning library."""
 
 import asyncio

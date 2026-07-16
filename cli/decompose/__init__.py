@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Typer sub-application for the `m decompose` command group.
 
 Exposes a single `run` command that takes a task prompt (from a file or

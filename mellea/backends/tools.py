@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """LLM tool definitions, parsing, and validation for mellea backends.
 
 Provides the `MelleaTool` class (and the `@tool` decorator shorthand) for

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests of the code in ``mellea.stdlib.intrinsics.core``"""
 
 import gc

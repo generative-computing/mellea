@@ -1,3 +1,4 @@
+# Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Constants relating to of input and output processing for RAG-related intrinsics."""

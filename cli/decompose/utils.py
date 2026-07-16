@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Filename validation utilities for the decompose pipeline.
 
 Provides `validate_filename`, which checks that a candidate output filename

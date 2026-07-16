@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """``AdapterBasedComponent`` — the user-facing component class for adapter-backed capabilities.
 
 ``AdapterBasedComponent`` is the project term for a component whose behaviour is

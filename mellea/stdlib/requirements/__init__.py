@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Module for working with Requirements."""
 
 from ...core import Requirement, ValidationResult, default_output_to_bool

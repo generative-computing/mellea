@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`SimpleComponent`: a lightweight named-span component.
 
 `SimpleComponent` accepts arbitrary keyword arguments (strings, `CBlock`s, or

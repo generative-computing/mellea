@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for built-in debug plugins (generation, sampling, validation).
 
 Verifies that each built-in debug plugin hook fires correctly and logs expected

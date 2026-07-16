@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Core adapter scaffolding types (Epic #929 Phase 0).
 
 Introduces the composable ``Adapter`` dataclass and its three parts:

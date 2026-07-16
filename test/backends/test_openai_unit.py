@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for OpenAI backend pure-logic helpers — no API calls required.
 
 Covers filter_openai_client_kwargs, filter_chat_completions_kwargs,

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Pre-configured sampling presets bundling requirements and strategies.
 
 Sampling presets encapsulate common patterns for code generation validation,

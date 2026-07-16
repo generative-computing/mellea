@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Budget-forcing generation algorithm for thinking models.
 
 Implements `think_budget_forcing`, which extends a model's reasoning phase by

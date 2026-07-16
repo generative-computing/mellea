@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`Intrinsic` component for invoking fine-tuned adapter capabilities.
 
 An `Intrinsic` component references a named adapter from Mellea's intrinsic catalog

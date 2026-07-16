@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for core/requirement.py pure helpers — ValidationResult, default_output_to_bool."""
 
 from unittest.mock import AsyncMock, MagicMock, patch

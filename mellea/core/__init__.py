@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Core abstractions for the mellea library.
 
 This package defines the fundamental interfaces and data structures on which every

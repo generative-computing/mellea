@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Logging utilities for the mellea core library.
 
 Provides `MelleaLogger`, a singleton logger with colour-coded console output,

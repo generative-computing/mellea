@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 from langchain_core.tools import Tool, tool  # type: ignore[import-not-found]
 from pydantic_core import ValidationError

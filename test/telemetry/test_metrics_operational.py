@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for operational counter metrics (sampling, requirement, tool).
 
 Integration tests use InMemoryMetricReader to verify counter values and attributes.

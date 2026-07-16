@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for IOContract validation in rag.py (Epic #929 Phase 1).
 
 Tests the ``parse()`` method of each IOContract subclass directly — no backend,

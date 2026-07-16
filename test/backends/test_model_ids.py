@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests verifying that model IDs in model_ids.py resolve to real models.
 
 HuggingFace tests check the Hub API (no model download required).

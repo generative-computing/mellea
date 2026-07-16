@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Deterministic Mock Tests for ModelOutputThunk.astream() incremental return behavior.
 
 Tests that astream() returns only the incremental content added during each call.

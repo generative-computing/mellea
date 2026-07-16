@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Low-level utilities for concatenating transformer KV caches (KV smashing).
 
 Provides ``prefill_cache_v5`` for converting a tokenized prompt into a prefilled

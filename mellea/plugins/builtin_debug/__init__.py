@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Built-in debug plugins for Mellea.
 
 Provides pre-built plugins for common debugging tasks:

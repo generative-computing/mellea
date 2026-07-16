@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for eval runner pure-logic helpers — no backend, no model required.
 
 Covers InputEvalResult, TestEvalResult, parse_judge_output, _extract_first_json.

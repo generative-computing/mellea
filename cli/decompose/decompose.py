@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # decompose/decompose.py
 """Implementation of the `m decompose run` CLI command.
 

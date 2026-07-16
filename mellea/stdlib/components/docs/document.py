@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`Document` component for grounding model inputs with text passages.
 
 `Document` wraps a text passage with an optional `title` and `doc_id`, and

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Extensible bash security pattern detection framework.
 
 Defines abstract base class and concrete implementations for bash security checks.

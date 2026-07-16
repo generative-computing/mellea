@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the OpenAI backend intrinsic generation path — no server required.
 
 Mocks the OpenAI async client to verify that ``_generate_from_intrinsic`` correctly:

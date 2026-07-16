@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Generic `Compactor` protocol for shrinking a `Context`.
 
 A `Compactor` returns a fresh, compacted copy of a context. Implementations

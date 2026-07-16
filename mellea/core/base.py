@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Foundational data structures for mellea's generative programming model.
 
 Defines the building blocks that flow through every layer of the library: `CBlock`

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """The mellea standard library of components, sessions, and sampling strategies.
 
 This package provides the high-level building blocks for writing generative programs

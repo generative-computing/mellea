@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Generate a CLI reference page from Typer command metadata.
 
 Imports the ``cli.m`` Typer application, introspects its Click command tree,

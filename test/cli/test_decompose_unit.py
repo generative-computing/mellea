@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for decompose pure-logic helpers — no backend, no file I/O required.
 
 Covers reorder_subtasks, verify_user_variables, validate_filename.

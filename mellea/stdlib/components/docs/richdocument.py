@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`RichDocument`, `Table`, and related helpers backed by Docling.
 
 `RichDocument` wraps a `DoclingDocument` (e.g. produced by converting a PDF or

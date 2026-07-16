@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for checking the functionality of typed components, model output thunks and sampling results."""
 
 from typing import get_args

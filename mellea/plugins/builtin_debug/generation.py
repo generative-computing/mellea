@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Built-in debug plugin for generation pipeline (pre-call and post-call).
 
 Provides tracing for all LLM backend calls. Use for debugging model invocations,

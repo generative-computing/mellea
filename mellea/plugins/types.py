@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Mellea hook type enum and hook registration."""
 
 from __future__ import annotations

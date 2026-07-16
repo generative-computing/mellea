@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for OpenTelemetry metrics instrumentation."""
 
 from unittest.mock import patch

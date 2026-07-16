@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Cache abstractions and implementations for model state.
 
 Defines the abstract `Cache` interface with `put`, `get`, and

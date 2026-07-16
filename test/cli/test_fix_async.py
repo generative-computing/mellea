@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the `m fix async` CLI tool.
 
 Tests AST-based detection and fixup of async calls (aact, ainstruct, aquery) after changing contract to no longer always await.

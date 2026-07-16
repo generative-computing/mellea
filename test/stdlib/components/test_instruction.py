@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the Instruction component — init, jinja rendering, copy/repair, parts, format."""
 
 import pytest

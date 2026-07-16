@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # run_tests_with_ollama_and_vllm.sh
 # Starts a local ollama server (no sudo), optionally starts a local vLLM server,
 # pulls/installs required models, runs tests, and shuts everything down cleanly.

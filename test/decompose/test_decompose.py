@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for ``cli/decompose/decompose.py`` run flow.
 
 This module validates prompt loading, argument forwarding, template selection,

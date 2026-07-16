@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for Query, Transform, and MObject — no docling, no backend required."""
 
 import pytest

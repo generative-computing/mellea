@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Helpers for converting OpenAI-style JSON Schema response formats."""
 
 from typing import Annotated, Any, Literal, cast

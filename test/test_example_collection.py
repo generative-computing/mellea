@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Regression tests for docs/examples/ collection hooks.
 
 These hooks have regressed twice (#794, #796). This test ensures:

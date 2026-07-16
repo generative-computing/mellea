@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Concrete `Context` implementations and the `Compactor` protocol.
 
 Provides:

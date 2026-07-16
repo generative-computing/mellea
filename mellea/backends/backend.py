@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`FormatterBackend`: base class for prompt-engineering backends.
 
 `FormatterBackend` extends the abstract `Backend` with a `ChatFormatter` and

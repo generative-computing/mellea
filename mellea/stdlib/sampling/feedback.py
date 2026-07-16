@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Model-friendly feedback formatters for validation failures.
 
 This module converts generic validation failure reasons into actionable guidance

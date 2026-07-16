@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`Instruction` component for instruct/validate/repair loops.
 
 `Instruction` is the primary component type used with `MelleaSession.instruct`. It
