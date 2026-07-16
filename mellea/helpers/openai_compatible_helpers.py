@@ -242,10 +242,7 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
                         "Fetch the audio and use AudioBlock with base64 data instead."
                     )
 
-        result: dict[str, Any] = {
-            "role": msg.role,
-            "content": parts,
-        }
+        result: dict[str, Any] = {"role": msg.role, "content": parts}
     else:
         result = {"role": msg.role, "content": content}
 
