@@ -36,9 +36,9 @@ class RichDocument(Component[str]):
     The two canonical ways to create a ``RichDocument``:
 
     * **From a file** — use :meth:`from_document_file` to convert a PDF,
-      Markdown, DOCX, or other `Docling-supported format`_ into a
-      ``RichDocument``.  Set ``do_ocr=False`` for text-based PDFs to skip
-      downloading OCR model weights.
+      Markdown, DOCX, or other [Docling-supported format](https://ds4sd.github.io/docling/)
+      into a ``RichDocument``.  Set ``do_ocr=False`` for text-based PDFs to
+      skip downloading OCR model weights.
     * **From a saved JSON** — use :meth:`load` to restore a document previously
       saved with :meth:`save`.
 
@@ -46,8 +46,6 @@ class RichDocument(Component[str]):
     advanced use (e.g. when you already hold a ``DoclingDocument`` produced by
     your own Docling pipeline).  If you pass any other type a ``TypeError`` is
     raised immediately.
-
-    .. _Docling-supported format: https://ds4sd.github.io/docling/
 
     Args:
         doc (DoclingDocument): The underlying Docling document to wrap.
@@ -57,11 +55,7 @@ class RichDocument(Component[str]):
     """
 
     def __init__(self, doc: DoclingDocument):
-        """Initialize RichDocument by wrapping the provided DoclingDocument.
-
-        Raises:
-            TypeError: If *doc* is not a ``DoclingDocument`` instance.
-        """
+        """Initialize RichDocument by wrapping the provided DoclingDocument."""
         if not isinstance(doc, DoclingDocument):
             raise TypeError(
                 f"RichDocument expects a DoclingDocument, got {type(doc).__name__!r}. "
