@@ -834,3 +834,88 @@ class TestAuditTrailCoverage:
         latest = violations[-1]
         assert latest.pattern == "DangerousPackageManagerPattern"
         assert latest.category == "destructive"
+
+
+class TestIsDangerousCommandBoundary:
+    """Tests for _is_dangerous_command() function boundaries.
+
+    These tests exercise _is_dangerous_command() directly to verify that the
+    function (and the inline bash_executor path it guards) correctly validates
+    command safety in nested contexts where the pattern framework alone is insufficient.
+
+    Specifically, these tests pin the semicolon handling behavior after issue #1391
+    (find -exec ... ; becomes inert under shell=False, so bare ';' in argv should
+    not be dangerous when used as a find terminator).
+    """
+
+    def test_is_dangerous_command_find_exec_semicolon(self) -> None:
+        """Guards the bash_executor path for find -exec semicolon boundary.
+
+        After shlex.split, "find -exec ... ;" yields a list where the semicolon
+        is a bare standalone token [';']. This is inert under shell=False because
+        it's not interpreted by the shell—it's just a positional argument to find.
+
+        This test verifies _is_dangerous_command() correctly identifies this as safe,
+        not dangerous, because it validates nested command contexts (not top-level
+        shell operators, which check_all_patterns handles).
+        """
+        from mellea.stdlib.tools.shell import _is_dangerous_command
+
+        # find -exec with semicolon terminator → should be safe
+        # (the bare ';' is a find option, not a shell operator in the argv list)
+        ok, reason = _is_dangerous_command(["find", "logs", "-exec", "cat", "{}", ";"])
+        assert ok is False, f"find -exec semicolon should be safe, but got: {reason}"
+
+    def test_is_dangerous_command_embedded_semicolon(self) -> None:
+        """Embedded semicolon in string arg not caught by nested validation.
+
+        This test documents that embedded semicolons (e.g., "hello;rm") are NOT
+        caught by _is_dangerous_command() because that function only validates
+        nested command contexts. Embedded semicolons are caught by
+        ShellOperatorPattern.check() in check_all_patterns(), which checks for
+        ';' in any argv element.
+
+        This is the correct division of responsibility:
+        - _is_dangerous_command() → nested contexts (env sudo, timeout bash -c)
+        - ShellOperatorPattern → top-level shell operators (semicolons, pipes)
+        """
+        from mellea.stdlib.tools.shell import _is_dangerous_command
+
+        # Embedded semicolon in string argument
+        # _is_dangerous_command alone does NOT catch this
+        # (that's ShellOperatorPattern's job)
+        bad, _ = _is_dangerous_command(["echo", "hello;rm"])
+        # We expect False because _is_dangerous_command only checks nested
+        # contexts, not embedded shell operators.
+        assert bad is False
+
+    def test_is_dangerous_command_vs_check_all_patterns(self) -> None:
+        """Verify division of labor between _is_dangerous_command and patterns.
+
+        _is_dangerous_command() is a thin wrapper around
+        _check_nested_dangerous_commands() and validates only nested command
+        contexts (e.g., env sudo, timeout bash -c).
+
+        Top-level shell operators (semicolons, pipes, redirects) are the
+        responsibility of check_all_patterns(), which runs ShellOperatorPattern
+        and other checkers.
+
+        This test verifies that:
+        1. Embedded semicolon passes _is_dangerous_command (nested only)
+        2. Embedded semicolon fails check_all_patterns (pattern-based)
+        """
+        from mellea.stdlib.tools._bash_patterns import check_all_patterns
+        from mellea.stdlib.tools.shell import _is_dangerous_command
+
+        argv = ["echo", "hello;rm"]
+
+        # Step 1: _is_dangerous_command only validates nested contexts
+        nested_ok, _ = _is_dangerous_command(argv)
+        # Embedded semicolon is not a nested context issue
+        assert nested_ok is False
+
+        # Step 2: check_all_patterns catches embedded semicolon
+        patterns_dangerous, reason = check_all_patterns(argv)
+        # ShellOperatorPattern catches it
+        assert patterns_dangerous is True
+        assert ";" in reason or "chaining" in reason.lower()
