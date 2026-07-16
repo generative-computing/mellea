@@ -18,7 +18,11 @@ from pathlib import Path
 
 try:
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import (
+        AcceleratorDevice,
+        AcceleratorOptions,
+        PdfPipelineOptions,
+    )
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling_core.types.doc.document import DoclingDocument, TableItem
     from docling_core.types.io import DocumentStream
@@ -141,6 +145,21 @@ class RichDocument(Component[str]):
         doc_doc = DoclingDocument.load_from_json(filename)
         return cls(doc_doc)
 
+    @staticmethod
+    def _mps_is_available() -> bool:
+        """Return whether the Apple Silicon MPS backend is the available GPU.
+
+        Returns:
+            bool: `True` if PyTorch reports MPS as available, `False` otherwise
+            (including when PyTorch is not installed).
+        """
+        try:
+            import torch
+
+            return bool(torch.backends.mps.is_available())
+        except ImportError:
+            return False
+
     @classmethod
     def from_document_file(
         cls, source: str | Path | DocumentStream, do_ocr: bool = True
@@ -162,6 +181,11 @@ class RichDocument(Component[str]):
         * Remote URLs (e.g. ``"https://arxiv.org/pdf/…"``) are accepted by
           Docling but require network access and may be slow or fail if the
           remote is unavailable.
+        * On Apple Silicon, Docling's auto-selected accelerator is MPS, but
+          some Docling models run in float64, which the MPS backend does not
+          support. To provide a reliable default, this method forces the CPU
+          accelerator whenever MPS is the available GPU; CUDA and CPU-only
+          environments keep Docling's auto-selected device.
 
         Args:
             source (str | Path | DocumentStream): Path, URL, or stream for the
@@ -176,6 +200,13 @@ class RichDocument(Component[str]):
         pipeline_options = PdfPipelineOptions(
             images_scale=2.0, generate_picture_images=True, do_ocr=do_ocr
         )
+
+        if cls._mps_is_available():
+            # MPS cannot run Docling's float64 layout models, so fall back to
+            # CPU on Apple Silicon to avoid a hard conversion failure.
+            pipeline_options.accelerator_options = AcceleratorOptions(
+                device=AcceleratorDevice.CPU
+            )
 
         converter = DocumentConverter(
             format_options={
