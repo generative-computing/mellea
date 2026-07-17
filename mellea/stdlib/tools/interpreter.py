@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Code interpreter tool and execution environments for agentic workflows.
 
 Provides `ExecutionResult` (capturing stdout, stderr, exit code, artifacts, and

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for genstub pure-logic helpers — no backend, no LLM required.
 
 Covers describe_function, get_argument, bind_function_arguments,

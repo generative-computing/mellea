@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for token usage metrics recording.
 
 These tests verify that the record_token_usage_metrics() function correctly

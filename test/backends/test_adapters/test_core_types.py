@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the Phase 0 adapter scaffolding types (issue #1134)."""
 
 import dataclasses

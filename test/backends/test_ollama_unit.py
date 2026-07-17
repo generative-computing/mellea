@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for Ollama backend pure-logic helpers — no Ollama server required.
 
 Covers _simplify_and_merge, _make_backend_specific_and_remove,

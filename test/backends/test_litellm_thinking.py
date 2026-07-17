@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for LiteLLMBackend mot.thinking population.
 
 Covers the vLLM case where the wire key is ``"reasoning"`` instead of

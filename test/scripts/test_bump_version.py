@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for `.github/scripts/bump_version.py`."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """LLM-assisted generator for adapter intrinsic README files.
 
 Uses a `MelleaSession` with rejection sampling to derive README template variables

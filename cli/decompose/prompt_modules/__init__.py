@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from .constraint_extractor import constraint_extractor as constraint_extractor
 from .general_instructions import general_instructions as general_instructions
 from .subtask_constraint_assign import (

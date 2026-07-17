@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 
 from mellea.core import CBlock, ModelOutputThunk, default_output_to_bool

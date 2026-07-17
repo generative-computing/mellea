@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for all remaining hook payload models not covered in test_payloads.py.
 
 Covers:

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """E2E tests for intrinsics on the OpenAI backend with a Granite Switch model.
 
 Starts a vLLM server hosting a Granite Switch model, creates an OpenAIBackend with

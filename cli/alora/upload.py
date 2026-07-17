@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Upload a trained LoRA or aLoRA adapter to Hugging Face Hub.
 
 Creates the target repository if it does not already exist and pushes the entire

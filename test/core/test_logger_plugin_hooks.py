@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests verifying MelleaLogger works correctly inside plugin hook dispatch.
 
 Key properties verified:

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Bash shell command execution tool and execution environments for agentic workflows.
 
 Provides ``BashEnvironment`` (abstract base for bash execution) and two concrete

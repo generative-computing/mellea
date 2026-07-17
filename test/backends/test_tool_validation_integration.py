@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for the validate_tool_arguments function.
 
 These tests verify that the validation function works correctly with

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for HuggingFace backend pure-logic helpers — no model load required."""
 
 from types import SimpleNamespace

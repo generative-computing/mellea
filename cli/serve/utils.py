@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Any, Literal
 
 from mellea.helpers.openai_compatible_helpers import has_tool_calls

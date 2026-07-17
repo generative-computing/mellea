@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Reusable test predicates for resource-gated test skipping.
 
 These return ``pytest.mark.skipif`` decorators that test authors apply directly.

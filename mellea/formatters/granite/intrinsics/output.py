@@ -1,3 +1,4 @@
+# Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Classes and functions that implement common aspects of output processing for intrinsics."""

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """SOFAI (Slow and Fast AI) Sampling Strategy.
 
 This module implements a two-solver sampling strategy that uses:

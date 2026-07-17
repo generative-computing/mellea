@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests verifying that documents on Messages render correctly through each backend.
 
 Each test mocks the backend's API call, sends a Message with documents through

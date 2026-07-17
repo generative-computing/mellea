@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Catalog of available adapter functions.
 
 Catalog of adapter functions currently known to Mellea, including metadata about where

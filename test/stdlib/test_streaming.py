@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for stream_with_chunking() and StreamChunkingResult.
 
 Uses StreamingMockBackend — a deterministic test double that feeds tokens from a

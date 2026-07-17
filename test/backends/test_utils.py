@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for backends/utils.py — get_value accessor and to_tool_calls parser."""
 
 from dataclasses import dataclass

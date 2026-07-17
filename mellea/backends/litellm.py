@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """A generic LiteLLM compatible backend that wraps around the openai python sdk."""
 
 import asyncio

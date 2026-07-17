@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Adapter classes for adding fine-tuned modules to inference backends.
 
 The primary public surface is :func:`AdapterMixin.resolve_adapter` (find or lazily

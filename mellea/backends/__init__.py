@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Backend implementations for the mellea inference layer.
 
 This package exposes the concrete machinery for connecting mellea to language model

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """ReACT (Reason + Act) agentic pattern implementation.
 
 Provides the `react()` async function, which drives a tool-use loop: the model

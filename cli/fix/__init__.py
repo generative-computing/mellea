@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """CLI for fixing async calls after top-level ainstruct, aquery, and aact contract change.."""
 
 from enum import StrEnum

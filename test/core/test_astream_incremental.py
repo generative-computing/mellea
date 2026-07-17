@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for ModelOutputThunk.astream() incremental return behavior.
 
 Tests that astream() returns only new content added since the beginning of

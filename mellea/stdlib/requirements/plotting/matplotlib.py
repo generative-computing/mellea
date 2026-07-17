@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Matplotlib-specific code generation requirements.
 
 This module validates Python code that uses matplotlib for plotting, ensuring

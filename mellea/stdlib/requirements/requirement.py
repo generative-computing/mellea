@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns."""
 
 import json

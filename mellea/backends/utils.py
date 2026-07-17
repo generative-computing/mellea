@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared utility functions used across formatter-based backend implementations.
 
 Provides `to_chat`, which converts a `Context` and a `Component` action into

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for SOFAI sampling strategy pure static helpers — no backend required.
 
 Covers _extract_action_prompt, _parse_judgment, _extract_feedback, _select_best_attempt.

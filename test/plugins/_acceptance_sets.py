@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Plugin sets covering every HookType x PluginMode for acceptance tests.
 
 Each set contains one hook per call site in a single execution mode:

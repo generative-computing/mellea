@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Advisory registry of known adapter capabilities.
 
 :data:`KNOWN_CAPABILITIES` is a frozenset of capability strings derived from the

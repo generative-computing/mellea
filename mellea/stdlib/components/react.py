@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Components that implement the ReACT (Reason + Act) agentic pattern.
 
 Provides `ReactInitiator`, which primes the model with a goal and a tool list, and

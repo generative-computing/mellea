@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Formatters for converting components into model-ready prompts.
 
 Formatters translate `Component` objects into the prompt strings or chat message

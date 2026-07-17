@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Abstract `Backend` interface and generation-walk utilities.
 
 Defines the `Backend` abstract base class. Backend implementers override

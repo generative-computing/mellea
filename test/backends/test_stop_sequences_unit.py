@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for ModelOption.STOP_SEQUENCES routing across backends.
 
 Verifies that the sentinel is mapped to the correct native parameter for each

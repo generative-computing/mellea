@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for session.py pure-logic — no Ollama server required.
 
 Covers backend_name_to_class factory resolution, get_session error path,

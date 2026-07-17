@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`ChatFormatter` for converting context histories to chat-message lists.
 
 `ChatFormatter` is the standard formatter used by mellea's legacy backends. Its

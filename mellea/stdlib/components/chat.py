@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Chat primitives: the `Message` and `ToolMessage` components.
 
 Defines `Message`, the `Component` subtype used to represent a single turn in a

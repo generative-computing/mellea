@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Entrypoint for the `m` command-line tool.
 
 Wires together all CLI sub-applications into a single Typer root command: `m serve`

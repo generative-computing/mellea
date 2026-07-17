@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Typer sub-application for the `m alora` command group.
 
 Provides three commands: `train` (fine-tune a base causal language model on a JSONL

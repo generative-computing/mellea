@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for span-attribute setters in `mellea.telemetry._tracing_setters`."""
 
 from unittest.mock import MagicMock

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """End-to-end tests for payload policy enforcement through invoke_hook.
 
 The plugin manager applies ``HookPayloadPolicy`` after each plugin returns:

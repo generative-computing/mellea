@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Abstract interfaces for sampling strategies and their results.
 
 `SamplingStrategy` defines the contract for all sampling algorithms: an async

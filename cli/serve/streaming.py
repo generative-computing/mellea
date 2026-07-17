@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Streaming utilities for OpenAI-compatible server responses."""
 
 from collections.abc import AsyncGenerator

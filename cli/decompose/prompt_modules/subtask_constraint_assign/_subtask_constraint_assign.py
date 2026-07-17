@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 import re
 from collections.abc import Callable, Sequence
 from typing import TypedDict, TypeVar, Unpack, cast, final

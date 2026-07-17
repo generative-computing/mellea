@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """CLI package for test-based LLM evaluation.
 
 Provides the `m eval` command group, which orchestrates running a generator model

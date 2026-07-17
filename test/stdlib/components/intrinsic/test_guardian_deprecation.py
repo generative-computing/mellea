@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the deprecated `target_role` path of `guardian_check`.
 
 Exercises the sentinel/mapping logic without touching a model. We monkeypatch

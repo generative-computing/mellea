@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Backend integration tests for token usage metrics.
 
 Tests that backends correctly record token metrics through the telemetry system.

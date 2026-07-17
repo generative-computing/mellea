@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for mellea.stdlib.frameworks.react.
 
 Uses a ScriptedBackend (fake) so that real aact() and _call_tools() run

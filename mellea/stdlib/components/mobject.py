@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`MObject`, `Query`, `Transform`, and `MObjectProtocol` for query/transform workflows.
 
 Defines the `MObjectProtocol` protocol for objects that can be queried and

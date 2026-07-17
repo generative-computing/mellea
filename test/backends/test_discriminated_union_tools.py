@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """End-to-end tests for discriminated-union tool parameters.
 
 Covers issue #989: a tool parameter typed as a Pydantic discriminated union

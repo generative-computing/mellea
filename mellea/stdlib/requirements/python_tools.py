@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Generic Python tool requirements for code generation validation.
 
 This module provides a set of composable requirements for validating Python code

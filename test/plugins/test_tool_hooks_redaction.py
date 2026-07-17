@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests verifying that tool hooks can redact sensitive data:
 
 - TOOL_PRE_INVOKE: replace model_tool_call.args before the tool runs

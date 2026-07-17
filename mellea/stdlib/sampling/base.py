@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Base Sampling Strategies.
 
 Sampling strategies control how Mellea handles validation failures during generation:

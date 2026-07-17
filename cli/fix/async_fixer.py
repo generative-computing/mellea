@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """AST-based detection and source transformation for async call fixes.
 
 Targets: aact, ainstruct, aquery calls that return uncomputed ModelOutputThunk.

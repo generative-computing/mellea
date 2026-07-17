@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Line-based detection and rewriting of old genslot imports and class names.
 
 Targets:

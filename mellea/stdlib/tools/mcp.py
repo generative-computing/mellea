@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """MCP tool discovery and MelleaTool wrapping.
 
 Bridges [MCP](https://modelcontextprotocol.io/) server tools into Mellea's

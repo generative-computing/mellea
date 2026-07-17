@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Utilities for detecting and classifying the target inference server.
 
 Defines the `_ServerType` enum (`LOCALHOST`, `OPENAI`, `REMOTE_VLLM`,

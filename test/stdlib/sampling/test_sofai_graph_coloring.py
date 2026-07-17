@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Comprehensive tests for SOFAISamplingStrategy using Graph Coloring domain.
 
 This test suite validates the SOFAI sampling strategy through a graph coloring

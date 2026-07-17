@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """The `@mify` decorator for turning Python objects into `Component`s.
 
 `mify` wraps an existing Python class or instance with the `MifiedProtocol`

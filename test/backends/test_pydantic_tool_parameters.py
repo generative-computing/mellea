@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for tools with Pydantic BaseModel parameters.
 
 This test file addresses the issue where tools defined with Pydantic BaseModel

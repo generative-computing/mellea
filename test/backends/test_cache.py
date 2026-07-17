@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for SimpleLRUCache — LRU eviction, callbacks, and capacity edge cases."""
 
 from mellea.backends.cache import SimpleLRUCache

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Test Mintlify anchor generation algorithm.
 
 Mintlify generates anchors from headings for internal linking.

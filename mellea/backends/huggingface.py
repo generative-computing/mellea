@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """A backend that uses the Hugging Face Transformers library.
 
 The purpose of the Hugging Face backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or aLoRA adapters, consider using Ollama backends instead.

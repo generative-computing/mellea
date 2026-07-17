@@ -1,3 +1,4 @@
+# Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Support for input and output processing for intrinsic models."""

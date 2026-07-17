@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration test for aLoRA/LoRA training with PEFT 0.18+.
 
 This test actually trains a tiny adapter to verify the migration works end-to-end.

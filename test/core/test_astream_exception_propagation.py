@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests that exceptions during generation propagate correctly through ModelOutputThunk.astream().
 
 Regression test for issue #577: post_process in a finally block was swallowing

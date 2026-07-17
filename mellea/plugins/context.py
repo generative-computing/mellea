@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Plugin context factory — maps Mellea domain objects to ContextForge GlobalContext."""
 
 from __future__ import annotations

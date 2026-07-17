@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`Requirement` factories for tool-use validation.
 
 Provides `uses_tool`, a `Requirement` factory that validates whether a model

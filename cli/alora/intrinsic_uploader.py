@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Upload a trained adapter to Hugging Face Hub in the intrinsic directory layout.
 
 Creates or updates a private Hugging Face repository and uploads adapter weights

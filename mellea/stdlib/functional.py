@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Low-level primitives for Mellea operations: Instruct, Chat, and friends.
 
 For scripts and applications, prefer `MelleaSession` (via `start_session()`),

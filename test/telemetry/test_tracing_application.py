@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for application-level tracing — session and action spans.
 
 This file covers the application-tracing surface in three layers:

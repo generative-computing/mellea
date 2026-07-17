@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """OpenTelemetry logging instrumentation for Mellea.
 
 Provides log export using OpenTelemetry Logs API with OTLP exporter support.

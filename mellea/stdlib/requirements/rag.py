@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Requirements for RAG (Retrieval-Augmented Generation) workflows."""
 
 import json

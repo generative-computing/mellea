@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for control-flow tool signalling on tool hook payloads.
 
 Verifies that TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks always fire for all

@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """`TemplateFormatter`: Jinja2-template-based formatter for legacy backends.
 
 `TemplateFormatter` extends `ChatFormatter` to look up a per-component Jinja2

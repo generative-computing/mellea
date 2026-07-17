@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Backward-compatibility shim — use `mellea.stdlib.components.genstub` instead.
 
 Deprecated: The `genslot` module has been renamed to `genstub`. This shim will be

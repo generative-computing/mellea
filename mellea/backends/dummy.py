@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """This module holds shim backends used for smoke tests."""
 
 from collections.abc import Sequence

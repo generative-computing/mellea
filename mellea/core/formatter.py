@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Abstract `Formatter` interface for rendering components to strings.
 
 A `Formatter` converts `Component` and `CBlock` objects into the text strings

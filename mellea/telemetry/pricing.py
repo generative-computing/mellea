@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """LLM pricing via litellm's pricing API.
 
 Pricing metrics require the litellm package (`mellea[litellm]`). Pricing is

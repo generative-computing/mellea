@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for latency metrics recording.
 
 These tests verify that record_request_duration() and record_ttfb() correctly

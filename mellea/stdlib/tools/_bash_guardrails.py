@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Structured bash security guardrails framework.
 
 Provides systematic organization of bash command safety rules with categories,
