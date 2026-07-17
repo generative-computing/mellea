@@ -10,6 +10,8 @@ import pytest
 from PIL import Image as PILImage
 
 from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
     CBlock,
     Component,
     GenerateType,
@@ -18,6 +20,8 @@ from mellea.core import (
     ModelOutputThunk,
     RawProviderResponse,
     blockify,
+    get_audio_from_component,
+    make_image_block,
 )
 from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
@@ -160,20 +164,358 @@ def test_image_url_block_base64_raises():
 
 
 def test_message_accepts_image_url_block():
-    from mellea.stdlib.components import Message
-
     block = ImageUrlBlock("https://example.com/cat.png")
     msg = Message("user", "look at this", images=[block])
     assert msg.images == [block]
 
 
 def test_message_mixed_image_types():
-    from mellea.stdlib.components import Message
-
     url_block = ImageUrlBlock("https://example.com/cat.png")
     b64_block = ImageBlock(_make_png_b64())
     msg = Message("user", "two images", images=[url_block, b64_block])
     assert len(msg.images) == 2  # type: ignore[arg-type]
+
+
+# --- AudioBlock ---
+
+
+def test_audio_block_valid_base64_audio():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    block = AudioBlock(wav_b64, format="wav")
+    assert block.value == wav_b64
+    assert block.format == "wav"
+
+
+def test_audio_block_valid_data_uri_prefix():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/wav;base64,{wav_b64}"
+    assert AudioBlock.is_valid_base64_audio(data_uri) is True
+
+
+def test_audio_block_invalid_base64_raises():
+    with pytest.raises(AssertionError, match="Invalid base64"):
+        AudioBlock(value="not-audio", format="wav")
+
+
+def test_audio_block_empty_format_raises():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioBlock(value=wav_b64, format="")
+
+
+def test_audio_block_whitespace_format_raises():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioBlock(value=wav_b64, format="   ")
+
+
+def test_audio_block_format_auto_detected_from_data_uri():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/wav;base64,{wav_b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == "wav"
+    assert block.value == data_uri
+
+
+def test_audio_block_format_auto_detected_mp3():
+    mp3_b64 = base64.b64encode(b"fake mp3 bytes").decode()
+    data_uri = f"data:audio/mpeg;base64,{mp3_b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == "mp3"
+
+
+@pytest.mark.parametrize(
+    "mime_subtype,expected_format",
+    [
+        ("x-wav", "wav"),
+        ("wave", "wav"),
+        ("mpeg", "mp3"),
+        ("x-mpeg", "mp3"),
+        ("x-mp3", "mp3"),
+        ("x-flac", "flac"),
+        ("ogg", "ogg"),
+        ("flac", "flac"),
+        ("wav", "wav"),
+    ],
+)
+def test_audio_block_mime_subtype_normalisation(
+    mime_subtype: str, expected_format: str
+):
+    b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/{mime_subtype};base64,{b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == expected_format
+
+
+def test_audio_block_missing_format_raises():
+    raw_b64 = base64.b64encode(b"fake audio bytes").decode()
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioBlock(raw_b64)
+
+
+# --- AudioUrlBlock ---
+
+
+def test_audio_url_block_valid_https():
+    block = AudioUrlBlock("https://example.com/audio.mp3", format="mp3")
+    assert block.value == "https://example.com/audio.mp3"
+    assert block.format == "mp3"
+
+
+def test_audio_url_block_invalid_scheme_raises():
+    with pytest.raises(ValueError, match="http"):
+        AudioUrlBlock("ftp://example.com/audio.mp3", format="mp3")
+
+
+def test_audio_url_block_valid_http():
+    block = AudioUrlBlock("http://example.com/audio.wav", format="wav")
+    assert block.value == "http://example.com/audio.wav"
+    assert block.format == "wav"
+
+
+def test_audio_url_block_empty_format_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioUrlBlock("https://example.com/audio.mp3", format="")
+
+
+def test_audio_url_block_whitespace_format_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioUrlBlock("https://example.com/audio.mp3", format="   ")
+
+
+# --- get_audio_from_component ---
+
+
+class _ComponentWithAudio(Component[str]):
+    def __init__(self, audio):
+        self.audio = audio
+
+    def parts(self):
+        return []
+
+    def format_for_llm(self) -> str:
+        return ""
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        return ""
+
+
+def test_get_audio_from_component_returns_audio():
+    audio = [AudioBlock(base64.b64encode(b"audio").decode(), format="wav")]
+    component = _ComponentWithAudio(audio)
+    assert get_audio_from_component(component) == audio
+
+
+def test_get_audio_from_component_returns_audio_url_block():
+    audio = [AudioUrlBlock("https://example.com/audio.mp3", format="mp3")]
+    component = _ComponentWithAudio(audio)
+    assert get_audio_from_component(component) == audio
+
+
+def test_get_audio_from_component_returns_none_for_empty_list():
+    component = _ComponentWithAudio([])
+    assert get_audio_from_component(component) is None
+
+
+def test_get_audio_from_component_returns_none_for_none_audio():
+    component = _ComponentWithAudio(None)
+    assert get_audio_from_component(component) is None
+
+
+def test_get_audio_from_component_returns_none_when_missing():
+    class _ComponentWithoutAudio(Component[str]):
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> str:
+            return ""
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return ""
+
+    assert get_audio_from_component(_ComponentWithoutAudio()) is None
+
+
+# --- make_image_block factory ---
+
+
+def _png_bytes() -> bytes:
+    img = PILImage.new("RGB", (1, 1), color="blue")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_make_image_block_from_pil():
+    img = PILImage.new("RGB", (1, 1), color="green")
+    block = make_image_block(img)
+    assert isinstance(block, ImageBlock)
+    assert ImageBlock.is_valid_base64_png(str(block))
+
+
+def test_make_image_block_from_url_returns_url_block():
+    block = make_image_block("https://example.com/cat.png")
+    assert isinstance(block, ImageUrlBlock)
+    assert block.value == "https://example.com/cat.png"
+
+
+def test_make_image_block_from_base64_returns_image_block():
+    b64 = _make_png_b64()
+    block = make_image_block(b64)
+    assert isinstance(block, ImageBlock)
+    assert block.value == b64
+
+
+def test_make_image_block_data_uri_returns_image_block():
+    data_uri = f"data:image/png;base64,{_make_png_b64()}"
+    block = make_image_block(data_uri)
+    assert isinstance(block, ImageBlock)
+
+
+def test_make_image_block_preserves_meta():
+    b64 = _make_png_b64()
+    block = make_image_block(b64, meta={"alt": "a dot"})
+    assert block._meta == {"alt": "a dot"}
+
+
+class _FakeRaw:
+    """Stand-in for `requests.Response.raw` supporting a capped `.read()`."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self, amt: int | None = None, decode_content: bool = False) -> bytes:
+        return self._body if amt is None else self._body[:amt]
+
+
+class _FakeResponse:
+    """Minimal stand-in for a `requests.Response` used as a context manager."""
+
+    def __init__(self, body: bytes, content_length: str | None = None):
+        self.raw = _FakeRaw(body)
+        self.headers = (
+            {} if content_length is None else {"Content-Length": content_length}
+        )
+
+    def raise_for_status(self):
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _clear_image_cache():
+    """Isolate tests from the process-wide URL -> base64 download cache."""
+    import mellea.core.base as base_mod
+
+    base_mod._image_base64_cache.clear()
+    yield
+    base_mod._image_base64_cache.clear()
+
+
+def _patch_download(monkeypatch, fake_get):
+    """Stub `requests.get` for a download test."""
+    import mellea.core.base as base_mod
+
+    monkeypatch.setattr(base_mod.requests, "get", fake_get)
+
+
+def test_make_image_block_url_convert_to_base64(monkeypatch):
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(_png_bytes()))
+
+    block = make_image_block("https://example.com/cat.png", convert_to_base64=True)
+    assert isinstance(block, ImageBlock)
+    assert ImageBlock.is_valid_base64_png(str(block))
+
+
+def test_make_image_block_download_failure_raises(monkeypatch):
+    import mellea.core.base as base_mod
+
+    def boom(url, **kw):
+        raise base_mod.requests.RequestException("no network")
+
+    _patch_download(monkeypatch, boom)
+
+    with pytest.raises(ValueError, match="Failed to download"):
+        make_image_block("https://example.com/cat.png", convert_to_base64=True)
+
+
+def test_make_image_block_download_rejects_oversized_body(monkeypatch):
+    from mellea.core import base as base_mod
+
+    big = _png_bytes() * (base_mod._IMAGE_DOWNLOAD_MAX_BYTES + 1)
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(big))
+
+    with pytest.raises(ValueError, match="exceeds"):
+        make_image_block("https://example.com/big.png", convert_to_base64=True)
+
+
+def test_make_image_block_download_rejects_oversized_content_length(monkeypatch):
+    from mellea.core import base as base_mod
+
+    limit = base_mod._IMAGE_DOWNLOAD_MAX_BYTES
+    _patch_download(
+        monkeypatch,
+        lambda url, **kw: _FakeResponse(_png_bytes(), content_length=str(limit + 1)),
+    )
+
+    with pytest.raises(ValueError, match="exceeds"):
+        make_image_block("https://example.com/big.png", convert_to_base64=True)
+
+
+def test_image_url_block_resolve_base64_caches_by_url(monkeypatch):
+    """resolve_base64 downloads once per URL; a reconstructed block hits cache."""
+    calls: dict[str, int] = {}
+
+    def fake_get(url, **kw):
+        calls[url] = calls.get(url, 0) + 1
+        return _FakeResponse(_png_bytes())
+
+    _patch_download(monkeypatch, fake_get)
+
+    url = "https://example.com/cat.png"
+    first = ImageUrlBlock(url).resolve_base64()
+    # A freshly reconstructed block for the same URL must not re-download.
+    second = ImageUrlBlock(url).resolve_base64()
+
+    assert ImageBlock.is_valid_base64_png(first)
+    assert first == second
+    assert calls[url] == 1  # cache is keyed on the URL, not the instance
+
+    # A different URL is a cache miss and triggers its own download.
+    other = "https://example.com/dog.png"
+    ImageUrlBlock(other).resolve_base64()
+    assert calls[other] == 1
+
+
+def test_image_cache_evicts_least_recently_used(monkeypatch):
+    """The download cache is bounded and evicts the least-recently-used URL."""
+    from mellea.core import base as base_mod
+
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(_png_bytes()))
+    monkeypatch.setattr(base_mod, "_IMAGE_CACHE_MAX_ENTRIES", 2)
+
+    a, b, c = (f"https://example.com/{n}.png" for n in ("a", "b", "c"))
+    base_mod._cached_download_image_as_base64(a)
+    base_mod._cached_download_image_as_base64(b)
+    base_mod._cached_download_image_as_base64(a)  # touch `a` so `b` is now LRU
+    base_mod._cached_download_image_as_base64(c)  # evicts `b`
+
+    assert set(base_mod._image_base64_cache) == {a, c}
+
+
+def test_make_image_block_invalid_string_raises():
+    with pytest.raises(ValueError, match="could not interpret"):
+        make_image_block("not-a-url-or-base64!!!")
+
+
+def test_make_image_block_invalid_type_raises():
+    with pytest.raises(TypeError, match="expects a PIL image or a string"):
+        make_image_block(12345)  # type: ignore[arg-type]
 
 
 # --- ModelOutputThunk._copy_from ---

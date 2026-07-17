@@ -3,9 +3,20 @@
 
 """Unit tests for the Instruction component — init, jinja rendering, copy/repair, parts, format."""
 
+import base64
+
 import pytest
 
-from mellea.core import CBlock, ModelOutputThunk, Requirement, TemplateRepresentation
+from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
+    CBlock,
+    ImageBlock,
+    ImageUrlBlock,
+    ModelOutputThunk,
+    Requirement,
+    TemplateRepresentation,
+)
 from mellea.stdlib.components.instruction import Instruction
 
 # --- basic init ---
@@ -267,6 +278,91 @@ def test_requirements_property():
     reqs = ins.requirements
     assert len(reqs) == 2
     assert all(isinstance(r, Requirement) for r in reqs)
+
+
+# --- images ---
+
+
+def test_init_images_stored():
+    img = ImageUrlBlock("https://example.com/img.png")
+    ins = Instruction(description="task", images=[img])
+    assert ins._images is not None
+    assert ins._images[0] is img
+
+
+def test_init_images_none_by_default():
+    ins = Instruction(description="task")
+    assert ins._images is None
+
+
+def test_format_for_llm_images_forwarded():
+    img = ImageUrlBlock("https://example.com/img.png")
+    ins = Instruction(description="task", images=[img])
+    result = ins.format_for_llm()
+    assert result.images is not None
+    assert result.images[0] is img
+
+
+def test_format_for_llm_images_none_by_default():
+    ins = Instruction(description="task")
+    result = ins.format_for_llm()
+    assert result.images is None
+
+
+# --- audio ---
+
+
+def test_init_audio_stored():
+    audio = AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    ins = Instruction(description="task", audio=[audio])
+    assert ins._audio is not None
+    assert ins._audio[0] is audio
+
+
+def test_init_audio_url_stored():
+    audio_url = AudioUrlBlock("https://example.com/clip.mp3", format="mp3")
+    ins = Instruction(description="task", audio=[audio_url])
+    assert ins._audio is not None
+    assert ins._audio[0] is audio_url
+
+
+def test_init_audio_none_by_default():
+    ins = Instruction(description="task")
+    assert ins._audio is None
+
+
+def test_format_for_llm_audio_forwarded():
+    audio = AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    ins = Instruction(description="task", audio=[audio])
+    result = ins.format_for_llm()
+    assert result.audio is not None
+    assert result.audio[0] is audio
+
+
+def test_format_for_llm_audio_none_by_default():
+    ins = Instruction(description="task")
+    result = ins.format_for_llm()
+    assert result.audio is None
+
+
+def test_format_for_llm_audio_and_images_together():
+    audio = AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    img = ImageUrlBlock("https://example.com/img.png")
+    ins = Instruction(description="task", images=[img], audio=[audio])
+    result = ins.format_for_llm()
+    assert result.audio is not None and result.audio[0] is audio
+    assert result.images is not None and result.images[0] is img
+
+
+def test_copy_and_repair_preserves_audio():
+    audio = AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    ins = Instruction(description="task", audio=[audio])
+    repaired = ins.copy_and_repair("fix this")
+    assert repaired._audio is not None
+    assert len(repaired._audio) == 1
+    assert repaired._audio[0].value == audio.value
+    assert repaired._audio[0].format == audio.format  # type: ignore[attr-defined]
+    assert repaired._repair_string == "fix this"
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ Also provides three stub :class:`WeightsBinding` subclasses
 (:class:`LocalFileBinding`, :class:`EmbeddedBinding`,
 :class:`ServerMediatedBinding`) and :class:`AdapterSchemaMismatchError`.
 
-.. note::
+Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
     ``adapter.py`` is not modified here.  This module introduces a new
     ``Adapter`` *dataclass* that is re-exported from

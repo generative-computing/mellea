@@ -44,6 +44,7 @@ from ..helpers import (
     get_current_event_loop,
     message_to_openai_message,
     send_to_queue,
+    should_replay_reasoning,
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
@@ -358,8 +359,12 @@ class LiteLLMBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
+        replay_flags = should_replay_reasoning(messages, self._provider)
         conversation.extend(
-            [message_to_openai_message(m, self.formatter) for m in messages]
+            [
+                message_to_openai_message(m, self.formatter, replay_reasoning=replay)
+                for m, replay in zip(messages, replay_flags)
+            ]
         )
 
         extra_params: dict[str, Any] = {}

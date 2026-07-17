@@ -35,6 +35,7 @@ from ..helpers import (
     ClientCache,
     get_current_event_loop,
     send_to_queue,
+    should_replay_reasoning,
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
@@ -389,10 +390,15 @@ class OllamaModelBackend(FormatterBackend):
         Returns:
             ModelOutputThunk[C]: A thunk holding the (lazy) model output.
 
+        Ollama requires base64-encoded images, so any `ImageUrlBlock` in a
+        message is fetched and encoded automatically before the request.
+
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
-            ValueError: If a message contains an ``ImageUrlBlock``; Ollama requires
-                base64-encoded images — convert to an ``ImageBlock`` first.
+            ValueError: If a message contains an `ImageUrlBlock` whose image
+                cannot be downloaded or decoded.
+            ValueError: If a message contains an `AudioBlock` or `AudioUrlBlock`;
+                Ollama does not support audio input.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)
@@ -423,25 +429,44 @@ class OllamaModelBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-        for m in messages:
+        replay_flags = should_replay_reasoning(messages, self._provider)
+        for m, replay in zip(messages, replay_flags):
+            image_values: list[str] | None = None
             if m.images is not None:
-                for img in m.images:
-                    if isinstance(img, ImageUrlBlock):
-                        raise ValueError(
-                            "OllamaModelBackend does not support URL images (ImageUrlBlock). "
-                            "Convert the image to a base64-encoded ImageBlock before passing it to Ollama."
-                        )
-            conversation.append(
-                {
-                    "role": m.role,
-                    "content": self.formatter.print(m),
-                    "images": (
-                        _strip_data_uri_prefix([str(img.value) for img in m.images])
-                        if m.images
-                        else None
-                    ),
+                # Ollama only accepts base64-encoded images, so URL images are
+                # downloaded and encoded on the fly rather than rejected.
+                # `resolve_base64` memoizes on the block, so re-using the same
+                # block across turns downloads only once. The download is
+                # blocking, so offload each one to a thread and run them
+                # concurrently to avoid stalling the event loop; non-URL images
+                # already carry their base64 value.
+                image_values = [str(img.value) for img in m.images]
+                url_downloads = {
+                    i: asyncio.to_thread(img.resolve_base64)
+                    for i, img in enumerate(m.images)
+                    if isinstance(img, ImageUrlBlock)
                 }
-            )
+                if url_downloads:
+                    downloaded = await asyncio.gather(*url_downloads.values())
+                    for i, value in zip(url_downloads.keys(), downloaded):
+                        image_values[i] = value
+            if m.audio:
+                raise ValueError(
+                    "OllamaModelBackend does not support audio (AudioBlock/AudioUrlBlock). "
+                    "Remove audio blocks before passing messages to Ollama."
+                )
+            message_dict: dict[str, Any] = {
+                "role": m.role,
+                "content": self.formatter.print(m),
+                "images": (
+                    _strip_data_uri_prefix(image_values) if image_values else None
+                ),
+            }
+            # Ollama's native SDK carries reasoning under the `thinking` key (see
+            # `chunk.message.thinking` on capture), not `reasoning_content`.
+            if replay and m.thinking:
+                message_dict["thinking"] = m.thinking
+            conversation.append(message_dict)
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()

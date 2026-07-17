@@ -11,7 +11,14 @@ from decimal import Decimal
 import pytest
 
 from mellea.backends.tools import MelleaTool
-from mellea.core.base import ImageBlock, ImageUrlBlock, ModelOutputThunk, ModelToolCall
+from mellea.core.base import (
+    AudioBlock,
+    AudioUrlBlock,
+    ImageBlock,
+    ImageUrlBlock,
+    ModelOutputThunk,
+    ModelToolCall,
+)
 from mellea.helpers.openai_compatible_helpers import (
     build_tool_calls,
     chat_completion_delta_merge,
@@ -410,6 +417,92 @@ class TestMessageToOpenaiMessage:
         url_entry = result["content"][1]
         assert url_entry["type"] == "image_url"
         assert url_entry["image_url"]["url"] == "https://example.com/photo.png"
+
+
+# Minimal valid WAV header (44-byte RIFF/WAVE header)
+_MINIMAL_WAV = (
+    b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00"
+    b"\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00"
+    b"data\x00\x00\x00\x00"
+)
+_B64_WAV = base64.b64encode(_MINIMAL_WAV).decode()
+
+
+class TestMessageToOpenaiMessageAudio:
+    def test_audio_block_raw_base64(self):
+        """AudioBlock with raw base64 serialises to input_audio content part."""
+        audio = AudioBlock(_B64_WAV, format="wav")
+        msg = Message(role="user", content="transcribe this", audio=[audio])
+        result = message_to_openai_message(msg)
+
+        assert result["role"] == "user"
+        assert isinstance(result["content"], list)
+        assert result["content"][0] == {"type": "text", "text": "transcribe this"}
+        part = result["content"][1]
+        assert part["type"] == "input_audio"
+        assert part["input_audio"]["format"] == "wav"
+        assert part["input_audio"]["data"] == _B64_WAV
+
+    def test_audio_block_data_uri_prefix_stripped(self):
+        """data URI prefix is stripped; OpenAI expects raw base64 in the data field."""
+        data_uri = f"data:audio/wav;base64,{_B64_WAV}"
+        audio = AudioBlock(data_uri)  # format auto-detected from URI
+        msg = Message(role="user", content="listen", audio=[audio])
+        result = message_to_openai_message(msg)
+
+        part = result["content"][1]
+        assert part["type"] == "input_audio"
+        assert part["input_audio"]["format"] == "wav"
+        # The data field must NOT contain the data URI prefix
+        assert not part["input_audio"]["data"].startswith("data:")
+        assert part["input_audio"]["data"] == _B64_WAV
+
+    def test_multiple_audio_blocks(self):
+        """Multiple AudioBlocks produce one input_audio part each."""
+        a1 = AudioBlock(_B64_WAV, format="wav")
+        a2 = AudioBlock(_B64_WAV, format="mp3")
+        msg = Message(role="user", content="compare", audio=[a1, a2])
+        result = message_to_openai_message(msg)
+
+        assert len(result["content"]) == 3  # 1 text + 2 audio
+        assert result["content"][1]["input_audio"]["format"] == "wav"
+        assert result["content"][2]["input_audio"]["format"] == "mp3"
+
+    def test_audio_and_image_together(self):
+        """A message with both audio and image produces all parts in order."""
+        img = ImageBlock(_B64_PNG)
+        audio = AudioBlock(_B64_WAV, format="wav")
+        msg = Message(role="user", content="describe", images=[img], audio=[audio])
+        result = message_to_openai_message(msg)
+
+        assert isinstance(result["content"], list)
+        types = [p["type"] for p in result["content"]]
+        assert types == ["text", "image_url", "input_audio"]
+
+    def test_audio_only_no_images(self):
+        """Audio without images still triggers the multi-part content list."""
+        audio = AudioBlock(_B64_WAV, format="wav")
+        msg = Message(role="user", content="hello", audio=[audio])
+        result = message_to_openai_message(msg)
+
+        assert isinstance(result["content"], list)
+        assert result["content"][0]["type"] == "text"
+        assert result["content"][1]["type"] == "input_audio"
+
+    def test_audio_url_block_raises(self):
+        """AudioUrlBlock cannot be serialised to the OpenAI schema and must raise."""
+        audio_url = AudioUrlBlock("https://example.com/audio.wav", format="wav")
+        msg = Message(role="user", content="listen", audio=[audio_url])
+        with pytest.raises(ValueError, match="AudioUrlBlock"):
+            message_to_openai_message(msg)
+
+    def test_empty_audio_list(self):
+        """Empty audio list triggers multimodal content format (unlike None)."""
+        msg = Message(role="user", content="hello", audio=[])
+        result = message_to_openai_message(msg)
+        assert isinstance(result["content"], list)
+        assert len(result["content"]) == 1
+        assert result["content"][0] == {"type": "text", "text": "hello"}
 
 
 # --- messages_to_docs ---

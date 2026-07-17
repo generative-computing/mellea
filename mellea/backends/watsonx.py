@@ -46,6 +46,7 @@ from ..helpers import (
     extract_model_tool_requests,
     get_current_event_loop,
     send_to_queue,
+    should_replay_reasoning,
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
@@ -405,9 +406,25 @@ class WatsonxAIBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
-        conversation.extend(
-            [{"role": m.role, "content": self.formatter.print(m)} for m in messages]
-        )
+        replay_flags = should_replay_reasoning(messages, self._provider)
+        for m, replay in zip(messages, replay_flags):
+            if m.images:
+                raise ValueError(
+                    "WatsonxAIBackend does not support image inputs (ImageBlock/ImageUrlBlock). "
+                    "Remove image blocks before passing messages to Watsonx."
+                )
+            if m.audio:
+                raise ValueError(
+                    "WatsonxAIBackend does not support audio inputs (AudioBlock/AudioUrlBlock). "
+                    "Remove audio blocks before passing messages to Watsonx."
+                )
+            message_dict: dict[str, Any] = {
+                "role": m.role,
+                "content": self.formatter.print(m),
+            }
+            if replay and m.thinking:
+                message_dict["reasoning_content"] = m.thinking
+            conversation.append(message_dict)
 
         if _format is not None:
             model_opts["response_format"] = {

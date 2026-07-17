@@ -616,6 +616,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         conversation: list[dict] = []
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
+        # Intrinsic/adapter calls are single-shot evaluations over a rewritten
+        # conversation, not multi-turn generation, so reasoning is never replayed
+        # here (no `replay_reasoning=`). The HF chat path serializes via
+        # `to_chat`/`apply_chat_template`, not this helper.
         conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
         docs = messages_to_docs(ctx_as_message_list)

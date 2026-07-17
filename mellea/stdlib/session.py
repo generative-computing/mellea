@@ -28,6 +28,8 @@ from ..backends.model_ids import (
     ModelIdentifier,
 )
 from ..core import (
+    AudioBlock,
+    AudioUrlBlock,
     Backend,
     BaseModelSubclass,
     CBlock,
@@ -556,6 +558,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -576,6 +579,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -595,6 +599,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -627,6 +632,7 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+            audio: A list of audio blocks to be used in the instruction or None if none.
 
         Returns:
             A `ModelOutputThunk` if `return_sampling_results` is `False`,
@@ -637,6 +643,7 @@ class MelleaSession:
             context=self.ctx,
             backend=self.backend,
             images=images,
+            audio=audio,
             requirements=requirements,
             icl_examples=icl_examples,
             grounding_context=grounding_context,
@@ -665,6 +672,7 @@ class MelleaSession:
         role: Message.Role = "user",
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
@@ -677,6 +685,7 @@ class MelleaSession:
             content: The message text to send.
             role: The role for the outgoing message (default `"user"`).
             images: Optional list of images to include in the message.
+            audio: Optional list of audio blocks to include in the message.
             documents: Optional documents to attach to the message. Each element
                 may be a string or a `Document` object.
             user_variables: Optional Jinja variable substitutions applied to `content`.
@@ -693,6 +702,7 @@ class MelleaSession:
             backend=self.backend,
             role=role,
             images=images,
+            audio=audio,
             documents=documents,
             user_variables=user_variables,
             format=format,
@@ -916,6 +926,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -937,6 +948,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -958,6 +970,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -979,6 +992,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -999,6 +1013,7 @@ class MelleaSession:
         description: str,
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -1032,6 +1047,7 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+            audio: A list of audio blocks to be used in the instruction or None if none.
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Returns:
@@ -1044,6 +1060,7 @@ class MelleaSession:
             context=self.ctx,
             backend=self.backend,
             images=images,
+            audio=audio,
             requirements=requirements,
             icl_examples=icl_examples,
             grounding_context=grounding_context,
@@ -1073,6 +1090,7 @@ class MelleaSession:
         role: Message.Role = "user",
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         documents: collections.abc.Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
@@ -1085,6 +1103,7 @@ class MelleaSession:
             content: The message text to send.
             role: The role for the outgoing message (default `"user"`).
             images: Optional list of images to include in the message.
+            audio: Optional list of audio blocks to include in the message.
             documents: Optional documents to attach to the message. Each element
                 may be a string or a `Document` object.
             user_variables: Optional Jinja variable substitutions applied to `content`.
@@ -1101,6 +1120,7 @@ class MelleaSession:
             backend=self.backend,
             role=role,
             images=images,
+            audio=audio,
             documents=documents,
             user_variables=user_variables,
             format=format,

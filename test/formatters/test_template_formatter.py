@@ -70,6 +70,33 @@ def test_to_chat_messages(tf: TemplateFormatter):
     )
 
 
+def test_to_chat_messages_preserves_audio(tf: TemplateFormatter):
+    import base64
+
+    from mellea.core import AudioBlock, AudioUrlBlock
+
+    audio: list[AudioBlock | AudioUrlBlock] = [
+        AudioBlock(base64.b64encode(b"audio bytes").decode(), format="wav")
+    ]
+
+    class _AudioComponent(Component[str]):
+        def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+            return []
+
+        def format_for_llm(self) -> TemplateRepresentation:
+            return TemplateRepresentation(
+                obj=self, args={}, template="audio component", audio=audio
+            )
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return ""
+
+    msgs = tf.to_chat_messages([_AudioComponent()])
+
+    assert len(msgs) == 1
+    assert msgs[0].audio == audio
+
+
 def test_custom_template_string(tf: TemplateFormatter):
     class _TemplInstruction(Instruction):
         def format_for_llm(self) -> TemplateRepresentation:

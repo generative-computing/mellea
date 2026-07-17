@@ -8,8 +8,8 @@ through async call chains via :mod:`contextvars`.  Values automatically appear
 in log records (via :class:`MelleaContextFilter`) and can be attached to
 OpenTelemetry spans.
 
-Example::
-
+Example:
+    ```python
     from mellea.telemetry.context import with_context, async_with_context, get_current_context
 
     # Synchronous (also works inside async functions):
@@ -20,6 +20,7 @@ Example::
     async with async_with_context(session_id="s-1", model_id="granite"):
         result = await backend.generate(...)
         # logs emitted here carry session_id and model_id automatically
+    ```
 """
 
 import contextlib
@@ -167,10 +168,11 @@ def with_context(**kwargs: Any) -> Generator[None, None, None]:
     Raises:
         ValueError: If an unknown context field name is passed.
 
-    Example::
-
+    Example:
+        ```python
         with with_context(session_id="s-1", model_id="granite-4.0"):
             logger.info("generating")   # log record includes both fields
+        ```
     """
     tokens = _apply_context(kwargs)
     try:

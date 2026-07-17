@@ -3,7 +3,7 @@
 
 """Unit tests for functional.py pure helpers — no backend, no LLM required.
 
-Covers _parse_and_clean_image_args image preprocessing and chat() document forwarding.
+Covers image preprocessing plus chat()/instruct() forwarding of multimodal inputs.
 """
 
 import base64
@@ -13,10 +13,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import ImageBlock
-from mellea.stdlib.components import Document, Message
+from mellea.core import AudioBlock, ImageBlock
+from mellea.stdlib.components import Document, Instruction, Message
 from mellea.stdlib.context import SimpleContext
-from mellea.stdlib.functional import _parse_and_clean_image_args, chat
+from mellea.stdlib.functional import (
+    _parse_and_clean_image_args,
+    achat,
+    ainstruct,
+    chat,
+    instruct,
+)
 
 
 def _make_image_block() -> ImageBlock:
@@ -26,6 +32,18 @@ def _make_image_block() -> ImageBlock:
     img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     return ImageBlock(value=b64)
+
+
+def _make_audio_block() -> AudioBlock:
+    """Return a valid AudioBlock backed by a short WAV payload."""
+    wav_bytes = (
+        b"RIFF$\x00\x00\x00WAVEfmt "
+        b"\x10\x00\x00\x00\x01\x00\x01\x00"
+        b"@\x1f\x00\x00\x80>\x00\x00"
+        b"\x02\x00\x10\x00data\x00\x00\x00\x00"
+    )
+    b64 = base64.b64encode(wav_bytes).decode()
+    return AudioBlock(value=b64, format="wav")
 
 
 # --- _parse_and_clean_image_args ---
@@ -109,6 +127,89 @@ def test_chat_no_documents_by_default(mock_act):
     user_message = mock_act.call_args[0][0]
     assert isinstance(user_message, Message)
     assert user_message._docs is None
+
+
+@patch("mellea.stdlib.functional.act")
+def test_chat_forwards_audio_and_images(mock_act):
+    """Verify that chat() passes multimodal inputs through to the Message."""
+    assistant_msg = Message(role="assistant", content="reply")
+    mock_result = MagicMock()
+    mock_result.parsed_repr = assistant_msg
+    mock_act.return_value = (mock_result, SimpleContext())
+
+    image = PILImage.new("RGB", (1, 1), color="green")
+    audio = _make_audio_block()
+
+    chat("hello", SimpleContext(), MagicMock(), images=[image], audio=[audio])
+
+    user_message = mock_act.call_args[0][0]
+    assert isinstance(user_message, Message)
+    assert user_message.audio == [audio]
+    assert user_message.images is not None
+    assert len(user_message.images) == 1
+    assert isinstance(user_message.images[0], ImageBlock)
+
+
+@patch("mellea.stdlib.functional.act")
+def test_instruct_forwards_audio_to_instruction(mock_act):
+    """Verify that instruct() forwards audio blocks into the Instruction."""
+    mock_act.return_value = (MagicMock(), SimpleContext())
+    audio = _make_audio_block()
+
+    instruct("describe this audio", SimpleContext(), MagicMock(), audio=[audio])
+
+    instruction = mock_act.call_args[0][0]
+    assert isinstance(instruction, Instruction)
+    assert instruction._audio == [audio]
+
+
+@patch("mellea.stdlib.functional.act")
+def test_instruct_converts_pil_images_before_forwarding(mock_act):
+    """Verify that instruct() converts PIL images before building the Instruction."""
+    mock_act.return_value = (MagicMock(), SimpleContext())
+    image = PILImage.new("RGB", (1, 1), color="yellow")
+
+    instruct("describe this image", SimpleContext(), MagicMock(), images=[image])
+
+    instruction = mock_act.call_args[0][0]
+    assert isinstance(instruction, Instruction)
+    assert instruction._images is not None
+    assert len(instruction._images) == 1
+    assert isinstance(instruction._images[0], ImageBlock)
+
+
+# --- achat() and ainstruct() async forwarding ---
+
+
+@pytest.mark.asyncio
+@patch("mellea.stdlib.functional.aact")
+async def test_achat_forwards_audio(mock_aact):
+    """Verify that achat() passes audio through to the Message."""
+    assistant_msg = Message(role="assistant", content="reply")
+    mock_result = MagicMock()
+    mock_result.parsed_repr = assistant_msg
+    mock_aact.return_value = (mock_result, SimpleContext())
+
+    audio = _make_audio_block()
+    await achat("hello", SimpleContext(), MagicMock(), audio=[audio])
+
+    user_message = mock_aact.call_args[0][0]
+    assert isinstance(user_message, Message)
+    assert user_message.audio == [audio]
+
+
+@pytest.mark.asyncio
+@patch("mellea.stdlib.functional.aact")
+async def test_ainstruct_forwards_audio(mock_aact):
+    """Verify that ainstruct() forwards audio blocks into the Instruction."""
+    mock_aact.return_value = (MagicMock(), SimpleContext())
+    audio = _make_audio_block()
+
+    await ainstruct("describe this audio", SimpleContext(), MagicMock(), audio=[audio])
+
+    instruction = mock_aact.call_args[0][0]
+    assert isinstance(instruction, Instruction)
+    assert instruction._audio == [audio]
 
 
 if __name__ == "__main__":

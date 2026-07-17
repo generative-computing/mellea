@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
-from ..core.base import ImageUrlBlock
+from ..core.base import AudioBlock, AudioUrlBlock, ImageUrlBlock
 
 if TYPE_CHECKING:
     from ..core import Formatter, ModelToolCall
@@ -187,7 +187,45 @@ def chat_completion_delta_merge(
     return merged
 
 
-def message_to_openai_message(msg: Message, formatter: Formatter | None = None) -> dict:
+def should_replay_reasoning(
+    messages: list[Message], provider: str | None
+) -> list[bool]:
+    """Decide, per message, whether its reasoning trace should be replayed to the provider.
+
+    Implements the cross-provider consensus rule from issue #1201: an assistant
+    message's reasoning is round-tripped only when that turn issued a tool call —
+    detected by the message's own `tool_calls` field — and stripped on plain
+    follow-up turns. Keying off `tool_calls` rather than a trailing `tool`-role
+    message means reasoning is still replayed for a turn that requested a tool
+    call even if the tool was never executed. Non-assistant messages and
+    assistant messages without reasoning always return `False`.
+
+    Args:
+        messages: The conversation in order, as it will be serialised.
+        provider: The backend provider name (e.g. `"openai"`, `"ollama"`).
+            Currently unused — every provider follows the consensus rule above.
+            It is a reserved hook for a provider-specific deviation (e.g. a model
+            that must replay reasoning on plain turns, or must not after a tool
+            call); add a keyed branch here once such a case is verified live.
+
+    Returns:
+        A list of booleans, one per message in `messages`, indicating whether that
+        message's reasoning should be included in the serialised payload.
+    """
+    flags: list[bool] = []
+    for msg in messages:
+        if msg.role != "assistant" or not msg.thinking:
+            flags.append(False)
+            continue
+        # The turn "had a tool call" iff the assistant message itself carries
+        # tool calls — independent of whether the tool was later executed.
+        flags.append(bool(msg.tool_calls))
+    return flags
+
+
+def message_to_openai_message(
+    msg: Message, formatter: Formatter | None = None, *, replay_reasoning: bool = False
+) -> dict:
     """Serialise a Mellea `Message` to the format required by OpenAI-compatible API providers.
 
     Args:
@@ -195,32 +233,69 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
         formatter: Optional formatter used to render the message content (including
             documents) through the template system. When `None`, uses the raw
             `msg.content` string without document rendering.
+        replay_reasoning: When `True` and `msg.thinking` is a non-empty string,
+            the reasoning trace is emitted under the `"reasoning_content"` key so
+            the provider receives the model's prior reasoning. Defaults to `False`
+            (reasoning is stripped), preserving the historical behaviour; callers
+            decide per-turn via their replay policy (see `should_replay_reasoning`).
 
     Returns:
         A dict with `"role"` and `"content"` fields. When the message carries
-        images, `"content"` is a list of text and image-URL dicts; otherwise it
+        images or audio, `"content"` is a list of content-part dicts; otherwise
         is a plain string. For tool-only assistant turns, `"content"` is `None`
         and `"tool_calls"` carries the structured call list. When content is
-        present alongside tool calls, both keys are included.
+        present alongside tool calls, both keys are included. When
+        `replay_reasoning` is `True` and reasoning is present, the dict also
+        carries a `"reasoning_content"` field.
+
+    Raises:
+        ValueError: If the message contains an `AudioUrlBlock`. The OpenAI Chat
+            Completions audio schema does not support audio by URL; fetch the
+            audio and pass it as an `AudioBlock` with base64 data instead.
     """
     # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
     # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
     content = formatter.print(msg) if formatter else msg.content
-    if msg.images is not None:
-        img_list = []
-        for img in msg.images:
-            if isinstance(img, ImageUrlBlock):
-                url = img.value
-            else:
-                # ImageBlock: base64-encoded PNG
-                raw = str(img.value)
-                url = raw if raw.startswith("data:") else f"data:image/png;base64,{raw}"
-            img_list.append({"type": "image_url", "image_url": {"url": url}})
+    if msg.images is not None or msg.audio is not None:
+        parts: list[dict] = [{"type": "text", "text": content}]
 
-        result: dict[str, Any] = {
-            "role": msg.role,
-            "content": [{"type": "text", "text": content}, *img_list],
-        }
+        if msg.images is not None:
+            for img in msg.images:
+                if isinstance(img, ImageUrlBlock):
+                    url = str(img.value)
+                else:
+                    # ImageBlock: base64-encoded PNG
+                    raw = str(img.value)
+                    url = (
+                        raw
+                        if raw.startswith("data:")
+                        else f"data:image/png;base64,{raw}"
+                    )
+                parts.append({"type": "image_url", "image_url": {"url": url}})
+
+        if msg.audio is not None:
+            for audio in msg.audio:
+                if isinstance(audio, AudioBlock):
+                    raw = str(audio.value)
+                    # Strip data URI prefix — OpenAI expects raw base64 in the `data` field.
+                    if "base64," in raw:
+                        raw = raw.split("base64,", 1)[1]
+                    parts.append(
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": raw, "format": audio.format},
+                        }
+                    )
+                elif isinstance(audio, AudioUrlBlock):
+                    # OpenAI Chat Completions does not support audio by URL;
+                    # AudioUrlBlock cannot be serialised to this schema.
+                    raise ValueError(
+                        f"AudioUrlBlock cannot be serialised to the OpenAI Chat Completions "
+                        f"audio schema (URL: {audio.value!r}). "
+                        "Fetch the audio and use AudioBlock with base64 data instead."
+                    )
+
+        result: dict[str, Any] = {"role": msg.role, "content": parts}
     else:
         result = {"role": msg.role, "content": content}
 
@@ -229,6 +304,9 @@ def message_to_openai_message(msg: Message, formatter: Formatter | None = None) 
         result["tool_calls"] = tool_calls
         if msg.images is None and not content:
             result["content"] = None
+
+    if replay_reasoning and msg.thinking:
+        result["reasoning_content"] = msg.thinking
     return result
 
 

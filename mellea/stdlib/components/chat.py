@@ -17,6 +17,8 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, cast, get_args
 
 from ...core import (
+    AudioBlock,
+    AudioUrlBlock,
     CBlock,
     Component,
     Context,
@@ -41,12 +43,22 @@ class Message(Component["Message"]):
         images (list[ImageBlock | ImageUrlBlock] | None): Optional images
             associated with the message. Use `ImageBlock` for base64-encoded
             images (supported by all vision backends) or `ImageUrlBlock` for
-            URL-referenced images (supported by OpenAI-compatible backends only;
-            backends that require base64 will raise a ``ValueError``).
+            URL-referenced images (passed directly to OpenAI-compatible
+            backends; backends that require base64, such as Ollama, download
+            and encode the image automatically).
+        audio (list[AudioBlock | AudioUrlBlock] | None): Optional audio
+            associated with the message.
         documents (list[Document] | None): Optional documents associated with
             the message.
         tool_calls (list[dict[str, Any]] | None): Optional OpenAI-compatible
             assistant tool calls associated with the message.
+        thinking (str | None): Optional reasoning trace produced by a thinking
+            model on the turn that generated this message. Populated by `_parse`
+            from `ModelOutputThunk.thinking`; carried through `as_chat_history`
+            so backends can round-trip it on subsequent turns per their replay
+            policy. `None` or empty for messages that carry no reasoning (e.g.
+            user turns, or assistant turns from non-thinking models); the replay
+            policy and serializers treat both falsy cases identically.
 
     Attributes:
         Role (type): Type alias for the allowed role literals: `"system"`,
@@ -61,18 +73,22 @@ class Message(Component["Message"]):
         content: str,
         *,
         images: None | list[ImageBlock | ImageUrlBlock] = None,
+        audio: None | list[AudioBlock | AudioUrlBlock] = None,
         documents: None | Iterable[str | Document] = None,
         tool_calls: list[dict[str, Any]] | None = None,
+        thinking: str | None = None,
     ):
-        """Initialize a Message with a role, text content, and optional images and documents."""
+        """Initialize a Message with a role, text content, optional images, audio, documents, tool calls, and an optional reasoning trace."""
         if role not in get_args(Message.Role):
             raise ValueError(
                 f"Invalid role {role!r}. Must be one of: {list(get_args(Message.Role))}"
             )
         self.role = role
         self.content = content  # TODO this should be private.
+        self.thinking = thinking
         self._content_cblock = CBlock(self.content)
         self._images = images
+        self._audio = audio
         self._docs = _coerce_to_documents(documents)
         self._tool_calls = tool_calls
 
@@ -82,22 +98,29 @@ class Message(Component["Message"]):
         return self._images
 
     @property
+    def audio(self) -> None | list[AudioBlock | AudioUrlBlock]:
+        """Returns the audio associated with this message."""
+        return self._audio
+
+    @property
     def tool_calls(self) -> list[dict[str, Any]] | None:
         """Returns the OpenAI-compatible tool calls associated with this message."""
         return self._tool_calls
 
     def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
-        """Return the constituent parts of this message, including content, documents, and images.
+        """Return the constituent parts of this message, including content, documents, images, and audio.
 
         Returns:
             list[Component | CBlock | ModelOutputThunk]: A list beginning with the content block,
-            followed by any attached documents and image blocks.
+            followed by any attached documents, image blocks, and audio blocks.
         """
         parts: list[Component | CBlock | ModelOutputThunk] = [self._content_cblock]
         if self._docs is not None:
             parts.extend(self._docs)
         if self._images is not None:
             parts.extend(self._images)
+        if self._audio is not None:
+            parts.extend(self._audio)
         return parts
 
     def format_for_llm(self) -> TemplateRepresentation:
@@ -110,6 +133,8 @@ class Message(Component["Message"]):
             obj=self,
             args={"content": self._content_cblock, "documents": self._docs},
             template_order=["*", "Message"],
+            images=self._images,
+            audio=self._audio,
         )
 
     def __repr__(self) -> str:
@@ -117,6 +142,10 @@ class Message(Component["Message"]):
         images = []
         if self._images is not None:
             images = [f"{str(i.value)[:20]}..." for i in self._images]
+
+        audio = []
+        if self._audio is not None:
+            audio = [f"{str(a.value)[:20]}..." for a in self._audio]
 
         docs = []
         if self._docs is not None:
@@ -129,7 +158,7 @@ class Message(Component["Message"]):
                 + "..."
                 for doc in self._docs
             ]
-        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
+        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", audio="{audio}", documents="{docs}")'
 
     def _parse(self, computed: ModelOutputThunk) -> "Message":
         """Parse the model output into a Message."""
@@ -143,35 +172,56 @@ class Message(Component["Message"]):
             # Assistant responses for tool calling differ by backend. Preserve
             # OpenAI-compatible tool calls separately from message content when
             # the provider gives us structured tool-call data.
+            # Carry any captured reasoning onto the tool-issuing assistant Message: this is the
+            # exact turn the replay policy round-trips (see `should_replay_reasoning`), so the
+            # reasoning must survive parsing here or the round-trip has nothing to replay.
             if provider == "ollama" and response is not None:
                 from ...helpers.openai_compatible_helpers import build_tool_calls
 
                 tool_calls = cast(
                     list[dict[str, Any]], build_tool_calls(computed) or []
                 )
+                thinking = (
+                    computed.thinking if response.message.role == "assistant" else None
+                )
                 return Message(
                     role=response.message.role,
                     content=getattr(response.message, "content", "") or "",
                     tool_calls=tool_calls,
+                    thinking=thinking,
                 )
             if provider in ("openai", "watsonx", "litellm") and isinstance(
                 response, dict
             ):
                 choice = response["choices"][0] if "choices" in response else response
                 msg = choice["message"]
+                thinking = computed.thinking if msg["role"] == "assistant" else None
                 return Message(
                     role=msg["role"],
                     content=msg.get("content") or "",
                     tool_calls=msg.get("tool_calls") or None,
+                    thinking=thinking,
                 )
             # Hugging Face (or others). There are no guarantees on how the model represented the function calls.
             # Output it in the same format we received the tool call request.
             assert computed.value is not None
-            return Message(role="assistant", content=computed.value)
+            return Message(
+                role="assistant", content=computed.value, thinking=computed.thinking
+            )
 
+        # No tool call on this turn: carry any captured reasoning onto the parsed
+        # assistant Message so it can round-trip on subsequent turns. `thinking` is
+        # None for non-thinking models and for role="tool" recoveries.
         if provider == "ollama" and response is not None:
             # Ollama can return role="tool"; preserve role recovery from the response.
-            return Message(role=response.message.role, content=response.message.content)
+            thinking = (
+                computed.thinking if response.message.role == "assistant" else None
+            )
+            return Message(
+                role=response.message.role,
+                content=response.message.content,
+                thinking=thinking,
+            )
         if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
             choices = response.get("choices") or [{}]
             msg = choices[0].get("message", {})
@@ -181,12 +231,15 @@ class Message(Component["Message"]):
             content = msg.get("content") or response.get("message", {}).get(
                 "content", ""
             )
-            return Message(role=role, content=content)
+            thinking = computed.thinking if role == "assistant" else None
+            return Message(role=role, content=content, thinking=thinking)
 
         # Hugging Face: raw.response is token tensors with no role/content to parse.
         # Unknown provider: nothing to switch on. Both fall back to the decoded text.
         assert computed.value is not None
-        return Message(role="assistant", content=computed.value)
+        return Message(
+            role="assistant", content=computed.value, thinking=computed.thinking
+        )
 
 
 class ToolMessage(Message):

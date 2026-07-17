@@ -25,6 +25,7 @@ from .openai_compatible_helpers import (
     extract_model_tool_requests,
     message_to_openai_message,
     messages_to_docs,
+    should_replay_reasoning,
 )
 from .server_type import (
     _server_type,
@@ -45,5 +46,6 @@ __all__ = [
     "message_to_openai_message",
     "messages_to_docs",
     "send_to_queue",
+    "should_replay_reasoning",
     "wait_for_all_mots",
 ]
