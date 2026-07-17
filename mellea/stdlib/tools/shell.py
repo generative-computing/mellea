@@ -746,6 +746,16 @@ class BashEnvironment(ABC):
         # This must be checked before patterns because it validates wrapper contexts
         is_dangerous, reason = _check_nested_dangerous_commands(argv)
         if is_dangerous:
+            record_bash_violation(
+                command=" ".join(argv),
+                argv=argv,
+                pattern_name="NestedDangerousCommandPattern",
+                category="nested_command",
+                severity="HIGH",
+                reason=reason,
+                working_dir=self.working_dir,
+                allowed_paths=self.allowed_paths,
+            )
             return ExecutionResult(
                 success=False,
                 stdout=None,

@@ -849,15 +849,14 @@ class TestIsDangerousCommandBoundary:
     """
 
     def test_is_dangerous_command_find_exec_semicolon(self) -> None:
-        """Guards the bash_executor path for find -exec semicolon boundary.
+        """_is_dangerous_command() alone does not flag a bare ';' terminator.
 
-        After shlex.split, "find -exec ... ;" yields a list where the semicolon
-        is a bare standalone token [';']. This is inert under shell=False because
-        it's not interpreted by the shell—it's just a positional argument to find.
-
-        This test verifies _is_dangerous_command() correctly identifies this as safe,
-        not dangerous, because it validates nested command contexts (not top-level
-        shell operators, which check_all_patterns handles).
+        After shlex.split, "find -exec ... ;" yields a bare standalone token
+        [';']. _is_dangerous_command() only validates nested command contexts,
+        so it returns safe here. NOTE: this does not mean the command executes —
+        in the full _validate_command flow, check_all_patterns()'s
+        ShellOperatorPattern still rejects the standalone ';'. This test pins
+        only the nested-context boundary, not end-to-end permissiveness.
         """
         from mellea.stdlib.tools.shell import _is_dangerous_command
 
