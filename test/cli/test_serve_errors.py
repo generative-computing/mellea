@@ -6,8 +6,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from cli.serve.app import make_chat_endpoint
-from cli.serve.models import ChatCompletionRequest, ChatMessage
+from mellea.serve.app import make_chat_endpoint
+from mellea.serve.models import ChatCompletionRequest, ChatMessage
 
 
 @pytest.fixture

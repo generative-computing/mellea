@@ -63,7 +63,7 @@ IMPORTS: dict[str, list[str]] = {
         "import elasticsearch",
     ],
     "cli": ["from cli.m import cli"],
-    "server": ["from cli.serve.app import run_server"],
+    "server": ["from mellea.serve.app import run_server"],
     "sandbox": ["import llm_sandbox"],
     "switch": ["import huggingface_hub"],
     "hooks": [

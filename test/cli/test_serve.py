@@ -10,8 +10,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
 
-from cli.serve.app import app, make_chat_endpoint, validation_exception_handler
-from cli.serve.models import (
+from mellea.backends.model_options import ModelOption
+from mellea.core.base import ModelOutputThunk, ModelToolCall
+from mellea.serve.app import app, make_chat_endpoint, validation_exception_handler
+from mellea.serve.models import (
     ChatCompletion,
     ChatCompletionRequest,
     ChatMessage,
@@ -22,8 +24,6 @@ from cli.serve.models import (
     ResponseFormat,
     ToolFunction,
 )
-from mellea.backends.model_options import ModelOption
-from mellea.core.base import ModelOutputThunk, ModelToolCall
 
 
 @pytest.fixture

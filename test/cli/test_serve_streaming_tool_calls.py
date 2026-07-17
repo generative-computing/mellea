@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from cli.serve.models import StreamOptions
-from cli.serve.streaming import stream_chat_completion_chunks
 from mellea.core.base import ModelOutputThunk, ModelToolCall
+from mellea.serve.models import StreamOptions
+from mellea.serve.streaming import stream_chat_completion_chunks
 
 
 class TestStreamingToolCalls:

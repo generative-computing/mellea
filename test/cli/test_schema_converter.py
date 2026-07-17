@@ -2,7 +2,7 @@
 
 import pytest
 
-from cli.serve.schema_converter import json_schema_to_pydantic
+from mellea.serve.schema_converter import json_schema_to_pydantic
 
 
 def test_json_schema_supports_enum_field():

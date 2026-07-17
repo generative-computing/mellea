@@ -9,14 +9,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from cli.serve.app import make_chat_endpoint
-from cli.serve.models import (
+from mellea.core import ModelOutputThunk
+from mellea.serve.app import make_chat_endpoint
+from mellea.serve.models import (
     ChatCompletionRequest,
     ChatMessage,
     ImageUrlContent,
     TextContent,
 )
-from mellea.core import ModelOutputThunk
 
 # --- Helper functions ---
 

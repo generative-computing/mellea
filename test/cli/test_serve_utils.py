@@ -2,8 +2,8 @@
 
 from unittest.mock import Mock
 
-from cli.serve.utils import extract_finish_reason
 from mellea.core.base import ModelOutputThunk, RawProviderResponse
+from mellea.serve.utils import extract_finish_reason
 
 
 class TestExtractFinishReason:

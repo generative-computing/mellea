@@ -1,8 +1,8 @@
 """Unit tests for _build_model_options function."""
 
-from cli.serve.app import _build_model_options
-from cli.serve.models import ChatCompletionRequest, ChatMessage
 from mellea.backends.model_options import ModelOption
+from mellea.serve.app import _build_model_options
+from mellea.serve.models import ChatCompletionRequest, ChatMessage
 
 
 class TestBuildModelOptions:

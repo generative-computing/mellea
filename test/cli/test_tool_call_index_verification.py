@@ -9,9 +9,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from cli.serve.app import make_chat_endpoint
-from cli.serve.models import ChatCompletionRequest, ChatMessage
 from mellea.core.base import ModelOutputThunk, ModelToolCall
+from mellea.serve.app import make_chat_endpoint
+from mellea.serve.models import ChatCompletionRequest, ChatMessage
 
 
 @pytest.mark.asyncio

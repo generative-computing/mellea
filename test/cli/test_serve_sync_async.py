@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from cli.serve.app import make_chat_endpoint
-from cli.serve.models import ChatCompletionRequest, ChatMessage
 from mellea.backends.model_options import ModelOption
 from mellea.core import ModelOutputThunk
+from mellea.serve.app import make_chat_endpoint
+from mellea.serve.models import ChatCompletionRequest, ChatMessage
 
 
 @pytest.fixture

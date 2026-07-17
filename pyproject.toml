@@ -96,7 +96,6 @@ cli = [
 server = [
     "uvicorn",
     "fastapi",
-    "mellea[cli]",
 ]
 
 sandbox = [

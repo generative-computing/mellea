@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from cli.serve.models import FunctionParameters, JsonSchemaFormat, StreamOptions
+from mellea.serve.models import FunctionParameters, JsonSchemaFormat, StreamOptions
 
 
 class TestStreamOptions:

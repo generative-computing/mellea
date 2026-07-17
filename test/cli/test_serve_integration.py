@@ -15,9 +15,9 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
-from cli.serve.app import make_chat_endpoint, validation_exception_handler
-from cli.serve.models import FunctionDefinition, FunctionParameters, ToolFunction
 from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
+from mellea.serve.app import make_chat_endpoint, validation_exception_handler
+from mellea.serve.models import FunctionDefinition, FunctionParameters, ToolFunction
 
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration

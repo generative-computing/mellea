@@ -38,6 +38,6 @@ def serve(
         guide: integrations/m-serve
     """
 
-    from cli.serve.app import run_server
+    from mellea.serve.app import run_server
 
     run_server(script_path=script_path, host=host, port=port)

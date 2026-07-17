@@ -6,8 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from cli.serve.app import make_chat_endpoint
-from cli.serve.models import (
+from mellea.backends import ModelOption
+from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
+from mellea.serve.app import make_chat_endpoint
+from mellea.serve.models import (
     ChatCompletion,
     ChatCompletionRequest,
     ChatMessage,
@@ -15,8 +17,6 @@ from cli.serve.models import (
     FunctionParameters,
     ToolFunction,
 )
-from mellea.backends import ModelOption
-from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
 
 
 class MockTool(AbstractMelleaTool):
