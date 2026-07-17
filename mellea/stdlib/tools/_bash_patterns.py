@@ -269,7 +269,7 @@ class DangerousPackageManagerPattern(BashSecurityPattern):
             return False, ""
 
         # Check for dangerous flags: -f (force), -r (recursive)
-        dangerous_flags = {"-f", "--force", "-r", "--recursive", "--force-all"}
+        dangerous_flags = {"-rf", "-f", "--force", "-r", "--recursive", "--force-all"}
         if any(flag in argv for flag in dangerous_flags):
             return True, f"Command '{cmd}' with dangerous flags is not allowed"
 

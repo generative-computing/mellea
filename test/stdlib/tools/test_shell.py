@@ -1683,3 +1683,18 @@ class TestBashValidationBugFixes:
         assert result.success is False
         assert result.skip_message is not None
         assert "Destructive" in result.skip_message
+
+    def test_nested_dangerous_command_records_violation(self) -> None:
+        """Nested-command rejections (e.g. env sudo) record an audit violation."""
+        from mellea.stdlib.tools._bash_audit import get_bash_violations
+
+        initial_count = len(get_bash_violations())
+        env = StaticBashEnvironment()
+        result = env.execute("env sudo whoami")
+
+        assert result.skipped is True
+        assert result.success is False
+        violations = get_bash_violations()
+        assert len(violations) > initial_count
+        assert violations[-1].pattern == "NestedDangerousCommandPattern"
+        assert violations[-1].category == "nested_command"

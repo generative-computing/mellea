@@ -724,6 +724,10 @@ class TestBashPatternImprovements:
         is_dangerous, reason = check_all_patterns(["apt", "install", "-r", "package"])
         assert is_dangerous is True
 
+        # apt with -rf (combined flags)
+        is_dangerous, reason = check_all_patterns(["apt", "install", "-rf", "package"])
+        assert is_dangerous is True
+
     def test_dangerous_package_manager_yum(self) -> None:
         """yum with dangerous flags should be detected."""
         # yum with -f
@@ -739,6 +743,10 @@ class TestBashPatternImprovements:
 
         # yum with -r
         is_dangerous, reason = check_all_patterns(["yum", "install", "-r", "package"])
+        assert is_dangerous is True
+
+        # yum with -rf (combined flags)
+        is_dangerous, reason = check_all_patterns(["yum", "install", "-rf", "package"])
         assert is_dangerous is True
 
     def test_safe_apt_commands(self) -> None:
