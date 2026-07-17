@@ -212,8 +212,6 @@ req = PythonExecutionReq(
     execution_tier="docker",  # Container-isolated execution
     policy=CapabilityPolicy(
         timeout=30,           # Kill after 30 seconds (enforced)
-        network_access=False, # Declared; not enforced at runtime
-        package_installation=False,  # Declared; not enforced at runtime
     ),
     max_output_chars=10_000,  # Limit output size (enforced)
 )
