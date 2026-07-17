@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Per-backend multi-turn reasoning-replay policy tests (no live model).
 
 These tests assert the *messages array actually sent to the provider* on a
