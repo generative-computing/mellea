@@ -298,7 +298,7 @@ def process_user_request(
         PythonCodeExtraction(),
         PythonSyntaxValid(),
         # SAFETY NOTE: execution_tier="local" runs code in a subprocess without container isolation.
-        # This is safe for:
+        # This is useful for:
         # - Trusted code sources (internal development, CI/CD already in containers)
         # - Development and demonstration purposes
         #

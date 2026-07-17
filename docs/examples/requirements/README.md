@@ -9,8 +9,9 @@ and code generation tasks like plotting.
 ### code_generation_and_execution.py
 
 Demonstrates the complete pipeline of code generation, data extraction, and graph
-visualization. **NOTE: Uses `execution_tier="local"` for fast development. For production
-with untrusted code, use `execution_tier="docker"`. See file docstring for guidance.**
+visualization. **NOTE: The default tier is `"static"` (no execution). This example uses
+`execution_tier="local"` to demonstrate code execution with policy-based safety controls.
+For production with untrusted code, use `execution_tier="docker"`. See file docstring for guidance.**
 
 **Key Features:**
 
