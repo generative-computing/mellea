@@ -18,6 +18,7 @@ from mellea.core import (
     RawProviderResponse,
     blockify,
     get_audio_from_component,
+    make_image_block,
 )
 from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
@@ -330,6 +331,188 @@ def test_get_audio_from_component_returns_none_when_missing():
             return ""
 
     assert get_audio_from_component(_ComponentWithoutAudio()) is None
+
+
+# --- make_image_block factory ---
+
+
+def _png_bytes() -> bytes:
+    img = PILImage.new("RGB", (1, 1), color="blue")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_make_image_block_from_pil():
+    img = PILImage.new("RGB", (1, 1), color="green")
+    block = make_image_block(img)
+    assert isinstance(block, ImageBlock)
+    assert ImageBlock.is_valid_base64_png(str(block))
+
+
+def test_make_image_block_from_url_returns_url_block():
+    block = make_image_block("https://example.com/cat.png")
+    assert isinstance(block, ImageUrlBlock)
+    assert block.value == "https://example.com/cat.png"
+
+
+def test_make_image_block_from_base64_returns_image_block():
+    b64 = _make_png_b64()
+    block = make_image_block(b64)
+    assert isinstance(block, ImageBlock)
+    assert block.value == b64
+
+
+def test_make_image_block_data_uri_returns_image_block():
+    data_uri = f"data:image/png;base64,{_make_png_b64()}"
+    block = make_image_block(data_uri)
+    assert isinstance(block, ImageBlock)
+
+
+def test_make_image_block_preserves_meta():
+    b64 = _make_png_b64()
+    block = make_image_block(b64, meta={"alt": "a dot"})
+    assert block._meta == {"alt": "a dot"}
+
+
+class _FakeRaw:
+    """Stand-in for `requests.Response.raw` supporting a capped `.read()`."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self, amt: int | None = None, decode_content: bool = False) -> bytes:
+        return self._body if amt is None else self._body[:amt]
+
+
+class _FakeResponse:
+    """Minimal stand-in for a `requests.Response` used as a context manager."""
+
+    def __init__(self, body: bytes, content_length: str | None = None):
+        self.raw = _FakeRaw(body)
+        self.headers = (
+            {} if content_length is None else {"Content-Length": content_length}
+        )
+
+    def raise_for_status(self):
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _clear_image_cache():
+    """Isolate tests from the process-wide URL -> base64 download cache."""
+    import mellea.core.base as base_mod
+
+    base_mod._image_base64_cache.clear()
+    yield
+    base_mod._image_base64_cache.clear()
+
+
+def _patch_download(monkeypatch, fake_get):
+    """Stub `requests.get` for a download test."""
+    import mellea.core.base as base_mod
+
+    monkeypatch.setattr(base_mod.requests, "get", fake_get)
+
+
+def test_make_image_block_url_convert_to_base64(monkeypatch):
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(_png_bytes()))
+
+    block = make_image_block("https://example.com/cat.png", convert_to_base64=True)
+    assert isinstance(block, ImageBlock)
+    assert ImageBlock.is_valid_base64_png(str(block))
+
+
+def test_make_image_block_download_failure_raises(monkeypatch):
+    import mellea.core.base as base_mod
+
+    def boom(url, **kw):
+        raise base_mod.requests.RequestException("no network")
+
+    _patch_download(monkeypatch, boom)
+
+    with pytest.raises(ValueError, match="Failed to download"):
+        make_image_block("https://example.com/cat.png", convert_to_base64=True)
+
+
+def test_make_image_block_download_rejects_oversized_body(monkeypatch):
+    from mellea.core import base as base_mod
+
+    big = _png_bytes() * (base_mod._IMAGE_DOWNLOAD_MAX_BYTES + 1)
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(big))
+
+    with pytest.raises(ValueError, match="exceeds"):
+        make_image_block("https://example.com/big.png", convert_to_base64=True)
+
+
+def test_make_image_block_download_rejects_oversized_content_length(monkeypatch):
+    from mellea.core import base as base_mod
+
+    limit = base_mod._IMAGE_DOWNLOAD_MAX_BYTES
+    _patch_download(
+        monkeypatch,
+        lambda url, **kw: _FakeResponse(_png_bytes(), content_length=str(limit + 1)),
+    )
+
+    with pytest.raises(ValueError, match="exceeds"):
+        make_image_block("https://example.com/big.png", convert_to_base64=True)
+
+
+def test_image_url_block_resolve_base64_caches_by_url(monkeypatch):
+    """resolve_base64 downloads once per URL; a reconstructed block hits cache."""
+    calls: dict[str, int] = {}
+
+    def fake_get(url, **kw):
+        calls[url] = calls.get(url, 0) + 1
+        return _FakeResponse(_png_bytes())
+
+    _patch_download(monkeypatch, fake_get)
+
+    url = "https://example.com/cat.png"
+    first = ImageUrlBlock(url).resolve_base64()
+    # A freshly reconstructed block for the same URL must not re-download.
+    second = ImageUrlBlock(url).resolve_base64()
+
+    assert ImageBlock.is_valid_base64_png(first)
+    assert first == second
+    assert calls[url] == 1  # cache is keyed on the URL, not the instance
+
+    # A different URL is a cache miss and triggers its own download.
+    other = "https://example.com/dog.png"
+    ImageUrlBlock(other).resolve_base64()
+    assert calls[other] == 1
+
+
+def test_image_cache_evicts_least_recently_used(monkeypatch):
+    """The download cache is bounded and evicts the least-recently-used URL."""
+    from mellea.core import base as base_mod
+
+    _patch_download(monkeypatch, lambda url, **kw: _FakeResponse(_png_bytes()))
+    monkeypatch.setattr(base_mod, "_IMAGE_CACHE_MAX_ENTRIES", 2)
+
+    a, b, c = (f"https://example.com/{n}.png" for n in ("a", "b", "c"))
+    base_mod._cached_download_image_as_base64(a)
+    base_mod._cached_download_image_as_base64(b)
+    base_mod._cached_download_image_as_base64(a)  # touch `a` so `b` is now LRU
+    base_mod._cached_download_image_as_base64(c)  # evicts `b`
+
+    assert set(base_mod._image_base64_cache) == {a, c}
+
+
+def test_make_image_block_invalid_string_raises():
+    with pytest.raises(ValueError, match="could not interpret"):
+        make_image_block("not-a-url-or-base64!!!")
+
+
+def test_make_image_block_invalid_type_raises():
+    with pytest.raises(TypeError, match="expects a PIL image or a string"):
+        make_image_block(12345)  # type: ignore[arg-type]
 
 
 # --- ModelOutputThunk._copy_from ---

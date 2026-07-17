@@ -40,8 +40,9 @@ class Message(Component["Message"]):
         images (list[ImageBlock | ImageUrlBlock] | None): Optional images
             associated with the message. Use `ImageBlock` for base64-encoded
             images (supported by all vision backends) or `ImageUrlBlock` for
-            URL-referenced images (supported by OpenAI-compatible backends only;
-            backends that require base64 will raise a ``ValueError``).
+            URL-referenced images (passed directly to OpenAI-compatible
+            backends; backends that require base64, such as Ollama, download
+            and encode the image automatically).
         audio (list[AudioBlock | AudioUrlBlock] | None): Optional audio
             associated with the message.
         documents (list[Document] | None): Optional documents associated with

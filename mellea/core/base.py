@@ -20,6 +20,8 @@ import binascii
 import datetime
 import enum
 import logging
+import threading
+from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
@@ -38,6 +40,7 @@ from typing import (
 if TYPE_CHECKING:
     import torch
 
+import requests
 import typing_extensions
 from PIL import Image as PILImage
 
@@ -193,8 +196,8 @@ class ImageUrlBlock(CBlock):
 
     Use this when the image is hosted remotely and you want to pass the URL
     directly to backends that support it (e.g. OpenAI). Backends that only
-    accept base64-encoded images (e.g. Ollama) will raise a ``ValueError``
-    rather than silently drop the image.
+    accept base64-encoded images (e.g. Ollama) download and encode the image
+    automatically, so the URL never has to be converted by hand.
 
     Args:
         value (str): A URL string pointing to the image.
@@ -206,14 +209,33 @@ class ImageUrlBlock(CBlock):
         """Initialize ImageUrlBlock with a URL string.
 
         Raises:
-            ValueError: If ``value`` does not look like a URL (does not start
-                with ``http://`` or ``https://``).
+            ValueError: If `value` does not look like a URL (does not start
+                with `http://` or `https://`).
         """
         if not value.startswith(("http://", "https://")):
             raise ValueError(
                 f"ImageUrlBlock requires an http:// or https:// URL; got: {value!r}"
             )
         super().__init__(value, meta)
+
+    def resolve_base64(self) -> str:
+        """Return the image as a base64-encoded PNG, downloading it once per URL.
+
+        Backends that cannot pass a URL through (e.g. Ollama) need the image
+        as base64. The download and encode result is memoized in a process-wide,
+        URL-keyed cache, so re-using the URL across conversation turns — even
+        via a freshly reconstructed block — does not re-fetch the image. This
+        call is blocking; async callers should offload it with
+        `asyncio.to_thread`.
+
+        Returns:
+            str: The base64-encoded PNG representation of the image at the URL.
+
+        Raises:
+            ValueError: If the response exceeds the size cap or the image
+                cannot be downloaded or decoded.
+        """
+        return _cached_download_image_as_base64(str(self.value))
 
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
@@ -340,6 +362,161 @@ class AudioUrlBlock(CBlock):
     def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"AudioUrlBlock({self.value}, {self.format}, {self._meta.__repr__()})"
+
+
+_IMAGE_DOWNLOAD_TIMEOUT_S: float = 10.0
+"""Socket timeout (seconds) applied to image URL downloads."""
+
+_IMAGE_DOWNLOAD_MAX_BYTES: int = 25 * 1024 * 1024
+"""Maximum accepted size (bytes) of a downloaded image body."""
+
+_IMAGE_CACHE_MAX_ENTRIES: int = 128
+"""Maximum number of URL -> base64 entries retained by the download cache."""
+
+_image_base64_cache: OrderedDict[str, str] = OrderedDict()
+"""Process-wide LRU cache mapping image URLs to their base64-encoded PNG."""
+
+_image_base64_cache_lock = threading.Lock()
+"""Guards `_image_base64_cache` against concurrent `asyncio.to_thread` callers."""
+
+
+def _cached_download_image_as_base64(url: str) -> str:
+    """Download an image as base64, memoizing the result per URL.
+
+    Wraps `_download_image_as_base64` with a bounded, thread-safe LRU cache
+    keyed on the URL so the same image is fetched only once regardless of how
+    many `ImageUrlBlock` instances reference it. The download runs outside the
+    lock so concurrent fetches of distinct URLs still proceed in parallel;
+    only the small cache read/write is serialized.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an image.
+
+    Returns:
+        str: The base64-encoded PNG representation of the image at the URL.
+
+    Raises:
+        ValueError: If the response exceeds the size cap or the image cannot
+            be downloaded or decoded.
+    """
+    with _image_base64_cache_lock:
+        cached = _image_base64_cache.get(url)
+        if cached is not None:
+            _image_base64_cache.move_to_end(url)  # mark as most-recently used
+            return cached
+
+    # Download outside the lock; two callers racing on a cold URL may both
+    # fetch, but the result is identical and the last writer simply wins.
+    encoded = _download_image_as_base64(url)
+
+    with _image_base64_cache_lock:
+        _image_base64_cache[url] = encoded
+        _image_base64_cache.move_to_end(url)
+        while len(_image_base64_cache) > _IMAGE_CACHE_MAX_ENTRIES:
+            _image_base64_cache.popitem(last=False)  # evict least-recently used
+    return encoded
+
+
+def _download_image_as_base64(url: str) -> str:
+    """Download an image from a URL and return it as a base64-encoded PNG string.
+
+    Fetches the bytes at `url`, loads them through PIL to confirm they are a
+    real image, and re-encodes the result as a base64 PNG so the output is
+    consistent with `ImageBlock`'s expected format.
+
+    A timeout bounds slow responses and the body is streamed with a size cap
+    to guard against memory-exhaustion. This function is blocking; async
+    callers should offload it with `asyncio.to_thread`.
+
+    Args:
+        url: An `http://` or `https://` URL pointing to an image.
+
+    Returns:
+        str: The base64-encoded PNG representation of the downloaded image.
+
+    Raises:
+        ValueError: If the response exceeds the size cap or the image cannot
+            be downloaded or decoded.
+    """
+    try:
+        with requests.get(  # scheme validated by caller
+            url, timeout=_IMAGE_DOWNLOAD_TIMEOUT_S, stream=True
+        ) as response:
+            response.raise_for_status()
+            declared = response.headers.get("Content-Length")
+            if declared is not None and int(declared) > _IMAGE_DOWNLOAD_MAX_BYTES:
+                raise ValueError(
+                    f"Image at {url!r} exceeds the {_IMAGE_DOWNLOAD_MAX_BYTES}-byte limit"
+                )
+            # Stream so an undeclared/lying Content-Length can't exhaust memory.
+            raw = response.raw.read(_IMAGE_DOWNLOAD_MAX_BYTES + 1, decode_content=True)
+        if len(raw) > _IMAGE_DOWNLOAD_MAX_BYTES:
+            raise ValueError(
+                f"Image at {url!r} exceeds the {_IMAGE_DOWNLOAD_MAX_BYTES}-byte limit"
+            )
+        image = PILImage.open(BytesIO(raw))
+    except (requests.RequestException, OSError, ValueError) as e:
+        raise ValueError(
+            f"Failed to download or decode image from URL {url!r}: {e}"
+        ) from e
+    return ImageBlock.pil_to_base64(image)
+
+
+def make_image_block(
+    src: str | PILImage.Image,
+    *,
+    convert_to_base64: bool = False,
+    meta: dict[str, Any] | None = None,
+) -> ImageBlock | ImageUrlBlock:
+    """Create the appropriate image block from any supported image source.
+
+    Dispatches on the type and shape of `src` so callers don't have to know
+    whether they need an `ImageBlock` (base64-encoded) or an `ImageUrlBlock`
+    (URL-referenced):
+
+    - A PIL image is encoded to a base64 PNG and returned as an `ImageBlock`.
+    - An `http://`/`https://` URL is returned as an `ImageUrlBlock`, unless
+      `convert_to_base64=True`, in which case the image is downloaded and
+      returned as an `ImageBlock`.
+    - A base64-encoded PNG string (with or without a data URI prefix) is
+      returned as an `ImageBlock`.
+
+    Args:
+        src: The image source — a PIL image, an image URL, or a base64-encoded
+            PNG string.
+        convert_to_base64: If `True` and `src` is a URL, download the image and
+            return an `ImageBlock` instead of an `ImageUrlBlock`. Ignored for
+            non-URL sources.
+        meta: Optional metadata to associate with the returned block.
+
+    Returns:
+        ImageBlock | ImageUrlBlock: An `ImageBlock` for PIL images, base64
+        strings, and downloaded URLs; an `ImageUrlBlock` for URLs when
+        `convert_to_base64` is `False`.
+
+    Raises:
+        ValueError: If `src` is a string that is neither a valid URL nor a
+            valid base64-encoded PNG, or if a URL download fails.
+        TypeError: If `src` is not a PIL image or a string.
+    """
+    if isinstance(src, PILImage.Image):
+        return ImageBlock.from_pil_image(src, meta)
+
+    if isinstance(src, str):
+        if src.startswith(("http://", "https://")):
+            if convert_to_base64:
+                return ImageBlock(_download_image_as_base64(src), meta)
+            return ImageUrlBlock(src, meta)
+        if ImageBlock.is_valid_base64_png(src):
+            return ImageBlock(src, meta)
+        raise ValueError(
+            f"make_image_block could not interpret string source; expected an "
+            f"http(s) URL or a base64-encoded PNG, got: {src!r}"
+        )
+
+    raise TypeError(
+        f"make_image_block expects a PIL image or a string source, got: {type(src)!r}"
+    )
 
 
 S = typing_extensions.TypeVar("S", default=Any, covariant=True)
@@ -1623,9 +1800,9 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrl
         c: The `Component` whose `images` attribute is inspected.
 
     Returns:
-        A non-empty list of ``ImageBlock`` or ``ImageUrlBlock`` objects if the
-        component has an ``images`` attribute with at least one element;
-        ``None`` otherwise.
+        A non-empty list of `ImageBlock` or `ImageUrlBlock` objects if the
+        component has an `images` attribute with at least one element;
+        `None` otherwise.
     """
     if hasattr(c, "images"):
         imgs = c.images  # type: ignore
