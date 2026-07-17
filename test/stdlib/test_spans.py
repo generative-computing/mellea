@@ -9,6 +9,7 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B
 from mellea.core import CBlock
 from mellea.stdlib.components import SimpleComponent
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession, start_session
 from test.conftest import hf_skip
 from test.predicates import require_gpu
@@ -50,15 +51,16 @@ async def test_lazy_spans(m_session) -> None:
     assert "6" in result, f"Expected 6 ( 1+1 + 2+2 ) but found {result}"
 
 
-@pytest.mark.xfail(
-    strict=False, reason="Model safety refusal despite context - see issue #398"
-)
 @pytest.mark.qualitative
 async def test_kv(m_session) -> None:
     m: MelleaSession = m_session
-    backend, ctx = m.backend, m.ctx  # type: ignore
+    backend = m.backend
 
-    ctx = ctx.add(
+    # Use a ChatContext (not the session's default SimpleContext): SimpleContext's
+    # view_for_generation() always returns [], so any documents added to it are
+    # dropped before generation and never reach the model. The KV-cache path must
+    # actually see the context for this test to be meaningful.
+    ctx = ChatContext().add(
         SimpleComponent(
             doc1="Nathan Fulton is a scientist at the MIT-IBM Watson AI Lab.",
             doc2="The MIT-IBM Watson AI Lab is located at 314 Main Street, Cambridge, MA.",
@@ -66,8 +68,13 @@ async def test_kv(m_session) -> None:
     )
 
     assert isinstance(backend, LocalHFBackend)
+    # Ask for the lab's street address directly (a single-hop extraction from doc2)
+    # rather than "Nathan's work address", which triggered a model safety refusal
+    # (see issue #398).
     response = await backend._generate_from_context_with_kv_cache(
-        action=CBlock("What is Nathan's work address?"), ctx=ctx, model_options=dict()
+        action=CBlock("What is the street address of the MIT-IBM Watson AI Lab?"),
+        ctx=ctx,
+        model_options=dict(),
     )
     result = await response.avalue()
     assert "314" in result, f"Expected correct answer (314 main st) but found: {result}"
