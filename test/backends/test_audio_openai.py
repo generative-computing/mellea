@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """E2E tests for audio-text-to-text with OpenAI-compatible backends.
 
 These tests require a local llama-server with an audio-capable model.

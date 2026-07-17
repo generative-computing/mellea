@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for audio payload shape on OpenAI-compatible backends (mocked).
 
 Verifies that `AudioBlock` is correctly serialised into the ``input_audio``

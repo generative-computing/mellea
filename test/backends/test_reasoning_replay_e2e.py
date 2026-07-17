@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Live multi-turn reasoning-replay verification against a real thinking model.
 
 This is the "quick verification after the fact" for issue #1201: the mechanical

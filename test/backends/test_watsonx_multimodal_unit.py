@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests verifying WatsonxAIBackend rejects image and audio inputs.
 
 Watsonx does not support image or audio inputs.  These tests confirm that

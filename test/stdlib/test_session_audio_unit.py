@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests verifying MelleaSession forwards audio params to mfuncs — no backend required."""
 
 import base64
