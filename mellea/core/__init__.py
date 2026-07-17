@@ -11,6 +11,8 @@ definitions shared across the library.
 
 from .backend import Backend, BaseModelSubclass, generate_walk
 from .base import (
+    AudioBlock,
+    AudioUrlBlock,
     C,
     CBlock,
     Component,
@@ -29,6 +31,7 @@ from .base import (
     S,
     TemplateRepresentation,
     blockify,
+    get_audio_from_component,
 )
 from .formatter import Formatter
 from .requirement import (
@@ -56,6 +59,8 @@ def __getattr__(name: str) -> object:
 
 
 __all__ = [
+    "AudioBlock",
+    "AudioUrlBlock",
     "Backend",
     "BaseModelSubclass",
     "C",
@@ -86,6 +91,7 @@ __all__ = [
     "clear_log_context",
     "default_output_to_bool",
     "generate_walk",
+    "get_audio_from_component",
     "log_context",
     "set_log_context",
 ]

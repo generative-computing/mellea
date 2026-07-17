@@ -7,6 +7,8 @@ import pytest
 from PIL import Image as PILImage
 
 from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
     CBlock,
     Component,
     GenerateType,
@@ -15,6 +17,7 @@ from mellea.core import (
     ModelOutputThunk,
     RawProviderResponse,
     blockify,
+    get_audio_from_component,
 )
 from mellea.core.backend import generate_walk
 from mellea.stdlib.components import Message
@@ -157,20 +160,176 @@ def test_image_url_block_base64_raises():
 
 
 def test_message_accepts_image_url_block():
-    from mellea.stdlib.components import Message
-
     block = ImageUrlBlock("https://example.com/cat.png")
     msg = Message("user", "look at this", images=[block])
     assert msg.images == [block]
 
 
 def test_message_mixed_image_types():
-    from mellea.stdlib.components import Message
-
     url_block = ImageUrlBlock("https://example.com/cat.png")
     b64_block = ImageBlock(_make_png_b64())
     msg = Message("user", "two images", images=[url_block, b64_block])
     assert len(msg.images) == 2  # type: ignore[arg-type]
+
+
+# --- AudioBlock ---
+
+
+def test_audio_block_valid_base64_audio():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    block = AudioBlock(wav_b64, format="wav")
+    assert block.value == wav_b64
+    assert block.format == "wav"
+
+
+def test_audio_block_valid_data_uri_prefix():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/wav;base64,{wav_b64}"
+    assert AudioBlock.is_valid_base64_audio(data_uri) is True
+
+
+def test_audio_block_invalid_base64_raises():
+    with pytest.raises(AssertionError, match="Invalid base64"):
+        AudioBlock(value="not-audio", format="wav")
+
+
+def test_audio_block_empty_format_raises():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioBlock(value=wav_b64, format="")
+
+
+def test_audio_block_whitespace_format_raises():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioBlock(value=wav_b64, format="   ")
+
+
+def test_audio_block_format_auto_detected_from_data_uri():
+    wav_b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/wav;base64,{wav_b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == "wav"
+    assert block.value == data_uri
+
+
+def test_audio_block_format_auto_detected_mp3():
+    mp3_b64 = base64.b64encode(b"fake mp3 bytes").decode()
+    data_uri = f"data:audio/mpeg;base64,{mp3_b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == "mp3"
+
+
+@pytest.mark.parametrize(
+    "mime_subtype,expected_format",
+    [
+        ("x-wav", "wav"),
+        ("wave", "wav"),
+        ("mpeg", "mp3"),
+        ("x-mpeg", "mp3"),
+        ("x-mp3", "mp3"),
+        ("x-flac", "flac"),
+        ("ogg", "ogg"),
+        ("flac", "flac"),
+        ("wav", "wav"),
+    ],
+)
+def test_audio_block_mime_subtype_normalisation(
+    mime_subtype: str, expected_format: str
+):
+    b64 = base64.b64encode(b"fake audio bytes").decode()
+    data_uri = f"data:audio/{mime_subtype};base64,{b64}"
+    block = AudioBlock(data_uri)
+    assert block.format == expected_format
+
+
+def test_audio_block_missing_format_raises():
+    raw_b64 = base64.b64encode(b"fake audio bytes").decode()
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioBlock(raw_b64)
+
+
+# --- AudioUrlBlock ---
+
+
+def test_audio_url_block_valid_https():
+    block = AudioUrlBlock("https://example.com/audio.mp3", format="mp3")
+    assert block.value == "https://example.com/audio.mp3"
+    assert block.format == "mp3"
+
+
+def test_audio_url_block_invalid_scheme_raises():
+    with pytest.raises(ValueError, match="http"):
+        AudioUrlBlock("ftp://example.com/audio.mp3", format="mp3")
+
+
+def test_audio_url_block_valid_http():
+    block = AudioUrlBlock("http://example.com/audio.wav", format="wav")
+    assert block.value == "http://example.com/audio.wav"
+    assert block.format == "wav"
+
+
+def test_audio_url_block_empty_format_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioUrlBlock("https://example.com/audio.mp3", format="")
+
+
+def test_audio_url_block_whitespace_format_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        AudioUrlBlock("https://example.com/audio.mp3", format="   ")
+
+
+# --- get_audio_from_component ---
+
+
+class _ComponentWithAudio(Component[str]):
+    def __init__(self, audio):
+        self.audio = audio
+
+    def parts(self):
+        return []
+
+    def format_for_llm(self) -> str:
+        return ""
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        return ""
+
+
+def test_get_audio_from_component_returns_audio():
+    audio = [AudioBlock(base64.b64encode(b"audio").decode(), format="wav")]
+    component = _ComponentWithAudio(audio)
+    assert get_audio_from_component(component) == audio
+
+
+def test_get_audio_from_component_returns_audio_url_block():
+    audio = [AudioUrlBlock("https://example.com/audio.mp3", format="mp3")]
+    component = _ComponentWithAudio(audio)
+    assert get_audio_from_component(component) == audio
+
+
+def test_get_audio_from_component_returns_none_for_empty_list():
+    component = _ComponentWithAudio([])
+    assert get_audio_from_component(component) is None
+
+
+def test_get_audio_from_component_returns_none_for_none_audio():
+    component = _ComponentWithAudio(None)
+    assert get_audio_from_component(component) is None
+
+
+def test_get_audio_from_component_returns_none_when_missing():
+    class _ComponentWithoutAudio(Component[str]):
+        def parts(self):
+            return []
+
+        def format_for_llm(self) -> str:
+            return ""
+
+        def _parse(self, computed: ModelOutputThunk) -> str:
+            return ""
+
+    assert get_audio_from_component(_ComponentWithoutAudio()) is None
 
 
 # --- ModelOutputThunk._copy_from ---

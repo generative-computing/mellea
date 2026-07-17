@@ -3,6 +3,8 @@
 from typing import assert_type, cast
 
 from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
     Backend,
     ComputedModelOutputThunk,
     Context,
@@ -28,3 +30,20 @@ async def check_uncomputed() -> None:
 async def check_sampling() -> None:
     r = await ainstruct("test", ctx, backend, return_sampling_results=True)
     assert_type(r, SamplingResult[str])
+
+
+async def check_audio_accepted() -> None:
+    """Verify audio param is present on all overload variants."""
+    audio: list[AudioBlock | AudioUrlBlock] = []
+    r1 = await ainstruct(
+        "test", ctx, backend, strategy=None, await_result=True, audio=audio
+    )
+    assert_type(r1, tuple[ComputedModelOutputThunk[str], Context])
+
+    r2 = await ainstruct("test", ctx, backend, strategy=None, audio=audio)
+    assert_type(r2, tuple[ModelOutputThunk[str], Context])
+
+    r3 = await ainstruct(
+        "test", ctx, backend, return_sampling_results=True, audio=audio
+    )
+    assert_type(r3, SamplingResult[str])

@@ -69,12 +69,15 @@ class ChatFormatter(Formatter):
                     return c
                 case Component():
                     images = None
+                    audio = None
                     tr = c.format_for_llm()
                     if isinstance(tr, TemplateRepresentation):
                         images = tr.images
+                        audio = tr.audio
 
-                    # components can have images
-                    return Message(role=role, content=self.print(c), images=images)
+                    return Message(
+                        role=role, content=self.print(c), images=images, audio=audio
+                    )
                 case _:
                     return Message(role=role, content=self.print(c))
 

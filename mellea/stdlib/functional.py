@@ -16,6 +16,8 @@ from PIL import Image as PILImage
 
 from ..backends import FormatterBackend
 from ..core import (
+    AudioBlock,
+    AudioUrlBlock,
     Backend,
     BaseModelSubclass,
     CBlock,
@@ -146,6 +148,7 @@ def instruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -168,6 +171,7 @@ def instruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -189,6 +193,7 @@ def instruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -223,6 +228,7 @@ def instruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
+        audio: A list of audio blocks to be used in the instruction or None if none.
 
     Returns:
         A (ComputedModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -244,6 +250,7 @@ def instruct(
         prefix=prefix,
         output_prefix=output_prefix,
         images=images,
+        audio=audio,
     )
 
     return act(
@@ -266,6 +273,7 @@ def chat(
     *,
     role: Message.Role = "user",
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     documents: Iterable[str | Document] | None = None,
     user_variables: dict[str, str] | None = None,
     format: type[BaseModelSubclass] | None = None,
@@ -280,6 +288,7 @@ def chat(
         backend: The backend used to generate the response.
         role: The role for the outgoing message (default `"user"`).
         images: Optional list of images to include in the message.
+        audio: Optional list of audio blocks to include in the message.
         documents: Optional documents to attach to the message. Each element
             may be a string or a `Document` object.
         user_variables: Optional Jinja variable substitutions applied to `content`.
@@ -298,7 +307,11 @@ def chat(
         content_resolved = content
     images = _parse_and_clean_image_args(images)
     user_message = Message(
-        role=role, content=content_resolved, images=images, documents=documents
+        role=role,
+        content=content_resolved,
+        images=images,
+        audio=audio,
+        documents=documents,
     )
 
     result, new_ctx = act(
@@ -754,6 +767,7 @@ async def ainstruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -777,6 +791,7 @@ async def ainstruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -800,6 +815,7 @@ async def ainstruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -823,6 +839,7 @@ async def ainstruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -845,6 +862,7 @@ async def ainstruct(
     backend: Backend,
     *,
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     requirements: list[Requirement | str] | None = None,
     icl_examples: list[str | CBlock] | None = None,
     grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
@@ -880,6 +898,7 @@ async def ainstruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
+        audio: A list of audio blocks to be used in the instruction or None if none.
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
 
     Returns:
@@ -901,6 +920,7 @@ async def ainstruct(
         prefix=prefix,
         output_prefix=output_prefix,
         images=images,
+        audio=audio,
     )
 
     return await aact(
@@ -924,6 +944,7 @@ async def achat(
     *,
     role: Message.Role = "user",
     images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+    audio: list[AudioBlock | AudioUrlBlock] | None = None,
     documents: Iterable[str | Document] | None = None,
     user_variables: dict[str, str] | None = None,
     format: type[BaseModelSubclass] | None = None,
@@ -938,6 +959,7 @@ async def achat(
         backend: The backend used to generate the response.
         role: The role for the outgoing message (default `"user"`).
         images: Optional list of images to include in the message.
+        audio: Optional list of audio blocks to include in the message.
         documents: Optional documents to attach to the message. Each element
             may be a string or a `Document` object.
         user_variables: Optional Jinja variable substitutions applied to `content`.
@@ -956,7 +978,11 @@ async def achat(
         content_resolved = content
     images = _parse_and_clean_image_args(images)
     user_message = Message(
-        role=role, content=content_resolved, images=images, documents=documents
+        role=role,
+        content=content_resolved,
+        images=images,
+        audio=audio,
+        documents=documents,
     )
 
     result, new_ctx = await aact(

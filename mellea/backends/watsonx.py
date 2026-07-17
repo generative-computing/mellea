@@ -402,6 +402,17 @@ class WatsonxAIBackend(FormatterBackend):
 
         # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
         # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
+        for m in messages:
+            if m.images:
+                raise ValueError(
+                    "WatsonxAIBackend does not support image inputs (ImageBlock/ImageUrlBlock). "
+                    "Remove image blocks before passing messages to Watsonx."
+                )
+            if m.audio:
+                raise ValueError(
+                    "WatsonxAIBackend does not support audio inputs (AudioBlock/AudioUrlBlock). "
+                    "Remove audio blocks before passing messages to Watsonx."
+                )
         conversation.extend(
             [{"role": m.role, "content": self.formatter.print(m)} for m in messages]
         )

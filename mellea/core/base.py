@@ -220,6 +220,128 @@ class ImageUrlBlock(CBlock):
         return f"ImageUrlBlock({self.value}, {self._meta.__repr__()})"
 
 
+class AudioBlock(CBlock):
+    """An `AudioBlock` represents audio as base64 data.
+
+    The `format` parameter is optional when `value` is a data URI — the format
+    is extracted automatically from the MIME type (e.g. `data:audio/wav;base64,...`
+    yields `"wav"`). When `value` is raw base64, `format` is required.
+
+    Args:
+        value (str): A valid base64-encoded audio string, optionally with a data URI
+            prefix (e.g. `"data:audio/wav;base64,..."`) or raw base64.
+        format (str | None): The audio format, such as `"wav"` or `"mp3"`. If `None`,
+            the format is auto-detected from the data URI prefix. Required when `value`
+            is raw base64 with no data URI prefix.
+        meta (dict[str, Any] | None): Optional metadata to associate with this audio block.
+
+    """
+
+    def __init__(
+        self, value: str, format: str | None = None, meta: dict[str, Any] | None = None
+    ):
+        """Initialize AudioBlock with a base64-encoded audio string and format.
+
+        When `value` is a data URI, `format` is auto-detected from the MIME type if
+        not provided. When `value` is raw base64, `format` must be supplied explicitly.
+
+        Raises:
+            AssertionError: If `value` is not a valid base64-encoded audio string.
+            ValueError: If `format` cannot be determined (not provided and not
+                derivable from a data URI prefix), or if an explicit `format` is
+                an empty string.
+        """
+        assert self.is_valid_base64_audio(value), (
+            "Invalid base64 string representation of audio."
+        )
+        if format is None and "data:" in value and "base64," in value:
+            mime = value.split(";")[0].split("data:")[1]  # e.g. "audio/wav"
+            subtype = mime.split("/")[-1]  # e.g. "wav"
+            # Normalise non-standard / legacy MIME subtypes to canonical format tokens.
+            # OpenAI Chat Completions input_audio.format accepts only: wav, mp3.
+            # Some mime subtypes need to be mapped (in particular mpeg -> mp3)
+            # Unknown subtypes are passed through unchanged — other backends may
+            # accept additional formats (e.g. flac, ogg) that OpenAI does not.
+            _MIME_SUBTYPE_TO_OPENAI_FORMAT: dict[str, str] = {
+                "x-wav": "wav",
+                "wave": "wav",
+                "mpeg": "mp3",
+                "x-mpeg": "mp3",
+                "x-mp3": "mp3",
+                "x-flac": "flac",
+            }
+            format = _MIME_SUBTYPE_TO_OPENAI_FORMAT.get(subtype, subtype)
+        if not (format and format.strip()):
+            raise ValueError(
+                "AudioBlock format must be a non-empty string (e.g. 'wav'). "
+                "Pass it explicitly or use a data URI: data:audio/wav;base64,..."
+            )
+        super().__init__(value, meta)
+        self.format = format
+
+    @staticmethod
+    def is_valid_base64_audio(s: str) -> bool:
+        """Checks whether a string is valid base64-encoded audio payload data.
+
+        Strips any data URI prefix before decoding. Adds padding characters if
+        necessary to make the base64 string a valid length.
+
+        Args:
+            s (str): The string to validate, optionally prefixed with a data URI header.
+
+        Returns:
+            bool: `True` if the string decodes as base64, `False` otherwise.
+        """
+        try:
+            if "data:" in s and "base64," in s:
+                s = s.split("base64,")[1]
+
+            s = s.strip()
+            mod4 = len(s) % 4
+            if mod4 > 0:
+                s = s + "=" * (4 - mod4)
+
+            base64.b64decode(s, validate=True)
+            return True
+        except (binascii.Error, ValueError):
+            return False
+
+    def __repr__(self) -> str:
+        """Provides a python-parsable representation of the block (usually)."""
+        return f"AudioBlock({self.value}, {self.format}, {self._meta.__repr__()})"
+
+
+class AudioUrlBlock(CBlock):
+    """An `AudioUrlBlock` represents audio as a URL.
+
+    Args:
+        value (str): A URL string pointing to the audio.
+        format (str): The audio format, such as `"wav"` or `"mp3"`.
+        meta (dict[str, Any] | None): Optional metadata to associate with this audio block.
+
+    """
+
+    def __init__(self, value: str, format: str, meta: dict[str, Any] | None = None):
+        """Initialize AudioUrlBlock with a URL string and declared format.
+
+        Raises:
+            ValueError: If ``value`` does not look like a URL (does not start
+                with ``http://`` or ``https://``), or if ``format`` is empty.
+        """
+        if not value.startswith(("http://", "https://")):
+            raise ValueError(
+                f"AudioUrlBlock requires an http:// or https:// URL; got: {value!r}"
+            )
+        if not format.strip():
+            raise ValueError("AudioUrlBlock format must be a non-empty string.")
+        super().__init__(value, meta)
+        self.format = format
+
+    def __repr__(self) -> str:
+        """Provides a python-parsable representation of the block (usually)."""
+        return f"AudioUrlBlock({self.value}, {self.format}, {self._meta.__repr__()})"
+
+
 S = typing_extensions.TypeVar("S", default=Any, covariant=True)
 """Used for class definitions for Component and ModelOutputThunk; also used for functions that don't accept CBlocks. Defaults to `Any`."""
 
@@ -1388,7 +1510,9 @@ class TemplateRepresentation:
         fields (list[Any] | None): An optional ordered list of field values for positional templates.
         template (str | None): An optional Jinja2 template string to use when rendering.
         template_order (list[str] | None): An optional ordering hint for template sections/keys.
-        images (list[ImageBlock] | None): Optional list of image blocks associated with this representation.
+        images (list[ImageBlock | ImageUrlBlock] | None): Optional list of image blocks associated with this representation.
+        audio (list[AudioBlock | AudioUrlBlock] | None): Optional list of audio blocks associated
+            with this representation.
 
     """
 
@@ -1404,6 +1528,7 @@ class TemplateRepresentation:
     template: str | None = None
     template_order: list[str] | None = None
     images: list[ImageBlock | ImageUrlBlock] | None = None
+    audio: list[AudioBlock | AudioUrlBlock] | None = None
 
 
 @dataclass
@@ -1513,6 +1638,34 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock | ImageUrl
                 return None
             else:
                 return imgs
+        else:
+            return None
+    else:
+        return None
+
+
+def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlBlock]:
+    """Return the audio attached to a `Component`, or `None` if absent or empty.
+
+    Args:
+        c: The `Component` whose `audio` attribute is inspected.
+
+    Returns:
+        A non-empty list of ``AudioBlock`` or ``AudioUrlBlock`` objects if the
+        component has an ``audio`` attribute with at least one element;
+        ``None`` otherwise.
+    """
+    if hasattr(c, "audio"):
+        audio = c.audio  # type: ignore
+        if audio is not None:
+            assert isinstance(audio, list), "audio field must be a list."
+            assert all(isinstance(a, (AudioBlock, AudioUrlBlock)) for a in audio), (
+                "all elements of audio list must be AudioBlock or AudioUrlBlock."
+            )
+            if len(audio) == 0:
+                return None
+            else:
+                return audio
         else:
             return None
     else:

@@ -390,6 +390,8 @@ class OllamaModelBackend(FormatterBackend):
             RuntimeError: If not called from a thread with a running event loop.
             ValueError: If a message contains an ``ImageUrlBlock``; Ollama requires
                 base64-encoded images — convert to an ``ImageBlock`` first.
+            ValueError: If a message contains an ``AudioBlock`` or ``AudioUrlBlock``;
+                Ollama does not support audio input.
         """
         # Start by awaiting any necessary computation.
         await self.do_generate_walk(action)
@@ -428,6 +430,11 @@ class OllamaModelBackend(FormatterBackend):
                             "OllamaModelBackend does not support URL images (ImageUrlBlock). "
                             "Convert the image to a base64-encoded ImageBlock before passing it to Ollama."
                         )
+            if m.audio:
+                raise ValueError(
+                    "OllamaModelBackend does not support audio (AudioBlock/AudioUrlBlock). "
+                    "Remove audio blocks before passing messages to Ollama."
+                )
             conversation.append(
                 {
                     "role": m.role,

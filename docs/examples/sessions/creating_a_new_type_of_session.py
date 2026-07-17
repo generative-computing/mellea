@@ -9,7 +9,14 @@ from mellea import MelleaSession
 from mellea.backends.adapters import AdapterMixin
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
-from mellea.core import BaseModelSubclass, Context, ImageBlock, ImageUrlBlock
+from mellea.core import (
+    AudioBlock,
+    AudioUrlBlock,
+    BaseModelSubclass,
+    Context,
+    ImageBlock,
+    ImageUrlBlock,
+)
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
@@ -36,6 +43,7 @@ class ChatCheckingSession(MelleaSession):
         | Literal["tool"] = "user",
         *,
         images: list[ImageBlock | ImageUrlBlock] | list[PILImage.Image] | None = None,
+        audio: list[AudioBlock | AudioUrlBlock] | None = None,
         documents: Iterable[str | Document] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
@@ -72,6 +80,7 @@ class ChatCheckingSession(MelleaSession):
             content,
             role,
             images=images,
+            audio=audio,
             documents=documents,
             user_variables=user_variables,
             format=format,
