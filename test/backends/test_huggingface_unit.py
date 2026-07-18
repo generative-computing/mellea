@@ -16,6 +16,9 @@ pytest.importorskip(
     "llguidance", reason="llguidance not installed — install mellea[hf]"
 )
 
+import base64
+import struct
+
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import ModelOption
@@ -23,8 +26,38 @@ from mellea.backends.adapters import AdapterMixin, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
-from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components import (
+    AudioBlock,
+    AudioUrlBlock,
+    ImageBlock,
+    ImageUrlBlock,
+    Intrinsic,
+    Message,
+)
 from mellea.stdlib.context import ChatContext
+
+# Minimal 1x1 PNG for testing
+_MINIMAL_PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
+    b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00"
+    b"\x00\x00\x00IEND\xaeB`\x82"
+)
+_B64_PNG = base64.b64encode(_MINIMAL_PNG).decode()
+
+# Minimal WAV for testing
+_SILENT_SAMPLE = struct.pack("<h", 0)
+_WAV_HEADER = (
+    b"RIFF"
+    + struct.pack("<I", 36 + len(_SILENT_SAMPLE))
+    + b"WAVEfmt "
+    + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+    + b"data"
+    + struct.pack("<I", len(_SILENT_SAMPLE))
+)
+_MINIMAL_WAV = _WAV_HEADER + _SILENT_SAMPLE
+_B64_WAV = base64.b64encode(_MINIMAL_WAV).decode()
 
 
 def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
@@ -676,3 +709,59 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     )
     assert len(output.generation.logits) == len(fake_scores)
     assert all(t.shape == (vocab_size,) for t in output.generation.logits)
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_raise_error(images, audio):
+    """LocalHFBackend raises ValueError for image/audio inputs instead of silently dropping them."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Message("assistant", ""), ctx, model_options={}
+        )
+
+
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_action_raise_error():
+    """LocalHFBackend raises ValueError when action contains image/audio blocks."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Message("assistant", "", images=[ImageBlock(_B64_PNG)]),
+            ctx,
+            model_options={},
+        )
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_kv_cache_path_raises_error(images, audio):
+    """LocalHFBackend KV cache path raises ValueError for image/audio inputs."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_with_kv_cache(
+            Message("assistant", ""), ctx, model_options={}
+        )

@@ -227,6 +227,16 @@ class Instruction(Component[str]):
         return jinja2.Template(s).render(user_dict)
 
     @property
+    def images(self) -> list[ImageBlock | ImageUrlBlock] | None:
+        """Returns the images associated with this instruction."""
+        return self._images
+
+    @property
+    def audio(self) -> list[AudioBlock | AudioUrlBlock] | None:
+        """Returns the audio associated with this instruction."""
+        return self._audio
+
+    @property
     def requirements(self) -> list[Requirement]:
         """Returns a list of Requirement instances."""
         return self._requirements
