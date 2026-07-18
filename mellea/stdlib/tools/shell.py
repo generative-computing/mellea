@@ -102,9 +102,6 @@ DANGEROUS_PATHS = {
     "/private/var/root",
 }
 
-# Dangerous flags that make commands unsafe
-DANGEROUS_FLAGS = {"-rf", "-r", "--recursive", "--force", "-f", "--force-all"}
-
 # Maximum output size (10KB per stream)
 MAX_OUTPUT_SIZE = 10 * 1024
 
@@ -130,8 +127,12 @@ WRITE_COMMANDS = {
 }
 
 
-def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
-    """Check if a command is dangerous based on argv analysis.
+def _check_nested_dangerous_commands(argv: list[str]) -> tuple[bool, str]:
+    """Check for dangerous nested commands in wrapper contexts.
+
+    This function validates nested command arguments that only the function-based
+    system can handle, because it requires context-aware multi-argument lookahead.
+    The pattern framework cannot perform these checks.
 
     Args:
         argv: Tokenized command arguments.
@@ -142,90 +143,7 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
     if not argv:
         return False, ""
 
-    # First, check against the pattern framework (comprehensive pattern registry)
-    # The pattern framework provides extensible, well-tested security checks
-    is_dangerous, reason = check_all_patterns(argv)
-    if is_dangerous:
-        return True, reason
-
     cmd = argv[0].split("/")[-1]  # Get basename of command
-
-    # Check for shell metacharacters that would need shell interpretation
-    # After shlex.split(), these characters in argv indicate shell operators (not quoted strings)
-    # These are only dangerous if they're standalone tokens (e.g., argv[i] == ">>").
-    # Substring matches would cause false positives for legitimate patterns like "a&&b".
-    shell_operators = {"<", ">", "|", ";", "&", "&&", "||", ">>", ">&", "<<", "|&"}
-
-    for arg in argv:
-        # Check for redirect/pipe/logic operators (these are shell operators).
-        # Operators can appear as:
-        # 1. Standalone tokens: arg == "&&" (caught by exact match)
-        # 2. Operator with argument: arg == ">&2" or arg == ">file" (start with operator)
-        # We don't check for substring matches (e.g., "a&&b") to avoid false positives
-        # for legitimate patterns like regex or AWK/sed code.
-
-        # Exact match first (standalone operators like "&&", "|", etc.)
-        # Exception: standalone ";" is safe (used by find -exec, etc.)
-        if arg in shell_operators:
-            if arg == ";":
-                # Standalone semicolon is safe when passed via argv (not shell interpretation)
-                continue
-            return True, f"Shell operator '{arg}' is not allowed"
-
-        # Check if argument starts with a shell operator (e.g., ">&2", ">file", "2>&1")
-        for op in shell_operators:
-            if arg.startswith(op) and len(arg) > len(op):
-                # Skip semicolon here (handled below)
-                if op == ";":
-                    continue
-                # Token starts with operator and has additional content (e.g., ">&2", ">file")
-                # This is a shell redirection/operator usage
-                return True, f"Shell operator '{op}' is not allowed"
-
-        # Semicolon: reject any arg containing semicolon (except standalone `;` from find -exec)
-        # After shlex.split(), escaped semicolons become bare `;` tokens, making them safe
-        # because they're passed to subprocess as argv elements, not shell strings.
-        if ";" in arg and arg != ";":
-            return True, "Command chaining (;) is not allowed"
-
-    # Check for command substitution (backticks, $(...))
-    for arg in argv:
-        if "`" in arg or "$(" in arg:
-            return True, "Command substitution is not allowed"
-        # Check for variable expansion patterns
-        if "${" in arg:
-            return True, "Variable expansion is not allowed"
-
-    # Check for interpreter indirection (code execution via -c, -e, etc.)
-    # These allow arbitrary code execution and bypass argv parsing
-    code_execution_interpreters = {
-        "python": ("-c", "-m"),
-        "python3": ("-c", "-m"),
-        "python2": ("-c", "-m"),
-        "perl": ("-e", "-E"),
-        "ruby": ("-e", "-E"),
-        "node": ("-e", "--eval"),
-        "bash": ("-c",),
-        "sh": ("-c",),
-        "zsh": ("-c",),
-        "ksh": ("-c",),
-        "tcsh": ("-c",),
-    }
-    if cmd in code_execution_interpreters:
-        dangerous_flags = code_execution_interpreters[cmd]
-        if any(arg in dangerous_flags for arg in argv):
-            return (
-                True,
-                f"Interpreter code execution ('{cmd} {' '.join(dangerous_flags)}') is not allowed",
-            )
-
-    # Check if any argument is a dangerous command (e.g., env sudo, timeout sudo)
-    # Only check positional arguments that are not paths or flag values.
-    # IMPORTANT: Only skip flag values if the top-level command is a known safe wrapper.
-    # For regular commands like ssh or git, we must NOT skip arguments after flags,
-    # because those flags belong to the command itself, not to a nested wrapper.
-    # E.g., in "ssh -t sudo whoami", the -t is for ssh, not a wrapper; we must check sudo.
-    # E.g., in "git -c sudo whoami", the -c is for git, not a wrapper; we must check sudo.
 
     # Flags that consume the next argument (only skip for safe wrappers)
     flag_value_flags = {
@@ -308,79 +226,31 @@ def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
                     "Command 'rm' with dangerous flags is not allowed as an argument",
                 )
 
-    # Check for dangerous commands
-    if cmd in DANGEROUS_COMMANDS:
-        if cmd in ("bash", "sh", "zsh", "ksh", "tcsh"):
-            if any(arg in ("-i", "--interactive", "-l", "-login") for arg in argv):
-                return True, f"Interactive shell '{cmd}' is not allowed"
-        else:
-            return True, f"Command '{cmd}' is not allowed"
-
-    # Check for dangerous git operations
-    if cmd == "git":
-        # Check for destructive git operations: push --force, reset --hard, clean -f/-d
-        has_destructive_op = False
-
-        # git push --force and variants: check for --force, -f, --force-with-lease, --force-if-includes
-        # These all force-push and can lose commits
-        if "push" in argv:
-            for arg in argv:
-                # Exact match for -f
-                if arg == "-f":
-                    has_destructive_op = True
-                    break
-                # Any arg starting with --force (including --force-with-lease, --force-if-includes, etc.)
-                if arg.startswith("--force"):
-                    has_destructive_op = True
-                    break
-
-        # git reset --hard: both must be exact tokens
-        if "reset" in argv and "--hard" in argv:
-            has_destructive_op = True
-
-        # git clean -f/-d: check for these dangerous flags (exact match or combined like -fd)
-        # Avoid false positives: --dry-run should not match -d (use exact or combined check)
-        if "clean" in argv:
-            for arg in argv:
-                # Exact matches: -f, -d, -fd, -df, etc. (short forms)
-                if arg in ("-f", "-d", "-fd", "-df"):
-                    has_destructive_op = True
-                    break
-                # Long form --force
-                if arg == "--force":
-                    has_destructive_op = True
-                    break
-                # Also check arg startswith for combined flags containing d or f
-                # but NOT for things like --dry-run (those start with --)
-                if arg.startswith("-") and not arg.startswith("--"):
-                    # Short flags: -f, -d, or combinations like -fd, -ddf, etc.
-                    if "f" in arg or "d" in arg:
-                        has_destructive_op = True
-                        break
-
-        if has_destructive_op:
-            return True, "Destructive git operation is not allowed"
-
-    # Check for dangerous rm patterns
-    if cmd == "rm":
-        if "-r" in argv or "-rf" in argv or "--recursive" in argv:
-            return True, "rm with -r or -rf flag is not allowed"
-
-    # Check for dangerous flags in specific commands where they are truly dangerous.
-    # Note: We don't check cp/mv/make here because:
-    # - cp -r: standard way to copy directories recursively
-    # - mv -r: standard way to move directories recursively
-    # - make -f: standard way to specify a makefile
-    # These are not "dangerous" operations in themselves.
-    # The real danger is rm -rf (covered above) and git --force (covered above).
-    for flag in DANGEROUS_FLAGS:
-        if flag in argv:
-            # Only apply DANGEROUS_FLAGS check to apt/yum (package managers)
-            # These with -f or -r can indeed be risky
-            if cmd in ("apt", "yum"):
-                return True, f"Command '{cmd}' with '{flag}' flag is not allowed"
-
     return False, ""
+
+
+def _is_dangerous_command(argv: list[str]) -> tuple[bool, str]:
+    """Check if a command is dangerous based on nested context analysis.
+
+    **DEPRECATED FOR MOST USES**: Use check_all_patterns() for top-level checks.
+    This function now only checks nested command contexts that the pattern framework
+    cannot handle. It is kept for backward compatibility.
+
+    For new code, prefer:
+    1. check_all_patterns() for top-level command validation (records audit trail)
+    2. _check_nested_dangerous_commands() for wrapper context validation
+
+    Args:
+        argv: Tokenized command arguments.
+
+    Returns:
+        A tuple of (is_dangerous, reason_message).
+    """
+    if not argv:
+        return False, ""
+
+    # Only check nested context validation (pattern framework handles top-level)
+    return _check_nested_dangerous_commands(argv)
 
 
 def _extract_write_command(argv: list[str]) -> tuple[str, int]:
@@ -875,7 +745,32 @@ class BashEnvironment(ABC):
                 skip_message="Empty command",
             )
 
-        is_dangerous, reason = _is_dangerous_command(argv)
+        # Check nested command context (e.g., env sudo, timeout bash -c)
+        # This must be checked before patterns because it validates wrapper contexts
+        is_dangerous, reason = _check_nested_dangerous_commands(argv)
+        if is_dangerous:
+            record_bash_violation(
+                command=" ".join(argv),
+                argv=argv,
+                pattern_name="NestedDangerousCommandPattern",
+                category="nested_command",
+                severity="HIGH",
+                reason=reason,
+                working_dir=self.working_dir,
+                allowed_paths=self.allowed_paths,
+            )
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message=reason,
+            )
+
+        # Check all patterns (top-level validation with audit trail recording)
+        is_dangerous, reason = check_all_patterns(
+            argv, self.working_dir, self.allowed_paths
+        )
         if is_dangerous:
             return ExecutionResult(
                 success=False,
