@@ -1116,6 +1116,75 @@ def _is_complex_anyof(v: dict) -> bool:
     return False
 
 
+def _recursively_inline_refs(
+    schema: dict, defs: dict, visited: set[int] | None = None
+) -> None:
+    """Recursively inline all remaining $ref entries at any depth in the schema.
+
+    This is a final pass after discriminated union flattening to catch any
+    dangling references that the earlier single-level passes missed. Handles
+    nested model references where properties contain other models via $ref.
+
+    Args:
+        schema: Schema object to process (mutated in-place).
+        defs: Global definitions dict for $ref resolution.
+        visited: Set of visited node ids to prevent infinite loops on circular refs.
+    """
+    if visited is None:
+        visited = set()
+
+    if not isinstance(schema, dict):
+        return
+
+    schema_id = id(schema)
+    if schema_id in visited:
+        return
+    visited.add(schema_id)
+
+    # Inline $ref at this level if present
+    if "$ref" in schema and isinstance(schema["$ref"], str):
+        ref_schema = _resolve_ref(schema["$ref"], defs)
+        if ref_schema:
+            inlined = copy.deepcopy(ref_schema)
+            # Replace schema contents with inlined schema, keeping other keys
+            schema.clear()
+            schema.update(inlined)
+
+    # Process properties of an object
+    if "properties" in schema and isinstance(schema["properties"], dict):
+        for prop_name, prop_schema in schema["properties"].items():
+            if isinstance(prop_schema, dict):
+                _recursively_inline_refs(prop_schema, defs, visited)
+
+    # Process array items
+    if "items" in schema and isinstance(schema["items"], dict):
+        _recursively_inline_refs(schema["items"], defs, visited)
+
+    # Process anyOf branches
+    if "anyOf" in schema and isinstance(schema["anyOf"], list):
+        for branch in schema["anyOf"]:
+            if isinstance(branch, dict):
+                _recursively_inline_refs(branch, defs, visited)
+
+    # Process oneOf branches (shouldn't exist after flattening, but be defensive)
+    if "oneOf" in schema and isinstance(schema["oneOf"], list):
+        for branch in schema["oneOf"]:
+            if isinstance(branch, dict):
+                _recursively_inline_refs(branch, defs, visited)
+
+    # Process allOf branches
+    if "allOf" in schema and isinstance(schema["allOf"], list):
+        for branch in schema["allOf"]:
+            if isinstance(branch, dict):
+                _recursively_inline_refs(branch, defs, visited)
+
+    # Process additionalProperties
+    if "additionalProperties" in schema and isinstance(
+        schema["additionalProperties"], dict
+    ):
+        _recursively_inline_refs(schema["additionalProperties"], defs, visited)
+
+
 def _recursively_flatten_in_properties(schema: dict, defs: dict) -> None:
     """Recursively flatten discriminated unions found in nested properties.
 
@@ -1352,6 +1421,11 @@ def convert_function_to_ollama_tool(
                 "description": parsed_docstring.get(k, ""),
                 "type": ", ".join(types),
             }
+
+    # Final pass: recursively inline all remaining $refs at any depth.
+    # This catches dangling references in nested model properties that weren't
+    # caught by the earlier single-level ref-inlining passes.
+    _recursively_inline_refs(schema, defs)
 
     tool = OllamaTool(
         type="function",

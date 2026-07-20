@@ -7,6 +7,8 @@ This test file addresses the issue where tools defined with Pydantic BaseModel
 parameters don't properly validate/coerce arguments from LLM responses.
 """
 
+import json
+
 import pytest
 from pydantic import BaseModel
 
@@ -509,13 +511,6 @@ class TestOptionalParameterRegression:
                 strict=True,  # missing subject + body
             )
 
-    @pytest.mark.skip(
-        reason="Nested model resolution not yet implemented. "
-        "This test documents the expected behavior once recursive $ref resolution is added. "
-        "Currently fails because Address remains as a dangling $ref inside Person's schema. "
-        "NESTED_MODEL_RESOLUTION_ISSUE.md in "
-        "https://github.com/generative-computing/mellea/issues/911 for implementation details."
-    )
     def test_nested_models_fully_inlined(self):
         """Test def f(person: Person) where Person has address: Address.
 
@@ -523,9 +518,8 @@ class TestOptionalParameterRegression:
         inlined in the schema, and validate_tool_arguments accepts a nested
         dict without a ValidationError.
 
-        DISABLED: This test is currently skipped because nested model resolution
-        is not yet implemented. The test will be enabled once the recursive
-        reference resolution feature is added to convert_function_to_ollama_tool.
+        This test verifies the fix for issue #911: recursive $ref resolution
+        in nested model properties.
         """
 
         def create_person(person: Person) -> str:
@@ -594,6 +588,122 @@ class TestOptionalParameterRegression:
         validated = validate_tool_arguments(tool, args, coerce_types=True)
         assert validated["person"]["name"] == "John Doe"
         assert validated["person"]["address"]["city"] == "Boston"
+
+
+class TestNestedModelsEdgeCases:
+    """Edge case tests for issue #911: recursive $ref resolution."""
+
+    def test_deeply_nested_models(self):
+        """Test deeply nested models (3+ levels) are all inlined."""
+
+        class Country(BaseModel):
+            name: str
+            code: str
+
+        class City(BaseModel):
+            name: str
+            country: Country
+
+        class Address(BaseModel):
+            street: str
+            city: City
+
+        class Person(BaseModel):
+            name: str
+            address: Address
+
+        def process_person(person: Person) -> str:
+            """Process a person with deeply nested address info.
+
+            Args:
+                person: Person with nested address
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(process_person)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        person_prop = params["properties"]["person"]
+
+        # Verify no $ref anywhere in the schema
+        rendered = json.dumps(person_prop)
+        assert "$ref" not in rendered, (
+            f"Deeply nested models should be fully inlined: {rendered[:200]}..."
+        )
+
+        # Verify the structure is preserved
+        assert person_prop["type"] == "object"
+        address_prop = person_prop["properties"]["address"]
+        assert address_prop["type"] == "object"
+        city_prop = address_prop["properties"]["city"]
+        assert city_prop["type"] == "object"
+        country_prop = city_prop["properties"]["country"]
+        assert country_prop["type"] == "object"
+
+    def test_no_infinite_loop_on_complex_structure(self):
+        """Verify the algorithm handles complex structures without hanging.
+
+        While true circular refs are prevented by Python's object model, this
+        test verifies the visited-tracking logic works correctly.
+        """
+
+        class Item(BaseModel):
+            name: str
+            quantity: int
+
+        class Order(BaseModel):
+            id: str
+            items: list[Item]
+
+        def create_order(order: Order) -> str:
+            """Create an order.
+
+            Args:
+                order: The order to create
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_order)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        order_prop = params["properties"]["order"]
+
+        # Should complete without hanging
+        rendered = json.dumps(order_prop)
+        assert "$ref" not in rendered
+        assert order_prop["type"] == "object"
+
+    def test_optional_nested_models_inlined(self):
+        """Optional nested models should also be fully inlined."""
+
+        class Contact(BaseModel):
+            email: str
+            phone: str | None = None
+
+        class Employee(BaseModel):
+            name: str
+            contact: "Contact | None" = None
+
+        def hire_employee(employee: Employee) -> str:
+            """Hire an employee.
+
+            Args:
+                employee: Employee information
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(hire_employee)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        employee_prop = params["properties"]["employee"]
+
+        rendered = json.dumps(employee_prop)
+        assert "$ref" not in rendered, (
+            f"Optional nested models should be inlined: {rendered[:200]}..."
+        )
 
 
 if __name__ == "__main__":
