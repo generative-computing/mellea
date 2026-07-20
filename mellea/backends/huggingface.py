@@ -276,19 +276,20 @@ _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist(
 
 
 def _check_no_multimodal_blocks(
-    action: Component | CBlock | ModelOutputThunk | None, ctx: Context
+    action: Component | CBlock | ModelOutputThunk | None, ctx: Context | None
 ) -> None:
     """Raise ValueError if any component in ctx or action carries image/audio blocks.
 
     Args:
         action: The generation action component, or None for intrinsic paths.
-        ctx: The current conversation context.
+        ctx: The current conversation context, or None to skip the context scan
+            (used on paths where ctx content is never rendered, e.g. `_generate_from_raw`).
 
     Raises:
         ValueError: If any component contains images or audio.
             `LocalHFBackend` does not support multimodal inputs.
     """
-    linearized = ctx.view_for_generation() or []
+    linearized = (ctx.view_for_generation() or []) if ctx is not None else []
     candidates: list[Any] = list(linearized)
     if action is not None:
         candidates.append(action)
@@ -1671,6 +1672,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 `results` is a list of model output thunks, one per action, and
                 `usage` is the aggregate token-usage dict for the batch.
         """
+        for action in actions:
+            _check_no_multimodal_blocks(action, None)
         await self.do_generate_walks(list(actions))
 
         if tool_calls:

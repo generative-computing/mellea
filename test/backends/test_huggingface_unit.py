@@ -765,3 +765,66 @@ async def test_multimodal_blocks_kv_cache_path_raises_error(images, audio):
         await backend._generate_from_context_with_kv_cache(
             Message("assistant", ""), ctx, model_options={}
         )
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_raw_action_raises_error(images, audio):
+    """_generate_from_raw raises ValueError for actions with image/audio blocks instead of silently dropping them."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+    action = Message("assistant", "", images=images, audio=audio)
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_raw([action], ctx, model_options={})
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_raw_ctx_not_checked(images, audio):
+    """_generate_from_raw does not scan ctx for multimodal content.
+
+    ctx is accepted by the signature but never rendered on the raw path — only
+    the actions are formatted and sent to the model. Multimodal blocks stored
+    in the context do not cause an error here (they are simply unused).
+    """
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+    action = Message("assistant", "")
+
+    # Should not raise — ctx content is not rendered by _generate_from_raw.
+    # We mock the model to avoid loading weights; just verify no ValueError is raised.
+    mock_outputs = MagicMock()
+    mock_outputs.sequences = [MagicMock()]
+    mock_outputs.sequences[0].__getitem__ = MagicMock(return_value=MagicMock())
+    mock_outputs.scores = None
+    mock_outputs.logits = None
+    with patch.object(
+        backend, "_generate_with_adapter_lock", return_value=mock_outputs
+    ):
+        with patch.object(
+            backend._tokenizer,
+            "__call__",
+            return_value={
+                "input_ids": MagicMock(size=lambda i: 0),
+                "attention_mask": MagicMock(),
+            },
+        ):
+            with patch.object(backend._tokenizer, "batch_decode", return_value=[""]):
+                await backend._generate_from_raw([action], ctx, model_options={})
