@@ -1,3 +1,6 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for Docling accelerator device selection in `RichDocument`.
 
 These tests mock out Docling's `DocumentConverter` so they exercise only the
