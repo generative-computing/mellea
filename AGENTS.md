@@ -94,7 +94,7 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 ## 6. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
 
-Pre-commit runs: ruff, mypy, uv-lock, codespell
+Pre-commit runs: ruff, mypy, uv-lock, codespell, license-headers
 
 **Review states**: when reviewing a PR, see [CONTRIBUTING.md → Review States](CONTRIBUTING.md#review-states) for when to use `APPROVE` vs `REQUEST CHANGES` vs `COMMENT`.
 

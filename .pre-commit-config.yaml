@@ -12,6 +12,15 @@ repos:
 
   - repo: local
     hooks:
+      - id: license-headers
+        name: SPDX license headers
+        entry: uv run --no-sync python3 .github/scripts/check_license_headers.py --fix
+        language: system
+        types_or: [python, shell, ts, tsx, javascript, css]
+        exclude: ^docs/
+
+  - repo: local
+    hooks:
       # Moving ruff hooks to the local version allows for different behavior locally and in ci/cd pipelines.
       - id: ruff-format
         name: "Ruff formatter"
