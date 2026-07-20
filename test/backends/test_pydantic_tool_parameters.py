@@ -705,6 +705,151 @@ class TestNestedModelsEdgeCases:
             f"Optional nested models should be inlined: {rendered[:200]}..."
         )
 
+    def test_nested_discriminated_union_payload_round_trips(self):
+        """Test that nested discriminated unions round-trip through validation.
+
+        This reproducer verifies the fix for issue #911: a valid nested
+        discriminated union payload should validate successfully through
+        validate_tool_arguments and be processable without errors.
+        """
+        from typing import Annotated, Literal
+
+        from pydantic import Field
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[CreateUserFull | DeleteUser, Field(discriminator="op")],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            if isinstance(cmd, dict):
+                return f"Executed {cmd.get('op', 'unknown')}"
+            return f"Executed {cmd.op}"
+
+        tool = MelleaTool.from_callable(execute)
+
+        # Test payload: create_full with full user data
+        test_payload = {
+            "cmd": {
+                "op": "create_full",
+                "user_data": {
+                    "type": "full",
+                    "name": "Ada",
+                    "email": "ada@example.com",
+                },
+            }
+        }
+
+        # Should validate without errors
+        validated = validate_tool_arguments(tool, test_payload, strict=True)
+
+        assert validated["cmd"]["op"] == "create_full"
+        assert validated["cmd"]["user_data"]["type"] == "full"
+        assert validated["cmd"]["user_data"]["name"] == "Ada"
+        assert validated["cmd"]["user_data"]["email"] == "ada@example.com"
+
+        # Test payload: create_full with stub user data
+        test_payload_stub = {
+            "cmd": {
+                "op": "create_full",
+                "user_data": {"type": "stub", "user_id": "usr_123"},
+            }
+        }
+
+        validated_stub = validate_tool_arguments(tool, test_payload_stub, strict=True)
+
+        assert validated_stub["cmd"]["op"] == "create_full"
+        assert validated_stub["cmd"]["user_data"]["type"] == "stub"
+        assert validated_stub["cmd"]["user_data"]["user_id"] == "usr_123"
+
+        # Test payload: delete user
+        test_payload_delete = {"cmd": {"op": "delete", "user_id": "usr_456"}}
+
+        validated_delete = validate_tool_arguments(
+            tool, test_payload_delete, strict=True
+        )
+
+        assert validated_delete["cmd"]["op"] == "delete"
+        assert validated_delete["cmd"]["user_id"] == "usr_456"
+
+    def test_nested_simple_model_payload_round_trips(self):
+        """Test that simple nested model payloads round-trip through validation.
+
+        Validates that the nested model Address in Person can be passed as a
+        dict through validate_tool_arguments without validation errors.
+        """
+
+        def create_person(person: Person) -> str:
+            """Create a person record.
+
+            Args:
+                person: The person's information
+            """
+            if isinstance(person, dict):
+                return f"Created {person['name']}"
+            return f"Created {person.name}"
+
+        tool = MelleaTool.from_callable(create_person)
+
+        # Test payload with nested address
+        test_payload = {
+            "person": {
+                "name": "Alice",
+                "age": 30,
+                "email": "alice@example.com",
+                "address": {
+                    "street": "123 Main St",
+                    "city": "Boston",
+                    "state": "MA",
+                    "zip_code": "02101",
+                },
+            }
+        }
+
+        # Should validate without errors
+        validated = validate_tool_arguments(tool, test_payload, strict=True)
+
+        assert validated["person"]["name"] == "Alice"
+        assert validated["person"]["age"] == 30
+        assert validated["person"]["address"]["street"] == "123 Main St"
+        assert validated["person"]["address"]["city"] == "Boston"
+
+        # Test payload with None address (optional field)
+        test_payload_no_address = {
+            "person": {
+                "name": "Bob",
+                "age": 25,
+                "email": "bob@example.com",
+                "address": None,
+            }
+        }
+
+        validated_no_addr = validate_tool_arguments(
+            tool, test_payload_no_address, strict=True
+        )
+
+        assert validated_no_addr["person"]["name"] == "Bob"
+        assert validated_no_addr["person"]["address"] is None
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
