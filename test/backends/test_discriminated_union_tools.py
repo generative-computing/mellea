@@ -478,6 +478,233 @@ class TestNestedDiscriminatedUnions:
             f"No $ref should leak into the final schema: {rendered[:200]}..."
         )
 
+    def test_nested_union_payload_round_trips(self):
+        """Valid nested discriminated union payloads must round-trip through validate_tool_arguments."""
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[CreateUserFull | DeleteUser, Field(discriminator="op")],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(execute)
+
+        # Test valid full user creation
+        validate_tool_arguments(
+            mt,
+            {
+                "cmd": {
+                    "op": "create_full",
+                    "user_data": {
+                        "type": "full",
+                        "name": "Ada",
+                        "email": "ada@example.com",
+                    },
+                }
+            },
+            strict=True,
+        )
+
+        # Test valid stub user creation
+        validate_tool_arguments(
+            mt,
+            {
+                "cmd": {
+                    "op": "create_full",
+                    "user_data": {"type": "stub", "user_id": "user123"},
+                }
+            },
+            strict=True,
+        )
+
+        # Test delete command
+        validate_tool_arguments(
+            mt, {"cmd": {"op": "delete", "user_id": "user456"}}, strict=True
+        )
+
+    def test_nested_union_payload_rejects_invalid_discriminator(self):
+        """Invalid nested discriminator values must be rejected."""
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[CreateUserFull | DeleteUser, Field(discriminator="op")],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(execute)
+
+        # Invalid nested discriminator value
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt,
+                {
+                    "cmd": {
+                        "op": "create_full",
+                        "user_data": {
+                            "type": "invalid",
+                            "name": "Ada",
+                            "email": "ada@example.com",
+                        },
+                    }
+                },
+                strict=True,
+            )
+
+    def test_nested_union_payload_rejects_missing_nested_field(self):
+        """Missing required fields in nested union branches must be rejected."""
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser, Field(discriminator="type")]
+
+        def execute(cmd: Annotated[CreateUserFull, Field(discriminator="op")]) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(execute)
+
+        # Missing required 'email' field in nested FullUser
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt,
+                {
+                    "cmd": {
+                        "op": "create_full",
+                        "user_data": {"type": "full", "name": "Ada"},
+                    }
+                },
+                strict=True,
+            )
+
+    def test_deeply_nested_union_payload_round_trips(self):
+        """Deeply nested discriminated union payloads must round-trip through validate_tool_arguments."""
+
+        class Level3A(BaseModel):
+            l3_type: Literal["a"]
+            value: str
+
+        class Level3B(BaseModel):
+            l3_type: Literal["b"]
+            value: int
+
+        class Level2A(BaseModel):
+            l2_type: Literal["a"]
+            nested: Annotated[Level3A | Level3B, Field(discriminator="l3_type")]
+
+        class Level2B(BaseModel):
+            l2_type: Literal["b"]
+            text: str
+
+        class Level1A(BaseModel):
+            l1_type: Literal["a"]
+            nested: Annotated[Level2A | Level2B, Field(discriminator="l2_type")]
+
+        class Level1B(BaseModel):
+            l1_type: Literal["b"]
+            name: str
+
+        def deeply_nested(
+            param: Annotated[Level1A | Level1B, Field(discriminator="l1_type")],
+        ) -> str:
+            """Deeply nested discriminated unions.
+
+            Args:
+                param: the parameter
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(deeply_nested)
+
+        # Test payload with three levels of nesting
+        validate_tool_arguments(
+            mt,
+            {
+                "param": {
+                    "l1_type": "a",
+                    "nested": {
+                        "l2_type": "a",
+                        "nested": {"l3_type": "a", "value": "deep_value"},
+                    },
+                }
+            },
+            strict=True,
+        )
+
+        # Test alternative path through nesting
+        validate_tool_arguments(
+            mt,
+            {
+                "param": {
+                    "l1_type": "a",
+                    "nested": {"l2_type": "a", "nested": {"l3_type": "b", "value": 42}},
+                }
+            },
+            strict=True,
+        )
+
+        # Test simplified path
+        validate_tool_arguments(
+            mt,
+            {"param": {"l1_type": "a", "nested": {"l2_type": "b", "text": "simple"}}},
+            strict=True,
+        )
+
+        # Test Level1B branch
+        validate_tool_arguments(
+            mt, {"param": {"l1_type": "b", "name": "direct"}}, strict=True
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

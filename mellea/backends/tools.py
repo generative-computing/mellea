@@ -16,7 +16,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Generator, Iterable, Mapping, Sequence
-from typing import Any, Literal, ParamSpec, TypeVar, overload
+from typing import Annotated, Any, Literal, ParamSpec, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -553,6 +553,39 @@ def validate_tool_arguments(
         "object": dict,
     }
 
+    def _detect_discriminator_field(schemas: list[dict[str, Any]]) -> str | None:
+        """Detect if anyOf schemas form a discriminated union.
+
+        Returns the discriminator field name if all schemas have a common field
+        with const values, otherwise None.
+        """
+        if not schemas or len(schemas) < 2:
+            return None
+
+        # Check if all schemas are objects with properties
+        if not all(s.get("type") == "object" and "properties" in s for s in schemas):
+            return None
+
+        # Find candidate discriminator fields (fields that all schemas have with const values)
+        first_props = schemas[0].get("properties", {})
+        for field_name, field_schema in first_props.items():
+            # Check if this field has a const value in the first schema
+            if "const" not in field_schema:
+                continue
+
+            # Check if all other schemas have this field with a const value
+            if all(
+                field_name in s.get("properties", {})
+                and "const" in s["properties"][field_name]
+                for s in schemas[1:]
+            ):
+                # Verify all const values are different (true discriminator)
+                const_values = [s["properties"][field_name]["const"] for s in schemas]
+                if len(set(const_values)) == len(const_values):
+                    return field_name
+
+        return None
+
     # Helper function to build Pydantic model from nested JSON schema
     def _build_pydantic_type_from_schema(schema: dict[str, Any]) -> Any:
         """Recursively build Pydantic type from JSON schema.
@@ -575,7 +608,13 @@ def validate_tool_arguments(
             nested_fields: dict[str, Any] = {}
 
             for nested_name, nested_schema in nested_properties.items():
-                nested_type = _build_pydantic_type_from_schema(nested_schema)
+                # Special handling for const fields: convert to Literal type
+                if "const" in nested_schema:
+                    const_value = nested_schema["const"]
+                    nested_type: Any = Literal[const_value]  # type: ignore
+                else:
+                    nested_type = _build_pydantic_type_from_schema(nested_schema)
+
                 if nested_name in nested_required:
                     nested_fields[nested_name] = (nested_type, ...)
                 else:
@@ -624,6 +663,9 @@ def validate_tool_arguments(
             has_null = any(s.get("type") == "null" for s in schema["anyOf"])
             non_null_schemas = [s for s in schema["anyOf"] if s.get("type") != "null"]
 
+            # Check if this is a discriminated union
+            discriminator_field = _detect_discriminator_field(non_null_schemas)
+
             types_list = []
             for sub_schema in non_null_schemas:
                 sub_type = _build_pydantic_type_from_schema(sub_schema)
@@ -638,6 +680,10 @@ def validate_tool_arguments(
                 from operator import or_
 
                 result = reduce(or_, types_list)
+
+                # Wrap discriminated unions with Field(discriminator=...)
+                if discriminator_field:
+                    result = Annotated[result, Field(discriminator=discriminator_field)]  # type: ignore
 
             return (result | None) if has_null else result
 
