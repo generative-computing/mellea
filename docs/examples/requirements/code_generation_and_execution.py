@@ -10,8 +10,45 @@ This example shows how to use Mellea to:
 The pipeline implements a 4-step process:
 1. User Input - Accept natural language request specifying data extraction AND visualization
 2. CSV Loading - Read data from a CSV file
-3. Code Generation - Generate code to extract data and create visualization using headless matplotlib
+3. Code Generation - Generate code to extract data and create visualization using
+   headless matplotlib
 4. Code Execution - Execute the code to generate and save graph to file (no display)
+
+## Execution Tier & Safety
+
+This example uses execution_tier="local" for fast local execution. Execution tiers
+control where and how generated code runs:
+
+**Available Tiers:**
+- "static" (default): Parse and import-check only, no execution
+- "local_unsafe": Direct subprocess execution, no isolation, no policy restrictions
+- "local": Subprocess execution with CapabilityPolicy (timeout, resource limits)
+- "docker_unsafe": Docker-isolated execution, no policy restrictions
+- "docker": Docker-isolated execution with CapabilityPolicy (RECOMMENDED for untrusted
+  inputs)
+
+**When to use each tier:**
+- Use "local" ONLY when:
+  * Code source is trusted (internal development)
+  * Running in already-sandboxed environments (CI/CD, containers)
+  * Performance is critical and isolation overhead is unacceptable
+- Use "docker" when:
+  * Code is LLM-generated or from untrusted sources
+  * Running in shared environments or production
+  * Security is more important than speed
+
+**For production use with untrusted code, set execution_tier="docker":**
+```python
+PythonExecutionReq(
+    execution_tier="docker",  # Container-isolated execution (recommended for
+    # untrusted code)
+    policy=CapabilityPolicy(timeout=20),
+    max_output_chars=10_000,
+)
+```
+
+This example uses "local" for demonstration purposes. Change to "docker" for production.
+See docs/examples/requirements/README.md for more details.
 """
 
 import argparse
@@ -260,6 +297,15 @@ def process_user_request(
     all_reqs = [
         PythonCodeExtraction(),
         PythonSyntaxValid(),
+        # SAFETY NOTE: execution_tier="local" runs code in a subprocess without container isolation.
+        # This is useful for:
+        # - Trusted code sources (internal development, CI/CD already in containers)
+        # - Development and demonstration purposes
+        #
+        # For production with untrusted/LLM-generated code, use:
+        #   execution_tier="docker"  (container-isolated execution)
+        #
+        # See module docstring for execution tier guidance.
         PythonExecutionReq(
             execution_tier="local",
             policy=CapabilityPolicy(timeout=20),
