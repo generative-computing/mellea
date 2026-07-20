@@ -18,6 +18,11 @@ Scope (matches what the headers were originally applied to):
 Usage:
     python3 .github/scripts/check_license_headers.py --check   # CI: exit 1 if any missing
     python3 .github/scripts/check_license_headers.py --fix     # insert/upgrade in place
+
+Optional file paths may be passed positionally (as pre-commit does). When given,
+only those files are checked/fixed; otherwise all git-tracked code files are used.
+In --fix mode the script exits non-zero if it changed any file, so pre-commit
+blocks the commit and the user re-stages the headers.
 """
 
 from __future__ import annotations
@@ -62,6 +67,30 @@ def tracked_files() -> list[Path]:
         if rel.startswith(EXCLUDED_PREFIXES):
             continue
         result.append(REPO / rel)
+    return result
+
+
+def select_files(paths: list[str]) -> list[Path]:
+    """Return in-scope files for the given paths, or all tracked files if none.
+
+    Filters passed paths to the target extensions and excluded subtrees so the
+    hook behaves the same on a staged subset as on the whole tree.
+    """
+    if not paths:
+        return tracked_files()
+    result: list[Path] = []
+    for raw in paths:
+        p = Path(raw)
+        abs_p = p if p.is_absolute() else REPO / p
+        if not abs_p.is_file() or abs_p.suffix not in ALL_EXTS:
+            continue
+        try:
+            rel = abs_p.resolve().relative_to(REPO).as_posix()
+        except ValueError:
+            continue
+        if rel.startswith(EXCLUDED_PREFIXES):
+            continue
+        result.append(abs_p)
     return result
 
 
@@ -142,7 +171,7 @@ def run_check(files: list[Path]) -> int:
 
 
 def run_fix(files: list[Path]) -> int:
-    """Insert/upgrade headers in place. Return process exit code (always 0)."""
+    """Insert/upgrade headers in place. Exit non-zero if any file was changed."""
     counts: dict[str, int] = {}
     for p in files:
         action = fix_file(p)
@@ -155,7 +184,9 @@ def run_fix(files: list[Path]) -> int:
         f"({counts.get('inserted', 0)} inserted, {counts.get('upgraded', 0)} upgraded), "
         f"{counts.get('ok', 0)} already compliant."
     )
-    return 0
+    # As an auto-fixer, exit non-zero when files were modified so pre-commit fails
+    # the run and the user re-stages the now-headered files.
+    return 1 if changed else 0
 
 
 def main() -> int:
@@ -170,9 +201,15 @@ def main() -> int:
     group.add_argument(
         "--fix", action="store_true", help="Insert or upgrade headers in place."
     )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Optional files to check/fix (pre-commit passes these). "
+        "Defaults to all git-tracked code files.",
+    )
     args = parser.parse_args()
 
-    files = tracked_files()
+    files = select_files(args.paths)
     if args.fix:
         return run_fix(files)
     return run_check(files)

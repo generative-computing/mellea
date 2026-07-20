@@ -413,6 +413,7 @@ Pre-commit hooks run automatically before each commit and check:
 - **mypy** - Type checking
 - **uv-lock** - Dependency lock file sync
 - **codespell** - Spell checking
+- **license-headers** - Inserts the SPDX/copyright header on new code files
 
 **Bypass hooks (for intermediate commits):**
 ```bash
@@ -557,7 +558,7 @@ Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualita
 ### CI/CD Tests
 
 CI runs the following checks on every pull request:
-1. **Pre-commit hooks** (`pre-commit run --all-files`) — ruff, mypy, uv-lock, codespell
+1. **Pre-commit hooks** (`pre-commit run --all-files`) — ruff, mypy, uv-lock, codespell, license-headers
 2. **Test suite** — `CICD=1 uv run pytest test` on Python 3.11/3.12/3.13 with Ollama running; skips qualitative tests
 
 To replicate CI locally:
