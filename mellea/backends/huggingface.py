@@ -610,8 +610,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             intrinsic output.
 
         Raises:
-            ValueError: If no adapter is registered for the requested intrinsic.
-            ValueError: If the context contains images or audio; `LocalHFBackend`
+            ValueError: If no adapter is registered for the requested intrinsic,
+                or if the context contains images or audio; `LocalHFBackend`
                 does not support multimodal inputs.
             TypeError: If the adapter isn't an IntrinsicAdapter.
         """
