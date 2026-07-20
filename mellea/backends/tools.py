@@ -1070,6 +1070,84 @@ def _is_complex_anyof(v: dict) -> bool:
     return False
 
 
+def _recursively_flatten_in_properties(schema: dict, defs: dict) -> None:
+    """Recursively flatten discriminated unions found in nested properties.
+
+    Mutates schema in-place, walking the tree to find and flatten any
+    discriminated unions within properties, items, or anyOf branches.
+
+    This is called after branch inlining to ensure nested discriminated unions
+    (e.g., a property field that is itself a discriminated union) are also
+    flattened.
+
+    Args:
+        schema: Schema object to process (mutated in-place).
+        defs: Global definitions dict for $ref resolution.
+    """
+    if not isinstance(schema, dict):
+        return
+
+    # Process properties of an object
+    if "properties" in schema and isinstance(schema["properties"], dict):
+        for prop_name, prop_schema in schema["properties"].items():
+            if not isinstance(prop_schema, dict):
+                continue
+
+            # Check if this property is a discriminated union (has oneOf + discriminator)
+            if "oneOf" in prop_schema or (
+                "anyOf" in prop_schema
+                and any("oneOf" in s for s in prop_schema.get("anyOf", []))
+            ):
+                schema["properties"][prop_name] = _flatten_discriminated_union(
+                    prop_schema, defs
+                )
+                prop_schema = schema["properties"][prop_name]
+
+            # Recurse into the (possibly flattened) property
+            _recursively_flatten_in_properties(prop_schema, defs)
+
+    # Process array items
+    if "items" in schema and isinstance(schema["items"], dict):
+        if "oneOf" in schema["items"] or (
+            "anyOf" in schema["items"]
+            and any("oneOf" in s for s in schema["items"].get("anyOf", []))
+        ):
+            schema["items"] = _flatten_discriminated_union(schema["items"], defs)
+
+        _recursively_flatten_in_properties(schema["items"], defs)
+
+    # Process anyOf branches
+    if "anyOf" in schema and isinstance(schema["anyOf"], list):
+        for branch in schema["anyOf"]:
+            _recursively_flatten_in_properties(branch, defs)
+
+    # Process oneOf branches (shouldn't exist after flattening, but be defensive)
+    if "oneOf" in schema and isinstance(schema["oneOf"], list):
+        for branch in schema["oneOf"]:
+            _recursively_flatten_in_properties(branch, defs)
+
+    # Process allOf branches
+    if "allOf" in schema and isinstance(schema["allOf"], list):
+        for branch in schema["allOf"]:
+            _recursively_flatten_in_properties(branch, defs)
+
+    # Process additionalProperties
+    if "additionalProperties" in schema and isinstance(
+        schema["additionalProperties"], dict
+    ):
+        if "oneOf" in schema["additionalProperties"] or (
+            "anyOf" in schema["additionalProperties"]
+            and any(
+                "oneOf" in s for s in schema["additionalProperties"].get("anyOf", [])
+            )
+        ):
+            schema["additionalProperties"] = _flatten_discriminated_union(
+                schema["additionalProperties"], defs
+            )
+
+        _recursively_flatten_in_properties(schema["additionalProperties"], defs)
+
+
 def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     """Normalise Pydantic discriminated-union schemas for tool-calling APIs.
 
@@ -1088,10 +1166,9 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     inlined, and `discriminator` stripped. The input is not mutated; callers
     must reassign the result.
 
-    Flattening is single-level. Discriminated unions nested inside an inlined
-    branch (e.g. a Pydantic model whose own field is another discriminated
-    union) are not recursively flattened — that case is tracked alongside the
-    recursive `$ref` resolution work in #911.
+    Discriminated unions nested inside inlined branches are recursively
+    flattened via `_recursively_flatten_in_properties()` to ensure no
+    nested `oneOf` + `discriminator` patterns remain.
     """
 
     def _inline(branch: dict) -> dict:
@@ -1122,6 +1199,10 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
             else:
                 flattened.append(sub)
         out["anyOf"] = flattened
+
+    # Recursively flatten discriminated unions found in nested properties
+    # of the inlined branches
+    _recursively_flatten_in_properties(out, defs)
 
     return out
 
