@@ -174,6 +174,15 @@ notebook = [
     "jupyter>=1.1.1",
 ]
 
+[tool.pdm.build]
+# Ship only the runtime package and the CLI (the `m` entry point imports cli.m:cli).
+# Directory entries copy the whole tree, not just .py files -- this is required for
+# mellea/py.typed and the jinja2 templates under mellea/templates/, not just source code.
+includes = ["mellea/", "cli/"]
+# sdist-only extras: LICENSE also auto-ships in the wheel via PEP 639 discovery;
+# this just gives the sdist tarball its own top-level copy.
+source-includes = ["README.md", "LICENSE"]
+
 # -----------------------------
 # poethepoet - Task Runner
 # -----------------------------
