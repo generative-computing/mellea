@@ -105,7 +105,17 @@ jobs:
       - name: Download NLTK data
         run: uv run python -m nltk.downloader punkt_tab
       - name: Install Ollama
-        run: curl -fsSL https://ollama.com/install.sh | sh
+        # Pinned to a GCC-13 build to fix a segfault loading granite4.1:3b on
+        # AMX-capable ubuntu-latest runners (#1388). Ollama's Linux builds through
+        # 0.32.1 were compiled with GCC 11, which miscompiles the AMX CPU kernels in
+        # libggml-cpu-sapphirerapids.so -- so ~1/3 of runs (the AMX-capable runner
+        # draws) crashed during model warmup, independent of ollama version and
+        # unreachable by any env var (the code path is correct; the machine code was
+        # not). Ollama PR #17244 ("bump Linux toolchain to GCC 13", Fixes ollama#17006
+        # / #17205) first ships in v0.32.2-rc0. Drop this pin once v0.32.2+ is a
+        # stable release. NB: OLLAMA_VERSION must omit the leading "v" -- install.sh
+        # prepends it (a "v" yields a broken .../download/vv0.32.2-rc0/... path).
+        run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.2-rc0 sh
       - name: Start serving ollama
         run: nohup ollama serve &
       - name: Pull models
