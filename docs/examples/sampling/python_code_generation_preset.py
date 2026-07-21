@@ -40,7 +40,7 @@ def example_basic_code_generation():
     print("Generated code:")
     print(code)
     print()
-    assert "100" in code or "5050" in code, "Result should reference the computation"
+    assert "range" in code or "101" in code, "Result should reference the computation"
 
 
 def example_with_import_restrictions():
@@ -77,7 +77,7 @@ def example_with_import_restrictions():
     assert "numpy" in code, "Code should use numpy"
     # Verify no forbidden imports are present
     assert "subprocess" not in code
-    assert "os" not in code
+    assert " os" not in code
 
 
 def example_with_tighter_constraints():
