@@ -37,11 +37,12 @@ class TestResolveQuestion:
         )
         text, rewound = _resolve_question(None, ctx)
         assert text == "second"
-        # Rewound context should end with the assistant reply
+        # Rewound context should end with the assistant reply as the output
         last = rewound.last_turn()  # type: ignore[union-attr]
         assert last is not None
-        assert isinstance(last.model_input, Message)
-        assert last.model_input.content == "reply"
+        assert isinstance(last.output, Message)
+        assert last.output.content == "reply"
+        assert last.output.role == "assistant"
 
     def test_empty_context_raises(self):
         ctx = ChatContext()

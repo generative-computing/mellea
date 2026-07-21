@@ -311,7 +311,11 @@ class GuardianCheck(Requirement):
             if last_turn.output is not None:
                 # For function call risk, append tool call info as text; otherwise add thunk directly.
                 if self._risk == "function_call" or effective_risk == "function_call":
-                    content = last_turn.output.value or ""
+                    # Extract content from either ModelOutputThunk or Message
+                    if isinstance(last_turn.output, Message):
+                        content = last_turn.output.content
+                    else:
+                        content = last_turn.output.value or ""
                     tcalls = getattr(last_turn.output, "tool_calls", None)
                     if tcalls:
                         calls = [

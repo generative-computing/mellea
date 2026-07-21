@@ -1401,13 +1401,14 @@ class ContextTurn:
     Args:
         model_input (CBlock | Component | ModelOutputThunk | None): The input component or content block for this turn,
             or `None` for an output-only partial turn.
-        output (ModelOutputThunk | None): The model's output thunk for this turn,
+        output (ModelOutputThunk | Component | None): The model's output thunk for this turn,
+            or a manually-added response component (e.g., `Message` with role="assistant"),
             or `None` for an input-only partial turn.
 
     """
 
     model_input: CBlock | Component | ModelOutputThunk | None
-    output: ModelOutputThunk | None
+    output: ModelOutputThunk | Component | None
 
 
 ContextT = TypeVar("ContextT", bound="Context")
@@ -1591,10 +1592,14 @@ class Context(abc.ABC):
         """The last input/output turn of the context.
 
         This can be partial. If the last event is an input, then the output is None.
+        Recognizes both `ModelOutputThunk` (session-generated) and `Message` with
+        role="assistant" (manually-added) as valid response outputs.
 
         Returns:
             The most recent turn, or `None` if the context is empty.
         """
+        from mellea.stdlib.components import Message
+
         history = self.as_list(last_n_components=2)
 
         if len(history) == 0:
@@ -1602,13 +1607,20 @@ class Context(abc.ABC):
         last_element = history[-1]
         if isinstance(last_element, ModelOutputThunk):
             if len(history) >= 2:
-                # assuming that the last two elements are input and output
+                # Last two elements are input and output
                 return ContextTurn(history[-2], last_element)
             else:
-                # if self._ctx is of size 1 and only element is output element, return partial turn without an input.
+                # Single output element, return partial turn without input
+                return ContextTurn(None, last_element)
+        elif isinstance(last_element, Message) and last_element.role == "assistant":
+            # Manually-added assistant message is treated as output
+            if len(history) >= 2:
+                return ContextTurn(history[-2], last_element)
+            else:
+                # Single assistant message, return partial turn without input
                 return ContextTurn(None, last_element)
         else:
-            # if the last element is input element, return partial turn without output
+            # Last element is an input (user message or other component)
             return ContextTurn(last_element, None)
 
     # Abstract methods below this line.
