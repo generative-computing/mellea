@@ -983,6 +983,114 @@ def record_tool_call(tool: str, status: str) -> None:
     counter.add(1, {"tool": tool, "status": status})
 
 
+_intrinsic_invocations_counter: Any = None
+_intrinsic_phase_duration_histogram: Any = None
+_intrinsic_parse_failures_counter: Any = None
+
+
+def _get_intrinsic_invocations_counter() -> Any:
+    """Get or create the intrinsic invocations counter (internal use only)."""
+    global _intrinsic_invocations_counter
+
+    if _intrinsic_invocations_counter is None:
+        _intrinsic_invocations_counter = create_counter(
+            "mellea.intrinsic.invocations",
+            description="Total number of adapter function (intrinsic) invocations",
+            unit="{invocation}",
+        )
+    return _intrinsic_invocations_counter
+
+
+def _get_intrinsic_phase_duration_histogram() -> Any:
+    """Get or create the intrinsic phase duration histogram (internal use only)."""
+    global _intrinsic_phase_duration_histogram
+
+    if _intrinsic_phase_duration_histogram is None:
+        _intrinsic_phase_duration_histogram = create_histogram(
+            "mellea.intrinsic.phase_duration_ms",
+            description="Duration of each adapter function lifecycle phase",
+            unit="ms",
+        )
+    return _intrinsic_phase_duration_histogram
+
+
+def _get_intrinsic_parse_failures_counter() -> Any:
+    """Get or create the intrinsic parse failures counter (internal use only)."""
+    global _intrinsic_parse_failures_counter
+
+    if _intrinsic_parse_failures_counter is None:
+        _intrinsic_parse_failures_counter = create_counter(
+            "mellea.intrinsic.parse_failures",
+            description="Total number of adapter function schema-mismatch parse failures",
+            unit="{failure}",
+        )
+    return _intrinsic_parse_failures_counter
+
+
+def record_intrinsic_invocation(
+    name: str, revision: str, binding_type: str, adapter_type: str, outcome: str
+) -> None:
+    """Record one adapter function (intrinsic) invocation.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        name: Adapter function name (e.g. `"answerability"`).
+        revision: Catalog revision of the adapter.
+        binding_type: Weight-binding reality the adapter ran under (e.g.
+            `"local_file"`, `"embedded"`, `"server_mediated"`).
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        outcome: `"success"`, `"schema_error"`, or `"error"`.
+    """
+    if _meter is None:
+        return
+
+    _get_intrinsic_invocations_counter().add(
+        1,
+        {
+            "name": name,
+            "revision": revision,
+            "binding_type": binding_type,
+            "adapter_type": adapter_type,
+            "outcome": outcome,
+        },
+    )
+
+
+def record_intrinsic_phase_duration(name: str, phase: str, duration_ms: float) -> None:
+    """Record the duration of one adapter function lifecycle phase.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        name: Adapter function name (e.g. `"answerability"`).
+        phase: Lifecycle phase (`"prepare"`, `"activate"`, `"generate"`,
+            `"parse"`, or `"deactivate"`).
+        duration_ms: Duration of the phase in milliseconds.
+    """
+    if _meter is None:
+        return
+
+    _get_intrinsic_phase_duration_histogram().record(
+        duration_ms, {"name": name, "phase": phase}
+    )
+
+
+def record_intrinsic_parse_failure(name: str, revision: str) -> None:
+    """Record one adapter function schema-mismatch parse failure.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        name: Adapter function name (e.g. `"answerability"`).
+        revision: Catalog revision of the adapter.
+    """
+    if _meter is None:
+        return
+
+    _get_intrinsic_parse_failures_counter().add(1, {"name": name, "revision": revision})
+
+
 __all__ = [
     "classify_error",
     "create_counter",
@@ -991,6 +1099,9 @@ __all__ = [
     "is_metrics_enabled",
     "record_cost",
     "record_error",
+    "record_intrinsic_invocation",
+    "record_intrinsic_parse_failure",
+    "record_intrinsic_phase_duration",
     "record_request_duration",
     "record_requirement_check",
     "record_requirement_failure",

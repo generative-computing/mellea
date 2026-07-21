@@ -70,6 +70,10 @@ class HookType(StrEnum):
     TOOL_PRE_INVOKE = "tool_pre_invoke"
     TOOL_POST_INVOKE = "tool_post_invoke"
 
+    # Adapter Function (Intrinsic) Lifecycle
+    INTRINSIC_INVOCATION_COMPLETE = "intrinsic_invocation_complete"
+    INTRINSIC_PHASE_COMPLETE = "intrinsic_phase_complete"
+
     # Streaming Pipeline
     STREAMING_START = "streaming_start"
     STREAMING_EVENT = "streaming_event"
@@ -100,6 +104,10 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         GenerationErrorPayload,
         GenerationPostCallPayload,
         GenerationPreCallPayload,
+    )
+    from mellea.plugins.hooks.intrinsic import (
+        IntrinsicInvocationCompletePayload,
+        IntrinsicPhaseCompletePayload,
     )
     from mellea.plugins.hooks.sampling import (
         SamplingIterationPayload,
@@ -172,6 +180,15 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         # Tool Execution
         HookType.TOOL_PRE_INVOKE.value: (ToolPreInvokePayload, PluginResult),
         HookType.TOOL_POST_INVOKE.value: (ToolPostInvokePayload, PluginResult),
+        # Adapter Function (Intrinsic) Lifecycle
+        HookType.INTRINSIC_INVOCATION_COMPLETE.value: (
+            IntrinsicInvocationCompletePayload,
+            PluginResult,
+        ),
+        HookType.INTRINSIC_PHASE_COMPLETE.value: (
+            IntrinsicPhaseCompletePayload,
+            PluginResult,
+        ),
         # Streaming Pipeline
         HookType.STREAMING_START.value: (StreamingStartPayload, PluginResult),
         HookType.STREAMING_EVENT.value: (StreamingEventPayload, PluginResult),

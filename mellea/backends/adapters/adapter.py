@@ -99,26 +99,26 @@ class _ShimIOContract(IOContract):
 
 
 class _ShimWeightsBinding(WeightsBinding):
-    """Phase 1 placeholder; Phase 2 (issue #1138) wires in real lifecycle."""
+    """Phase 1 placeholder; Phase 2 (see epic #929) wires in real lifecycle."""
 
     def prepare(self) -> None:
         raise NotImplementedError(
-            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
         )
 
     def activate(self) -> None:
         raise NotImplementedError(
-            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
         )
 
     def deactivate(self) -> None:
         raise NotImplementedError(
-            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
         )
 
     def release(self) -> None:
         raise NotImplementedError(
-            "Phase 2 (issue #1138) — WeightsBinding not yet implemented"
+            "Phase 2 (see epic #929) — WeightsBinding not yet implemented"
         )
 
 
@@ -164,7 +164,7 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
         populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
         protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
         ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
-        (issues #1137, #1138).
+        (issues #1137, #1141).
     """
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -329,11 +329,19 @@ def get_adapter_for_intrinsic(
 class AdapterMixin(Backend, abc.ABC):
     """Mixin class for backends capable of utilizing adapters.
 
+    Three verbs are universal across every adapter reality (LocalFile/PEFT,
+    Embedded/Granite Switch, ServerMediated): ``base_model_name``,
+    ``add_adapter``, and ``list_adapters``. The remaining four verbs are
+    reality-specific — a concrete backend overrides only the verb(s) matching
+    its own reality; the others keep raising ``NotImplementedError``.
+
     Attributes:
         base_model_name (str): The short model name used to identify adapter
             variants (e.g. ``"granite-3.3-8b-instruct"`` for
             ``"ibm-granite/granite-3.3-8b-instruct"``).
     """
+
+    # ---- Universal verbs (every adapter reality) ----
 
     @property
     @abc.abstractmethod
@@ -345,44 +353,23 @@ class AdapterMixin(Backend, abc.ABC):
         """
 
     @abc.abstractmethod
-    def add_adapter(self, *args, **kwargs):
+    def add_adapter(self, adapter: "Adapter | _AdapterCore") -> None:
         """Register an adapter with this backend so it can be loaded later.
 
         The adapter must not already have been added to a different backend.
 
         Args:
-            args: Positional arguments forwarded to the concrete implementation.
-            kwargs: Keyword arguments forwarded to the concrete implementation.
-        """
-
-    @abc.abstractmethod
-    def load_adapter(self, adapter_qualified_name: str):
-        """Load a previously registered adapter into the underlying model.
-
-        The adapter must have been registered via ``add_adapter`` before calling
-        this method.
-
-        Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
-                adapter to load.
-        """
-
-    @abc.abstractmethod
-    def unload_adapter(self, adapter_qualified_name: str):
-        """Unload a previously loaded adapter from the underlying model.
-
-        Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
-                adapter to unload.
+            adapter (Adapter | _AdapterCore): The adapter to register with
+                this backend.
         """
 
     @abc.abstractmethod
     def list_adapters(self) -> list[str]:
-        """Return the qualified names of all adapters currently loaded in this backend.
+        """Return the qualified names of all adapters registered with this backend.
 
         Returns:
             list[str]: Qualified adapter names for all adapters that have been
-                loaded via ``load_adapter``.
+                registered via ``add_adapter``.
 
         Raises:
             NotImplementedError: If the concrete backend subclass has not
@@ -392,12 +379,94 @@ class AdapterMixin(Backend, abc.ABC):
             f"Backend type {type(self)} does not implement list_adapters() API call."
         )
 
+    # ---- Reality-specific verbs ----
+
+    def load_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Load a previously registered PEFT adapter into the underlying model.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model). The adapter must have been registered via ``add_adapter``
+        before calling this method.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+                adapter to load.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support load_peft_adapter()."
+        )
+
+    def unload_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Unload a previously loaded PEFT adapter from the underlying model.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model).
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+                adapter to unload.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support unload_peft_adapter()."
+        )
+
+    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
+        """Render or clear the control tokens for a baked-in embedded adapter.
+
+        Embedded/Granite Switch reality only. Weights are already baked into
+        the model; this only toggles the control-token rendering that
+        activates or deactivates the adapter's behaviour for subsequent
+        requests.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+                adapter to activate or deactivate.
+            active (bool): ``True`` to render the adapter's control tokens,
+                ``False`` to clear them.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                Embedded/Granite Switch.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support render_controls()."
+        )
+
+    def set_request_adapter(self, adapter_qualified_name: str) -> None:
+        """Select the adapter to use for the next request.
+
+        ServerMediated reality only — for servers that accept an adapter
+        selection per request rather than loading/unloading weights or
+        toggling control tokens locally. No backend implements this reality
+        yet.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+                adapter to select.
+
+        Raises:
+            NotImplementedError: Always — the ServerMediated adapter reality
+                has no implementation yet.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support set_request_adapter(); "
+            "the ServerMediated adapter reality is not implemented yet."
+        )
+
     def resolve_adapter(self, name: str) -> _AdapterCore:
         """Find or lazily register an adapter by capability name.
 
         Default implementation preserves Phase 0 behaviour, using the internal
         ``_added_adapters`` dict that concrete backends maintain.  Override in
-        Phase 2 (issue #1138) to implement proper lifecycle management.
+        Phase 2 (see epic #929) to implement proper lifecycle management.
 
         Args:
             name (str): Capability name (e.g. ``"answerability"``).
@@ -424,7 +493,7 @@ class AdapterMixin(Backend, abc.ABC):
         # add_adapter is idempotent so the double-registration hazard is benign, but the
         # filter race is a known Phase-1 gap: two concurrent first-time call_intrinsic
         # calls can interleave their catch_warnings contexts, causing a DeprecationWarning
-        # to surface in user code during lazy-registration.  Phase 2 (#1138) adds a lock.
+        # to surface in user code during lazy-registration.  Phase 2 (see epic #929) adds a lock.
         # Suppress DeprecationWarning: the shim constructors warn user-facing code,
         # not internal registration paths.
         with warnings.catch_warnings():
@@ -445,8 +514,8 @@ class AdapterMixin(Backend, abc.ABC):
                     self.add_adapter(a)
             else:
                 # AdapterType.LORA is the pre-Phase-1 default (mirrors old _util.py).
-                # Every current catalog entry supports LORA.  Phase 2 (#1138) will
-                # select the type from catalog availability instead of hardcoding.
+                # Every current catalog entry supports LORA.  Phase 2 (see epic #929)
+                # will select the type from catalog availability instead of hardcoding.
                 self.add_adapter(
                     IntrinsicAdapter(
                         name, adapter_type=AdapterType.LORA, base_model_name=base
@@ -463,7 +532,7 @@ class AdapterMixin(Backend, abc.ABC):
     def adapter_scope(self, adapter: "_AdapterCore | None"):  # type: ignore[type-arg]
         """Context manager wrapping adapter activation and deactivation.
 
-        Phase 1 stub — yields immediately (no-op). Phase 2 (issue #1138) wires
+        Phase 1 stub — yields immediately (no-op). Phase 2 (see epic #929) wires
         in ``adapter.weights.activate()`` and ``adapter.weights.deactivate()``.
 
         Args:
@@ -535,7 +604,7 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
         protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
         ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
-        (issues #1137, #1138).
+        (issues #1137, #1142).
     """
 
     def __setattr__(self, name: str, value: object) -> None:

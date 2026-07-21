@@ -51,6 +51,7 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
+from ._options import resolve_model_options
 from .adapters._core import Adapter
 from .adapters.adapter import AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
@@ -252,7 +253,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # AdapterMixin implementation
     # ------------------------------------------------------------------
 
-    def add_adapter(self, adapter: Adapter) -> None:
+    def add_adapter(self, adapter: Adapter) -> None:  # type: ignore[override]
         """Register an adapter with this backend.
 
         Currently only :class:`EmbeddedIntrinsicAdapter` is supported.
@@ -271,18 +272,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
 
-    def load_adapter(self, adapter_qualified_name: str) -> None:
-        """No-op for embedded adapters — weights are baked into the model."""
-        MelleaLogger.get_logger().debug(
-            "load_adapter is a no-op for OpenAIBackends (adapter: %s)",
-            adapter_qualified_name,
-        )
+    def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
+        """No-op for embedded adapters — weights are baked into the model.
 
-    def unload_adapter(self, adapter_qualified_name: str) -> None:
-        """No-op for embedded adapters — weights are baked into the model."""
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to activate or deactivate.
+            active (bool): `True` to activate the adapter, `False` to
+                deactivate it.
+        """
         MelleaLogger.get_logger().debug(
-            "unload_adapter is a no-op for OpenAIBackends (adapter: %s)",
+            "render_controls is a no-op for OpenAIBackends (adapter: %s, active: %s)",
             adapter_qualified_name,
+            active,
         )
 
     def list_adapters(self) -> list[str]:
@@ -411,16 +413,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         if not is_chat_context:
             remap_dict = self.to_mellea_model_opts_map_completions
 
-        backend_model_opts = ModelOption.replace_keys(self.model_options, remap_dict)
-
-        if model_options is None:
-            return backend_model_opts
-
-        generate_call_model_opts = ModelOption.replace_keys(model_options, remap_dict)
-        merged = ModelOption.merge_model_options(
-            backend_model_opts, generate_call_model_opts
+        return resolve_model_options(
+            backend_defaults=self.model_options,
+            remap=remap_dict,
+            call_options=model_options,
         )
-        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], is_chat_context: bool

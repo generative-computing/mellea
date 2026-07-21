@@ -13,6 +13,8 @@ automatically record metrics when enabled. Currently includes:
 - SamplingMetricsPlugin: Records sampling attempt/success/failure counts per strategy
 - RequirementMetricsPlugin: Records requirement validation check and failure counts
 - ToolMetricsPlugin: Records tool invocation counts by name and status
+- IntrinsicMetricsPlugin: Records adapter function (intrinsic) invocation and
+  phase-duration metrics
 """
 
 from __future__ import annotations
@@ -30,6 +32,10 @@ if TYPE_CHECKING:
         GenerationBatchPostCallPayload,
         GenerationErrorPayload,
         GenerationPostCallPayload,
+    )
+    from mellea.plugins.hooks.intrinsic import (
+        IntrinsicInvocationCompletePayload,
+        IntrinsicPhaseCompletePayload,
     )
     from mellea.plugins.hooks.sampling import (
         SamplingIterationPayload,
@@ -456,6 +462,58 @@ class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=56):
         record_tool_call(tool_name, status)
 
 
+class IntrinsicMetricsPlugin(Plugin, name="intrinsic_metrics", priority=57):
+    """Records adapter function (intrinsic) invocation and phase-duration metrics.
+
+    Hooks into `intrinsic_invocation_complete` and `intrinsic_phase_complete`.
+    No production call site fires these hooks yet — real `prepare`/`activate`/
+    `generate`/`parse`/`deactivate` wiring lands with the LocalFileBinding and
+    EmbeddedBinding lifecycle work (Epic #929 Phase 2 follow-ups).
+    """
+
+    @hook("intrinsic_invocation_complete", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_intrinsic_invocation(
+        self, payload: IntrinsicInvocationCompletePayload, context: dict[str, Any]
+    ) -> None:
+        """Record one adapter function invocation after it completes.
+
+        Args:
+            payload: Contains name, revision, binding_type, adapter_type, and outcome.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import (
+            record_intrinsic_invocation,
+            record_intrinsic_parse_failure,
+        )
+
+        revision = payload.revision or "unknown"
+        record_intrinsic_invocation(
+            name=payload.name,
+            revision=revision,
+            binding_type=payload.binding_type,
+            adapter_type=payload.adapter_type,
+            outcome=payload.outcome,
+        )
+        if payload.outcome == "schema_error":
+            record_intrinsic_parse_failure(payload.name, revision)
+
+    @hook("intrinsic_phase_complete", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_intrinsic_phase(
+        self, payload: IntrinsicPhaseCompletePayload, context: dict[str, Any]
+    ) -> None:
+        """Record one adapter function lifecycle phase after it completes.
+
+        Args:
+            payload: Contains name, phase, and duration_ms.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_intrinsic_phase_duration
+
+        record_intrinsic_phase_duration(
+            payload.name, payload.phase, payload.duration_ms
+        )
+
+
 # All metrics plugins to auto-register when metrics are enabled
 _METRICS_PLUGIN_CLASSES = (
     TokenMetricsPlugin,
@@ -465,4 +523,5 @@ _METRICS_PLUGIN_CLASSES = (
     SamplingMetricsPlugin,
     RequirementMetricsPlugin,
     ToolMetricsPlugin,
+    IntrinsicMetricsPlugin,
 )
