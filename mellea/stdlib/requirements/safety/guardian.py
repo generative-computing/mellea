@@ -13,6 +13,7 @@ from ....core import (
     CBlock,
     Context,
     MelleaLogger,
+    ModelOutputThunk,
     Requirement,
     ValidationResult,
 )
@@ -314,8 +315,11 @@ class GuardianCheck(Requirement):
                     # Extract content from either ModelOutputThunk or Message
                     if isinstance(last_turn.output, Message):
                         content = last_turn.output.content
-                    else:
+                    elif isinstance(last_turn.output, ModelOutputThunk):
                         content = last_turn.output.value or ""
+                    else:
+                        # Fallback for other Component types
+                        content = ""
                     tcalls = getattr(last_turn.output, "tool_calls", None)
                     if tcalls:
                         calls = [
