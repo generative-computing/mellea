@@ -785,7 +785,9 @@ class WatsonxAIBackend(FormatterBackend):
 
             # Validate and coerce argument types
             validated_args = validate_tool_arguments(func, args, strict=False)
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
+            model_tool_calls[tool_name] = ModelToolCall(
+                tool_name, func, validated_args, tool_call_id=tool_call.get("id")
+            )
 
         if len(model_tool_calls) > 0:
             return model_tool_calls

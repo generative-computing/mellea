@@ -282,7 +282,7 @@ All sampling metrics include:
 
 | Attribute | Description | Example Values |
 | --------- | ----------- | -------------- |
-| `tool` | Name of the invoked tool | `"search"`, `"calculator"` |
+| `gen_ai.tool.name` | Name of the invoked tool | `"search"`, `"calculator"` |
 | `status` | Execution outcome | `success`, `failure` |
 
 ## Metrics export configuration

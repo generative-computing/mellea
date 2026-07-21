@@ -980,7 +980,7 @@ def record_tool_call(tool: str, status: str) -> None:
         return
 
     counter = _get_tool_calls_counter()
-    counter.add(1, {"tool": tool, "status": status})
+    counter.add(1, {"gen_ai.tool.name": tool, "status": status})
 
 
 __all__ = [

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from collections.abc import Coroutine, Iterable
 from typing import Any, Literal, overload
 
@@ -609,7 +610,6 @@ async def aact(
     """
     import time
     import traceback
-    import uuid
 
     action_id = str(uuid.uuid4())
 
@@ -1314,11 +1314,14 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
 
     for name, tool in tool_calls.items():
         control_flow = is_internal_tool(name)
+        tool_invocation_id = str(uuid.uuid4())
 
         # --- tool_pre_invoke ---
         if has_plugins(HookType.TOOL_PRE_INVOKE):
             pre_payload = ToolPreInvokePayload(
-                model_tool_call=tool, is_control_flow=control_flow
+                tool_invocation_id=tool_invocation_id,
+                model_tool_call=tool,
+                is_control_flow=control_flow,
             )
             _, pre_payload = await invoke_hook(
                 HookType.TOOL_PRE_INVOKE, pre_payload, backend=backend
@@ -1359,6 +1362,7 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         # --- tool_post_invoke ---
         if has_plugins(HookType.TOOL_POST_INVOKE):
             post_payload = ToolPostInvokePayload(
+                tool_invocation_id=tool_invocation_id,
                 model_tool_call=tool,
                 tool_output=output,
                 tool_message=tool_msg,

@@ -50,11 +50,18 @@ except ImportError:
     trace = None  # type: ignore
     otel_context = None  # type: ignore
 
-
-def _env_true(name: str) -> bool:
-    """Return True if `name` is set to a truthy value (1/true/yes)."""
-    return os.getenv(name, "false").lower() in ("true", "1", "yes")
-
+from mellea.telemetry._tracing_helpers import (
+    _env_true,
+    content_capture_enabled,
+    get_capture_content_value,
+    get_tool_call_attrs,
+    set_attribute_safe,
+    set_conversation_id,
+    set_mellea_attrs,
+    set_request_attrs,
+    set_response_attrs,
+    set_usage_attrs,
+)
 
 _tracer_provider: Any = None
 _application_tracer: Any = None
@@ -200,11 +207,7 @@ def is_content_tracing_enabled() -> bool:
         True if enabled via `MELLEA_TRACES_CONTENT` or
         `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
     """
-    if not _OTEL_AVAILABLE:
-        return False
-    return _env_true("MELLEA_TRACES_CONTENT") or _env_true(
-        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
-    )
+    return _OTEL_AVAILABLE and content_capture_enabled()
 
 
 def get_application_tracer() -> Any:
@@ -363,7 +366,6 @@ def start_backend_span(
         The span, or `None` if tracing is disabled.
     """
     from mellea.core.base import GenerationMetadata
-    from mellea.telemetry._tracing_setters import set_conversation_id, set_request_attrs
 
     tracer = get_backend_tracer()
     if tracer is None:
@@ -413,13 +415,6 @@ def finish_backend_span_success(
         mot: The fully-computed `ModelOutputThunk`, or `None`.
         gen: The `GenerationMetadata` from the MOT, or `None`.
     """
-    from mellea.telemetry._tracing_setters import (
-        set_mellea_attrs,
-        set_request_attrs,
-        set_response_attrs,
-        set_usage_attrs,
-    )
-
     entry = _in_flight_spans.pop(generation_id, None)
     if entry is None:
         return
@@ -452,8 +447,6 @@ def finish_backend_span_error(
         exception: The exception raised by the backend.
         gen: Optional `GenerationMetadata` for refreshing request attrs.
     """
-    from mellea.telemetry._tracing_setters import set_request_attrs
-
     entry = _in_flight_spans.pop(generation_id, None)
     if entry is None:
         return
@@ -483,8 +476,6 @@ def _start_application_span(
     Returns:
         The span, or `None` if the application tracer is unavailable.
     """
-    from mellea.telemetry._tracing_setters import set_attribute_safe
-
     tracer = get_application_tracer()
     if tracer is None:
         return None
@@ -512,8 +503,6 @@ def _finish_application_span_success(
         key: Correlation key from the matching open call.
         extra_attributes: Optional response-side attributes; `None` values are skipped.
     """
-    from mellea.telemetry._tracing_setters import set_attribute_safe
-
     entry = _in_flight_spans.pop(key, None)
     if entry is None:
         return
@@ -546,8 +535,6 @@ def _finish_application_span_error(
         exception: The exception to record, when one was raised.
         description: ERROR-status description used when `exception` is `None`.
     """
-    from mellea.telemetry._tracing_setters import set_attribute_safe
-
     entry = _in_flight_spans.pop(key, None)
     if entry is None:
         return
@@ -720,8 +707,7 @@ def finish_action_span_success(
 ) -> None:
     """End the action span with response-side attributes.
 
-    `mellea.response` is recorded only when `is_content_tracing_enabled()`
-    returns true; the helper truncates to 500 chars before recording.
+    `mellea.response` is recorded (truncated) only when content capture is enabled;
     `mellea.response_length` is always recorded (a non-content metric).
 
     Args:
@@ -732,30 +718,101 @@ def finish_action_span_success(
             when content tracing is enabled.
         response_length: `mellea.response_length` (always safe; ungated).
     """
-    response_value: str | None = None
-    if response_text is not None and is_content_tracing_enabled():
-        response_value = (
-            response_text[:500] + "..." if len(response_text) > 500 else response_text
-        )
     _finish_application_span_success(
         action_id,
         extra_attributes={
             "mellea.num_generate_logs": num_generate_logs,
             "mellea.sampling_success": sampling_success,
-            "mellea.response": response_value,
+            "mellea.response": get_capture_content_value(response_text),
             "mellea.response_length": response_length,
         },
     )
 
 
-def finish_action_span_error(action_id: str, *, exception: BaseException) -> None:
+def finish_action_span_error(
+    action_id: str, *, exception: BaseException | None
+) -> None:
     """End the action span with ERROR status.
 
     Args:
         action_id: Correlation key from the matching open call.
-        exception: The exception that ended the action.
+        exception: The exception that ended the action, or `None` to set ERROR
+            status without a recorded exception.
     """
     _finish_application_span_error(action_id, exception=exception)
+
+
+def start_tool_span(
+    tool_invocation_id: str,
+    model_tool_call: Any,
+    *,
+    is_control_flow: bool,
+    attach_context: bool = True,
+) -> Span | None:
+    """Open the `execute_tool` span for a single tool invocation.
+
+    Args:
+        tool_invocation_id: UUID correlating this invocation across the pre/post hooks.
+        model_tool_call: The `ModelToolCall` being executed.
+        is_control_flow: Whether this tool is framework control flow.
+        attach_context: Whether to attach the span as the ambient OTel context.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    attrs = get_tool_call_attrs(model_tool_call)
+    attrs["mellea.tool.is_control_flow"] = is_control_flow
+    return _start_application_span(
+        f"execute_tool {attrs['gen_ai.tool.name']}",
+        tool_invocation_id,
+        attrs,
+        attach_context=attach_context,
+    )
+
+
+def finish_tool_span_success(
+    tool_invocation_id: str, *, execution_time_ms: int, result: Any | None
+) -> None:
+    """End the tool span with success status and response-side attributes.
+
+    `gen_ai.tool.call.result` is recorded (truncated) only when content capture
+    is enabled.
+
+    Args:
+        tool_invocation_id: Correlation key from the matching open call.
+        execution_time_ms: Wall-clock tool execution time.
+        result: The tool's return value. Recorded as `gen_ai.tool.call.result`
+            only when content tracing is enabled.
+    """
+    _finish_application_span_success(
+        tool_invocation_id,
+        extra_attributes={
+            "mellea.tool.status": "success",
+            "mellea.tool.execution_time_ms": execution_time_ms,
+            "gen_ai.tool.call.result": get_capture_content_value(result),
+        },
+    )
+
+
+def finish_tool_span_error(
+    tool_invocation_id: str, *, execution_time_ms: int, exception: BaseException | None
+) -> None:
+    """End the tool span with ERROR status, recording the exception.
+
+    Args:
+        tool_invocation_id: Correlation key from the matching open call.
+        execution_time_ms: Wall-clock tool execution time.
+        exception: The exception raised by the tool, or `None` to set ERROR
+            status without a recorded exception.
+    """
+    _finish_application_span_error(
+        tool_invocation_id,
+        extra_attributes={
+            "mellea.tool.status": "failure",
+            "mellea.tool.execution_time_ms": execution_time_ms,
+        },
+        exception=exception,
+    )
 
 
 def start_streaming_span(

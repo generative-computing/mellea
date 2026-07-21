@@ -713,7 +713,10 @@ class OllamaModelBackend(FormatterBackend):
                 # Validate and coerce argument types
                 validated_args = validate_tool_arguments(func, args, strict=False)
                 model_tool_calls[tool.function.name] = ModelToolCall(
-                    tool.function.name, func, validated_args
+                    tool.function.name,
+                    func,
+                    validated_args,
+                    tool_call_id=getattr(tool, "id", None),
                 )
 
         if len(model_tool_calls) > 0:

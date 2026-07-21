@@ -265,7 +265,7 @@ def test_record_tool_call_success(clean_metrics_env):
 
     assert len(dps) == 1
     attrs = dict(dps[0].attributes)
-    assert attrs["tool"] == "search"
+    assert attrs["gen_ai.tool.name"] == "search"
     assert attrs["status"] == "success"
 
 
@@ -301,7 +301,7 @@ def test_record_tool_call_multiple_tools(clean_metrics_env):
     dps = _data_points_for(reader.get_metrics_data(), "mellea.tool.calls")
 
     assert len(dps) == 2
-    tools = {dict(dp.attributes)["tool"] for dp in dps}
+    tools = {dict(dp.attributes)["gen_ai.tool.name"] for dp in dps}
     assert tools == {"search", "calculator"}
 
 

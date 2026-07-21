@@ -854,6 +854,7 @@ class TestToolPreInvokePayload:
     def test_defaults(self):
         payload = ToolPreInvokePayload()
         assert payload.model_tool_call is None
+        assert payload.tool_invocation_id == ""
 
     def test_construction_with_values(self):
         payload = ToolPreInvokePayload(
@@ -894,6 +895,7 @@ class TestToolPostInvokePayload:
         assert payload.execution_time_ms == 0
         assert payload.success is True
         assert payload.error is None
+        assert payload.tool_invocation_id == ""
 
     def test_construction_successful(self):
         payload = ToolPostInvokePayload(

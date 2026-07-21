@@ -1752,12 +1752,15 @@ class ModelToolCall:
         name (str): The name of the tool the model requested to call.
         func (AbstractMelleaTool): The `AbstractMelleaTool` instance that will be invoked.
         args (Mapping[str, Any]): The keyword arguments the model supplied for the tool call.
+        tool_call_id (str | None): The provider-supplied tool-call id, when the backend
+            exposes one; `None` for backends or paths that do not (e.g., raw-string parsing).
 
     """
 
     name: str
     func: AbstractMelleaTool
     args: Mapping[str, Any]
+    tool_call_id: str | None = None
 
     def call_func(self) -> Any:
         """Invokes the tool represented by this object and returns the result.

@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for the BackendTracingPlugin span lifecycle."""
+"""Unit tests for the tracing plugin lifecycles."""
 
 import asyncio
 from unittest.mock import MagicMock, patch
@@ -33,6 +33,7 @@ from mellea.plugins.hooks.streaming import (
     StreamingEventPayload,
     StreamingStartPayload,
 )
+from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
 from mellea.stdlib.streaming import (
     ChunkEvent,
     ErrorEvent,
@@ -46,6 +47,7 @@ from mellea.telemetry.tracing_plugins import (
     BackendTracingPlugin,
     ComponentTracingPlugin,
     StreamingTracingPlugin,
+    ToolTracingPlugin,
 )
 from test.telemetry.conftest import reset_tracing_state
 
@@ -63,6 +65,11 @@ def component_plugin():
 @pytest.fixture
 def streaming_plugin():
     return StreamingTracingPlugin()
+
+
+@pytest.fixture
+def tool_plugin():
+    return ToolTracingPlugin()
 
 
 @pytest.fixture
@@ -1017,3 +1024,256 @@ async def test_streaming_start_end_skip_when_streaming_id_empty(
     await streaming_plugin.on_streaming_end(
         StreamingEndPayload(streaming_id="", success=True), {}
     )
+
+
+# ToolTracingPlugin tests
+
+
+def _mock_tool_call(
+    name="search", args=None, tool_call_id="call-abc", description="Search the web"
+):
+    """Build a mock ModelToolCall exposing name/args/tool_call_id and a tool schema."""
+    tc = MagicMock()
+    tc.name = name
+    tc.args = args if args is not None else {"q": "hello"}
+    tc.tool_call_id = tool_call_id
+    tc.func.as_json_tool = {
+        "type": "function",
+        "function": {"name": name, "description": description},
+    }
+    return tc
+
+
+@pytest.mark.asyncio
+async def test_tool_pre_call_starts_and_stashes(tool_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    payload = ToolPreInvokePayload(
+        model_tool_call=_mock_tool_call(),
+        tool_invocation_id="iid-1",
+        is_control_flow=True,
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(payload, {})
+
+    fake_tracer.start_span.assert_called_once_with("execute_tool search")
+    assert "iid-1" in tracing._in_flight_spans
+    fake_span.end.assert_not_called()
+    attrs = _attrs(fake_span)
+    assert attrs["gen_ai.operation.name"] == "execute_tool"
+    assert attrs["gen_ai.tool.name"] == "search"
+    assert attrs["gen_ai.tool.type"] == "function"
+    assert attrs["gen_ai.tool.description"] == "Search the web"
+    assert attrs["gen_ai.tool.call.id"] == "call-abc"
+    assert attrs["mellea.tool.is_control_flow"] is True
+    assert "mellea.tool.arguments_hash" in attrs
+
+
+@pytest.mark.asyncio
+async def test_tool_span_omits_optional_attrs_when_absent(tool_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    tc = MagicMock()
+    tc.name = "bare"
+    tc.args = {}
+    tc.tool_call_id = None
+    # No usable schema: as_json_tool raises.
+    type(tc.func).as_json_tool = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("no schema"))
+    )
+
+    payload = ToolPreInvokePayload(model_tool_call=tc, tool_invocation_id="iid-bare")
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(payload, {})
+
+    attrs = _attrs(fake_span)
+    assert attrs["gen_ai.tool.name"] == "bare"
+    assert attrs["gen_ai.operation.name"] == "execute_tool"
+    assert "gen_ai.tool.type" not in attrs
+    assert "gen_ai.tool.description" not in attrs
+    assert "gen_ai.tool.call.id" not in attrs
+
+
+@pytest.mark.asyncio
+async def test_tool_post_call_finishes_success(tool_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    tc = _mock_tool_call()
+    pre = ToolPreInvokePayload(model_tool_call=tc, tool_invocation_id="iid-2")
+    post = ToolPostInvokePayload(
+        model_tool_call=tc,
+        tool_output="done",
+        execution_time_ms=42,
+        success=True,
+        tool_invocation_id="iid-2",
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(pre, {})
+        await tool_plugin.on_tool_post_invoke(post, {})
+
+    fake_span.end.assert_called_once()
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.tool.status"] == "success"
+    assert attrs["mellea.tool.execution_time_ms"] == 42
+    assert "iid-2" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_tool_post_call_finishes_error(tool_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    tc = _mock_tool_call()
+    pre = ToolPreInvokePayload(model_tool_call=tc, tool_invocation_id="iid-err")
+    post = ToolPostInvokePayload(
+        model_tool_call=tc,
+        execution_time_ms=5,
+        success=False,
+        error=ValueError("boom"),
+        tool_invocation_id="iid-err",
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(pre, {})
+        await tool_plugin.on_tool_post_invoke(post, {})
+
+    fake_span.end.assert_called_once()
+    fake_span.record_exception.assert_called_once()
+    fake_span.set_status.assert_called_once()
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.tool.status"] == "failure"
+    assert attrs["error.type"] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_tool_post_without_pre_is_noop(tool_plugin, enabled_tracing):
+    """A post hook with no matching in-flight span is a silent no-op."""
+    fake_tracer = MagicMock()
+
+    post = ToolPostInvokePayload(
+        model_tool_call=_mock_tool_call(),
+        tool_output="done",
+        execution_time_ms=10,
+        success=True,
+        tool_invocation_id="iid-orphan",
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_post_invoke(post, {})
+
+    fake_tracer.start_span.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tool_span_content_gating(tool_plugin, enabled_tracing, monkeypatch):
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    tc = _mock_tool_call(args={"q": "hello"})
+    pre = ToolPreInvokePayload(model_tool_call=tc, tool_invocation_id="iid-c")
+    post = ToolPostInvokePayload(
+        model_tool_call=tc,
+        tool_output="the result",
+        execution_time_ms=1,
+        success=True,
+        tool_invocation_id="iid-c",
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(pre, {})
+        await tool_plugin.on_tool_post_invoke(post, {})
+
+    attrs = _attrs(fake_span)
+    assert "gen_ai.tool.call.arguments" in attrs
+    assert attrs["gen_ai.tool.call.result"] == "the result"
+
+
+@pytest.mark.asyncio
+async def test_tool_span_content_gated_off_by_default(
+    tool_plugin, enabled_tracing, monkeypatch
+):
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    tc = _mock_tool_call(args={"q": "hello"})
+    pre = ToolPreInvokePayload(model_tool_call=tc, tool_invocation_id="iid-d")
+    post = ToolPostInvokePayload(
+        model_tool_call=tc,
+        tool_output="the result",
+        execution_time_ms=1,
+        success=True,
+        tool_invocation_id="iid-d",
+    )
+
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(pre, {})
+        await tool_plugin.on_tool_post_invoke(post, {})
+
+    attrs = _attrs(fake_span)
+    assert "gen_ai.tool.call.arguments" not in attrs
+    assert "gen_ai.tool.call.result" not in attrs
+    # Hash is always recorded (non-content).
+    assert "mellea.tool.arguments_hash" in attrs
+
+
+@pytest.mark.asyncio
+async def test_tool_span_noop_when_tracing_disabled(tool_plugin, enabled_tracing):
+    with patch("mellea.telemetry.tracing.get_application_tracer", return_value=None):
+        await tool_plugin.on_tool_pre_invoke(
+            ToolPreInvokePayload(
+                model_tool_call=_mock_tool_call(), tool_invocation_id="iid-off"
+            ),
+            {},
+        )
+    assert "iid-off" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_tool_span_skips_without_id(tool_plugin, enabled_tracing):
+    fake_tracer = MagicMock()
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await tool_plugin.on_tool_pre_invoke(
+            ToolPreInvokePayload(
+                model_tool_call=_mock_tool_call(), tool_invocation_id=""
+            ),
+            {},
+        )
+        await tool_plugin.on_tool_post_invoke(
+            ToolPostInvokePayload(
+                model_tool_call=_mock_tool_call(), success=True, tool_invocation_id=""
+            ),
+            {},
+        )
+    fake_tracer.start_span.assert_not_called()

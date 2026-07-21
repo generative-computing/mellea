@@ -14,6 +14,8 @@ class ToolPreInvokePayload(MelleaBasePayload):
     """Payload for `tool_pre_invoke` — before tool/function invocation.
 
     Attributes:
+        tool_invocation_id: UUID correlating the pre/post hooks for a single
+            tool invocation.
         model_tool_call: The `ModelToolCall` about to be executed (writable —
             plugins may modify arguments or swap the tool entirely).
         is_control_flow: `True` when this tool is used for framework control
@@ -21,6 +23,7 @@ class ToolPreInvokePayload(MelleaBasePayload):
             Plugins should check this field to decide whether to act.
     """
 
+    tool_invocation_id: str = ""
     model_tool_call: Any = None
     is_control_flow: bool = False
 
@@ -29,6 +32,8 @@ class ToolPostInvokePayload(MelleaBasePayload):
     """Payload for `tool_post_invoke` — after tool execution.
 
     Attributes:
+        tool_invocation_id: UUID correlating the pre/post hooks for a single
+            tool invocation.
         model_tool_call: The `ModelToolCall` that was executed.
         tool_output: The return value of the tool function (writable —
             plugins may transform the output before it is formatted).
@@ -41,6 +46,7 @@ class ToolPostInvokePayload(MelleaBasePayload):
             Plugins should check this field to decide whether to act.
     """
 
+    tool_invocation_id: str = ""
     model_tool_call: Any = None
     tool_output: Any = None
     tool_message: Any = None
