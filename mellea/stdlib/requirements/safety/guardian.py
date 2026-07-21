@@ -319,6 +319,10 @@ class GuardianCheck(Requirement):
                         content = last_turn.output.value or ""
                     else:
                         # Fallback for other Component types
+                        logger.warning(
+                            f"Unexpected component type in last_turn.output: {type(last_turn.output).__name__}. "
+                            "Treating as empty content."
+                        )
                         content = ""
                     tcalls = getattr(last_turn.output, "tool_calls", None)
                     if tcalls:

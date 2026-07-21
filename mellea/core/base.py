@@ -1605,19 +1605,13 @@ class Context(abc.ABC):
         if len(history) == 0:
             return None
         last_element = history[-1]
-        if isinstance(last_element, ModelOutputThunk):
-            if len(history) >= 2:
-                # Last two elements are input and output
-                return ContextTurn(history[-2], last_element)
-            else:
-                # Single output element, return partial turn without input
-                return ContextTurn(None, last_element)
-        elif isinstance(last_element, Message) and last_element.role == "assistant":
-            # Manually-added assistant message is treated as output
+        if isinstance(last_element, ModelOutputThunk) or (
+            isinstance(last_element, Message) and last_element.role == "assistant"
+        ):
+            # Only role=="assistant" is output; tool messages fall through to input (matches #377 scoping)
             if len(history) >= 2:
                 return ContextTurn(history[-2], last_element)
             else:
-                # Single assistant message, return partial turn without input
                 return ContextTurn(None, last_element)
         else:
             # Last element is an input (user message or other component)
