@@ -176,6 +176,8 @@ notebook = [
 
 [tool.pdm.build]
 # Ship only the runtime package and the CLI (the `m` entry point imports cli.m:cli).
+# Directory entries copy the whole tree, not just .py files -- this is required for
+# mellea/py.typed and the jinja2 templates under mellea/templates/, not just source code.
 includes = ["mellea/", "cli/"]
 # sdist-only: source files worth shipping in the tarball but not the wheel.
 source-includes = ["README.md", "LICENSE"]
