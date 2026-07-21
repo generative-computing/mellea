@@ -77,6 +77,8 @@ def example_with_import_restrictions():
     assert "numpy" in code, "Code should use numpy"
     # Verify no forbidden imports are present
     assert "subprocess" not in code
+
+    # Use ' os' so that 'purposes' and other words don't trigger the assert.
     assert " os" not in code
 
 
