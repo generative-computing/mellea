@@ -883,3 +883,32 @@ async def test_multimodal_blocks_on_instruction_as_action_raise_error(images, au
             ctx,
             model_options={},
         )
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
+    stub_backend, images, audio
+):
+    """_generate_from_intrinsic raises ValueError when ctx contains image/audio blocks.
+
+    The guard on the intrinsic path passes ``action=None`` and scans only the context;
+    this test exercises that branch directly.
+    """
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await LocalHFBackend._generate_from_intrinsic(
+            backend, Intrinsic("answerability"), ctx, model_options={}
+        )
