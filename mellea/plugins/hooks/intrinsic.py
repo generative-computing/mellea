@@ -46,5 +46,9 @@ class IntrinsicPhaseCompletePayload(MelleaBasePayload):
     """
 
     name: str = ""
-    phase: str = ""
+    # Constrained to a Literal so a typo can't silently spawn a new metric-label
+    # series (the phase becomes a metric dimension). "" is the unset sentinel: the
+    # field can't be made required because the base payload's fields are all
+    # defaulted, and a non-defaulted field after them breaks dataclass ordering.
+    phase: Literal["", "prepare", "activate", "generate", "parse", "deactivate"] = ""
     duration_ms: float = 0.0
