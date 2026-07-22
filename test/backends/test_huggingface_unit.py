@@ -31,6 +31,7 @@ from mellea.stdlib.components import (
     AudioUrlBlock,
     ImageBlock,
     ImageUrlBlock,
+    Instruction,
     Intrinsic,
     Message,
 )
@@ -828,3 +829,57 @@ async def test_multimodal_blocks_in_raw_ctx_not_checked(images, audio):
         ):
             with patch.object(backend._tokenizer, "batch_decode", return_value=[""]):
                 await backend._generate_from_raw([action], ctx, model_options={})
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_on_instruction_in_ctx_raise_error(images, audio):
+    """LocalHFBackend raises ValueError when an Instruction in ctx carries image/audio blocks.
+
+    The guard uses hasattr(c, "images") / hasattr(c, "audio"), so it must fire
+    for Instruction just as it does for Message.
+    """
+    backend = _make_backend()
+    ctx = ChatContext().add(
+        Instruction(description="describe this", images=images, audio=audio)
+    )
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Message("assistant", ""), ctx, model_options={}
+        )
+
+
+@pytest.mark.parametrize(
+    "images,audio",
+    [
+        ([ImageBlock(_B64_PNG)], None),
+        ([ImageUrlBlock(value="http://example.com/image.png")], None),
+        (None, [AudioBlock(_B64_WAV, format="wav")]),
+        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_on_instruction_as_action_raise_error(images, audio):
+    """LocalHFBackend raises ValueError when an Instruction used as the action carries image/audio.
+
+    The guard checks the action component as well as components in ctx; this test
+    exercises the action branch via Instruction instead of Message.
+    """
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Instruction(description="describe this", images=images, audio=audio),
+            ctx,
+            model_options={},
+        )
