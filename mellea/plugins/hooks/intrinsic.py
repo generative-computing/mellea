@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mellea.plugins.base import MelleaBasePayload
 
@@ -27,7 +27,7 @@ class IntrinsicInvocationCompletePayload(MelleaBasePayload):
     revision: str | None = None
     binding_type: str = "unknown"
     adapter_type: str = "unknown"
-    outcome: str = "success"
+    outcome: Literal["success", "schema_error", "error"] = "success"
     # Carried for consumers that inspect the failure (e.g. structured logging);
     # the metrics plugin classifies on `outcome` and does not read this field.
     # Typed `Any` rather than `BaseException | None` because the payload base is

@@ -1996,6 +1996,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         try:
+            # self._model is a HF PreTrainedModel — .load_adapter() here is
+            # transformers/PEFT's own method, not the renamed AdapterMixin verb.
             # v5: adapter_kwargs is forwarded to download_kwargs only; device is
             # derived automatically from self.device, so we don't pass it here —
             # find_adapter_config_file() no longer accepts a 'device' argument.

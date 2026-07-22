@@ -9,6 +9,7 @@ from .component import (
     ComponentPreExecutePayload,
 )
 from .generation import GenerationPostCallPayload, GenerationPreCallPayload
+from .intrinsic import IntrinsicInvocationCompletePayload, IntrinsicPhaseCompletePayload
 from .sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
@@ -32,6 +33,9 @@ __all__ = [
     # Generation
     "GenerationPostCallPayload",
     "GenerationPreCallPayload",
+    # Intrinsic
+    "IntrinsicInvocationCompletePayload",
+    "IntrinsicPhaseCompletePayload",
     # Sampling
     "SamplingIterationPayload",
     "SamplingLoopEndPayload",
