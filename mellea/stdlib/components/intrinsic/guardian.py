@@ -25,6 +25,7 @@ from ....backends.adapters import (
     IOContract,
     LocalFileBinding,
 )
+from ....backends.adapters._core import _DictContract
 from ....core import Component
 from ....core.utils import MelleaLogger
 from ...components import Document
@@ -142,76 +143,6 @@ class _GuardianCheckContract(IOContract):
         return data
 
 
-class _FactualityDetectionContract(IOContract):
-    """Validate factuality-detection output: required key `score`."""
-
-    def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        """Parse and validate factuality-detection output.
-
-        Args:
-            raw (str): Raw JSON string from the model.
-
-        Returns:
-            dict[str, object]: Parsed output dict with `score` key.
-
-        Raises:
-            ValueError: When *raw* is not valid JSON or is not a JSON object.
-            AdapterSchemaMismatchError: When `score` key is absent.
-        """
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"Adapter 'factuality-detection' output must be a JSON object, "
-                f"got {type(data).__name__}."
-            )
-        if "score" not in data:
-            raise AdapterSchemaMismatchError(
-                "factuality-detection", frozenset(data.keys()), frozenset({"score"})
-            )
-        return data
-
-
-class _FactualityCorrectionContract(IOContract):
-    """Validate factuality-correction output: required key `correction`."""
-
-    def build_prompt(self, **_kwargs: object) -> Component:
-        raise NotImplementedError(
-            "build_prompt is not used in Phase 1; implemented in Phase 2."
-        )
-
-    def parse(self, raw: str) -> dict[str, object]:
-        """Parse and validate factuality-correction output.
-
-        Args:
-            raw (str): Raw JSON string from the model.
-
-        Returns:
-            dict[str, object]: Parsed output dict with `correction` key.
-
-        Raises:
-            ValueError: When *raw* is not valid JSON or is not a JSON object.
-            AdapterSchemaMismatchError: When `correction` key is absent.
-        """
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"Adapter 'factuality-correction' output must be a JSON object, "
-                f"got {type(data).__name__}."
-            )
-        if "correction" not in data:
-            raise AdapterSchemaMismatchError(
-                "factuality-correction",
-                frozenset(data.keys()),
-                frozenset({"correction"}),
-            )
-        return data
-
-
 # ---------------------------------------------------------------------------
 # Module-level Adapter constants (one per helper)
 # ---------------------------------------------------------------------------
@@ -232,7 +163,7 @@ _FACTUALITY_DETECTION_ADAPTER = Adapter(
     identity=Identity(
         "factuality-detection", "alora", capability="factuality_detection"
     ),
-    io_contract=_FactualityDetectionContract(),
+    io_contract=_DictContract("factuality-detection", frozenset({"score"})),
     weights=LocalFileBinding(),
 )
 
@@ -240,7 +171,7 @@ _FACTUALITY_CORRECTION_ADAPTER = Adapter(
     identity=Identity(
         "factuality-correction", "alora", capability="factuality_correction"
     ),
-    io_contract=_FactualityCorrectionContract(),
+    io_contract=_DictContract("factuality-correction", frozenset({"correction"})),
     weights=LocalFileBinding(),
 )
 
