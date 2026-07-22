@@ -112,10 +112,13 @@ jobs:
         # draws) crashed during model warmup, independent of ollama version and
         # unreachable by any env var (the code path is correct; the machine code was
         # not). Ollama PR #17244 ("bump Linux toolchain to GCC 13", Fixes ollama#17006
-        # / #17205) first ships in v0.32.2-rc0. Drop this pin once v0.32.2+ is a
-        # stable release. NB: OLLAMA_VERSION must omit the leading "v" -- install.sh
-        # prepends it (a "v" yields a broken .../download/vv0.32.2-rc0/... path).
-        run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.2-rc0 sh
+        # / #17205) first shipped in the 0.32.2 line. The rc0 tag has since been
+        # removed (promoted to the v0.32.2 release), so its download URL now 404s and
+        # the pin is bumped to 0.32.2. Drop this pin once a stable (non-prerelease)
+        # release includes the GCC-13 build. NB: OLLAMA_VERSION must omit the leading
+        # "v" -- install.sh prepends it (a "v" yields a broken .../download/vv0.32.2/...
+        # path).
+        run: curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.32.2 sh
       - name: Start serving ollama
         run: nohup ollama serve &
       - name: Pull models
