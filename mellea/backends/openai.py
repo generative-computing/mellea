@@ -52,8 +52,7 @@ from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
-from .adapters._core import Adapter
-from .adapters.adapter import AdapterMixin, EmbeddedIntrinsicAdapter
+from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapter
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -253,19 +252,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # AdapterMixin implementation
     # ------------------------------------------------------------------
 
-    # The base mixin accepts the Adapter | _AdapterCore union; this backend narrows
-    # the parameter to Adapter. Parameter narrowing is contravariantly unsound under
-    # LSP, so the override ignore is intentional here.
-    def add_adapter(self, adapter: Adapter) -> None:  # type: ignore[override]
+    def add_adapter(self, adapter: AdapterInput) -> None:
         """Register an adapter with this backend.
 
-        Currently only :class:`EmbeddedIntrinsicAdapter` is supported.
+        Accepts the full `AdapterInput` union to honour the mixin contract, but
+        currently only `EmbeddedIntrinsicAdapter` (the Embedded/Granite Switch
+        reality) is supported; other realities are rejected at runtime.
 
         Args:
-            adapter: The adapter to register.
+            adapter (AdapterInput): The adapter to register. Must be an
+                `EmbeddedIntrinsicAdapter`.
 
         Raises:
-            TypeError: If *adapter* is not an `EmbeddedIntrinsicAdapter`.
+            TypeError: If `adapter` is not an `EmbeddedIntrinsicAdapter`.
         """
         if not isinstance(adapter, EmbeddedIntrinsicAdapter):
             raise TypeError(

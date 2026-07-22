@@ -19,7 +19,7 @@ import contextlib
 import pathlib
 import re
 import warnings
-from typing import Literal, TypeVar, cast
+from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
@@ -326,6 +326,16 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
+# The full adapter-input surface `add_adapter` advertises. The legacy abc
+# `Adapter` (LocalFile/PEFT) and the core dataclass adapter (`_AdapterCore`,
+# Embedded/ServerMediated) are disjoint hierarchies, so the accepted type is
+# their union. Concrete backends accept this union and raise `TypeError` for the
+# adapter realities they do not implement — the same "reject unsupported reality"
+# contract the reality-specific verbs use. See the module note on the mixin-vs-
+# generic trade-off for why this is a runtime, not a type-parameter, guarantee.
+AdapterInput: TypeAlias = "Adapter | _AdapterCore"
+
+
 class AdapterMixin(Backend, abc.ABC):
     """Mixin class for backends capable of utilizing adapters.
 
@@ -353,14 +363,21 @@ class AdapterMixin(Backend, abc.ABC):
         """
 
     @abc.abstractmethod
-    def add_adapter(self, adapter: "Adapter | _AdapterCore") -> None:
+    def add_adapter(self, adapter: AdapterInput) -> None:
         """Register an adapter with this backend so it can be loaded later.
 
         The adapter must not already have been added to a different backend.
+        Concrete backends accept the full `AdapterInput` union but raise
+        `TypeError` for adapter realities they do not implement (e.g. a PEFT
+        backend rejects an embedded adapter), so a statically valid call may
+        still be rejected at runtime.
 
         Args:
-            adapter (Adapter | _AdapterCore): The adapter to register with
-                this backend.
+            adapter (AdapterInput): The adapter to register with this backend.
+
+        Raises:
+            TypeError: If `adapter` belongs to a reality this backend does not
+                support.
         """
 
     @abc.abstractmethod

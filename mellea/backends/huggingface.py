@@ -70,6 +70,7 @@ from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
 from ._options import resolve_model_options
 from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
+from .adapters.adapter import AdapterInput
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -1938,22 +1939,30 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
         return self._model_id.split("/")[1]
 
-    # The base mixin accepts the Adapter | _AdapterCore union; this backend narrows
-    # the parameter to its own adapter type. Parameter narrowing is contravariantly
-    # unsound under LSP, so the override ignore is intentional here.
-    def add_adapter(self, adapter: LocalHFAdapter):  # type: ignore[override]
+    def add_adapter(self, adapter: AdapterInput) -> None:
         """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
 
         Downloads the adapter weights (via `adapter.get_local_hf_path`) and records
         the adapter in the backend's registry. The adapter must not already be
         registered with a different backend.
 
+        Accepts the full `AdapterInput` union to honour the mixin contract, but
+        only the LocalFile/PEFT reality is supported here — other realities are
+        rejected at runtime rather than narrowing the signature.
+
         Args:
-            adapter (LocalHFAdapter): The adapter to register with this backend.
+            adapter (AdapterInput): The adapter to register. Must be a
+                `LocalHFAdapter`; other adapter realities are rejected.
 
         Raises:
+            TypeError: If `adapter` is not a `LocalHFAdapter`.
             Exception: If `adapter` has already been added to a different backend.
         """
+        if not isinstance(adapter, LocalHFAdapter):
+            raise TypeError(
+                f"LocalHFBackend requires a LocalHFAdapter; got "
+                f"{type(adapter).__name__}."
+            )
         if adapter.backend is not None:
             if adapter.backend is self:
                 MelleaLogger.get_logger().warning(
