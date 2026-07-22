@@ -86,3 +86,40 @@ No production code fires these hooks yet — this is a skeleton, unit-tested
 against synthetic payloads only (`test/telemetry/test_intrinsic_metrics_plugin.py`).
 Real wiring from `prepare`/`activate`/`generate`/`parse`/`deactivate` is
 expected to go in with #1141 (LocalFileBinding) and #1142 (EmbeddedBinding).
+
+## Span tree (structure)
+
+Span emission lands with #1141/#1142; this issue defines the shape so the
+metrics and traces stay aligned. Concrete span names and attributes will follow
+Mellea's existing tracing conventions (the `start_*_span` helpers in
+`mellea/telemetry/tracing.py`, `gen_ai.*` operation attributes where they apply,
+and the `mellea.*` prefix for Mellea-specific fields) — the tree below is the
+structural shape, not final identifiers. An adapter-function invocation produces
+one parent span with a child span per lifecycle phase:
+
+```text
+intrinsic.invoke              name, revision, binding_type, adapter_type, outcome
+├─ intrinsic.prepare
+├─ intrinsic.activate
+├─ intrinsic.generate
+├─ intrinsic.parse
+└─ intrinsic.deactivate
+```
+
+Each phase span corresponds one-to-one with a `mellea.intrinsic.phase_duration`
+sample carrying the same `phase` label, and the parent span's `outcome` mirrors
+the `mellea.intrinsic.invocations` counter. The Binding that owns each reality
+(#1141/#1142) emits these spans from its `prepare`/`activate`/`generate`/`parse`/
+`deactivate` steps.
+
+## Content capture (`MELLEA_TRACE_CONTENT`)
+
+Span *metadata* — names, revisions, phase durations, outcomes — is always safe
+to record. Adapter *input and output content* — prompts, retrieved documents,
+generated text — is gated behind the `MELLEA_TRACE_CONTENT` environment
+variable and is **off by default**, so traces never capture PII or proprietary
+content unless explicitly opted in. When unset or falsey, the phase spans carry
+metadata only; when set truthy, they additionally attach the adapter's
+input/output content for debugging. The gate is defined here as part of the
+observability contract; enforcement is wired alongside span emission in the
+Binding work (#1141/#1142).
