@@ -20,10 +20,12 @@ import tqdm
 from ...core import (
     Backend,
     BaseModelSubclass,
+    CBlock,
     Component,
     ComputedModelOutputThunk,
     Context,
     MelleaLogger,
+    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -560,7 +562,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
 
     async def sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -658,7 +660,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
                     constraint_scores,
                 ) = await self._generate_and_validate(
                     solver_backend=self.s1_solver_backend,
-                    action=next_action,
+                    # A CBlock/MOT action is carried through as an opaque
+                    # Component-shaped span (SOFAI has no repair semantics for it).
+                    action=next_action,  # type: ignore[arg-type]
                     ctx=next_context,
                     reqs=reqs,
                     session_backend=backend,
@@ -670,7 +674,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 # Store attempt
                 sampled_results.append(result)
                 sampled_scores.append(constraint_scores)
-                sampled_actions.append(next_action)
+                sampled_actions.append(next_action)  # type: ignore[arg-type]
                 sample_contexts.append(result_ctx)
 
                 # Check for success
@@ -733,10 +737,11 @@ class SOFAISamplingStrategy(SamplingStrategy):
             # Prepare S2 context based on mode
             s2_action, s2_context = self._prepare_s2_context(
                 s2_mode=self.s2_solver_mode,
-                original_action=action,
+                # See note above: non-Component actions are opaque spans here.
+                original_action=action,  # type: ignore[arg-type]
                 original_context=context,
                 last_result_ctx=result_ctx,
-                last_action=next_action,
+                last_action=next_action,  # type: ignore[arg-type]
                 sampled_results=sampled_results,
                 sampled_scores=sampled_scores,
                 loop_count=loop_count,

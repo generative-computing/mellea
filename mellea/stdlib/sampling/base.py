@@ -29,10 +29,12 @@ import tqdm
 from ...core import (
     Backend,
     BaseModelSubclass,
+    CBlock,
     Component,
     ComputedModelOutputThunk,
     Context,
     MelleaLogger,
+    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -200,7 +202,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
     async def sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -214,7 +216,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         """This method performs a sampling operation based on the given instruction.
 
         Args:
-            action : The action object to be sampled.
+            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
@@ -445,7 +447,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         subsample_index: int,
         iterations: int,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement],
@@ -489,7 +491,13 @@ class BaseSamplingStrategy(SamplingStrategy):
                 # type / value. Explicitly overwrite that here.
                 # TODO: See if there's a more elegant way for this so that each sampling
                 # strategy doesn't have to re-implement it.
-                result.parsed_repr = action.parse(result)
+                # CBlocks and ModelOutputThunks have no `.parse`, so fall back to the
+                # raw value (mirrors how backends handle non-Component actions).
+                result.parsed_repr = (
+                    action.parse(result)
+                    if isinstance(action, Component)
+                    else result.value  # type: ignore[assignment]
+                )
 
                 # validation pass
                 val_scores_co = mfuncs.avalidate(
@@ -542,7 +550,9 @@ class BaseSamplingStrategy(SamplingStrategy):
                     generation=result,
                     validation=constraint_scores,
                     context=result_ctx,
-                    action=next_action,
+                    # A CBlock/MOT action has no repair semantics; the machinery
+                    # carries it through as an opaque Component-shaped span.
+                    action=next_action,  # type: ignore[arg-type]
                 )
 
                 if all_validations_passed:
@@ -557,7 +567,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 # sees the most recent failed attempt.
                 sampled_results.append(result)
                 sampled_scores.append(constraint_scores)
-                sampled_actions.append(next_action)
+                sampled_actions.append(next_action)  # type: ignore[arg-type]
 
                 next_action, next_context = self.repair(
                     next_context,

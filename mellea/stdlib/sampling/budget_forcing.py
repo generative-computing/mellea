@@ -11,10 +11,12 @@ from ...backends.ollama import OllamaModelBackend
 from ...core import (
     Backend,
     BaseModelSubclass,
+    CBlock,
     Component,
     ComputedModelOutputThunk,
     Context,
     MelleaLogger,
+    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -97,7 +99,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
 
     async def sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -111,7 +113,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         """This method performs a sampling operation based on the given instruction.
 
         Args:
-            action : The action object to be sampled.
+            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
@@ -197,7 +199,13 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 # Sampling strategies may use different components from the original
                 # action. This might cause discrepancies in the expected parsed_repr
                 # type / value. Explicitly overwrite that here.
-                result.parsed_repr = action.parse(result)
+                # CBlocks and ModelOutputThunks have no `.parse`, so fall back to the
+                # raw value (mirrors how backends handle non-Component actions).
+                result.parsed_repr = (
+                    action.parse(result)
+                    if isinstance(action, Component)
+                    else result.value
+                )
 
                 # validation pass
                 val_scores_co = mfuncs.avalidate(
@@ -217,7 +225,9 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 # collect all data
                 sampled_results.append(result)
                 sampled_scores.append(constraint_scores)
-                sampled_actions.append(next_action)
+                # A CBlock/MOT action has no repair semantics; the machinery
+                # carries it through as an opaque Component-shaped span.
+                sampled_actions.append(next_action)  # type: ignore[arg-type]
                 sample_contexts.append(result_ctx)
 
                 # if all vals are true -- break and return success

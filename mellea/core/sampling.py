@@ -118,7 +118,7 @@ class SamplingStrategy(abc.ABC):
     @abc.abstractmethod
     async def sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -133,7 +133,7 @@ class SamplingStrategy(abc.ABC):
         It must be implemented by any concrete subclasses to provide specific sampling logic.
 
         Args:
-            action : The action object to be sampled.
+            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).

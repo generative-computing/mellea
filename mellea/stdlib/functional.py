@@ -57,12 +57,12 @@ from .sampling import RejectionSamplingStrategy
 
 @overload
 def act(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: SamplingStrategy | None = None,
     return_sampling_results: Literal[False] = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -72,12 +72,12 @@ def act(
 
 @overload
 def act(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: SamplingStrategy | None = None,
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -86,12 +86,12 @@ def act(
 
 
 def act(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: SamplingStrategy | None = None,
     return_sampling_results: bool = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -100,11 +100,11 @@ def act(
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
-        action: the Component from which to generate.
+        action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
         requirements: used as additional requirements when a sampling strategy is provided.
-        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
         format: Constrains generation to JSON matching this Pydantic
             schema. The result's `.value` is always a JSON string — not a
@@ -130,7 +130,7 @@ def act(
             tool_calls=tool_calls,
             silence_context_type_warning=True,  # We can safely silence this here since it's in a sync function.
             await_result=True,  # Sync functions must always await
-        )  # type: ignore[call-overload]
+        )  # type: ignore[call-overload, misc]
     )
 
     computed = False
@@ -506,7 +506,7 @@ def transform(
 
 @overload
 async def aact(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
@@ -523,7 +523,7 @@ async def aact(
 
 @overload
 async def aact(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
@@ -540,7 +540,7 @@ async def aact(
 
 @overload
 async def aact(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
@@ -557,12 +557,12 @@ async def aact(
 
 @overload
 async def aact(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: SamplingStrategy | None = None,
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -573,12 +573,12 @@ async def aact(
 
 
 async def aact(
-    action: Component[S],
+    action: Component[S] | CBlock | ModelOutputThunk,
     context: Context,
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: SamplingStrategy | None = None,
     return_sampling_results: bool = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -589,11 +589,11 @@ async def aact(
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
     Args:
-        action: the Component from which to generate.
+        action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
         requirements: used as additional requirements when a sampling strategy is provided
-        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
         format: Constrains generation to JSON matching this Pydantic
             schema. The result's `.value` is always a JSON string — not a
