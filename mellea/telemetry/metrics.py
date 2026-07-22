@@ -1007,9 +1007,9 @@ def _get_intrinsic_phase_duration_histogram() -> Any:
 
     if _intrinsic_phase_duration_histogram is None:
         _intrinsic_phase_duration_histogram = create_histogram(
-            "mellea.intrinsic.phase_duration_ms",
+            "mellea.intrinsic.phase_duration",
             description="Duration of each adapter function lifecycle phase",
-            unit="ms",
+            unit="s",
         )
     return _intrinsic_phase_duration_histogram
 
@@ -1057,7 +1057,7 @@ def record_intrinsic_invocation(
     )
 
 
-def record_intrinsic_phase_duration(name: str, phase: str, duration_ms: float) -> None:
+def record_intrinsic_phase_duration(name: str, phase: str, duration_s: float) -> None:
     """Record the duration of one adapter function lifecycle phase.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
@@ -1066,13 +1066,14 @@ def record_intrinsic_phase_duration(name: str, phase: str, duration_ms: float) -
         name: Adapter function name (e.g. `"answerability"`).
         phase: Lifecycle phase (`"prepare"`, `"activate"`, `"generate"`,
             `"parse"`, or `"deactivate"`).
-        duration_ms: Duration of the phase in milliseconds.
+        duration_s: Duration of the phase in seconds (matches the base-unit
+            convention used by the latency histograms).
     """
     if _meter is None:
         return
 
     _get_intrinsic_phase_duration_histogram().record(
-        duration_ms, {"name": name, "phase": phase}
+        duration_s, {"name": name, "phase": phase}
     )
 
 

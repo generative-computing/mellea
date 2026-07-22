@@ -511,8 +511,10 @@ class IntrinsicMetricsPlugin(Plugin, name="intrinsic_metrics", priority=57):
         """
         from mellea.telemetry.metrics import record_intrinsic_phase_duration
 
+        # payload carries milliseconds; the metric is in seconds, matching
+        # LatencyMetricsPlugin and the OTel base-unit convention for durations.
         record_intrinsic_phase_duration(
-            payload.name, payload.phase, payload.duration_ms
+            payload.name, payload.phase, payload.duration_ms / 1000.0
         )
 
 

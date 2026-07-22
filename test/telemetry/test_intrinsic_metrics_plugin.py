@@ -120,7 +120,7 @@ async def test_record_intrinsic_invocation_missing_revision_defaults_to_unknown(
 
 @pytest.mark.asyncio
 async def test_record_intrinsic_phase_duration(intrinsic_plugin):
-    """Phase-complete events record the phase_duration_ms histogram."""
+    """Phase-complete events record the phase-duration histogram in seconds."""
     payload = IntrinsicPhaseCompletePayload(
         name="answerability", phase="prepare", duration_ms=12.5
     )
@@ -130,4 +130,5 @@ async def test_record_intrinsic_phase_duration(intrinsic_plugin):
     ) as mock_phase:
         await intrinsic_plugin.record_intrinsic_phase(payload, {})
 
-    mock_phase.assert_called_once_with("answerability", "prepare", 12.5)
+    # payload ms is converted to seconds before recording
+    mock_phase.assert_called_once_with("answerability", "prepare", 0.0125)

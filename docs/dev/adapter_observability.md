@@ -75,7 +75,7 @@ default — the same class of bug PR #972 fixed elsewhere.
 - `mellea.intrinsic.invocations` (counter) — labels: `name`, `revision`,
   `binding_type`, `adapter_type`, `outcome` (`success` | `schema_error` |
   `error`).
-- `mellea.intrinsic.phase_duration_ms` (histogram) — labels: `name`, `phase`
+- `mellea.intrinsic.phase_duration` (histogram, unit `s`) — labels: `name`, `phase`
   (`prepare` | `activate` | `generate` | `parse` | `deactivate`).
 - `mellea.intrinsic.parse_failures` (counter) — labels: `name`, `revision`.
   Incremented automatically whenever an invocation's `outcome` is
