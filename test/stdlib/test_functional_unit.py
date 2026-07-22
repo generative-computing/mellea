@@ -277,9 +277,12 @@ async def test_aact_accepts_mot_action():
     backend = _mock_backend_returning("4")
     ctx = SimpleContext()
 
-    out, _ = await aact(ModelOutputThunk("prior"), ctx, backend, await_result=True)
+    out, new_ctx = await aact(
+        ModelOutputThunk("prior"), ctx, backend, await_result=True
+    )
 
     assert str(out) == "4"
+    assert new_ctx is not ctx
 
 
 if __name__ == "__main__":

@@ -491,5 +491,33 @@ async def test_sampling_over_mot_action_does_not_raise(mocked_context_backend):
     assert result.result.parsed_repr == "mocked"
 
 
+async def test_sampling_over_cblock_action_failing_requirement_does_not_raise(
+    mocked_context_backend,
+):
+    """A failing requirement over a CBlock must exercise the repair/append path.
+
+    The always-pass cases above only cover the happy path. When validation
+    fails, the strategy appends `next_action` to `sampled_actions` and calls
+    `repair` on the non-Component action (the sites carrying
+    `type: ignore[arg-type]`). This must exhaust the budget and return a
+    failed result rather than raising.
+    """
+    always_fail = Requirement(
+        "always_fail", validation_fn=lambda _ctx: ValidationResult(result=False)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=2, concurrency_budget=1)
+
+    result = await strategy.sample(
+        action=CBlock("What is 1+1?"),
+        context=ChatContext(),
+        backend=mocked_context_backend,
+        requirements=[always_fail],
+    )
+
+    assert result.success is False
+    # Even on the failure path, parsed_repr falls back to the raw model value.
+    assert result.result.parsed_repr == "mocked"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
