@@ -89,37 +89,45 @@ expected to go in with #1141 (LocalFileBinding) and #1142 (EmbeddedBinding).
 
 ## Span tree (structure)
 
-Span emission lands with #1141/#1142; this issue defines the shape so the
-metrics and traces stay aligned. Concrete span names and attributes will follow
-Mellea's existing tracing conventions (the `start_*_span` helpers in
-`mellea/telemetry/tracing.py`, `gen_ai.*` operation attributes where they apply,
-and the `mellea.*` prefix for Mellea-specific fields) — the tree below is the
-structural shape, not final identifiers. An adapter-function invocation produces
-one parent span with a child span per lifecycle phase:
+Span *emission* ships with the Bindings (#1141/#1142) — no span code lands in
+this PR. What this issue fixes is the *shape*, so the traces align with the
+metrics and follow Mellea's existing tracing conventions rather than a bespoke
+scheme. Spans are opened through the `start_*_span` helper family in
+`mellea/telemetry/tracing.py` (mirroring `start_backend_span` /
+`start_action_span`): the span is named by its operation with `gen_ai.*` set
+where the semantic conventions apply, and Mellea-specific fields are attached
+under the `mellea.*` prefix — the same convention as `mellea.action_type`,
+`mellea.num_actions`, etc.
 
-```text
-intrinsic.invoke              name, revision, binding_type, adapter_type, outcome
-├─ intrinsic.prepare
-├─ intrinsic.activate
-├─ intrinsic.generate
-├─ intrinsic.parse
-└─ intrinsic.deactivate
-```
+An invocation opens one parent span with a child span per lifecycle phase:
 
-Each phase span corresponds one-to-one with a `mellea.intrinsic.phase_duration`
-sample carrying the same `phase` label, and the parent span's `outcome` mirrors
-the `mellea.intrinsic.invocations` counter. The Binding that owns each reality
-(#1141/#1142) emits these spans from its `prepare`/`activate`/`generate`/`parse`/
-`deactivate` steps.
+- **Parent** (the invocation) — carries `mellea.intrinsic.name`,
+  `mellea.intrinsic.revision`, `mellea.intrinsic.binding_type`,
+  `mellea.intrinsic.adapter_type`, and `mellea.intrinsic.outcome`, mirroring the
+  `mellea.intrinsic.invocations` counter.
+- **Children** (one per phase: `prepare`, `activate`, `generate`, `parse`,
+  `deactivate`) — each carries `mellea.intrinsic.phase` and corresponds
+  one-to-one with a `mellea.intrinsic.phase_duration` histogram sample of the
+  same phase.
 
-## Content capture (`MELLEA_TRACE_CONTENT`)
+Note the deliberate split, consistent with the rest of Mellea: **metric labels
+are bare** (`name`, `phase`, `revision`, …) while **span attributes are
+`mellea.*`-prefixed** — same values, different surface, each following its
+signal type's existing convention.
+
+## Content capture (`MELLEA_TRACES_CONTENT`)
 
 Span *metadata* — names, revisions, phase durations, outcomes — is always safe
 to record. Adapter *input and output content* — prompts, retrieved documents,
-generated text — is gated behind the `MELLEA_TRACE_CONTENT` environment
-variable and is **off by default**, so traces never capture PII or proprietary
-content unless explicitly opted in. When unset or falsey, the phase spans carry
-metadata only; when set truthy, they additionally attach the adapter's
-input/output content for debugging. The gate is defined here as part of the
-observability contract; enforcement is wired alongside span emission in the
-Binding work (#1141/#1142).
+generated text — is gated behind the **existing** `MELLEA_TRACES_CONTENT`
+environment variable: the same content-capture gate Mellea's other spans
+already use (it also honours `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`),
+**off by default**, so traces never capture PII or proprietary content unless
+explicitly opted in. When unset or falsey, the phase spans carry metadata only;
+when set truthy, they additionally attach the adapter's input/output content.
+The intrinsic spans **reuse this gate rather than introducing a new one**;
+content attributes are attached when the Bindings (#1141/#1142) emit spans.
+
+(#1140's acceptance criteria named this `MELLEA_TRACE_CONTENT`; the real,
+already-implemented variable is `MELLEA_TRACES_CONTENT` — see
+`mellea/telemetry/tracing.py`.)
