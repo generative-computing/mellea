@@ -826,6 +826,129 @@ class TestNestedModelsEdgeCases:
         assert validated_delete["cmd"]["op"] == "delete"
         assert validated_delete["cmd"]["user_id"] == "usr_456"
 
+    def test_description_sibling_preserved_on_nested_ref(self):
+        """A description alongside a nested-model `$ref` must survive inlining."""
+
+        from pydantic import Field
+
+        class Address(BaseModel):
+            street: str
+            city: str
+
+        class Person(BaseModel):
+            name: str
+            address: Address = Field(description="the person's mailing address")
+
+        def create_person(person: Person) -> str:
+            """Create a person.
+
+            Args:
+                person: the person record
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_person)
+        schema = tool.as_json_tool
+
+        assert schema["function"] is not None
+        assert schema["function"]["parameters"] is not None
+        params = schema["function"]["parameters"]
+
+        address = params["properties"]["person"]["properties"]["address"]
+
+        # The ref must be inlined (no dangling $ref)...
+        assert "$ref" not in json.dumps(address), f"nested ref not inlined: {address}"
+        assert address.get("type") == "object"
+        assert "street" in address.get("properties", {})
+
+        # ...and the sibling description must be preserved.
+        assert address.get("description") == "the person's mailing address", (
+            f"sibling description dropped during inlining: {address}"
+        )
+
+    def test_description_sibling_preserved_two_levels_deep(self):
+        """A described `$ref` nested two levels deep must keep its description."""
+
+        from pydantic import Field
+
+        class Country(BaseModel):
+            name: str
+            code: str
+
+        class Address(BaseModel):
+            street: str
+            country: Country = Field(description="the country of residence")
+
+        class Person(BaseModel):
+            name: str
+            address: Address
+
+        def create_person(person: Person) -> str:
+            """Create a person.
+
+            Args:
+                person: the person record
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_person)
+        schema = tool.as_json_tool
+
+        assert schema["function"] is not None
+        assert schema["function"]["parameters"] is not None
+        params = schema["function"]["parameters"]
+
+        country = params["properties"]["person"]["properties"]["address"]["properties"][
+            "country"
+        ]
+
+        assert "$ref" not in json.dumps(country), (
+            f"deeply nested ref not inlined: {country}"
+        )
+        assert country.get("type") == "object"
+        assert country.get("description") == "the country of residence", (
+            f"sibling description dropped at depth: {country}"
+        )
+
+    def test_inlined_object_fields_still_present(self):
+        """Inlining must add the referenced object's own keys, not just siblings.
+
+        Guards against a fix that preserves siblings but stops populating the
+        inlined body (or vice versa).
+        """
+
+        from pydantic import Field
+
+        class Address(BaseModel):
+            street: str
+            city: str
+
+        class Person(BaseModel):
+            name: str
+            address: Address = Field(description="mailing address")
+
+        def create_person(person: Person) -> str:
+            """Create a person.
+
+            Args:
+                person: the person record
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_person)
+        schema = tool.as_json_tool
+
+        assert schema["function"] is not None
+        assert schema["function"]["parameters"] is not None
+        params = schema["function"]["parameters"]
+
+        address = params["properties"]["person"]["properties"]["address"]
+
+        # Both the inlined body and the sibling description must coexist.
+        assert address.get("description") == "mailing address"
+        assert set(address.get("properties", {})) == {"street", "city"}
+        assert address.get("required") == ["street", "city"]
+
     def test_nested_simple_model_payload_round_trips(self):
         """Test that simple nested model payloads round-trip through validation.
 

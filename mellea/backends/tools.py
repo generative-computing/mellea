@@ -1147,9 +1147,10 @@ def _recursively_inline_refs(
         ref_schema = _resolve_ref(ref_name, defs)
         if ref_schema:
             inlined = copy.deepcopy(ref_schema)
-            # Replace schema contents with inlined schema, keeping other keys
-            schema.clear()
-            schema.update(inlined)
+            # Remove the $ref, then merge inlined content while preserving sibling keys
+            del schema["$ref"]
+            for key, value in inlined.items():
+                schema.setdefault(key, value)  # sibling keys (e.g. description) win
             active_refs = active_refs | {ref_name}
 
     # Process properties of an object
