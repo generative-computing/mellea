@@ -1117,7 +1117,7 @@ def _is_complex_anyof(v: dict) -> bool:
 
 
 def _recursively_inline_refs(
-    schema: dict, defs: dict, visited: set[int] | None = None
+    schema: dict, defs: dict, active_refs: frozenset[str] = frozenset()
 ) -> None:
     """Recursively inline all remaining $ref entries at any depth in the schema.
 
@@ -1125,64 +1125,66 @@ def _recursively_inline_refs(
     dangling references that the earlier single-level passes missed. Handles
     nested model references where properties contain other models via $ref.
 
+    Cycles from self-referential models (e.g. a tree node whose field is a
+    list of itself) are broken by tracking the $ref targets currently open on
+    the resolution path: a ref already being inlined on this path is left in
+    place rather than expanded again.
+
     Args:
         schema: Schema object to process (mutated in-place).
         defs: Global definitions dict for $ref resolution.
-        visited: Set of visited node ids to prevent infinite loops on circular refs.
+        active_refs: $ref targets already open on the current resolution path,
+            used to break cycles on self-referential models.
     """
-    if visited is None:
-        visited = set()
-
     if not isinstance(schema, dict):
         return
 
-    schema_id = id(schema)
-    if schema_id in visited:
-        return
-    visited.add(schema_id)
-
     # Inline $ref at this level if present
     if "$ref" in schema and isinstance(schema["$ref"], str):
-        ref_schema = _resolve_ref(schema["$ref"], defs)
+        ref_name = schema["$ref"]
+        if ref_name in active_refs:
+            return  # circular ref already on this path; stop inlining
+        ref_schema = _resolve_ref(ref_name, defs)
         if ref_schema:
             inlined = copy.deepcopy(ref_schema)
             # Replace schema contents with inlined schema, keeping other keys
             schema.clear()
             schema.update(inlined)
+            active_refs = active_refs | {ref_name}
 
     # Process properties of an object
     if "properties" in schema and isinstance(schema["properties"], dict):
         for prop_name, prop_schema in schema["properties"].items():
             if isinstance(prop_schema, dict):
-                _recursively_inline_refs(prop_schema, defs, visited)
+                _recursively_inline_refs(prop_schema, defs, active_refs)
 
     # Process array items
     if "items" in schema and isinstance(schema["items"], dict):
-        _recursively_inline_refs(schema["items"], defs, visited)
+        _recursively_inline_refs(schema["items"], defs, active_refs)
 
     # Process anyOf branches
     if "anyOf" in schema and isinstance(schema["anyOf"], list):
         for branch in schema["anyOf"]:
             if isinstance(branch, dict):
-                _recursively_inline_refs(branch, defs, visited)
+                _recursively_inline_refs(branch, defs, active_refs)
 
     # Process oneOf branches (shouldn't exist after flattening, but be defensive)
     if "oneOf" in schema and isinstance(schema["oneOf"], list):
         for branch in schema["oneOf"]:
             if isinstance(branch, dict):
-                _recursively_inline_refs(branch, defs, visited)
+                _recursively_inline_refs(branch, defs, active_refs)
 
     # Process allOf branches
     if "allOf" in schema and isinstance(schema["allOf"], list):
         for branch in schema["allOf"]:
             if isinstance(branch, dict):
-                _recursively_inline_refs(branch, defs, visited)
+                _recursively_inline_refs(branch, defs, active_refs)
 
     # Process additionalProperties
     if "additionalProperties" in schema and isinstance(
         schema["additionalProperties"], dict
     ):
-        _recursively_inline_refs(schema["additionalProperties"], defs, visited)
+        _recursively_inline_refs(schema["additionalProperties"], defs, active_refs)
 
 
 def _recursively_flatten_in_properties(schema: dict, defs: dict) -> None:

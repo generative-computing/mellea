@@ -642,10 +642,10 @@ class TestNestedModelsEdgeCases:
         assert country_prop["type"] == "object"
 
     def test_no_infinite_loop_on_complex_structure(self):
-        """Verify the algorithm handles complex structures without hanging.
+        """Verify a non-recursive nested model (list of items) is fully inlined.
 
-        While true circular refs are prevented by Python's object model, this
-        test verifies the visited-tracking logic works correctly.
+        This covers the DAG case only. The genuinely self-referential case is
+        covered by test_recursive_model_terminates.
         """
 
         class Item(BaseModel):
@@ -674,6 +674,41 @@ class TestNestedModelsEdgeCases:
         rendered = json.dumps(order_prop)
         assert "$ref" not in rendered
         assert order_prop["type"] == "object"
+
+    def test_recursive_model_terminates(self):
+        """A self-referential model must not cause infinite recursion.
+
+        A model whose own field references itself (e.g. a tree node with a
+        list of child nodes) emits a $ref back to itself. Inlining must stop
+        at the cycle boundary and return; the schema at that boundary keeps a
+        single unresolved $ref by design, so we assert termination, not
+        $ref-freedom.
+        """
+
+        class TreeNode(BaseModel):
+            name: str
+            children: "list[TreeNode]" = []
+
+        TreeNode.model_rebuild()
+
+        def build_tree(root: TreeNode) -> str:
+            """Build a tree.
+
+            Args:
+                root: the root node
+            """
+            return "ok"
+
+        # Must return without raising RecursionError.
+        tool = MelleaTool.from_callable(build_tree)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        root_prop = params["properties"]["root"]
+        assert root_prop["type"] == "object"
+        # The top level and one level of children are inlined; the cycle
+        # boundary retains a single self-$ref rather than expanding forever.
+        assert "children" in root_prop["properties"]
 
     def test_optional_nested_models_inlined(self):
         """Optional nested models should also be fully inlined."""
