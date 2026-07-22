@@ -4,6 +4,7 @@
 """Unit tests for the Phase 0 adapter scaffolding types (issue #1134)."""
 
 import dataclasses
+import json
 import pickle
 import warnings
 
@@ -20,6 +21,7 @@ from mellea.backends.adapters import (
     ServerMediatedBinding,
     WeightsBinding,
 )
+from mellea.backends.adapters._core import _DictContract
 from mellea.backends.adapters.catalog import _INTRINSICS_CATALOG_ENTRIES
 from mellea.core import Component
 
@@ -217,3 +219,63 @@ def test_known_capabilities_count_matches_catalog():
     # Every catalog entry must contribute exactly one distinct effective_capability.
     # If two entries resolve to the same token, the frozenset shrinks and this fails.
     assert len(KNOWN_CAPABILITIES) == len(_INTRINSICS_CATALOG_ENTRIES)
+
+
+# ---------------------------------------------------------------------------
+# _DictContract — shared dict-shaped output validator (promoted from rag.py so
+# both rag.py and guardian.py reuse it).
+# ---------------------------------------------------------------------------
+
+
+def test_dict_contract_parses_valid_output():
+    contract = _DictContract("answerability", frozenset({"answerability"}))
+    result = contract.parse(json.dumps({"answerability": "answerable"}))
+    assert result == {"answerability": "answerable"}
+
+
+def test_dict_contract_tolerates_extra_keys():
+    # Forward compatibility: unexpected keys are passed through, not rejected.
+    contract = _DictContract("answerability", frozenset({"answerability"}))
+    result = contract.parse(
+        json.dumps({"answerability": "answerable", "extra": "ignored"})
+    )
+    assert result["answerability"] == "answerable"
+    assert result["extra"] == "ignored"
+
+
+def test_dict_contract_missing_required_key_raises():
+    contract = _DictContract("factuality-detection", frozenset({"score"}))
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
+        contract.parse(json.dumps({"wrong_key": "yes"}))
+    err = exc_info.value
+    assert err.name == "factuality-detection"
+    assert "score" in err.expected_keys
+
+
+def test_dict_contract_rejects_non_object():
+    contract = _DictContract("answerability", frozenset({"answerability"}))
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        contract.parse(json.dumps(["not", "a", "dict"]))
+
+
+def test_dict_contract_rejects_invalid_json():
+    contract = _DictContract("answerability", frozenset({"answerability"}))
+    with pytest.raises(ValueError):
+        contract.parse("{not valid json")
+
+
+def test_dict_contract_reports_all_missing_multi_key():
+    # The promoted class generalises beyond the single-key checks the guardian
+    # contracts used: a multi-key required set surfaces every expected key.
+    contract = _DictContract("multi", frozenset({"a", "b"}))
+    with pytest.raises(AdapterSchemaMismatchError) as exc_info:
+        contract.parse(json.dumps({"a": 1}))
+    err = exc_info.value
+    assert err.expected_keys == frozenset({"a", "b"})
+    assert err.observed_keys == frozenset({"a"})
+
+
+def test_dict_contract_build_prompt_not_implemented():
+    contract = _DictContract("answerability", frozenset({"answerability"}))
+    with pytest.raises(NotImplementedError, match="Phase 1"):
+        contract.build_prompt()

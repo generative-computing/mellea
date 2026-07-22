@@ -23,6 +23,7 @@ Note:
 """
 
 import abc
+import json
 import warnings
 from dataclasses import dataclass
 from typing import Literal
@@ -130,6 +131,50 @@ class IOContract(abc.ABC):
                 benign additions to the output schema).
         """
         ...
+
+
+class _DictContract(IOContract):
+    """Validate dict-shaped adapter output against a fixed set of required keys.
+
+    Args:
+        name: Adapter capability name; included in
+            :class:`~mellea.backends.adapters.AdapterSchemaMismatchError` messages.
+        required_keys: Keys that must be present in the parsed output dict.
+    """
+
+    def __init__(self, name: str, required_keys: frozenset[str]) -> None:
+        self._name = name
+        self._required_keys = required_keys
+
+    def build_prompt(self, **_kwargs: object) -> Component:
+        raise NotImplementedError(
+            "build_prompt is not used in Phase 1; implemented in Phase 2."
+        )
+
+    def parse(self, raw: str) -> dict[str, object]:
+        """Parse and validate dict-shaped adapter output.
+
+        Args:
+            raw (str): Raw JSON string from the model.
+
+        Returns:
+            dict[str, object]: Parsed output dict, unchanged.
+
+        Raises:
+            ValueError: When *raw* is not valid JSON or is not a JSON object.
+            AdapterSchemaMismatchError: When a required key is absent.
+        """
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Adapter '{self._name}' output must be a JSON object, "
+                f"got {type(data).__name__}."
+            )
+        observed = frozenset(data.keys())
+        missing = self._required_keys - observed
+        if missing:
+            raise AdapterSchemaMismatchError(self._name, observed, self._required_keys)
+        return data
 
 
 class WeightsBinding(abc.ABC):
