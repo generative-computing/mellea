@@ -1938,6 +1938,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
         return self._model_id.split("/")[1]
 
+    # The base mixin accepts the Adapter | _AdapterCore union; this backend narrows
+    # the parameter to its own adapter type. Parameter narrowing is contravariantly
+    # unsound under LSP, so the override ignore is intentional here.
     def add_adapter(self, adapter: LocalHFAdapter):  # type: ignore[override]
         """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
 

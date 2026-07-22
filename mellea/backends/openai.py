@@ -253,6 +253,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     # AdapterMixin implementation
     # ------------------------------------------------------------------
 
+    # The base mixin accepts the Adapter | _AdapterCore union; this backend narrows
+    # the parameter to Adapter. Parameter narrowing is contravariantly unsound under
+    # LSP, so the override ignore is intentional here.
     def add_adapter(self, adapter: Adapter) -> None:  # type: ignore[override]
         """Register an adapter with this backend.
 

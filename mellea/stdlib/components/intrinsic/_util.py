@@ -167,6 +167,8 @@ def call_intrinsic(
         kwargs (dict | None): Extra keyword arguments forwarded to the
             adapter function's input template.
         model_options (dict | None): Model options that override defaults.
+            Adapter functions default to ``TEMPERATURE: 0.0`` for deterministic
+            output; pass ``TEMPERATURE`` here to override it.
         io_contract (IOContract | None): Output contract to validate and parse the
             raw model output.  When ``None``, ``json.loads`` is used directly.
 

@@ -28,6 +28,10 @@ class IntrinsicInvocationCompletePayload(MelleaBasePayload):
     binding_type: str = "unknown"
     adapter_type: str = "unknown"
     outcome: str = "success"
+    # Carried for consumers that inspect the failure (e.g. structured logging);
+    # the metrics plugin classifies on `outcome` and does not read this field.
+    # Typed `Any` rather than `BaseException | None` because the payload base is
+    # pydantic-backed and an exception type would need `arbitrary_types_allowed`.
     error: Any = None
 
 
