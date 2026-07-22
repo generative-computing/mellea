@@ -60,6 +60,14 @@ _WAV_HEADER = (
 _MINIMAL_WAV = _WAV_HEADER + _SILENT_SAMPLE
 _B64_WAV = base64.b64encode(_MINIMAL_WAV).decode()
 
+# All four multimodal block types — reused by every parametrized guard test below.
+_MULTIMODAL_CASES = [
+    ([ImageBlock(_B64_PNG)], None),
+    ([ImageUrlBlock(value="http://example.com/image.png")], None),
+    (None, [AudioBlock(_B64_WAV, format="wav")]),
+    (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+]
+
 
 def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
     mock_tok = MagicMock(eos_token_id=eos_token_id, vocab_size=32000)
@@ -712,15 +720,7 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     assert all(t.shape == (vocab_size,) for t in output.generation.logits)
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_raise_error(images, audio):
     """LocalHFBackend raises ValueError for image/audio inputs instead of silently dropping them."""
@@ -747,15 +747,7 @@ async def test_multimodal_blocks_in_action_raise_error():
         )
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_kv_cache_path_raises_error(images, audio):
     """LocalHFBackend KV cache path raises ValueError for image/audio inputs."""
@@ -768,15 +760,7 @@ async def test_multimodal_blocks_kv_cache_path_raises_error(images, audio):
         )
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_in_raw_action_raises_error(images, audio):
     """_generate_from_raw raises ValueError for actions with image/audio blocks instead of silently dropping them."""
@@ -788,15 +772,7 @@ async def test_multimodal_blocks_in_raw_action_raises_error(images, audio):
         await backend._generate_from_raw([action], ctx, model_options={})
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_in_raw_ctx_not_checked(images, audio):
     """_generate_from_raw does not scan ctx for multimodal content.
@@ -831,15 +807,7 @@ async def test_multimodal_blocks_in_raw_ctx_not_checked(images, audio):
                 await backend._generate_from_raw([action], ctx, model_options={})
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_on_instruction_in_ctx_raise_error(images, audio):
     """LocalHFBackend raises ValueError when an Instruction in ctx carries image/audio blocks.
@@ -858,15 +826,7 @@ async def test_multimodal_blocks_on_instruction_in_ctx_raise_error(images, audio
         )
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_on_instruction_as_action_raise_error(images, audio):
     """LocalHFBackend raises ValueError when an Instruction used as the action carries image/audio.
@@ -885,15 +845,7 @@ async def test_multimodal_blocks_on_instruction_as_action_raise_error(images, au
         )
 
 
-@pytest.mark.parametrize(
-    "images,audio",
-    [
-        ([ImageBlock(_B64_PNG)], None),
-        ([ImageUrlBlock(value="http://example.com/image.png")], None),
-        (None, [AudioBlock(_B64_WAV, format="wav")]),
-        (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
-    ],
-)
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
 @pytest.mark.asyncio
 async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
     stub_backend, images, audio
