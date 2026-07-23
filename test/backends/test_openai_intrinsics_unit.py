@@ -482,6 +482,47 @@ async def test_reasoning_effort_bool_true():
     )
 
 
+async def test_user_extra_body_merges_into_intrinsic_extra_body():
+    """User extra_body merges with intrinsic adapter keys without duplicate kwargs."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={
+                ModelOption.THINKING: True,
+                "extra_body": {
+                    "guided_json": {"type": "string"},
+                    "chat_template_kwargs": {"caller_key": "caller-value"},
+                },
+            },
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert "extra_body" in call_kwargs
+    extra_body = call_kwargs["extra_body"]
+    assert "documents" in extra_body
+    assert extra_body["guided_json"] == {"type": "string"}
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+    assert extra_body["chat_template_kwargs"]["enable_thinking"] is True
+    assert extra_body["chat_template_kwargs"]["caller_key"] == "caller-value"
+    assert call_kwargs["reasoning_effort"] == "medium"
+
+
 async def test_reasoning_effort_bool_false():
     """THINKING: False sets chat_template_kwargs.enable_thinking=False; no reasoning_effort."""
     backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
