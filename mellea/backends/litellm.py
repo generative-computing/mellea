@@ -640,10 +640,9 @@ class LiteLLMBackend(FormatterBackend):
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:
-                mot.tool_calls = {}
-            # Merge the tool_chunk dict.
-            for key, val in tool_chunk.items():
-                mot.tool_calls[key] = val
+                mot.tool_calls = []
+            # Extend the tool_chunk list.
+            mot.tool_calls.extend(tool_chunk)
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()

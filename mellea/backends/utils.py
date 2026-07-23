@@ -127,7 +127,7 @@ def to_chat(
 
 def to_tool_calls(
     tools: dict[str, AbstractMelleaTool], decoded_result: str
-) -> dict[str, ModelToolCall] | None:
+) -> list[ModelToolCall] | None:
     """Parse a tool call string.
 
     Args:
@@ -135,9 +135,9 @@ def to_tool_calls(
         decoded_result: Raw model output string that may contain tool call markup.
 
     Returns:
-        Dict mapping tool name to validated `ModelToolCall`, or `None` if no tool calls were found.
+        List of validated `ModelToolCall` (order preserved), or `None` if no tool calls were found.
     """
-    model_tool_calls: dict[str, ModelToolCall] = dict()
+    model_tool_calls: list[ModelToolCall] = []
     for tool_name, tool_args in parse_tools(decoded_result):
         func = tools.get(tool_name)
         if func is None:
@@ -154,7 +154,7 @@ def to_tool_calls(
 
         # Validate and coerce argument types
         validated_args = validate_tool_arguments(func, tool_args, strict=False)
-        model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
+        model_tool_calls.append(ModelToolCall(tool_name, func, validated_args))
 
     if len(model_tool_calls) > 0:
         return model_tool_calls

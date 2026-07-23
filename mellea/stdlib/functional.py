@@ -1312,7 +1312,8 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
     if not tool_calls:
         return outputs
 
-    for name, tool in tool_calls.items():
+    for tool in tool_calls:
+        name = tool.name
         control_flow = is_internal_tool(name)
         tool_invocation_id = str(uuid.uuid4())
 
