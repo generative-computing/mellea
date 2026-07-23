@@ -333,7 +333,7 @@ def get_adapter_for_intrinsic(
 # adapter realities they do not implement — the same "reject unsupported reality"
 # contract the reality-specific verbs use. See the module note on the mixin-vs-
 # generic trade-off for why this is a runtime, not a type-parameter, guarantee.
-AdapterInput: TypeAlias = "Adapter | _AdapterCore"
+AdapterInput: TypeAlias = Adapter | _AdapterCore
 
 
 class AdapterMixin(Backend, abc.ABC):
