@@ -74,9 +74,10 @@ def test_from_callable_generation(session: MelleaSession):
     )
 
     assert out.tool_calls is not None, "did not call tool when expected"
-    assert len(out.tool_calls.keys()) > 0
+    assert len(out.tool_calls) > 0
 
-    tool = out.tool_calls[t.name]
+    tool = next((tc for tc in out.tool_calls if tc.name == t.name), None)
+    assert tool is not None
     assert isinstance(tool.call_func(), str), "tool call did not yield expected type"
 
 
@@ -145,9 +146,10 @@ def test_from_langchain_generation(session: MelleaSession):
     )
 
     assert out.tool_calls is not None, "did not call tool when expected"
-    assert len(out.tool_calls.keys()) > 0
+    assert len(out.tool_calls) > 0
 
-    tool = out.tool_calls[t.name]
+    tool = next((tc for tc in out.tool_calls if tc.name == t.name), None)
+    assert tool is not None
     assert isinstance(tool.call_func(), str), "tool call did not yield expected type"
 
 

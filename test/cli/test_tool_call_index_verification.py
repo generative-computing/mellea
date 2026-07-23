@@ -38,18 +38,18 @@ async def test_tool_call_delta_has_required_index_field():
 
     # Create a mock output with multiple tool calls to test indexing
     mock_output = ModelOutputThunk("I'll check the weather for you.")
-    mock_output.tool_calls = {
-        "get_weather": ModelToolCall(
+    mock_output.tool_calls = [
+        ModelToolCall(
             name="get_weather",
             func=mock_tool,
             args={"location": "San Francisco", "units": "celsius"},
         ),
-        "get_forecast": ModelToolCall(
+        ModelToolCall(
             name="get_forecast",
             func=mock_tool,
             args={"location": "San Francisco", "days": 3},
         ),
-    }
+    ]
     mock_module.serve.return_value = mock_output
 
     request = ChatCompletionRequest(
@@ -114,9 +114,9 @@ async def test_single_tool_call_has_index_zero():
     mock_tool.name = "search"
 
     mock_output = ModelOutputThunk("Searching...")
-    mock_output.tool_calls = {
-        "search": ModelToolCall(name="search", func=mock_tool, args={"query": "test"})
-    }
+    mock_output.tool_calls = [
+        ModelToolCall(name="search", func=mock_tool, args={"query": "test"})
+    ]
     mock_module.serve.return_value = mock_output
 
     request = ChatCompletionRequest(

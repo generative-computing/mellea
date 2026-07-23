@@ -192,7 +192,7 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
     # Step 2: Fallback to tool_calls if no text code found
     if not all_blocks and last_output.tool_calls:
-        for tool_call in last_output.tool_calls.values():
+        for tool_call in last_output.tool_calls:
             extracted = _extract_code_from_tool_call(tool_call)
             if extracted:
                 # Tool_calls are a fallback: only reached when text yields no code blocks
