@@ -276,5 +276,435 @@ class TestDiscriminatedUnionValidation:
         )
 
 
+class TestNestedDiscriminatedUnions:
+    """Tests for nested discriminated unions (unions within union branches)."""
+
+    def test_nested_discriminated_union_flattens(self):
+        """Nested discriminated unions must be recursively flattened.
+
+        When a tool parameter has a discriminated union whose branches
+        themselves contain discriminated unions, all levels must be flattened:
+        - All oneOf converted to anyOf
+        - All discriminator keywords stripped
+        - All $ref entries within nested discriminated unions inlined
+        """
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class CreateUserStub(BaseModel):
+            op: Literal["create_stub"]
+            user_id: str
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[
+                CreateUserFull | CreateUserStub | DeleteUser, Field(discriminator="op")
+            ],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        tool = convert_function_to_ollama_tool(execute)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        params = tool.function.parameters.model_dump(exclude_none=True)
+        cmd_schema = params["properties"]["cmd"]
+
+        # Check that outer union is flattened
+        assert "anyOf" in cmd_schema, "outer union must be in anyOf"
+        assert "oneOf" not in cmd_schema, "outer union must not have oneOf"
+
+        # Check each branch for nested discriminated unions
+        for branch in cmd_schema.get("anyOf", []):
+            if branch.get("title") == "CreateUserFull":
+                # This branch has a nested discriminated union
+                user_data = branch.get("properties", {}).get("user_data", {})
+
+                # The nested union must be flattened too
+                assert "anyOf" in user_data, (
+                    f"nested discriminated union must be in anyOf: {user_data}"
+                )
+                assert "oneOf" not in user_data, (
+                    f"nested union must not have oneOf: {user_data}"
+                )
+                assert "discriminator" not in user_data, (
+                    f"nested union must not have discriminator keyword: {user_data}"
+                )
+
+                # All branches of the nested union must be inlined objects
+                nested_branches = user_data.get("anyOf", [])
+                assert len(nested_branches) == 2, "nested union should have 2 branches"
+                for nested_branch in nested_branches:
+                    # Should be inlined object, not a $ref
+                    assert "$ref" not in nested_branch, (
+                        f"nested branch should not have $ref: {nested_branch}"
+                    )
+                    assert "properties" in nested_branch, (
+                        f"nested branch should be inlined object: {nested_branch}"
+                    )
+                    assert nested_branch.get("type") == "object", (
+                        f"nested branch should be object type: {nested_branch}"
+                    )
+
+    def test_deeply_nested_discriminated_unions(self):
+        """Discriminated unions at 3+ levels of nesting must all be flattened."""
+
+        class Level3A(BaseModel):
+            l3_type: Literal["a"]
+            value: str
+
+        class Level3B(BaseModel):
+            l3_type: Literal["b"]
+            value: int
+
+        class Level2A(BaseModel):
+            l2_type: Literal["a"]
+            nested: Annotated[Level3A | Level3B, Field(discriminator="l3_type")]
+
+        class Level2B(BaseModel):
+            l2_type: Literal["b"]
+            text: str
+
+        class Level1A(BaseModel):
+            l1_type: Literal["a"]
+            nested: Annotated[Level2A | Level2B, Field(discriminator="l2_type")]
+
+        class Level1B(BaseModel):
+            l1_type: Literal["b"]
+            name: str
+
+        def deeply_nested(
+            param: Annotated[Level1A | Level1B, Field(discriminator="l1_type")],
+        ) -> str:
+            """Deeply nested discriminated unions.
+
+            Args:
+                param: the parameter
+            """
+            return "ok"
+
+        tool = convert_function_to_ollama_tool(deeply_nested)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        params = tool.function.parameters.model_dump(exclude_none=True)
+        param_schema = params["properties"]["param"]
+
+        # Render entire schema to JSON to search for problematic patterns
+        rendered = json.dumps(param_schema)
+
+        # No oneOf should remain anywhere in the schema
+        assert "oneOf" not in rendered, (
+            "All levels of nesting should have oneOf flattened to anyOf"
+        )
+
+        # No discriminator keyword should remain anywhere
+        assert "discriminator" not in rendered, (
+            "All discriminator keywords should be stripped"
+        )
+
+        # Verify at least level 1 and level 2 are properly structured
+        level1_branches = param_schema.get("anyOf", [])
+        for branch in level1_branches:
+            if branch.get("title") == "Level1A":
+                # Has nested Level2
+                nested = branch.get("properties", {}).get("nested", {})
+                assert "anyOf" in nested, "Level 2 should use anyOf"
+                assert "oneOf" not in nested, "Level 2 should not have oneOf"
+
+                # Check Level 2 branches
+                level2_branches = nested.get("anyOf", [])
+                for level2_branch in level2_branches:
+                    if level2_branch.get("title") == "Level2A":
+                        # Has nested Level3
+                        level3_nested = level2_branch.get("properties", {}).get(
+                            "nested", {}
+                        )
+                        assert "anyOf" in level3_nested, "Level 3 should use anyOf"
+                        assert "oneOf" not in level3_nested, (
+                            "Level 3 should not have oneOf"
+                        )
+
+    def test_nested_union_no_refs_leak(self):
+        """No $ref should leak into the nested discriminated union schema."""
+
+        class Inner1(BaseModel):
+            inner_type: Literal["inner1"]
+            value: str
+
+        class Inner2(BaseModel):
+            inner_type: Literal["inner2"]
+            count: int
+
+        class Outer(BaseModel):
+            outer_type: Literal["outer"]
+            inner: Annotated[Inner1 | Inner2, Field(discriminator="inner_type")]
+
+        def cmd(
+            param: Annotated[Outer, Field(discriminator="outer_type")] | None = None,
+        ) -> str:
+            """Command.
+
+            Args:
+                param: optional outer parameter
+            """
+            return "ok"
+
+        tool = convert_function_to_ollama_tool(cmd)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        params = tool.function.parameters.model_dump(exclude_none=True)
+
+        # Check the entire parameter schema for leaked $refs
+        rendered = json.dumps(params["properties"]["param"])
+        assert "$ref" not in rendered, (
+            f"No $ref should leak into the final schema: {rendered[:200]}..."
+        )
+
+    def test_nested_union_payload_round_trips(self):
+        """Valid nested discriminated union payloads must round-trip through validate_tool_arguments."""
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[CreateUserFull | DeleteUser, Field(discriminator="op")],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(execute)
+
+        # Test valid full user creation
+        validate_tool_arguments(
+            mt,
+            {
+                "cmd": {
+                    "op": "create_full",
+                    "user_data": {
+                        "type": "full",
+                        "name": "Ada",
+                        "email": "ada@example.com",
+                    },
+                }
+            },
+            strict=True,
+        )
+
+        # Test valid stub user creation
+        validate_tool_arguments(
+            mt,
+            {
+                "cmd": {
+                    "op": "create_full",
+                    "user_data": {"type": "stub", "user_id": "user123"},
+                }
+            },
+            strict=True,
+        )
+
+        # Test delete command
+        validate_tool_arguments(
+            mt, {"cmd": {"op": "delete", "user_id": "user456"}}, strict=True
+        )
+
+    def test_nested_union_payload_rejects_invalid_discriminator(self):
+        """Invalid nested discriminator values must be rejected."""
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[CreateUserFull | DeleteUser, Field(discriminator="op")],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(execute)
+
+        # Invalid nested discriminator value
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt,
+                {
+                    "cmd": {
+                        "op": "create_full",
+                        "user_data": {
+                            "type": "invalid",
+                            "name": "Ada",
+                            "email": "ada@example.com",
+                        },
+                    }
+                },
+                strict=True,
+            )
+
+    def test_nested_union_payload_rejects_missing_nested_field(self):
+        """Missing required fields in nested union branches must be rejected."""
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser, Field(discriminator="type")]
+
+        def execute(cmd: Annotated[CreateUserFull, Field(discriminator="op")]) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(execute)
+
+        # Missing required 'email' field in nested FullUser
+        with pytest.raises(ValidationError):
+            validate_tool_arguments(
+                mt,
+                {
+                    "cmd": {
+                        "op": "create_full",
+                        "user_data": {"type": "full", "name": "Ada"},
+                    }
+                },
+                strict=True,
+            )
+
+    def test_deeply_nested_union_payload_round_trips(self):
+        """Deeply nested discriminated union payloads must round-trip through validate_tool_arguments."""
+
+        class Level3A(BaseModel):
+            l3_type: Literal["a"]
+            value: str
+
+        class Level3B(BaseModel):
+            l3_type: Literal["b"]
+            value: int
+
+        class Level2A(BaseModel):
+            l2_type: Literal["a"]
+            nested: Annotated[Level3A | Level3B, Field(discriminator="l3_type")]
+
+        class Level2B(BaseModel):
+            l2_type: Literal["b"]
+            text: str
+
+        class Level1A(BaseModel):
+            l1_type: Literal["a"]
+            nested: Annotated[Level2A | Level2B, Field(discriminator="l2_type")]
+
+        class Level1B(BaseModel):
+            l1_type: Literal["b"]
+            name: str
+
+        def deeply_nested(
+            param: Annotated[Level1A | Level1B, Field(discriminator="l1_type")],
+        ) -> str:
+            """Deeply nested discriminated unions.
+
+            Args:
+                param: the parameter
+            """
+            return "ok"
+
+        mt = MelleaTool.from_callable(deeply_nested)
+
+        # Test payload with three levels of nesting
+        validate_tool_arguments(
+            mt,
+            {
+                "param": {
+                    "l1_type": "a",
+                    "nested": {
+                        "l2_type": "a",
+                        "nested": {"l3_type": "a", "value": "deep_value"},
+                    },
+                }
+            },
+            strict=True,
+        )
+
+        # Test alternative path through nesting
+        validate_tool_arguments(
+            mt,
+            {
+                "param": {
+                    "l1_type": "a",
+                    "nested": {"l2_type": "a", "nested": {"l3_type": "b", "value": 42}},
+                }
+            },
+            strict=True,
+        )
+
+        # Test simplified path
+        validate_tool_arguments(
+            mt,
+            {"param": {"l1_type": "a", "nested": {"l2_type": "b", "text": "simple"}}},
+            strict=True,
+        )
+
+        # Test Level1B branch
+        validate_tool_arguments(
+            mt, {"param": {"l1_type": "b", "name": "direct"}}, strict=True
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

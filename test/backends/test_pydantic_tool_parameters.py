@@ -7,6 +7,8 @@ This test file addresses the issue where tools defined with Pydantic BaseModel
 parameters don't properly validate/coerce arguments from LLM responses.
 """
 
+import json
+
 import pytest
 from pydantic import BaseModel
 
@@ -509,13 +511,6 @@ class TestOptionalParameterRegression:
                 strict=True,  # missing subject + body
             )
 
-    @pytest.mark.skip(
-        reason="Nested model resolution not yet implemented. "
-        "This test documents the expected behavior once recursive $ref resolution is added. "
-        "Currently fails because Address remains as a dangling $ref inside Person's schema. "
-        "NESTED_MODEL_RESOLUTION_ISSUE.md in "
-        "https://github.com/generative-computing/mellea/issues/911 for implementation details."
-    )
     def test_nested_models_fully_inlined(self):
         """Test def f(person: Person) where Person has address: Address.
 
@@ -523,9 +518,8 @@ class TestOptionalParameterRegression:
         inlined in the schema, and validate_tool_arguments accepts a nested
         dict without a ValidationError.
 
-        DISABLED: This test is currently skipped because nested model resolution
-        is not yet implemented. The test will be enabled once the recursive
-        reference resolution feature is added to convert_function_to_ollama_tool.
+        This test verifies the fix for issue #911: recursive $ref resolution
+        in nested model properties.
         """
 
         def create_person(person: Person) -> str:
@@ -594,6 +588,425 @@ class TestOptionalParameterRegression:
         validated = validate_tool_arguments(tool, args, coerce_types=True)
         assert validated["person"]["name"] == "John Doe"
         assert validated["person"]["address"]["city"] == "Boston"
+
+
+class TestNestedModelsEdgeCases:
+    """Edge case tests for issue #911: recursive $ref resolution."""
+
+    def test_deeply_nested_models(self):
+        """Test deeply nested models (3+ levels) are all inlined."""
+
+        class Country(BaseModel):
+            name: str
+            code: str
+
+        class City(BaseModel):
+            name: str
+            country: Country
+
+        class Address(BaseModel):
+            street: str
+            city: City
+
+        class Person(BaseModel):
+            name: str
+            address: Address
+
+        def process_person(person: Person) -> str:
+            """Process a person with deeply nested address info.
+
+            Args:
+                person: Person with nested address
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(process_person)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        person_prop = params["properties"]["person"]
+
+        # Verify no $ref anywhere in the schema
+        rendered = json.dumps(person_prop)
+        assert "$ref" not in rendered, (
+            f"Deeply nested models should be fully inlined: {rendered[:200]}..."
+        )
+
+        # Verify the structure is preserved
+        assert person_prop["type"] == "object"
+        address_prop = person_prop["properties"]["address"]
+        assert address_prop["type"] == "object"
+        city_prop = address_prop["properties"]["city"]
+        assert city_prop["type"] == "object"
+        country_prop = city_prop["properties"]["country"]
+        assert country_prop["type"] == "object"
+
+    def test_no_infinite_loop_on_complex_structure(self):
+        """Verify a non-recursive nested model (list of items) is fully inlined.
+
+        This covers the DAG case only. The genuinely self-referential case is
+        covered by test_recursive_model_terminates.
+        """
+
+        class Item(BaseModel):
+            name: str
+            quantity: int
+
+        class Order(BaseModel):
+            id: str
+            items: list[Item]
+
+        def create_order(order: Order) -> str:
+            """Create an order.
+
+            Args:
+                order: The order to create
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_order)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        order_prop = params["properties"]["order"]
+
+        # Should complete without hanging
+        rendered = json.dumps(order_prop)
+        assert "$ref" not in rendered
+        assert order_prop["type"] == "object"
+
+    def test_recursive_model_terminates(self):
+        """A self-referential model must not cause infinite recursion.
+
+        A model whose own field references itself (e.g. a tree node with a
+        list of child nodes) emits a $ref back to itself. Inlining must stop
+        at the cycle boundary and return; the schema at that boundary keeps a
+        single unresolved $ref by design, so we assert termination, not
+        $ref-freedom.
+        """
+
+        class TreeNode(BaseModel):
+            name: str
+            children: "list[TreeNode]" = []
+
+        TreeNode.model_rebuild()
+
+        def build_tree(root: TreeNode) -> str:
+            """Build a tree.
+
+            Args:
+                root: the root node
+            """
+            return "ok"
+
+        # Must return without raising RecursionError.
+        tool = MelleaTool.from_callable(build_tree)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        root_prop = params["properties"]["root"]
+        assert root_prop["type"] == "object"
+        # The top level and one level of children are inlined; the cycle
+        # boundary retains a single self-$ref rather than expanding forever.
+        assert "children" in root_prop["properties"]
+
+    def test_optional_nested_models_inlined(self):
+        """Optional nested models should also be fully inlined."""
+
+        class Contact(BaseModel):
+            email: str
+            phone: str | None = None
+
+        class Employee(BaseModel):
+            name: str
+            contact: "Contact | None" = None
+
+        def hire_employee(employee: Employee) -> str:
+            """Hire an employee.
+
+            Args:
+                employee: Employee information
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(hire_employee)
+        schema = tool.as_json_tool
+
+        params = schema["function"]["parameters"]
+        employee_prop = params["properties"]["employee"]
+
+        rendered = json.dumps(employee_prop)
+        assert "$ref" not in rendered, (
+            f"Optional nested models should be inlined: {rendered[:200]}..."
+        )
+
+    def test_nested_discriminated_union_payload_round_trips(self):
+        """Test that nested discriminated unions round-trip through validation.
+
+        This reproducer verifies the fix for issue #911: a valid nested
+        discriminated union payload should validate successfully through
+        validate_tool_arguments and be processable without errors.
+        """
+        from typing import Annotated, Literal
+
+        from pydantic import Field
+
+        class FullUser(BaseModel):
+            type: Literal["full"]
+            name: str
+            email: str
+
+        class StubUser(BaseModel):
+            type: Literal["stub"]
+            user_id: str
+
+        class CreateUserFull(BaseModel):
+            op: Literal["create_full"]
+            user_data: Annotated[FullUser | StubUser, Field(discriminator="type")]
+
+        class DeleteUser(BaseModel):
+            op: Literal["delete"]
+            user_id: str
+
+        def execute(
+            cmd: Annotated[CreateUserFull | DeleteUser, Field(discriminator="op")],
+        ) -> str:
+            """Execute a command.
+
+            Args:
+                cmd: the command to execute
+            """
+            if isinstance(cmd, dict):
+                return f"Executed {cmd.get('op', 'unknown')}"
+            return f"Executed {cmd.op}"
+
+        tool = MelleaTool.from_callable(execute)
+
+        # Test payload: create_full with full user data
+        test_payload = {
+            "cmd": {
+                "op": "create_full",
+                "user_data": {
+                    "type": "full",
+                    "name": "Ada",
+                    "email": "ada@example.com",
+                },
+            }
+        }
+
+        # Should validate without errors
+        validated = validate_tool_arguments(tool, test_payload, strict=True)
+
+        assert validated["cmd"]["op"] == "create_full"
+        assert validated["cmd"]["user_data"]["type"] == "full"
+        assert validated["cmd"]["user_data"]["name"] == "Ada"
+        assert validated["cmd"]["user_data"]["email"] == "ada@example.com"
+
+        # Test payload: create_full with stub user data
+        test_payload_stub = {
+            "cmd": {
+                "op": "create_full",
+                "user_data": {"type": "stub", "user_id": "usr_123"},
+            }
+        }
+
+        validated_stub = validate_tool_arguments(tool, test_payload_stub, strict=True)
+
+        assert validated_stub["cmd"]["op"] == "create_full"
+        assert validated_stub["cmd"]["user_data"]["type"] == "stub"
+        assert validated_stub["cmd"]["user_data"]["user_id"] == "usr_123"
+
+        # Test payload: delete user
+        test_payload_delete = {"cmd": {"op": "delete", "user_id": "usr_456"}}
+
+        validated_delete = validate_tool_arguments(
+            tool, test_payload_delete, strict=True
+        )
+
+        assert validated_delete["cmd"]["op"] == "delete"
+        assert validated_delete["cmd"]["user_id"] == "usr_456"
+
+    def test_description_sibling_preserved_on_nested_ref(self):
+        """A description alongside a nested-model `$ref` must survive inlining."""
+
+        from pydantic import Field
+
+        class Address(BaseModel):
+            street: str
+            city: str
+
+        class Person(BaseModel):
+            name: str
+            address: Address = Field(description="the person's mailing address")
+
+        def create_person(person: Person) -> str:
+            """Create a person.
+
+            Args:
+                person: the person record
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_person)
+        schema = tool.as_json_tool
+
+        assert schema["function"] is not None
+        assert schema["function"]["parameters"] is not None
+        params = schema["function"]["parameters"]
+
+        address = params["properties"]["person"]["properties"]["address"]
+
+        # The ref must be inlined (no dangling $ref)...
+        assert "$ref" not in json.dumps(address), f"nested ref not inlined: {address}"
+        assert address.get("type") == "object"
+        assert "street" in address.get("properties", {})
+
+        # ...and the sibling description must be preserved.
+        assert address.get("description") == "the person's mailing address", (
+            f"sibling description dropped during inlining: {address}"
+        )
+
+    def test_description_sibling_preserved_two_levels_deep(self):
+        """A described `$ref` nested two levels deep must keep its description."""
+
+        from pydantic import Field
+
+        class Country(BaseModel):
+            name: str
+            code: str
+
+        class Address(BaseModel):
+            street: str
+            country: Country = Field(description="the country of residence")
+
+        class Person(BaseModel):
+            name: str
+            address: Address
+
+        def create_person(person: Person) -> str:
+            """Create a person.
+
+            Args:
+                person: the person record
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_person)
+        schema = tool.as_json_tool
+
+        assert schema["function"] is not None
+        assert schema["function"]["parameters"] is not None
+        params = schema["function"]["parameters"]
+
+        country = params["properties"]["person"]["properties"]["address"]["properties"][
+            "country"
+        ]
+
+        assert "$ref" not in json.dumps(country), (
+            f"deeply nested ref not inlined: {country}"
+        )
+        assert country.get("type") == "object"
+        assert country.get("description") == "the country of residence", (
+            f"sibling description dropped at depth: {country}"
+        )
+
+    def test_inlined_object_fields_still_present(self):
+        """Inlining must add the referenced object's own keys, not just siblings.
+
+        Guards against a fix that preserves siblings but stops populating the
+        inlined body (or vice versa).
+        """
+
+        from pydantic import Field
+
+        class Address(BaseModel):
+            street: str
+            city: str
+
+        class Person(BaseModel):
+            name: str
+            address: Address = Field(description="mailing address")
+
+        def create_person(person: Person) -> str:
+            """Create a person.
+
+            Args:
+                person: the person record
+            """
+            return "ok"
+
+        tool = MelleaTool.from_callable(create_person)
+        schema = tool.as_json_tool
+
+        assert schema["function"] is not None
+        assert schema["function"]["parameters"] is not None
+        params = schema["function"]["parameters"]
+
+        address = params["properties"]["person"]["properties"]["address"]
+
+        # Both the inlined body and the sibling description must coexist.
+        assert address.get("description") == "mailing address"
+        assert set(address.get("properties", {})) == {"street", "city"}
+        assert address.get("required") == ["street", "city"]
+
+    def test_nested_simple_model_payload_round_trips(self):
+        """Test that simple nested model payloads round-trip through validation.
+
+        Validates that the nested model Address in Person can be passed as a
+        dict through validate_tool_arguments without validation errors.
+        """
+
+        def create_person(person: Person) -> str:
+            """Create a person record.
+
+            Args:
+                person: The person's information
+            """
+            if isinstance(person, dict):
+                return f"Created {person['name']}"
+            return f"Created {person.name}"
+
+        tool = MelleaTool.from_callable(create_person)
+
+        # Test payload with nested address
+        test_payload = {
+            "person": {
+                "name": "Alice",
+                "age": 30,
+                "email": "alice@example.com",
+                "address": {
+                    "street": "123 Main St",
+                    "city": "Boston",
+                    "state": "MA",
+                    "zip_code": "02101",
+                },
+            }
+        }
+
+        # Should validate without errors
+        validated = validate_tool_arguments(tool, test_payload, strict=True)
+
+        assert validated["person"]["name"] == "Alice"
+        assert validated["person"]["age"] == 30
+        assert validated["person"]["address"]["street"] == "123 Main St"
+        assert validated["person"]["address"]["city"] == "Boston"
+
+        # Test payload with None address (optional field)
+        test_payload_no_address = {
+            "person": {
+                "name": "Bob",
+                "age": 25,
+                "email": "bob@example.com",
+                "address": None,
+            }
+        }
+
+        validated_no_addr = validate_tool_arguments(
+            tool, test_payload_no_address, strict=True
+        )
+
+        assert validated_no_addr["person"]["name"] == "Bob"
+        assert validated_no_addr["person"]["address"] is None
 
 
 if __name__ == "__main__":

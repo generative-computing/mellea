@@ -16,7 +16,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Generator, Iterable, Mapping, Sequence
-from typing import Any, Literal, ParamSpec, TypeVar, overload
+from typing import Annotated, Any, Literal, ParamSpec, TypeVar, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -553,6 +553,39 @@ def validate_tool_arguments(
         "object": dict,
     }
 
+    def _detect_discriminator_field(schemas: list[dict[str, Any]]) -> str | None:
+        """Detect if anyOf schemas form a discriminated union.
+
+        Returns the discriminator field name if all schemas have a common field
+        with const values, otherwise None.
+        """
+        if not schemas or len(schemas) < 2:
+            return None
+
+        # Check if all schemas are objects with properties
+        if not all(s.get("type") == "object" and "properties" in s for s in schemas):
+            return None
+
+        # Find candidate discriminator fields (fields that all schemas have with const values)
+        first_props = schemas[0].get("properties", {})
+        for field_name, field_schema in first_props.items():
+            # Check if this field has a const value in the first schema
+            if "const" not in field_schema:
+                continue
+
+            # Check if all other schemas have this field with a const value
+            if all(
+                field_name in s.get("properties", {})
+                and "const" in s["properties"][field_name]
+                for s in schemas[1:]
+            ):
+                # Verify all const values are different (true discriminator)
+                const_values = [s["properties"][field_name]["const"] for s in schemas]
+                if len(set(const_values)) == len(const_values):
+                    return field_name
+
+        return None
+
     # Helper function to build Pydantic model from nested JSON schema
     def _build_pydantic_type_from_schema(schema: dict[str, Any]) -> Any:
         """Recursively build Pydantic type from JSON schema.
@@ -575,7 +608,13 @@ def validate_tool_arguments(
             nested_fields: dict[str, Any] = {}
 
             for nested_name, nested_schema in nested_properties.items():
-                nested_type = _build_pydantic_type_from_schema(nested_schema)
+                # Special handling for const fields: convert to Literal type
+                if "const" in nested_schema:
+                    const_value = nested_schema["const"]
+                    nested_type: Any = Literal[const_value]  # type: ignore
+                else:
+                    nested_type = _build_pydantic_type_from_schema(nested_schema)
+
                 if nested_name in nested_required:
                     nested_fields[nested_name] = (nested_type, ...)
                 else:
@@ -624,6 +663,9 @@ def validate_tool_arguments(
             has_null = any(s.get("type") == "null" for s in schema["anyOf"])
             non_null_schemas = [s for s in schema["anyOf"] if s.get("type") != "null"]
 
+            # Check if this is a discriminated union
+            discriminator_field = _detect_discriminator_field(non_null_schemas)
+
             types_list = []
             for sub_schema in non_null_schemas:
                 sub_type = _build_pydantic_type_from_schema(sub_schema)
@@ -638,6 +680,10 @@ def validate_tool_arguments(
                 from operator import or_
 
                 result = reduce(or_, types_list)
+
+                # Wrap discriminated unions with Field(discriminator=...)
+                if discriminator_field:
+                    result = Annotated[result, Field(discriminator=discriminator_field)]  # type: ignore
 
             return (result | None) if has_null else result
 
@@ -1070,6 +1116,156 @@ def _is_complex_anyof(v: dict) -> bool:
     return False
 
 
+def _recursively_inline_refs(
+    schema: dict, defs: dict, active_refs: frozenset[str] = frozenset()
+) -> None:
+    """Recursively inline all remaining $ref entries at any depth in the schema.
+
+    This is a final pass after discriminated union flattening to catch any
+    dangling references that the earlier single-level passes missed. Handles
+    nested model references where properties contain other models via $ref.
+
+    Cycles from self-referential models (e.g. a tree node whose field is a
+    list of itself) are broken by tracking the $ref targets currently open on
+    the resolution path: a ref already being inlined on this path is left in
+    place rather than expanded again.
+
+    Args:
+        schema: Schema object to process (mutated in-place).
+        defs: Global definitions dict for $ref resolution.
+        active_refs: $ref targets already open on the current resolution path,
+            used to break cycles on self-referential models.
+    """
+    if not isinstance(schema, dict):
+        return
+
+    # Inline $ref at this level if present
+    if "$ref" in schema and isinstance(schema["$ref"], str):
+        ref_name = schema["$ref"]
+        if ref_name in active_refs:
+            return  # circular ref already on this path; stop inlining
+        ref_schema = _resolve_ref(ref_name, defs)
+        if ref_schema:
+            inlined = copy.deepcopy(ref_schema)
+            # Remove the $ref, then merge inlined content while preserving sibling keys
+            del schema["$ref"]
+            for key, value in inlined.items():
+                schema.setdefault(key, value)  # sibling keys (e.g. description) win
+            active_refs = active_refs | {ref_name}
+
+    # Process properties of an object
+    if "properties" in schema and isinstance(schema["properties"], dict):
+        for prop_name, prop_schema in schema["properties"].items():
+            if isinstance(prop_schema, dict):
+                _recursively_inline_refs(prop_schema, defs, active_refs)
+
+    # Process array items
+    if "items" in schema and isinstance(schema["items"], dict):
+        _recursively_inline_refs(schema["items"], defs, active_refs)
+
+    # Process anyOf branches
+    if "anyOf" in schema and isinstance(schema["anyOf"], list):
+        for branch in schema["anyOf"]:
+            if isinstance(branch, dict):
+                _recursively_inline_refs(branch, defs, active_refs)
+
+    # Process oneOf branches (shouldn't exist after flattening, but be defensive)
+    if "oneOf" in schema and isinstance(schema["oneOf"], list):
+        for branch in schema["oneOf"]:
+            if isinstance(branch, dict):
+                _recursively_inline_refs(branch, defs, active_refs)
+
+    # Process allOf branches
+    if "allOf" in schema and isinstance(schema["allOf"], list):
+        for branch in schema["allOf"]:
+            if isinstance(branch, dict):
+                _recursively_inline_refs(branch, defs, active_refs)
+
+    # Process additionalProperties
+    if "additionalProperties" in schema and isinstance(
+        schema["additionalProperties"], dict
+    ):
+        _recursively_inline_refs(schema["additionalProperties"], defs, active_refs)
+
+
+def _recursively_flatten_in_properties(schema: dict, defs: dict) -> None:
+    """Recursively flatten discriminated unions found in nested properties.
+
+    Mutates schema in-place, walking the tree to find and flatten any
+    discriminated unions within properties, items, or anyOf branches.
+
+    This is called after branch inlining to ensure nested discriminated unions
+    (e.g., a property field that is itself a discriminated union) are also
+    flattened.
+
+    Args:
+        schema: Schema object to process (mutated in-place).
+        defs: Global definitions dict for $ref resolution.
+    """
+    if not isinstance(schema, dict):
+        return
+
+    # Process properties of an object
+    if "properties" in schema and isinstance(schema["properties"], dict):
+        for prop_name, prop_schema in schema["properties"].items():
+            if not isinstance(prop_schema, dict):
+                continue
+
+            # Check if this property is a discriminated union (has oneOf + discriminator)
+            if "oneOf" in prop_schema or (
+                "anyOf" in prop_schema
+                and any("oneOf" in s for s in prop_schema.get("anyOf", []))
+            ):
+                schema["properties"][prop_name] = _flatten_discriminated_union(
+                    prop_schema, defs
+                )
+                prop_schema = schema["properties"][prop_name]
+
+            # Recurse into the (possibly flattened) property
+            _recursively_flatten_in_properties(prop_schema, defs)
+
+    # Process array items
+    if "items" in schema and isinstance(schema["items"], dict):
+        if "oneOf" in schema["items"] or (
+            "anyOf" in schema["items"]
+            and any("oneOf" in s for s in schema["items"].get("anyOf", []))
+        ):
+            schema["items"] = _flatten_discriminated_union(schema["items"], defs)
+
+        _recursively_flatten_in_properties(schema["items"], defs)
+
+    # Process anyOf branches
+    if "anyOf" in schema and isinstance(schema["anyOf"], list):
+        for branch in schema["anyOf"]:
+            _recursively_flatten_in_properties(branch, defs)
+
+    # Process oneOf branches (shouldn't exist after flattening, but be defensive)
+    if "oneOf" in schema and isinstance(schema["oneOf"], list):
+        for branch in schema["oneOf"]:
+            _recursively_flatten_in_properties(branch, defs)
+
+    # Process allOf branches
+    if "allOf" in schema and isinstance(schema["allOf"], list):
+        for branch in schema["allOf"]:
+            _recursively_flatten_in_properties(branch, defs)
+
+    # Process additionalProperties
+    if "additionalProperties" in schema and isinstance(
+        schema["additionalProperties"], dict
+    ):
+        if "oneOf" in schema["additionalProperties"] or (
+            "anyOf" in schema["additionalProperties"]
+            and any(
+                "oneOf" in s for s in schema["additionalProperties"].get("anyOf", [])
+            )
+        ):
+            schema["additionalProperties"] = _flatten_discriminated_union(
+                schema["additionalProperties"], defs
+            )
+
+        _recursively_flatten_in_properties(schema["additionalProperties"], defs)
+
+
 def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     """Normalise Pydantic discriminated-union schemas for tool-calling APIs.
 
@@ -1088,10 +1284,9 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
     inlined, and `discriminator` stripped. The input is not mutated; callers
     must reassign the result.
 
-    Flattening is single-level. Discriminated unions nested inside an inlined
-    branch (e.g. a Pydantic model whose own field is another discriminated
-    union) are not recursively flattened — that case is tracked alongside the
-    recursive `$ref` resolution work in #911.
+    Discriminated unions nested inside inlined branches are recursively
+    flattened via `_recursively_flatten_in_properties()` to ensure no
+    nested `oneOf` + `discriminator` patterns remain.
     """
 
     def _inline(branch: dict) -> dict:
@@ -1122,6 +1317,10 @@ def _flatten_discriminated_union(v: dict, defs: dict) -> dict:
             else:
                 flattened.append(sub)
         out["anyOf"] = flattened
+
+    # Recursively flatten discriminated unions found in nested properties
+    # of the inlined branches
+    _recursively_flatten_in_properties(out, defs)
 
     return out
 
@@ -1225,6 +1424,11 @@ def convert_function_to_ollama_tool(
                 "description": parsed_docstring.get(k, ""),
                 "type": ", ".join(types),
             }
+
+    # Final pass: recursively inline all remaining $refs at any depth.
+    # This catches dangling references in nested model properties that weren't
+    # caught by the earlier single-level ref-inlining passes.
+    _recursively_inline_refs(schema, defs)
 
     tool = OllamaTool(
         type="function",
