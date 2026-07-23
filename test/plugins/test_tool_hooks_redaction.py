@@ -50,7 +50,7 @@ class _RecordingTool(AbstractMelleaTool):
 def _make_result(tool_call: ModelToolCall) -> ModelOutputThunk:
     """Wrap a single ModelToolCall in a minimal ModelOutputThunk."""
     mot = MagicMock(spec=ModelOutputThunk)
-    mot.tool_calls = {tool_call.name: tool_call}
+    mot.tool_calls = [tool_call]
     return mot
 
 

@@ -794,7 +794,7 @@ class ModelOutputThunk(Generic[S]):
         value (str | None): The raw model output string, or `None` if not yet computed.
         meta (dict[str, Any] | None): Optional metadata from the inference engine (e.g., completion object).
         parsed_repr (S | None): An already-parsed representation to attach; set when re-wrapping existing output.
-        tool_calls (dict[str, ModelToolCall] | None): Tool calls returned by the model alongside the text output.
+        tool_calls (list[ModelToolCall] | None): Tool calls returned by the model alongside the text output (order preserved).
 
     """
 
@@ -803,7 +803,7 @@ class ModelOutputThunk(Generic[S]):
         value: str | None,
         meta: dict[str, Any] | None = None,
         parsed_repr: S | None = None,
-        tool_calls: dict[str, ModelToolCall] | None = None,
+        tool_calls: list[ModelToolCall] | None = None,
     ):
         """Initialize ModelOutputThunk with an optional pre-computed value and metadata."""
         if value is not None and not isinstance(value, str):

@@ -694,10 +694,10 @@ class OllamaModelBackend(FormatterBackend):
 
     def _extract_model_tool_requests(
         self, tools: dict[str, AbstractMelleaTool], chat_response: ollama.ChatResponse
-    ) -> dict[str, ModelToolCall] | None:
+    ) -> list[ModelToolCall] | None:
         from .tools import validate_tool_arguments
 
-        model_tool_calls: dict[str, ModelToolCall] = {}
+        model_tool_calls: list[ModelToolCall] = []
 
         if chat_response.message.tool_calls:
             for tool in chat_response.message.tool_calls:
@@ -712,12 +712,12 @@ class OllamaModelBackend(FormatterBackend):
 
                 # Validate and coerce argument types
                 validated_args = validate_tool_arguments(func, args, strict=False)
-                model_tool_calls[tool.function.name] = ModelToolCall(
+                model_tool_calls.append(ModelToolCall(
                     tool.function.name,
                     func,
                     validated_args,
                     tool_call_id=getattr(tool, "id", None),
-                )
+                ))
 
         if len(model_tool_calls) > 0:
             return model_tool_calls
@@ -757,11 +757,10 @@ class OllamaModelBackend(FormatterBackend):
         if tool_chunk is not None:
             # Only set tool_calls if there is one.
             if mot.tool_calls is None:
-                mot.tool_calls = {}
+                mot.tool_calls = []
 
-            # Merge the tool_chunk dict.
-            for key, val in tool_chunk.items():
-                mot.tool_calls[key] = val
+            # Extend the tool_chunk list.
+            mot.tool_calls.extend(tool_chunk)
 
         # Ollama responses are mostly self-contained. Merge chunks immediately.
         chat_response_delta_merge(mot, chunk)

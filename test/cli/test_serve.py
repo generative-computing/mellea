@@ -563,13 +563,13 @@ class TestHTTPValidation:
         # Create a mock output with tool calls
         # Real backends may return content alongside tool calls (e.g., "I'll check that for you")
         mock_output = ModelOutputThunk("I'll check the weather for you.")
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather",
                 func=mock_tool,
                 args={"location": "San Francisco", "units": "celsius"},
             )
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         request = ChatCompletionRequest(
