@@ -92,9 +92,11 @@ def extract_model_tool_requests(
 
             # Validate and coerce argument types
             validated_args = validate_tool_arguments(func, args, strict=False)
-            model_tool_calls.appen(ModelToolCall(
-                tool_name, func, validated_args, tool_call_id=tool_call.get("id")
-            ))
+            model_tool_calls.appen(
+                ModelToolCall(
+                    tool_name, func, validated_args, tool_call_id=tool_call.get("id")
+                )
+            )
 
     if len(model_tool_calls) > 0:
         return model_tool_calls

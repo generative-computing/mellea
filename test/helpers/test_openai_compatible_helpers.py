@@ -187,16 +187,24 @@ class TestExtractModelToolRequests:
         tool = _make_tool("search")
         tools = {"search": tool}
 
-        response = _response_with_tool_calls([
-            {
-                "id": "call_1",
-                "function": {"name": "search", "arguments": json.dumps({"q": "Python"})},
-            },
-            {
-                "id": "call_2",
-                "function": {"name": "search", "arguments": json.dumps({"q": "JavaScript"})},
-            },
-        ])
+        response = _response_with_tool_calls(
+            [
+                {
+                    "id": "call_1",
+                    "function": {
+                        "name": "search",
+                        "arguments": json.dumps({"q": "Python"}),
+                    },
+                },
+                {
+                    "id": "call_2",
+                    "function": {
+                        "name": "search",
+                        "arguments": json.dumps({"q": "JavaScript"}),
+                    },
+                },
+            ]
+        )
 
         result = extract_model_tool_requests(tools, response)
 
