@@ -17,9 +17,11 @@ from cli.serve.models import (
     ChatCompletionRequest,
     ChatMessage,
     ImageUrlContent,
+    InputAudioContent,
+    InputAudioData,
     TextContent,
 )
-from mellea.core import ModelOutputThunk
+from mellea.core import AudioBlock, ModelOutputThunk
 
 # --- Helper functions ---
 
@@ -33,6 +35,34 @@ def _make_valid_png_base64() -> str:
         b"\x00\x00\x00\x00IEND\xaeB`\x82"
     )
     return base64.b64encode(png_data).decode("utf-8")
+
+
+def _make_valid_wav_base64() -> str:
+    """Create a minimal valid WAV file (4 silent 16-bit PCM samples) as base64."""
+    import struct
+
+    num_samples = 4
+    sample_rate = 16000
+    data_size = num_samples * 2
+    chunk_size = 36 + data_size
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",
+        chunk_size,
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,
+        1,
+        sample_rate,
+        sample_rate * 2,
+        2,
+        16,
+        b"data",
+        data_size,
+    )
+    samples = b"\x00\x00" * num_samples
+    return base64.b64encode(header + samples).decode("utf-8")
 
 
 # --- Test fixtures ---
@@ -258,3 +288,91 @@ class TestServeEndpointSyncFunction:
         image_urls = received_input[0].get_image_urls()
         assert len(image_urls) == 1
         assert image_urls[0].startswith("data:image/png;base64,")
+
+
+# --- Audio unit tests ---
+
+
+class TestGetAudioBlocks:
+    """Unit tests for ChatMessage.get_audio_blocks()."""
+
+    def test_returns_empty_list_for_string_content(self):
+        """get_audio_blocks() returns [] when content is a plain string."""
+        msg = ChatMessage(role="user", content="hello")
+        assert msg.get_audio_blocks() == []
+
+    def test_returns_empty_list_for_none_content(self):
+        """get_audio_blocks() returns [] when content is None."""
+        msg = ChatMessage(role="user", content=None)
+        assert msg.get_audio_blocks() == []
+
+    def test_returns_audio_block_for_valid_wav(self):
+        """get_audio_blocks() returns an AudioBlock for a valid base64 WAV part."""
+        wav_b64 = _make_valid_wav_base64()
+        msg = ChatMessage(
+            role="user",
+            content=[
+                InputAudioContent(
+                    type="input_audio",
+                    input_audio=InputAudioData(data=wav_b64, format="wav"),
+                )
+            ],
+        )
+        blocks = msg.get_audio_blocks()
+        assert len(blocks) == 1
+        assert isinstance(blocks[0], AudioBlock)
+        assert blocks[0].format == "wav"
+
+    def test_returns_empty_list_for_no_audio_parts(self):
+        """get_audio_blocks() returns [] when content has only text parts."""
+        msg = ChatMessage(role="user", content=[TextContent(type="text", text="hello")])
+        assert msg.get_audio_blocks() == []
+
+    def test_raises_value_error_for_invalid_base64(self):
+        """get_audio_blocks() raises ValueError for an invalid base64 payload."""
+        msg = ChatMessage(
+            role="user",
+            content=[
+                InputAudioContent(
+                    type="input_audio",
+                    input_audio=InputAudioData(
+                        data="not-valid-base64!!!", format="wav"
+                    ),
+                )
+            ],
+        )
+        with pytest.raises(ValueError, match="Invalid audio data"):
+            msg.get_audio_blocks()
+
+    def test_get_text_content_ignores_audio_parts(self):
+        """get_text_content() skips InputAudioContent items."""
+        wav_b64 = _make_valid_wav_base64()
+        msg = ChatMessage(
+            role="user",
+            content=[
+                TextContent(type="text", text="describe this"),
+                InputAudioContent(
+                    type="input_audio",
+                    input_audio=InputAudioData(data=wav_b64, format="wav"),
+                ),
+            ],
+        )
+        assert msg.get_text_content() == "describe this"
+
+    def test_deserialises_mixed_text_and_audio(self):
+        """ChatMessage deserialises a mixed list of TextContent and InputAudioContent."""
+        wav_b64 = _make_valid_wav_base64()
+        raw = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "what is this?"},
+                {
+                    "type": "input_audio",
+                    "input_audio": {"data": wav_b64, "format": "wav"},
+                },
+            ],
+        }
+        msg = ChatMessage.model_validate(raw)
+        assert len(msg.content) == 2  # type: ignore[arg-type]
+        assert isinstance(msg.content[0], TextContent)  # type: ignore[index]
+        assert isinstance(msg.content[1], InputAudioContent)  # type: ignore[index]

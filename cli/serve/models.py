@@ -9,6 +9,8 @@ from mellea.helpers.openai_compatible_helpers import CompletionUsage
 from mellea.serve.models import (
     ChatMessage,
     ImageUrlContent,
+    InputAudioContent,
+    InputAudioData,
     MessageContent,
     TextContent,
 )
