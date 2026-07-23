@@ -35,6 +35,7 @@ from .base import (
     TemplateRepresentation,
     blockify,
     get_audio_from_component,
+    get_images_from_component,
     make_image_block,
 )
 from .formatter import Formatter
@@ -96,6 +97,7 @@ __all__ = [
     "default_output_to_bool",
     "generate_walk",
     "get_audio_from_component",
+    "get_images_from_component",
     "log_context",
     "make_image_block",
     "set_log_context",
