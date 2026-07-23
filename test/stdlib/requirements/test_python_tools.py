@@ -88,14 +88,13 @@ class MockBashTool(AbstractMelleaTool):
 
 
 def from_model_with_tool_calls(
-    text_content: str | None = None,
-    tool_calls_dict: dict[str, ModelToolCall] | None = None,
+    text_content: str | None = None, tool_calls_dict: list[ModelToolCall] | None = None
 ) -> Context:
     """Helper to create context with both text and tool_calls.
 
     Args:
         text_content: Optional text content for the model output.
-        tool_calls_dict: Optional dict mapping tool names to ModelToolCall objects.
+        tool_calls_dict: Optional list of ModelToolCall objects.
 
     Returns:
         Context with ModelOutputThunk containing both text and tool_calls.
@@ -797,7 +796,7 @@ class TestToolCallsCodeExtraction:
             func=python_tool,
             args={"code": "x = 1 + 1\nprint(x)"},
         )
-        tool_calls_dict = {"python_executor": tool_call}
+        tool_calls_dict = [tool_call]
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict
@@ -816,7 +815,7 @@ class TestToolCallsCodeExtraction:
             func=python_tool,
             args={"code": "print('from tool')"},
         )
-        tool_calls_dict = {"python_executor": tool_call}
+        tool_calls_dict = [tool_call]
 
         text_content = "```python\nprint('from text')\n```"
         ctx = from_model_with_tool_calls(
@@ -840,7 +839,7 @@ class TestToolCallsCodeExtraction:
                 "code": "def factorial(n):\n    return n * factorial(n-1) if n > 1 else 1"
             },
         )
-        tool_calls_dict = {"python_interpreter": tool_call}
+        tool_calls_dict = [tool_call]
 
         text_content = "Here's a function to compute factorials:"
         ctx = from_model_with_tool_calls(
@@ -942,7 +941,7 @@ More text here
             func=python_tool,
             args={"code": "def valid_func():\n    return 42"},
         )
-        tool_calls_dict = {"python_executor": tool_call}
+        tool_calls_dict = [tool_call]
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict
@@ -960,7 +959,7 @@ More text here
             func=python_tool,
             args={"code": "def invalid_func(\n    return 42"},
         )
-        tool_calls_dict = {"python_executor": tool_call}
+        tool_calls_dict = [tool_call]
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict
@@ -979,7 +978,7 @@ More text here
             func=python_tool,
             args={"code": "import os\nimport sys\nprint(os.getcwd())"},
         )
-        tool_calls_dict = {"python_executor": tool_call}
+        tool_calls_dict = [tool_call]
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict
@@ -997,7 +996,7 @@ More text here
             func=python_tool,
             args={"code": "import subprocess\nprint('dangerous')"},
         )
-        tool_calls_dict = {"python_executor": tool_call}
+        tool_calls_dict = [tool_call]
 
         ctx = from_model_with_tool_calls(
             text_content=None, tool_calls_dict=tool_calls_dict

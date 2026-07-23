@@ -54,7 +54,7 @@ from mellea.stdlib.frameworks.react import react
 @dataclass
 class _ScriptedTurn:
     value: str
-    tool_calls: dict[str, ModelToolCall] | None = None
+    tool_calls: list[ModelToolCall] | None = None
 
 
 class ScriptedBackend(Backend):

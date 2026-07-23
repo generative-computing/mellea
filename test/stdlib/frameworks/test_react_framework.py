@@ -46,7 +46,7 @@ class _ScriptedTurn:
     """A single scripted backend response."""
 
     value: str
-    tool_calls: dict[str, ModelToolCall] | None = None
+    tool_calls: list[ModelToolCall] | None = None
 
 
 class ScriptedBackend(Backend):
@@ -113,7 +113,7 @@ def _tool_call_turn(
 ) -> _ScriptedTurn:
     """Script a turn where the model calls a non-final tool."""
     tc = ModelToolCall(name=tool_name, func=tool, args={})
-    return _ScriptedTurn(value=thought, tool_calls={tool_name: tc})
+    return _ScriptedTurn(value=thought, tool_calls=[tc])
 
 
 # --- react loop termination ---

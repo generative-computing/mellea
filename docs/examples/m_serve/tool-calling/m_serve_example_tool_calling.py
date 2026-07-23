@@ -263,9 +263,15 @@ if __name__ == "__main__":
     print(f"Response: {response.value}")
     print(
         "Tool calls requested:",
-        None if response.tool_calls is None else list(response.tool_calls.keys()),
+        None
+        if response.tool_calls is None
+        else [tc.name for tc in response.tool_calls],
     )
 
-    if response.tool_calls and weather_tool.name in response.tool_calls:
-        tool_result = response.tool_calls[weather_tool.name].call_func()
-        print(f"Tool result: {tool_result}")
+    if response.tool_calls:
+        tool_call = next(
+            (tc for tc in response.tool_calls if tc.name == weather_tool.name), None
+        )
+        if tool_call:
+            tool_result = tool_call.call_func()
+            print(f"Tool result: {tool_result}")

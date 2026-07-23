@@ -29,13 +29,13 @@ class TestStreamingToolCalls:
 
         # Create output with tool calls
         output = ModelOutputThunk("Checking weather...")
-        output.tool_calls = {
-            "get_weather": ModelToolCall(
+        output.tool_calls = [
+            ModelToolCall(
                 name="get_weather",
                 func=mock_tool,
                 args={"location": "San Francisco", "units": "celsius"},
             )
-        }
+        ]
 
         # Stream chunks
         chunks = []
@@ -72,11 +72,9 @@ class TestStreamingToolCalls:
         mock_tool.name = "test_func"
 
         output = ModelOutputThunk("Response")
-        output.tool_calls = {
-            "test_func": ModelToolCall(
-                name="test_func", func=mock_tool, args={"arg": "value"}
-            )
-        }
+        output.tool_calls = [
+            ModelToolCall(name="test_func", func=mock_tool, args={"arg": "value"})
+        ]
 
         chunks = []
         async for chunk_data in stream_chat_completion_chunks(
@@ -124,11 +122,11 @@ class TestStreamingToolCalls:
         mock_tool3.name = "func3"
 
         output = ModelOutputThunk("Calling multiple functions")
-        output.tool_calls = {
-            "func1": ModelToolCall(name="func1", func=mock_tool1, args={"a": 1}),
-            "func2": ModelToolCall(name="func2", func=mock_tool2, args={"b": 2}),
-            "func3": ModelToolCall(name="func3", func=mock_tool3, args={"c": 3}),
-        }
+        output.tool_calls = [
+            ModelToolCall(name="func1", func=mock_tool1, args={"a": 1}),
+            ModelToolCall(name="func2", func=mock_tool2, args={"b": 2}),
+            ModelToolCall(name="func3", func=mock_tool3, args={"c": 3}),
+        ]
 
         chunks = []
         async for chunk_data in stream_chat_completion_chunks(
@@ -167,9 +165,7 @@ class TestStreamingToolCalls:
         mock_tool.name = "test_func"
 
         output = ModelOutputThunk("Response")
-        output.tool_calls = {
-            "test_func": ModelToolCall(name="test_func", func=mock_tool, args={})
-        }
+        output.tool_calls = [ModelToolCall(name="test_func", func=mock_tool, args={})]
 
         chunks = []
         async for chunk_data in stream_chat_completion_chunks(
@@ -269,11 +265,9 @@ class TestStreamingIncrementalContent:
 
         # Create output that streams incrementally
         output = ModelOutputThunk("")
-        output.tool_calls = {
-            "test_func": ModelToolCall(
-                name="test_func", func=mock_tool, args={"key": "value"}
-            )
-        }
+        output.tool_calls = [
+            ModelToolCall(name="test_func", func=mock_tool, args={"key": "value"})
+        ]
 
         # Mock astream
         chunks_to_stream = ["Part1", "Part2"]

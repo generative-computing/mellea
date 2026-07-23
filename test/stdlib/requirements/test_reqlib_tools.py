@@ -14,7 +14,7 @@ from mellea.stdlib.requirements.tool_reqs import (
 )
 
 
-def _ctx_with_tool_calls(tool_calls: dict[str, ModelToolCall] | None) -> ChatContext:
+def _ctx_with_tool_calls(tool_calls: list[ModelToolCall] | None) -> ChatContext:
     """Helper: build a ChatContext whose last output has the given tool_calls."""
     ctx = ChatContext()
     return ctx.add(ModelOutputThunk(value="", tool_calls=tool_calls))
@@ -47,14 +47,14 @@ def test_name2str_type_error():
 
 
 def test_uses_tool_present():
-    ctx = _ctx_with_tool_calls({"get_weather": _make_tool_call("get_weather", {})})
+    ctx = _ctx_with_tool_calls([_make_tool_call("get_weather", {})])
     req = uses_tool("get_weather")
     result = req.validation_fn(ctx)
     assert result.as_bool() is True
 
 
 def test_uses_tool_absent():
-    ctx = _ctx_with_tool_calls({"get_weather": _make_tool_call("get_weather", {})})
+    ctx = _ctx_with_tool_calls([_make_tool_call("get_weather", {})])
     req = uses_tool("send_email")
     result = req.validation_fn(ctx)
     assert result.as_bool() is False
@@ -72,7 +72,7 @@ def test_uses_tool_callable_input():
     def my_tool():
         pass
 
-    ctx = _ctx_with_tool_calls({"my_tool": _make_tool_call("my_tool", {})})
+    ctx = _ctx_with_tool_calls([_make_tool_call("my_tool", {})])
     req = uses_tool(my_tool)
     result = req.validation_fn(ctx)
     assert result.as_bool() is True
@@ -88,7 +88,7 @@ def test_uses_tool_check_only():
 
 def test_tool_arg_validator_valid():
     ctx = _ctx_with_tool_calls(
-        {"search": _make_tool_call("search", {"query": "hello", "limit": 10})}
+        [_make_tool_call("search", {"query": "hello", "limit": 10})]
     )
     req = tool_arg_validator(
         description="limit must be positive",
@@ -102,7 +102,7 @@ def test_tool_arg_validator_valid():
 
 def test_tool_arg_validator_failed_validation():
     ctx = _ctx_with_tool_calls(
-        {"search": _make_tool_call("search", {"query": "hello", "limit": -1})}
+        [_make_tool_call("search", {"query": "hello", "limit": -1})]
     )
     req = tool_arg_validator(
         description="limit must be positive",
@@ -115,9 +115,7 @@ def test_tool_arg_validator_failed_validation():
 
 
 def test_tool_arg_validator_missing_tool():
-    ctx = _ctx_with_tool_calls(
-        {"search": _make_tool_call("search", {"query": "hello"})}
-    )
+    ctx = _ctx_with_tool_calls([_make_tool_call("search", {"query": "hello"})])
     req = tool_arg_validator(
         description="check email tool",
         tool_name="send_email",
@@ -130,9 +128,7 @@ def test_tool_arg_validator_missing_tool():
 
 
 def test_tool_arg_validator_missing_arg():
-    ctx = _ctx_with_tool_calls(
-        {"search": _make_tool_call("search", {"query": "hello"})}
-    )
+    ctx = _ctx_with_tool_calls([_make_tool_call("search", {"query": "hello"})])
     req = tool_arg_validator(
         description="limit must exist",
         tool_name="search",
@@ -158,10 +154,7 @@ def test_tool_arg_validator_no_tool_calls():
 
 def test_tool_arg_validator_no_tool_name_all_pass():
     ctx = _ctx_with_tool_calls(
-        {
-            "tool_a": _make_tool_call("tool_a", {"x": 5}),
-            "tool_b": _make_tool_call("tool_b", {"x": 10}),
-        }
+        [_make_tool_call("tool_a", {"x": 5}), _make_tool_call("tool_b", {"x": 10})]
     )
     req = tool_arg_validator(
         description="x must be positive",
@@ -175,10 +168,7 @@ def test_tool_arg_validator_no_tool_name_all_pass():
 
 def test_tool_arg_validator_no_tool_name_one_fails():
     ctx = _ctx_with_tool_calls(
-        {
-            "tool_a": _make_tool_call("tool_a", {"x": 5}),
-            "tool_b": _make_tool_call("tool_b", {"x": -1}),
-        }
+        [_make_tool_call("tool_a", {"x": 5}), _make_tool_call("tool_b", {"x": -1})]
     )
     req = tool_arg_validator(
         description="x must be positive",
@@ -196,7 +186,7 @@ def test_tool_arg_validator_no_tool_name_arg_missing_everywhere():
     """Documents current behavior (see #826): when tool_name=None and no tool call
     contains the target arg_name, validation silently passes (the for-loop completes
     without failing). This is arguably a latent bug — the validator never runs."""
-    ctx = _ctx_with_tool_calls({"tool_a": _make_tool_call("tool_a", {"y": 5})})
+    ctx = _ctx_with_tool_calls([_make_tool_call("tool_a", {"y": 5})])
     req = tool_arg_validator(
         description="x must be positive",
         tool_name=None,
