@@ -23,11 +23,13 @@ class IntrinsicInvocationCompletePayload(MelleaBasePayload):
         error: The exception raised during invocation, or `None` on success.
     """
 
-    name: str = ""
+    name: str
     revision: str | None = None
     binding_type: str = "unknown"
     adapter_type: str = "unknown"
-    outcome: Literal["success", "schema_error", "error"] = "success"
+    # Required, not defaulted: an invocation always has a determined outcome, and
+    # defaulting to "success" would let a forgotten emit silently record success.
+    outcome: Literal["success", "schema_error", "error"]
     # Carried for consumers that inspect the failure (e.g. structured logging);
     # the metrics plugin classifies on `outcome` and does not read this field.
     # Typed `Any` rather than `BaseException | None` because the payload base is
@@ -45,10 +47,10 @@ class IntrinsicPhaseCompletePayload(MelleaBasePayload):
         duration_ms: Wall-clock duration of the phase in milliseconds.
     """
 
-    name: str = ""
+    name: str
     # Constrained to a Literal so a typo can't silently spawn a new metric-label
-    # series (the phase becomes a metric dimension). "" is the unset sentinel: the
-    # field can't be made required because the base payload's fields are all
-    # defaulted, and a non-defaulted field after them breaks dataclass ordering.
-    phase: Literal["", "prepare", "activate", "generate", "parse", "deactivate"] = ""
-    duration_ms: float = 0.0
+    # series (the phase becomes a metric dimension). Required, with no unset
+    # sentinel: a phase-complete event always has a real phase. (The payload is a
+    # pydantic model, so a required field after the base's defaulted ones is fine.)
+    phase: Literal["prepare", "activate", "generate", "parse", "deactivate"]
+    duration_ms: float

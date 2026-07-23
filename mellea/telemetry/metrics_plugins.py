@@ -486,9 +486,10 @@ class IntrinsicMetricsPlugin(Plugin, name="intrinsic_metrics", priority=57):
             record_intrinsic_parse_failure,
         )
 
-        # revision is an optional catalog pin (None means unpinned). Normalise to a
-        # string here because it becomes a metric label, which must be a string.
-        revision = payload.revision or "unknown"
+        # revision is an optional catalog pin; None means the adapter is unpinned
+        # (the actually-served version can't be determined here). Normalise to a
+        # string label — "unpinned", not "unknown", since None is a known state.
+        revision = payload.revision or "unpinned"
         record_intrinsic_invocation(
             name=payload.name,
             revision=revision,

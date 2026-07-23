@@ -101,10 +101,10 @@ async def test_record_intrinsic_invocation_schema_error_also_records_parse_failu
 
 
 @pytest.mark.asyncio
-async def test_record_intrinsic_invocation_missing_revision_defaults_to_unknown(
+async def test_record_intrinsic_invocation_missing_revision_defaults_to_unpinned(
     intrinsic_plugin,
 ):
-    """A None revision is normalized to 'unknown' before being recorded."""
+    """A None revision is normalized to 'unpinned' before being recorded."""
     payload = IntrinsicInvocationCompletePayload(
         name="answerability",
         revision=None,
@@ -120,7 +120,7 @@ async def test_record_intrinsic_invocation_missing_revision_defaults_to_unknown(
 
     mock_invocation.assert_called_once_with(
         name="answerability",
-        revision="unknown",
+        revision="unpinned",
         binding_type="embedded",
         adapter_type="alora",
         outcome="error",
