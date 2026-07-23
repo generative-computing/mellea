@@ -86,36 +86,37 @@ def _extract_last_response(context: ChatContext) -> tuple[str, ChatContext]:
             assistant response, if the response has not been computed yet,
             or if there is no preceding node.
     """
+    from ....core import ModelOutputThunk
     from ..chat import Message
 
     turn = context.last_turn()
     if turn is None:
         raise ValueError("Context is empty; cannot extract an assistant response.")
 
-    if turn.output is not None and turn.output.value is not None:
-        # Session-generated response stored as a ModelOutputThunk.
-        # Only the text value is preserved; thunk metadata is intentionally dropped.
-        response_text: str = turn.output.value
-        prev_ctx = context.previous_node
-    elif turn.output is not None and turn.output.value is None:
-        raise ValueError(
-            "Cannot extract assistant response: it has not been computed yet. "
-            "Await the response before calling this adapter function."
-        )
-    elif (
-        turn.model_input is not None
-        and isinstance(turn.model_input, Message)
-        and turn.model_input.role == "assistant"
-    ):
-        # Manually-added assistant Message (e.g. built from test fixtures).
-        response_text = turn.model_input.content
-        prev_ctx = context.previous_node
-    else:
+    if turn.output is None:
         raise ValueError(
             "Cannot extract assistant response: the last context element is "
             "not an assistant response."
         )
 
+    if isinstance(turn.output, ModelOutputThunk):
+        # Session-generated response stored as a ModelOutputThunk.
+        if turn.output.value is None:
+            raise ValueError(
+                "Cannot extract assistant response: it has not been computed yet. "
+                "Await the response before calling this adapter function."
+            )
+        response_text: str = turn.output.value
+    elif isinstance(turn.output, Message):
+        # Manually-added assistant Message (e.g. built from test fixtures).
+        response_text = turn.output.content
+    else:
+        raise ValueError(
+            f"Cannot extract assistant response: output is of type "
+            f"{type(turn.output).__name__}, not ModelOutputThunk or Message."
+        )
+
+    prev_ctx = context.previous_node
     if prev_ctx is None:
         raise ValueError(
             "Context has no previous node; cannot rewind past the assistant turn."

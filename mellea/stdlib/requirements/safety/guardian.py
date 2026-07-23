@@ -13,6 +13,7 @@ from ....core import (
     CBlock,
     Context,
     MelleaLogger,
+    ModelOutputThunk,
     Requirement,
     ValidationResult,
 )
@@ -311,7 +312,18 @@ class GuardianCheck(Requirement):
             if last_turn.output is not None:
                 # For function call risk, append tool call info as text; otherwise add thunk directly.
                 if self._risk == "function_call" or effective_risk == "function_call":
-                    content = last_turn.output.value or ""
+                    # Extract content from either ModelOutputThunk or Message
+                    if isinstance(last_turn.output, Message):
+                        content = last_turn.output.content
+                    elif isinstance(last_turn.output, ModelOutputThunk):
+                        content = last_turn.output.value or ""
+                    else:
+                        # Fallback for other Component types
+                        logger.warning(
+                            f"Unexpected component type in last_turn.output: {type(last_turn.output).__name__}. "
+                            "Treating as empty content."
+                        )
+                        content = ""
                     tcalls = getattr(last_turn.output, "tool_calls", None)
                     if tcalls:
                         calls = [

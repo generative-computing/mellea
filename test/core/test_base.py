@@ -952,3 +952,102 @@ def test_blockify_mot_returns_unchanged():
 def test_blockify_uncomputed_mot_returns_unchanged():
     mot = ModelOutputThunk(value=None)
     assert blockify(mot) is mot
+
+
+# --- Context.last_turn() tests ---
+
+
+def test_last_turn_empty_context():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext()
+    turn = ctx.last_turn()
+    assert turn is None
+
+
+def test_last_turn_with_model_output_thunk():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("user", "hello")).add(ModelOutputThunk("response"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "user"
+    assert isinstance(turn.output, ModelOutputThunk)
+    assert turn.output.value == "response"
+
+
+def test_last_turn_with_assistant_message():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = (
+        ChatContext()
+        .add(Message("user", "hello"))
+        .add(Message("assistant", "response"))
+    )
+    turn = ctx.last_turn()
+    assert turn is not None
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "user"
+    assert isinstance(turn.output, Message)
+    assert turn.output.role == "assistant"
+    assert turn.output.content == "response"
+
+
+def test_last_turn_output_only_assistant_message():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("assistant", "response"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    assert turn.model_input is None
+    assert isinstance(turn.output, Message)
+    assert turn.output.role == "assistant"
+    assert turn.output.content == "response"
+
+
+def test_last_turn_input_only_user_message():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("user", "hello"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "user"
+    assert turn.output is None
+
+
+def test_last_turn_user_message_treated_as_input():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("user", "hello"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    # User message should be in model_input, not output
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "user"
+    assert turn.output is None
+
+
+def test_last_turn_system_message_treated_as_input():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("system", "system prompt"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    # System message should be in model_input, not output
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "system"
+    assert turn.output is None
+
+
+def test_last_turn_tool_message_treated_as_input():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("tool", "tool result"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    # Tool message should be in model_input, not output (matches #377 scoping)
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "tool"
+    assert turn.output is None
