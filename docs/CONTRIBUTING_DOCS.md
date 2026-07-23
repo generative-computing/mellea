@@ -325,6 +325,13 @@ When you do backport, mirror the same edit into both `docs/docs/` (`Next`) and
 the affected `versioned_docs/version-X.Y.Z/` copies in the same PR, and say so
 in the PR description.
 
+This applies to hand-authored pages. Don't hand-edit a versioned snapshot's
+copy of the generated API or CLI reference (`api/**`, `reference/cli.md`) —
+those are produced by `tooling/docs-autogen/build.py` and nothing ever
+re-runs it for an already-released version, so a manual edit would silently
+drift from its source the next time that page's docstring changes. Fix the
+docstring and file an issue against the generator instead.
+
 ---
 
 ## Deprecation
