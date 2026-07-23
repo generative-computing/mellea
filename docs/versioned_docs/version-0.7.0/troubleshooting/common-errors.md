@@ -226,6 +226,28 @@ See [Safety Guardrails](../how-to/safety-guardrails.md) for full usage.
   user message.
 - Scores below `0.5` are safe; at or above `0.5` indicates risk detected.
 
+### `except ValueError` no longer catches guardrail schema failures
+
+As of v0.7.0, `policy_guardrails()` raises `AdapterSchemaMismatchError` (from
+`mellea.backends.adapters`) when the adapter returns malformed output — a result
+with neither a `label` nor a `score`, or with both. This replaces the
+`ValueError` raised for that case in earlier releases. Because
+`AdapterSchemaMismatchError` does not subclass `ValueError`, a caller that only
+catches `ValueError` will now let the error propagate:
+
+```python
+from mellea.backends.adapters import AdapterSchemaMismatchError
+
+try:
+    label = policy_guardrails(context, backend, policy_text=policy)
+except AdapterSchemaMismatchError:
+    ...  # adapter returned malformed output
+except ValueError:
+    ...  # output was not valid JSON
+```
+
+See [Safety Guardrails](../how-to/safety-guardrails.md) for the full contract.
+
 ### Deprecated `GuardianCheck` warnings
 
 ```text
