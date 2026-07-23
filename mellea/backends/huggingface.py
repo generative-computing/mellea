@@ -55,6 +55,8 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     Requirement,
+    get_audio_from_component,
+    get_images_from_component,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
@@ -271,6 +273,37 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 
 
 _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
+
+
+def _check_no_multimodal_blocks(
+    action: Component | CBlock | ModelOutputThunk | None, ctx: Context | None
+) -> None:
+    """Raise ValueError if any component in ctx or action carries image/audio blocks.
+
+    Args:
+        action: The generation action component, or None for intrinsic paths.
+        ctx: The current conversation context, or None to skip the context scan
+            (used on paths where ctx content is never rendered, e.g. `_generate_from_raw`).
+
+    Raises:
+        ValueError: If any component contains images or audio.
+            `LocalHFBackend` does not support multimodal inputs.
+    """
+    linearized = (ctx.view_for_generation() or []) if ctx is not None else []
+    candidates: list[Any] = list(linearized)
+    if action is not None:
+        candidates.append(action)
+    for c in candidates:
+        if get_images_from_component(c) is not None:
+            raise ValueError(
+                "LocalHFBackend does not support images. "
+                "Remove image content before passing messages to the Hugging Face backend."
+            )
+        if get_audio_from_component(c) is not None:
+            raise ValueError(
+                "LocalHFBackend does not support audio. "
+                "Remove audio content before passing messages to the Hugging Face backend."
+            )
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -577,11 +610,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             intrinsic output.
 
         Raises:
-            ValueError: If no adapter is registered for the requested intrinsic.
+            ValueError: If no adapter is registered for the requested intrinsic,
+                or if the context contains images or audio; `LocalHFBackend`
+                does not support multimodal inputs.
             TypeError: If the adapter isn't an IntrinsicAdapter.
         """
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
+
+        _check_no_multimodal_blocks(None, ctx)
 
         seed = model_options.get(ModelOption.SEED, None)
         if seed is not None:
@@ -954,10 +991,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict[str, Any],
         tool_calls: bool = False,
     ) -> ModelOutputThunk[C]:
+        """Generate a completion using the KV cache path.
+
+        Raises:
+            ValueError: If the context or action contains images or audio;
+                `LocalHFBackend` does not support multimodal inputs.
+        """
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
+            _check_no_multimodal_blocks(action, ctx)
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
             ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
@@ -1145,10 +1189,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict[str, Any],
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
+        """Generate a completion using the standard (non-KV-cache) path.
+
+        Raises:
+            ValueError: If the context or action contains images or audio;
+                `LocalHFBackend` does not support multimodal inputs.
+        """
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
+            _check_no_multimodal_blocks(action, ctx)
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
             ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
@@ -1621,6 +1672,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 `results` is a list of model output thunks, one per action, and
                 `usage` is the aggregate token-usage dict for the batch.
         """
+        for action in actions:
+            _check_no_multimodal_blocks(action, None)
         await self.do_generate_walks(list(actions))
 
         if tool_calls:

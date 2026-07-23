@@ -16,6 +16,9 @@ pytest.importorskip(
     "llguidance", reason="llguidance not installed — install mellea[hf]"
 )
 
+import base64
+import struct
+
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import ModelOption
@@ -23,8 +26,47 @@ from mellea.backends.adapters import AdapterMixin, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
-from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.components import (
+    AudioBlock,
+    AudioUrlBlock,
+    ImageBlock,
+    ImageUrlBlock,
+    Instruction,
+    Intrinsic,
+    Message,
+)
 from mellea.stdlib.context import ChatContext
+
+# Minimal 1x1 PNG for testing
+_MINIMAL_PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
+    b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00"
+    b"\x00\x00\x00IEND\xaeB`\x82"
+)
+_B64_PNG = base64.b64encode(_MINIMAL_PNG).decode()
+
+# Minimal WAV for testing
+_SILENT_SAMPLE = struct.pack("<h", 0)
+_WAV_HEADER = (
+    b"RIFF"
+    + struct.pack("<I", 36 + len(_SILENT_SAMPLE))
+    + b"WAVEfmt "
+    + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+    + b"data"
+    + struct.pack("<I", len(_SILENT_SAMPLE))
+)
+_MINIMAL_WAV = _WAV_HEADER + _SILENT_SAMPLE
+_B64_WAV = base64.b64encode(_MINIMAL_WAV).decode()
+
+# All four multimodal block types — reused by every parametrized guard test below.
+_MULTIMODAL_CASES = [
+    ([ImageBlock(_B64_PNG)], None),
+    ([ImageUrlBlock(value="http://example.com/image.png")], None),
+    (None, [AudioBlock(_B64_WAV, format="wav")]),
+    (None, [AudioUrlBlock(value="http://example.com/audio.wav", format="wav")]),
+]
 
 
 def _make_backend(eos_token_id: int | list[int] = 0) -> LocalHFBackend:
@@ -676,3 +718,149 @@ async def test_intrinsic_logits_populated_when_option_set(stub_backend):
     )
     assert len(output.generation.logits) == len(fake_scores)
     assert all(t.shape == (vocab_size,) for t in output.generation.logits)
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_raise_error(images, audio):
+    """LocalHFBackend raises ValueError for image/audio inputs instead of silently dropping them."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Message("assistant", ""), ctx, model_options={}
+        )
+
+
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_action_raise_error():
+    """LocalHFBackend raises ValueError when action contains image/audio blocks."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Message("assistant", "", images=[ImageBlock(_B64_PNG)]),
+            ctx,
+            model_options={},
+        )
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_kv_cache_path_raises_error(images, audio):
+    """LocalHFBackend KV cache path raises ValueError for image/audio inputs."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_with_kv_cache(
+            Message("assistant", ""), ctx, model_options={}
+        )
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_raw_action_raises_error(images, audio):
+    """_generate_from_raw raises ValueError for actions with image/audio blocks instead of silently dropping them."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+    action = Message("assistant", "", images=images, audio=audio)
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_raw([action], ctx, model_options={})
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_raw_ctx_not_checked(images, audio):
+    """_generate_from_raw does not scan ctx for multimodal content.
+
+    ctx is accepted by the signature but never rendered on the raw path — only
+    the actions are formatted and sent to the model. Multimodal blocks stored
+    in the context do not cause an error here (they are simply unused).
+    """
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+    action = Message("assistant", "")
+
+    # Should not raise — ctx content is not rendered by _generate_from_raw.
+    # We mock the model to avoid loading weights; just verify no ValueError is raised.
+    mock_outputs = MagicMock()
+    mock_outputs.sequences = [MagicMock()]
+    mock_outputs.sequences[0].__getitem__ = MagicMock(return_value=MagicMock())
+    mock_outputs.scores = None
+    mock_outputs.logits = None
+    with patch.object(
+        backend, "_generate_with_adapter_lock", return_value=mock_outputs
+    ):
+        with patch.object(
+            backend._tokenizer,
+            "__call__",
+            return_value={
+                "input_ids": MagicMock(size=lambda i: 0),
+                "attention_mask": MagicMock(),
+            },
+        ):
+            with patch.object(backend._tokenizer, "batch_decode", return_value=[""]):
+                await backend._generate_from_raw([action], ctx, model_options={})
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_on_instruction_in_ctx_raise_error(images, audio):
+    """LocalHFBackend raises ValueError when an Instruction in ctx carries image/audio blocks.
+
+    The guard uses hasattr(c, "images") / hasattr(c, "audio"), so it must fire
+    for Instruction just as it does for Message.
+    """
+    backend = _make_backend()
+    ctx = ChatContext().add(
+        Instruction(description="describe this", images=images, audio=audio)
+    )
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Message("assistant", ""), ctx, model_options={}
+        )
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_on_instruction_as_action_raise_error(images, audio):
+    """LocalHFBackend raises ValueError when an Instruction used as the action carries image/audio.
+
+    The guard checks the action component as well as components in ctx; this test
+    exercises the action branch via Instruction instead of Message.
+    """
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await backend._generate_from_context_standard(
+            Instruction(description="describe this", images=images, audio=audio),
+            ctx,
+            model_options={},
+        )
+
+
+@pytest.mark.parametrize("images,audio", _MULTIMODAL_CASES)
+@pytest.mark.asyncio
+async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
+    stub_backend, images, audio
+):
+    """_generate_from_intrinsic raises ValueError when ctx contains image/audio blocks.
+
+    The guard on the intrinsic path passes ``action=None`` and scans only the context;
+    this test exercises that branch directly.
+    """
+    backend = _make_intrinsic_backend_stub(stub_backend)
+    adapter = _make_intrinsic_adapter_stub()
+    backend._added_adapters = {adapter.qualified_name: adapter}
+    ctx = ChatContext().add(Message("user", "Hello", images=images, audio=audio))
+
+    with pytest.raises(ValueError, match="LocalHFBackend does not support"):
+        await LocalHFBackend._generate_from_intrinsic(
+            backend, Intrinsic("answerability"), ctx, model_options={}
+        )
