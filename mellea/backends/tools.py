@@ -445,7 +445,7 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
                 tool_json["function"] = tool_json["function"].copy()
                 tool_json["function"]["name"] = tool_name
 
-       result.append(tool_json)
+        result.append(tool_json)
 
     return result
 
