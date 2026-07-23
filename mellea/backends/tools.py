@@ -367,7 +367,11 @@ def add_tools_from_context_actions(
     tools_dict: dict[str, AbstractMelleaTool],
     ctx_actions: list[Component | CBlock | ModelOutputThunk] | None,
 ):
-    """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
+    """Extract and merge tools from component actions, with auto-prefixing to avoid collisions.
+
+    Tools from each component are prefixed with "componentN." to prevent naming collisions when
+    multiple components define tools with identical names. This allows safe composition of
+    multiple agents or tool-bearing components.
 
     Args:
         tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
@@ -377,20 +381,47 @@ def add_tools_from_context_actions(
     if ctx_actions is None:
         return
 
+    component_index = 0
     for action in ctx_actions:
         if not isinstance(action, Component):
             continue  # Only components have template representations.
 
         tr = action.format_for_llm()
         if not isinstance(tr, TemplateRepresentation) or tr.tools is None:
+            component_index += 1
             continue
 
-        for tool_name, func in tr.tools.items():
-            tools_dict[tool_name] = func
+        # Track mapping from original to prefixed names
+        name_mapping = {}
+
+        for original_tool_name, tool_instance in tr.tools.items():
+            # Auto-prefix tool name to avoid collisions
+            prefixed_name = f"component{component_index}.{original_tool_name}"
+
+            # Detect collision and warn if it still occurs (defensive)
+            if prefixed_name in tools_dict:
+                MelleaLogger.get_logger().warning(
+                    f"Tool name collision even after prefixing: '{prefixed_name}' "
+                    f"already exists (component {component_index}); skipping tool '{original_tool_name}'"
+                )
+                continue
+
+            # Add tool with prefixed name
+            tools_dict[prefixed_name] = tool_instance
+            name_mapping[original_tool_name] = prefixed_name
+
+        # Store mapping on template representation for JSON schema generation
+        if name_mapping and tr.tool_name_mapping is None:
+            tr.tool_name_mapping = name_mapping
+
+        component_index += 1
 
 
 def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     """Convert tools to json dict representation.
+
+    Ensures that tool names in JSON schemas match the keys in the tools dict,
+    which is necessary when tools have been renamed (e.g., prefixed for conflict avoidance).
 
     Args:
         tools: Mapping of tool name to `AbstractMelleaTool` instance.
@@ -403,7 +434,20 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
     - OpenAI uses the same format / schema.
     """
-    return [t.as_json_tool for t in tools.values()]
+    result = []
+    for tool_name, tool_instance in tools.items():
+        tool_json = tool_instance.as_json_tool.copy()
+
+        # Update the function name in JSON to match the dict key (for prefixed names).
+        # This ensures the model sees and requests the prefixed name.
+        if tool_json.get("function", {}).get("name") != tool_name:
+            if "function" in tool_json:
+                tool_json["function"] = tool_json["function"].copy()
+                tool_json["function"]["name"] = tool_name
+
+       result.append(tool_json)
+
+    return result
 
 
 def json_extraction(text: str) -> Generator[dict, None, None]:
