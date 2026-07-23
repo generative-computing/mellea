@@ -61,7 +61,8 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     assert "test2" in tools
 
     add_tools_from_context_actions(tools, m.ctx.actions_for_available_tools())
-    assert "to_markdown" in tools
+    # Component tools are now auto-prefixed to avoid collisions (component0.to_markdown)
+    assert "component0.to_markdown" in tools
 
 
 @pytest.mark.xfail(

@@ -1687,6 +1687,9 @@ class TemplateRepresentation:
         args (dict): Named arguments extracted from the component for template substitution.
         tools (dict[str, AbstractMelleaTool] | None): Tools available for this representation,
             keyed by the tool's function name. Defaults to `None`.
+        tool_name_mapping (dict[str, str] | None): Optional mapping from original tool names to
+            renamed tool names (e.g., for conflict avoidance via prefixing like "search" → "component0.search").
+            Used during tool extraction to support auto-prefixing of component tools. Defaults to `None`.
         fields (list[Any] | None): An optional ordered list of field values for positional templates.
         template (str | None): An optional Jinja2 template string to use when rendering.
         template_order (list[str] | None): An optional ordering hint for template sections/keys.
@@ -1704,6 +1707,7 @@ class TemplateRepresentation:
     tools: dict[str, AbstractMelleaTool] | None = (
         None  # the key must be the name of the function.
     )
+    tool_name_mapping: dict[str, str] | None = None
     fields: list[Any] | None = None
     template: str | None = None
     template_order: list[str] | None = None

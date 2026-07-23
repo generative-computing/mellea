@@ -100,12 +100,16 @@ def test_add_tools_from_context_actions():
     tools = {}
     add_tools_from_context_actions(tools, ctx_actions)
 
-    # Check that tools with the same name get properly overwritten in order of ctx.
-    tool1 = tools["tool1"]._call_tool
-    assert tool1 == ftc2.tool1, f"{tool1} should == {ftc2.tool1}"
+    # With auto-prefixing, tools with the same name no longer collide.
+    # Both are preserved with prefixed names: component0.tool1 and component1.tool1
+    tool1_from_ftc1 = tools["component0.tool1"]._call_tool
+    assert tool1_from_ftc1 == ftc1.tool1, f"{tool1_from_ftc1} should == {ftc1.tool1}"
 
-    # Check that tools that aren't overwritten are still there.
-    tool2 = tools["tool2"]._call_tool
+    tool1_from_ftc2 = tools["component1.tool1"]._call_tool
+    assert tool1_from_ftc2 == ftc2.tool1, f"{tool1_from_ftc2} should == {ftc2.tool1}"
+
+    # Check that tools that aren't duplicated are still there with prefixed names.
+    tool2 = tools["component0.tool2"]._call_tool
     assert tool2 == ftc1.tool2, f"{tool2} should == {ftc1.tool2}"
 
 
