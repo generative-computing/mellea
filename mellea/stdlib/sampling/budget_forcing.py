@@ -19,6 +19,7 @@ from ...core import (
     ModelOutputThunk,
     Requirement,
     S,
+    SampleActionType,
     SamplingResult,
     ValidationResult,
     log_context,
@@ -136,7 +137,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         with log_context(strategy=type(self).__name__, loop_budget=self.loop_budget):
             sampled_results: list[ComputedModelOutputThunk] = []
             sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-            sampled_actions: list[Component] = []
+            sampled_actions: list[SampleActionType] = []
             sample_contexts: list[Context] = []
 
             # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress

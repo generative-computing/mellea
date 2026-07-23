@@ -38,5 +38,6 @@ async def check_uncomputed() -> None:
 
 
 async def check_sampling() -> None:
-    r = await aact(action, ctx, backend, return_sampling_results=True)
+    strat = RejectionSamplingStrategy(loop_budget=2)
+    r = await aact(action, ctx, backend, strategy=strat, return_sampling_results=True)
     assert_type(r, SamplingResult[str])

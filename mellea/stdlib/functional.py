@@ -77,7 +77,7 @@ def act(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy,
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -103,8 +103,8 @@ def act(
         action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
-        requirements: used as additional requirements when a sampling strategy is provided.
-        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used.
+        requirements: additional requirements checked by the sampling strategy. Providing requirements without a `strategy` logs a warning, since requirements are only validated by a strategy.
+        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — no validate/repair loop runs and any `requirements` go unchecked (a warning is logged). Required when `return_sampling_results=True`.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
         format: Constrains generation to JSON matching this Pydantic
             schema. The result's `.value` is always a JSON string — not a
@@ -112,6 +112,9 @@ def act(
             `MyModel.model_validate_json(str(result))` to get a typed instance.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
+
+    Raises:
+        ValueError: if `return_sampling_results=True` without a `strategy`.
 
     Returns:
         A (ComputedModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -562,7 +565,7 @@ async def aact(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy,
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -592,8 +595,8 @@ async def aact(
         action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
-        requirements: used as additional requirements when a sampling strategy is provided
-        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used.
+        requirements: additional requirements checked by the sampling strategy. Providing requirements without a `strategy` logs a warning, since requirements are only validated by a strategy.
+        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — in that case no validate/repair loop runs and, unless `await_result=True`, the returned thunk is uncomputed. Required when `return_sampling_results=True`.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
         format: Constrains generation to JSON matching this Pydantic
             schema. The result's `.value` is always a JSON string — not a
@@ -603,6 +606,9 @@ async def aact(
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
+
+    Raises:
+        ValueError: if `return_sampling_results=True` without a `strategy`.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -651,16 +657,22 @@ async def aact(
         sampling_result: SamplingResult | None = None
         generate_logs: list[GenerateLog] = []
 
-        if return_sampling_results:
-            assert strategy is not None, (
-                "Must provide a SamplingStrategy when return_sampling_results==True"
+        if return_sampling_results and strategy is None:
+            raise ValueError(
+                "Must provide a SamplingStrategy when return_sampling_results==True."
             )
 
         if strategy is None:
-            # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
+            # No strategy means no validate/repair loop, so any `requirements`
+            # passed here are not checked. Warn rather than raise: some callers
+            # (e.g. generative stubs) attach requirements to the component itself
+            # and render them into the prompt independently of a strategy. A
+            # follow-up issue tracks a proper enforcement design for that case.
             if requirements is not None and len(requirements) > 0:
                 MelleaLogger.get_logger().warning(
-                    "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+                    "Requirements were provided without a SamplingStrategy. "
+                    "Requirements are only checked by a strategy; pass a "
+                    "`strategy` (e.g. RejectionSamplingStrategy) to validate them."
                 )
 
             result, new_ctx = await backend.generate_from_context(

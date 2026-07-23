@@ -13,6 +13,7 @@ from mellea.core import (
     SamplingResult,
 )
 from mellea.stdlib.components import Instruction
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
 s = cast(MelleaSession, None)
@@ -30,7 +31,8 @@ async def check_aact_uncomputed() -> None:
 
 
 async def check_aact_sampling() -> None:
-    r = await s.aact(action, return_sampling_results=True)
+    strat = RejectionSamplingStrategy(loop_budget=2)
+    r = await s.aact(action, strategy=strat, return_sampling_results=True)
     assert_type(r, SamplingResult[str])
 
 

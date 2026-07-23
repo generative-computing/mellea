@@ -12,6 +12,7 @@ process.
 """
 
 import abc
+from collections.abc import Sequence
 from typing import Generic
 
 from .backend import Backend, BaseModelSubclass
@@ -25,6 +26,12 @@ from .base import (
 )
 from .requirement import Requirement, ValidationResult
 
+# The kinds of action a sampling strategy may operate on. Originally `Component`
+# only; widened to include `CBlock` and `ModelOutputThunk` so that `act`/`aact`
+# can sample over non-Component actions (see #356). Only `Component` carries
+# `.parse()` semantics; the others are carried through as opaque spans.
+SampleActionType = Component | CBlock | ModelOutputThunk
+
 
 class SamplingResult(CBlock, Generic[S]):
     """Stores the results from a sampling operation. This includes successful and failed samplings.
@@ -35,7 +42,7 @@ class SamplingResult(CBlock, Generic[S]):
         sample_generations (list[ModelOutputThunk[S]] | None): All output thunks generated during sampling.
         sample_validations (list[list[tuple[Requirement, ValidationResult]]] | None): Per-generation validation
             results; each inner list contains one tuple per requirement evaluated.
-        sample_actions (list[Component] | None): The actions used to produce each generation.
+        sample_actions (Sequence[SampleActionType] | None): The actions used to produce each generation.
         sample_contexts (list[Context] | None): The contexts associated with each generation.
 
     Attributes:
@@ -45,7 +52,7 @@ class SamplingResult(CBlock, Generic[S]):
             sampling; always a list (`None` input is normalised to `[]`).
         sample_validations (list[list[tuple[Requirement, ValidationResult]]]): Per-generation
             validation results; always a list (`None` input is normalised to `[]`).
-        sample_actions (list[Component]): The actions used to produce each generation;
+        sample_actions (list[SampleActionType]): The actions used to produce each generation;
             always a list (`None` input is normalised to `[]`).
         sample_contexts (list[Context]): The contexts associated with each generation;
             always a list (`None` input is normalised to `[]`).
@@ -59,7 +66,7 @@ class SamplingResult(CBlock, Generic[S]):
         sample_generations: list[ComputedModelOutputThunk[S]] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
-        sample_actions: list[Component] | None = None,
+        sample_actions: Sequence[SampleActionType] | None = None,
         sample_contexts: list[Context] | None = None,
     ):
         """Initialize SamplingResult with the chosen output index, success flag, and generation history."""
@@ -67,8 +74,9 @@ class SamplingResult(CBlock, Generic[S]):
             sample_generations = []
         if sample_validations is None:
             sample_validations = []
-        if sample_actions is None:
-            sample_actions = []
+        # Accept any Sequence (e.g. a `list[Component]`) but store a list so the
+        # attribute stays mutable and covariantly assignable at call sites.
+        sample_actions = list(sample_actions) if sample_actions is not None else []
         if sample_contexts is None:
             sample_contexts = []
 
@@ -98,7 +106,7 @@ class SamplingResult(CBlock, Generic[S]):
         return self.sample_contexts[self.result_index]
 
     @property
-    def result_action(self) -> Component[S]:
+    def result_action(self) -> SampleActionType:
         """The action that generated the final output or result from applying the sampling strategy."""
         return self.sample_actions[self.result_index]
 

@@ -12,6 +12,7 @@ feedback for repair, enabling more effective iterative improvement.
 """
 
 import re
+from collections.abc import Sequence
 from copy import deepcopy
 from typing import Literal
 
@@ -28,6 +29,7 @@ from ...core import (
     ModelOutputThunk,
     Requirement,
     S,
+    SampleActionType,
     SamplingResult,
     SamplingStrategy,
     TemplateRepresentation,
@@ -110,10 +112,10 @@ class SOFAISamplingStrategy(SamplingStrategy):
     def repair(
         old_ctx: Context,
         new_ctx: Context,
-        past_actions: list[Component],
+        past_actions: Sequence[SampleActionType],
         past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> tuple[Component, Context]:
+    ) -> tuple[SampleActionType, Context]:
         """Create targeted feedback message from validation results.
 
         Extracts failed requirements and uses their ValidationResult.reason fields
@@ -156,7 +158,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: Sequence[SampleActionType],
         sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -619,7 +621,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             # State tracking for all attempts
             sampled_results: list[ComputedModelOutputThunk] = []
             sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-            sampled_actions: list[Component] = []
+            sampled_actions: list[SampleActionType] = []
             sample_contexts: list[Context] = []
 
             # ---------------------------------------------------------------------
