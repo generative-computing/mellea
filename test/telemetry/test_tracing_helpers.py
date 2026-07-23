@@ -1,12 +1,15 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for span-attribute setters in `mellea.telemetry._tracing_setters`."""
+"""Unit tests for the helpers in `mellea.telemetry._tracing_helpers`."""
 
 from unittest.mock import MagicMock
 
 from mellea.core.base import GenerationMetadata
-from mellea.telemetry._tracing_setters import (
+from mellea.telemetry._tracing_helpers import (
+    _MAX_CONTENT_LEN,
+    get_capture_content_value,
+    get_tool_call_attrs,
     set_attribute_safe,
     set_conversation_id,
     set_mellea_attrs,
@@ -264,3 +267,103 @@ def test_set_conversation_id_no_op_when_session_id_unset():
     span = MagicMock()
     set_conversation_id(span)
     span.set_attribute.assert_not_called()
+
+
+# get_tool_call_attrs
+
+
+def _tool_call(name="search", args=None, tool_call_id="call-abc", description="Search"):
+    tc = MagicMock()
+    tc.name = name
+    tc.args = args if args is not None else {"q": "hi"}
+    tc.tool_call_id = tool_call_id
+    tc.func.as_json_tool = {
+        "type": "function",
+        "function": {"name": name, "description": description},
+    }
+    return tc
+
+
+def test_get_tool_call_attrs_unpacks_object(monkeypatch):
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+    attrs = get_tool_call_attrs(_tool_call())
+    assert attrs["gen_ai.operation.name"] == "execute_tool"
+    assert attrs["gen_ai.tool.name"] == "search"
+    assert attrs["gen_ai.tool.type"] == "function"
+    assert attrs["gen_ai.tool.description"] == "Search"
+    assert attrs["gen_ai.tool.call.id"] == "call-abc"
+    assert attrs["mellea.tool.arguments_hash"]  # non-empty hash
+    # is_control_flow is set by start_tool_span, not the unpacker.
+    assert "mellea.tool.is_control_flow" not in attrs
+
+
+def test_get_tool_call_attrs_arguments_gated_by_content_capture(monkeypatch):
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+    off = get_tool_call_attrs(_tool_call())
+    assert off["gen_ai.tool.call.arguments"] is None
+
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+    on = get_tool_call_attrs(_tool_call())
+    assert on["gen_ai.tool.call.arguments"] == '{"q": "hi"}'
+
+
+def test_get_tool_call_attrs_hash_stable_regardless_of_key_order():
+    a = get_tool_call_attrs(_tool_call(args={"a": 1, "b": 2}))
+    b = get_tool_call_attrs(_tool_call(args={"b": 2, "a": 1}))
+    assert a["mellea.tool.arguments_hash"] == b["mellea.tool.arguments_hash"]
+
+
+def test_get_tool_call_attrs_missing_schema_yields_none(monkeypatch):
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+    tc = MagicMock()
+    tc.name = "bare"
+    tc.args = {}
+    tc.tool_call_id = None
+    type(tc.func).as_json_tool = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("no schema"))
+    )
+    attrs = get_tool_call_attrs(tc)
+    assert attrs["gen_ai.tool.name"] == "bare"
+    assert attrs["gen_ai.tool.type"] is None
+    assert attrs["gen_ai.tool.description"] is None
+    assert attrs["gen_ai.tool.call.id"] is None
+    # Empty args -> no hash, no captured arguments.
+    assert attrs["mellea.tool.arguments_hash"] is None
+    assert attrs["gen_ai.tool.call.arguments"] is None
+
+
+def test_get_tool_call_attrs_unnamed_tool_falls_back_to_unknown():
+    tc = MagicMock()
+    tc.name = None
+    tc.args = {}
+    tc.tool_call_id = None
+    tc.func.as_json_tool = {"type": "function", "function": {}}
+    attrs = get_tool_call_attrs(tc)
+    assert attrs["gen_ai.tool.name"] == "unknown"
+
+
+def test_get_tool_call_attrs_non_mapping_function_schema_yields_none():
+    tc = MagicMock()
+    tc.name = "search"
+    tc.args = {}
+    tc.tool_call_id = None
+    tc.func.as_json_tool = {"type": "function", "function": "bad"}
+    attrs = get_tool_call_attrs(tc)
+    assert attrs["gen_ai.tool.type"] == "function"
+    assert attrs["gen_ai.tool.description"] is None
+
+
+# get_capture_content_value
+
+
+def test_get_capture_content_value_truncates_over_limit(monkeypatch):
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+    long = "x" * (_MAX_CONTENT_LEN + 50)
+    out = get_capture_content_value(long)
+    assert out == "x" * _MAX_CONTENT_LEN + "..."
+
+
+def test_get_capture_content_value_keeps_value_at_or_under_limit(monkeypatch):
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+    exact = "y" * _MAX_CONTENT_LEN
+    assert get_capture_content_value(exact) == exact

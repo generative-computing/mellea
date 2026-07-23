@@ -12,6 +12,7 @@ pipelines to automatically emit spans when tracing is enabled:
   execution.
 - StreamingTracingPlugin: Emits an application-level orchestration span and
   per-chunk span events for `stream_with_chunking` runs.
+- ToolTracingPlugin: Emits an `execute_tool` span for every tool invocation.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
         StreamingOrchestrationStartPayload,
         StreamingStartPayload,
     )
+    from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
 
 
 class BackendTracingPlugin(Plugin, name="backend_tracing", priority=40):
@@ -261,8 +263,7 @@ class ComponentTracingPlugin(Plugin, name="component_tracing", priority=41):
             return
         from mellea.telemetry.tracing import finish_action_span_error
 
-        exc = payload.error if payload.error is not None else Exception("unknown error")
-        finish_action_span_error(payload.action_id, exception=exc)
+        finish_action_span_error(payload.action_id, exception=payload.error)
 
 
 class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
@@ -399,9 +400,62 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
         )
 
 
+class ToolTracingPlugin(Plugin, name="tool_tracing", priority=43):
+    """Emits an `execute_tool` span per tool invocation (pre/post lifecycle).
+
+    `tool_pre_invoke` opens the span; `tool_post_invoke` closes it with success
+    or error status, correlated via `tool_invocation_id`.
+
+    All hooks run SEQUENTIAL so the OTel context token attached in the pre hook
+    can be detached on the same task in the post hook.
+    """
+
+    @hook("tool_pre_invoke")
+    async def on_tool_pre_invoke(
+        self, payload: ToolPreInvokePayload, context: dict[str, Any]
+    ) -> None:
+        """Open the `execute_tool` span for this tool invocation."""
+        if not payload.tool_invocation_id:
+            return
+        from mellea.telemetry.tracing import start_tool_span
+
+        start_tool_span(
+            payload.tool_invocation_id,
+            payload.model_tool_call,
+            is_control_flow=payload.is_control_flow,
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
+        )
+
+    @hook("tool_post_invoke")
+    async def on_tool_post_invoke(
+        self, payload: ToolPostInvokePayload, context: dict[str, Any]
+    ) -> None:
+        """Close the `execute_tool` span with success or error status."""
+        if not payload.tool_invocation_id:
+            return
+        from mellea.telemetry.tracing import (
+            finish_tool_span_error,
+            finish_tool_span_success,
+        )
+
+        if payload.success:
+            finish_tool_span_success(
+                payload.tool_invocation_id,
+                execution_time_ms=payload.execution_time_ms,
+                result=payload.tool_output,
+            )
+        else:
+            finish_tool_span_error(
+                payload.tool_invocation_id,
+                execution_time_ms=payload.execution_time_ms,
+                exception=payload.error,
+            )
+
+
 # All tracing plugins to auto-register when tracing is enabled.
 _TRACING_PLUGIN_CLASSES = (
     BackendTracingPlugin,
     ComponentTracingPlugin,
     StreamingTracingPlugin,
+    ToolTracingPlugin,
 )

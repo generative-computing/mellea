@@ -241,7 +241,12 @@ class TestChatCompletionDeltaMerge:
             _delta_chunk(
                 role="assistant",
                 tool_calls=[
-                    {"index": 0, "function": {"name": "get_weather", "arguments": None}}
+                    {
+                        "index": 0,
+                        "id": "call_abc",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": None},
+                    }
                 ],
             ),
             _delta_chunk(
@@ -262,6 +267,8 @@ class TestChatCompletionDeltaMerge:
         result = chat_completion_delta_merge(chunks)
         tc = result["message"]["tool_calls"]
         assert len(tc) == 1
+        assert tc[0]["id"] == "call_abc"
+        assert tc[0]["type"] == "function"
         assert tc[0]["function"]["name"] == "get_weather"
         assert json.loads(tc[0]["function"]["arguments"]) == {"location": "Dallas"}
 

@@ -103,10 +103,12 @@ Mellea has two trace scopes.
 
 ### Application spans (`mellea.application`)
 
-Application spans cover user-facing Mellea operations. They appear whenever you
-call `m.act()`, `m.instruct()`, `m.chat()`, or a `@generative` function.
+Application spans cover user-facing Mellea operations, on the
+`mellea.application` tracer.
 
-The `session` span:
+#### `session` span
+
+Covers the lifetime of a session used as a context manager.
 
 | Attribute | Description |
 | --------- | ----------- |
@@ -114,7 +116,9 @@ The `session` span:
 | `mellea.context_type` | Context class name (e.g., `SimpleContext`) |
 | `mellea.backend` | Backend identifier (e.g., `"ollama"`); set when known |
 
-The `start_session` span:
+#### `start_session` span
+
+Covers session construction (backend setup and model resolution).
 
 | Attribute | Description |
 | --------- | ----------- |
@@ -122,7 +126,9 @@ The `start_session` span:
 | `mellea.model_id` | Resolved model id string |
 | `mellea.context_type` | Context class name |
 
-The `action` span:
+#### `action` span
+
+One per `m.act()`, `m.instruct()`, `m.chat()`, or `@generative` call.
 
 | Attribute | Description |
 | --------- | ----------- |
@@ -137,8 +143,29 @@ The `action` span:
 | `mellea.response` | Model response truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
 | `mellea.response_length` | Length of the model response (always recorded) |
 
-The `stream_with_chunking` span covers one streaming-generation run. It wraps
-the backend generation and any per-chunk validation:
+#### `execute_tool {name}` span
+
+One per tool the model calls, following the OTel Gen-AI tool-execution
+convention.
+
+| Attribute | Description |
+| --------- | ----------- |
+| `gen_ai.operation.name` | Always `"execute_tool"` |
+| `gen_ai.tool.name` | Name of the invoked tool |
+| `gen_ai.tool.type` | Tool type from the tool schema (e.g., `"function"`), when known |
+| `gen_ai.tool.description` | Tool description from the tool schema, when known |
+| `gen_ai.tool.call.id` | Provider-supplied tool-call id, when available |
+| `gen_ai.tool.call.arguments` | Tool arguments truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
+| `gen_ai.tool.call.result` | Tool result truncated to 500 characters; recorded only when `MELLEA_TRACES_CONTENT=true` |
+| `mellea.tool.status` | Execution outcome (`success` or `failure`) |
+| `mellea.tool.execution_time_ms` | Wall-clock tool execution time in milliseconds |
+| `mellea.tool.is_control_flow` | Whether the tool is framework control flow (e.g., `final_answer` in ReAct) |
+| `mellea.tool.arguments_hash` | Stable hash of the arguments; recorded independent of content capture, when the call has arguments |
+
+#### `stream_with_chunking` span
+
+One per `stream_with_chunking()` run, wrapping the backend generation and any
+per-chunk validation.
 
 | Attribute | Description |
 | --------- | ----------- |
@@ -200,11 +227,18 @@ session                   (mellea.application)
 │   │                     [gen_ai.usage.input_tokens=150]
 │   │                     [gen_ai.usage.output_tokens=42]
 │   └── requirement_validation  (mellea.application)
+├── execute_tool search   (mellea.application)
+│                         [gen_ai.tool.name=search]
+│                         [mellea.tool.status=success]
 └── action                (mellea.application)
     └── chat              (mellea.backend)
                           [gen_ai.provider.name=openai]
                           [gen_ai.request.model=gpt-4o]
 ```
+
+Tool execution happens after the generating call completes, so `execute_tool`
+spans are not nested inside the `action` that requested them. Outside a session
+they are root spans.
 
 In a `stream_with_chunking` run, the backend generation and each per-chunk
 validation call nest under the `stream_with_chunking` span as sibling `chat`

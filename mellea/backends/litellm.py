@@ -836,7 +836,10 @@ class LiteLLMBackend(FormatterBackend):
                 # Validate and coerce argument types
                 validated_args = validate_tool_arguments(func, args, strict=False)
                 model_tool_calls[tool_name] = ModelToolCall(
-                    tool_name, func, validated_args
+                    tool_name,
+                    func,
+                    validated_args,
+                    tool_call_id=getattr(tool_call, "id", None),
                 )
 
         if len(model_tool_calls) > 0:

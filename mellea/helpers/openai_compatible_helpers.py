@@ -92,7 +92,9 @@ def extract_model_tool_requests(
 
             # Validate and coerce argument types
             validated_args = validate_tool_arguments(func, args, strict=False)
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
+            model_tool_calls[tool_name] = ModelToolCall(
+                tool_name, func, validated_args, tool_call_id=tool_call.get("id")
+            )
 
     if len(model_tool_calls) > 0:
         return model_tool_calls
@@ -172,6 +174,12 @@ def chat_completion_delta_merge(
                 else:
                     # This tool has already started to be defined.
                     current_tool = m_tool_calls[idx]
+
+                # id and type arrive only on the first chunk of a tool call.
+                if tool_call.get("id") is not None:
+                    current_tool["id"] = tool_call["id"]
+                if tool_call.get("type") is not None:
+                    current_tool["type"] = tool_call["type"]
 
                 # Get the info from the function chunk.
                 fx_info = tool_call["function"]
