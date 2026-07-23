@@ -206,14 +206,14 @@ async def test_intrinsic_metrics_emit_through_exporter(intrinsic_plugin, monkeyp
         provider.force_flush()
         data = reader.get_metrics_data()
 
-        invocations = _points(data, "mellea.intrinsic.invocations")
+        invocations = _points(data, "mellea.adapter_function.invocations")
         assert len(invocations) == 1
         assert dict(invocations[0].attributes)["outcome"] == "schema_error"
 
         # a schema_error outcome also drives the parse-failures counter
-        assert len(_points(data, "mellea.intrinsic.parse_failures")) == 1
+        assert len(_points(data, "mellea.adapter_function.parse_failures")) == 1
 
-        phase = _points(data, "mellea.intrinsic.phase_duration")
+        phase = _points(data, "mellea.adapter_function.phase_duration")
         assert len(phase) == 1
         assert dict(phase[0].attributes)["phase"] == "generate"
         # payload milliseconds are recorded as seconds

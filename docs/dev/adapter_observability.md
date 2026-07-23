@@ -72,12 +72,13 @@ default — the same class of bug PR #972 fixed elsewhere.
 `intrinsic_invocation_complete` and `intrinsic_phase_complete`
 (`mellea/plugins/hooks/intrinsic.py`). Three metrics:
 
-- `mellea.intrinsic.invocations` (counter) — labels: `name`, `revision`,
+- `mellea.adapter_function.invocations` (counter) — labels: `name`, `revision`,
   `binding_type`, `adapter_type`, `outcome` (`success` | `schema_error` |
   `error`).
-- `mellea.intrinsic.phase_duration` (histogram, unit `s`) — labels: `name`, `phase`
-  (`prepare` | `activate` | `generate` | `parse` | `deactivate`).
-- `mellea.intrinsic.parse_failures` (counter) — labels: `name`, `revision`.
+- `mellea.adapter_function.phase_duration` (histogram, unit `s`) —
+  labels: `name`, `phase` (`prepare` | `activate` | `generate` | `parse` |
+  `deactivate`).
+- `mellea.adapter_function.parse_failures` (counter) — labels: `name`, `revision`.
   Incremented automatically whenever an invocation's `outcome` is
   `schema_error` (i.e. an `AdapterSchemaMismatchError`), acting as a
   schema-drift detector.
@@ -101,14 +102,15 @@ under the `mellea.*` prefix — the same convention as `mellea.action_type`,
 
 An invocation opens one parent span with a child span per lifecycle phase:
 
-- **Parent** (the invocation) — carries `mellea.intrinsic.name`,
-  `mellea.intrinsic.revision`, `mellea.intrinsic.binding_type`,
-  `mellea.intrinsic.adapter_type`, and `mellea.intrinsic.outcome`, mirroring the
-  `mellea.intrinsic.invocations` counter.
+- **Parent** (the invocation) — carries `mellea.adapter_function.name`,
+  `mellea.adapter_function.revision`, `mellea.adapter_function.binding_type`,
+  `mellea.adapter_function.adapter_type`, and
+  `mellea.adapter_function.outcome`, mirroring the
+  `mellea.adapter_function.invocations` counter.
 - **Children** (one per phase: `prepare`, `activate`, `generate`, `parse`,
-  `deactivate`) — each carries `mellea.intrinsic.phase` and corresponds
-  one-to-one with a `mellea.intrinsic.phase_duration` histogram sample of the
-  same phase.
+  `deactivate`) — each carries `mellea.adapter_function.phase` and
+  corresponds one-to-one with a `mellea.adapter_function.phase_duration`
+  histogram sample of the same phase.
 
 Note the deliberate split, consistent with the rest of Mellea: **metric labels
 are bare** (`name`, `phase`, `revision`, …) while **span attributes are
@@ -125,7 +127,7 @@ already use (it also honours `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
 **off by default**, so traces never capture PII or proprietary content unless
 explicitly opted in. When unset or falsey, the phase spans carry metadata only;
 when set truthy, they additionally attach the adapter's input/output content.
-The intrinsic spans **reuse this gate rather than introducing a new one**;
+The adapter-function spans **reuse this gate rather than introducing a new one**;
 content attributes are attached when the Bindings (#1141/#1142) emit spans.
 
 (#1140's acceptance criteria named this `MELLEA_TRACE_CONTENT`; the real,

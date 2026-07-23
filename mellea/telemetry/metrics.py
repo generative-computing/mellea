@@ -993,8 +993,13 @@ def _get_intrinsic_invocations_counter() -> Any:
     global _intrinsic_invocations_counter
 
     if _intrinsic_invocations_counter is None:
+        # Metric names use the glossary's canonical prose term "adapter_function",
+        # not the code-level "intrinsic" symbol. Metric/label names are user-facing
+        # (dashboards), and the glossary calls for "adapter function" in user-facing
+        # surfaces; the Python symbols stay `Intrinsic*`, the "current implementation
+        # name" per the glossary. (Applies to all three metrics below.)
         _intrinsic_invocations_counter = create_counter(
-            "mellea.intrinsic.invocations",
+            "mellea.adapter_function.invocations",
             description="Total number of adapter function (intrinsic) invocations",
             unit="{invocation}",
         )
@@ -1007,7 +1012,7 @@ def _get_intrinsic_phase_duration_histogram() -> Any:
 
     if _intrinsic_phase_duration_histogram is None:
         _intrinsic_phase_duration_histogram = create_histogram(
-            "mellea.intrinsic.phase_duration",
+            "mellea.adapter_function.phase_duration",
             description="Duration of each adapter function lifecycle phase",
             unit="s",
         )
@@ -1020,7 +1025,7 @@ def _get_intrinsic_parse_failures_counter() -> Any:
 
     if _intrinsic_parse_failures_counter is None:
         _intrinsic_parse_failures_counter = create_counter(
-            "mellea.intrinsic.parse_failures",
+            "mellea.adapter_function.parse_failures",
             description="Total number of adapter function schema-mismatch parse failures",
             unit="{failure}",
         )
