@@ -1039,3 +1039,15 @@ def test_last_turn_system_message_treated_as_input():
     assert isinstance(turn.model_input, Message)
     assert turn.model_input.role == "system"
     assert turn.output is None
+
+
+def test_last_turn_tool_message_treated_as_input():
+    from mellea.stdlib.context import ChatContext
+
+    ctx = ChatContext().add(Message("tool", "tool result"))
+    turn = ctx.last_turn()
+    assert turn is not None
+    # Tool message should be in model_input, not output (matches #377 scoping)
+    assert isinstance(turn.model_input, Message)
+    assert turn.model_input.role == "tool"
+    assert turn.output is None
