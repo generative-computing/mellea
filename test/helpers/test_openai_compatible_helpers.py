@@ -600,7 +600,7 @@ class TestBuildToolCalls:
             func=tool,
             args={"timestamp": datetime(2024, 1, 15), "amount": Decimal("123.45")},
         )
-        output = ModelOutputThunk(value="test", tool_calls={"test_tool": tool_call})
+        output = ModelOutputThunk(value="test", tool_calls=[tool_call])
 
         result = build_tool_calls(output)
 
