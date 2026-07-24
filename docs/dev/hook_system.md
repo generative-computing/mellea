@@ -104,9 +104,9 @@ The following hooks are designed but not yet implemented. They are included in t
 | `component_pre_create` | Component Lifecycle | Blocked on Component-as-ABC refactoring (see above) |
 | `component_post_create` | Component Lifecycle | Blocked on Component-as-ABC refactoring (see above) |
 | `generation_stream_chunk` | Generation Pipeline | Per-chunk interception during streaming |
-| `adapter_pre_load` | Backend Adapter Ops | Before `backend.load_adapter()` |
+| `adapter_pre_load` | Backend Adapter Ops | Before `backend.load_peft_adapter()` |
 | `adapter_post_load` | Backend Adapter Ops | After adapter loaded |
-| `adapter_pre_unload` | Backend Adapter Ops | Before `backend.unload_adapter()` |
+| `adapter_pre_unload` | Backend Adapter Ops | Before `backend.unload_peft_adapter()` |
 | `adapter_post_unload` | Backend Adapter Ops | After adapter unloaded |
 | `context_update` | Context Operations | When context changes (append/reset) |
 | `context_prune` | Context Operations | When context is trimmed for token budget |

@@ -43,6 +43,9 @@ def reset_metrics_state() -> None:
     metrics._requirement_checks_counter = None
     metrics._requirement_failures_counter = None
     metrics._tool_calls_counter = None
+    metrics._intrinsic_invocations_counter = None
+    metrics._intrinsic_phase_duration_histogram = None
+    metrics._intrinsic_parse_failures_counter = None
     # Re-register: another test's shutdown_plugins() may have emptied the manager.
     metrics._plugins_registered = False
     metrics._setup_metrics()

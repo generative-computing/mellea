@@ -7,6 +7,7 @@ import json
 from typing import cast
 
 from ....backends import ModelOption
+from ....backends._options import resolve_model_options
 from ....backends.adapters import AdapterMixin, AdapterType, IOContract
 from ....core import Backend
 from ....stdlib import functional as mfuncs
@@ -167,6 +168,8 @@ def call_intrinsic(
         kwargs (dict | None): Extra keyword arguments forwarded to the
             adapter function's input template.
         model_options (dict | None): Model options that override defaults.
+            Adapter functions default to ``TEMPERATURE: 0.0`` for deterministic
+            output; pass ``TEMPERATURE`` here to override it.
         io_contract (IOContract | None): Output contract to validate and parse the
             raw model output.  When ``None``, ``json.loads`` is used directly.
 
@@ -191,15 +194,18 @@ def call_intrinsic(
         adapter_types=(AdapterType.ALORA, AdapterType.LORA),
     )
 
-    default_opts: dict = {ModelOption.TEMPERATURE: 0.0}
-    if model_options is not None:
-        default_opts.update(model_options)
+    resolved_opts = resolve_model_options(
+        backend_defaults={},
+        remap={},
+        helper_defaults={ModelOption.TEMPERATURE: 0.0},
+        call_options=model_options,
+    )
 
     model_output_thunk, _ = mfuncs.act(
         intrinsic,
         context,
         backend,
-        model_options=default_opts,
+        model_options=resolved_opts,
         tool_calls=True,
         strategy=None,
     )

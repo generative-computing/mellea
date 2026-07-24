@@ -70,7 +70,9 @@ from ..helpers import (
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.context import generate_request_id, with_context
+from ._options import resolve_model_options
 from .adapters import AdapterMixin, IntrinsicAdapter, LocalHFAdapter
+from .adapters.adapter import AdapterInput
 from .backend import FormatterBackend
 from .cache import Cache, SimpleLRUCache
 from .model_ids import ModelIdentifier
@@ -558,7 +560,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Helper function for ensuring exclusive generation when adapters are present. Necessary to prevent generating with incorrect weights."""
         with self._generation_lock:
             if adapter_name != "":
-                self.load_adapter(adapter_name)
+                self.load_peft_adapter(adapter_name)
                 self._model.set_adapter(adapter_name)
             else:
                 try:
@@ -1851,20 +1853,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         Returns:
             a new dict
         """
-        backend_model_opts = ModelOption.replace_keys(
-            self.model_options, self.to_mellea_model_opts_map
+        return resolve_model_options(
+            backend_defaults=self.model_options,
+            remap=self.to_mellea_model_opts_map,
+            call_options=model_options,
         )
-
-        if model_options is None:
-            return backend_model_opts
-
-        generate_call_model_opts = ModelOption.replace_keys(
-            model_options, self.to_mellea_model_opts_map
-        )
-        merged = ModelOption.merge_model_options(
-            backend_model_opts, generate_call_model_opts
-        )
-        return merged
 
     def _make_backend_specific_and_remove(
         self, model_options: dict[str, Any], *, for_generate: bool = True
@@ -1999,19 +1992,30 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
         return self._model_id.split("/")[1]
 
-    def add_adapter(self, adapter: LocalHFAdapter):
+    def add_adapter(self, adapter: AdapterInput) -> None:
         """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
 
         Downloads the adapter weights (via `adapter.get_local_hf_path`) and records
         the adapter in the backend's registry. The adapter must not already be
         registered with a different backend.
 
+        Accepts the full `AdapterInput` union to honour the mixin contract, but
+        only the LocalFile/PEFT reality is supported here — other realities are
+        rejected at runtime rather than narrowing the signature.
+
         Args:
-            adapter (LocalHFAdapter): The adapter to register with this backend.
+            adapter (AdapterInput): The adapter to register. Must be a
+                `LocalHFAdapter`; other adapter realities are rejected.
 
         Raises:
+            TypeError: If `adapter` is not a `LocalHFAdapter`.
             Exception: If `adapter` has already been added to a different backend.
         """
+        if not isinstance(adapter, LocalHFAdapter):
+            raise TypeError(
+                f"LocalHFBackend requires a LocalHFAdapter; got "
+                f"{type(adapter).__name__}."
+            )
         if adapter.backend is not None:
             if adapter.backend is self:
                 MelleaLogger.get_logger().warning(
@@ -2033,7 +2037,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
 
-    def load_adapter(self, adapter_qualified_name: str):
+    def load_peft_adapter(self, adapter_qualified_name: str) -> None:
         """Load a previously registered adapter into the underlying Hugging Face model.
 
         The adapter must have been registered via `add_adapter` first. Do not call
@@ -2054,6 +2058,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         try:
+            # self._model is a HF PreTrainedModel — .load_adapter() here is
+            # transformers/PEFT's own method, not the renamed AdapterMixin verb.
             # v5: adapter_kwargs is forwarded to download_kwargs only; device is
             # derived automatically from self.device, so we don't pass it here —
             # find_adapter_config_file() no longer accepts a 'device' argument.
@@ -2074,7 +2080,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # self._model.disable_adapters()
         self._loaded_adapters[adapter.qualified_name] = adapter
 
-    def unload_adapter(self, adapter_qualified_name: str):
+    def unload_peft_adapter(self, adapter_qualified_name: str) -> None:
         """Unload a previously loaded adapter from the underlying Hugging Face model.
 
         If the adapter is not currently loaded, a log message is emitted and the
@@ -2098,13 +2104,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         del self._loaded_adapters[adapter.qualified_name]
 
     def list_adapters(self) -> list[str]:
-        """List the qualified names of all adapters currently loaded in this backend.
+        """List the qualified names of all adapters registered with this backend.
 
         Returns:
             list[str]: Qualified adapter names (i.e. `adapter.qualified_name`) for
-                all adapters that have been loaded via `load_adapter`.
+                all adapters that have been registered via `add_adapter`, whether
+                or not they have also been loaded via `load_peft_adapter`.
         """
-        return list(self._loaded_adapters.keys())
+        return list(self._added_adapters.keys())
 
 
 def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
