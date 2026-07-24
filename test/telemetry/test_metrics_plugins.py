@@ -17,6 +17,10 @@ from mellea.plugins.hooks.generation import (
     GenerationErrorPayload,
     GenerationPostCallPayload,
 )
+from mellea.plugins.hooks.intrinsic import (
+    IntrinsicInvocationCompletePayload,
+    IntrinsicPhaseCompletePayload,
+)
 from mellea.plugins.hooks.sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
@@ -33,6 +37,7 @@ from mellea.telemetry.metrics import (
 from mellea.telemetry.metrics_plugins import (
     CostMetricsPlugin,
     ErrorMetricsPlugin,
+    IntrinsicMetricsPlugin,
     LatencyMetricsPlugin,
     RequirementMetricsPlugin,
     SamplingMetricsPlugin,
@@ -1033,3 +1038,118 @@ async def test_tool_plugin_none_tool_call_falls_back_to_unknown(tool_plugin):
         await tool_plugin.record_tool_call(payload, {})
 
         mock_record.assert_called_once_with("unknown", "success")
+
+
+# IntrinsicMetricsPlugin tests
+
+
+@pytest.fixture
+def intrinsic_plugin():
+    return IntrinsicMetricsPlugin()
+
+
+@pytest.mark.asyncio
+async def test_record_intrinsic_invocation_success(intrinsic_plugin):
+    """A successful invocation records the invocations counter, not parse_failures."""
+    payload = IntrinsicInvocationCompletePayload(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="success",
+    )
+
+    with (
+        patch(
+            "mellea.telemetry.metrics.record_intrinsic_invocation"
+        ) as mock_invocation,
+        patch(
+            "mellea.telemetry.metrics.record_intrinsic_parse_failure"
+        ) as mock_parse_failure,
+    ):
+        await intrinsic_plugin.record_intrinsic_invocation(payload, {})
+
+    mock_invocation.assert_called_once_with(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="success",
+    )
+    mock_parse_failure.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_record_intrinsic_invocation_schema_error_also_records_parse_failure(
+    intrinsic_plugin,
+):
+    """A schema_error outcome records both the invocations counter and parse_failures."""
+    payload = IntrinsicInvocationCompletePayload(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="schema_error",
+    )
+
+    with (
+        patch(
+            "mellea.telemetry.metrics.record_intrinsic_invocation"
+        ) as mock_invocation,
+        patch(
+            "mellea.telemetry.metrics.record_intrinsic_parse_failure"
+        ) as mock_parse_failure,
+    ):
+        await intrinsic_plugin.record_intrinsic_invocation(payload, {})
+
+    mock_invocation.assert_called_once_with(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="schema_error",
+    )
+    mock_parse_failure.assert_called_once_with("answerability", "r1")
+
+
+@pytest.mark.asyncio
+async def test_record_intrinsic_invocation_missing_revision_defaults_to_unpinned(
+    intrinsic_plugin,
+):
+    """A None revision is normalized to 'unpinned' before being recorded."""
+    payload = IntrinsicInvocationCompletePayload(
+        name="answerability",
+        revision=None,
+        binding_type="embedded",
+        adapter_type="alora",
+        outcome="error",
+    )
+
+    with patch(
+        "mellea.telemetry.metrics.record_intrinsic_invocation"
+    ) as mock_invocation:
+        await intrinsic_plugin.record_intrinsic_invocation(payload, {})
+
+    mock_invocation.assert_called_once_with(
+        name="answerability",
+        revision="unpinned",
+        binding_type="embedded",
+        adapter_type="alora",
+        outcome="error",
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_intrinsic_phase_duration(intrinsic_plugin):
+    """Phase-complete events record the phase-duration histogram in seconds."""
+    payload = IntrinsicPhaseCompletePayload(
+        name="answerability", phase="prepare", duration_ms=12.5
+    )
+
+    with patch(
+        "mellea.telemetry.metrics.record_intrinsic_phase_duration"
+    ) as mock_phase:
+        await intrinsic_plugin.record_intrinsic_phase(payload, {})
+
+    # payload ms is converted to seconds before recording
+    mock_phase.assert_called_once_with("answerability", "prepare", 0.0125)

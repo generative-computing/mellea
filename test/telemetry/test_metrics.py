@@ -621,6 +621,9 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
         _cost_counter,
         _duration_histogram,
         _input_token_counter,
+        _intrinsic_invocations_counter,
+        _intrinsic_parse_failures_counter,
+        _intrinsic_phase_duration_histogram,
         _output_token_counter,
         _requirement_checks_counter,
         _requirement_failures_counter,
@@ -643,9 +646,15 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     assert _requirement_checks_counter is None
     assert _requirement_failures_counter is None
     assert _tool_calls_counter is None
+    assert _intrinsic_invocations_counter is None
+    assert _intrinsic_phase_duration_histogram is None
+    assert _intrinsic_parse_failures_counter is None
 
     from mellea.telemetry.metrics import (
         record_cost,
+        record_intrinsic_invocation,
+        record_intrinsic_parse_failure,
+        record_intrinsic_phase_duration,
         record_request_duration,
         record_requirement_check,
         record_requirement_failure,
@@ -666,11 +675,23 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     record_requirement_check("LLMaJRequirement")
     record_requirement_failure("LLMaJRequirement", "constraint not met")
     record_tool_call("search", "success")
+    record_intrinsic_invocation(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="success",
+    )
+    record_intrinsic_phase_duration("answerability", "prepare", 0.1)
+    record_intrinsic_parse_failure("answerability", "r1")
 
     from mellea.telemetry.metrics import (
         _cost_counter,
         _duration_histogram,
         _input_token_counter,
+        _intrinsic_invocations_counter,
+        _intrinsic_parse_failures_counter,
+        _intrinsic_phase_duration_histogram,
         _output_token_counter,
         _requirement_checks_counter,
         _requirement_failures_counter,
@@ -684,6 +705,9 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
     assert _input_token_counter is not None
     assert _output_token_counter is not None
     assert _duration_histogram is not None
+    assert _intrinsic_invocations_counter is not None
+    assert _intrinsic_phase_duration_histogram is not None
+    assert _intrinsic_parse_failures_counter is not None
     assert (
         _ttfb_histogram is not None
     )  # initialized together via _get_latency_histograms

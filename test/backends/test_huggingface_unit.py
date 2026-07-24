@@ -211,6 +211,15 @@ def test_list_adapters_reflects_registration_not_just_loading():
     assert adapter.qualified_name in backend.list_adapters()
 
 
+def test_add_non_local_hf_adapter_raises():
+    """LocalHFBackend.add_adapter() rejects adapters outside its own reality."""
+    backend = _make_backend()
+    mock_adapter = MagicMock(spec=[])
+
+    with pytest.raises(TypeError, match="LocalHFAdapter"):
+        backend.add_adapter(mock_adapter)
+
+
 def test_seed_forces_do_sample_true(stub_backend):
     """Issue #40: a seed alone must flip do_sample=True so it isn't ignored."""
     out = _call(stub_backend, {ModelOption.SEED: 42})

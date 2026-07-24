@@ -260,6 +260,12 @@ def _setup_meter_provider() -> Any:
                 [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10]
             ),
         ),
+        View(  # type: ignore
+            instrument_name="mellea.adapter_function.phase_duration",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120]
+            ),
+        ),
     ]
 
     provider = MeterProvider(resource=resource, metric_readers=readers, views=views)  # type: ignore
@@ -997,7 +1003,8 @@ def _get_intrinsic_invocations_counter() -> Any:
         # not the code-level "intrinsic" symbol. Metric/label names are user-facing
         # (dashboards), and the glossary calls for "adapter function" in user-facing
         # surfaces; the Python symbols stay `Intrinsic*`, the "current implementation
-        # name" per the glossary. (Applies to all three metrics below.)
+        # name" per the glossary. See docs/dev/adapter_observability.md for the full
+        # rationale. (Applies to all three metrics below.)
         _intrinsic_invocations_counter = create_counter(
             "mellea.adapter_function.invocations",
             description="Total number of adapter function (intrinsic) invocations",
