@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-0.7.0 docs-doc-page docs-doc-id-observability/telemetry" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Telemetry | Mellea</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" name="twitter:image" content="https://docs.mellea.ai/images/mellea_draft_logo_300.png"><meta data-rh="true" property="og:url" content="https://docs.mellea.ai/observability/telemetry"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="keywords" content="mellea, generative programming, AI, LLM, Python"><meta data-rh="true" name="docusaurus_version" content="0.7.0"><meta data-rh="true" name="docusaurus_tag" content="docs-default-0.7.0"><meta data-rh="true" name="docsearch:version" content="0.7.0"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-0.7.0"><meta data-rh="true" property="og:title" content="Telemetry | Mellea"><meta data-rh="true" name="description" content="Add OpenTelemetry tracing, metrics, and logging to Mellea programs."><meta data-rh="true" property="og:description" content="Add OpenTelemetry tracing, metrics, and logging to Mellea programs."><link data-rh="true" rel="icon" href="/images/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.mellea.ai/observability/telemetry"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/observability/telemetry" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.mellea.ai/observability/telemetry" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Telemetry","item":"https://docs.mellea.ai/observability/telemetry"}]}</script><script src="/analytics.js" async></script><link rel="stylesheet" href="/assets/css/styles.8178f1a9.css">
+<script src="/assets/js/runtime~main.7f34f426.js" defer="defer"></script>
+<script src="/assets/js/main.59887cf8.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/"><div class="navbar__logo"><img src="/logo/logo-light.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/logo/logo-dark.svg" alt="Mellea" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate"></b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/getting-started/installation">Docs</a><a class="navbar__item navbar__link" href="/api">API Reference</a><div class="navbar__item dropdown dropdown--hoverable"><a aria-current="page" class="navbar__link active" aria-haspopup="true" aria-expanded="false" role="button" href="/observability/telemetry">0.7.0</a><ul class="dropdown__menu"><li><a class="dropdown__link" href="/next/observability/telemetry">Next</a></li><li><a aria-current="page" class="dropdown__link dropdown__link--active" href="/observability/telemetry">0.7.0</a></li></ul></div></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Community<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a href="https://mellea.ai" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">mellea.ai<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"><div class="navbar__search searchBarContainer_NW3z" dir="ltr"><input placeholder="Search" aria-label="Search" class="navbar__search-input" value=""><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/getting-started/installation"><span title="Getting Started" class="categoryLinkLabel_W154">Getting Started</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/tutorials/your-first-generative-program"><span title="Tutorials" class="categoryLinkLabel_W154">Tutorials</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/concepts/generative-programming"><span title="Concepts" class="categoryLinkLabel_W154">Concepts</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/how-to/generative-functions"><span title="How-To" class="categoryLinkLabel_W154">How-To</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/examples"><span title="Examples" class="categoryLinkLabel_W154">Examples</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/integrations/ollama"><span title="Integrations" class="categoryLinkLabel_W154">Integrations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/observability/telemetry"><span title="Observability" class="categoryLinkLabel_W154">Observability</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/observability/telemetry"><span title="Telemetry" class="linkLabel_WmDU">Telemetry</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/observability/tracing"><span title="Tracing" class="linkLabel_WmDU">Tracing</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/observability/metrics"><span title="Metrics" class="linkLabel_WmDU">Metrics</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/observability/logging"><span title="Logging" class="linkLabel_WmDU">Logging</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/advanced/intrinsics"><span title="Advanced" class="categoryLinkLabel_W154">Advanced</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/community/contributing-guide"><span title="Community" class="categoryLinkLabel_W154">Community</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/reference/glossary"><span title="Reference" class="categoryLinkLabel_W154">Reference</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/troubleshooting/common-errors"><span title="Troubleshooting" class="categoryLinkLabel_W154">Troubleshooting</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Observability</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Telemetry</span></li></ul></nav><span class="theme-doc-version-badge badge badge--secondary">Version: 0.7.0</span><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Telemetry</h1></header><p><strong>Prerequisites:</strong> <a class="" href="/getting-started/quickstart">Quick Start</a> complete,
+<code>pip install &quot;mellea[telemetry]&quot;</code>, Ollama running locally.</p>
+<p>Mellea provides built-in <a href="https://opentelemetry.io/" target="_blank" rel="noopener noreferrer" class="">OpenTelemetry</a> instrumentation
+across three independent pillars — tracing, metrics, and logging. Each can be enabled
+separately. All telemetry is opt-in: if the <code>[telemetry]</code> extra is not installed,
+every telemetry call is a silent no-op.</p>
+<blockquote>
+<p><strong>Note:</strong> OpenTelemetry is an optional dependency. Mellea works normally without it.
+Install with <code>pip install &quot;mellea[telemetry]&quot;</code> or <code>uv pip install &quot;mellea[telemetry]&quot;</code>.</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="configuration">Configuration<a href="#configuration" class="hash-link" aria-label="Direct link to Configuration" title="Direct link to Configuration" translate="no">​</a></h2>
+<p>All telemetry is configured via environment variables:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="general">General<a href="#general" class="hash-link" aria-label="Direct link to General" title="Direct link to General" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>OTEL_SERVICE_NAME</code></td><td>Service name for all telemetry signals</td><td><code>mellea</code></td></tr><tr><td><code>OTEL_EXPORTER_OTLP_ENDPOINT</code></td><td>OTLP endpoint for all telemetry signals</td><td>none</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="tracing-variables">Tracing variables<a href="#tracing-variables" class="hash-link" aria-label="Direct link to Tracing variables" title="Direct link to Tracing variables" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>MELLEA_TRACES_ENABLED</code></td><td>Enable tracing (umbrella flag)</td><td><code>false</code></td></tr><tr><td><code>MELLEA_TRACES_OTLP</code></td><td>Enable OTLP span exporter</td><td><code>false</code></td></tr><tr><td><code>MELLEA_TRACES_CONSOLE</code></td><td>Print traces to console (debugging)</td><td><code>false</code></td></tr><tr><td><code>MELLEA_TRACES_CONTENT</code></td><td>Capture prompt/response content on spans (may include PII)</td><td><code>false</code></td></tr><tr><td><code>OTEL_EXPORTER_OTLP_TRACES_ENDPOINT</code></td><td>Trace-specific OTLP endpoint (overrides general)</td><td>none</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="metrics-variables">Metrics variables<a href="#metrics-variables" class="hash-link" aria-label="Direct link to Metrics variables" title="Direct link to Metrics variables" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>MELLEA_METRICS_ENABLED</code></td><td>Enable metrics collection</td><td><code>false</code></td></tr><tr><td><code>MELLEA_METRICS_CONSOLE</code></td><td>Print metrics to console (debugging)</td><td><code>false</code></td></tr><tr><td><code>MELLEA_METRICS_OTLP</code></td><td>Enable OTLP metrics exporter</td><td><code>false</code></td></tr><tr><td><code>OTEL_EXPORTER_OTLP_METRICS_ENDPOINT</code></td><td>Metrics-specific OTLP endpoint (overrides general)</td><td>none</td></tr><tr><td><code>MELLEA_METRICS_PROMETHEUS</code></td><td>Enable Prometheus metric reader</td><td><code>false</code></td></tr><tr><td><code>OTEL_METRIC_EXPORT_INTERVAL</code></td><td>Export interval in milliseconds</td><td><code>60000</code></td></tr><tr><td><code>MELLEA_PRICING_FILE</code></td><td>Path to a JSON file with custom model pricing overrides</td><td>none</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="logging-variables">Logging variables<a href="#logging-variables" class="hash-link" aria-label="Direct link to Logging variables" title="Direct link to Logging variables" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>MELLEA_LOGS_OTLP</code></td><td>Enable OTLP logs exporter</td><td><code>false</code></td></tr><tr><td><code>OTEL_EXPORTER_OTLP_LOGS_ENDPOINT</code></td><td>Logs-specific OTLP endpoint (overrides general)</td><td>none</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="quick-start">Quick start<a href="#quick-start" class="hash-link" aria-label="Direct link to Quick start" title="Direct link to Quick start" translate="no">​</a></h2>
+<p>Enable tracing and metrics with console output to verify everything works:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_TRACES_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_TRACES_CONSOLE</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_ENABLED</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">MELLEA_METRICS_CONSOLE</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">true</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">python your_script.py</span><br></div></code></pre></div></div>
+<p>Traces and metrics print to stdout. For production use, replace the console
+exporters with an OTLP endpoint:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_EXPORTER_OTLP_ENDPOINT</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">http://localhost:4317</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token builtin class-name">export</span><span class="token plain"> </span><span class="token assign-left variable" style="color:#36acaa">OTEL_SERVICE_NAME</span><span class="token operator" style="color:#393A34">=</span><span class="token plain">my-mellea-app</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="checking-telemetry-status-programmatically">Checking telemetry status programmatically<a href="#checking-telemetry-status-programmatically" class="hash-link" aria-label="Direct link to Checking telemetry status programmatically" title="Direct link to Checking telemetry status programmatically" translate="no">​</a></h2>
+<div class="language-python codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-python codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token keyword" style="color:#00009f">from</span><span class="token plain"> mellea</span><span class="token punctuation" style="color:#393A34">.</span><span class="token plain">telemetry </span><span class="token keyword" style="color:#00009f">import</span><span class="token plain"> is_metrics_enabled</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"> is_tracing_enabled</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Tracing: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">is_tracing_enabled</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">(</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">)</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c">&quot;</span><span class="token punctuation" style="color:#393A34">)</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token keyword" style="color:#00009f">print</span><span class="token punctuation" style="color:#393A34">(</span><span class="token string-interpolation string" style="color:#e3116c">f&quot;Metrics: </span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">{</span><span class="token string-interpolation interpolation">is_metrics_enabled</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">(</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">)</span><span class="token string-interpolation interpolation punctuation" style="color:#393A34">}</span><span class="token string-interpolation string" style="color:#e3116c">&quot;</span><span class="token punctuation" style="color:#393A34">)</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="tracing">Tracing<a href="#tracing" class="hash-link" aria-label="Direct link to Tracing" title="Direct link to Tracing" translate="no">​</a></h2>
+<p>Mellea has two trace scopes:</p>
+<ul>
+<li class=""><strong><code>mellea.application</code></strong> — user-facing operations: session lifecycle,
+<code>@generative</code> calls, <code>instruct()</code> and <code>act()</code>, sampling strategies, and
+requirement validation.</li>
+<li class=""><strong><code>mellea.backend</code></strong> — LLM backend interactions following the
+<a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" target="_blank" rel="noopener noreferrer" class="">OpenTelemetry Gen-AI Semantic Conventions</a>.
+Records model calls, token usage, finish reasons, and API latency.</li>
+</ul>
+<p>Enable tracing for full observability. Backend spans nest inside application spans:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token plain">session                  (mellea.application)</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">├── action               (mellea.application)</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">│   ├── chat             (mellea.backend) [gen_ai.provider.name=ollama]</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">│   └── requirement_validation  (mellea.application)</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">└── action               (mellea.application)</span><br></div><div class="token-line" style="color:#393A34"><span class="token plain">    └── chat             (mellea.backend) [gen_ai.provider.name=openai]</span><br></div></code></pre></div></div>
+<p>See <a class="" href="/observability/tracing">Tracing</a> for span attributes,
+exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="metrics">Metrics<a href="#metrics" class="hash-link" aria-label="Direct link to Metrics" title="Direct link to Metrics" translate="no">​</a></h2>
+<p>Mellea automatically records the following metrics across all backends using
+OpenTelemetry. No code changes are required:</p>
+<ul>
+<li class=""><strong>Token counters</strong> — <code>mellea.llm.tokens.input</code> and <code>mellea.llm.tokens.output</code>
+after each LLM call.</li>
+<li class=""><strong>Latency histograms</strong> — <code>mellea.llm.request.duration</code> (every request) and
+<code>mellea.llm.ttfb</code> (streaming requests only).</li>
+<li class=""><strong>Error counter</strong> — <code>mellea.llm.errors</code> on each failed backend call,
+classified by semantic error type.</li>
+<li class=""><strong>Cost counter</strong> — <code>mellea.llm.cost.usd</code> estimated request cost in USD,
+when pricing data is available for the model.</li>
+<li class=""><strong>Sampling counters</strong> — <code>mellea.sampling.attempts</code>, <code>mellea.sampling.successes</code>,
+and <code>mellea.sampling.failures</code> per strategy.</li>
+<li class=""><strong>Requirement counters</strong> — <code>mellea.requirement.checks</code> and
+<code>mellea.requirement.failures</code> per requirement type.</li>
+<li class=""><strong>Tool counter</strong> — <code>mellea.tool.calls</code> by tool name and status.</li>
+</ul>
+<p>The metrics API also exposes <code>create_counter</code>, <code>create_histogram</code>, and
+<code>create_up_down_counter</code> for instrumenting your own application code.</p>
+<p>Mellea supports three exporters that can run simultaneously:</p>
+<ul>
+<li class=""><strong>Console</strong> — print to stdout for debugging</li>
+<li class=""><strong>OTLP</strong> — export to production observability platforms</li>
+<li class=""><strong>Prometheus</strong> — register with <code>prometheus_client</code> for scraping</li>
+</ul>
+<p>See <a class="" href="/observability/metrics">Metrics</a> for the full list of
+metrics, backend support matrix, exporter setup, custom instruments, and
+troubleshooting.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="logging">Logging<a href="#logging" class="hash-link" aria-label="Direct link to Logging" title="Direct link to Logging" translate="no">​</a></h2>
+<p>Mellea uses a color-coded console logger (<code>MelleaLogger</code>) by default. When the
+<code>[telemetry]</code> extra is installed and <code>MELLEA_LOGS_OTLP=true</code> is set, Mellea
+also exports logs to an OTLP collector alongside existing console output.</p>
+<p>See <a class="" href="/observability/logging">Logging</a> for console logging
+configuration, OTLP log export setup, and programmatic access via
+<code>get_otlp_log_handler()</code>.</p>
+<blockquote>
+<p><strong>Full example:</strong> <a href="https://github.com/generative-computing/mellea/blob/main/docs/examples/telemetry/telemetry_example.py" target="_blank" rel="noopener noreferrer" class=""><code>docs/examples/telemetry/telemetry_example.py</code></a></p>
+</blockquote>
+<hr>
+<p><strong>See also:</strong></p>
+<ul>
+<li class=""><a class="" href="/observability/tracing">Tracing</a> — distributed traces
+with Gen-AI semantic conventions.</li>
+<li class=""><a class="" href="/observability/metrics">Metrics</a> — metrics, exporters,
+and custom instruments.</li>
+<li class=""><a class="" href="/observability/logging">Logging</a> — console logging and OTLP
+log export.</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/generative-computing/mellea/edit/main/versioned_docs/version-0.7.0/observability/telemetry.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"><span class="theme-last-updated">Last updated<!-- --> on <b><time datetime="2026-07-13T19:25:21.000Z" itemprop="dateModified">Jul 13, 2026</time></b></span></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/integrations/m-serve"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">m serve</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/observability/tracing"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Tracing</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#configuration" class="table-of-contents__link toc-highlight">Configuration</a><ul><li><a href="#general" class="table-of-contents__link toc-highlight">General</a></li><li><a href="#tracing-variables" class="table-of-contents__link toc-highlight">Tracing variables</a></li><li><a href="#metrics-variables" class="table-of-contents__link toc-highlight">Metrics variables</a></li><li><a href="#logging-variables" class="table-of-contents__link toc-highlight">Logging variables</a></li></ul></li><li><a href="#quick-start" class="table-of-contents__link toc-highlight">Quick start</a></li><li><a href="#checking-telemetry-status-programmatically" class="table-of-contents__link toc-highlight">Checking telemetry status programmatically</a></li><li><a href="#tracing" class="table-of-contents__link toc-highlight">Tracing</a></li><li><a href="#metrics" class="table-of-contents__link toc-highlight">Metrics</a></li><li><a href="#logging" class="table-of-contents__link toc-highlight">Logging</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="footer__links text--center"><div class="footer__links"><a href="https://mellea.ai/blogs/" target="_blank" rel="noopener noreferrer" class="footer__link-item">Blog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/discussions" target="_blank" rel="noopener noreferrer" class="footer__link-item">Discussions<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" class="footer__link-item">Contributing<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea/issues" target="_blank" rel="noopener noreferrer" class="footer__link-item">Issues<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><span class="footer__link-separator">·</span><a href="https://github.com/generative-computing/mellea" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Mellea Contributors.</div></div></div></footer></div>
+</body>
+</html>
