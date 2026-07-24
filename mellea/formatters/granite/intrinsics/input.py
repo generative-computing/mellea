@@ -9,8 +9,8 @@ import pathlib
 
 # First Party
 from ..base.io import ChatCompletionRewriter
+from ..base.optional import import_optional
 from ..base.types import ChatCompletion, DocumentMessage, UserMessage, VLLMExtraBody
-from ..base.util import import_optional
 
 # Local
 from .constants import TOP_LOGPROBS
