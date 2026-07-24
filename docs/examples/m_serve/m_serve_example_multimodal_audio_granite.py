@@ -17,6 +17,12 @@ This example uses that endpoint to split the work into two steps:
 This emulates audio-text-to-text on an all-Ollama/Granite stack without
 requiring a separate llama-server or cloud API.
 
+The session uses `ChatContext` so conversation history accumulates across
+turns: follow-up questions like "who sang it?" work without re-uploading
+the audio.  The serve function also honours caller-supplied `requirements`
+and `model_options`, and uses `session.ainstruct()` with a built-in
+`Requirement` to keep answers grounded in the transcript.
+
 Prerequisites:
     - Ollama running locally with both models pulled:
 
@@ -40,13 +46,16 @@ Then test with:
 import base64
 import io
 import os
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
 from mellea import start_session
-from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk
+from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk, Requirement
 from mellea.serve import ChatMessage
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements import simple_validate
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 _ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 _speech_model = os.environ.get(
@@ -54,8 +63,9 @@ _speech_model = os.environ.get(
 )
 _chat_model = os.environ.get("GRANITE_CHAT_MODEL", "granite4.1:3b")
 
-# Standard Mellea session for the chat step.
-chat_session = start_session(model_id=_chat_model)
+# ChatContext accumulates conversation history across turns so follow-up
+# questions work without re-uploading the audio.
+chat_session = start_session(model_id=_chat_model, ctx=ChatContext())
 
 
 def _audio_block_to_bytes(block: AudioBlock) -> tuple[bytes, str]:
@@ -114,10 +124,11 @@ async def serve(
 
     Step 1: ``hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`` transcribes the audio.
     Step 2: ``granite4.1:3b`` answers the user's text question, informed by the transcript.
+
+    The session retains conversation history across calls (via ``ChatContext``),
+    so follow-up questions work without re-uploading audio.  Caller-supplied
+    ``requirements`` and ``model_options`` are forwarded to ``ainstruct``.
     """
-
-    _ = requirements, model_options  # Not used in this example
-
     if not input:
         return ModelOutputThunk(value="No input provided")
 
@@ -127,18 +138,36 @@ async def serve(
         last_message.get_audio_blocks()
     )
 
-    transcript = ""
-    if audio_blocks:
-        transcript = await _transcribe(audio_blocks)
-        print(f"Transcript: {transcript[:120]}...")
+    if not audio_blocks:
+        raise ValueError(
+            "No audio provided. Please include an audio clip in your message."
+        )
 
-    # Build the prompt that combines the user question with the transcript.
-    if transcript:
-        prompt = f"{user_text}\n\n[Audio transcript: {transcript}]"
-    else:
-        prompt = user_text
+    transcript = await _transcribe(audio_blocks)
+    if not transcript:
+        raise ValueError("Audio was provided but could not be transcribed.")
+    print(f"Transcript: {transcript[:120]}...")
 
-    result = chat_session.chat(content=prompt)
+    prompt = f"{user_text}\n\n[Audio transcript: {transcript}]"
 
-    print(f"Result content: {result.content[:100] if result.content else 'None'}...")
-    return cast(ModelOutputThunk, chat_session.ctx.as_list()[-1])
+    # Python-checkable grounding requirement: verify the answer shares at least
+    # one word with the transcript.  This avoids LLM-as-a-Judge overhead and
+    # makes the RejectionSamplingStrategy retry loop deterministic.
+    _words = set(transcript.lower().split())
+    grounding_req: Requirement = Requirement(
+        "Base your answer only on the provided audio transcript",
+        validation_fn=simple_validate(
+            lambda output: bool(_words & set(output.lower().split()))
+        ),
+    )
+
+    result = await chat_session.ainstruct(
+        description=prompt,
+        requirements=[grounding_req, *[Requirement(r) for r in (requirements or [])]],
+        strategy=RejectionSamplingStrategy(loop_budget=2),
+        model_options=model_options,
+        await_result=True,
+    )
+
+    print(f"Result content: {result.value[:100] if result.value else 'None'}...")
+    return result
