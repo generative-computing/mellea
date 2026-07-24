@@ -303,35 +303,6 @@ For pages documenting features that don't yet exist in any released version, use
 
 Do not use per-feature version tags in prose — incomplete tagging misleads readers.
 
-### Backporting a fix to a published version
-
-`versioned_docs/version-X.Y.Z/` files are ordinary files in the repo tree, not
-a separate deploy artifact. Editing one and merging to `main` is enough —
-`docs-publish.yml` rebuilds `Next` and every versioned snapshot on each push to
-`main` that touches `docs/**`, then redeploys the whole site
-(`force_orphan: true`), so the corrected page republishes under that version's
-tab with no extra workflow step.
-
-Backport a doc change into a published version's snapshot when it:
-
-- Corrects a factual error that was already wrong in the frozen snapshot, or
-- Documents a breaking or behavioural change that shipped **in** that version
-  (e.g. a changed exception type) — readers on the stable tab should see it,
-  not only `Next`.
-
-Don't backport new features or prose/style improvements that weren't true of
-the docs at release time — that would misrepresent the historical snapshot.
-When you do backport, mirror the same edit into both `docs/docs/` (`Next`) and
-the affected `versioned_docs/version-X.Y.Z/` copies in the same PR, and say so
-in the PR description.
-
-This applies to hand-authored pages. Don't hand-edit a versioned snapshot's
-copy of the generated API or CLI reference (`api/**`, `reference/cli.md`) —
-those are produced by `tooling/docs-autogen/build.py` and nothing ever
-re-runs it for an already-released version, so a manual edit would silently
-drift from its source the next time that page's docstring changes. Fix the
-docstring and file an issue against the generator instead.
-
 ---
 
 ## Deprecation
