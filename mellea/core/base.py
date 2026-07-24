@@ -1951,7 +1951,7 @@ class TemplateRepresentation:
         tools (dict[str, AbstractMelleaTool] | None): Tools available for this representation,
             keyed by the tool's function name. Defaults to `None`.
         tool_name_mapping (dict[str, str] | None): Optional mapping from original tool names to
-            renamed tool names (e.g., for conflict avoidance via prefixing like "search" → "component0.search").
+            renamed tool names (e.g., for conflict avoidance via prefixing like "search" → "component_a1b2c3d4.search").
             Used during tool extraction to support auto-prefixing of component tools. Defaults to `None`.
         fields (list[Any] | None): An optional ordered list of field values for positional templates.
         template (str | None): An optional Jinja2 template string to use when rendering.
@@ -1973,6 +1973,12 @@ class TemplateRepresentation:
         tool_name (str | None): For a `role="tool"` component, the name of the tool
             whose result this message carries (e.g. Ollama's tool-result turn keys on
             it). Defaults to `None`.
+        component_id (str | None): Hex-encoded object identifier for the component (e.g., "a1b2c3d4").
+            Used for stable component identification and tool prefixing across turns. Defaults to `None`.
+        component_type (str | None): The class name of the component (e.g., "Table", "Message").
+            Useful for debugging and observability. Defaults to `None`.
+        component_description (str | None): Optional human-readable description of the component.
+            Defaults to `None`.
 
     """
 
@@ -1995,6 +2001,9 @@ class TemplateRepresentation:
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
+    component_id: str | None = None
+    component_type: str | None = None
+    component_description: str | None = None
 
 
 @dataclass
