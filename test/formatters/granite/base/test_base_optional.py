@@ -3,7 +3,26 @@
 
 import pytest
 
-from mellea.formatters.granite.base.optional import nltk_check
+from mellea.formatters.granite.base import optional, util
+from mellea.formatters.granite.base.optional import import_optional, nltk_check
+
+
+class TestImportOptional:
+    """Verify import_optional re-raises ImportError and is single-sourced."""
+
+    def test_reraises_import_error(self):
+        with pytest.raises(ImportError):
+            with import_optional("hf"):
+                raise ImportError("No module named 'torch'")
+
+    def test_no_error_passes_through(self):
+        with import_optional("hf"):
+            pass  # no exception — should succeed silently
+
+    def test_util_reexports_optional(self):
+        # Single source of truth: util must re-export optional's object,
+        # not define its own duplicate.
+        assert util.import_optional is optional.import_optional
 
 
 class TestNltkCheck:

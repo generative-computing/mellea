@@ -6,10 +6,8 @@
 # Standard
 from __future__ import annotations
 
-import contextlib
 import itertools
 import json
-import logging
 import os
 import uuid
 from typing import TYPE_CHECKING
@@ -25,27 +23,10 @@ if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
+from .optional import import_optional
 from .types import ChatCompletionResponse, ChatCompletionResponseChoice
 
-
-@contextlib.contextmanager
-def import_optional(extra_name: str):
-    """Handle optional imports.
-
-    Args:
-        extra_name: Package extra to suggest in the install hint
-            (e.g. `pip install mellea[extra_name]`).
-    """
-    try:
-        yield
-    except ImportError as err:
-        logging.warning(
-            "%s.\nHINT: You may need to pip install %s[%s]",
-            err,
-            __package__,
-            extra_name,
-        )
-        raise
+__all__ = ["import_optional"]
 
 
 def random_uuid() -> str:
