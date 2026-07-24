@@ -93,20 +93,46 @@ def test_add_tools_from_model_options_map():
 
 
 def test_add_tools_from_context_actions():
+    import re
+
     ftc1 = FakeToolComponentWithExtraTool()
     ftc2 = FakeToolComponent()
+
+    # Extract component IDs before adding tools (ID is based on Python object identity)
+    ftc1_id = hex(id(ftc1))[-8:]
+    ftc2_id = hex(id(ftc2))[-8:]
 
     ctx_actions = [CBlock("Hello"), ftc1, ftc2]
     tools = {}
     add_tools_from_context_actions(tools, ctx_actions)
 
-    # Check that tools with the same name get properly overwritten in order of ctx.
-    tool1 = tools["tool1"]._call_tool
-    assert tool1 == ftc2.tool1, f"{tool1} should == {ftc2.tool1}"
+    # With auto-prefixing using component IDs, tools with the same name no longer collide.
+    # Both are preserved with prefixed names: component_{ID}.tool1
+    tool1_key_ftc1 = f"component_{ftc1_id}.tool1"
+    tool1_key_ftc2 = f"component_{ftc2_id}.tool1"
 
-    # Check that tools that aren't overwritten are still there.
-    tool2 = tools["tool2"]._call_tool
+    assert tool1_key_ftc1 in tools, f"Expected {tool1_key_ftc1} in tools"
+    assert tool1_key_ftc2 in tools, f"Expected {tool1_key_ftc2} in tools"
+
+    tool1_from_ftc1 = tools[tool1_key_ftc1]._call_tool
+    assert tool1_from_ftc1 == ftc1.tool1, f"{tool1_from_ftc1} should == {ftc1.tool1}"
+
+    tool1_from_ftc2 = tools[tool1_key_ftc2]._call_tool
+    assert tool1_from_ftc2 == ftc2.tool1, f"{tool1_from_ftc2} should == {ftc2.tool1}"
+
+    # Check that tools that aren't duplicated are still there with prefixed names.
+    tool2_key = f"component_{ftc1_id}.tool2"
+    assert tool2_key in tools, f"Expected {tool2_key} in tools"
+
+    tool2 = tools[tool2_key]._call_tool
     assert tool2 == ftc1.tool2, f"{tool2} should == {ftc1.tool2}"
+
+    # Verify that all tool prefixes match the expected ID pattern
+    for tool_name in tools:
+        if tool_name.startswith("component_"):
+            assert re.match(r"component_[0-9a-f]{8}\.", tool_name), (
+                f"Tool name {tool_name} does not match ID-based prefix pattern"
+            )
 
 
 if __name__ == "__main__":
