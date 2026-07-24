@@ -211,12 +211,12 @@ async def test_react_final_answer_with_extra_tool_rejected():
     """final_answer alongside another tool in the same turn triggers assertion."""
     search = _make_tool("search", "found it")
     finalizer = MelleaTool.from_callable(_mellea_finalize_tool, MELLEA_FINALIZER_TOOL)
-    both = {
-        "search": ModelToolCall(name="search", func=search, args={}),
-        MELLEA_FINALIZER_TOOL: ModelToolCall(
+    both = [
+        ModelToolCall(name="search", func=search, args={}),
+        ModelToolCall(
             name=MELLEA_FINALIZER_TOOL, func=finalizer, args={"answer": "done"}
         ),
-    }
+    ]
     backend = ScriptedBackend([_ScriptedTurn(value="", tool_calls=both)])
 
     with pytest.raises(AssertionError, match="multiple tools were called with 'final'"):
