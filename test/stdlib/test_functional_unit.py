@@ -18,6 +18,7 @@ from mellea.stdlib.components import Document, Instruction, Message
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.functional import (
     _parse_and_clean_image_args,
+    aact,
     achat,
     ainstruct,
     chat,
@@ -210,6 +211,78 @@ async def test_ainstruct_forwards_audio(mock_aact):
     instruction = mock_aact.call_args[0][0]
     assert isinstance(instruction, Instruction)
     assert instruction._audio == [audio]
+
+
+# --- act/aact accept CBlock and ModelOutputThunk (issue #356) ---
+
+
+def _default_strategy(func) -> object:
+    """Return the default value of the `strategy` parameter of `func`."""
+    import inspect
+
+    return inspect.signature(func).parameters["strategy"].default
+
+
+def test_act_default_strategy_is_none():
+    """act's default sampling strategy must be None (issue #356, decision #2)."""
+    from mellea.stdlib.functional import act
+    from mellea.stdlib.session import MelleaSession
+
+    assert _default_strategy(act) is None
+    assert _default_strategy(MelleaSession.act) is None
+
+
+def test_instruct_default_strategy_unchanged():
+    """instruct keeps its RejectionSamplingStrategy default (scope: act only)."""
+    from mellea.stdlib.functional import instruct
+    from mellea.stdlib.sampling import RejectionSamplingStrategy
+
+    assert isinstance(_default_strategy(instruct), RejectionSamplingStrategy)
+
+
+def _mock_backend_returning(value: str):
+    """Return a mock backend whose generate_from_context yields a computed MOT."""
+    from mellea.core import GenerateLog, ModelOutputThunk
+
+    backend = MagicMock()
+
+    async def mock_generate(action, *, ctx, **kwargs):
+        output = ModelOutputThunk(value)
+        output._generate_log = GenerateLog()
+        return output, ctx.add(action).add(output)
+
+    backend.generate_from_context = mock_generate
+    return backend
+
+
+@pytest.mark.asyncio
+async def test_aact_accepts_cblock_action():
+    """aact over a raw CBlock generates without sampling (issue #356)."""
+    from mellea.core import CBlock
+
+    backend = _mock_backend_returning("2")
+    ctx = SimpleContext()
+
+    out, new_ctx = await aact(CBlock("What is 1+1?"), ctx, backend, await_result=True)
+
+    assert str(out) == "2"
+    assert new_ctx is not ctx
+
+
+@pytest.mark.asyncio
+async def test_aact_accepts_mot_action():
+    """aact over a raw ModelOutputThunk generates without sampling (issue #356)."""
+    from mellea.core import ModelOutputThunk
+
+    backend = _mock_backend_returning("4")
+    ctx = SimpleContext()
+
+    out, new_ctx = await aact(
+        ModelOutputThunk("prior"), ctx, backend, await_result=True
+    )
+
+    assert str(out) == "4"
+    assert new_ctx is not ctx
 
 
 if __name__ == "__main__":

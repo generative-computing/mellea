@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from mellea.core import (
+    CBlock,
     ComputedModelOutputThunk,
     Context,
     GenerateLog,
@@ -444,6 +445,78 @@ async def test_backend_exception_does_not_mask_concurrent_success():
         "subsample peer raised an exception and prevented result from being successful"
     )
     assert len(result.sample_generations) >= 1
+
+
+# --- Sampling over non-Component actions (issue #356) ---
+
+
+async def test_sampling_over_cblock_action_does_not_raise(mocked_context_backend):
+    """A CBlock action has no `.parse`; sampling must fall back to `result.value`.
+
+    Regression test for #356: previously `action.parse(result)` raised
+    `AttributeError: 'CBlock' object has no attribute 'parse'`.
+    """
+    always_pass = Requirement(
+        "always_pass", validation_fn=lambda _ctx: ValidationResult(result=True)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=2, concurrency_budget=1)
+
+    result = await strategy.sample(
+        action=CBlock("What is 1+1?"),
+        context=ChatContext(),
+        backend=mocked_context_backend,
+        requirements=[always_pass],
+    )
+
+    assert result.success is True
+    # parsed_repr falls back to the raw model value for non-Component actions.
+    assert result.result.parsed_repr == "mocked"
+
+
+async def test_sampling_over_mot_action_does_not_raise(mocked_context_backend):
+    """A ModelOutputThunk action also lacks `.parse`; sampling must not raise."""
+    always_pass = Requirement(
+        "always_pass", validation_fn=lambda _ctx: ValidationResult(result=True)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=2, concurrency_budget=1)
+
+    result = await strategy.sample(
+        action=ModelOutputThunk("prior output"),
+        context=ChatContext(),
+        backend=mocked_context_backend,
+        requirements=[always_pass],
+    )
+
+    assert result.success is True
+    assert result.result.parsed_repr == "mocked"
+
+
+async def test_sampling_over_cblock_action_failing_requirement_does_not_raise(
+    mocked_context_backend,
+):
+    """A failing requirement over a CBlock must exercise the repair/append path.
+
+    The always-pass cases above only cover the happy path. When validation
+    fails, the strategy appends `next_action` to `sampled_actions` and calls
+    `repair` on the non-Component action (the sites carrying
+    `type: ignore[arg-type]`). This must exhaust the budget and return a
+    failed result rather than raising.
+    """
+    always_fail = Requirement(
+        "always_fail", validation_fn=lambda _ctx: ValidationResult(result=False)
+    )
+    strategy = RejectionSamplingStrategy(loop_budget=2, concurrency_budget=1)
+
+    result = await strategy.sample(
+        action=CBlock("What is 1+1?"),
+        context=ChatContext(),
+        backend=mocked_context_backend,
+        requirements=[always_fail],
+    )
+
+    assert result.success is False
+    # Even on the failure path, parsed_repr falls back to the raw model value.
+    assert result.result.parsed_repr == "mocked"
 
 
 if __name__ == "__main__":

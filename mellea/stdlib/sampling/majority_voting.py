@@ -13,8 +13,10 @@ from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
 from ...core import (
     Backend,
     BaseModelSubclass,
+    CBlock,
     Component,
     Context,
+    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -99,7 +101,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
     async def sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,

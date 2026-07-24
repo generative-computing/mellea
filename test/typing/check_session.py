@@ -8,15 +8,19 @@ from typing import Any, assert_type, cast
 from mellea.core import (
     AudioBlock,
     AudioUrlBlock,
+    CBlock,
     ComputedModelOutputThunk,
     ModelOutputThunk,
     SamplingResult,
 )
 from mellea.stdlib.components import Instruction
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
 s = cast(MelleaSession, None)
 action: Instruction = cast(Instruction, None)
+cblock_action: CBlock = cast(CBlock, None)
+mot_action: ModelOutputThunk[str] = cast(ModelOutputThunk[str], None)
 
 
 async def check_aact_computed() -> None:
@@ -30,8 +34,28 @@ async def check_aact_uncomputed() -> None:
 
 
 async def check_aact_sampling() -> None:
-    r = await s.aact(action, return_sampling_results=True)
+    strat = RejectionSamplingStrategy(loop_budget=2)
+    r = await s.aact(action, strategy=strat, return_sampling_results=True)
     assert_type(r, SamplingResult[str])
+
+
+async def check_aact_cblock_action() -> None:
+    # The core widening of #356: aact accepts a raw CBlock action. A CBlock is
+    # not generic, so S falls back to its Any default.
+    r = await s.aact(cblock_action, strategy=None, await_result=True)
+    assert_type(r, ComputedModelOutputThunk[Any])
+
+    u = await s.aact(cblock_action, strategy=None)
+    assert_type(u, ModelOutputThunk[Any])
+
+
+async def check_aact_mot_action() -> None:
+    # aact also accepts a ModelOutputThunk action.
+    r = await s.aact(mot_action, strategy=None, await_result=True)
+    assert_type(r, ComputedModelOutputThunk[Any])
+
+    u = await s.aact(mot_action, strategy=None)
+    assert_type(u, ModelOutputThunk[Any])
 
 
 async def check_ainstruct_computed() -> None:

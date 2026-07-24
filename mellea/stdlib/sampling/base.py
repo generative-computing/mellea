@@ -19,7 +19,7 @@ Sampling strategies control how Mellea handles validation failures during genera
 
 import abc
 import asyncio
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Generic
@@ -29,12 +29,15 @@ import tqdm
 from ...core import (
     Backend,
     BaseModelSubclass,
+    CBlock,
     Component,
     ComputedModelOutputThunk,
     Context,
     MelleaLogger,
+    ModelOutputThunk,
     Requirement,
     S,
+    SampleActionType,
     SamplingResult,
     SamplingStrategy,
     ValidationResult,
@@ -56,14 +59,14 @@ class _SamplingResultSlice(Generic[S]):
     generation: ComputedModelOutputThunk[S]
     validation: list[tuple[Requirement, ValidationResult]]
     context: Context
-    action: Component
+    action: SampleActionType
 
 
 def _get_sampling_result(
     slices: list[_SamplingResultSlice[S]],
     select_from_failure: Callable[
         [
-            list[Component],
+            Sequence[SampleActionType],
             list[ComputedModelOutputThunk],
             list[list[tuple[Requirement, ValidationResult]]],
         ],
@@ -77,7 +80,7 @@ def _get_sampling_result(
     """
     sample_generations: list[ComputedModelOutputThunk] = []
     sample_validations: list[list[tuple[Requirement, ValidationResult]]] = []
-    sample_actions: list[Component] = []
+    sample_actions: list[SampleActionType] = []
     sample_contexts: list[Context] = []
 
     success = False
@@ -159,10 +162,10 @@ class BaseSamplingStrategy(SamplingStrategy):
     def repair(
         old_ctx: Context,
         new_ctx: Context,
-        past_actions: list[Component],
+        past_actions: Sequence[SampleActionType],
         past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> tuple[Component, Context]:
+    ) -> tuple[SampleActionType, Context]:
         """Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
 
         Args:
@@ -182,7 +185,7 @@ class BaseSamplingStrategy(SamplingStrategy):
     @staticmethod
     @abc.abstractmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: Sequence[SampleActionType],
         sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -200,7 +203,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
     async def sample(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -214,7 +217,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         """This method performs a sampling operation based on the given instruction.
 
         Args:
-            action : The action object to be sampled.
+            action : The action object to be sampled. A `Component`, `CBlock`, or `ModelOutputThunk`.
             context: The context to be passed to the sampling strategy.
             backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
@@ -445,7 +448,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         subsample_index: int,
         iterations: int,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         context: Context,
         backend: Backend,
         requirements: list[Requirement],
@@ -464,7 +467,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         flog = MelleaLogger.get_logger()
         sampled_results: list[ComputedModelOutputThunk[S]] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        sampled_actions: list[Component] = []
+        sampled_actions: list[SampleActionType] = []
 
         next_action = deepcopy(action)
         next_context = context
@@ -489,7 +492,18 @@ class BaseSamplingStrategy(SamplingStrategy):
                 # type / value. Explicitly overwrite that here.
                 # TODO: See if there's a more elegant way for this so that each sampling
                 # strategy doesn't have to re-implement it.
-                result.parsed_repr = action.parse(result)
+                # Only a Component knows how to `.parse()` a result. A CBlock has no
+                # parse semantics, and a ModelOutputThunk does not retain its
+                # originating Component — only the already-parsed *value* (see
+                # ModelOutputThunk.avalue in core/base.py, which stores
+                # `parsed_repr = value` for CBlock/MOT actions). So there is no
+                # Component to re-parse against, even for a MOT[Component]; fall back
+                # to the raw value (mirrors how backends handle non-Component actions).
+                result.parsed_repr = (
+                    action.parse(result)
+                    if isinstance(action, Component)
+                    else result.value  # type: ignore[assignment]
+                )
 
                 # validation pass
                 val_scores_co = mfuncs.avalidate(
@@ -592,7 +606,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: Sequence[SampleActionType],
         sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -612,10 +626,10 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
     def repair(
         old_ctx: Context,
         new_ctx: Context,
-        past_actions: list[Component],
+        past_actions: Sequence[SampleActionType],
         past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> tuple[Component, Context]:
+    ) -> tuple[SampleActionType, Context]:
         """Always returns the unedited, last action.
 
         Args:
@@ -636,7 +650,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: Sequence[SampleActionType],
         sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -656,10 +670,10 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
     def repair(
         old_ctx: Context,
         new_ctx: Context,
-        past_actions: list[Component],
+        past_actions: Sequence[SampleActionType],
         past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> tuple[Component, Context]:
+    ) -> tuple[SampleActionType, Context]:
         """Adds a description of the requirements that failed to a copy of the original instruction.
 
         Args:
@@ -701,7 +715,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: Sequence[SampleActionType],
         sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -724,10 +738,10 @@ class MultiTurnStrategy(BaseSamplingStrategy):
     def repair(
         old_ctx: Context,
         new_ctx: Context,
-        past_actions: list[Component],
+        past_actions: Sequence[SampleActionType],
         past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> tuple[Component, Context]:
+    ) -> tuple[SampleActionType, Context]:
         """Returns a Message with a description (and validation reasons) of the failed requirements.
 
         Args:

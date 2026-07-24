@@ -481,10 +481,10 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: SamplingStrategy | None = None,
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -494,10 +494,10 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: SamplingStrategy | None = None,
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -506,10 +506,10 @@ class MelleaSession:
 
     def act(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: SamplingStrategy | None = None,
         return_sampling_results: bool = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -518,9 +518,9 @@ class MelleaSession:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
-            action: the Component from which to generate.
+            action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
             requirements: used as additional requirements when a sampling strategy is provided
-            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
             format: Constrains generation to JSON matching this Pydantic
                 schema. The result's `.value` is always a JSON string — not a
@@ -815,7 +815,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
         strategy: None = None,
@@ -829,7 +829,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy,
@@ -843,7 +843,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
         strategy: None = None,
@@ -857,10 +857,10 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: SamplingStrategy,
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -870,10 +870,10 @@ class MelleaSession:
 
     async def aact(
         self,
-        action: Component[S],
+        action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: SamplingStrategy | None = None,
         return_sampling_results: bool = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -883,9 +883,9 @@ class MelleaSession:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
-            action: the Component from which to generate.
-            requirements: used as additional requirements when a sampling strategy is provided
-            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+            action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
+            requirements: additional requirements checked by the sampling strategy. Providing requirements without a `strategy` logs a warning, since requirements are only validated by a strategy.
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — in that case no validate/repair loop runs and, unless `await_result=True`, the returned thunk is uncomputed. Required when `return_sampling_results=True`.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
             format: Constrains generation to JSON matching this Pydantic
                 schema. The result's `.value` is always a JSON string — not a
@@ -894,6 +894,9 @@ class MelleaSession:
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
+
+        Raises:
+            ValueError: if `return_sampling_results=True` without a `strategy`.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
