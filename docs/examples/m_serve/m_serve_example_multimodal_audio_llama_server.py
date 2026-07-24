@@ -10,6 +10,10 @@ Unlike the Ollama version, llama-server with a multimodal Gemma checkpoint
 supports native audio-text-to-text: audio and text are sent together in a
 single request and the model responds in text.
 
+The session uses `ChatContext` so conversation history accumulates across
+turns: follow-up questions work without re-uploading audio.  Caller-supplied
+`requirements` and `model_options` are forwarded to `ainstruct`.
+
 Prerequisites:
     - llama-server running with an audio-capable Gemma checkpoint, e.g.:
 
@@ -38,22 +42,27 @@ Then test with:
 """
 
 import os
-from typing import Any, cast
+from typing import Any
 
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk
+from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk, Requirement
 from mellea.serve import ChatMessage
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 _base_url = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8088/v1")
 _api_key = os.environ.get("LLAMA_SERVER_API_KEY", "default")
 _model_id = os.environ.get("LLAMA_SERVER_MODEL", "gemma-4-12b-it-Q8_0.gguf")
 
+# ChatContext accumulates conversation history across turns so follow-up
+# questions work without re-uploading audio.
 session = start_session(
     "openai",
     model_id=_model_id,
     base_url=_base_url,
     api_key=_api_key,
+    ctx=ChatContext(),
     model_options={ModelOption.MAX_NEW_TOKENS: 1000, "modalities": ["text"]},
 )
 
@@ -63,10 +72,12 @@ async def serve(
     requirements: list[str] | None = None,
     model_options: dict[str, Any] | None = None,
 ) -> ModelOutputThunk:
-    """Serve function that supports native audio-text-to-text via llama-server."""
+    """Serve function that supports native audio-text-to-text via llama-server.
 
-    _ = requirements, model_options  # Not used in this example
-
+    The session retains conversation history across calls (via ``ChatContext``),
+    so follow-up questions work without re-uploading audio.  Caller-supplied
+    ``requirements`` and ``model_options`` are forwarded to ``ainstruct``.
+    """
     if not input:
         return ModelOutputThunk(value="No input provided")
 
@@ -75,7 +86,20 @@ async def serve(
     audio_blocks: list[AudioBlock | AudioUrlBlock] = list(
         last_message.get_audio_blocks()
     )
-    result = session.chat(content=text, audio=audio_blocks)
 
-    print(f"Result content: {result.content[:100] if result.content else 'None'}...")
-    return cast(ModelOutputThunk, session.ctx.as_list()[-1])
+    if not audio_blocks:
+        raise ValueError(
+            "No audio provided. Please include an audio clip in your message."
+        )
+
+    result = await session.ainstruct(
+        description=text,
+        audio=audio_blocks,
+        requirements=[Requirement(r) for r in (requirements or [])],
+        strategy=RejectionSamplingStrategy(loop_budget=2),
+        model_options=model_options,
+        await_result=True,
+    )
+
+    print(f"Result content: {result.value[:100] if result.value else 'None'}...")
+    return result
