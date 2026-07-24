@@ -3,10 +3,11 @@
 
 """Mypy overload-resolution checks for functional aact."""
 
-from typing import assert_type, cast
+from typing import Any, assert_type, cast
 
 from mellea.core import (
     Backend,
+    CBlock,
     ComputedModelOutputThunk,
     Context,
     ModelOutputThunk,
@@ -19,6 +20,8 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 ctx = cast(Context, None)
 backend = cast(Backend, None)
 action: Instruction = cast(Instruction, None)
+cblock_action: CBlock = cast(CBlock, None)
+mot_action: ModelOutputThunk[str] = cast(ModelOutputThunk[str], None)
 
 
 async def check_computed_await() -> None:
@@ -41,3 +44,22 @@ async def check_sampling() -> None:
     strat = RejectionSamplingStrategy(loop_budget=2)
     r = await aact(action, ctx, backend, strategy=strat, return_sampling_results=True)
     assert_type(r, SamplingResult[str])
+
+
+async def check_cblock_action() -> None:
+    # The core widening of #356: aact accepts a raw CBlock action. A CBlock is
+    # not generic, so S falls back to its Any default.
+    r = await aact(cblock_action, ctx, backend, strategy=None, await_result=True)
+    assert_type(r, tuple[ComputedModelOutputThunk[Any], Context])
+
+    u = await aact(cblock_action, ctx, backend, strategy=None)
+    assert_type(u, tuple[ModelOutputThunk[Any], Context])
+
+
+async def check_mot_action() -> None:
+    # aact also accepts a ModelOutputThunk action.
+    r = await aact(mot_action, ctx, backend, strategy=None, await_result=True)
+    assert_type(r, tuple[ComputedModelOutputThunk[Any], Context])
+
+    u = await aact(mot_action, ctx, backend, strategy=None)
+    assert_type(u, tuple[ModelOutputThunk[Any], Context])
