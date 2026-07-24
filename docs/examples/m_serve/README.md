@@ -33,12 +33,6 @@ Example of serving a vision model through `m serve` with image inputs.
 ### client_multimodal_image.py
 Client code for testing the multimodal image endpoint with an OpenAI-compatible request.
 
-### m_serve_example_multimodal_audio.py
-
-Example of an audio-text-to-text serve function using Ollama + granite3.3.
-**Note:** granite3.3 is not an audio model; Ollama rejects audio input for it.
-See the llama-server and granite two-step variants below for working examples.
-
 ### m_serve_example_multimodal_audio_llama_server.py
 
 Audio-text-to-text serve function using llama-server with a Gemma audio
