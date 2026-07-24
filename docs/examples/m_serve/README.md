@@ -50,9 +50,10 @@ handles the multimodal fusion natively. Requires a running llama-server with
 
 Audio-text-to-text serve function using a two-step Ollama/Granite pipeline:
 
-1. **granite-speech** (`gabegoodhart/granite4.1-speech:2b`) transcribes the
-   audio via the Ollama SDK's native `audio` message field.
-2. **granite3.3** answers the user's question with the transcript injected
+1. **granite-speech** (`hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`)
+   transcribes the audio via Ollama's OpenAI-compatible
+   `/v1/audio/transcriptions` endpoint.
+2. **granite4.1:3b** answers the user's question with the transcript injected
    into the prompt.
 
 Both models run locally through Ollama — no llama-server or cloud API needed.
@@ -182,8 +183,8 @@ uv run python docs/examples/m_serve/client_multimodal_audio.py
 Requires both models pulled locally:
 
 ```bash
-ollama pull gabegoodhart/granite4.1-speech:2b
-ollama pull granite3.3
+ollama pull hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M
+ollama pull granite4.1:3b
 ```
 
 ```bash
