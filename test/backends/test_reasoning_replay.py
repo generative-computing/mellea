@@ -185,7 +185,7 @@ async def test_openai_tool_turn_reasoning_survives_parse_to_wire(
     # Simulate what a backend produces on a tool-calling turn: tool_calls set and
     # reasoning captured on the MOT. `_parse` only checks `tool_calls is not None`,
     # never the value — the cast keeps the type checker happy without a real tool.
-    mot = ModelOutputThunk(value="v", tool_calls={"fn": cast(ModelToolCall, None)})
+    mot = ModelOutputThunk(value="v", tool_calls=[cast(ModelToolCall, None)])
     mot.thinking = "reasoning that led to the tool call"
     mot.raw = RawProviderResponse(
         provider="openai",

@@ -318,9 +318,7 @@ def test_parse_no_thinking_stays_none():
 
 def test_parse_tool_calls_ollama():
     msg = Message("user", "q")
-    mot = ModelOutputThunk(
-        value="v", tool_calls={"some_fn": _make_tool_call("some_fn")}
-    )
+    mot = ModelOutputThunk(value="v", tool_calls=[_make_tool_call("some_fn")])
     fake_calls = [{"name": "some_fn"}]
     fake_response = type(
         "Resp",

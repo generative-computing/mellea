@@ -625,10 +625,9 @@ class WatsonxAIBackend(FormatterBackend):
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:
-                mot.tool_calls = {}
-            # Merge the tool_chunk dict.
-            for key, val in tool_chunk.items():
-                mot.tool_calls[key] = val
+                mot.tool_calls = []
+            # Extend the tool_chunk list.
+            mot.tool_calls.extend(tool_chunk)
 
         # Populate usage when the response carries it (WatsonX uses OpenAI format).
         if usage := response.get("usage"):
@@ -767,8 +766,8 @@ class WatsonxAIBackend(FormatterBackend):
 
     def _extract_model_tool_requests(
         self, tools: dict[str, AbstractMelleaTool], chat_response: dict
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = {}
+    ) -> list[ModelToolCall] | None:
+        model_tool_calls: list[ModelToolCall] = []
         for tool_call in chat_response["choices"][0]["message"].get("tool_calls", []):
             tool_name = tool_call["function"]["name"]
             tool_args = tool_call["function"]["arguments"]
@@ -785,8 +784,10 @@ class WatsonxAIBackend(FormatterBackend):
 
             # Validate and coerce argument types
             validated_args = validate_tool_arguments(func, args, strict=False)
-            model_tool_calls[tool_name] = ModelToolCall(
-                tool_name, func, validated_args, tool_call_id=tool_call.get("id")
+            model_tool_calls.append(
+                ModelToolCall(
+                    tool_name, func, validated_args, tool_call_id=tool_call.get("id")
+                )
             )
 
         if len(model_tool_calls) > 0:

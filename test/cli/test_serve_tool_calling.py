@@ -96,11 +96,11 @@ class TestToolCalling:
         # Setup mock output with tool calls
         mock_output = ModelOutputThunk("I'll check the weather for you.")
         mock_tool = MockTool()
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         # Create endpoint and call it
@@ -131,14 +131,14 @@ class TestToolCalling:
         """Test handling multiple tool calls in a single response."""
         mock_output = ModelOutputThunk("I'll check multiple locations.")
         mock_tool = MockTool()
-        mock_output.tool_calls = {
-            "get_weather_paris": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             ),
-            "get_weather_london": ModelToolCall(
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "London"}
             ),
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         endpoint = make_chat_endpoint(mock_module)
@@ -178,8 +178,8 @@ class TestToolCalling:
         finish_reason='stop' with tool_calls=None.
         """
         mock_output = ModelOutputThunk("Hello! How can I help?")
-        # Set tool_calls to empty dict (the bug case)
-        mock_output.tool_calls = {}
+        # Set tool_calls to empty list (the bug case)
+        mock_output.tool_calls = []
         mock_module.serve.return_value = mock_output
 
         endpoint = make_chat_endpoint(mock_module)
@@ -298,8 +298,8 @@ class TestToolCalling:
         """Test tool calls with complex nested arguments."""
         mock_output = ModelOutputThunk("Processing complex request.")
         mock_tool = MockTool()
-        mock_output.tool_calls = {
-            "complex_tool": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="complex_function",
                 func=mock_tool,
                 args={
@@ -312,7 +312,7 @@ class TestToolCalling:
                     "tags": ["weather", "forecast"],
                 },
             )
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         endpoint = make_chat_endpoint(mock_module)
@@ -333,11 +333,11 @@ class TestToolCalling:
         """Test that usage info is included alongside tool calls."""
         mock_output = ModelOutputThunk("Calling tool.")
         mock_tool = MockTool()
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
-        }
+        ]
         mock_output.generation.usage = {
             "prompt_tokens": 50,
             "completion_tokens": 20,

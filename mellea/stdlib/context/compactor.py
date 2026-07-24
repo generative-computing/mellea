@@ -579,7 +579,7 @@ class LLMSummarizeCompactor:
                     lines.append(f"assistant: {c.value}")
                 elif c.tool_calls:
                     rendered = ", ".join(
-                        f"{name}({dict(tc.args)})" for name, tc in c.tool_calls.items()
+                        f"{tc.name}({dict(tc.args)})" for tc in c.tool_calls
                     )
                     lines.append(f"assistant called tools: {rendered}")
                 # else: thunk with neither value nor tool_calls is skipped —

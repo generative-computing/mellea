@@ -18,6 +18,7 @@ from mellea.core import (
     ImageBlock,
     ImageUrlBlock,
     ModelOutputThunk,
+    ModelToolCall,
     RawProviderResponse,
     blockify,
     get_audio_from_component,
@@ -537,10 +538,17 @@ def test_mot_copy_from_copies_meta():
 
 
 def test_mot_copy_from_copies_tool_calls():
+    from mellea.backends.tools import MelleaTool
+
+    def fn() -> str:
+        return "result"
+
+    tool = MelleaTool.from_callable(fn, "fn")
+    tc = ModelToolCall(name="fn", func=tool, args={})
     a = ModelOutputThunk(value=None)
-    b = ModelOutputThunk(value="x", tool_calls={"fn": None})
+    b = ModelOutputThunk(value="x", tool_calls=[tc])
     a._copy_from(b)
-    assert a.tool_calls == {"fn": None}
+    assert a.tool_calls == [tc]
 
 
 def _make_mot_with_generation() -> ModelOutputThunk:

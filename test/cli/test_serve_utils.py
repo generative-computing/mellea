@@ -227,7 +227,9 @@ class TestExtractFinishReason:
 
     def test_tool_calls_attribute_short_circuits(self):
         """Test that a set tool_calls attribute returns 'tool_calls' regardless of raw."""
-        output = ModelOutputThunk("test response", tool_calls={"fn": None})
+        from unittest.mock import Mock
+
+        output = ModelOutputThunk("test response", tool_calls=[Mock(name="fn")])
         output.raw = RawProviderResponse(
             provider="openai",
             response={"choices": [{"finish_reason": "stop", "index": 0}]},

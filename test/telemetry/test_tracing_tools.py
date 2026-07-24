@@ -97,7 +97,7 @@ def test_session_tool_calls_emit_parented_spans_per_call(span_exporter):
         raise ValueError("boom")
 
     mot: ModelOutputThunk = ModelOutputThunk(value="")
-    mot.tool_calls = {"ok": _tool_call(_ok, "ok"), "boom": _tool_call(_boom, "boom")}
+    mot.tool_calls = [_tool_call(_ok, "ok"), _tool_call(_boom, "boom")]
 
     class _Subject:
         """Trivial mify-able object to transform."""

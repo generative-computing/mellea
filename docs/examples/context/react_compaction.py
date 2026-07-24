@@ -54,7 +54,7 @@ from mellea.stdlib.frameworks.react import react
 @dataclass
 class _ScriptedTurn:
     value: str
-    tool_calls: dict[str, ModelToolCall] | None = None
+    tool_calls: list[ModelToolCall] | None = None
 
 
 class ScriptedBackend(Backend):
@@ -100,7 +100,7 @@ def _tool(name: str, return_value: str = "ok") -> MelleaTool:
 
 def _tool_call(tool_name: str, tool: MelleaTool, thought: str) -> _ScriptedTurn:
     tc = ModelToolCall(name=tool_name, func=tool, args={})
-    return _ScriptedTurn(value=thought, tool_calls={tool_name: tc})
+    return _ScriptedTurn(value=thought, tool_calls=[tc])
 
 
 def _final(answer: str) -> _ScriptedTurn:
@@ -108,7 +108,7 @@ def _final(answer: str) -> _ScriptedTurn:
     tc = ModelToolCall(
         name=MELLEA_FINALIZER_TOOL, func=finalizer, args={"answer": answer}
     )
-    return _ScriptedTurn(value="", tool_calls={MELLEA_FINALIZER_TOOL: tc})
+    return _ScriptedTurn(value="", tool_calls=[tc])
 
 
 # --------------------------------------------------------------------------- #

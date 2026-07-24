@@ -46,7 +46,7 @@ class _ScriptedTurn:
     """A single scripted backend response."""
 
     value: str
-    tool_calls: dict[str, ModelToolCall] | None = None
+    tool_calls: list[ModelToolCall] | None = None
 
 
 class ScriptedBackend(Backend):
@@ -105,7 +105,7 @@ def _final_answer_call(answer: str = "42") -> _ScriptedTurn:
     """Script a turn where the model calls final_answer with real arg flow."""
     tool = MelleaTool.from_callable(_mellea_finalize_tool, MELLEA_FINALIZER_TOOL)
     tc = ModelToolCall(name=MELLEA_FINALIZER_TOOL, func=tool, args={"answer": answer})
-    return _ScriptedTurn(value="", tool_calls={MELLEA_FINALIZER_TOOL: tc})
+    return _ScriptedTurn(value="", tool_calls=[tc])
 
 
 def _tool_call_turn(
@@ -113,7 +113,7 @@ def _tool_call_turn(
 ) -> _ScriptedTurn:
     """Script a turn where the model calls a non-final tool."""
     tc = ModelToolCall(name=tool_name, func=tool, args={})
-    return _ScriptedTurn(value=thought, tool_calls={tool_name: tc})
+    return _ScriptedTurn(value=thought, tool_calls=[tc])
 
 
 # --- react loop termination ---
@@ -211,12 +211,12 @@ async def test_react_final_answer_with_extra_tool_rejected():
     """final_answer alongside another tool in the same turn triggers assertion."""
     search = _make_tool("search", "found it")
     finalizer = MelleaTool.from_callable(_mellea_finalize_tool, MELLEA_FINALIZER_TOOL)
-    both = {
-        "search": ModelToolCall(name="search", func=search, args={}),
-        MELLEA_FINALIZER_TOOL: ModelToolCall(
+    both = [
+        ModelToolCall(name="search", func=search, args={}),
+        ModelToolCall(
             name=MELLEA_FINALIZER_TOOL, func=finalizer, args={"answer": "done"}
         ),
-    }
+    ]
     backend = ScriptedBackend([_ScriptedTurn(value="", tool_calls=both)])
 
     with pytest.raises(AssertionError, match="multiple tools were called with 'final'"):
