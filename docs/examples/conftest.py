@@ -630,38 +630,14 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 def _evict_ollama_models() -> None:
-    """Evict all currently loaded Ollama models (best-effort)."""
-    import requests
+    """Evict all currently loaded Ollama models (best-effort).
 
-    host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
-    if ":" in host:
-        host, port = host.rsplit(":", 1)
-    else:
-        port = os.environ.get("OLLAMA_PORT", "11434")
+    Thin wrapper over the shared eviction helper that logs successes to stderr.
+    See `test._ollama_utils.evict_all_loaded_ollama_models` for the core logic.
+    """
+    from test._ollama_utils import evict_all_loaded_ollama_models
 
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-
-    base_url = f"http://{host}:{port}"
-
-    try:
-        resp = requests.get(f"{base_url}/api/ps", timeout=5)
-        resp.raise_for_status()
-        loaded = resp.json().get("models", [])
-    except Exception:
-        return
-
-    for entry in loaded:
-        model_name = entry.get("name") or entry.get("model", "unknown")
-        try:
-            requests.post(
-                f"{base_url}/api/generate",
-                json={"model": model_name, "keep_alive": 0},
-                timeout=10,
-            )
-            print(f"ollama-evict: evicted {model_name}", file=sys.stderr)
-        except Exception:
-            pass
+    evict_all_loaded_ollama_models(on_info=lambda msg: print(msg, file=sys.stderr))
 
 
 def pytest_collection_modifyitems(items):

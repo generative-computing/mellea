@@ -12,6 +12,7 @@ import pytest
 import requests
 
 from mellea.core import MelleaLogger
+from test._ollama_utils import evict_all_loaded_ollama_models
 
 # ============================================================================
 # HuggingFace Hub Skip Helper
@@ -676,48 +677,12 @@ def memory_cleaner():
 def evict_ollama_models() -> None:
     """Evict all currently loaded Ollama models to free memory.
 
-    Queries /api/ps to discover loaded models, then sends keep_alive=0
-    to each via /api/generate. Prevents heavyweight models from starving
-    subsequent tests of memory (see #798).
-
-    Best-effort: errors are logged but never raised.
+    Thin wrapper over the shared eviction helper that routes messages through
+    `FancyLogger`. See `test._ollama_utils.evict_all_loaded_ollama_models` for
+    the core logic.
     """
     logger = MelleaLogger.get_logger()
-
-    # Parse OLLAMA_HOST which may be "host", "host:port", or absent.
-    host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
-    if ":" in host:
-        host, port = host.rsplit(":", 1)
-    else:
-        port = os.environ.get("OLLAMA_PORT", "11434")
-
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-
-    base_url = f"http://{host}:{port}"
-
-    try:
-        resp = requests.get(f"{base_url}/api/ps", timeout=5)
-        resp.raise_for_status()
-        loaded = resp.json().get("models", [])
-    except Exception as e:
-        logger.warning("ollama-evict: could not query loaded models: %s", e)
-        return
-
-    if not loaded:
-        return
-
-    for entry in loaded:
-        model_name = entry.get("name") or entry.get("model", "unknown")
-        try:
-            requests.post(
-                f"{base_url}/api/generate",
-                json={"model": model_name, "keep_alive": 0},
-                timeout=10,
-            )
-            logger.info("ollama-evict: evicted %s", model_name)
-        except Exception as e:
-            logger.warning("ollama-evict: failed to evict %s: %s", model_name, e)
+    evict_all_loaded_ollama_models(on_info=logger.info, on_warning=logger.warning)
 
 
 @pytest.fixture(autouse=True, scope="session")
