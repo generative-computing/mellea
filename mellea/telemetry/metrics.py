@@ -973,14 +973,29 @@ def record_tool_call(tool: str, status: str) -> None:
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
-        tool: Name of the tool that was invoked.
+        tool: Name of the tool that was invoked (e.g., "component_203e1b50.query" or "my_tool").
         status: `"success"` if the tool executed without error, `"failure"` otherwise.
+
+    Attributes recorded:
+        - tool: Full tool name
+        - status: Execution status
+        - component_id: Extracted from tool name if available (e.g., "203e1b50" from "component_203e1b50.query")
     """
     if _meter is None:
         return
 
+    attributes: dict[str, str] = {"tool": tool, "status": status}
+
+    # Extract component_id from prefixed tool name for better observability
+    # Format: component_{component_id}.{original_tool_name}
+    if tool.startswith("component_"):
+        parts = tool.split(".", 1)
+        if len(parts) == 2:
+            component_id = parts[0].replace("component_", "")
+            attributes["component_id"] = component_id
+
     counter = _get_tool_calls_counter()
-    counter.add(1, {"gen_ai.tool.name": tool, "status": status})
+    counter.add(1, attributes)
 
 
 __all__ = [
