@@ -105,7 +105,7 @@ def _final_answer_call(answer: str = "42") -> _ScriptedTurn:
     """Script a turn where the model calls final_answer with real arg flow."""
     tool = MelleaTool.from_callable(_mellea_finalize_tool, MELLEA_FINALIZER_TOOL)
     tc = ModelToolCall(name=MELLEA_FINALIZER_TOOL, func=tool, args={"answer": answer})
-    return _ScriptedTurn(value="", tool_calls={MELLEA_FINALIZER_TOOL: tc})
+    return _ScriptedTurn(value="", tool_calls=[tc])
 
 
 def _tool_call_turn(
