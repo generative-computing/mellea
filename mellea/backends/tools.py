@@ -369,8 +369,9 @@ def add_tools_from_context_actions(
 ):
     """Extract and merge tools from component actions, with auto-prefixing to avoid collisions.
 
-    Tools from each component are prefixed with "componentN." to prevent naming collisions when
-    multiple components define tools with identical names. This allows safe composition of
+    Tools from each component are prefixed with "component_{ID}." to prevent naming collisions when
+    multiple components define tools with identical names. The component ID is derived from the
+    component object's identity for multi-turn stability. This allows safe composition of
     multiple agents or tool-bearing components.
 
     Args:
@@ -381,28 +382,36 @@ def add_tools_from_context_actions(
     if ctx_actions is None:
         return
 
-    component_index = 0
     for action in ctx_actions:
         if not isinstance(action, Component):
             continue  # Only components have template representations.
 
         tr = action.format_for_llm()
         if not isinstance(tr, TemplateRepresentation) or tr.tools is None:
-            component_index += 1
             continue
+
+        # Extract component metadata for identification and observability
+        component_id = hex(id(action))[-8:]
+        component_type = type(action).__name__
+        component_description = getattr(action, "description", None)
+
+        # Store metadata on template representation
+        tr.component_id = component_id
+        tr.component_type = component_type
+        tr.component_description = component_description
 
         # Track mapping from original to prefixed names
         name_mapping = {}
 
         for original_tool_name, tool_instance in tr.tools.items():
-            # Auto-prefix tool name to avoid collisions
-            prefixed_name = f"component{component_index}.{original_tool_name}"
+            # Auto-prefix tool name using component ID to avoid collisions
+            prefixed_name = f"component_{component_id}.{original_tool_name}"
 
             # Detect collision and warn if it still occurs (defensive)
             if prefixed_name in tools_dict:
                 MelleaLogger.get_logger().warning(
                     f"Tool name collision even after prefixing: '{prefixed_name}' "
-                    f"already exists (component {component_index}); skipping tool '{original_tool_name}'"
+                    f"already exists (component {component_type} {component_id}); skipping tool '{original_tool_name}'"
                 )
                 continue
 
@@ -413,8 +422,6 @@ def add_tools_from_context_actions(
         # Store mapping on template representation for JSON schema generation
         if name_mapping and tr.tool_name_mapping is None:
             tr.tool_name_mapping = name_mapping
-
-        component_index += 1
 
 
 def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
