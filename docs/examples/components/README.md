@@ -62,14 +62,15 @@ uv run pytest docs/examples/components/duplicate_tool_names_experiments.py -v
 ---
 
 ### `pattern2_context_and_tools.py`
-**Pattern 2 demonstration** - Shows how to combine components in context with explicit tool passing for tool calling.
+**Pattern 2 demonstration** - Shows how to combine components in context with automatic tool extraction for tool calling.
 
 **What it shows:**
-- Pattern 2 approach: Components in session context + explicit tools via `ModelOption.TOOLS`
-- How to add context blocks and components to the session
-- Separating concerns: context rendering vs. tool availability
+- Pattern 2 approach: Components in session context with automatic tool extraction
+- How to add components to the session context
+- Backend automatically extracts tools via `add_tools_from_context_actions()` when `tool_calls=True`
 - Proper tool execution via Mellea's pipeline (enables telemetry)
 - Multi-turn stability with component ID-based prefixing
+- Components with templates render in the conversation
 
 **Run it:**
 ```bash
@@ -86,9 +87,10 @@ uv run python docs/examples/components/pattern2_context_and_tools.py
 
 **Key concepts:**
 - Pattern 1: Extract tools only (simple tool calling)
-- Pattern 2: Components in context + explicit tools (full control)
+- Pattern 2: Components in context with auto-extraction (implicit tool passing)
 - Both patterns use component ID-based prefixing
-- Tools must be explicitly passed even when components are in context
+- NO explicit `ModelOption.TOOLS` needed - backend auto-extracts from context
+- Components must have valid templates for rendering
 - Each tool call recorded in `mellea.tool.calls` metric with component_id
 
 ---
