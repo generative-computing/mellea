@@ -977,14 +977,14 @@ def record_tool_call(tool: str, status: str) -> None:
         status: `"success"` if the tool executed without error, `"failure"` otherwise.
 
     Attributes recorded:
-        - tool: Full tool name
+        - gen_ai.tool.name: Full tool name (semantic convention)
         - status: Execution status
         - component_id: Extracted from tool name if available (e.g., "203e1b50" from "component_203e1b50.query")
     """
     if _meter is None:
         return
 
-    attributes: dict[str, str] = {"tool": tool, "status": status}
+    attributes: dict[str, str] = {"gen_ai.tool.name": tool, "status": status}
 
     # Extract component_id from prefixed tool name for better observability
     # Format: component_{component_id}.{original_tool_name}
