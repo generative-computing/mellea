@@ -120,6 +120,7 @@ class DatabaseComponent(Component):
             obj=self,
             args={"description": "Database query interface"},
             tools={"query": MelleaTool.from_callable(self._tool.run)},
+            template="🗄️  **Database Interface**: {{description}}\nAvailable: SQL query tool",
         )
 
     def _parse(self, computed: ModelOutputThunk) -> str:
@@ -143,6 +144,7 @@ class SearchComponent(Component):
             obj=self,
             args={"description": "Search interface"},
             tools={"query": MelleaTool.from_callable(self._tool.run)},
+            template="🔍 **Search Interface**: {{description}}\nAvailable: Document search tool",
         )
 
     def _parse(self, computed: ModelOutputThunk) -> str:

@@ -21,7 +21,7 @@ from typing import Any
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.tools import MelleaTool, add_tools_from_context_actions
+from mellea.backends.tools import MelleaTool
 from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
@@ -116,6 +116,7 @@ class DatabaseComponent(Component):
             obj=self,
             args={"description": "Database query interface"},
             tools={"query": MelleaTool.from_callable(self._tool.run)},
+            template="🗄️  **Database Interface**: {{description}}\nAvailable: SQL query tool",
         )
 
     def _parse(self, computed: ModelOutputThunk) -> str:
@@ -139,6 +140,7 @@ class SearchComponent(Component):
             obj=self,
             args={"description": "Search interface"},
             tools={"query": MelleaTool.from_callable(self._tool.run)},
+            template="🔍 **Search Interface**: {{description}}\nAvailable: Document search tool",
         )
 
     def _parse(self, computed: ModelOutputThunk) -> str:
@@ -147,34 +149,35 @@ class SearchComponent(Component):
 
 
 def main():
-    """Demonstrate Pattern 2: Components in context + explicit tools."""
+    """Demonstrate Pattern 2: Components in context + auto tool extraction."""
     print("=" * 70)
-    print("PATTERN 2: Components in Context + Explicit Tools for Tool Calling")
+    print("PATTERN 2: Components in Context + Auto Tool Extraction")
+    print("=" * 70)
+
+    print("\n" + "=" * 70)
+    print("STEP 1: Create Components")
     print("=" * 70)
 
     # Create components
     db_component = DatabaseComponent()
     search_component = SearchComponent()
+    print("✓ Created DatabaseComponent and SearchComponent with tools")
 
     print("\n" + "=" * 70)
-    print("STEP 1: Extract Tools from Components")
+    print("STEP 2: Add Components to Context")
     print("=" * 70)
 
-    # Extract tools from components
-    ctx_actions = [db_component, search_component]
-    tools = {}
-    add_tools_from_context_actions(tools, ctx_actions)
-
-    print("\nExtracted tools with ID-based prefixes:")
-    for tool_name in sorted(tools.keys()):
-        if tool_name.startswith("component_"):
-            print(f"  - {tool_name}")
-
-    query_tools = [k for k in tools if "query" in k]
-    print(f"\nTotal query tools: {len(query_tools)}")
+    # Add components to context (no templates needed - already defined!)
+    print("\nAdding components to context...")
+    db_component = DatabaseComponent()
+    search_component = SearchComponent()
+    session_ctx = ChatContext()
+    session_ctx = session_ctx.add(db_component)
+    session_ctx = session_ctx.add(search_component)
+    print("  ✓ Added both components to context")
 
     print("\n" + "=" * 70)
-    print("STEP 2: Set Up Backend and Session")
+    print("STEP 3: Set Up Backend and Session")
     print("=" * 70)
 
     ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
@@ -189,32 +192,9 @@ def main():
         base_url=f"{ollama_host}/v1",
         api_key="ollama",
     )
-    session = MelleaSession(backend, ctx=ChatContext())
+    session = MelleaSession(backend, ctx=session_ctx)
 
-    print("\nSession created")
-
-    print("\n" + "=" * 70)
-    print("STEP 3: Add Context for Additional Information")
-    print("=" * 70)
-
-    # Add context blocks to the session (for demonstration of Pattern 2)
-    # In a real scenario, components could be added here if they have templates
-    print("\nAdding context information...")
-    context_block = CBlock(
-        "Available systems:\n"
-        "1. Database: For querying user information\n"
-        "2. Search: For finding documentation"
-    )
-    session.ctx = session.ctx.add(context_block)
-    print("  ✓ Added context block")
-
-    # Verify items are in context
-    context_items = session.ctx.view_for_generation()
-    print(f"\nContext items: {len(context_items) if context_items else 0}")
-    if context_items:
-        for i, item in enumerate(context_items):
-            if isinstance(item, CBlock):
-                print(f"  {i + 1}. CBlock: {item.value[:40]}...")
+    print("\nSession created with components in context")
 
     print("\n" + "=" * 70)
     print("STEP 4: LLM Generation with Tool Calling")
@@ -228,17 +208,16 @@ def main():
     )
 
     print(f"\nPrompt:\n{prompt}")
-    print(f"\nTools available: {sorted(tools.keys())}")
 
-    # IMPORTANT: Must explicitly pass tools via ModelOption.TOOLS
+    # IMPORTANT: NO ModelOption.TOOLS - backend auto-extracts from context!
     print("\nCalling session.instruct() with:")
-    print(f"  - Components in context: {len(context_items) if context_items else 0}")
-    print(f"  - Tools via ModelOption.TOOLS: {sorted(tools.keys())}")
+    print("  - Components in context: YES (database + search)")
+    print("  - ModelOption.TOOLS: NO (backend auto-extracts!)")
+    print("  - tool_calls: True")
 
     response = session.instruct(
         prompt,
         model_options={
-            ModelOption.TOOLS: tools,  # ← EXPLICIT TOOLS REQUIRED
             ModelOption.TOOL_CHOICE: "auto",
             ModelOption.MAX_NEW_TOKENS: 1000,
         },
@@ -266,32 +245,30 @@ def main():
     print("Pattern 2 Summary")
     print("=" * 70)
     print("""
-PATTERN 2: Components in Context + Explicit Tools
+PATTERN 2: Components in Context + Auto Tool Extraction
 
 Approach:
-  1. Create components with tools
-  2. Extract tools: add_tools_from_context_actions()
-  3. Create session with ChatContext
-  4. Add components to context: session.ctx = session.ctx.add(component)
-  5. Pass tools explicitly: ModelOption.TOOLS = tools
-  6. Call session.instruct() with tool_calls=True
+  1. Create components with tools and templates
+  2. Create session with ChatContext
+  3. Add components to context: session.ctx = session.ctx.add(component)
+  4. Call session.instruct() with tool_calls=True (NO ModelOption.TOOLS!)
 
 Benefits:
   ✓ Components rendered in the prompt
-  ✓ Components' tools available for tool calling
+  ✓ Components' tools automatically extracted and available
   ✓ ID-based prefixing prevents tool collisions
   ✓ Multi-turn stable (same instances = same IDs)
+  ✓ No explicit tool passing needed
 
 Key Point:
-  Even though components are in context, tools MUST be explicitly passed
-  via ModelOption.TOOLS. This is intentional design - two separate concerns:
-  - Context rendering (what the LLM sees in the conversation)
-  - Tool availability (what tools the LLM can call)
+  The backend automatically calls add_tools_from_context_actions() when
+  tool_calls=True, extracting tools from all components in the context.
+  This makes Pattern 2 truly implicit and elegant.
 
 When to Use Pattern 2:
   - You need components to appear in the conversation
-  - You also need their tools available for calling
-  - You want full control over tool availability
+  - You want their tools available for calling automatically
+  - You prefer implicit over explicit tool passing
     """)
 
     print("=" * 70)
