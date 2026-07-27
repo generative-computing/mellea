@@ -285,5 +285,28 @@ async def test_aact_accepts_mot_action():
     assert new_ctx is not ctx
 
 
+# --- return_sampling_results without a strategy raises ValueError ---
+
+
+@pytest.mark.asyncio
+async def test_aact_sampling_results_without_strategy_raises():
+    """aact rejects return_sampling_results=True with no strategy (ValueError)."""
+    from mellea.core import CBlock
+
+    backend = _mock_backend_returning("ignored")
+    with pytest.raises(ValueError):
+        await aact(CBlock("x"), SimpleContext(), backend, return_sampling_results=True)
+
+
+def test_act_sampling_results_without_strategy_raises():
+    """act surfaces the same ValueError as aact when no strategy is given."""
+    from mellea.core import CBlock
+    from mellea.stdlib.functional import act
+
+    backend = _mock_backend_returning("ignored")
+    with pytest.raises(ValueError):
+        act(CBlock("x"), SimpleContext(), backend, return_sampling_results=True)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -231,7 +231,7 @@ from mellea.stdlib.components import Instruction
 async def main():
     m = start_session()
     instruction = Instruction(description="Write a limerick about debugging.")
-    result = await m.aact(instruction)
+    result = await m.aact(instruction, await_result=True)
     print(str(result))
     # Output will vary — LLM responses depend on model and temperature.
 

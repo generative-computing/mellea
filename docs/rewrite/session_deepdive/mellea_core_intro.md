@@ -97,7 +97,7 @@ import asyncio
 
 async def main(backend: Backend, ctx: Context):
     response, next_context = await mfuncs.aact(
-        CBlock("What is 1+1?"), context=ctx, backend=backend
+        CBlock("What is 1+1?"), context=ctx, backend=backend, await_result=True
     )
 
     print(response.value)

@@ -228,7 +228,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 sampled_scores.append(constraint_scores)
                 # A CBlock/MOT action has no repair semantics; the machinery
                 # carries it through as an opaque Component-shaped span.
-                sampled_actions.append(next_action)  # type: ignore[arg-type]
+                sampled_actions.append(next_action)
                 sample_contexts.append(result_ctx)
 
                 # if all vals are true -- break and return success

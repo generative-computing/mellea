@@ -497,7 +497,7 @@ class MelleaSession:
         action: Component[S] | CBlock | ModelOutputThunk,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy,
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -528,6 +528,9 @@ class MelleaSession:
                 `MyModel.model_validate_json(str(result))` to get a typed instance.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
+
+        Raises:
+            ValueError: if `return_sampling_results=True` without a `strategy`.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.

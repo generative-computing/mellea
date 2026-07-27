@@ -88,6 +88,19 @@ def check_query_sync() -> None:
     assert_type(r, ComputedModelOutputThunk[Any])
 
 
+def check_act_sync_computed() -> None:
+    r = s.act(action)
+    assert_type(r, ComputedModelOutputThunk[str])
+
+
+def check_act_sync_sampling() -> None:
+    # The Literal[True] overload requires an explicit strategy — the runtime
+    # asserts strategy is not None, so mypy must reject a missing strategy here.
+    strat = RejectionSamplingStrategy(loop_budget=2)
+    r = s.act(action, strategy=strat, return_sampling_results=True)
+    assert_type(r, SamplingResult[str])
+
+
 async def check_ainstruct_audio_accepted() -> None:
     """Verify audio param is present on all ainstruct overload variants."""
     audio: list[AudioBlock | AudioUrlBlock] = []

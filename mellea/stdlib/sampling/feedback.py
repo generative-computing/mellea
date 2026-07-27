@@ -25,7 +25,6 @@ from typing import Any
 
 from ...core import (
     Backend,
-    Component,
     Context,
     MelleaLogger,
     Requirement,
