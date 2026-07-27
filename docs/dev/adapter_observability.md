@@ -2,7 +2,7 @@
 
 Epic #929 Phase 2, issue #1140. Covers three things landed together in the
 same PR: the narrowed `AdapterMixin` verb contract, the shared
-`resolve_model_options` helper, and the `IntrinsicMetricsPlugin` skeleton.
+`resolve_model_options` helper, and the `AdapterFunctionMetricsPlugin` skeleton.
 
 ## AdapterMixin verb contract
 
@@ -66,11 +66,11 @@ also routes through this helper for its `TEMPERATURE: 0.0` default, so
 caller-supplied `model_options` can't be silently clobbered by a hardcoded
 default — the same class of bug PR #972 fixed elsewhere.
 
-## IntrinsicMetricsPlugin (skeleton)
+## AdapterFunctionMetricsPlugin (skeleton)
 
-`mellea/telemetry/metrics_plugins.py` adds `IntrinsicMetricsPlugin`, hooking
-`intrinsic_invocation_complete` and `intrinsic_phase_complete`
-(`mellea/plugins/hooks/intrinsic.py`). Three metrics:
+`mellea/telemetry/metrics_plugins.py` adds `AdapterFunctionMetricsPlugin`, hooking
+`adapter_function_invocation_complete` and `adapter_function_phase_complete`
+(`mellea/plugins/hooks/adapter_function.py`). Three metrics:
 
 - `mellea.adapter_function.invocations` (counter) — labels: `name`, `revision`,
   `binding_type`, `adapter_type`, `outcome` (`success` | `schema_error` |
@@ -84,7 +84,7 @@ default — the same class of bug PR #972 fixed elsewhere.
   schema-drift detector.
 
 No production code fires these hooks yet — this is a skeleton, unit-tested
-against synthetic payloads only (`test/telemetry/test_intrinsic_metrics_plugin.py`).
+against synthetic payloads only (`test/telemetry/test_metrics_plugins.py`).
 Real wiring from `prepare`/`activate`/`generate`/`parse`/`deactivate` is
 expected to go in with #1141 (LocalFileBinding) and #1142 (EmbeddedBinding).
 

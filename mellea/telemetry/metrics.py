@@ -989,60 +989,61 @@ def record_tool_call(tool: str, status: str) -> None:
     counter.add(1, {"tool": tool, "status": status})
 
 
-_intrinsic_invocations_counter: Any = None
-_intrinsic_phase_duration_histogram: Any = None
-_intrinsic_parse_failures_counter: Any = None
+_adapter_function_invocations_counter: Any = None
+_adapter_function_phase_duration_histogram: Any = None
+_adapter_function_parse_failures_counter: Any = None
 
 
-def _get_intrinsic_invocations_counter() -> Any:
-    """Get or create the intrinsic invocations counter (internal use only)."""
-    global _intrinsic_invocations_counter
+def _get_adapter_function_invocations_counter() -> Any:
+    """Get or create the adapter function invocations counter (internal use only)."""
+    global _adapter_function_invocations_counter
 
-    if _intrinsic_invocations_counter is None:
-        # Metric names use the glossary's canonical prose term "adapter_function",
-        # not the code-level "intrinsic" symbol. Metric/label names are user-facing
-        # (dashboards), and the glossary calls for "adapter function" in user-facing
-        # surfaces; the Python symbols stay `Intrinsic*`, the "current implementation
-        # name" per the glossary. See docs/dev/adapter_observability.md for the full
+    if _adapter_function_invocations_counter is None:
+        # These three metrics/symbols use the glossary's canonical term
+        # "adapter_function" throughout — code and metric names match. Elsewhere
+        # in the codebase, pre-existing, already-shipped `Intrinsic*` symbols
+        # (the `Intrinsic` component, `call_intrinsic`, etc.) still use the old
+        # name and are renamed in a later, coordinated phase of Epic #929 (#1136)
+        # rather than here. See docs/dev/adapter_observability.md for the full
         # rationale. (Applies to all three metrics below.)
-        _intrinsic_invocations_counter = create_counter(
+        _adapter_function_invocations_counter = create_counter(
             "mellea.adapter_function.invocations",
-            description="Total number of adapter function (intrinsic) invocations",
+            description="Total number of adapter function invocations",
             unit="{invocation}",
         )
-    return _intrinsic_invocations_counter
+    return _adapter_function_invocations_counter
 
 
-def _get_intrinsic_phase_duration_histogram() -> Any:
-    """Get or create the intrinsic phase duration histogram (internal use only)."""
-    global _intrinsic_phase_duration_histogram
+def _get_adapter_function_phase_duration_histogram() -> Any:
+    """Get or create the adapter function phase duration histogram (internal use only)."""
+    global _adapter_function_phase_duration_histogram
 
-    if _intrinsic_phase_duration_histogram is None:
-        _intrinsic_phase_duration_histogram = create_histogram(
+    if _adapter_function_phase_duration_histogram is None:
+        _adapter_function_phase_duration_histogram = create_histogram(
             "mellea.adapter_function.phase_duration",
             description="Duration of each adapter function lifecycle phase",
             unit="s",
         )
-    return _intrinsic_phase_duration_histogram
+    return _adapter_function_phase_duration_histogram
 
 
-def _get_intrinsic_parse_failures_counter() -> Any:
-    """Get or create the intrinsic parse failures counter (internal use only)."""
-    global _intrinsic_parse_failures_counter
+def _get_adapter_function_parse_failures_counter() -> Any:
+    """Get or create the adapter function parse failures counter (internal use only)."""
+    global _adapter_function_parse_failures_counter
 
-    if _intrinsic_parse_failures_counter is None:
-        _intrinsic_parse_failures_counter = create_counter(
+    if _adapter_function_parse_failures_counter is None:
+        _adapter_function_parse_failures_counter = create_counter(
             "mellea.adapter_function.parse_failures",
             description="Total number of adapter function schema-mismatch parse failures",
             unit="{failure}",
         )
-    return _intrinsic_parse_failures_counter
+    return _adapter_function_parse_failures_counter
 
 
-def record_intrinsic_invocation(
+def record_adapter_function_invocation(
     name: str, revision: str, binding_type: str, adapter_type: str, outcome: str
 ) -> None:
-    """Record one adapter function (intrinsic) invocation.
+    """Record one adapter function invocation.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
@@ -1057,7 +1058,7 @@ def record_intrinsic_invocation(
     if _meter is None:
         return
 
-    _get_intrinsic_invocations_counter().add(
+    _get_adapter_function_invocations_counter().add(
         1,
         {
             "name": name,
@@ -1069,7 +1070,9 @@ def record_intrinsic_invocation(
     )
 
 
-def record_intrinsic_phase_duration(name: str, phase: str, duration_s: float) -> None:
+def record_adapter_function_phase_duration(
+    name: str, phase: str, duration_s: float
+) -> None:
     """Record the duration of one adapter function lifecycle phase.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
@@ -1084,12 +1087,12 @@ def record_intrinsic_phase_duration(name: str, phase: str, duration_s: float) ->
     if _meter is None:
         return
 
-    _get_intrinsic_phase_duration_histogram().record(
+    _get_adapter_function_phase_duration_histogram().record(
         duration_s, {"name": name, "phase": phase}
     )
 
 
-def record_intrinsic_parse_failure(name: str, revision: str) -> None:
+def record_adapter_function_parse_failure(name: str, revision: str) -> None:
     """Record one adapter function schema-mismatch parse failure.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
@@ -1101,7 +1104,9 @@ def record_intrinsic_parse_failure(name: str, revision: str) -> None:
     if _meter is None:
         return
 
-    _get_intrinsic_parse_failures_counter().add(1, {"name": name, "revision": revision})
+    _get_adapter_function_parse_failures_counter().add(
+        1, {"name": name, "revision": revision}
+    )
 
 
 __all__ = [
@@ -1110,11 +1115,11 @@ __all__ = [
     "create_histogram",
     "create_up_down_counter",
     "is_metrics_enabled",
+    "record_adapter_function_invocation",
+    "record_adapter_function_parse_failure",
+    "record_adapter_function_phase_duration",
     "record_cost",
     "record_error",
-    "record_intrinsic_invocation",
-    "record_intrinsic_parse_failure",
-    "record_intrinsic_phase_duration",
     "record_request_duration",
     "record_requirement_check",
     "record_requirement_failure",

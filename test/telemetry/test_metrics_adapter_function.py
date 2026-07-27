@@ -1,13 +1,14 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Integration tests for adapter-function (intrinsic) metrics recording.
+"""Integration tests for adapter-function metrics recording.
 
-These tests verify that record_intrinsic_invocation(), record_intrinsic_phase_duration(),
-and record_intrinsic_parse_failure() correctly record counter/histogram metrics with
-proper attributes and values using OpenTelemetry. No production call site fires these
-hooks yet — this exercises the skeleton ahead of the LocalFileBinding/EmbeddedBinding
-lifecycle wiring (#1141/#1142).
+These tests verify that record_adapter_function_invocation(),
+record_adapter_function_phase_duration(), and
+record_adapter_function_parse_failure() correctly record counter/histogram
+metrics with proper attributes and values using OpenTelemetry. No production
+call site fires these hooks yet — this exercises the skeleton ahead of the
+LocalFileBinding/EmbeddedBinding lifecycle wiring (#1141/#1142).
 """
 
 import pytest
@@ -45,9 +46,9 @@ def _setup_in_memory_provider(metrics_module):
     provider = MeterProvider(metric_readers=[reader])
     metrics_module._meter_provider = provider
     metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._intrinsic_invocations_counter = None
-    metrics_module._intrinsic_phase_duration_histogram = None
-    metrics_module._intrinsic_parse_failures_counter = None
+    metrics_module._adapter_function_invocations_counter = None
+    metrics_module._adapter_function_phase_duration_histogram = None
+    metrics_module._adapter_function_parse_failures_counter = None
     return reader, provider
 
 
@@ -64,15 +65,15 @@ def _find_data_points(metrics_data, name):
     return data_points
 
 
-def test_record_intrinsic_invocation_basic(clean_metrics_env):
+def test_record_adapter_function_invocation_basic(clean_metrics_env):
     """Invocations counter is populated with correct labels."""
     from mellea.telemetry import metrics as metrics_module
 
     reader, provider = _setup_in_memory_provider(metrics_module)
 
-    from mellea.telemetry.metrics import record_intrinsic_invocation
+    from mellea.telemetry.metrics import record_adapter_function_invocation
 
-    record_intrinsic_invocation(
+    record_adapter_function_invocation(
         name="answerability",
         revision="abc123",
         binding_type="embedded",
@@ -94,7 +95,7 @@ def test_record_intrinsic_invocation_basic(clean_metrics_env):
     assert attrs["outcome"] == "schema_error"
 
 
-def test_record_intrinsic_invocation_schema_error_also_increments_parse_failures(
+def test_record_adapter_function_invocation_schema_error_also_increments_parse_failures(
     clean_metrics_env,
 ):
     """A schema_error outcome drives the parse-failures counter too."""
@@ -103,18 +104,18 @@ def test_record_intrinsic_invocation_schema_error_also_increments_parse_failures
     reader, provider = _setup_in_memory_provider(metrics_module)
 
     from mellea.telemetry.metrics import (
-        record_intrinsic_invocation,
-        record_intrinsic_parse_failure,
+        record_adapter_function_invocation,
+        record_adapter_function_parse_failure,
     )
 
-    record_intrinsic_invocation(
+    record_adapter_function_invocation(
         name="answerability",
         revision="abc123",
         binding_type="embedded",
         adapter_type="alora",
         outcome="schema_error",
     )
-    record_intrinsic_parse_failure("answerability", "abc123")
+    record_adapter_function_parse_failure("answerability", "abc123")
 
     provider.force_flush()
     data_points = _find_data_points(
@@ -125,15 +126,15 @@ def test_record_intrinsic_invocation_schema_error_also_increments_parse_failures
     assert data_points[0].value == 1
 
 
-def test_record_intrinsic_phase_duration_basic(clean_metrics_env):
+def test_record_adapter_function_phase_duration_basic(clean_metrics_env):
     """Phase-duration histogram is populated with the phase label and seconds value."""
     from mellea.telemetry import metrics as metrics_module
 
     reader, provider = _setup_in_memory_provider(metrics_module)
 
-    from mellea.telemetry.metrics import record_intrinsic_phase_duration
+    from mellea.telemetry.metrics import record_adapter_function_phase_duration
 
-    record_intrinsic_phase_duration("answerability", "generate", 0.0125)
+    record_adapter_function_phase_duration("answerability", "generate", 0.0125)
 
     provider.force_flush()
     data_points = _find_data_points(

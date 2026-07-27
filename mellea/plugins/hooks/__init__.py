@@ -3,13 +3,16 @@
 
 """Hook payload classes for the Mellea plugin system."""
 
+from .adapter_function import (
+    AdapterFunctionInvocationCompletePayload,
+    AdapterFunctionPhaseCompletePayload,
+)
 from .component import (
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
     ComponentPreExecutePayload,
 )
 from .generation import GenerationPostCallPayload, GenerationPreCallPayload
-from .intrinsic import IntrinsicInvocationCompletePayload, IntrinsicPhaseCompletePayload
 from .sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
@@ -26,6 +29,9 @@ from .tool import ToolPostInvokePayload, ToolPreInvokePayload
 from .validation import ValidationPostCheckPayload, ValidationPreCheckPayload
 
 __all__ = [
+    # Adapter Function
+    "AdapterFunctionInvocationCompletePayload",
+    "AdapterFunctionPhaseCompletePayload",
     # Component
     "ComponentPostErrorPayload",
     "ComponentPostSuccessPayload",
@@ -33,9 +39,6 @@ __all__ = [
     # Generation
     "GenerationPostCallPayload",
     "GenerationPreCallPayload",
-    # Intrinsic
-    "IntrinsicInvocationCompletePayload",
-    "IntrinsicPhaseCompletePayload",
     # Sampling
     "SamplingIterationPayload",
     "SamplingLoopEndPayload",

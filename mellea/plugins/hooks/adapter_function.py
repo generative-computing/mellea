@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Adapter function (intrinsic) invocation hook payloads."""
+"""Adapter function invocation hook payloads."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from typing import Any, Literal
 from mellea.plugins.base import MelleaBasePayload
 
 
-class IntrinsicInvocationCompletePayload(MelleaBasePayload):
-    """Payload for `intrinsic_invocation_complete` — after an adapter function invocation finishes.
+class AdapterFunctionInvocationCompletePayload(MelleaBasePayload):
+    """Payload for `adapter_function_invocation_complete` — after an adapter function invocation finishes.
 
     Attributes:
         name: Adapter function name (e.g. `"answerability"`).
@@ -37,8 +37,8 @@ class IntrinsicInvocationCompletePayload(MelleaBasePayload):
     error: Any = None
 
 
-class IntrinsicPhaseCompletePayload(MelleaBasePayload):
-    """Payload for `intrinsic_phase_complete` — after one lifecycle phase finishes.
+class AdapterFunctionPhaseCompletePayload(MelleaBasePayload):
+    """Payload for `adapter_function_phase_complete` — after one lifecycle phase finishes.
 
     Attributes:
         name: Adapter function name (e.g. `"answerability"`).
