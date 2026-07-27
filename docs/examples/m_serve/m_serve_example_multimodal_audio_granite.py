@@ -24,7 +24,8 @@ The session uses `ChatContext` so conversation history accumulates across
 turns: follow-up questions like "who sang it?" work without re-uploading
 the audio.  The serve function also honours caller-supplied `requirements`
 and `model_options`, and uses `session.ainstruct()` with a built-in
-`Requirement` to keep answers grounded in the transcript.
+`Requirement` to keep answers grounded in the transcript (tuned to the
+bundled "roses are red and violets are blue" audio sample).
 
 Prerequisites:
     - Ollama running locally with both models pulled:
@@ -145,15 +146,29 @@ async def serve(
 
     prompt = f"{user_text}\n\n[Audio transcript: {transcript}]"
 
-    # Python-checkable grounding requirement: verify the answer shares at least
-    # one word with the transcript.  This avoids LLM-as-a-Judge overhead and
-    # makes the RejectionSamplingStrategy retry loop deterministic.
-    _words = set(transcript.lower().split())
+    # Grounding check tuned to the bundled audio sample ("roses are red and
+    # violets are blue"): the answer must mention at least 2 colors that also
+    # appear in the transcript.  This avoids LLM-as-a-Judge overhead and gives
+    # the RejectionSamplingStrategy retry loop real teeth.
+    # This is a contrived example to let you experiment with requirements.
+    # If you swap in your own audio, replace _COLORS with words relevant to
+    # your content, or remove/replace this requirement entirely.
+    _COLORS = {"red", "orange", "yellow", "green", "blue", "purple", "pink", "white"}
+    _transcript_words = set(transcript.lower().split())
+
+    def _has_two_transcript_colors(output: str) -> bool:
+        return (
+            sum(
+                1
+                for w in output.lower().split()
+                if w in _COLORS and w in _transcript_words
+            )
+            >= 2
+        )
+
     grounding_req: Requirement = Requirement(
         "Base your answer only on the provided audio transcript",
-        validation_fn=simple_validate(
-            lambda output: bool(_words & set(output.lower().split()))
-        ),
+        validation_fn=simple_validate(_has_two_transcript_colors),
     )
 
     result = await chat_session.ainstruct(
