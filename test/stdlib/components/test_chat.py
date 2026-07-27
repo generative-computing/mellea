@@ -228,14 +228,19 @@ def test_parse_openai_chat_response():
 
 
 def test_parse_openai_streamed_choice_shape():
-    """Streaming stores the merged choice dict (no top-level `choices` wrapper)."""
+    """Streaming now stores the top-level envelope (choices wrapper) same as non-streaming."""
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v")
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
-            "finish_reason": "stop",
-            "message": {"role": "assistant", "content": "streamed answer"},
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": "streamed answer"},
+                }
+            ],
+            "usage": None,
         },
     )
     result = msg._parse(mot)
@@ -376,10 +381,10 @@ def test_parse_tool_calls_openai():
 
 
 def test_parse_tool_calls_openai_streamed_choice_shape():
-    """Streamed tool calls store the merged choice dict, not a top-level envelope.
+    """Streamed tool calls now store the top-level envelope shape, same as non-streaming.
 
-    Regression test: the tool branch previously indexed `response["choices"][0]`
-    unconditionally and raised `KeyError` on the streaming choice-level shape.
+    Regression test: verifies that the tool branch correctly indexes `response["choices"][0]`
+    on the normalized streaming shape.
     """
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
@@ -393,8 +398,17 @@ def test_parse_tool_calls_openai_streamed_choice_shape():
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
-            "finish_reason": "tool_calls",
-            "message": {"role": "assistant", "content": None, "tool_calls": tool_calls},
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls,
+                    },
+                }
+            ],
+            "usage": None,
         },
     )
     result = msg._parse(mot)
@@ -417,8 +431,17 @@ def test_tool_call_message_survives_formatter_to_openai_history():
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
-            "finish_reason": "tool_calls",
-            "message": {"role": "assistant", "content": None, "tool_calls": tool_calls},
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls,
+                    },
+                }
+            ],
+            "usage": None,
         },
     )
     mot.parsed_repr = prompt._parse(mot)
@@ -498,17 +521,23 @@ def test_parse_tool_calls_openai_carries_thinking():
 
 
 def test_parse_tool_calls_openai_streamed_carries_thinking():
+    """Streaming normalized shape: thinking is carried onto the tool-issuing assistant turn."""
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
     mot.thinking = "tool-turn reasoning"
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
-            "finish_reason": "tool_calls",
-            "message": {
-                "role": "assistant",
-                "tool_calls": [{"function": {"name": "fn"}}],
-            },
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "tool_calls": [{"function": {"name": "fn"}}],
+                    },
+                }
+            ],
+            "usage": None,
         },
     )
     result = msg._parse(mot)
@@ -935,6 +964,60 @@ class TestMessageDocumentRendering:
         assert "What is the capital of France?" in result
         assert "[Document 7]" in result
         assert "Geography: The capital of France is Paris." in result
+
+
+def test_parse_openai_streaming_normalized_shape():
+    """Streaming normalized shape: _parse extracts role+content from top-level envelope."""
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": "streamed answer"},
+                }
+            ],
+            "usage": None,
+        },
+    )
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.content == "streamed answer"
+
+
+def test_parse_tool_calls_openai_streaming_normalized_shape():
+    """Streaming normalized shape: _parse extracts tool calls from top-level envelope."""
+    msg = Message("user", "q")
+    tool_calls = [
+        {
+            "id": "call_norm",
+            "type": "function",
+            "function": {"name": "fn", "arguments": "{}"},
+        }
+    ]
+    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot.raw = RawProviderResponse(
+        provider="openai",
+        response={
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls,
+                    },
+                }
+            ],
+            "usage": None,
+        },
+    )
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.content == ""
+    assert result.tool_calls == tool_calls
 
 
 if __name__ == "__main__":

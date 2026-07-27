@@ -601,7 +601,8 @@ class WatsonxAIBackend(FormatterBackend):
         """
         # Reconstruct the top-level response from chunks if streamed.
         if mot.raw.streamed_chunks is not None:
-            mot.raw.response = chat_completion_delta_merge(mot.raw.streamed_chunks)
+            merged = chat_completion_delta_merge(mot.raw.streamed_chunks)
+            mot.raw.response = {"choices": [merged], "usage": mot.generation.usage}
 
         assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
@@ -610,18 +611,9 @@ class WatsonxAIBackend(FormatterBackend):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        # OpenAI streamed responses give you chunks of tool calls.
-        # As a result, we have to store data between calls and only then
-        # check for complete tool calls in the post_processing step.
-        # Non-streaming stores a top-level response (index into choices); streaming
-        # stores the already-merged choice dict (use directly).
         response = mot.raw.response
         assert response is not None
-        choice_response = (
-            response["choices"][0]
-            if isinstance(response, dict) and "choices" in response
-            else response
-        )
+        choice_response = response["choices"][0]
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:

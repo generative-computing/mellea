@@ -193,7 +193,7 @@ class Message(Component["Message"]):
             if provider in ("openai", "watsonx", "litellm") and isinstance(
                 response, dict
             ):
-                choice = response["choices"][0] if "choices" in response else response
+                choice = response["choices"][0]
                 msg = choice["message"]
                 thinking = computed.thinking if msg["role"] == "assistant" else None
                 return Message(
@@ -223,14 +223,9 @@ class Message(Component["Message"]):
                 thinking=thinking,
             )
         if provider in ("openai", "watsonx", "litellm") and isinstance(response, dict):
-            choices = response.get("choices") or [{}]
-            msg = choices[0].get("message", {})
-            role = msg.get("role") or response.get("message", {}).get(
-                "role", "assistant"
-            )
-            content = msg.get("content") or response.get("message", {}).get(
-                "content", ""
-            )
+            msg = response["choices"][0].get("message", {})
+            role = msg.get("role", "assistant")
+            content = msg.get("content") or ""
             thinking = computed.thinking if role == "assistant" else None
             return Message(role=role, content=content, thinking=thinking)
 
