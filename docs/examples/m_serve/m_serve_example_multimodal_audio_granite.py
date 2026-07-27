@@ -163,7 +163,10 @@ async def serve(
 
     result = await chat_session.ainstruct(
         description=prompt,
-        requirements=[grounding_req, *[Requirement(r) for r in (requirements or [])]],
+        requirements=[
+            grounding_req,
+            *[Requirement(r) for r in (requirements or []) if r],
+        ],
         strategy=RejectionSamplingStrategy(loop_budget=2),
         model_options=model_options,
         await_result=True,

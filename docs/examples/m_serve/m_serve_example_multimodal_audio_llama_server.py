@@ -95,7 +95,7 @@ async def serve(
     result = await session.ainstruct(
         description=text,
         audio=audio_blocks,
-        requirements=[Requirement(r) for r in (requirements or [])],
+        requirements=[Requirement(r) for r in (requirements or []) if r],
         strategy=RejectionSamplingStrategy(loop_budget=2),
         model_options=model_options,
         await_result=True,
