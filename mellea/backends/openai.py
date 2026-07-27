@@ -433,6 +433,39 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return model_opts
 
+    @staticmethod
+    def _merge_user_extra_body(
+        base: dict[str, Any], user: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        """Merges a user-supplied `extra_body` into the one Mellea built.
+
+        Both must end up in a single `extra_body` value; passing two spreads that
+        each contain one raises `TypeError` at call time.
+
+        Args:
+            base: the `extra_body` Mellea assembled for this request
+            user: `extra_body` taken from the caller's model_options, or None
+
+        Returns:
+            a new dict; `base` and `user` are left unmodified
+        """
+        if user is None:
+            return base
+
+        # shallow copy so .pop() below doesn't mutate the caller's dict
+        user = dict(user)
+        merged = dict(base)
+        user_ctk = user.pop("chat_template_kwargs", None)
+        # shallow merge is safe: chat_template_kwargs is the only nested dict key
+        # Mellea writes into extra_body; it is deep-merged separately below
+        merged.update(user)
+        if user_ctk is not None:
+            merged["chat_template_kwargs"] = {
+                **merged.get("chat_template_kwargs", {}),
+                **user_ctk,
+            }
+        return merged
+
     async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
@@ -681,17 +714,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             else:
                 api_params["reasoning_effort"] = thinking
 
-        if user_extra_body is not None:
-            user_extra_body = dict(user_extra_body)
-            merged_extra_body = dict(extra_body)
-            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
-            merged_extra_body.update(user_extra_body)
-            if user_ctk is not None:
-                merged_extra_body["chat_template_kwargs"] = {
-                    **merged_extra_body.get("chat_template_kwargs", {}),
-                    **user_ctk,
-                }
-            extra_body = merged_extra_body
+        extra_body = self._merge_user_extra_body(extra_body, user_extra_body)
 
         # --- call the OpenAI-compatible API --------------------------------
         # The rewriter may add instruction messages where 'role' is a default
@@ -938,19 +961,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         user_extra_body = backend_specific.pop("extra_body", None)
         if user_extra_body is not None:
-            # shallow copy so .pop() below doesn't mutate the caller's dict
-            user_extra_body = dict(user_extra_body)
-            eb = dict(extra_params.get("extra_body") or {})
-            user_ctk = user_extra_body.pop("chat_template_kwargs", None)
-            # shallow merge is safe: chat_template_kwargs is the only nested dict
-            # key Mellea writes into extra_body; it is deep-merged separately below
-            eb.update(user_extra_body)
-            if user_ctk is not None:
-                eb["chat_template_kwargs"] = {
-                    **eb.get("chat_template_kwargs", {}),
-                    **user_ctk,
-                }
-            extra_params["extra_body"] = eb
+            extra_params["extra_body"] = self._merge_user_extra_body(
+                extra_params.get("extra_body") or {}, user_extra_body
+            )
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
@@ -1217,15 +1230,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         prompts = [self.formatter.print(action) for action in actions]
 
+        backend_specific = self._make_backend_specific_and_remove(
+            model_opts, is_chat_context=False
+        )
+        extra_body = self._merge_user_extra_body(
+            extra_body, backend_specific.pop("extra_body", None)
+        )
+
         try:
             completion_response: Completion = (
                 await self._async_client.completions.create(
                     model=self._model_id,
                     prompt=prompts,
                     extra_body=extra_body,
-                    **self._make_backend_specific_and_remove(
-                        model_opts, is_chat_context=False
-                    ),
+                    **backend_specific,
                 )
             )  # type: ignore
         except openai.BadRequestError as e:

@@ -11,6 +11,7 @@ Mocks the OpenAI async client to verify that ``_generate_from_intrinsic`` correc
 
 import json
 import pathlib
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -518,6 +519,71 @@ async def test_user_extra_body_merges_into_intrinsic_extra_body():
     assert extra_body["chat_template_kwargs"]["enable_thinking"] is True
     assert extra_body["chat_template_kwargs"]["caller_key"] == "caller-value"
     assert call_kwargs["reasoning_effort"] == "medium"
+
+
+async def test_user_extra_body_without_thinking():
+    """User extra_body merges when THINKING is unset; the #1241 reproduction."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": {"guided_json": {"type": "string"}}},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    extra_body = call_kwargs["extra_body"]
+    assert "documents" in extra_body
+    assert extra_body["guided_json"] == {"type": "string"}
+    assert extra_body["chat_template_kwargs"]["adapter_name"] == "answerability"
+    assert "reasoning_effort" not in call_kwargs
+
+
+async def test_user_extra_body_is_not_mutated():
+    """The caller's extra_body dict survives the merge unchanged."""
+    backend = _make_backend_with_adapter(_SIMPLE_CONFIG)
+    ctx = _make_context()
+    mock_create = AsyncMock(return_value=_simple_chat_completion())
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    user_extra_body = {
+        "guided_json": {"type": "string"},
+        "chat_template_kwargs": {"caller_key": "caller-value"},
+    }
+    original = deepcopy(user_extra_body)
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        mot, _ = await mfuncs.aact(
+            Intrinsic("answerability"),
+            ctx,
+            backend,
+            strategy=None,
+            model_options={"extra_body": user_extra_body},
+        )
+        await mot.avalue()
+
+    assert user_extra_body == original
 
 
 async def test_reasoning_effort_bool_false():
