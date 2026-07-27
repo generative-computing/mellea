@@ -1113,10 +1113,14 @@ async def test_record_adapter_function_invocation_schema_error_also_records_pars
 
 
 @pytest.mark.asyncio
-async def test_record_adapter_function_invocation_missing_revision_defaults_to_unpinned(
+async def test_record_adapter_function_invocation_none_revision_passed_through(
     adapter_function_plugin,
 ):
-    """A None revision is normalized to 'unpinned' before being recorded."""
+    """A None revision is passed through to the metric function unchanged.
+
+    Normalisation to "unpinned" happens inside record_adapter_function_invocation,
+    not in the plugin — so the plugin passes the raw payload.revision value.
+    """
     payload = AdapterFunctionInvocationCompletePayload(
         name="answerability",
         revision=None,
@@ -1132,7 +1136,7 @@ async def test_record_adapter_function_invocation_missing_revision_defaults_to_u
 
     mock_invocation.assert_called_once_with(
         name="answerability",
-        revision="unpinned",
+        revision=None,
         binding_type="embedded",
         adapter_type="alora",
         outcome="error",

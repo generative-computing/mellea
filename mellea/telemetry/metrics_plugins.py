@@ -489,19 +489,15 @@ class AdapterFunctionMetricsPlugin(
             record_adapter_function_parse_failure,
         )
 
-        # revision is an optional catalog pin; None means the adapter is unpinned
-        # (the actually-served version can't be determined here). Normalise to a
-        # string label — "unpinned", not "unknown", since None is a known state.
-        revision = payload.revision or "unpinned"
         record_adapter_function_invocation(
             name=payload.name,
-            revision=revision,
+            revision=payload.revision,
             binding_type=payload.binding_type,
             adapter_type=payload.adapter_type,
             outcome=payload.outcome,
         )
         if payload.outcome == "schema_error":
-            record_adapter_function_parse_failure(payload.name, revision)
+            record_adapter_function_parse_failure(payload.name, payload.revision)
 
     @hook("adapter_function_phase_complete", mode=PluginMode.FIRE_AND_FORGET)
     async def record_adapter_function_phase(

@@ -387,14 +387,8 @@ class AdapterMixin(Backend, abc.ABC):
         Returns:
             list[str]: Qualified adapter names for all adapters that have been
                 registered via ``add_adapter``.
-
-        Raises:
-            NotImplementedError: If the concrete backend subclass has not
-                implemented this method.
         """
-        raise NotImplementedError(
-            f"Backend type {type(self)} does not implement list_adapters() API call."
-        )
+        ...
 
     # ---- Reality-specific verbs ----
 

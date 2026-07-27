@@ -1041,7 +1041,7 @@ def _get_adapter_function_parse_failures_counter() -> Any:
 
 
 def record_adapter_function_invocation(
-    name: str, revision: str, binding_type: str, adapter_type: str, outcome: str
+    name: str, revision: str | None, binding_type: str, adapter_type: str, outcome: str
 ) -> None:
     """Record one adapter function invocation.
 
@@ -1049,7 +1049,8 @@ def record_adapter_function_invocation(
 
     Args:
         name: Adapter function name (e.g. `"answerability"`).
-        revision: Catalog revision of the adapter.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+            `None` is normalised to `"unpinned"` in the metric label.
         binding_type: Weight-binding reality the adapter ran under (e.g.
             `"local_file"`, `"embedded"`, `"server_mediated"`).
         adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
@@ -1062,7 +1063,7 @@ def record_adapter_function_invocation(
         1,
         {
             "name": name,
-            "revision": revision,
+            "revision": revision or "unpinned",
             "binding_type": binding_type,
             "adapter_type": adapter_type,
             "outcome": outcome,
@@ -1092,20 +1093,21 @@ def record_adapter_function_phase_duration(
     )
 
 
-def record_adapter_function_parse_failure(name: str, revision: str) -> None:
+def record_adapter_function_parse_failure(name: str, revision: str | None) -> None:
     """Record one adapter function schema-mismatch parse failure.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
     Args:
         name: Adapter function name (e.g. `"answerability"`).
-        revision: Catalog revision of the adapter.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+            `None` is normalised to `"unpinned"` in the metric label.
     """
     if _meter is None:
         return
 
     _get_adapter_function_parse_failures_counter().add(
-        1, {"name": name, "revision": revision}
+        1, {"name": name, "revision": revision or "unpinned"}
     )
 
 
