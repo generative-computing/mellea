@@ -54,7 +54,7 @@ from typing import Any
 import httpx
 
 from mellea import start_session
-from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk, Requirement
+from mellea.core import AudioBlock, ModelOutputThunk, Requirement
 from mellea.serve import ChatMessage
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import simple_validate
@@ -85,7 +85,7 @@ def _audio_block_to_bytes(block: AudioBlock) -> tuple[bytes, str]:
     return base64.b64decode(raw_b64), fmt
 
 
-async def _transcribe(audio_blocks: list[AudioBlock | AudioUrlBlock]) -> str:
+async def _transcribe(audio_blocks: list[AudioBlock]) -> str:
     """Transcribe audio using Ollama's OpenAI-compatible transcriptions endpoint.
 
     POSTs each AudioBlock as a multipart WAV upload to
@@ -94,14 +94,10 @@ async def _transcribe(audio_blocks: list[AudioBlock | AudioUrlBlock]) -> str:
     A fresh httpx.AsyncClient is created per call so that it always belongs
     to the running event loop (avoids loop-mismatch errors when the serve
     function is called from different async contexts).
-
-    AudioUrlBlock is not supported (skipped); download it first if needed.
     """
     parts: list[str] = []
     async with httpx.AsyncClient(base_url=_ollama_host, timeout=120) as client:
         for block in audio_blocks:
-            if not isinstance(block, AudioBlock):
-                continue
             audio_bytes, fmt = _audio_block_to_bytes(block)
             response = await client.post(
                 "/v1/audio/transcriptions",
@@ -135,9 +131,7 @@ async def serve(
 
     last_message = input[-1]
     user_text = last_message.get_text_content() or "What is in this audio?"
-    audio_blocks: list[AudioBlock | AudioUrlBlock] = list(
-        last_message.get_audio_blocks()
-    )
+    audio_blocks: list[AudioBlock] = list(last_message.get_audio_blocks())
 
     if not audio_blocks:
         raise ValueError(
