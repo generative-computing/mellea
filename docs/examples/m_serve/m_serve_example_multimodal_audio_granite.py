@@ -81,10 +81,8 @@ def _audio_block_to_bytes(block: AudioBlock) -> tuple[bytes, str]:
     """
     value = block.value or ""
     fmt = block.format or "wav"
-    if isinstance(value, str):
-        raw_b64 = value.split("base64,")[-1] if "base64," in value else value
-        return base64.b64decode(raw_b64), fmt
-    return value, fmt  # type: ignore[return-value]
+    raw_b64 = value.split("base64,")[-1] if "base64," in value else value
+    return base64.b64decode(raw_b64), fmt
 
 
 async def _transcribe(audio_blocks: list[AudioBlock | AudioUrlBlock]) -> str:
