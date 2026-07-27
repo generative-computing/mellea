@@ -218,6 +218,16 @@ print(f"Policy compliance: {label}")
 `"Ambiguous"` is returned when the scenario does not contain enough information
 to determine compliance with certainty.
 
+> **Exception contract (changed in v0.7.0):** when the adapter returns malformed
+> output — a result with neither a `label` nor a `score`, or with both —
+> `policy_guardrails()` raises `AdapterSchemaMismatchError` (from
+> `mellea.backends.adapters`). This replaces the `ValueError` raised for that
+> case in earlier releases, and `AdapterSchemaMismatchError` does **not** subclass
+> `ValueError`, so any caller that wrapped the call in `except ValueError` to
+> handle a bad verdict must also catch `AdapterSchemaMismatchError`. A `ValueError`
+> is still raised separately when the output is not valid JSON. See
+> [Common Errors](../troubleshooting/common-errors.md) for a handler example.
+
 ## Factuality detection
 
 `factuality_detection()` evaluates whether the assistant's response is factually
