@@ -20,14 +20,15 @@ For example:
 """
 
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from ...core import (
     Backend,
-    Component,
     Context,
     MelleaLogger,
     Requirement,
+    SampleActionType,
     ValidationResult,
 )
 from ..components import Instruction
@@ -368,10 +369,10 @@ class ModelFriendlyRepairStrategy(RepairTemplateStrategy):
     def repair(
         old_ctx: Context,
         new_ctx: Context,
-        past_actions: list[Component],
+        past_actions: Sequence[SampleActionType],
         past_results: list[Any],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> tuple[Component, Context]:
+    ) -> tuple[SampleActionType, Context]:
         """Repair with model-friendly feedback formatting.
 
         Identical to RepairTemplateStrategy.repair() but uses

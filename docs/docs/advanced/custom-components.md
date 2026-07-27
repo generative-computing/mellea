@@ -261,7 +261,9 @@ async def main() -> None:
     backend = OllamaModelBackend("granite4:latest")
     ctx = SimpleContext()
     component = SummaryComponent("Long article text here...", max_words=30)
-    thunk, _ = await mfuncs.aact(action=component, context=ctx, backend=backend)
+    thunk, _ = await mfuncs.aact(
+        action=component, context=ctx, backend=backend, await_result=True
+    )
     print(component.parse(thunk))
 
 

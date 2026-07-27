@@ -9,7 +9,10 @@ from mellea.stdlib.context import SimpleContext
 
 async def main(backend: Backend, ctx: Context):
     response, _next_context = await mfuncs.aact(
-        action=Instruction("What is 1+1?"), context=ctx, backend=backend
+        action=Instruction("What is 1+1?"),
+        context=ctx,
+        backend=backend,
+        await_result=True,
     )
 
     print(response.value)

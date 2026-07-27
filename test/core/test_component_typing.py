@@ -3,6 +3,7 @@
 
 """Tests for checking the functionality of typed components, model output thunks and sampling results."""
 
+from collections.abc import Sequence
 from typing import get_args
 
 import pytest
@@ -18,6 +19,7 @@ from mellea.core import (
     Context,
     ModelOutputThunk,
     Requirement,
+    SampleActionType,
     ValidationResult,
 )
 from mellea.core.base import ComputedModelOutputThunk
@@ -189,7 +191,7 @@ async def test_generating_with_sampling(session):
     class CustomSamplingStrat(BaseSamplingStrategy):
         @staticmethod
         def select_from_failure(
-            sampled_actions: list[Component],
+            sampled_actions: Sequence[SampleActionType],
             sampled_results: list[ComputedModelOutputThunk],
             sampled_val: list[list[tuple[Requirement, ValidationResult]]],
         ) -> int:
@@ -199,10 +201,10 @@ async def test_generating_with_sampling(session):
         def repair(
             old_ctx: Context,
             new_ctx: Context,
-            past_actions: list[Component],
+            past_actions: Sequence[SampleActionType],
             past_results: list[ComputedModelOutputThunk],
             past_val: list[list[tuple[Requirement, ValidationResult]]],
-        ) -> tuple[Component, Context]:
+        ) -> tuple[SampleActionType, Context]:
             return Instruction("print another number 100 greater"), old_ctx
 
     css = CustomSamplingStrat(loop_budget=3)

@@ -142,6 +142,7 @@ async def main():
         Instruction("What is 1+1?"),
         context=SimpleContext(),
         backend=OllamaModelBackend("granite4:latest"),
+        await_result=True,
     )
     print(response.value)
 

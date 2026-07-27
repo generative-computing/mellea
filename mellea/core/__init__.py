@@ -45,7 +45,7 @@ from .requirement import (
     ValidationResult,
     default_output_to_bool,
 )
-from .sampling import SamplingResult, SamplingStrategy
+from .sampling import SampleActionType, SamplingResult, SamplingStrategy
 from .utils import MelleaLogger, clear_log_context, log_context, set_log_context
 
 
@@ -88,6 +88,7 @@ __all__ = [
     "RawProviderResponse",
     "Requirement",
     "S",
+    "SampleActionType",
     "SamplingResult",
     "SamplingStrategy",
     "TemplateRepresentation",

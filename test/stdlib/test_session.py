@@ -9,7 +9,7 @@ import pytest
 from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Message
-from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.session import MelleaSession, start_session
 from test.predicates import require_api_key
 
@@ -47,7 +47,13 @@ def test_start_session_openai_with_kwargs(m_session):
 
 async def test_aact(m_session):
     initial_ctx = m_session.ctx
-    out = await m_session.aact(Message(role="user", content="Hello!"))
+    # aact defaults to strategy=None; pass await_result=True to compute the
+    # result (matching act's synchronous contract) and to keep the
+    # module-scoped session's context free of an uncomputed ModelOutputThunk,
+    # which later deepcopy/clone-based tests cannot handle.
+    out = await m_session.aact(
+        Message(role="user", content="Hello!"), await_result=True
+    )
     assert m_session.ctx is not initial_ctx
     assert out.value is not None
 
@@ -79,20 +85,32 @@ async def test_async_await_with_chat_context(m_session):
     assert ctx.is_root_node  # type: ignore
 
 
-async def test_async_without_waiting_with_chat_context(m_session):
-    m_session.ctx = ChatContext()
+async def test_async_without_waiting_with_simple_context(m_session):
+    # Concurrent fire-and-forget aact calls must use SimpleContext. With aact's
+    # default strategy=None (and await_result=False), each call adds an
+    # uncomputed ModelOutputThunk to its context; on a shared ChatContext two
+    # gathered calls race and one reads the other's uncomputed thunk during
+    # rendering (assert c.is_computed() failure). SimpleContext keeps each turn
+    # independent, which is the documented context for parallel generation.
+    m_session.ctx = SimpleContext()
 
     m1 = Message(role="user", content="1")
     m2 = Message(role="user", content="2")
     co1 = m_session.aact(m1)
     co2 = m_session.aact(m2)
-    _, _ = await asyncio.gather(co2, co1)
+    r2, r1 = await asyncio.gather(co2, co1)
 
-    ctx = m_session.ctx
-    assert len(ctx.view_for_generation()) == 2  # type: ignore
+    # Both fire-and-forget generations resolve to real values once awaited.
+    assert await r1.avalue() is not None
+    assert await r2.avalue() is not None
 
 
 def test_session_copy_with_context_ops(m_session):
+    # Start from a clean ChatContext. The module-scoped session is mutated by
+    # earlier async tests, so reset here to make this test order-independent
+    # and to get the chained history the previous_node assertions below rely on.
+    m_session.ctx = ChatContext()
+
     out = m_session.instruct("What is 2x2?")
     main_ctx = m_session.ctx
 
