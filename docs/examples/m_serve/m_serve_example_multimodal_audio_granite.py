@@ -15,7 +15,10 @@ This example uses that endpoint to split the work into two steps:
    produce a response to the caller's question.
 
 This emulates audio-text-to-text on an all-Ollama/Granite stack without
-requiring a separate llama-server or cloud API.
+requiring a separate llama-server or cloud API. Because the audio is
+transcribed to plain text before reaching the chat model, only word-level
+content survives the pipeline — tone of voice, emotion, background sound,
+and speaker identity are not available to the chat model on this path.
 
 The session uses `ChatContext` so conversation history accumulates across
 turns: follow-up questions like "who sang it?" work without re-uploading
