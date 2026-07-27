@@ -40,7 +40,7 @@ class InputAudioData(BaseModel):
 class InputAudioContent(BaseModel):
     """Audio content part in an OpenAI-compatible multimodal message.
 
-    Matches the ``{"type": "input_audio", "input_audio": {"data": "...", "format": "wav"}}``
+    Matches the `{"type": "input_audio", "input_audio": {"data": "...", "format": "wav"}}`
     wire format used by the OpenAI Chat Completions API.
     """
 
@@ -103,8 +103,8 @@ class ChatMessage(BaseModel):
         """Extract image blocks from message content.
 
         Returns:
-            List of ``ImageBlock`` (for base64/data-URI images) or
-            ``ImageUrlBlock`` (for http/https URLs) from all ImageUrlContent
+            List of `ImageBlock` (for base64/data-URI images) or
+            `ImageUrlBlock` (for http/https URLs) from all ImageUrlContent
             items. Empty list if content is a string or contains no images.
 
         Raises:
@@ -136,7 +136,7 @@ class ChatMessage(BaseModel):
         """Extract audio blocks from message content.
 
         Returns:
-            List of ``AudioBlock`` instances from all ``InputAudioContent`` items.
+            List of `AudioBlock` instances from all `InputAudioContent` items.
             Empty list if content is a string or contains no audio parts.
 
         Raises:

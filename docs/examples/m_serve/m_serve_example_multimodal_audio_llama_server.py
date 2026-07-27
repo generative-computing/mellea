@@ -74,9 +74,9 @@ async def serve(
 ) -> ModelOutputThunk:
     """Serve function that supports native audio-text-to-text via llama-server.
 
-    The session retains conversation history across calls (via ``ChatContext``),
+    The session retains conversation history across calls (via `ChatContext`),
     so follow-up questions work without re-uploading audio.  Caller-supplied
-    ``requirements`` and ``model_options`` are forwarded to ``ainstruct``.
+    `requirements` and `model_options` are forwarded to `ainstruct`.
     """
     if not input:
         return ModelOutputThunk(value="No input provided")

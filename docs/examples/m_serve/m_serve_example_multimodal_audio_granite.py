@@ -3,14 +3,14 @@
 """Example: M serve with audio input via Ollama — two-step transcribe + chat.
 
 Ollama does not pass audio through its generic chat backends, but since
-version 0.7 it exposes an OpenAI-compatible ``POST /v1/audio/transcriptions``
+version 0.7 it exposes an OpenAI-compatible `POST /v1/audio/transcriptions`
 endpoint that accepts multipart WAV/MP3 uploads and returns a JSON transcript.
 This example uses that endpoint to split the work into two steps:
 
 1. **Transcribe** — POST the raw audio bytes to Ollama's
-   ``/v1/audio/transcriptions`` endpoint using
-   ``hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M``.
-2. **Chat** — pass the transcript to a standard ``granite4.1:3b`` session
+   `/v1/audio/transcriptions` endpoint using
+   `hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`.
+2. **Chat** — pass the transcript to a standard `granite4.1:3b` session
    (via Mellea's Ollama backend) so the model can reason about it and
    produce a response to the caller's question.
 
@@ -72,9 +72,9 @@ def _audio_block_to_bytes(block: AudioBlock) -> tuple[bytes, str]:
     """Decode an AudioBlock's base64 value to raw bytes and return (bytes, format).
 
     AudioBlock values may be stored in two forms:
-    - Data URI: ``data:audio/wav;base64,<b64>`` (e.g. from session.chat() audio)
-    - Raw base64 string without a prefix (e.g. from ``get_audio_blocks()`` on a
-      serve ChatMessage whose ``InputAudioData.data`` is plain base64)
+    - Data URI: `data:audio/wav;base64,<b64>` (e.g. from session.chat() audio)
+    - Raw base64 string without a prefix (e.g. from `get_audio_blocks()` on a
+      serve ChatMessage whose `InputAudioData.data` is plain base64)
     """
     value = block.value or ""
     fmt = block.format or "wav"
@@ -88,7 +88,7 @@ async def _transcribe(audio_blocks: list[AudioBlock | AudioUrlBlock]) -> str:
     """Transcribe audio using Ollama's OpenAI-compatible transcriptions endpoint.
 
     POSTs each AudioBlock as a multipart WAV upload to
-    ``/v1/audio/transcriptions`` and concatenates the results.
+    `/v1/audio/transcriptions` and concatenates the results.
 
     A fresh httpx.AsyncClient is created per call so that it always belongs
     to the running event loop (avoids loop-mismatch errors when the serve
@@ -122,12 +122,12 @@ async def serve(
 ) -> ModelOutputThunk:
     """Serve function that emulates audio-text-to-text via two Ollama calls.
 
-    Step 1: ``hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`` transcribes the audio.
-    Step 2: ``granite4.1:3b`` answers the user's text question, informed by the transcript.
+    Step 1: `hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M` transcribes the audio.
+    Step 2: `granite4.1:3b` answers the user's text question, informed by the transcript.
 
-    The session retains conversation history across calls (via ``ChatContext``),
+    The session retains conversation history across calls (via `ChatContext`),
     so follow-up questions work without re-uploading audio.  Caller-supplied
-    ``requirements`` and ``model_options`` are forwarded to ``ainstruct``.
+    `requirements` and `model_options` are forwarded to `ainstruct`.
     """
     if not input:
         return ModelOutputThunk(value="No input provided")
