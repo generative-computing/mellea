@@ -1,8 +1,11 @@
 # pytest: ollama, e2e
-"""Example demonstrating two components with tools that have the same name.
+"""Example demonstrating two components with tools that have the same name (using private APIs).
+
+⚠️  DEPRECATED: This example uses private _call_tools() API. For new code, prefer
+`duplicate_tool_names_public_api.py` which uses the public MelleaSession.act() API.
 
 When multiple components define tools with identical names, Mellea automatically
-prefixes each tool name with its component ID (component_{ID}.tool_name) to prevent
+prefixes each tool name with its component ID (component_{ID}__tool_name) to prevent
 naming collisions. This allows safe composition of multiple components.
 
 In this example:
@@ -249,9 +252,9 @@ def main():
     print("\nTool name analysis (component ID is embedded in the prefix):")
     for tool_name in sorted(query_tools):
         # Extract component ID from the prefixed tool name
-        # Format: component_{component_id}.{tool_name}
+        # Format: component_{component_id}__{tool_name}
         if tool_name.startswith("component_"):
-            parts = tool_name.split(".", 1)
+            parts = tool_name.split("__", 1)
             if len(parts) == 2:
                 component_id = parts[0].replace("component_", "")
                 original_name = parts[1]

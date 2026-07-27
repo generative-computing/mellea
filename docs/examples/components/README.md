@@ -4,14 +4,17 @@ This directory contains examples demonstrating Mellea's component system, partic
 
 ## Files
 
-### `duplicate_tool_names.py`
-**Main example** - Demonstrates how Mellea handles multiple components with identical tool names.
+### `duplicate_tool_names.py` (Private API)
+**Reference example** - Demonstrates component ID-based tool prefixing using private APIs.
+
+**⚠️ Note:** This example uses the private `_call_tools()` function from `mellea.stdlib.functional`. For new code, prefer the public API examples below.
 
 **What it shows:**
 - Two components (`DatabaseComponent` and `SearchComponent`) both define a `query` tool
-- Automatic tool prefixing using component IDs (`component_{ID}.query`)
-- LLM receiving and using both prefixed tools
-- Proper tool execution via Mellea's pipeline (enables telemetry)
+- Automatic tool prefixing using component IDs (`component_{ID}__query`)
+- Explicit tool extraction via `add_tools_from_context_actions()`
+- Tool passing via `ModelOption.TOOLS` to the LLM
+- Manual tool execution via private `_call_tools()` to enable telemetry
 - Component ID extraction from prefixed tool names
 
 **Run it:**
@@ -28,47 +31,56 @@ uv run python docs/examples/components/duplicate_tool_names.py
 ```
 
 **Key outputs:**
-- Tools extracted with ID-based prefixes: `component_1adeba40.query`, `component_1c611a00.query`
+- Tools extracted with ID-based prefixes: `component_1adeba40__query`, `component_1c611a00__query`
 - LLM successfully calls both tools in a single prompt
-- Tool calls executed via `_call_tools()` to enable telemetry recording
-- Both tools' component IDs visible in `mellea.tool.calls` metrics
+- Tool calls executed via private `_call_tools()` to enable telemetry recording
 
 ---
 
-### `duplicate_tool_names_experiments.py`
-**Advanced experiments** - Explores various scenarios and edge cases with component tool prefixing.
+### `duplicate_tool_names_public_api.py` (Public API - Recommended)
+**Modern example** - Demonstrates component ID-based tool prefixing using public APIs only.
 
-**Experiments:**
-1. **Three Components with Same Tool Name** - Verify scaling beyond 2 components
-2. **Tool Name Mapping Inspection** - Examine the extracted tool objects and structure
-3. **Prefixing Stability** - Show that same instances get same IDs, new instances get different IDs
-4. **Selective Tool Access** - Filter tools before passing to LLM
-5. **Tool Deduplication** - Behavior when same component added multiple times
-6. **LLM with Filtered Tools** - Call LLM with a subset of available tools
+**What it shows:**
+- Two components with identical tool names handled via automatic prefixing
+- Public `MelleaSession.act()` API with `tool_calls=True`
+- Backend automatically extracts and prefixes tools (no manual extraction needed)
+- Tool execution and telemetry handled automatically
+- No private `_call_tools()` import required
+
+**Important:** Uses `ChatContext` instead of `SimpleContext` (required for tool extraction from session context).
 
 **Run it:**
 ```bash
-uv run python docs/examples/components/duplicate_tool_names_experiments.py
-uv run pytest docs/examples/components/duplicate_tool_names_experiments.py -v
+uv run python docs/examples/components/duplicate_tool_names_public_api.py
+uv run pytest docs/examples/components/duplicate_tool_names_public_api.py -v
 ```
 
-**Key findings:**
-- Component IDs are stable for the same instance (multi-turn ready)
-- New component instances get new IDs (expected behavior)
-- Duplicate component instances are gracefully handled with warnings
-- Tool filtering works by subsetting the tools dict
-- LLM respects prompt guidance even when given multiple tools
+**View telemetry metrics:**
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+uv run python docs/examples/components/duplicate_tool_names_public_api.py
+```
+
+**Key points:**
+- Uses public `act()` with `tool_calls=True` instead of `instruct()` + explicit tool passing
+- **Requires `ChatContext`** — `SimpleContext` returns empty history and tools won't be extracted
+- Backend auto-extracts tools from context components (no `ModelOption.TOOLS` needed)
+- **Important:** `act()` does NOT automatically execute tools; call `_call_tools()` explicitly to execute them and record telemetry
+- Cleaner, more declarative API for handling multiple components
 
 ---
 
-### `pattern2_context_and_tools.py`
-**Pattern 2 demonstration** - Shows how to combine components in context with automatic tool extraction for tool calling.
+### `pattern2_context_and_tools.py` (Private API)
+**Reference example** - Shows how to combine components in context with automatic tool extraction using private APIs.
+
+**⚠️ Note:** This example uses the private `_call_tools()` function. For new code, prefer the public API example below.
 
 **What it shows:**
 - Pattern 2 approach: Components in session context with automatic tool extraction
 - How to add components to the session context
 - Backend automatically extracts tools via `add_tools_from_context_actions()` when `tool_calls=True`
-- Proper tool execution via Mellea's pipeline (enables telemetry)
+- Proper tool execution via private `_call_tools()` (enables telemetry)
 - Multi-turn stability with component ID-based prefixing
 - Components with templates render in the conversation
 
@@ -85,46 +97,42 @@ export MELLEA_METRICS_CONSOLE=true
 uv run python docs/examples/components/pattern2_context_and_tools.py
 ```
 
-**Key concepts:**
-- Pattern 1: Extract tools only (simple tool calling)
-- Pattern 2: Components in context with auto-extraction (implicit tool passing)
-- Both patterns use component ID-based prefixing
-- NO explicit `ModelOption.TOOLS` needed - backend auto-extracts from context
-- Components must have valid templates for rendering
-- Each tool call recorded in `mellea.tool.calls` metric with component_id
-
 ---
 
-### `telemetry_tool_calling_demo.py`
-**Telemetry demonstration** - Shows how to enable and view tool calling metrics.
+### `pattern2_public_api.py` (Public API - Recommended)
+**Modern example** - Shows Pattern 2 (components in context) using public APIs only.
 
 **What it shows:**
-- How to enable telemetry with environment variables
-- Setting up console exporter for metric viewing
-- Tool calls executed via `_call_tools()` to trigger telemetry hooks
-- JSON format of OpenTelemetry metrics
-- Component ID extraction in `mellea.tool.calls` metric
-- Multi-exporter setup (Console, OTLP, Prometheus)
+- Components with templates live in session context
+- Public `MelleaSession.act()` API with `tool_calls=True`
+- Backend automatically extracts tools from all context components
+- Tool execution and telemetry handled automatically
+- Multi-component composition with stable component IDs
+- No private API imports required
 
-**Run it (with telemetry):**
+**Important:** Uses `ChatContext` instead of `SimpleContext` (required for tool extraction from session context).
+
+**Run it:**
+```bash
+uv run python docs/examples/components/pattern2_public_api.py
+uv run pytest docs/examples/components/pattern2_public_api.py -v
+```
+
+**View telemetry metrics:**
 ```bash
 export MELLEA_METRICS_ENABLED=true
 export MELLEA_METRICS_CONSOLE=true
-uv run python docs/examples/components/telemetry_tool_calling_demo.py
+uv run python docs/examples/components/pattern2_public_api.py
 ```
 
-**Run it (without telemetry):**
-```bash
-uv run python docs/examples/components/telemetry_tool_calling_demo.py
-```
-
-**Key outputs:**
-- Tool calls listed with their component IDs
-- OpenTelemetry JSON metrics showing `mellea.tool.calls` counter
-- Each tool invocation tracked with:
-  - `tool`: Full tool name (e.g., `component_203e1b50.query`)
-  - `status`: `"success"` or `"failure"`
-  - `component_id`: Extracted from tool name (e.g., `203e1b50`)
+**Key concepts:**
+- Pattern 1: Extract tools only (simple tool calling) → use `duplicate_tool_names_public_api.py`
+- Pattern 2: Components in context with auto-extraction → use `pattern2_public_api.py`
+- Both patterns use component ID-based prefixing
+- **Requires `ChatContext`** — `SimpleContext` is stateless and won't extract tools from context
+- Backend auto-extracts tools—NO explicit `ModelOption.TOOLS` needed
+- **Important:** `act()` only extracts and passes tools to LLM; doesn't execute them. Call `_call_tools(response, backend)` to execute tool calls and trigger telemetry
+- Components must have valid templates for rendering
 
 ---
 
@@ -136,7 +144,7 @@ When multiple components define tools with the same name, Mellea prevents collis
 
 ```
 Original:     query, query
-Prefixed:     component_1adeba40.query, component_1c611a00.query
+Prefixed:     component_1adeba40__query, component_1c611a00__query
 ```
 
 **How it works:**
@@ -160,7 +168,6 @@ Prefixed:     component_1adeba40.query, component_1c611a00.query
 ## Related Source Files
 
 - `mellea/backends/tools.py` - `add_tools_from_context_actions()` implementation
-- `mellea/core/base.py` - `TemplateRepresentation` with component metadata
 - `mellea/stdlib/functional.py` - `_call_tools()` implementation (executes tools via pipeline)
 - `mellea/telemetry/metrics_plugins.py` - `ToolMetricsPlugin` (records tool metrics)
 - `mellea/telemetry/metrics.py` - `record_tool_call()` function (telemetry recording)

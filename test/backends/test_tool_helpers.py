@@ -107,9 +107,9 @@ def test_add_tools_from_context_actions():
     add_tools_from_context_actions(tools, ctx_actions)
 
     # With auto-prefixing using component IDs, tools with the same name no longer collide.
-    # Both are preserved with prefixed names: component_{ID}.tool1
-    tool1_key_ftc1 = f"component_{ftc1_id}.tool1"
-    tool1_key_ftc2 = f"component_{ftc2_id}.tool1"
+    # Both are preserved with prefixed names: component_{ID}__tool1
+    tool1_key_ftc1 = f"component_{ftc1_id}__tool1"
+    tool1_key_ftc2 = f"component_{ftc2_id}__tool1"
 
     assert tool1_key_ftc1 in tools, f"Expected {tool1_key_ftc1} in tools"
     assert tool1_key_ftc2 in tools, f"Expected {tool1_key_ftc2} in tools"
@@ -121,7 +121,7 @@ def test_add_tools_from_context_actions():
     assert tool1_from_ftc2 == ftc2.tool1, f"{tool1_from_ftc2} should == {ftc2.tool1}"
 
     # Check that tools that aren't duplicated are still there with prefixed names.
-    tool2_key = f"component_{ftc1_id}.tool2"
+    tool2_key = f"component_{ftc1_id}__tool2"
     assert tool2_key in tools, f"Expected {tool2_key} in tools"
 
     tool2 = tools[tool2_key]._call_tool
@@ -130,7 +130,7 @@ def test_add_tools_from_context_actions():
     # Verify that all tool prefixes match the expected ID pattern
     for tool_name in tools:
         if tool_name.startswith("component_"):
-            assert re.match(r"component_[0-9a-f]{8}\.", tool_name), (
+            assert re.match(r"component_[0-9a-f]{8}__", tool_name), (
                 f"Tool name {tool_name} does not match ID-based prefix pattern"
             )
 
