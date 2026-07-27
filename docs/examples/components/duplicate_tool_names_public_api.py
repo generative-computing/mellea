@@ -1,21 +1,25 @@
 # pytest: ollama, e2e
-"""Example demonstrating Pattern 2: Components in context (using private APIs).
+"""Example demonstrating component ID-based tool prefixing using public APIs.
 
-⚠️  DEPRECATED: This example uses private _call_tools() API. For new code, prefer
-`pattern2_public_api.py` which uses the public MelleaSession.act() API.
+This is the recommended approach for handling multiple components with identical
+tool names. It uses the public MelleaSession.act() API with tool_calls=True,
+which automatically extracts and prefixes tools from context.
 
-Pattern 2 combines both approaches:
-1. Add components to session context (for rendering in the prompt)
-2. Extract and explicitly pass tools via ModelOption.TOOLS (for tool calling)
+When multiple components define tools with identical names, Mellea automatically
+prefixes each tool name with its component ID (component_{ID}__tool_name) to prevent
+naming collisions.
 
-This allows the LLM to see the components in the conversation AND use their tools.
+In this example:
+- DatabaseComponent has a "query" tool for querying data
+- SearchComponent also has a "query" tool for searching
+- Both tools are available to the LLM with prefixed names to avoid conflicts
+- The LLM is prompted to use both tools and demonstrate collision handling
+- Tool calls are executed via _call_tools() to enable telemetry recording
 
 To view tool calling telemetry metrics:
     export MELLEA_METRICS_ENABLED=true
     export MELLEA_METRICS_CONSOLE=true
     uv run python this_script.py
-
-Tool calls are executed via Mellea's pipeline to enable telemetry recording.
 """
 
 import os
@@ -151,131 +155,93 @@ class SearchComponent(Component):
         return str(computed.value)
 
 
-def main():
-    """Demonstrate Pattern 2: Components in context + auto tool extraction."""
-    print("=" * 70)
-    print("PATTERN 2: Components in Context + Auto Tool Extraction")
-    print("=" * 70)
+class TaskComponent(Component):
+    """Component that prompts the LLM to use available tools."""
+
+    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+        """Return parts of this component."""
+        return []
+
+    def format_for_llm(self) -> TemplateRepresentation | str:
+        """Format component for LLM with explicit tool use instructions."""
+        return (
+            "Please complete these tasks using the available tools:\n"
+            "1. Query the database: SELECT * FROM users\n"
+            "2. Search documentation: best practices\n"
+            "Use both tools to demonstrate collision handling."
+        )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the LLM response."""
+        return str(computed.value)
+
+
+def main() -> None:
+    """Main function demonstrating component ID-based tool prefixing."""
 
     print("\n" + "=" * 70)
-    print("STEP 1: Create Components")
+    print("Component ID-Based Tool Prefixing (Public API Example)")
     print("=" * 70)
-
-    # Create components
-    db_component = DatabaseComponent()
-    search_component = SearchComponent()
-    print("✓ Created DatabaseComponent and SearchComponent with tools")
-
-    print("\n" + "=" * 70)
-    print("STEP 2: Add Components to Context")
-    print("=" * 70)
-
-    # Add components to context (no templates needed - already defined!)
-    print("\nAdding components to context...")
-    db_component = DatabaseComponent()
-    search_component = SearchComponent()
-    session_ctx = ChatContext()
-    session_ctx = session_ctx.add(db_component)
-    session_ctx = session_ctx.add(search_component)
-    print("  ✓ Added both components to context")
-
-    print("\n" + "=" * 70)
-    print("STEP 3: Set Up Backend and Session")
-    print("=" * 70)
-
-    ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
-    if not ollama_host.startswith(("http://", "https://")):
-        ollama_host = f"http://{ollama_host}"
 
     backend = OpenAIBackend(
         model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore[arg-type]
         formatter=TemplateFormatter(
             model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name  # type: ignore[arg-type]
         ),
-        base_url=f"{ollama_host}/v1",
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
         api_key="ollama",
     )
-    session = MelleaSession(backend, ctx=session_ctx)
 
-    print("\nSession created with components in context")
+    # Create a session with ChatContext (required for context-based tool extraction)
+    session = MelleaSession(backend=backend, ctx=ChatContext())
 
-    print("\n" + "=" * 70)
-    print("STEP 4: LLM Generation with Tool Calling")
-    print("=" * 70)
+    # Add both components to the session context
+    db_component = DatabaseComponent()
+    search_component = SearchComponent()
 
-    prompt = (
-        "I need to find information about users. Please:"
-        "\n1. Query the database to get all users"
-        "\n2. Search the documentation for user management best practices"
-        "\nUse the available tools to complete both tasks."
-    )
+    session.ctx = session.ctx.add(db_component).add(search_component)
 
-    print(f"\nPrompt:\n{prompt}")
+    print("\nStep 1: Add components to session context")
+    print("  ✓ Added DatabaseComponent (has 'query' tool)")
+    print("  ✓ Added SearchComponent (also has 'query' tool)")
 
-    # IMPORTANT: NO ModelOption.TOOLS - backend auto-extracts from context!
-    print("\nCalling session.instruct() with:")
-    print("  - Components in context: YES (database + search)")
-    print("  - ModelOption.TOOLS: NO (backend auto-extracts!)")
-    print("  - tool_calls: True")
+    print("\nStep 2: Use act() with tool_calls=True")
+    print("  This automatically:")
+    print("    - Extracts tools from all components in context")
+    print("    - Prefixes duplicate tool names with component IDs")
+    print("    - Enables tool calling")
+    print("  Then execute tools via _call_tools() to record telemetry")
 
-    response = session.instruct(
-        prompt,
+    # Create a task component that will request tool use
+    action = TaskComponent()
+
+    # Use the public API: act() with tool_calls=True
+    # This handles tool extraction, execution, and telemetry automatically
+    response = session.act(
+        action,
         model_options={
+            ModelOption.MAX_NEW_TOKENS: 500,
             ModelOption.TOOL_CHOICE: "auto",
-            ModelOption.MAX_NEW_TOKENS: 1000,
         },
-        strategy=None,
         tool_calls=True,
     )
 
     print(f"\nLLM Response:\n{response.value}\n")
 
-    # Execute tool calls
-    if response.tool_calls:
-        print(f"Tool calls requested by LLM: {list(response.tool_calls.keys())}")
-        print("\nExecuting tool calls via Mellea's pipeline (hooks enabled):")
-        # Execute tools through Mellea's pipeline to trigger telemetry hooks
+    # Check if tool calls were made and execute them
+    if hasattr(response, "tool_calls") and response.tool_calls:
+        print(f"Tool calls requested: {list(response.tool_calls.keys())}")
+        print("\nExecuting tool calls via Mellea's pipeline (enables telemetry recording):")
         tool_messages = _call_tools(response, backend)
         for msg in tool_messages:
             print(f"  {msg.name}() → {msg.content}")
-        print("\nNote: Tool calls are executed via _call_tools() so telemetry")
-        print("hooks fire and metrics are recorded in mellea.tool.calls")
-        print("\n✓ Tool calling SUCCESSFUL in Pattern 2")
+        print()
     else:
-        print("No tool calls were requested by the LLM.")
+        print("(No tool calls in this response)\n")
 
     print("\n" + "=" * 70)
-    print("Pattern 2 Summary")
-    print("=" * 70)
-    print("""
-PATTERN 2: Components in Context + Auto Tool Extraction
-
-Approach:
-  1. Create components with tools and templates
-  2. Create session with ChatContext
-  3. Add components to context: session.ctx = session.ctx.add(component)
-  4. Call session.instruct() with tool_calls=True (NO ModelOption.TOOLS!)
-
-Benefits:
-  ✓ Components rendered in the prompt
-  ✓ Components' tools automatically extracted and available
-  ✓ ID-based prefixing prevents tool collisions
-  ✓ Multi-turn stable (same instances = same IDs)
-  ✓ No explicit tool passing needed
-
-Key Point:
-  The backend automatically calls add_tools_from_context_actions() when
-  tool_calls=True, extracting tools from all components in the context.
-  This makes Pattern 2 truly implicit and elegant.
-
-When to Use Pattern 2:
-  - You need components to appear in the conversation
-  - You want their tools available for calling automatically
-  - You prefer implicit over explicit tool passing
-    """)
-
-    print("=" * 70)
-    print("✓ Pattern 2 Successfully Demonstrated")
+    print("✓ Component ID-based tool prefixing successfully demonstrated")
+    print("✓ Tools extracted from context and executed via _call_tools()")
     print("=" * 70)
 
 

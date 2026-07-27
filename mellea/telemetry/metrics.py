@@ -970,29 +970,22 @@ def _get_tool_calls_counter() -> Any:
 def record_tool_call(tool: str, status: str) -> None:
     """Record one tool invocation.
 
-    This is a no-op when metrics are disabled, ensuring zero overhead.
+    This is a no-op when metrics are disabled, ensuring zero overhead. Records
+    `gen_ai.tool.name` (full tool name) and `status` as metric attributes.
+
+    Component identification is encoded in the tool name prefix (component_{id}__name).
+    We do not extract component_id as a separate metric label to avoid unbounded
+    cardinality explosion on long-lived servers. Component tracing belongs in
+    OpenTelemetry spans or structured logs, not metric labels.
 
     Args:
-        tool: Name of the tool that was invoked (e.g., "component_203e1b50.query" or "my_tool").
+        tool: Name of the tool that was invoked (e.g., "component_203e1b50__query" or "my_tool").
         status: `"success"` if the tool executed without error, `"failure"` otherwise.
-
-    Attributes recorded:
-        - gen_ai.tool.name: Full tool name (semantic convention)
-        - status: Execution status
-        - component_id: Extracted from tool name if available (e.g., "203e1b50" from "component_203e1b50.query")
     """
     if _meter is None:
         return
 
     attributes: dict[str, str] = {"gen_ai.tool.name": tool, "status": status}
-
-    # Extract component_id from prefixed tool name for better observability
-    # Format: component_{component_id}.{original_tool_name}
-    if tool.startswith("component_"):
-        parts = tool.split(".", 1)
-        if len(parts) == 2:
-            component_id = parts[0].replace("component_", "")
-            attributes["component_id"] = component_id
 
     counter = _get_tool_calls_counter()
     counter.add(1, attributes)

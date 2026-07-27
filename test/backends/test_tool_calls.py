@@ -64,14 +64,14 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
 
     add_tools_from_context_actions(tools, m.ctx.actions_for_available_tools())
     # Component tools are now auto-prefixed using component ID to avoid collisions
-    # Pattern: component_{ID}.tool_name where ID is hex-encoded object identity
+    # Pattern: component_{ID}__tool_name where ID is hex-encoded object identity
     table_tools = [
-        k for k in tools if k.startswith("component_") and k.endswith(".to_markdown")
+        k for k in tools if k.startswith("component_") and k.endswith("__to_markdown")
     ]
     assert len(table_tools) == 1, (
         f"Expected 1 table tool with ID-based prefix, found {table_tools}"
     )
-    assert re.match(r"component_[0-9a-f]{8}\.to_markdown", table_tools[0])
+    assert re.match(r"component_[0-9a-f]{8}__to_markdown", table_tools[0])
 
 
 @pytest.mark.xfail(

@@ -390,22 +390,12 @@ def add_tools_from_context_actions(
         if not isinstance(tr, TemplateRepresentation) or tr.tools is None:
             continue
 
-        # Extract component metadata for identification and observability
         component_id = hex(id(action))[-8:]
         component_type = type(action).__name__
-        component_description = getattr(action, "description", None)
-
-        # Store metadata on template representation
-        tr.component_id = component_id
-        tr.component_type = component_type
-        tr.component_description = component_description
-
-        # Track mapping from original to prefixed names
-        name_mapping = {}
 
         for original_tool_name, tool_instance in tr.tools.items():
             # Auto-prefix tool name using component ID to avoid collisions
-            prefixed_name = f"component_{component_id}.{original_tool_name}"
+            prefixed_name = f"component_{component_id}__{original_tool_name}"
 
             # Detect collision and warn if it still occurs (defensive)
             if prefixed_name in tools_dict:
@@ -417,11 +407,6 @@ def add_tools_from_context_actions(
 
             # Add tool with prefixed name
             tools_dict[prefixed_name] = tool_instance
-            name_mapping[original_tool_name] = prefixed_name
-
-        # Store mapping on template representation for JSON schema generation
-        if name_mapping and tr.tool_name_mapping is None:
-            tr.tool_name_mapping = name_mapping
 
 
 def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
