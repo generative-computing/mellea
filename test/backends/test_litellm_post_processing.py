@@ -4,7 +4,7 @@
 """Unit tests for LiteLLMBackend.post_processing — normalized response shape.
 
 Verifies that the streaming path stores a top-level envelope in mot.raw.response
-(``{"choices": [...], "usage": ...}``) identical in shape to the non-streaming path.
+(`{"choices": [...], "usage": ...}`) identical in shape to the non-streaming path.
 No API calls are made.
 """
 
