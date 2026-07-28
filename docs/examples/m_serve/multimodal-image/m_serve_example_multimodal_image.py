@@ -10,10 +10,10 @@ Prerequisites:
     - Run: ollama pull granite3.2-vision
 
 Usage:
-    m serve docs/examples/m_serve/m_serve_example_multimodal_image.py
+    m serve docs/examples/m_serve/multimodal-image/m_serve_example_multimodal_image.py
 
 Then test with:
-    uv run python docs/examples/m_serve/client_multimodal_image.py
+    uv run python docs/examples/m_serve/multimodal-image/client_multimodal_image.py
 """
 
 from typing import Any, cast

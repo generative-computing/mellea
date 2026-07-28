@@ -4,7 +4,7 @@
 This example shows how to use the OpenAI Python client with a Mellea server
 started with:
 
-    m serve docs/examples/m_serve/m_serve_example_streaming.py
+    m serve docs/examples/m_serve/streaming/m_serve_example_streaming.py
 
 Set ``streaming`` below to:
 - ``True`` for incremental SSE chunks

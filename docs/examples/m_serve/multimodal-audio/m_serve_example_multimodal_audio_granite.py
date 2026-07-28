@@ -41,10 +41,10 @@ Environment variables (all optional):
     GRANITE_CHAT_MODEL     chat model name         (default: granite4.1:3b)
 
 Usage:
-    m serve docs/examples/m_serve/m_serve_example_multimodal_audio_granite.py
+    m serve docs/examples/m_serve/multimodal-audio/m_serve_example_multimodal_audio_granite.py
 
 Then test with:
-    uv run python docs/examples/m_serve/client_multimodal_audio.py
+    uv run python docs/examples/m_serve/multimodal-audio/client_multimodal_audio.py
 """
 
 import base64

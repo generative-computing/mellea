@@ -5,10 +5,10 @@ from an m serve server using the OpenAI-compatible API.
 
 Usage:
     1. Start the server:
-       uv run m serve docs/examples/m_serve/m_serve_example_tool_calling.py
+       uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling.py
 
     2. Run this client:
-       uv run python docs/examples/m_serve/client_streaming_tool_calling.py
+       uv run python docs/examples/m_serve/tool-calling/client_streaming_tool_calling.py
 """
 
 import json
@@ -308,7 +308,9 @@ if __name__ == "__main__":
     except requests.exceptions.ConnectionError:
         print("Error: Could not connect to server.")
         print("Make sure the server is running:")
-        print("  uv run m serve docs/examples/m_serve/m_serve_example_tool_calling.py")
+        print(
+            "  uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling.py"
+        )
     except requests.exceptions.HTTPError as e:
         print(f"Error: {e}")
         if e.response is not None:

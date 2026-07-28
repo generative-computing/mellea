@@ -9,10 +9,10 @@ output from the model. The server supports three format types:
 - json_schema: Structured output validated against a JSON schema
 
 Run the server:
-    m serve docs/examples/m_serve/m_serve_example_response_format.py
+    m serve docs/examples/m_serve/response-format/m_serve_example_response_format.py
 
 Test with the client:
-    python docs/examples/m_serve/client_response_format.py
+    python docs/examples/m_serve/response-format/client_response_format.py
 """
 
 from typing import Any
