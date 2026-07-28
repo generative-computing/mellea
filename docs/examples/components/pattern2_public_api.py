@@ -230,7 +230,9 @@ def main() -> None:
     # Check if tool calls were made and execute them
     if hasattr(response, "tool_calls") and response.tool_calls:
         print(f"Tool calls requested: {list(response.tool_calls.keys())}")
-        print("\nExecuting tool calls via Mellea's pipeline (enables telemetry recording):")
+        print(
+            "\nExecuting tool calls via Mellea's pipeline (enables telemetry recording):"
+        )
         tool_messages = _call_tools(response, backend)
         for msg in tool_messages:
             print(f"  {msg.name}() → {msg.content}")
