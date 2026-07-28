@@ -4,8 +4,8 @@
 """Unit tests for WatsonxAIBackend.post_processing — normalized response shape.
 
 Verifies that the streaming path stores a top-level envelope in mot.raw.response
-(``{"choices": [...], "usage": ...}``).  Also explicitly documents that Watsonx
-streaming usage is ``None`` (known limitation, canary test).
+(`{"choices": [...], "usage": ...}`).  Also explicitly documents that Watsonx
+streaming usage is `None` (known limitation, canary test).
 No live credentials or API calls are made.
 """
 
