@@ -206,7 +206,7 @@ class TestExtractFinishReason:
         assert extract_finish_reason(output) == "stop"
 
     def test_litellm_normalized_streaming_shape(self):
-        """Streaming now stores a top-level envelope; finish_reason is under choices[0]."""
+        """Streaming stores a top-level envelope; finish_reason is under choices[0]."""
         output = ModelOutputThunk("test response")
         output.raw = RawProviderResponse(
             provider="litellm",
