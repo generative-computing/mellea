@@ -1,0 +1,191 @@
+# Copyright IBM Corp. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Unit tests for LocalFileBinding (Epic #929 Phase 2, issue #1141).
+
+Uses a fake AdapterMixin-conforming backend double throughout — no real HF
+model or network access.
+"""
+
+from collections.abc import Coroutine
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from mellea.backends.adapters._core import LocalFileBinding
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
+
+
+def _fake_backend():
+    """A minimal AdapterMixin-conforming double."""
+    backend = MagicMock()
+    backend.add_adapter.side_effect = lambda binding: setattr(
+        binding, "backend", backend
+    )
+    return backend
+
+
+def test_construction_defaults():
+    binding = LocalFileBinding()
+    assert binding.name == ""
+    assert binding.adapter_type is AdapterType.LORA
+    assert binding.repo_id == ""
+    assert binding.revision == "main"
+    assert binding.backend is None
+    assert binding.path is None
+
+
+def test_qualified_name():
+    binding = LocalFileBinding(name="answerability", adapter_type=AdapterType.ALORA)
+    assert binding.qualified_name == "answerability_alora"
+
+
+def test_from_catalog_uses_pinned_metadata():
+    metadata = fetch_intrinsic_metadata("answerability")
+
+    binding = LocalFileBinding.from_catalog("answerability")
+
+    assert binding.name == "answerability"
+    assert binding.repo_id == metadata.repo_id
+    assert binding.revision == metadata.revision
+    assert binding.revision != "main"
+    assert binding.adapter_type == metadata.adapter_types[0]
+
+
+def test_from_catalog_unknown_name_raises():
+    with pytest.raises(ValueError, match="Unknown intrinsic name"):
+        LocalFileBinding.from_catalog("not-a-real-adapter-function")
+
+
+def test_prepare_without_bind_backend_raises():
+    binding = LocalFileBinding(name="answerability")
+    with pytest.raises(RuntimeError, match="bind_backend"):
+        binding.prepare()
+
+
+def test_prepare_registers_and_loads_on_staged_backend():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    binding.prepare()
+
+    backend.add_adapter.assert_called_once_with(binding)
+    backend.load_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert binding.backend is backend
+
+
+def test_prepare_is_idempotent():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    binding.prepare()
+    binding.prepare()
+
+    backend.add_adapter.assert_called_once()
+    backend.load_peft_adapter.assert_called_once()
+
+
+def test_activate_without_prepare_raises():
+    binding = LocalFileBinding(name="answerability")
+    with pytest.raises(RuntimeError, match="prepare"):
+        binding.activate()
+
+
+def test_deactivate_without_prepare_raises():
+    binding = LocalFileBinding(name="answerability")
+    with pytest.raises(RuntimeError, match="prepare"):
+        binding.deactivate()
+
+
+def test_activate_delegates_to_backend_verb():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    binding.activate()
+
+    backend.activate_peft_adapter.assert_called_once_with(binding.qualified_name)
+
+
+def test_deactivate_delegates_to_backend_verb():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    binding.deactivate()
+
+    backend.deactivate_peft_adapter.assert_called_once_with(binding.qualified_name)
+
+
+def test_release_without_prepare_is_noop():
+    binding = LocalFileBinding(name="answerability")
+    binding.release()  # must not raise
+
+
+def test_release_unloads_and_clears_state():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    binding.release()
+
+    backend.unload_peft_adapter.assert_called_once_with(binding.qualified_name)
+    assert binding.backend is None
+    assert binding.path is None
+    assert binding._staged_backend is None
+
+
+def test_release_is_idempotent():
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    binding.release()
+    binding.release()
+
+    backend.unload_peft_adapter.assert_called_once()
+
+
+def test_prepare_fires_phase_complete_metric_when_plugins_present():
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    with (
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch("mellea.backends.adapters._core._run_async_in_thread") as mock_run,
+    ):
+        binding.prepare()
+
+    mock_run.assert_called_once()
+    hook_coro = mock_run.call_args.args[0]
+    assert isinstance(hook_coro, Coroutine)
+    hook_coro.close()
+
+
+def test_release_does_not_fire_phase_complete_metric():
+    # "release" is not a valid AdapterFunctionPhaseCompletePayload.phase value.
+    pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+
+    with (
+        patch("mellea.backends.adapters._core.has_plugins", return_value=True),
+        patch("mellea.backends.adapters._core._run_async_in_thread") as mock_run,
+    ):
+        binding.release()
+
+    mock_run.assert_not_called()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -4,9 +4,9 @@
 """Unit tests for the narrowed AdapterMixin verb contract (Epic #929 Phase 2, issue #1140).
 
 Verifies that:
-  - the four reality-specific verbs (`load_peft_adapter`, `unload_peft_adapter`,
-    `render_controls`, `set_request_adapter`) raise `NotImplementedError` by
-    default on the mixin
+  - the reality-specific verbs (`load_peft_adapter`, `unload_peft_adapter`,
+    `activate_peft_adapter`, `deactivate_peft_adapter`, `render_controls`,
+    `set_request_adapter`) raise `NotImplementedError` by default on the mixin
   - each concrete backend overrides only the verb(s) matching its own adapter
     reality, leaving the others on the default (raising) implementation
 """
@@ -22,6 +22,8 @@ from mellea.backends.openai import OpenAIBackend
 _REALITY_SPECIFIC_VERBS = (
     "load_peft_adapter",
     "unload_peft_adapter",
+    "activate_peft_adapter",
+    "deactivate_peft_adapter",
     "render_controls",
     "set_request_adapter",
 )
@@ -39,9 +41,11 @@ def test_default_reality_specific_verb_raises_not_implemented(verb):
 
 
 def test_hf_backend_overrides_only_peft_verbs():
-    """LocalHFBackend (LocalFile/PEFT reality) overrides load/unload_peft_adapter only."""
+    """LocalHFBackend (LocalFile/PEFT reality) overrides the PEFT verbs only."""
     assert "load_peft_adapter" in vars(LocalHFBackend)
     assert "unload_peft_adapter" in vars(LocalHFBackend)
+    assert "activate_peft_adapter" in vars(LocalHFBackend)
+    assert "deactivate_peft_adapter" in vars(LocalHFBackend)
     assert "render_controls" not in vars(LocalHFBackend)
     assert "set_request_adapter" not in vars(LocalHFBackend)
 
