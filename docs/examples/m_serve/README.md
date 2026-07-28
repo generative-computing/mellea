@@ -2,9 +2,23 @@
 
 This directory contains examples for deploying Mellea programs as API services using the `m serve` CLI command.
 
+## Structure
+
+Each subdirectory contains a server implementation and its matching client(s):
+
+| Subdirectory | Description |
+|---|---|
+| `simple/` | Basic request/response with rejection sampling |
+| `streaming/` | Real-time token streaming via Server-Sent Events (SSE) |
+| `response-format/` | Structured output with `response_format` / JSON schema |
+| `tool-calling/` | Function/tool calling through the API |
+| `multimodal-image/` | Vision model serving with image inputs |
+| `multimodal-audio/` | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
+| `pii/` | PII detection service |
+
 ## Files
 
-### m_serve_example_simple.py
+### simple/m_serve_example_simple.py
 A simple example showing how to structure a Mellea program for serving as an API.
 
 **Key Features:**
@@ -13,13 +27,13 @@ A simple example showing how to structure a Mellea program for serving as an API
 - Custom validation functions for API constraints
 - Handling chat message inputs
 
-### m_serve_example_streaming.py
+### streaming/m_serve_example_streaming.py
 A dedicated streaming example for `m serve` that supports both modes:
 - `stream=False` returns a normal computed response
 - `stream=True` returns an uncomputed thunk so the server can emit
   incremental Server-Sent Events (SSE) chunks
 
-### m_serve_example_response_format.py
+### response-format/m_serve_example_response_format.py
 Example demonstrating structured output with the `response_format` parameter.
 
 **Key Features:**
@@ -27,20 +41,20 @@ Example demonstrating structured output with the `response_format` parameter.
 - Structured output validation with JSON schemas
 - Three format types: `text`, `json_object`, `json_schema`
 
-### m_serve_example_multimodal_image.py
+### multimodal-image/m_serve_example_multimodal_image.py
 Example of serving a vision model through `m serve` with image inputs.
 
-### client_multimodal_image.py
+### multimodal-image/client_multimodal_image.py
 Client code for testing the multimodal image endpoint with an OpenAI-compatible request.
 
-### m_serve_example_multimodal_audio_llama_server.py
+### multimodal-audio/m_serve_example_multimodal_audio_llama_server.py
 
 Audio-text-to-text serve function using llama-server with a Gemma audio
 checkpoint. Audio and text are sent together in a single request; llama-server
 handles the multimodal fusion natively. Requires a running llama-server with
 `--mmproj` loaded (see prerequisites in the file header).
 
-### m_serve_example_multimodal_audio_granite.py
+### multimodal-audio/m_serve_example_multimodal_audio_granite.py
 
 Audio-text-to-text serve function using a two-step Ollama/Granite pipeline:
 
@@ -52,31 +66,31 @@ Audio-text-to-text serve function using a two-step Ollama/Granite pipeline:
 
 Both models run locally through Ollama — no llama-server or cloud API needed.
 
-### client_multimodal_audio.py
+### multimodal-audio/client_multimodal_audio.py
 
 Client code for testing any of the multimodal audio endpoints with an
 OpenAI-compatible `input_audio` content part request.
 
-### pii_serve.py
+### pii/pii_serve.py
 Example of serving a PII (Personally Identifiable Information) detection service.
 
-### client.py
+### simple/client.py
 Client code for testing the served API endpoints with non-streaming requests.
 
-### client_streaming.py
+### streaming/client_streaming.py
 Client code demonstrating streaming responses using Server-Sent Events (SSE)
-against `m_serve_example_streaming.py`.
+against `streaming/m_serve_example_streaming.py`.
 
-### client_response_format.py
+### response-format/client_response_format.py
 Client code demonstrating all three `response_format` types with examples.
 
-### m_serve_example_tool_calling.py
+### tool-calling/m_serve_example_tool_calling.py
 Example of serving a function with tool calling capabilities through `m serve`.
 
-### client_tool_calling.py
+### tool-calling/client_tool_calling.py
 Client code for testing tool calling endpoints, demonstrating function invocation through the API.
 
-### client_streaming_tool_calling.py
+### tool-calling/client_streaming_tool_calling.py
 Client code demonstrating streaming responses combined with tool calling.
 
 ## Concepts Demonstrated
@@ -100,12 +114,12 @@ from mellea.core import Requirement
 
 session = start_session()
 
-def serve(input: list[ChatMessage], 
+def serve(input: list[ChatMessage],
           requirements: list[str] | None = None,
           model_options: dict | None = None):
     """Main serving function - called by m serve."""
     message = input[-1].content
-    
+
     result = session.instruct(
         description=message,
         requirements=requirements or [],
@@ -121,40 +135,40 @@ def serve(input: list[ChatMessage],
 
 ```bash
 # Start the sampling example server
-m serve docs/examples/m_serve/m_serve_example_simple.py
+m serve docs/examples/m_serve/simple/m_serve_example_simple.py
 
 # In another terminal, test with the non-streaming client
-python docs/examples/m_serve/client.py
+python docs/examples/m_serve/simple/client.py
 ```
 
 ### Streaming
 
 ```bash
 # Start the dedicated streaming example server
-m serve docs/examples/m_serve/m_serve_example_streaming.py
+m serve docs/examples/m_serve/streaming/m_serve_example_streaming.py
 
 # In another terminal, test with the streaming client
-python docs/examples/m_serve/client_streaming.py
+python docs/examples/m_serve/streaming/client_streaming.py
 ```
 
 ### Response Format
 
 ```bash
 # Start the response_format example server
-m serve docs/examples/m_serve/m_serve_example_response_format.py
+m serve docs/examples/m_serve/response-format/m_serve_example_response_format.py
 
 # In another terminal, test with the response_format client
-python docs/examples/m_serve/client_response_format.py
+python docs/examples/m_serve/response-format/client_response_format.py
 ```
 
 ### Multimodal Images
 
 ```bash
 # Start the multimodal image example server
-m serve docs/examples/m_serve/m_serve_example_multimodal_image.py
+m serve docs/examples/m_serve/multimodal-image/m_serve_example_multimodal_image.py
 
 # In another terminal, test with the multimodal client
-uv run python docs/examples/m_serve/client_multimodal_image.py
+uv run python docs/examples/m_serve/multimodal-image/client_multimodal_image.py
 ```
 
 ### Multimodal Audio (llama-server + Gemma)
@@ -166,10 +180,10 @@ Configure via `LLAMA_SERVER_URL`, `LLAMA_SERVER_API_KEY`, and
 
 ```bash
 # Start the llama-server audio example
-m serve docs/examples/m_serve/m_serve_example_multimodal_audio_llama_server.py
+m serve docs/examples/m_serve/multimodal-audio/m_serve_example_multimodal_audio_llama_server.py
 
 # In another terminal, test with the audio client
-uv run python docs/examples/m_serve/client_multimodal_audio.py
+uv run python docs/examples/m_serve/multimodal-audio/client_multimodal_audio.py
 ```
 
 ### Multimodal Audio (Ollama + Granite — two-step transcribe + chat)
@@ -183,10 +197,23 @@ ollama pull granite4.1:3b
 
 ```bash
 # Start the Granite two-step audio example
-m serve docs/examples/m_serve/m_serve_example_multimodal_audio_granite.py
+m serve docs/examples/m_serve/multimodal-audio/m_serve_example_multimodal_audio_granite.py
 
 # In another terminal, test with the audio client
-uv run python docs/examples/m_serve/client_multimodal_audio.py
+uv run python docs/examples/m_serve/multimodal-audio/client_multimodal_audio.py
+```
+
+### Tool Calling
+
+```bash
+# Start the tool calling example server
+uv run m serve docs/examples/m_serve/tool-calling/m_serve_example_tool_calling.py
+
+# In another terminal, test with the tool calling client
+uv run python docs/examples/m_serve/tool-calling/client_tool_calling.py
+
+# Or test with streaming tool calling
+uv run python docs/examples/m_serve/tool-calling/client_streaming_tool_calling.py
 ```
 
 ## Response Format Support
@@ -265,9 +292,9 @@ The server supports streaming responses via Server-Sent Events (SSE) when the
 tokens as they are generated, providing a better user experience for long-running
 generations.
 
-For a real streaming demo, serve `m_serve_example_streaming.py`. That example
+For a real streaming demo, serve `streaming/m_serve_example_streaming.py`. That example
 supports both normal and streaming responses consistently. The sampling example
-(`m_serve_example_simple.py`) demonstrates rejection sampling and validation,
+(`simple/m_serve_example_simple.py`) demonstrates rejection sampling and validation,
 not token-by-token streaming.
 
 **Key Features:**

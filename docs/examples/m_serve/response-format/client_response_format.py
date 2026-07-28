@@ -8,10 +8,10 @@ This example shows how to use the three response_format types:
 
 Prerequisites:
     Start the server first:
-        m serve docs/examples/m_serve/m_serve_example_response_format.py
+        m serve docs/examples/m_serve/response-format/m_serve_example_response_format.py
 
     Then run this client:
-        python docs/examples/m_serve/client_response_format.py
+        python docs/examples/m_serve/response-format/client_response_format.py
 """
 
 import json
@@ -246,7 +246,7 @@ def main():
         print(f"\nError: {e}")
         print("\nMake sure the server is running:")
         print(
-            f"  m serve docs/examples/m_serve/m_serve_example_response_format.py --port {PORT}"
+            f"  m serve docs/examples/m_serve/response-format/m_serve_example_response_format.py --port {PORT}"
         )
 
 

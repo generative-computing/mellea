@@ -35,10 +35,10 @@ Environment variables (all optional):
     LLAMA_SERVER_MODEL    model name                    (default: gemma-4-12b-it-Q8_0.gguf)
 
 Usage:
-    m serve docs/examples/m_serve/m_serve_example_multimodal_audio_llama_server.py
+    m serve docs/examples/m_serve/multimodal-audio/m_serve_example_multimodal_audio_llama_server.py
 
 Then test with:
-    uv run python docs/examples/m_serve/client_multimodal_audio.py
+    uv run python docs/examples/m_serve/multimodal-audio/client_multimodal_audio.py
 """
 
 import os
