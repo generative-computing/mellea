@@ -228,7 +228,7 @@ def test_parse_openai_chat_response():
 
 
 def test_parse_openai_streamed_choice_shape():
-    """Streaming now stores the top-level envelope (choices wrapper) same as non-streaming."""
+    """Streaming stores the merged choice dict in a top-level envelope (choices wrapper) matching non-streaming."""
     msg = Message("user", "q")
     mot = ModelOutputThunk(value="v")
     mot.raw = RawProviderResponse(
