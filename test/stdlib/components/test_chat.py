@@ -381,7 +381,7 @@ def test_parse_tool_calls_openai():
 
 
 def test_parse_tool_calls_openai_streamed_choice_shape():
-    """Streamed tool calls now store the top-level envelope shape, same as non-streaming.
+    """Streamed tool calls store the merged choice dict in a top-level envelope shape, matching non-streaming.
 
     Regression test: verifies that the tool branch correctly indexes `response["choices"][0]`
     on the normalized streaming shape.
