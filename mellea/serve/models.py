@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from mellea.core import ImageBlock, ImageUrlBlock
+from mellea.core import AudioBlock, ImageBlock, ImageUrlBlock
 
 
 class TextContent(BaseModel):
@@ -28,8 +28,28 @@ class ImageUrlContent(BaseModel):
     """Image URL object containing 'url' key and optional 'detail' key."""
 
 
+class InputAudioData(BaseModel):
+    """Audio data payload for an `input_audio` content part."""
+
+    data: str
+    """Base64-encoded audio data."""
+    format: str
+    """Audio format, e.g. `"wav"` or `"mp3"`."""
+
+
+class InputAudioContent(BaseModel):
+    """Audio content part in an OpenAI-compatible multimodal message.
+
+    Matches the `{"type": "input_audio", "input_audio": {"data": "...", "format": "wav"}}`
+    wire format used by the OpenAI Chat Completions API.
+    """
+
+    type: Literal["input_audio"]
+    input_audio: InputAudioData
+
+
 # Union type for all content types
-MessageContent = TextContent | ImageUrlContent
+MessageContent = TextContent | ImageUrlContent | InputAudioContent
 
 
 class ChatMessage(BaseModel):
@@ -38,7 +58,7 @@ class ChatMessage(BaseModel):
     The content field can be:
     - A string (text-only, backward compatible)
     - None (for messages without content)
-    - A list of content objects (multimodal: text, images)
+    - A list of content objects (multimodal: text, images, audio)
     """
 
     role: Literal["system", "user", "assistant", "tool", "function"]
@@ -52,7 +72,7 @@ class ChatMessage(BaseModel):
 
         Returns:
             Concatenated text from all TextContent items, or empty string if no text.
-            Images are ignored (handled separately via extraction utilities).
+            Images and audio are ignored (handled separately via extraction utilities).
         """
         if isinstance(self.content, str):
             return self.content
@@ -83,8 +103,8 @@ class ChatMessage(BaseModel):
         """Extract image blocks from message content.
 
         Returns:
-            List of ``ImageBlock`` (for base64/data-URI images) or
-            ``ImageUrlBlock`` (for http/https URLs) from all ImageUrlContent
+            List of `ImageBlock` (for base64/data-URI images) or
+            `ImageUrlBlock` (for http/https URLs) from all ImageUrlContent
             items. Empty list if content is a string or contains no images.
 
         Raises:
@@ -111,3 +131,30 @@ class ChatMessage(BaseModel):
                     "Expected an http/https URL or a data: URI."
                 )
         return image_blocks
+
+    def get_audio_blocks(self) -> list[AudioBlock]:
+        """Extract audio blocks from message content.
+
+        Returns:
+            List of `AudioBlock` instances from all `InputAudioContent` items.
+            Empty list if content is a string or contains no audio parts.
+
+        Raises:
+            ValueError: If an audio data payload is invalid or cannot be processed.
+        """
+        if not isinstance(self.content, list):
+            return []
+        audio_blocks: list[AudioBlock] = []
+        for item in self.content:
+            if isinstance(item, InputAudioContent):
+                try:
+                    audio_blocks.append(
+                        AudioBlock(item.input_audio.data, item.input_audio.format)
+                    )
+                except (AssertionError, ValueError) as e:
+                    raise ValueError(
+                        f"Invalid audio data: {item.input_audio.data[:100]}"
+                        f"{'...' if len(item.input_audio.data) > 100 else ''}. "
+                        f"Error: {e}"
+                    ) from e
+        return audio_blocks

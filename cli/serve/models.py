@@ -1,6 +1,16 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Re-exported so callers can import from cli.serve.models instead of mellea.serve.models
+__all__ = [
+    "ChatMessage",
+    "ImageUrlContent",
+    "InputAudioContent",
+    "InputAudioData",
+    "MessageContent",
+    "TextContent",
+]
+
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, model_validator
@@ -9,6 +19,8 @@ from mellea.helpers.openai_compatible_helpers import CompletionUsage
 from mellea.serve.models import (
     ChatMessage,
     ImageUrlContent,
+    InputAudioContent,
+    InputAudioData,
     MessageContent,
     TextContent,
 )

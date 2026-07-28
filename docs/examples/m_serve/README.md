@@ -33,6 +33,30 @@ Example of serving a vision model through `m serve` with image inputs.
 ### client_multimodal_image.py
 Client code for testing the multimodal image endpoint with an OpenAI-compatible request.
 
+### m_serve_example_multimodal_audio_llama_server.py
+
+Audio-text-to-text serve function using llama-server with a Gemma audio
+checkpoint. Audio and text are sent together in a single request; llama-server
+handles the multimodal fusion natively. Requires a running llama-server with
+`--mmproj` loaded (see prerequisites in the file header).
+
+### m_serve_example_multimodal_audio_granite.py
+
+Audio-text-to-text serve function using a two-step Ollama/Granite pipeline:
+
+1. **granite-speech** (`hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M`)
+   transcribes the audio via Ollama's OpenAI-compatible
+   `/v1/audio/transcriptions` endpoint.
+2. **granite4.1:3b** answers the user's question with the transcript injected
+   into the prompt.
+
+Both models run locally through Ollama — no llama-server or cloud API needed.
+
+### client_multimodal_audio.py
+
+Client code for testing any of the multimodal audio endpoints with an
+OpenAI-compatible `input_audio` content part request.
+
 ### pii_serve.py
 Example of serving a PII (Personally Identifiable Information) detection service.
 
@@ -65,6 +89,7 @@ Client code demonstrating streaming responses combined with tool calling.
 - **Streaming Responses**: Real-time token streaming via Server-Sent Events (SSE)
 - **Structured Output**: Using `response_format` for JSON schema validation
 - **Multimodal Inputs**: Sending text plus image content to vision-capable models
+- **Audio-Text-to-Text**: Sending base64-encoded audio alongside text in a chat request; the model responds in text (not transcription)
 
 ## Basic Pattern
 
@@ -130,6 +155,38 @@ m serve docs/examples/m_serve/m_serve_example_multimodal_image.py
 
 # In another terminal, test with the multimodal client
 uv run python docs/examples/m_serve/client_multimodal_image.py
+```
+
+### Multimodal Audio (llama-server + Gemma)
+
+Requires a local llama-server with an audio-capable Gemma checkpoint and
+`--mmproj` loaded (see the file header for the full `llama-server` command).
+Configure via `LLAMA_SERVER_URL`, `LLAMA_SERVER_API_KEY`, and
+`LLAMA_SERVER_MODEL` environment variables.
+
+```bash
+# Start the llama-server audio example
+m serve docs/examples/m_serve/m_serve_example_multimodal_audio_llama_server.py
+
+# In another terminal, test with the audio client
+uv run python docs/examples/m_serve/client_multimodal_audio.py
+```
+
+### Multimodal Audio (Ollama + Granite — two-step transcribe + chat)
+
+Requires both models pulled locally:
+
+```bash
+ollama pull hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M
+ollama pull granite4.1:3b
+```
+
+```bash
+# Start the Granite two-step audio example
+m serve docs/examples/m_serve/m_serve_example_multimodal_audio_granite.py
+
+# In another terminal, test with the audio client
+uv run python docs/examples/m_serve/client_multimodal_audio.py
 ```
 
 ## Response Format Support
