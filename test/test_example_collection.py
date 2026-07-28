@@ -125,13 +125,19 @@ def test_ignore_all_checks_applies_to_direct_example():
 
 def test_ignore_all_avoids_detection_in_direct_hook(monkeypatch):
     """Verify the direct-file hook does not probe capabilities under the aggregate flag."""
+    capability_probes = []
 
-    def fail_capability_detection():
-        raise RuntimeError("capability detection should be bypassed")
+    def record_capability_detection():
+        capability_probes.append(True)
+        return {
+            "has_gpu": True,
+            "has_ollama": True,
+            "has_api_keys": {"watsonx": "set", "openai": "set"},
+        }
 
     expected = object()
     monkeypatch.setattr(
-        example_conftest, "get_system_capabilities", fail_capability_detection
+        example_conftest, "get_system_capabilities", record_capability_detection
     )
     monkeypatch.setattr(
         example_conftest.ExampleModule, "from_parent", lambda *args, **kwargs: expected
@@ -146,6 +152,40 @@ def test_ignore_all_avoids_detection_in_direct_hook(monkeypatch):
         )
         is expected
     )
+    assert capability_probes == []
+
+
+def test_direct_hook_applies_capability_gate(monkeypatch):
+    """Verify the direct-file hook probes and skips without an override."""
+    capability_probes = []
+
+    def record_capability_detection():
+        capability_probes.append(True)
+        return {"has_gpu": False, "has_ollama": False, "has_api_keys": {}}
+
+    expected = object()
+    monkeypatch.setattr(
+        example_conftest, "get_system_capabilities", record_capability_detection
+    )
+    monkeypatch.setattr(
+        example_conftest.SkippedFile, "from_parent", lambda *args, **kwargs: expected
+    )
+    monkeypatch.setattr(
+        example_conftest.ExampleModule,
+        "from_parent",
+        lambda *args, **kwargs: pytest.fail("capability-gated example was collected"),
+    )
+
+    class DirectParent:
+        config = _Config()
+
+    assert (
+        example_conftest.pytest_pycollect_makemodule(
+            REPO_ROOT / DIRECT_EXAMPLE, DirectParent()
+        )
+        is expected
+    )
+    assert capability_probes == [True]
 
 
 def test_collection_capability_gates(monkeypatch):
@@ -180,37 +220,67 @@ def test_collection_capability_gates(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("option", "markers"),
+    ("option", "markers", "still_gated"),
     [
-        ("--ignore-gpu-check", ["huggingface"]),
-        ("skip_resource_checks", ["vllm"]),
-        ("--ignore-ollama-check", ["ollama"]),
-        ("--ignore-api-key-check", ["watsonx"]),
-        ("--ignore-api-key-check", ["openai"]),
+        (
+            "--ignore-gpu-check",
+            ["huggingface"],
+            ((["ollama"], "Ollama"), (["watsonx"], "Watsonx")),
+        ),
+        (
+            "skip_resource_checks",
+            ["vllm"],
+            ((["ollama"], "Ollama"), (["openai"], "OpenAI")),
+        ),
+        (
+            "--ignore-ollama-check",
+            ["ollama"],
+            ((["huggingface"], "GPU"), (["watsonx"], "Watsonx")),
+        ),
+        (
+            "--ignore-api-key-check",
+            ["watsonx"],
+            ((["huggingface"], "GPU"), (["ollama"], "Ollama")),
+        ),
+        (
+            "--ignore-api-key-check",
+            ["openai"],
+            ((["vllm"], "GPU"), (["ollama"], "Ollama")),
+        ),
     ],
 )
-def test_collection_capability_overrides(option, markers, monkeypatch):
-    """Verify individual runtime overrides also apply during collection."""
+def test_collection_capability_overrides(option, markers, still_gated, monkeypatch):
+    """Verify individual runtime overrides apply only to their capability gate."""
     monkeypatch.setattr(
         example_conftest,
         "get_system_capabilities",
         lambda: {"has_gpu": False, "has_ollama": False, "has_api_keys": {}},
     )
+    config = _Config(option)
 
-    assert example_conftest._should_skip_collection(markers, _Config(option)) == (
-        False,
-        None,
-    )
+    assert example_conftest._should_skip_collection(markers, config) == (False, None)
+    for gated_markers, reason_fragment in still_gated:
+        should_skip, reason = example_conftest._should_skip_collection(
+            gated_markers, config
+        )
+        assert should_skip
+        assert reason_fragment in reason
 
 
 def test_ignore_all_preserves_non_capability_gates(monkeypatch):
     """Verify the aggregate override avoids detection but preserves explicit gates."""
+    capability_probes = []
 
-    def fail_capability_detection():
-        raise AssertionError("capability detection should be bypassed")
+    def record_capability_detection():
+        capability_probes.append(True)
+        return {
+            "has_gpu": True,
+            "has_ollama": True,
+            "has_api_keys": {"watsonx": "set", "openai": "set"},
+        }
 
     monkeypatch.setattr(
-        example_conftest, "get_system_capabilities", fail_capability_detection
+        example_conftest, "get_system_capabilities", record_capability_detection
     )
     monkeypatch.setenv("CICD", "1")
     monkeypatch.setenv("SKIP_SLOW", "1")
@@ -221,3 +291,4 @@ def test_ignore_all_preserves_non_capability_gates(monkeypatch):
         should_skip, reason = example_conftest._should_skip_collection(markers, config)
         assert should_skip
         assert reason
+    assert capability_probes == []
