@@ -1,9 +1,9 @@
 // IBM Analytics — loaded via scripts: in docusaurus.config.ts
 
 (function() {
-  // Only run in production or when explicitly enabled
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    console.log('IBM Analytics disabled in development');
+  // Only run on the production site
+  if (window.location.hostname !== 'docs.mellea.ai') {
+    console.log('IBM Analytics disabled outside production');
     return;
   }
 
@@ -36,16 +36,18 @@
   var script = document.createElement('script');
   script.src = 'https://1.www.s81c.com/common/stats/ibm-common.js';
   script.type = 'text/javascript';
-  script.defer = true;
   document.head.appendChild(script);
 
   function trackPageview() {
-    // Wait for IBM Analytics to load, then track pageview
-    setTimeout(function() {
+    // Wait for IBM Analytics to load, then track pageview (poll up to ~2s)
+    var attempts = 0;
+    (function attempt() {
       if (window.ibmStats && typeof window.ibmStats.pageview === 'function') {
         window.ibmStats.pageview();
+      } else if (attempts++ < 20) {
+        setTimeout(attempt, 100);
       }
-    }, 100);
+    })();
   }
 
   // Track initial page load
@@ -55,9 +57,19 @@
     trackPageview();
   }
 
-  if(window.navigation) {
-    window.navigation.addEventListener("navigate", trackPageview)
+  function emitOnHistoryChange(type) {
+    var orig = history[type];
+    history[type] = function() {
+      var ret = orig.apply(this, arguments);
+      trackPageview();
+      return ret;
+    };
+  }
+  if (window.navigation) {
+    window.navigation.addEventListener("navigate", trackPageview);
   } else {
+    emitOnHistoryChange('pushState');
+    emitOnHistoryChange('replaceState');
     window.addEventListener('popstate', trackPageview);
   }
 })();
