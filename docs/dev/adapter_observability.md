@@ -4,6 +4,19 @@ Epic #929 Phase 2, issue #1140. Covers three things landed together in the
 same PR: the narrowed `AdapterMixin` verb contract, the shared
 `resolve_model_options` helper, and the `AdapterFunctionMetricsPlugin` skeleton.
 
+Issue #1141 built on top of this: `LocalFileBinding` (PEFT/aLoRA reality) now
+has a real `prepare`/`activate`/`deactivate`/`release` lifecycle and a real
+`from_catalog()` constructor, `adapter_scope()` really activates/deactivates
+weights instead of being a no-op, and the span/metric plumbing described below
+actually fires. The sections that were written in future tense against #1141
+are updated in place rather than left as a historical record — see each
+section for what #1141 changed. `EmbeddedBinding` (#1142, Granite Switch
+reality) is still unimplemented. The existing `IntrinsicAdapter` /
+`resolve_adapter()` / `_generate_from_intrinsic` production hot path is
+**not** rewired onto this machinery yet — it still uses its own inline
+`set_adapter()` calls and doesn't open these spans or fire these hooks. That
+cutover is issue 4.1's job.
+
 ## AdapterMixin verb contract
 
 `AdapterMixin` (`mellea/backends/adapters/adapter.py`) exposes **seven**
@@ -45,9 +58,15 @@ a backend overrides only the verb matching its own adapter reality.
   implements this yet; the verb name is defined for when that reality is
   built.
 
-`resolve_adapter()` and `adapter_scope()` are unchanged Phase 1 scaffolding
-and out of scope for this issue — their real wiring into
-`WeightsBinding.activate()`/`deactivate()` belongs to #1141/#1142.
+`resolve_adapter()` is unchanged Phase 1 scaffolding — it still only knows
+about `IntrinsicAdapter`/`LocalHFAdapter` and is not used to look up
+`LocalFileBinding`/`Adapter` instances. `adapter_scope()` is no longer
+scaffolding: as of #1141 it really calls `adapter.weights.activate()` before
+the `with` body and `adapter.weights.deactivate()` after (in a `finally`, so
+deactivation runs even if the body raises), wrapping both in the span/metric
+plumbing described below. Wiring `EmbeddedBinding.activate()`/`deactivate()`
+for the Granite Switch reality is #1142's job; `adapter_scope()` itself
+doesn't change again for that.
 
 ## resolve_model_options
 
@@ -83,15 +102,34 @@ default — the same class of bug PR #972 fixed elsewhere.
   `schema_error` (i.e. an `AdapterSchemaMismatchError`), acting as a
   schema-drift detector.
 
-No production code fires these hooks yet — this is a skeleton, unit-tested
-against synthetic payloads only (`test/telemetry/test_metrics_plugins.py`).
-Real wiring from `prepare`/`activate`/`generate`/`parse`/`deactivate` is
-expected to go in with #1141 (LocalFileBinding) and #1142 (EmbeddedBinding).
+As of #1141, `LocalFileBinding.prepare()` and `AdapterMixin.adapter_scope()`'s
+`activate`/`deactivate` phases fire `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
+`adapter_scope()` fires `ADAPTER_FUNCTION_INVOCATION_COMPLETE` when the parent
+scope closes — both through the standard `has_plugins()`-then-`invoke_hook()`
+idiom, so the metrics plugin now receives real payloads whenever
+`LocalFileBinding` is prepared and activated/deactivated through
+`adapter_scope()`. `release()` opens and closes its own
+`adapter_function.release` span but does **not** fire a phase-complete metric:
+`AdapterFunctionPhaseCompletePayload.phase`'s `Literal` (`prepare` | `activate`
+| `generate` | `parse` | `deactivate`) has no `"release"` value, so there's
+nothing for `LocalFileBinding.release()` to report against — this is the
+existing #1140 contract, not a #1141 oversight. `generate` and `parse` never
+fire in this issue either: nothing in production calls `io_contract.parse()`
+yet, since the `IntrinsicAdapter` hot path isn't wired onto this machinery
+(see the note at the top of this doc). Closing that gap, and wiring the
+equivalent hooks for `EmbeddedBinding`, is issue 4.1's and #1142's job
+respectively. `test/telemetry/test_metrics_plugins.py` still exercises the
+plugin against synthetic payloads directly; it isn't yet exercised through a
+real invocation end-to-end.
 
 ## Span tree (structure)
 
-Span *emission* ships with the Bindings (#1141/#1142) — no span code lands in
-this PR. What this issue fixes is the *shape*, so the traces align with the
+Span *emission* for `LocalFileBinding` ships with #1141, via
+`start_adapter_function_span`/`finish_adapter_function_span_success`/
+`finish_adapter_function_span_error` and
+`start_adapter_function_phase_span`/`finish_adapter_function_phase_span` in
+`mellea/telemetry/tracing.py`. `EmbeddedBinding` (#1142) still has no span
+emission. What #1140 fixed was the *shape*, so the traces align with the
 metrics and follow Mellea's existing tracing conventions rather than a bespoke
 scheme. Spans are opened through the `start_*_span` helper family in
 `mellea/telemetry/tracing.py` (mirroring `start_backend_span` /
@@ -108,9 +146,13 @@ An invocation opens one parent span with a child span per lifecycle phase:
   `mellea.adapter_function.outcome`, mirroring the
   `mellea.adapter_function.invocations` counter.
 - **Children** (one per phase: `prepare`, `activate`, `generate`, `parse`,
-  `deactivate`) — each carries `mellea.adapter_function.phase` and
-  corresponds one-to-one with a `mellea.adapter_function.phase_duration`
-  histogram sample of the same phase.
+  `deactivate`, plus `release` which only ever gets a span, never a metric —
+  see the metrics section above) — each carries `mellea.adapter_function.phase`
+  and, except for `release`, corresponds one-to-one with a
+  `mellea.adapter_function.phase_duration` histogram sample of the same phase.
+  As of #1141, only `prepare`, `activate`, `deactivate`, and `release`
+  actually open a span for `LocalFileBinding`; `generate`/`parse` are
+  structurally supported but nothing calls them yet (see above).
 
 Note the deliberate split, consistent with the rest of Mellea: **metric labels
 are bare** (`name`, `phase`, `revision`, …) while **span attributes are
@@ -127,8 +169,14 @@ already use (it also honours `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
 **off by default**, so traces never capture PII or proprietary content unless
 explicitly opted in. When unset or falsey, the phase spans carry metadata only;
 when set truthy, they additionally attach the adapter's input/output content.
-The adapter-function spans **reuse this gate rather than introducing a new one**;
-content attributes are attached when the Bindings (#1141/#1142) emit spans.
+The adapter-function spans **reuse this gate rather than introducing a new one**
+by design, but as of #1141 no content attributes are attached yet — the
+`start_adapter_function_span`/`start_adapter_function_phase_span` helpers only
+set the metadata attributes listed above. There's no adapter input/output
+content to attach until `generate`/`parse` actually fire, which doesn't happen
+in this issue (see above). Wiring `MELLEA_TRACES_CONTENT`-gated content
+attributes is deferred to whichever issue first makes `generate`/`parse` fire
+in production — expected to be issue 4.1.
 
 (#1140's acceptance criteria named this `MELLEA_TRACE_CONTENT`; the real,
 already-implemented variable is `MELLEA_TRACES_CONTENT` — see

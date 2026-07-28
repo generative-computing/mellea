@@ -947,6 +947,118 @@ def finish_streaming_span(
         )
 
 
+_ADAPTER_FUNCTION_PHASE_KEY_INFIX = ":phase:"
+
+
+def start_adapter_function_span(
+    call_id: str,
+    *,
+    name: str,
+    revision: str | None,
+    binding_type: str,
+    adapter_type: str,
+    attach_context: bool = True,
+) -> Span | None:
+    """Open the `adapter_function` parent span for one adapter-function invocation.
+
+    Args:
+        call_id: UUID correlating this invocation across the phase spans it wraps.
+        name: Adapter function name (e.g. `"answerability"`).
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+        binding_type: Weight-binding reality (e.g. `"local_file"`).
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        attach_context: Whether to attach the span as the ambient OTel context.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        "adapter_function",
+        call_id,
+        {
+            "mellea.adapter_function.name": name,
+            "mellea.adapter_function.revision": revision,
+            "mellea.adapter_function.binding_type": binding_type,
+            "mellea.adapter_function.adapter_type": adapter_type,
+        },
+        attach_context=attach_context,
+    )
+
+
+def finish_adapter_function_span_success(call_id: str, *, outcome: str) -> None:
+    """End the `adapter_function` span with success status.
+
+    Args:
+        call_id: Correlation key from the matching open call.
+        outcome: `mellea.adapter_function.outcome` (e.g. `"success"`).
+    """
+    _finish_application_span_success(
+        call_id, extra_attributes={"mellea.adapter_function.outcome": outcome}
+    )
+
+
+def finish_adapter_function_span_error(
+    call_id: str, *, outcome: str, exception: BaseException | None
+) -> None:
+    """End the `adapter_function` span with ERROR status.
+
+    Args:
+        call_id: Correlation key from the matching open call.
+        outcome: `mellea.adapter_function.outcome` (e.g. `"error"`, `"schema_error"`).
+        exception: The exception that ended the invocation, or `None` to set
+            ERROR status without a recorded exception.
+    """
+    _finish_application_span_error(
+        call_id,
+        extra_attributes={"mellea.adapter_function.outcome": outcome},
+        exception=exception,
+    )
+
+
+def start_adapter_function_phase_span(
+    call_id: str, phase: str, *, attach_context: bool = True
+) -> Span | None:
+    """Open a child span for one adapter-function lifecycle phase.
+
+    Stashed under a derived key so it doesn't collide with the parent
+    `adapter_function` span's `call_id` key.
+
+    Args:
+        call_id: Correlation key of the enclosing invocation (or, for phases
+            with no enclosing invocation such as `prepare`/`release`, a
+            standalone UUID).
+        phase: Lifecycle phase (`"prepare"`, `"activate"`, `"generate"`,
+            `"parse"`, or `"deactivate"`).
+        attach_context: Whether to attach the span as the ambient OTel context.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        f"adapter_function.{phase}",
+        call_id + _ADAPTER_FUNCTION_PHASE_KEY_INFIX + phase,
+        {"mellea.adapter_function.phase": phase},
+        attach_context=attach_context,
+    )
+
+
+def finish_adapter_function_phase_span(
+    call_id: str, phase: str, *, exception: BaseException | None = None
+) -> None:
+    """End a phase span opened by `start_adapter_function_phase_span`.
+
+    Args:
+        call_id: Correlation key from the matching open call.
+        phase: Lifecycle phase name from the matching open call.
+        exception: If provided, mark the span ERROR and record the exception.
+    """
+    key = call_id + _ADAPTER_FUNCTION_PHASE_KEY_INFIX + phase
+    if exception is not None:
+        _finish_application_span_error(key, exception=exception)
+    else:
+        _finish_application_span_success(key)
+
+
 __all__ = [
     "get_application_tracer",
     "get_backend_tracer",

@@ -119,14 +119,18 @@ def test_weights_binding_abc_enforcement():
         PartialBinding()  # type: ignore[abstract]
 
 
-@pytest.mark.parametrize(
-    "cls", [LocalFileBinding, EmbeddedBinding, ServerMediatedBinding]
-)
+@pytest.mark.parametrize("cls", [EmbeddedBinding, ServerMediatedBinding])
 @pytest.mark.parametrize("verb", ["prepare", "activate", "deactivate", "release"])
 def test_stub_binding_subclasses_raise_not_implemented(cls, verb):
     binding = cls()
     with pytest.raises(NotImplementedError, match="Phase 0 stub"):
         getattr(binding, verb)()
+
+
+def test_local_file_binding_not_a_phase_0_stub():
+    # LocalFileBinding graduated out of the stub set in Epic #929 Phase 2
+    # (issue #1141) — see test_local_file_binding.py for its real behavior.
+    assert LocalFileBinding.prepare is not EmbeddedBinding.prepare
 
 
 def test_adapter_schema_mismatch_error_format():
