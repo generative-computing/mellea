@@ -614,9 +614,10 @@ class LiteLLMBackend(FormatterBackend):
             # Must handle ollama differently due to: https://github.com/BerriAI/litellm/issues/14579.
             # Check that we are targeting ollama with the model_id prefix litellm uses.
             separate_tools = "ollama" in self._model_id.split("/")[0]
-            mot.raw.response = chat_completion_delta_merge(
+            merged = chat_completion_delta_merge(
                 mot.raw.streamed_chunks, force_all_tool_calls_separate=separate_tools
             )
+            mot.raw.response = {"choices": [merged], "usage": mot.generation.usage}
 
         assert mot._call.action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
@@ -628,15 +629,9 @@ class LiteLLMBackend(FormatterBackend):
         # OpenAI-like streamed responses potentially give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        # Non-streaming stores a top-level response (index into choices); streaming
-        # stores the already-merged choice dict (use directly).
         response = mot.raw.response
         assert response is not None
-        choice_response = (
-            response["choices"][0]
-            if isinstance(response, dict) and "choices" in response
-            else response
-        )
+        choice_response = response["choices"][0]
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:

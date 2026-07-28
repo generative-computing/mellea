@@ -205,11 +205,15 @@ class TestExtractFinishReason:
         output.raw = RawProviderResponse(provider="litellm", response="not a dict")
         assert extract_finish_reason(output) == "stop"
 
-    def test_litellm_per_choice_dict_fallback(self):
-        """Test that a LiteLLM per-choice dict (no choices key) uses top-level finish_reason."""
+    def test_litellm_normalized_streaming_shape(self):
+        """Streaming stores a top-level envelope; finish_reason is under choices[0]."""
         output = ModelOutputThunk("test response")
         output.raw = RawProviderResponse(
-            provider="litellm", response={"finish_reason": "tool_calls"}
+            provider="litellm",
+            response={
+                "choices": [{"finish_reason": "tool_calls", "index": 0}],
+                "usage": None,
+            },
         )
         assert extract_finish_reason(output) == "tool_calls"
 
@@ -233,3 +237,27 @@ class TestExtractFinishReason:
             response={"choices": [{"finish_reason": "stop", "index": 0}]},
         )
         assert extract_finish_reason(output) == "tool_calls"
+
+    def test_openai_streaming_normalized_shape(self):
+        """Streaming stores a top-level envelope; finish_reason is under choices[0]."""
+        output = ModelOutputThunk("test response")
+        output.raw = RawProviderResponse(
+            provider="openai",
+            response={
+                "choices": [{"finish_reason": "stop", "index": 0}],
+                "usage": None,
+            },
+        )
+        assert extract_finish_reason(output) == "stop"
+
+    def test_watsonx_streaming_normalized_shape(self):
+        """Watsonx streaming stores a top-level envelope; finish_reason is under choices[0]."""
+        output = ModelOutputThunk("test response")
+        output.raw = RawProviderResponse(
+            provider="watsonx",
+            response={
+                "choices": [{"finish_reason": "stop", "index": 0}],
+                "usage": None,
+            },
+        )
+        assert extract_finish_reason(output) == "stop"

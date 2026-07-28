@@ -54,16 +54,12 @@ def extract_finish_reason(output: Any) -> FinishReason:
         elif provider in ("openai", "watsonx", "litellm") and isinstance(
             response, dict
         ):
-            # Chat path: full response dict, finish_reason nested under choices[0].
+            # Chat path: top-level response dict, finish_reason nested under choices[0].
             choices = response.get("choices", [])
             if choices and len(choices) > 0:
                 finish_reason = choices[0].get("finish_reason")
                 if finish_reason in valid_reasons:
                     return finish_reason
-            # Raw-completion path: single choice dict, finish_reason at top level.
-            finish_reason = response.get("finish_reason")
-            if finish_reason in valid_reasons:
-                return finish_reason
 
     # Default to "stop" per OpenAI spec
     return "stop"
