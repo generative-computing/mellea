@@ -42,9 +42,9 @@ def _make_backend(monkeypatch: pytest.MonkeyPatch) -> "WatsonxAIBackend":
 def _streaming_chunks() -> list[dict]:
     """Minimal choice-level delta chunks as stored by WatsonxAIBackend.processing().
 
-    Note: Watsonx's processing() appends ``chunk["choices"][0]`` (the choice dict),
+    Note: Watsonx's processing() appends `chunk["choices"][0]` (the choice dict),
     not the full top-level chunk, so streamed_chunks holds choice-level dicts.
-    ``chat_completion_delta_merge`` then merges these into a single choice dict.
+    `chat_completion_delta_merge` then merges these into a single choice dict.
     """
     return [
         {"delta": {"role": "assistant", "content": "hello"}, "finish_reason": None},
