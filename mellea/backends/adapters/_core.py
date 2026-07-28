@@ -24,12 +24,20 @@ Note:
 
 import abc
 import json
+import time
 import warnings
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from ...core import Component
+from ...helpers.event_loop_helper import _run_async_in_thread
+from ...plugins.manager import has_plugins, invoke_hook
+from ...plugins.types import HookType
 from .capabilities import KNOWN_CAPABILITIES
+from .catalog import AdapterType, fetch_intrinsic_metadata
+
+if TYPE_CHECKING:
+    from .adapter import AdapterMixin
 
 _PHASE_2_NOT_IMPLEMENTED = (
     "{cls} is a Phase 0 stub; implementation lands in Epic #929 Phase 2."
@@ -193,7 +201,13 @@ class WeightsBinding(abc.ABC):
 
     Concrete implementations are expected to document any deviations from this
     contract (e.g. servers that prepare-and-activate atomically).
+
+    Attributes:
+        binding_type (ClassVar[str]): Weight-binding reality identifier used in
+            adapter-function telemetry (e.g. `"local_file"`).
     """
+
+    binding_type: ClassVar[str] = "unknown"
 
     @abc.abstractmethod
     def prepare(self) -> None:
@@ -217,31 +231,253 @@ class WeightsBinding(abc.ABC):
 
 
 class LocalFileBinding(WeightsBinding):
-    """Stub binding for locally stored adapter weights."""
+    """Weights binding for the LocalFile/PEFT reality (Epic #929 Phase 2).
+
+    Downloads LoRA/aLoRA adapter weights from a Hugging Face Hub repository and
+    loads them into a PEFT-capable backend (e.g.
+    :class:`~mellea.backends.huggingface.LocalHFBackend`) via the
+    :class:`~mellea.backends.adapters.adapter.AdapterMixin` verb contract.
+
+    `prepare()` is session-scoped: call `bind_backend()` once, then `prepare()`.
+    `activate()`/`deactivate()` are call-scoped, typically driven by
+    :meth:`~mellea.backends.adapters.adapter.AdapterMixin.adapter_scope`.
+    `release()` is terminal.
+
+    Attributes:
+        name (str): Adapter function name (e.g. `"answerability"`).
+        adapter_type (AdapterType): The LoRA variant.
+        repo_id (str): Hugging Face Hub repository containing the adapter weights.
+        revision (str | None): Git revision (branch, tag, or commit SHA) to
+            download, or `None` to use the catalogue's pinned revision for
+            `name` — resolved lazily, so it stays correct if the catalogue is
+            re-pinned. Pass `"main"` explicitly to opt into tracking latest.
+        backend (AdapterMixin | None): Backend this binding is registered
+            with, set by `prepare()` and cleared by `release()`.
+        path (str | None): Local filesystem path to the downloaded adapter
+            weights, set by `prepare()` and cleared by `release()`.
+    """
+
+    binding_type: ClassVar[str] = "local_file"
+
+    def __init__(
+        self,
+        name: str = "",
+        adapter_type: AdapterType = AdapterType.LORA,
+        repo_id: str = "",
+        revision: str | None = None,
+    ) -> None:
+        """Constructs a LocalFileBinding.
+
+        Args:
+            name: Adapter function name (e.g. `"answerability"`).
+            adapter_type: The LoRA variant.
+            repo_id: Hugging Face Hub repository containing the adapter weights.
+            revision: Git revision (branch, tag, or commit SHA) to download, or
+                `None` to use the catalogue's pinned revision for `name`. Pass
+                `"main"` explicitly to opt into tracking latest.
+        """
+        self.name = name
+        self.adapter_type = adapter_type
+        self.repo_id = repo_id
+        self.revision = revision
+        self.backend: AdapterMixin | None = None
+        self.path: str | None = None
+        self._staged_backend: AdapterMixin | None = None
+
+    @property
+    def qualified_name(self) -> str:
+        """Backend-facing adapter identifier, e.g. `"answerability_lora"`."""
+        return f"{self.name}_{self.adapter_type.value}"
+
+    def resolved_revision(self) -> str:
+        """Returns the revision to download, resolving `None` via the catalogue.
+
+        A `revision` of `None` means "whatever the catalogue has pinned for this
+        adapter function". Resolving here rather than in `__init__` keeps a
+        long-lived binding correct across a catalogue re-pin, and keeps
+        construction free of catalogue lookups.
+
+        Returns:
+            The git revision (branch, tag, or commit SHA) to download.
+
+        Raises:
+            ValueError: `revision` is `None` and `name` is not a registered
+                adapter function, so there is no pinned revision to fall back on.
+        """
+        if self.revision is not None:
+            return self.revision
+        return fetch_intrinsic_metadata(self.name).revision
+
+    def get_local_hf_path(self, base_model_name: str) -> str:
+        """Downloads (or reuses a cached copy of) the adapter weights.
+
+        Args:
+            base_model_name: Base model the adapter is being loaded against.
+
+        Returns:
+            Filesystem path to the local copy of the adapter weights.
+
+        Raises:
+            ValueError: `revision` is `None` and `name` is not a registered
+                adapter function.
+        """
+        from ...formatters.granite import intrinsics
+
+        return str(
+            intrinsics.obtain_lora(
+                self.name,
+                base_model_name,
+                self.repo_id,
+                revision=self.resolved_revision(),
+                alora=self.adapter_type is AdapterType.ALORA,
+            )
+        )
+
+    @classmethod
+    def from_catalog(cls, name: str) -> "LocalFileBinding":
+        """Builds a `LocalFileBinding` from the adapter function catalog.
+
+        Args:
+            name: Adapter function name registered in the catalog.
+
+        Returns:
+            A `LocalFileBinding` configured with the catalog's pinned
+            `repo_id`, `revision`, and first-listed adapter type.
+
+        Raises:
+            ValueError: `name` is not a registered adapter function.
+        """
+        metadata = fetch_intrinsic_metadata(name)
+        return cls(
+            name=name,
+            adapter_type=metadata.adapter_types[0],
+            repo_id=metadata.repo_id,
+            revision=metadata.revision,
+        )
+
+    def bind_backend(self, backend: "AdapterMixin") -> None:
+        """Stages the backend that `prepare()` will register this binding with.
+
+        Args:
+            backend: The backend to register with on the next `prepare()` call.
+        """
+        self._staged_backend = backend
 
     def prepare(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
-        )
+        """Downloads the adapter weights and loads them into the staged backend.
+
+        Idempotent: a no-op once already prepared.
+
+        Raises:
+            RuntimeError: `bind_backend()` was not called first, `name` is empty,
+                or the backend refused the registration.
+        """
+        if self.backend is not None:
+            return
+        if self._staged_backend is None:
+            raise RuntimeError(
+                "LocalFileBinding.prepare() requires bind_backend() to be called first."
+            )
+        if not self.name:
+            raise RuntimeError(
+                "LocalFileBinding.prepare() requires a non-empty name. A default-"
+                "constructed LocalFileBinding() is an unconfigured placeholder — "
+                "build one with LocalFileBinding.from_catalog(name) instead."
+            )
+
+        started_at = time.monotonic()
+        self._staged_backend.add_adapter(self)
+        # `add_adapter` signals success by setting `.backend`; it has early-return
+        # paths (notably: a different object already registered under this
+        # `qualified_name`) that log a warning and leave it unset. Without this
+        # check `prepare()` would go on to load the *other* adapter's weights and
+        # leave `.backend` None, so a later `activate()` would raise "requires
+        # prepare() to be called first" despite `prepare()` having run. Fail here
+        # instead, where the cause is still visible.
+        if self.backend is None:
+            raise RuntimeError(
+                f"Backend refused to register adapter {self.qualified_name!r}; see the "
+                "backend's warning log. A different adapter is most likely already "
+                "registered under this qualified name."
+            )
+        self._staged_backend.load_peft_adapter(self.qualified_name)
+        self._fire_phase_complete("prepare", time.monotonic() - started_at)
 
     def activate(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
-        )
+        """Loads the adapter weights into the backend for generation.
+
+        Raises:
+            RuntimeError: `prepare()` was not called first.
+        """
+        if self.backend is None:
+            raise RuntimeError(
+                "LocalFileBinding.activate() requires prepare() to be called first."
+            )
+        with self.backend._adapter_activation_lock():
+            self.backend.activate_peft_adapter(self.qualified_name)
 
     def deactivate(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
-        )
+        """Unloads the adapter weights from the backend.
+
+        Raises:
+            RuntimeError: `prepare()` was not called first.
+        """
+        if self.backend is None:
+            raise RuntimeError(
+                "LocalFileBinding.deactivate() requires prepare() to be called first."
+            )
+        with self.backend._adapter_activation_lock():
+            self.backend.deactivate_peft_adapter(self.qualified_name)
 
     def release(self) -> None:
-        raise NotImplementedError(
-            _PHASE_2_NOT_IMPLEMENTED.format(cls="LocalFileBinding")
+        """Unloads the adapter from the backend and releases all resources.
+
+        Idempotent: a no-op if never prepared, or already released.
+        """
+        if self.backend is None:
+            return
+
+        self.backend.unload_peft_adapter(self.qualified_name)
+
+        self.backend = None
+        self.path = None
+        self._staged_backend = None
+
+    def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
+        """Fires `adapter_function_phase_complete` for a phase this binding owns.
+
+        Only `"prepare"` is fired from here: `"activate"`/`"deactivate"` are
+        owned by `AdapterMixin.adapter_scope`, and `"release"` has no phase
+        metric in the `AdapterFunctionPhaseCompletePayload` contract (Epic #929
+        Phase 1, issue #1140).
+
+        Args:
+            phase: Lifecycle phase name; must be a valid
+                `AdapterFunctionPhaseCompletePayload.phase` value.
+            duration_s: Wall-clock duration of the phase, in seconds.
+        """
+        if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+            return
+
+        from ...plugins.hooks.adapter_function import (
+            AdapterFunctionPhaseCompletePayload,
         )
+
+        payload = AdapterFunctionPhaseCompletePayload(
+            name=self.name, phase=phase, duration_ms=duration_s * 1000.0
+        )
+        hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+        try:
+            _run_async_in_thread(hook_coro)
+        except BaseException:
+            hook_coro.close()
+            raise
 
 
 class EmbeddedBinding(WeightsBinding):
     """Stub binding for weights embedded in a model artifact."""
+
+    binding_type: ClassVar[str] = "embedded"
 
     def prepare(self) -> None:
         raise NotImplementedError(
@@ -266,6 +502,8 @@ class EmbeddedBinding(WeightsBinding):
 
 class ServerMediatedBinding(WeightsBinding):
     """Stub binding for server-managed adapter weights."""
+
+    binding_type: ClassVar[str] = "server_mediated"
 
     def prepare(self) -> None:
         raise NotImplementedError(
@@ -304,3 +542,16 @@ class Adapter:
     identity: Identity
     io_contract: IOContract
     weights: WeightsBinding
+
+    # NOTE(#1516): a construction-time cross-check that `weights.adapter_type`
+    # agrees with `identity.adapter_type` was tried here and backed out. It is the
+    # right invariant — the two feed different lookup paths (registration and the
+    # verbs key on the binding's `qualified_name`; `_find_adapter` scans on the
+    # identity) and both return `None` on a miss, so a disagreement surfaces as
+    # "adapter not found" far from its cause. But it cannot be enforced yet: the
+    # ten module-level `Adapter` constants in `stdlib/components/intrinsic/rag.py`
+    # and `guardian.py` pair an `alora` identity with a bare, deliberately
+    # unconfigured `LocalFileBinding()` that defaults to LoRA. Every catalogue
+    # entry supports both types, so those are placeholders rather than genuine
+    # conflicts, and the check fired on "not configured yet". Enforce it once
+    # #1516 gives those constants real bindings.

@@ -18,14 +18,25 @@ import abc
 import contextlib
 import pathlib
 import re
+import time
 import warnings
+from collections.abc import Callable
 from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
 from ...core import Backend
 from ...formatters.granite import intrinsics as intrinsics
-from ._core import Adapter as _AdapterCore, Identity, IOContract, WeightsBinding
+from ...helpers.event_loop_helper import _run_async_in_thread
+from ...plugins.manager import has_plugins, invoke_hook
+from ...plugins.types import HookType
+from ._core import (
+    Adapter as _AdapterCore,
+    Identity,
+    IOContract,
+    LocalFileBinding,
+    WeightsBinding,
+)
 from .catalog import AdapterType, fetch_intrinsic_metadata
 
 
@@ -225,12 +236,11 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
-            # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision
-            # once revision-aware prepare() is merged (issue #1141 / epic #929).
             config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 self.intrinsic_metadata.repo_id,
+                revision=self.intrinsic_metadata.revision,
                 alora=is_alora,
             )
         if config_file:
@@ -283,13 +293,12 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
             a path to the files
         """
         is_alora = self.adapter_type == AdapterType.ALORA
-        # TODO(phase-2.2): pass revision=self.intrinsic_metadata.revision once
-        # revision-aware prepare() is merged (issue #1141 / epic #929).
         return str(
             intrinsics.obtain_lora(
                 self.intrinsic_name,
                 base_model_name,
                 self.intrinsic_metadata.repo_id,
+                revision=self.intrinsic_metadata.revision,
                 alora=is_alora,
             )
         )
@@ -326,6 +335,78 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
+def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> None:
+    """Run one lifecycle phase and fire its phase-complete metric hook.
+
+    Fires the hook only; it does not open a span. Span production belongs to a
+    plugin (#1464, #1466), not to code under `mellea/backends/`.
+
+    Args:
+        name: Adapter function name, used as the metric's `name` field.
+        phase: Lifecycle phase name; must be a valid
+            `AdapterFunctionPhaseCompletePayload.phase` value.
+        phase_fn: The zero-argument callable implementing the phase (e.g.
+            `adapter.weights.activate`).
+    """
+    started_at = time.monotonic()
+    phase_fn()
+
+    if not has_plugins(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import AdapterFunctionPhaseCompletePayload
+
+    payload = AdapterFunctionPhaseCompletePayload(
+        name=name, phase=phase, duration_ms=(time.monotonic() - started_at) * 1000.0
+    )
+    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
+    try:
+        _run_async_in_thread(hook_coro)
+    except BaseException:
+        hook_coro.close()
+        raise
+
+
+def _fire_invocation_complete(
+    *,
+    name: str,
+    revision: str | None,
+    binding_type: str,
+    adapter_type: str,
+    outcome: Literal["success", "schema_error", "error"],
+    error: BaseException | None,
+) -> None:
+    """Fire the `adapter_function_invocation_complete` metric hook.
+
+    Args:
+        name: Adapter function name.
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+        binding_type: Weight-binding reality the adapter ran under.
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        outcome: Invocation outcome.
+        error: The exception raised during invocation, or `None` on success.
+    """
+    if not has_plugins(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE):
+        return
+    from ...plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+    )
+
+    payload = AdapterFunctionInvocationCompletePayload(
+        name=name,
+        revision=revision,
+        binding_type=binding_type,
+        adapter_type=adapter_type,
+        outcome=outcome,
+        error=error,
+    )
+    hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload)
+    try:
+        _run_async_in_thread(hook_coro)
+    except BaseException:
+        hook_coro.close()
+        raise
+
+
 # The full adapter-input surface `add_adapter` advertises. The legacy abc
 # `Adapter` (LocalFile/PEFT) and the core dataclass adapter (`_AdapterCore`,
 # Embedded/ServerMediated) are disjoint hierarchies, so the accepted type is
@@ -333,7 +414,7 @@ def get_adapter_for_intrinsic(
 # adapter realities they do not implement — the same "reject unsupported reality"
 # contract the reality-specific verbs use. See the module note on the mixin-vs-
 # generic trade-off for why this is a runtime, not a type-parameter, guarantee.
-AdapterInput: TypeAlias = Adapter | _AdapterCore
+AdapterInput: TypeAlias = Adapter | _AdapterCore | LocalFileBinding
 
 
 class AdapterMixin(Backend, abc.ABC):
@@ -428,6 +509,58 @@ class AdapterMixin(Backend, abc.ABC):
         raise NotImplementedError(
             f"Backend type {type(self)} does not support unload_peft_adapter()."
         )
+
+    def activate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch a previously loaded PEFT adapter on for subsequent generation.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model). The adapter must have been loaded via `load_peft_adapter`
+        before calling this method.
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to activate.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support activate_peft_adapter()."
+        )
+
+    def deactivate_peft_adapter(self, adapter_qualified_name: str) -> None:
+        """Switch off any active PEFT adapter so generation uses the base model.
+
+        LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
+        model).
+
+        Args:
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
+                adapter to deactivate. Accepted for symmetry with
+                `activate_peft_adapter`; the underlying primitive clears all
+                active PEFT adapters regardless of name.
+
+        Raises:
+            NotImplementedError: If this backend's adapter reality is not
+                LocalFile/PEFT.
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not support deactivate_peft_adapter()."
+        )
+
+    def _adapter_activation_lock(
+        self,
+    ) -> contextlib.AbstractContextManager[bool | None]:
+        """Exclusivity lock to hold while calling activate/deactivate verbs.
+
+        Default is a no-op (`contextlib.nullcontext()`). Backends whose
+        activation verbs mutate shared, non-thread-safe state (e.g.
+        `LocalHFBackend`'s underlying PEFT model) override this to return
+        their own lock, so callers like `LocalFileBinding.activate()` get
+        the same exclusivity `_generate_with_adapter_lock` relies on.
+        """
+        return contextlib.nullcontext()
 
     def render_controls(self, adapter_qualified_name: str, active: bool) -> None:
         """Render or clear the control tokens for a baked-in embedded adapter.
@@ -543,13 +676,51 @@ class AdapterMixin(Backend, abc.ABC):
     def adapter_scope(self, adapter: "_AdapterCore | None"):  # type: ignore[type-arg]
         """Context manager wrapping adapter activation and deactivation.
 
-        Phase 1 stub — yields immediately (no-op). Phase 2 (see epic #929) wires
-        in `adapter.weights.activate()` and `adapter.weights.deactivate()`.
+        A no-op when `adapter` is `None`. Otherwise: activates
+        `adapter.weights`, yields, then always deactivates — even if the `with`
+        body raises. Each phase fires `ADAPTER_FUNCTION_PHASE_COMPLETE`, and
+        `ADAPTER_FUNCTION_INVOCATION_COMPLETE` fires on the way out, carrying the
+        overall outcome.
+
+        This method fires hooks only; it does not open spans. Span production is a
+        plugin's job (see #1464 for the rule and #1466 for the adapter-function
+        spans), and the `ADAPTER_FUNCTION_*` family currently has no start hook for
+        a plugin to open a span on. See `docs/dev/adapter_observability.md` for the
+        metric schema.
 
         Args:
-            adapter: The adapter to activate, or `None` (no-op in Phase 1).
+            adapter: The adapter to activate, or `None` (no-op).
         """
-        yield
+        if adapter is None:
+            yield
+            return
+
+        name = adapter.identity.name
+        revision = getattr(adapter.weights, "revision", None)
+        binding_type = adapter.weights.binding_type
+        adapter_type = adapter.identity.adapter_type
+
+        outcome: Literal["success", "error"] = "success"
+        exception: BaseException | None = None
+        try:
+            _run_adapter_phase(name, "activate", adapter.weights.activate)
+            try:
+                yield
+            finally:
+                _run_adapter_phase(name, "deactivate", adapter.weights.deactivate)
+        except BaseException as exc:
+            outcome = "error"
+            exception = exc
+            raise
+        finally:
+            _fire_invocation_complete(
+                name=name,
+                revision=revision,
+                binding_type=binding_type,
+                adapter_type=adapter_type,
+                outcome=outcome,
+                error=exception,
+            )
 
     def _find_adapter(
         self, capability: str, adapter_types: tuple[str, ...] | None = None
