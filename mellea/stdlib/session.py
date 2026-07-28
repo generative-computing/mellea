@@ -41,6 +41,7 @@ from ..core import (
     ImageUrlBlock,
     MelleaLogger,
     ModelOutputThunk,
+    NodeData,
     Requirement,
     S,
     SamplingResult,
@@ -564,8 +565,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -585,8 +585,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -605,8 +604,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -935,8 +933,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -957,8 +954,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -979,8 +975,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -1001,8 +996,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -1022,8 +1016,7 @@ class MelleaSession:
         audio: list[AudioBlock | AudioUrlBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | NodeData] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,

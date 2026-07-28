@@ -11,7 +11,7 @@ the go-to component type for ad-hoc prompts that do not require a dedicated
 
 from typing import Any
 
-from ...core import CBlock, Component, ModelOutputThunk
+from ...core import CBlock, Component, ModelOutputThunk, NodeData
 
 
 class SimpleComponent(Component[str]):
@@ -25,7 +25,7 @@ class SimpleComponent(Component[str]):
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         """Returns the values of the kwargs.
 
         Returns:

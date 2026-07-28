@@ -12,10 +12,10 @@ completion endpoint.
 """
 
 from ..core import (
-    CBlock,
     Component,
     Formatter,
     ModelOutputThunk,
+    NodeData,
     TemplateRepresentation,
 )
 from ..stdlib.components.chat import Message
@@ -24,9 +24,7 @@ from ..stdlib.components.chat import Message
 class ChatFormatter(Formatter):
     """Formatter used by Legacy backends to format Contexts as Messages."""
 
-    def to_chat_messages(
-        self, cs: list[Component | CBlock | ModelOutputThunk]
-    ) -> list[Message]:
+    def to_chat_messages(self, cs: list[NodeData]) -> list[Message]:
         """Convert a linearized chat history into a list of chat messages.
 
         Iterates over each element in the context history and converts it to a
@@ -36,7 +34,7 @@ class ChatFormatter(Formatter):
         parsed structured outputs are handled transparently.
 
         Args:
-            cs (list[Component | CBlock | ModelOutputThunk]): The linearized sequence of context
+            cs (list[NodeData]): The linearized sequence of context
                 components, content blocks, and model outputs to convert.
 
         Returns:
@@ -44,7 +42,7 @@ class ChatFormatter(Formatter):
                 a chat completion endpoint.
         """
 
-        def _to_msg(c: Component | CBlock | ModelOutputThunk) -> Message:
+        def _to_msg(c: NodeData) -> Message:
             role: Message.Role = "user"  # default to `user`; see ModelOutputThunk below for when the role changes.
 
             # Check if it's a ModelOutputThunk first since that changes what we should be printing

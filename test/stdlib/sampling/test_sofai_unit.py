@@ -114,6 +114,29 @@ def test_extract_action_prompt_format_for_llm_str():
     assert result == "plain text repr"
 
 
+def test_extract_action_prompt_cblock():
+    """A bare CBlock action yields its value, not a `CBlock(...)` repr.
+
+    SOFAI has no repair semantics for non-Component actions (they carry through
+    as opaque spans), but the S2 "best_attempt" prompt must still embed the
+    action's content rather than its Python repr. See issue #1439.
+    """
+    from mellea.core import CBlock
+
+    result = SOFAISamplingStrategy._extract_action_prompt(CBlock("solve for x"))
+    assert result == "solve for x"
+
+
+def test_extract_action_prompt_model_output_thunk():
+    """A bare ModelOutputThunk action yields its value, not a repr."""
+    from mellea.core import ModelOutputThunk
+
+    result = SOFAISamplingStrategy._extract_action_prompt(
+        ModelOutputThunk(value="prior generation")
+    )
+    assert result == "prior generation"
+
+
 # --- _select_best_attempt ---
 
 

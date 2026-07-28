@@ -16,16 +16,16 @@ from ....backends.ollama import OllamaModelBackend
 from ....core import (
     BaseModelSubclass,
     CBlock,
-    Component,
     Context,
     GenerateLog,
     ModelOutputThunk,
+    NodeData,
 )
 
 
 async def think_budget_forcing(
     backend: OllamaModelBackend,
-    action: CBlock | Component | ModelOutputThunk,
+    action: NodeData,
     *,
     ctx: Context,
     format: type[BaseModelSubclass] | None = None,

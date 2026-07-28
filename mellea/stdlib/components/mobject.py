@@ -18,7 +18,7 @@ from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from ...backends.tools import MelleaTool
-from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ...core import Component, ModelOutputThunk, NodeData, TemplateRepresentation
 
 
 class Query(Component[str]):
@@ -38,11 +38,11 @@ class Query(Component[str]):
         self._obj = obj
         self._query = query
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         """Return the constituent parts of this query component.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: A list containing the wrapped object.
+            list[NodeData]: A list containing the wrapped object.
         """
         return [self._obj]
 
@@ -96,11 +96,11 @@ class Transform(Component[str]):
         self._obj = obj
         self._transformation = transformation
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         """Return the constituent parts of this transform component.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: A list containing the wrapped object.
+            list[NodeData]: A list containing the wrapped object.
         """
         return [self._obj]
 
@@ -141,11 +141,11 @@ class Transform(Component[str]):
 class MObjectProtocol(Protocol):
     """Protocol to describe the necessary functionality of a MObject. Implementers should prefer inheriting from MObject than MObjectProtocol."""
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         """Return a list of parts for this MObject.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: The constituent sub-components.
+            list[NodeData]: The constituent sub-components.
         """
         ...
 
@@ -226,11 +226,11 @@ class MObject(Component[str]):
         self._query_type = query_type
         self._transform_type = transform_type
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         """MObject has no parts because of how format_for_llm is defined.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: Always an empty list.
+            list[NodeData]: Always an empty list.
         """
         return []
 

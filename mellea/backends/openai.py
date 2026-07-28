@@ -29,6 +29,7 @@ from ..core import (
     GenerateType,
     MelleaLogger,
     ModelOutputThunk,
+    NodeData,
     RawProviderResponse,
     Requirement,
 )
@@ -840,7 +841,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_chat_context_standard(
         self,
-        action: Component | CBlock | ModelOutputThunk,
+        action: NodeData,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]

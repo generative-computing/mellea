@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ...core import Component, ModelOutputThunk, NodeData, TemplateRepresentation
 
 
 class Message(BaseModel):
@@ -110,11 +110,11 @@ class TestBasedEval(Component[str]):
         self.test_id = test_id
         self.input_ids = input_ids or []
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         """Return the constituent parts of this component.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: Always an empty list; the component
+            list[NodeData]: Always an empty list; the component
             renders entirely via `format_for_llm`.
         """
         return []
