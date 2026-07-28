@@ -70,6 +70,10 @@ class HookType(StrEnum):
     TOOL_PRE_INVOKE = "tool_pre_invoke"
     TOOL_POST_INVOKE = "tool_post_invoke"
 
+    # Adapter Function Lifecycle
+    ADAPTER_FUNCTION_INVOCATION_COMPLETE = "adapter_function_invocation_complete"
+    ADAPTER_FUNCTION_PHASE_COMPLETE = "adapter_function_phase_complete"
+
     # Streaming Pipeline
     STREAMING_START = "streaming_start"
     STREAMING_EVENT = "streaming_event"
@@ -88,6 +92,10 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
 
     Imports payload classes lazily to avoid circular imports.
     """
+    from mellea.plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+        AdapterFunctionPhaseCompletePayload,
+    )
     from mellea.plugins.hooks.component import (
         ComponentPostErrorPayload,
         ComponentPostSuccessPayload,
@@ -172,6 +180,15 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         # Tool Execution
         HookType.TOOL_PRE_INVOKE.value: (ToolPreInvokePayload, PluginResult),
         HookType.TOOL_POST_INVOKE.value: (ToolPostInvokePayload, PluginResult),
+        # Adapter Function Lifecycle
+        HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE.value: (
+            AdapterFunctionInvocationCompletePayload,
+            PluginResult,
+        ),
+        HookType.ADAPTER_FUNCTION_PHASE_COMPLETE.value: (
+            AdapterFunctionPhaseCompletePayload,
+            PluginResult,
+        ),
         # Streaming Pipeline
         HookType.STREAMING_START.value: (StreamingStartPayload, PluginResult),
         HookType.STREAMING_EVENT.value: (StreamingEventPayload, PluginResult),

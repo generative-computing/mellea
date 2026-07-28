@@ -14,6 +14,7 @@ from ._core import (
     WeightsBinding,
 )
 from .adapter import (
+    AdapterInput,
     AdapterMixin,
     AdapterType,
     EmbeddedIntrinsicAdapter,
@@ -28,6 +29,7 @@ from .catalog import validate_revision
 __all__ = [
     "KNOWN_CAPABILITIES",
     "Adapter",
+    "AdapterInput",
     "AdapterMixin",
     "AdapterSchemaMismatchError",
     "AdapterType",

@@ -223,6 +223,45 @@ def _make_intrinsic_backend_stub(stub_backend):
     return stub_backend
 
 
+def test_generate_with_adapter_lock_calls_load_peft_adapter():
+    """Regression guard: the internal adapter-lock call site (Epic #929 Phase 2,
+    issue #1140) must use the renamed `load_peft_adapter` verb, not the old
+    `load_adapter` name.
+    """
+    backend = _make_backend()
+    backend._model.active_adapters.return_value = ["my_adapter"]  # type: ignore[union-attr]
+
+    with patch.object(backend, "load_peft_adapter") as mock_load:
+        backend._generate_with_adapter_lock("my_adapter", lambda: "output")
+
+    mock_load.assert_called_once_with("my_adapter")
+    backend._model.set_adapter.assert_called_once_with("my_adapter")  # type: ignore[union-attr]
+
+
+def test_list_adapters_reflects_registration_not_just_loading():
+    """list_adapters() must include adapters registered via add_adapter, even
+    if they've never been loaded (aligns HF's semantics with OpenAI's).
+    """
+    backend = _make_backend()
+    adapter = _make_intrinsic_adapter_stub()
+    adapter.backend = None
+    adapter.get_local_hf_path = lambda base_model_name: "/fake/path"
+
+    backend.add_adapter(adapter)
+
+    assert adapter.qualified_name not in backend._loaded_adapters
+    assert adapter.qualified_name in backend.list_adapters()
+
+
+def test_add_non_local_hf_adapter_raises():
+    """LocalHFBackend.add_adapter() rejects adapters outside its own reality."""
+    backend = _make_backend()
+    mock_adapter = MagicMock(spec=[])
+
+    with pytest.raises(TypeError, match="LocalHFAdapter"):
+        backend.add_adapter(mock_adapter)
+
+
 def test_seed_forces_do_sample_true(stub_backend):
     """Issue #40: a seed alone must flip do_sample=True so it isn't ignored."""
     out = _call(stub_backend, {ModelOption.SEED: 42})

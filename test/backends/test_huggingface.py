@@ -96,15 +96,15 @@ def test_adapters(backend) -> None:
 
     expected_qualified_name = "requirement-check_alora"
     adapter = backend._added_adapters[expected_qualified_name]
-    backend.load_adapter(adapter.qualified_name)
+    backend.load_peft_adapter(adapter.qualified_name)
     assert adapter.qualified_name in backend._loaded_adapters
 
     # Ensure you can load the same adapter twice.
-    backend.load_adapter(adapter.qualified_name)
+    backend.load_peft_adapter(adapter.qualified_name)
 
     # Ensure you can unload an adapter.
-    backend.unload_adapter(adapter.qualified_name)
-    backend.unload_adapter(adapter.qualified_name)
+    backend.unload_peft_adapter(adapter.qualified_name)
+    backend.unload_peft_adapter(adapter.qualified_name)
     assert adapter.qualified_name not in backend._loaded_adapters
 
 

@@ -13,6 +13,8 @@ automatically record metrics when enabled. Currently includes:
 - SamplingMetricsPlugin: Records sampling attempt/success/failure counts per strategy
 - RequirementMetricsPlugin: Records requirement validation check and failure counts
 - ToolMetricsPlugin: Records tool invocation counts by name and status
+- AdapterFunctionMetricsPlugin: Records adapter function invocation and
+  phase-duration metrics
 """
 
 from __future__ import annotations
@@ -25,6 +27,10 @@ from mellea.plugins.types import PluginMode
 
 if TYPE_CHECKING:
     from mellea.core.base import GenerationMetadata
+    from mellea.plugins.hooks.adapter_function import (
+        AdapterFunctionInvocationCompletePayload,
+        AdapterFunctionPhaseCompletePayload,
+    )
     from mellea.plugins.hooks.generation import (
         GenerationBatchErrorPayload,
         GenerationBatchPostCallPayload,
@@ -456,6 +462,62 @@ class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=56):
         record_tool_call(tool_name, status)
 
 
+class AdapterFunctionMetricsPlugin(
+    Plugin, name="adapter_function_metrics", priority=57
+):
+    """Records adapter function invocation and phase-duration metrics.
+
+    Hooks into `adapter_function_invocation_complete` and
+    `adapter_function_phase_complete`. No production call site fires these
+    hooks yet — real `prepare`/`activate`/`generate`/`parse`/`deactivate`
+    wiring lands with the LocalFileBinding and EmbeddedBinding lifecycle work
+    (Epic #929 Phase 2 follow-ups).
+    """
+
+    @hook("adapter_function_invocation_complete", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_adapter_function_invocation(
+        self, payload: AdapterFunctionInvocationCompletePayload, context: dict[str, Any]
+    ) -> None:
+        """Record one adapter function invocation after it completes.
+
+        Args:
+            payload: Contains name, revision, binding_type, adapter_type, and outcome.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import (
+            record_adapter_function_invocation,
+            record_adapter_function_parse_failure,
+        )
+
+        record_adapter_function_invocation(
+            name=payload.name,
+            revision=payload.revision,
+            binding_type=payload.binding_type,
+            adapter_type=payload.adapter_type,
+            outcome=payload.outcome,
+        )
+        if payload.outcome == "schema_error":
+            record_adapter_function_parse_failure(payload.name, payload.revision)
+
+    @hook("adapter_function_phase_complete", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_adapter_function_phase(
+        self, payload: AdapterFunctionPhaseCompletePayload, context: dict[str, Any]
+    ) -> None:
+        """Record one adapter function lifecycle phase after it completes.
+
+        Args:
+            payload: Contains name, phase, and duration_ms.
+            context: Plugin context (unused).
+        """
+        from mellea.telemetry.metrics import record_adapter_function_phase_duration
+
+        # payload carries milliseconds; the metric is in seconds, matching
+        # LatencyMetricsPlugin and the OTel base-unit convention for durations.
+        record_adapter_function_phase_duration(
+            payload.name, payload.phase, payload.duration_ms / 1000.0
+        )
+
+
 # All metrics plugins to auto-register when metrics are enabled
 _METRICS_PLUGIN_CLASSES = (
     TokenMetricsPlugin,
@@ -465,4 +527,5 @@ _METRICS_PLUGIN_CLASSES = (
     SamplingMetricsPlugin,
     RequirementMetricsPlugin,
     ToolMetricsPlugin,
+    AdapterFunctionMetricsPlugin,
 )

@@ -260,6 +260,12 @@ def _setup_meter_provider() -> Any:
                 [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10]
             ),
         ),
+        View(  # type: ignore
+            instrument_name="mellea.adapter_function.phase_duration",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120]
+            ),
+        ),
     ]
 
     provider = MeterProvider(resource=resource, metric_readers=readers, views=views)  # type: ignore
@@ -983,12 +989,137 @@ def record_tool_call(tool: str, status: str) -> None:
     counter.add(1, {"gen_ai.tool.name": tool, "status": status})
 
 
+_adapter_function_invocations_counter: Any = None
+_adapter_function_phase_duration_histogram: Any = None
+_adapter_function_parse_failures_counter: Any = None
+
+
+def _get_adapter_function_invocations_counter() -> Any:
+    """Get or create the adapter function invocations counter (internal use only)."""
+    global _adapter_function_invocations_counter
+
+    if _adapter_function_invocations_counter is None:
+        # These three metrics/symbols use the glossary's canonical term
+        # "adapter_function" throughout — code and metric names match. Elsewhere
+        # in the codebase, pre-existing, already-shipped `Intrinsic*` symbols
+        # (the `Intrinsic` component, `call_intrinsic`, etc.) still use the old
+        # name and are renamed in a later, coordinated phase of Epic #929 (#1136)
+        # rather than here. See docs/dev/adapter_observability.md for the full
+        # rationale. (Applies to all three metrics below.)
+        _adapter_function_invocations_counter = create_counter(
+            "mellea.adapter_function.invocations",
+            description="Total number of adapter function invocations",
+            unit="{invocation}",
+        )
+    return _adapter_function_invocations_counter
+
+
+def _get_adapter_function_phase_duration_histogram() -> Any:
+    """Get or create the adapter function phase duration histogram (internal use only)."""
+    global _adapter_function_phase_duration_histogram
+
+    if _adapter_function_phase_duration_histogram is None:
+        _adapter_function_phase_duration_histogram = create_histogram(
+            "mellea.adapter_function.phase_duration",
+            description="Duration of each adapter function lifecycle phase",
+            unit="s",
+        )
+    return _adapter_function_phase_duration_histogram
+
+
+def _get_adapter_function_parse_failures_counter() -> Any:
+    """Get or create the adapter function parse failures counter (internal use only)."""
+    global _adapter_function_parse_failures_counter
+
+    if _adapter_function_parse_failures_counter is None:
+        _adapter_function_parse_failures_counter = create_counter(
+            "mellea.adapter_function.parse_failures",
+            description="Total number of adapter function schema-mismatch parse failures",
+            unit="{failure}",
+        )
+    return _adapter_function_parse_failures_counter
+
+
+def record_adapter_function_invocation(
+    name: str, revision: str | None, binding_type: str, adapter_type: str, outcome: str
+) -> None:
+    """Record one adapter function invocation.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        name: Adapter function name (e.g. `"answerability"`).
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+            `None` is normalised to `"unpinned"` in the metric label.
+        binding_type: Weight-binding reality the adapter ran under (e.g.
+            `"local_file"`, `"embedded"`, `"server_mediated"`).
+        adapter_type: Adapter mechanism (e.g. `"lora"`, `"alora"`).
+        outcome: `"success"`, `"schema_error"`, or `"error"`.
+    """
+    if _meter is None:
+        return
+
+    _get_adapter_function_invocations_counter().add(
+        1,
+        {
+            "name": name,
+            "revision": revision or "unpinned",
+            "binding_type": binding_type,
+            "adapter_type": adapter_type,
+            "outcome": outcome,
+        },
+    )
+
+
+def record_adapter_function_phase_duration(
+    name: str, phase: str, duration_s: float
+) -> None:
+    """Record the duration of one adapter function lifecycle phase.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        name: Adapter function name (e.g. `"answerability"`).
+        phase: Lifecycle phase (`"prepare"`, `"activate"`, `"generate"`,
+            `"parse"`, or `"deactivate"`).
+        duration_s: Duration of the phase in seconds (matches the base-unit
+            convention used by the latency histograms).
+    """
+    if _meter is None:
+        return
+
+    _get_adapter_function_phase_duration_histogram().record(
+        duration_s, {"name": name, "phase": phase}
+    )
+
+
+def record_adapter_function_parse_failure(name: str, revision: str | None) -> None:
+    """Record one adapter function schema-mismatch parse failure.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        name: Adapter function name (e.g. `"answerability"`).
+        revision: Catalog revision of the adapter, or `None` if unpinned.
+            `None` is normalised to `"unpinned"` in the metric label.
+    """
+    if _meter is None:
+        return
+
+    _get_adapter_function_parse_failures_counter().add(
+        1, {"name": name, "revision": revision or "unpinned"}
+    )
+
+
 __all__ = [
     "classify_error",
     "create_counter",
     "create_histogram",
     "create_up_down_counter",
     "is_metrics_enabled",
+    "record_adapter_function_invocation",
+    "record_adapter_function_parse_failure",
+    "record_adapter_function_phase_duration",
     "record_cost",
     "record_error",
     "record_request_duration",

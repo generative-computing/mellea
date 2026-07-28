@@ -3,6 +3,10 @@
 
 """Hook payload classes for the Mellea plugin system."""
 
+from .adapter_function import (
+    AdapterFunctionInvocationCompletePayload,
+    AdapterFunctionPhaseCompletePayload,
+)
 from .component import (
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
@@ -25,6 +29,9 @@ from .tool import ToolPostInvokePayload, ToolPreInvokePayload
 from .validation import ValidationPostCheckPayload, ValidationPreCheckPayload
 
 __all__ = [
+    # Adapter Function
+    "AdapterFunctionInvocationCompletePayload",
+    "AdapterFunctionPhaseCompletePayload",
     # Component
     "ComponentPostErrorPayload",
     "ComponentPostSuccessPayload",

@@ -11,6 +11,10 @@ pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]
 
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
 from mellea.core.requirement import PartialValidationResult
+from mellea.plugins.hooks.adapter_function import (
+    AdapterFunctionInvocationCompletePayload,
+    AdapterFunctionPhaseCompletePayload,
+)
 from mellea.plugins.hooks.generation import (
     GenerationBatchErrorPayload,
     GenerationBatchPostCallPayload,
@@ -31,6 +35,7 @@ from mellea.telemetry.metrics import (
     ERROR_TYPE_UNKNOWN,
 )
 from mellea.telemetry.metrics_plugins import (
+    AdapterFunctionMetricsPlugin,
     CostMetricsPlugin,
     ErrorMetricsPlugin,
     LatencyMetricsPlugin,
@@ -1033,3 +1038,122 @@ async def test_tool_plugin_none_tool_call_falls_back_to_unknown(tool_plugin):
         await tool_plugin.record_tool_call(payload, {})
 
         mock_record.assert_called_once_with("unknown", "success")
+
+
+# AdapterFunctionMetricsPlugin tests
+
+
+@pytest.fixture
+def adapter_function_plugin():
+    return AdapterFunctionMetricsPlugin()
+
+
+@pytest.mark.asyncio
+async def test_record_adapter_function_invocation_success(adapter_function_plugin):
+    """A successful invocation records the invocations counter, not parse_failures."""
+    payload = AdapterFunctionInvocationCompletePayload(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="success",
+    )
+
+    with (
+        patch(
+            "mellea.telemetry.metrics.record_adapter_function_invocation"
+        ) as mock_invocation,
+        patch(
+            "mellea.telemetry.metrics.record_adapter_function_parse_failure"
+        ) as mock_parse_failure,
+    ):
+        await adapter_function_plugin.record_adapter_function_invocation(payload, {})
+
+    mock_invocation.assert_called_once_with(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="success",
+    )
+    mock_parse_failure.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_record_adapter_function_invocation_schema_error_also_records_parse_failure(
+    adapter_function_plugin,
+):
+    """A schema_error outcome records both the invocations counter and parse_failures."""
+    payload = AdapterFunctionInvocationCompletePayload(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="schema_error",
+    )
+
+    with (
+        patch(
+            "mellea.telemetry.metrics.record_adapter_function_invocation"
+        ) as mock_invocation,
+        patch(
+            "mellea.telemetry.metrics.record_adapter_function_parse_failure"
+        ) as mock_parse_failure,
+    ):
+        await adapter_function_plugin.record_adapter_function_invocation(payload, {})
+
+    mock_invocation.assert_called_once_with(
+        name="answerability",
+        revision="r1",
+        binding_type="local_file",
+        adapter_type="lora",
+        outcome="schema_error",
+    )
+    mock_parse_failure.assert_called_once_with("answerability", "r1")
+
+
+@pytest.mark.asyncio
+async def test_record_adapter_function_invocation_none_revision_passed_through(
+    adapter_function_plugin,
+):
+    """A None revision is passed through to the metric function unchanged.
+
+    Normalisation to "unpinned" happens inside record_adapter_function_invocation,
+    not in the plugin — so the plugin passes the raw payload.revision value.
+    """
+    payload = AdapterFunctionInvocationCompletePayload(
+        name="answerability",
+        revision=None,
+        binding_type="embedded",
+        adapter_type="alora",
+        outcome="error",
+    )
+
+    with patch(
+        "mellea.telemetry.metrics.record_adapter_function_invocation"
+    ) as mock_invocation:
+        await adapter_function_plugin.record_adapter_function_invocation(payload, {})
+
+    mock_invocation.assert_called_once_with(
+        name="answerability",
+        revision=None,
+        binding_type="embedded",
+        adapter_type="alora",
+        outcome="error",
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_adapter_function_phase_duration(adapter_function_plugin):
+    """Phase-complete events record the phase-duration histogram in seconds."""
+    payload = AdapterFunctionPhaseCompletePayload(
+        name="answerability", phase="prepare", duration_ms=12.5
+    )
+
+    with patch(
+        "mellea.telemetry.metrics.record_adapter_function_phase_duration"
+    ) as mock_phase:
+        await adapter_function_plugin.record_adapter_function_phase(payload, {})
+
+    # payload ms is converted to seconds before recording
+    mock_phase.assert_called_once_with("answerability", "prepare", 0.0125)
