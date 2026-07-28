@@ -611,6 +611,9 @@ class WatsonxAIBackend(FormatterBackend):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
+        # OpenAI streamed responses give you chunks of tool calls.
+        # As a result, we have to store data between calls and only then
+        # check for complete tool calls in the post_processing step.
         response = mot.raw.response
         assert response is not None
         choice_response = response["choices"][0]
