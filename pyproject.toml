@@ -51,7 +51,7 @@ hf = [
 
 
 litellm = [
-    "litellm>=1.76",
+    "litellm>=1.83.10",  # CVE-2026-42203/42208/42271/40217 (pulls fixed anthropic>=0.87.0, python-multipart>=0.0.27)
     "boto3", # for Bedrock support.
 ]
 
@@ -62,7 +62,7 @@ watsonx = [
 # Feature integrations
 tools = [
     "smolagents>=1.0.0",
-    "langchain-core>=1.2.7",
+    "langchain-core>=1.2.28",  # CVE-2026-40087, CVE-2026-44843 (pulls fixed langsmith>=0.7.31 for CVE-2026-41182)
     "mcp>=1.27.0",
     "httpx>=0.27",
 ]
