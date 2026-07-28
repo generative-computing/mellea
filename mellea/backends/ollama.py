@@ -701,27 +701,37 @@ class OllamaModelBackend(FormatterBackend):
 
         if chat_response.message.tool_calls:
             for tool in chat_response.message.tool_calls:
-                func = tools.get(tool.function.name)
-                if func is None:
+                try:
+                    func = tools.get(tool.function.name)
+                    if func is None:
+                        MelleaLogger.get_logger().warning(
+                            f"model attempted to call a non-existing function: {tool.function.name}"
+                        )
+                        continue  # skip this function if we can't find it.
+
+                    args = tool.function.arguments
+
+                    # Validate and coerce argument types
+                    validated_args = validate_tool_arguments(func, args, strict=False)
+                    model_tool_calls.append(
+                        ModelToolCall(
+                            tool.function.name,
+                            func,
+                            validated_args,
+                            tool_call_id=getattr(tool, "id", None),
+                        )
+                    )
+                except (KeyError, TypeError, ValueError, AttributeError) as e:
                     MelleaLogger.get_logger().warning(
-                        f"model attempted to call a non-existing function: {tool.function.name}"
+                        f"Failed to extract tool call from malformed response: {e}; "
+                        f"raw tool: {tool!r}"
                     )
-                    continue  # skip this function if we can't find it.
-
-                args = tool.function.arguments
-
-                # Validate and coerce argument types
-                validated_args = validate_tool_arguments(func, args, strict=False)
-                model_tool_calls.append(
-                    ModelToolCall(
-                        tool.function.name,
-                        func,
-                        validated_args,
-                        tool_call_id=getattr(tool, "id", None),
-                    )
-                )
+                    continue
 
         if len(model_tool_calls) > 0:
+            assert isinstance(model_tool_calls, list), (
+                f"Expected list[ModelToolCall], got {type(model_tool_calls)}"
+            )
             return model_tool_calls
         return None
 
@@ -757,12 +767,18 @@ class OllamaModelBackend(FormatterBackend):
 
         tool_chunk = self._extract_model_tool_requests(tools, chunk)
         if tool_chunk is not None:
-            # Only set tool_calls if there is one.
-            if mot.tool_calls is None:
-                mot.tool_calls = []
+            if not isinstance(tool_chunk, list):
+                MelleaLogger.get_logger().error(
+                    f"_extract_model_tool_requests returned {type(tool_chunk).__name__} "
+                    f"instead of list[ModelToolCall]"
+                )
+            else:
+                # Only set tool_calls if there is one.
+                if mot.tool_calls is None:
+                    mot.tool_calls = []
 
-            # Extend the tool_chunk list.
-            mot.tool_calls.extend(tool_chunk)
+                # Extend the tool_chunk list.
+                mot.tool_calls.extend(tool_chunk)
 
         # Ollama responses are mostly self-contained. Merge chunks immediately.
         chat_response_delta_merge(mot, chunk)

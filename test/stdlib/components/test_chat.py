@@ -350,7 +350,7 @@ def test_parse_tool_calls_ollama():
 
 def test_parse_tool_calls_openai():
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot = ModelOutputThunk(value="v", tool_calls=[_make_tool_call("fn")])
     tool_calls = [
         {
             "id": "call_openai",
@@ -385,7 +385,7 @@ def test_parse_tool_calls_openai_streamed_choice_shape():
     on the normalized streaming shape.
     """
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot = ModelOutputThunk(value="v", tool_calls=[_make_tool_call("fn")])
     tool_calls = [
         {
             "id": "call_streamed",
@@ -425,7 +425,7 @@ def test_tool_call_message_survives_formatter_to_openai_history():
         }
     ]
     prompt = Message("user", "call fn")
-    mot = ModelOutputThunk(value="", tool_calls={"fn": None})
+    mot = ModelOutputThunk(value="", tool_calls=[_make_tool_call("fn")])
     mot.raw = RawProviderResponse(
         provider="openai",
         response={
@@ -464,7 +464,9 @@ def test_tool_call_message_survives_formatter_to_openai_history():
 def test_parse_tool_calls_fallback_uses_value():
     """No raw provider info — falls back to computed.value."""
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="<tool_call>fn()</tool_call>", tool_calls={"fn": None})
+    mot = ModelOutputThunk(
+        value="<tool_call>fn()</tool_call>", tool_calls=[_make_tool_call("fn")]
+    )
     result = msg._parse(mot)
     assert result.role == "assistant"
     assert result.content == "<tool_call>fn()</tool_call>"
@@ -480,9 +482,7 @@ def test_parse_tool_calls_fallback_uses_value():
 
 def test_parse_tool_calls_ollama_carries_thinking():
     msg = Message("user", "q")
-    mot = ModelOutputThunk(
-        value="v", tool_calls={"some_fn": _make_tool_call("some_fn")}
-    )
+    mot = ModelOutputThunk(value="v", tool_calls=[_make_tool_call("some_fn")])
     mot.thinking = "tool-turn reasoning"
     fake_calls = [{"name": "some_fn"}]
     fake_response = type(
@@ -498,7 +498,7 @@ def test_parse_tool_calls_ollama_carries_thinking():
 
 def test_parse_tool_calls_openai_carries_thinking():
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot = ModelOutputThunk(value="v", tool_calls=[_make_tool_call("fn")])
     mot.thinking = "tool-turn reasoning"
     mot.raw = RawProviderResponse(
         provider="openai",
@@ -521,7 +521,7 @@ def test_parse_tool_calls_openai_carries_thinking():
 def test_parse_tool_calls_openai_streamed_carries_thinking():
     """Streaming normalized shape: thinking is carried onto the tool-issuing assistant turn."""
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot = ModelOutputThunk(value="v", tool_calls=[_make_tool_call("fn")])
     mot.thinking = "tool-turn reasoning"
     mot.raw = RawProviderResponse(
         provider="openai",
@@ -546,7 +546,9 @@ def test_parse_tool_calls_openai_streamed_carries_thinking():
 def test_parse_tool_calls_fallback_carries_thinking():
     """HF/unknown fallback also carries reasoning onto the tool-issuing turn."""
     msg = Message("user", "q")
-    mot = ModelOutputThunk(value="<tool_call>fn()</tool_call>", tool_calls={"fn": None})
+    mot = ModelOutputThunk(
+        value="<tool_call>fn()</tool_call>", tool_calls=[_make_tool_call("fn")]
+    )
     mot.thinking = "tool-turn reasoning"
     result = msg._parse(mot)
     assert result.role == "assistant"

@@ -1137,10 +1137,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         choice_response = response["choices"][0]
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
-            if mot.tool_calls is None:
-                mot.tool_calls = []
-            # Extend the tool_chunk list.
-            mot.tool_calls.extend(tool_chunk)
+            if not isinstance(tool_chunk, list):
+                MelleaLogger.get_logger().error(
+                    f"extract_model_tool_requests returned {type(tool_chunk).__name__} "
+                    f"instead of list[ModelToolCall]"
+                )
+            else:
+                if mot.tool_calls is None:
+                    mot.tool_calls = []
+                # Extend the tool_chunk list.
+                mot.tool_calls.extend(tool_chunk)
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()

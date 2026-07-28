@@ -68,37 +68,50 @@ def extract_model_tool_requests(
     calls = response["message"].get("tool_calls", None)
     if calls:
         for tool_call in calls:
-            tool_name = tool_call["function"]["name"]  # type: ignore
-            tool_args = tool_call["function"]["arguments"]  # type: ignore
+            try:
+                tool_name = tool_call["function"]["name"]  # type: ignore
+                tool_args = tool_call["function"]["arguments"]  # type: ignore
 
-            func = tools.get(tool_name)
-            if func is None:
-                MelleaLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
-                )
-                continue  # skip this function if we can't find it.
-
-            args = {}
-            if tool_args is not None:
-                # Returns the args as a string. Parse it here.
-                try:
-                    args = json.loads(tool_args)
-                except json.JSONDecodeError:
+                func = tools.get(tool_name)
+                if func is None:
                     MelleaLogger.get_logger().warning(
-                        f"model returned malformed JSON arguments for tool {tool_name!r} "
-                        f"(possibly truncated during streaming); skipping this tool call: {tool_args!r}"
+                        f"model attempted to call a non-existing function: {tool_name}"
                     )
-                    continue
+                    continue  # skip this function if we can't find it.
 
-            # Validate and coerce argument types
-            validated_args = validate_tool_arguments(func, args, strict=False)
-            model_tool_calls.append(
-                ModelToolCall(
-                    tool_name, func, validated_args, tool_call_id=tool_call.get("id")
+                args = {}
+                if tool_args is not None:
+                    # Returns the args as a string. Parse it here.
+                    try:
+                        args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        MelleaLogger.get_logger().warning(
+                            f"model returned malformed JSON arguments for tool {tool_name!r} "
+                            f"(possibly truncated during streaming); skipping this tool call: {tool_args!r}"
+                        )
+                        continue
+
+                # Validate and coerce argument types
+                validated_args = validate_tool_arguments(func, args, strict=False)
+                model_tool_calls.append(
+                    ModelToolCall(
+                        tool_name,
+                        func,
+                        validated_args,
+                        tool_call_id=tool_call.get("id"),
+                    )
                 )
-            )
+            except (KeyError, TypeError, ValueError) as e:
+                MelleaLogger.get_logger().warning(
+                    f"Failed to extract tool call from malformed response: {e}; "
+                    f"raw tool_call: {tool_call!r}"
+                )
+                continue
 
     if len(model_tool_calls) > 0:
+        assert isinstance(model_tool_calls, list), (
+            f"Expected list[ModelToolCall], got {type(model_tool_calls)}"
+        )
         return model_tool_calls
     return None
 
