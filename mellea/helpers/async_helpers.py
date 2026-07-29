@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -41,6 +41,7 @@ async def send_to_queue(
     aqueue: asyncio.Queue,
     *,
     chunk_timeout: float | None = DEFAULT_CHUNK_TIMEOUT,
+    on_timeout: Callable[[], None] | None = None,
 ) -> None:
     """Processes the output of an async chat request by sending the output to an async queue.
 
@@ -57,6 +58,10 @@ async def send_to_queue(
             the queue and the stream is aborted. `None` disables the timeout.
             Defaults to `DEFAULT_CHUNK_TIMEOUT` (120 s). Note that `0` sets the
             deadline to "now" and aborts immediately — use `None` to disable.
+        on_timeout: Optional non-blocking callback invoked when this function's
+            per-chunk guard expires. Backends may use it to cooperatively stop work
+            running outside the event loop. Callback errors are logged and suppressed
+            so the original stream timeout remains the consumer-visible error.
 
     Raises:
         TimeoutError: Re-raised verbatim when the backend itself raises `TimeoutError`
@@ -83,6 +88,15 @@ async def send_to_queue(
                 except TimeoutError:
                     if cm is None or not cm.expired():
                         raise  # backend's own TimeoutError — forward verbatim
+                    if on_timeout is not None:
+                        try:
+                            on_timeout()
+                        except Exception as e:
+                            from ..core import MelleaLogger
+
+                            MelleaLogger.get_logger().debug(
+                                f"Failed to notify backend of stream timeout: {e}"
+                            )
                     await aqueue.put(
                         TimeoutError(
                             f"Stream timed out after {chunk_timeout}s without a chunk "

@@ -3,6 +3,7 @@
 
 """Unit tests for HuggingFace backend pure-logic helpers — no model load required."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -638,6 +639,79 @@ async def test_logits_none_when_stream_and_logits_both_set():
     await backend.post_processing(mot, [], None, False, {}, None, input_ids)
 
     assert mot.generation.logits is None
+
+
+@pytest.mark.asyncio
+async def test_stream_timeout_signals_generation_thread():
+    """Direct streaming signals the HF worker's cooperative cancel event on timeout."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+    cancel_event = MagicMock()
+
+    async def _stalling_stream():
+        await asyncio.sleep(1)
+        yield "never"  # pragma: no cover
+
+    with (
+        patch(
+            "mellea.backends.huggingface.AsyncTextIteratorStreamer",
+            return_value=_stalling_stream(),
+        ),
+        patch(
+            "mellea.backends.huggingface._install_cancel_stopping_criteria",
+            return_value=cancel_event,
+        ),
+    ):
+        output = await backend._generate_from_context_standard(
+            Message("assistant", ""),
+            ctx,
+            model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 0.05},
+        )
+
+        with pytest.raises(TimeoutError, match="Stream timed out"):
+            await output.astream()
+
+    cancel_event.set.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_kv_cache_stream_timeout_signals_generation_thread():
+    """Direct KV-cache streaming signals the HF worker on timeout."""
+    backend = _make_backend()
+    ctx = ChatContext().add(Message("user", "Hello"))
+    cancel_event = MagicMock()
+    input_ids = torch.tensor([[1]])
+    attention_mask = torch.tensor([[1]])
+
+    async def _stalling_stream():
+        await asyncio.sleep(1)
+        yield "never"  # pragma: no cover
+
+    with (
+        patch(
+            "mellea.backends.huggingface.AsyncTextIteratorStreamer",
+            return_value=_stalling_stream(),
+        ),
+        patch(
+            "mellea.backends.huggingface._install_cancel_stopping_criteria",
+            return_value=cancel_event,
+        ),
+        patch.object(
+            backend,
+            "_make_merged_kv_cache",
+            return_value=("", input_ids, MagicMock(), attention_mask),
+        ),
+    ):
+        output = await backend._generate_from_context_with_kv_cache(
+            Message("assistant", ""),
+            ctx,
+            model_options={ModelOption.STREAM: True, ModelOption.STREAM_TIMEOUT: 0.05},
+        )
+
+        with pytest.raises(TimeoutError, match="Stream timed out"):
+            await output.astream()
+
+    cancel_event.set.assert_called_once_with()
 
 
 @pytest.mark.asyncio
