@@ -36,8 +36,10 @@ print(result)
 
 if result.tool_calls:
     try:
-        calc_result = result.tool_calls[python_tool.name].call_func()
-        print(f"Calculation result: {calc_result}")
+        tool_call = next((tc for tc in result.tool_calls if tc.name == python_tool.name), None)
+        if tool_call:
+            calc_result = tool_call.call_func()
+            print(f"Calculation result: {calc_result}")
     except Exception as e:
         print(f"Tool execution failed: {e}")
 ```

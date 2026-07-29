@@ -372,8 +372,7 @@ def add_tools_from_context_actions(
     Args:
         tools_dict: Mutable mapping of tool name to tool instance; modified in-place. Dict keys are unique,
             so if multiple components define tools with the same name, the last one wins (earlier definitions
-            are silently overwritten). For duplicate tool names, use component ID-based prefixing to ensure
-            unique names across components.
+            are silently overwritten).
         ctx_actions: List of `Component`, `CBlock`, or `ModelOutputThunk` objects whose template
             representations may declare tools, or `None` to skip.
     """

@@ -109,9 +109,6 @@ def extract_model_tool_requests(
                 continue
 
     if len(model_tool_calls) > 0:
-        assert isinstance(model_tool_calls, list), (
-            f"Expected list[ModelToolCall], got {type(model_tool_calls)}"
-        )
         return model_tool_calls
     return None
 

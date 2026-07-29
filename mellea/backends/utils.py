@@ -157,8 +157,5 @@ def to_tool_calls(
         model_tool_calls.append(ModelToolCall(tool_name, func, validated_args))
 
     if len(model_tool_calls) > 0:
-        assert isinstance(model_tool_calls, list), (
-            f"Expected list[ModelToolCall], got {type(model_tool_calls)}"
-        )
         return model_tool_calls
     return None

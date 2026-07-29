@@ -91,8 +91,10 @@ print("Tool calls:", result.tool_calls)
 
 # Access the generated code
 if result.tool_calls:
-    code = result.tool_calls["python"].args["code"]
-    print(f"Generated code:\n{code}")
+    tool_call = next((tc for tc in result.tool_calls if tc.name == "python"), None)
+    if tool_call:
+        code = tool_call.args["code"]
+        print(f"Generated code:\n{code}")
 ```
 
 ### Forcing Tool Use
@@ -112,21 +114,23 @@ result = m.instruct(
 )
 
 # Access the tool call
-code = result.tool_calls["python"].args["code"]
-print(f"Generated code:\n{code}")
+tool_call = next((tc for tc in result.tool_calls if tc.name == "python"), None)
+if tool_call:
+    code = tool_call.args["code"]
+    print(f"Generated code:\n{code}")
 
-# Execute the tool
-exec_result = result.tool_calls["python"].call_func()
-print(f"Execution success: {exec_result.success}")
-print(f"Exit code: {exec_result.exit_code}")
+    # Execute the tool
+    exec_result = tool_call.call_func()
+    print(f"Execution success: {exec_result.success}")
+    print(f"Exit code: {exec_result.exit_code}")
 
-# Check for generated artifacts (plots, images, etc.)
-if exec_result.artifacts:
-    print(f"Generated artifacts: {len(exec_result.artifacts)}")
-    for artifact in exec_result.artifacts:
-        print(f"  - {artifact.path}")
-else:
-    print("No artifacts generated (plot saved internally)")
+    # Check for generated artifacts (plots, images, etc.)
+    if exec_result.artifacts:
+        print(f"Generated artifacts: {len(exec_result.artifacts)}")
+        for artifact in exec_result.artifacts:
+            print(f"  - {artifact.path}")
+    else:
+        print("No artifacts generated (plot saved internally)")
 ```
 
 ### Validating Tool Arguments
@@ -155,18 +159,20 @@ result = m.instruct(
 )
 
 # Access the tool call
-code = result.tool_calls["python"].args["code"]
-print(f"Generated code:\n{code}")
+tool_call = next((tc for tc in result.tool_calls if tc.name == "python"), None)
+if tool_call:
+    code = tool_call.args["code"]
+    print(f"Generated code:\n{code}")
 
-# Verify the constraint was satisfied
-if "/tmp/output.png" in code:
-    print("\n✓ Code constraint satisfied: plot will be saved to /tmp/output.png")
-else:
-    print("\n✗ Code constraint NOT satisfied")
+    # Verify the constraint was satisfied
+    if "/tmp/output.png" in code:
+        print("\n✓ Code constraint satisfied: plot will be saved to /tmp/output.png")
+    else:
+        print("\n✗ Code constraint NOT satisfied")
 
-# Execute the tool
-exec_result = result.tool_calls["python"].call_func()
-print(f"Execution success: {exec_result.success}")
+    # Execute the tool
+    exec_result = tool_call.call_func()
+    print(f"Execution success: {exec_result.success}")
 ```
 
 ## Available Tools
@@ -201,13 +207,14 @@ print("Tool calls:", result.tool_calls)
 
 if result.tool_calls:
     # Get the tool call details
-    tool_call = result.tool_calls["my_tool"]
-    print(f"Tool name: {tool_call.name}")
-    print(f"Arguments: {tool_call.args}")
+    tool_call = next((tc for tc in result.tool_calls if tc.name == "my_tool"), None)
+    if tool_call:
+        print(f"Tool name: {tool_call.name}")
+        print(f"Arguments: {tool_call.args}")
 
-    # Execute the tool
-    tool_result = tool_call.call_func()
-    print(f"Tool result: {tool_result}")
+        # Execute the tool
+        tool_result = tool_call.call_func()
+        print(f"Tool result: {tool_result}")
 ```
 
 ## Tool Requirements

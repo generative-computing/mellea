@@ -122,9 +122,11 @@ response = m.instruct(
 )
 
 # tool_calls=True makes .tool_calls available on the result
-code = response.tool_calls["python"].args["code"]
-exec_result = response.tool_calls["python"].call_func()
-print(exec_result)
+tool_call = next((tc for tc in response.tool_calls if tc.name == "python"), None)
+if tool_call:
+    code = tool_call.args["code"]
+    exec_result = tool_call.call_func()
+    print(exec_result)
 ```
 
 ### Validating tool arguments

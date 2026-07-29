@@ -619,16 +619,10 @@ class WatsonxAIBackend(FormatterBackend):
         choice_response = response["choices"][0]
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
-            if not isinstance(tool_chunk, list):
-                MelleaLogger.get_logger().error(
-                    f"extract_model_tool_requests returned {type(tool_chunk).__name__} "
-                    f"instead of list[ModelToolCall]"
-                )
-            else:
-                if mot.tool_calls is None:
-                    mot.tool_calls = []
-                # Extend the tool_chunk list.
-                mot.tool_calls.extend(tool_chunk)
+            if mot.tool_calls is None:
+                mot.tool_calls = []
+            # Extend the tool_chunk list.
+            mot.tool_calls.extend(tool_chunk)
 
         # Populate usage when the response carries it (WatsonX uses OpenAI format).
         if usage := response.get("usage"):
@@ -764,46 +758,3 @@ class WatsonxAIBackend(FormatterBackend):
             else None
         )
         return results, usage
-
-    def _extract_model_tool_requests(
-        self, tools: dict[str, AbstractMelleaTool], chat_response: dict
-    ) -> list[ModelToolCall] | None:
-        model_tool_calls: list[ModelToolCall] = []
-        for tool_call in chat_response["choices"][0]["message"].get("tool_calls", []):
-            try:
-                tool_name = tool_call["function"]["name"]
-                tool_args = tool_call["function"]["arguments"]
-
-                func = tools.get(tool_name)
-                if func is None:
-                    MelleaLogger.get_logger().warning(
-                        f"model attempted to call a non-existing function: {tool_name}"
-                    )
-                    continue  # skip this function if we can't find it.
-
-                # Watsonx returns the args as a string. Parse it here.
-                args = json.loads(tool_args)
-
-                # Validate and coerce argument types
-                validated_args = validate_tool_arguments(func, args, strict=False)
-                model_tool_calls.append(
-                    ModelToolCall(
-                        tool_name,
-                        func,
-                        validated_args,
-                        tool_call_id=tool_call.get("id"),
-                    )
-                )
-            except (KeyError, TypeError, ValueError) as e:
-                MelleaLogger.get_logger().warning(
-                    f"Failed to extract tool call from malformed response: {e}; "
-                    f"raw tool_call: {tool_call!r}"
-                )
-                continue
-
-        if len(model_tool_calls) > 0:
-            assert isinstance(model_tool_calls, list), (
-                f"Expected list[ModelToolCall], got {type(model_tool_calls)}"
-            )
-            return model_tool_calls
-        return None

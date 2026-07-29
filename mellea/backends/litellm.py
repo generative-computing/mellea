@@ -634,16 +634,10 @@ class LiteLLMBackend(FormatterBackend):
         choice_response = response["choices"][0]
         tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
-            if not isinstance(tool_chunk, list):
-                MelleaLogger.get_logger().error(
-                    f"extract_model_tool_requests returned {type(tool_chunk).__name__} "
-                    f"instead of list[ModelToolCall]"
-                )
-            else:
-                if mot.tool_calls is None:
-                    mot.tool_calls = []
-                # Extend the tool_chunk list.
-                mot.tool_calls.extend(tool_chunk)
+            if mot.tool_calls is None:
+                mot.tool_calls = []
+            # Extend the tool_chunk list.
+            mot.tool_calls.extend(tool_chunk)
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -806,57 +800,6 @@ class LiteLLMBackend(FormatterBackend):
             results.append(output)
 
         return results, usage_dump
-
-    def _extract_model_tool_requests(
-        self,
-        tools: dict[str, AbstractMelleaTool],
-        chat_response: litellm.ModelResponse,  # type: ignore
-    ) -> list[ModelToolCall] | None:
-        model_tool_calls: list[ModelToolCall] = []
-        choice_0 = chat_response.choices[0]
-        assert isinstance(choice_0, litellm.utils.Choices), (  # type: ignore
-            "Only works for non-streaming response for now"
-        )
-        calls = choice_0.message.tool_calls
-        if calls:
-            for tool_call in calls:
-                try:
-                    tool_name = str(tool_call.function.name)
-                    tool_args = tool_call.function.arguments
-
-                    func = tools.get(tool_name)
-                    if func is None:
-                        MelleaLogger.get_logger().warning(
-                            f"model attempted to call a non-existing function: {tool_name}"
-                        )
-                        continue  # skip this function if we can't find it.
-
-                    # Returns the args as a string. Parse it here.
-                    args = json.loads(tool_args)
-
-                    # Validate and coerce argument types
-                    validated_args = validate_tool_arguments(func, args, strict=False)
-                    model_tool_calls.append(
-                        ModelToolCall(
-                            tool_name,
-                            func,
-                            validated_args,
-                            tool_call_id=getattr(tool_call, "id", None),
-                        )
-                    )
-                except (KeyError, TypeError, ValueError, AttributeError) as e:
-                    MelleaLogger.get_logger().warning(
-                        f"Failed to extract tool call from malformed response: {e}; "
-                        f"raw tool_call: {tool_call!r}"
-                    )
-                    continue
-
-        if len(model_tool_calls) > 0:
-            assert isinstance(model_tool_calls, list), (
-                f"Expected list[ModelToolCall], got {type(model_tool_calls)}"
-            )
-            return model_tool_calls
-        return None
 
     def _has_potential_event_loop_errors(self) -> bool:
         """In some cases litellm doesn't create a new async client. There doesn't appear to be any way for us to force that behavior. As a result, log a warning for known cases.
