@@ -7,9 +7,12 @@ This test fills the gap identified in PR #1431 review: verifying that the
 automatic tool execution loop through _acall_tools() correctly processes
 multiple same-name tool calls from the list-based tool_calls structure.
 
-Unlike test_parallel_same_name_tool_execution.py which manually calls
-tool_call.call_func(), this test uses the actual _acall_tools() function
-to verify the complete execution pipeline.
+Coverage layers:
+- Extraction layer: test/helpers/test_openai_compatible_helpers.py::test_duplicate_same_name_tool_calls
+  Verifies that extract_model_tool_requests() preserves both calls in the list.
+- Execution layer: this file
+  Verifies that _acall_tools() iterates and executes all calls from the list,
+  producing ToolMessages for each (not just the last one).
 """
 
 import pytest
@@ -19,12 +22,16 @@ from mellea.backends.tools import MelleaTool
 from mellea.core.base import ModelOutputThunk, ModelToolCall
 from mellea.stdlib.functional import _acall_tools
 
-pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture(scope="module")
 def backend():
-    """Create an OllamaModelBackend for testing."""
+    """Create an OllamaModelBackend for formatter.print() only.
+
+    Note: _acall_tools() only uses backend.formatter, not inference.
+    Tests use local Python functions as tool implementations, no model calls.
+    """
     return OllamaModelBackend()
 
 
