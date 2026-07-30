@@ -99,7 +99,7 @@ def get_otlp_log_handler() -> Any:
     """Get an OTLP logging handler for Python's logging module.
 
     The logger provider is initialised on the first call so that environment
-    variables set after module import (e.g. ``MELLEA_LOGS_OTLP``) are
+    variables set after module import (e.g. `MELLEA_LOGS_OTLP`) are
     respected without requiring a module reload.
 
     Returns:

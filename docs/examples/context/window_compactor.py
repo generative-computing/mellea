@@ -1,8 +1,8 @@
 # pytest: unit
 """WindowCompactor — keep the last N body components.
 
-Demonstrates the default behaviour, the ``window_size=`` sugar on
-``ChatContext``, and how the auto-pinned system prefix is preserved.
+Demonstrates the default behaviour, the `window_size=` sugar on
+`ChatContext`, and how the auto-pinned system prefix is preserved.
 """
 
 from mellea.stdlib.components.chat import Message
@@ -15,8 +15,8 @@ from mellea.stdlib.context import (
 
 
 def basic_window():
-    """``ChatContext()`` keeps the full history by default; opt in via
-    ``compactor=`` to start truncating.
+    """`ChatContext()` keeps the full history by default; opt in via
+    `compactor=` to start truncating.
     """
     ctx = ChatContext(compactor=WindowCompactor(size=5))
     for i in range(8):
@@ -26,7 +26,7 @@ def basic_window():
 
 
 def window_size_sugar():
-    """``window_size=`` is sugar for ``WindowCompactor(size=...)``."""
+    """`window_size=` is sugar for `WindowCompactor(size=...)`."""
     ctx = ChatContext(window_size=3)
     for i in range(6):
         ctx = ctx.add(Message("user", f"msg {i}"))
@@ -35,7 +35,7 @@ def window_size_sugar():
 
 
 def system_prefix_pinned():
-    """Default predicate ``pin_system`` keeps a leading system message."""
+    """Default predicate `pin_system` keeps a leading system message."""
     ctx = ChatContext(window_size=3)
     ctx = ctx.add(Message("system", "You are a helpful assistant."))
     for i in range(6):
@@ -45,7 +45,7 @@ def system_prefix_pinned():
 
 
 def pin_initial_user_too():
-    """Use ``pin_system_and_initial_user`` to also keep the user's first turn."""
+    """Use `pin_system_and_initial_user` to also keep the user's first turn."""
     ctx = ChatContext(
         compactor=WindowCompactor(size=3, pin_predicate=pin_system_and_initial_user)
     )
@@ -57,7 +57,7 @@ def pin_initial_user_too():
 
 
 def pure_last_n():
-    """``pin_nothing`` disables prefix pinning — the system message is dropped."""
+    """`pin_nothing` disables prefix pinning — the system message is dropped."""
     ctx = ChatContext(compactor=WindowCompactor(size=3, pin_predicate=pin_nothing))
     ctx = ctx.add(Message("system", "ignored after a few turns"))
     for i in range(6):
@@ -66,7 +66,7 @@ def pure_last_n():
 
 
 def clear_body_keep_prefix():
-    """``size=0`` drops the body entirely while keeping the pinned prefix."""
+    """`size=0` drops the body entirely while keeping the pinned prefix."""
     ctx = ChatContext(window_size=10_000)
     ctx = ctx.add(Message("system", "You are helpful."))
     for i in range(5):

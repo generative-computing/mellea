@@ -5,23 +5,23 @@
 Demonstrates:
 - Subclassing :class:`~mellea.stdlib.chunking.ChunkingStrategy` to define a
   new splitting boundary
-- Implementing ``split()`` (stateless, idempotent) and ``flush()`` (end-of-stream
+- Implementing `split()` (stateless, idempotent) and `flush()` (end-of-stream
   release of any withheld trailing fragment)
-- Using the custom chunker with ``stream_with_chunking()`` in place of a string alias
+- Using the custom chunker with `stream_with_chunking()` in place of a string alias
 - Validating line-by-line output from a numbered-list prompt
 
-``LineChunker`` splits on single newlines (``\\n``), emitting one line per
-``stream_validate`` call.  It sits between :class:`~mellea.stdlib.chunking.WordChunker`
+`LineChunker` splits on single newlines (`\\n`), emitting one line per
+`stream_validate` call.  It sits between :class:`~mellea.stdlib.chunking.WordChunker`
 (one word) and :class:`~mellea.stdlib.chunking.SentenceChunker` (one sentence) in
 granularity, and is a natural fit for list-formatted model output.
 
 Extension pattern:
-  1. Subclass ``ChunkingStrategy``.
-  2. Implement ``split(accumulated_text)`` — return all complete chunks found in
+  1. Subclass `ChunkingStrategy`.
+  2. Implement `split(accumulated_text)` — return all complete chunks found in
      the accumulated text so far; withhold any trailing fragment.  The method is
      called on every new token delta, so it must be stateless and idempotent.
-  3. Override ``flush(accumulated_text)`` to release the withheld trailing fragment
-     when the stream ends naturally.  The default base implementation returns ``[]``
+  3. Override `flush(accumulated_text)` to release the withheld trailing fragment
+     when the stream ends naturally.  The default base implementation returns `[]`
      (fragment discarded); override it when the trailing fragment is semantically
      significant.
 """
@@ -55,7 +55,7 @@ _NUMBERED_LINE = re.compile(r"^\s*\d+[\.\)]\s")
 class LineChunker(ChunkingStrategy):
     """Splits accumulated text on single newlines, emitting one line per chunk.
 
-    The line after the last ``\\n`` is withheld as a trailing fragment until
+    The line after the last `\\n` is withheld as a trailing fragment until
     the stream ends and :meth:`flush` is called.  Blank lines are skipped —
     they carry no content for a line-level validator.
 
@@ -102,9 +102,9 @@ class LineChunker(ChunkingStrategy):
 class NumberedLineReq(Requirement):
     """Fails the stream if any line does not start with a list number.
 
-    Each ``stream_validate`` call receives one complete line (from
+    Each `stream_validate` call receives one complete line (from
     :class:`LineChunker`).  This requirement enforces that every line follows
-    the ``N. item`` format, catching unstructured paragraphs or stray headers
+    the `N. item` format, catching unstructured paragraphs or stray headers
     that sneak into what should be a clean numbered list.
     """
 

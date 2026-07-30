@@ -73,28 +73,28 @@ class OllamaModelBackend(FormatterBackend):
 
     Args:
         model_id (str | ModelIdentifier): Ollama model ID. If a
-            ``ModelIdentifier`` is passed, its ``ollama_name`` attribute must
+            `ModelIdentifier` is passed, its `ollama_name` attribute must
             be set.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to ``TemplateFormatter``.
+            Defaults to `TemplateFormatter`.
         base_url (str | None): Ollama server endpoint; defaults to
-            ``env(OLLAMA_HOST)`` or ``http://localhost:11434``.
+            `env(OLLAMA_HOST)` or `http://localhost:11434`.
         model_options (dict | None): Default model options for generation requests.
         timeout (float | None): Per-operation HTTP timeout in seconds (connect,
             read, write, pool). Defaults to 300 s. For streaming requests this
             bounds the wait between consecutive chunks; for non-streaming requests
-            it bounds total time-to-response. Pass ``None`` to use the upstream
-            ``ollama`` SDK default (no timeout).
+            it bounds total time-to-response. Pass `None` to use the upstream
+            `ollama` SDK default (no timeout).
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from Ollama-specific option names
-            to Mellea ``ModelOption`` sentinel keys.
-        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption``
+            to Mellea `ModelOption` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea `ModelOption`
             sentinel keys to Ollama-specific option names.
 
     Raises:
-        ValueError: If ``model_id`` is a ``ModelIdentifier`` with no ``ollama_name`` set.
-        ConnectionError: If the Ollama server is not running at ``base_url``.
+        ValueError: If `model_id` is a `ModelIdentifier` with no `ollama_name` set.
+        ConnectionError: If the Ollama server is not running at `base_url`.
         OSError: If the model cannot be pulled from the Ollama library.
     """
 
@@ -328,9 +328,9 @@ class OllamaModelBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` via the Ollama chat API.
+        """Generate a completion for `action` given `ctx` via the Ollama chat API.
 
-        Delegates to ``generate_from_chat_context``. Only chat contexts are supported.
+        Delegates to `generate_from_chat_context`. Only chat contexts are supported.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -340,12 +340,12 @@ class OllamaModelBackend(FormatterBackend):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
@@ -374,7 +374,7 @@ class OllamaModelBackend(FormatterBackend):
     ) -> ModelOutputThunk[C]:
         """Generate a new completion from the provided context using this backend's formatter.
 
-        Treats the ``Context`` as a chat history and uses the ``ollama.Client.chat()``
+        Treats the `Context` as a chat history and uses the `ollama.Client.chat()`
         interface to generate a completion. Returns a thunk that lazily resolves
         the model output.
 
@@ -385,7 +385,7 @@ class OllamaModelBackend(FormatterBackend):
             _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
                 structured output decoding.
             model_options (dict | None): Per-call model options.
-            tool_calls (bool): If ``True``, expose available tools and parse responses.
+            tool_calls (bool): If `True`, expose available tools and parse responses.
 
         Returns:
             ModelOutputThunk[C]: A thunk holding the (lazy) model output.
@@ -574,15 +574,15 @@ class OllamaModelBackend(FormatterBackend):
                 `usage` is the aggregate token-usage dict for the batch (or `None`
                 when no request reported usage).
 
-                If Ollama returns an empty done response (``response=""``,
-                ``done=True``, no thinking content) for an action, that thunk
-                soft-fails: it has ``value=""`` and ``thunk.error`` carries the
-                ``RuntimeError`` describing the cause. Other actions in the
+                If Ollama returns an empty done response (`response=""`,
+                `done=True`, no thinking content) for an action, that thunk
+                soft-fails: it has `value=""` and `thunk.error` carries the
+                `RuntimeError` describing the cause. Other actions in the
                 batch are unaffected.
 
         Note:
-            Requests are awaited with ``asyncio.gather`` (all-or-nothing): if any
-            request raises (e.g. ``ollama.ResponseError`` or a connection error),
+            Requests are awaited with `asyncio.gather` (all-or-nothing): if any
+            request raises (e.g. `ollama.ResponseError` or a connection error),
             that exception propagates to the caller and no list is returned, even
             for requests that completed successfully.
         """

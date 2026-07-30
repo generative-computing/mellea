@@ -71,10 +71,10 @@ class LiteLLMBackend(FormatterBackend):
         formatter (ChatFormatter | None): Formatter for rendering components.
             Defaults to `TemplateFormatter`.
         base_url (str | None): Base URL for the LLM API endpoint. When set,
-            forwarded as ``api_base`` to LiteLLM. When ``None`` (default),
+            forwarded as `api_base` to LiteLLM. When `None` (default),
             LiteLLM infers the endpoint from the model prefix (e.g.
-            ``ollama_chat/`` → localhost:11434, ``anthropic/`` → Anthropic API).
-            Use ``None`` for cloud providers; set explicitly for local servers
+            `ollama_chat/` → localhost:11434, `anthropic/` → Anthropic API).
+            Use `None` for cloud providers; set explicitly for local servers
             such as vLLM or a non-default Ollama port.
         model_options (dict | None): Default model options for generation requests.
 

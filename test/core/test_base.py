@@ -844,7 +844,7 @@ async def test_cancel_generation_propagates_outer_cancellation() -> None:
 
     When cancel_generation() is awaiting self._gen.generate and the *cancel_generation*
     task is itself cancelled from outside, cur.cancelling() > 0 and the
-    CancelledError must propagate — not be swallowed by the bare ``pass`` path.
+    CancelledError must propagate — not be swallowed by the bare `pass` path.
     """
     import asyncio
 

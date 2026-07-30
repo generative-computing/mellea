@@ -30,11 +30,11 @@ from ._util import _resolve_question, _resolve_response, call_intrinsic
 
 
 class _ListContract(IOContract):
-    """Validate list-of-dicts adapter output and wrap it under key ``"items"``.
+    """Validate list-of-dicts adapter output and wrap it under key `"items"`.
 
     Each item in the list is checked for the declared required keys.  The
-    validated list is returned wrapped in ``{"items": [...]}`` so that
-    :func:`call_intrinsic` can always return a plain ``dict``.
+    validated list is returned wrapped in `{"items": [...]}` so that
+    :func:`call_intrinsic` can always return a plain `dict`.
 
     Args:
         name: Adapter capability name; included in
@@ -58,8 +58,8 @@ class _ListContract(IOContract):
             raw (str): Raw JSON string from the model.
 
         Returns:
-            dict[str, object]: ``{"items": [list of validated dicts]}``.
-                An empty list parses to ``{"items": []}``.
+            dict[str, object]: `{"items": [list of validated dicts]}`.
+                An empty list parses to `{"items": []}`.
 
         Raises:
             ValueError: When *raw* is not valid JSON, is not a JSON array, or
@@ -172,7 +172,7 @@ def check_answerability(
     Adapter function that checks whether the question in the last user turn of a
     chat can be answered by a provided set of RAG documents.
 
-    Output contract — required key: ``answerability``.  Missing the key raises
+    Output contract — required key: `answerability`.  Missing the key raises
     :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
     keys in the model output do not raise (forward-compatible).
 
@@ -187,16 +187,16 @@ def check_answerability(
         backend: Backend instance that supports adding the LoRA or aLoRA adapters
             for answerability checks.
         model_options: Optional model-option overrides (e.g.
-            ``{"temperature": 0.1}``).  Merged on top of the adapter default
-            (``temperature=0.0``).
+            `{"temperature": 0.1}`).  Merged on top of the adapter default
+            (`temperature=0.0`).
 
     Returns:
-        A string value of either ``"answerable"`` or ``"unanswerable"``.
+        A string value of either `"answerable"` or `"unanswerable"`.
 
     Raises:
         ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
-            ``answerability`` field.
+            `answerability` field.
     """
     question, context = _resolve_question(question, context, backend)
     result = call_intrinsic(
@@ -223,7 +223,7 @@ def rewrite_question(
     Adapter function that rewrites the question in the next user turn into a
     self-contained query that can be passed to the retriever.
 
-    Output contract — required key: ``rewritten_question``.  Missing the key
+    Output contract — required key: `rewritten_question`.  Missing the key
     raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`;
     extra optional keys do not raise (forward-compatible).
 
@@ -234,8 +234,8 @@ def rewrite_question(
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters.
         model_options: Optional model-option overrides (e.g.
-            ``{"temperature": 0.1}``).  Merged on top of the adapter default
-            (``temperature=0.0``).
+            `{"temperature": 0.1}`).  Merged on top of the adapter default
+            (`temperature=0.0`).
 
     Returns:
         Rewritten version of `question`.
@@ -243,7 +243,7 @@ def rewrite_question(
     Raises:
         ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
-            ``rewritten_question`` field.
+            `rewritten_question` field.
     """
     question, context = _resolve_question(question, context, backend)
     result = call_intrinsic(
@@ -270,7 +270,7 @@ def clarify_query(
     based on the retrieved documents and conversation context, and generates an
     appropriate clarification question if needed.
 
-    Output contract — required key: ``clarification``.  Missing the key raises
+    Output contract — required key: `clarification`.  Missing the key raises
     :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
     keys do not raise (forward-compatible).
 
@@ -284,17 +284,17 @@ def clarify_query(
         backend: Backend instance that supports the adapters that implement
             this adapter function.
         model_options: Optional model-option overrides (e.g.
-            ``{"temperature": 0.1}``).  Merged on top of the adapter default
-            (``temperature=0.0``).
+            `{"temperature": 0.1}`).  Merged on top of the adapter default
+            (`temperature=0.0`).
 
     Returns:
-        Clarification question string (e.g., ``"Do you mean A or B?"``), or
-        the string ``"CLEAR"`` if no clarification is needed.
+        Clarification question string (e.g., `"Do you mean A or B?"`), or
+        the string `"CLEAR"` if no clarification is needed.
 
     Raises:
         ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
-            ``clarification`` field.
+            `clarification` field.
     """
     question, context = _resolve_question(question, context, backend)
     result = call_intrinsic(
@@ -322,9 +322,9 @@ def find_citations(
     Adapter function that finds sentences in RAG documents that support sentences
     in a potential assistant response to a user question.
 
-    Output contract — each record must contain: ``response_begin``,
-    ``response_end``, ``response_text``, ``citation_doc_id``, ``citation_begin``,
-    ``citation_end``, ``citation_text``.  A record missing any of these keys
+    Output contract — each record must contain: `response_begin`,
+    `response_end`, `response_text`, `citation_doc_id`, `citation_begin`,
+    `citation_end`, `citation_text`.  A record missing any of these keys
     raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra
     optional keys do not raise (forward-compatible).
 
@@ -342,13 +342,13 @@ def find_citations(
         backend: Backend that supports one of the adapters that implements this
             adapter function.
         model_options: Optional model-option overrides (e.g.
-            ``{"temperature": 0.1}``).  Merged on top of the adapter default
-            (``temperature=0.0``).
+            `{"temperature": 0.1}`).  Merged on top of the adapter default
+            (`temperature=0.0`).
 
     Returns:
-        List of records with fields ``response_begin``, ``response_end``,
-        ``response_text``, ``citation_doc_id``, ``citation_begin``,
-        ``citation_end``, ``citation_text``.  Begin and end offsets are
+        List of records with fields `response_begin`, `response_end`,
+        `response_text`, `citation_doc_id`, `citation_begin`,
+        `citation_end`, `citation_text`.  Begin and end offsets are
         character offsets into their respective UTF-8 strings.
 
     Raises:
@@ -393,10 +393,10 @@ def check_context_relevance(
     the answer to a user's question. Does not consider the context in which the
     question was asked.
 
-    This helper uses a Granite 4.0 adapter (``ibm-granite/granite-4.0-micro``) and
+    This helper uses a Granite 4.0 adapter (`ibm-granite/granite-4.0-micro`) and
     is not available for Granite 4.1 models.
 
-    Output contract — required key: ``context_relevance``.  Missing the key raises
+    Output contract — required key: `context_relevance`.  Missing the key raises
     :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
     keys do not raise (forward-compatible).
 
@@ -409,17 +409,17 @@ def check_context_relevance(
         backend: Backend instance that supports the adapters that implement this
             adapter function.
         model_options: Optional model-option overrides (e.g.
-            ``{"temperature": 0.1}``).  Merged on top of the adapter default
-            (``temperature=0.0``).
+            `{"temperature": 0.1}`).  Merged on top of the adapter default
+            (`temperature=0.0`).
 
     Returns:
         Context relevance judgement as one of the following strings:
-        ``"relevant"``, ``"irrelevant"``, or ``"partially relevant"``.
+        `"relevant"`, `"irrelevant"`, or `"partially relevant"`.
 
     Raises:
         ValueError: When the model output is not valid JSON.
         AdapterSchemaMismatchError: When the model output is missing the required
-            ``context_relevance`` field.
+            `context_relevance` field.
     """
     warnings.warn(
         "check_context_relevance() is deprecated and will be removed in a future "
@@ -456,12 +456,12 @@ def flag_hallucinated_content(
     user question are faithful to the retrieved document snippets. Sentences that do
     not align with the retrieved snippets are flagged as potential hallucinations.
 
-    The ``faithfulness`` field in each record is a string label (e.g.
-    ``"faithful"``, ``"hallucinated"``); coercion to a boolean is the caller's
+    The `faithfulness` field in each record is a string label (e.g.
+    `"faithful"`, `"hallucinated"`); coercion to a boolean is the caller's
     responsibility.
 
-    Output contract — each record must contain: ``response_begin``,
-    ``response_end``, ``response_text``, ``faithfulness``, ``explanation``.  A
+    Output contract — each record must contain: `response_begin`,
+    `response_end`, `response_text`, `faithfulness`, `explanation`.  A
     record missing any of these keys raises
     :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`; extra optional
     keys do not raise (forward-compatible).
@@ -477,12 +477,12 @@ def flag_hallucinated_content(
         backend: Backend instance that supports the adapters that implement this
             adapter function.
         model_options: Optional model-option overrides (e.g.
-            ``{"temperature": 0.1}``).  Merged on top of the adapter default
-            (``temperature=0.0``).
+            `{"temperature": 0.1}`).  Merged on top of the adapter default
+            (`temperature=0.0`).
 
     Returns:
-        List of records with fields ``response_begin``, ``response_end``,
-        ``response_text``, ``faithfulness``, ``explanation``.
+        List of records with fields `response_begin`, `response_end`,
+        `response_text`, `faithfulness`, `explanation`.
 
     Raises:
         ValueError: When the model output is not valid JSON.

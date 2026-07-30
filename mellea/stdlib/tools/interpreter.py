@@ -1136,11 +1136,11 @@ def python_tool(
         `artifact_export_paths` emits a `RuntimeWarning` and yields
         `result.artifacts == []`.
 
-        **Local tiers are always unenforced.** ``CapabilityPolicy`` boolean
-        restrictions (``network_access``, ``subprocess_execution``, etc.)
-        are declarative-only on ``"local"`` and ``"local_unsafe"`` — this
+        **Local tiers are always unenforced.** `CapabilityPolicy` boolean
+        restrictions (`network_access`, `subprocess_execution`, etc.)
+        are declarative-only on `"local"` and `"local_unsafe"` — this
         applies to both explicitly passed policies *and* the default
-        ``LOCAL_POLICY`` used by ``tier="local"``.  Use a docker tier for
+        `LOCAL_POLICY` used by `tier="local"`.  Use a docker tier for
         real process isolation.
 
     When the executed code imports `matplotlib`, `matplotlib.use('Agg')` is

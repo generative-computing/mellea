@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 __doc__ = """
-Tests of code under ``mellea.formatters.granite``
+Tests of code under `mellea.formatters.granite`
 """
 
 # Standard
@@ -80,12 +80,12 @@ def _substitute_root(
 
     Args:
         child_path: A path that is a descendant of a known root.
-        old_root: Root directory that is an ancestor of ``child_path``.
-        new_root: Root directory to substitute for ``old_root``.
+        old_root: Root directory that is an ancestor of `child_path`.
+        new_root: Root directory to substitute for `old_root`.
 
     Returns:
-        A version of ``child_path`` in which the prefix corresponding to
-        ``old_root`` has been replaced with ``new_root``.
+        A version of `child_path` in which the prefix corresponding to
+        `old_root` has been replaced with `new_root`.
     """
     # Resolve paths to handle symlinks, relative components, and other corner cases
     child_path = child_path.resolve()
@@ -128,18 +128,18 @@ class YamlJsonCombo(pydantic.BaseModel):
     short_name: str
     """Short name for the test scenario, for printing to the logs."""
     yaml_file: pathlib.Path | None = None
-    """Location of local YAML file, or ``None`` to download from remote repo.
+    """Location of local YAML file, or `None` to download from remote repo.
     If the file is downloaded, the validator for this field will update this field
     automatically."""
     inputs_file: pathlib.Path
     """Location of local JSON input file."""
     arguments_file: pathlib.Path | None = None
-    """Location of local JSON file of arguments, or ``None`` if no arguments."""
+    """Location of local JSON file of arguments, or `None` if no arguments."""
     task: str | None = None
-    """Name of target task, used for loading adapters. ``None`` means no adapter and
+    """Name of target task, used for loading adapters. `None` means no adapter and
     no inference tests."""
     is_alora: bool = False
-    """``True`` to use the activated LoRA variant of the model for inference tests."""
+    """`True` to use the activated LoRA variant of the model for inference tests."""
     repo_id: str = _RAG_INTRINSICS_REPO_NAME
     """Repo on Hugging Face Hub from which the adapter for this intrinsic should be
     loaded."""
@@ -151,7 +151,7 @@ class YamlJsonCombo(pydantic.BaseModel):
     def revision(self) -> str:
         """Pinned commit SHA for this combo's repo.
 
-        Resolved from ``_REPO_PINNED_SHAS`` so every combo for a given repo
+        Resolved from `_REPO_PINNED_SHAS` so every combo for a given repo
         downloads against the same revision, letting huggingface_hub's cache
         coalesce all per-test snapshot_download calls into one materialization
         per repo per pytest session.
@@ -365,7 +365,7 @@ def _yaml_json_combo(request: pytest.FixtureRequest) -> YamlJsonCombo:
     """Pytest fixture that allows us to run a given test case repeatedly with multiple
     different combinations of IO configuration and chat completion request.
 
-    Uses the files in ``testdata/input_json`` and ``testdata/input_yaml``.
+    Uses the files in `testdata/input_json` and `testdata/input_yaml`.
 
     Returns test configuration.
     """
@@ -380,7 +380,7 @@ def _yaml_json_combo_no_alora(request: pytest.FixtureRequest) -> YamlJsonCombo:
     different combinations of IO configuration and chat completion request. Ignores
     model configs that use the aLoRA variant of the model.
 
-    Uses the files in ``testdata/input_json`` and ``testdata/input_yaml``.
+    Uses the files in `testdata/input_json` and `testdata/input_yaml`.
 
     Returns tuple of short name, YAML file, JSON file, model directory, and
     arguments file.

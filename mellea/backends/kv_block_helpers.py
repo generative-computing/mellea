@@ -3,9 +3,9 @@
 
 """Low-level utilities for concatenating transformer KV caches (KV smashing).
 
-Provides ``prefill_cache_v5`` for converting a tokenized prompt into a prefilled
-``DynamicCache``, ``merge_dynamic_caches_v5`` for concatenating multiple
-``DynamicCache`` objects along the time axis, and ``merge_v5`` which composes
+Provides `prefill_cache_v5` for converting a tokenized prompt into a prefilled
+`DynamicCache`, `merge_dynamic_caches_v5` for concatenating multiple
+`DynamicCache` objects along the time axis, and `merge_v5` which composes
 the two. These helpers are used internally by local Hugging Face backends
 (transformers v5+) that reuse cached prefix computations across multiple
 generation calls.

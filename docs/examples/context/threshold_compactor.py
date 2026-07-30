@@ -1,10 +1,10 @@
 # pytest: unit
 """ThresholdCompactor — gate an inner Compactor on conversation size.
 
-Reads ``ModelOutputThunk.generation.usage`` from the most recent thunk
-in the context. For a chat backend, ``total_tokens`` on that thunk is
-``prompt_tokens`` (full conversation history sent to the model) plus
-``completion_tokens`` (the reply), so it tracks *cumulative* context
+Reads `ModelOutputThunk.generation.usage` from the most recent thunk
+in the context. For a chat backend, `total_tokens` on that thunk is
+`prompt_tokens` (full conversation history sent to the model) plus
+`completion_tokens` (the reply), so it tracks *cumulative* context
 size — not just one call's isolated tokens. The inner compactor fires
 once that running size exceeds the configured threshold.
 """

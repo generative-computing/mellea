@@ -3,8 +3,8 @@
 
 """End-to-end tests for payload policy enforcement through invoke_hook.
 
-The plugin manager applies ``HookPayloadPolicy`` after each plugin returns:
-only changes to ``writable_fields`` are accepted; all other mutations are
+The plugin manager applies `HookPayloadPolicy` after each plugin returns:
+only changes to `writable_fields` are accepted; all other mutations are
 silently discarded.  Hooks absent from the policy table are observe-only
 and reject every modification attempt.
 """
@@ -282,7 +282,7 @@ class TestPayloadChaining:
 
 
 class TestReturnNoneIsNoop:
-    """A plugin that returns ``None`` must leave the payload entirely unchanged."""
+    """A plugin that returns `None` must leave the payload entirely unchanged."""
 
     async def test_none_return_preserves_original_payload(self) -> None:
         @hook("session_pre_init", priority=10)

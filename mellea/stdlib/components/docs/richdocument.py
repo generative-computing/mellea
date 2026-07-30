@@ -40,25 +40,25 @@ from ..mobject import MObject, Query, Transform
 class RichDocument(Component[str]):
     """A document wrapper that exposes content to a language model as Markdown.
 
-    The two canonical ways to create a ``RichDocument``:
+    The two canonical ways to create a `RichDocument`:
 
     * **From a file** — use :meth:`from_document_file` to convert a PDF,
       Markdown, DOCX, or other [Docling-supported format](https://ds4sd.github.io/docling/)
-      into a ``RichDocument``.  Set ``do_ocr=False`` for text-based PDFs to
+      into a `RichDocument`.  Set `do_ocr=False` for text-based PDFs to
       skip downloading OCR model weights.
     * **From a saved JSON** — use :meth:`load` to restore a document previously
       saved with :meth:`save`.
 
-    Passing a ``DoclingDocument`` directly to the constructor is intended for
-    advanced use (e.g. when you already hold a ``DoclingDocument`` produced by
-    your own Docling pipeline).  If you pass any other type a ``TypeError`` is
+    Passing a `DoclingDocument` directly to the constructor is intended for
+    advanced use (e.g. when you already hold a `DoclingDocument` produced by
+    your own Docling pipeline).  If you pass any other type a `TypeError` is
     raised immediately.
 
     Args:
         doc (DoclingDocument): The underlying Docling document to wrap.
 
     Raises:
-        TypeError: If *doc* is not a ``DoclingDocument`` instance.
+        TypeError: If *doc* is not a `DoclingDocument` instance.
     """
 
     def __init__(self, doc: DoclingDocument):
@@ -174,11 +174,11 @@ class RichDocument(Component[str]):
         * PDF pipeline options (image scaling, picture extraction, OCR) are
           always configured internally. For non-PDF formats Docling ignores
           these options, so they have no effect on Markdown or DOCX conversion.
-        * ``do_ocr=True`` (the default) causes Docling to download OCR model
+        * `do_ocr=True` (the default) causes Docling to download OCR model
           weights on the *first* call, which can be several hundred MB. Pass
-          ``do_ocr=False`` for text-based PDFs or any format that does not
+          `do_ocr=False` for text-based PDFs or any format that does not
           require OCR to avoid this download.
-        * Remote URLs (e.g. ``"https://arxiv.org/pdf/…"``) are accepted by
+        * Remote URLs (e.g. `"https://arxiv.org/pdf/…"`) are accepted by
           Docling but require network access and may be slow or fail if the
           remote is unavailable.
         * On Apple Silicon, Docling's auto-selected accelerator is MPS, but
@@ -191,7 +191,7 @@ class RichDocument(Component[str]):
             source (str | Path | DocumentStream): Path, URL, or stream for the
                 source document.
             do_ocr (bool): Whether to run OCR on the document. Defaults to
-                ``True``. Set to ``False`` for text-based PDFs or when you want
+                `True`. Set to `False` for text-based PDFs or when you want
                 to avoid downloading OCR model weights.
 
         Returns:

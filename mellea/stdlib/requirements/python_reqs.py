@@ -272,31 +272,31 @@ class PythonExecutionReq(Requirement):
     Extracts the highest-scoring Python code block from the model's last output
     and validates or executes it according to the configured execution tier.
 
-    Use ``execution_tier`` to select behavior by intent:
+    Use `execution_tier` to select behavior by intent:
 
-    - ``"static"`` (default) — parse and import-check only, no execution.
-    - ``"local_unsafe"`` — subprocess execution, no policy restrictions.
-    - ``"local"`` — subprocess execution with a declared capability policy.
-    - ``"docker_unsafe"`` — Docker-isolated execution, no policy restrictions.
-    - ``"docker"`` — Docker-isolated execution with a declared capability policy.
+    - `"static"` (default) — parse and import-check only, no execution.
+    - `"local_unsafe"` — subprocess execution, no policy restrictions.
+    - `"local"` — subprocess execution with a declared capability policy.
+    - `"docker_unsafe"` — Docker-isolated execution, no policy restrictions.
+    - `"docker"` — Docker-isolated execution with a declared capability policy.
 
     Args:
-        execution_tier (str): One of ``"static"``, ``"local_unsafe"``, ``"local"``,
-            ``"docker_unsafe"``, or ``"docker"``.  Defaults to ``"static"``.
+        execution_tier (str): One of `"static"`, `"local_unsafe"`, `"local"`,
+            `"docker_unsafe"`, or `"docker"`.  Defaults to `"static"`.
         policy (CapabilityPolicy | None): Override the tier's default policy.
-            Ignored for ``"static"`` and unsafe tiers unless explicitly provided.
+            Ignored for `"static"` and unsafe tiers unless explicitly provided.
         allowed_imports (list[str] | None): Allowlist of importable top-level
-            modules.  ``None`` allows any import.
+            modules.  `None` allows any import.
         max_output_chars (int | None): Maximum allowed stdout size in characters.
             None = no size check (default). When set, adds output size validation
             in the same execution pass, avoiding the double-execution cost of using
             OutputSizeLimit. Only enforced for tiers that execute code (local_unsafe,
             local, docker_unsafe, docker); static tier skips output check.
-        timeout (int | None): Deprecated.  Pass ``policy=CapabilityPolicy(timeout=N)``
+        timeout (int | None): Deprecated.  Pass `policy=CapabilityPolicy(timeout=N)`
             instead.  When provided, overrides the policy timeout.
         allow_unsafe_execution (bool): Deprecated.  Use
-            ``execution_tier="local_unsafe"`` instead.
-        use_sandbox (bool): Deprecated.  Use ``execution_tier="docker"`` instead.
+            `execution_tier="local_unsafe"` instead.
+        use_sandbox (bool): Deprecated.  Use `execution_tier="docker"` instead.
 
     Attributes:
         validation_fn (Callable[[Context], ValidationResult]): The validation

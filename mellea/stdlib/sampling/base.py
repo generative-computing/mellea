@@ -76,7 +76,7 @@ def _get_sampling_result(
     """Aggregate per-iteration slices into a SamplingResult.
 
     Picks the first successful slice as the result; falls back to
-    ``select_from_failure`` over the collected slices when no slice succeeded.
+    `select_from_failure` over the collected slices when no slice succeeded.
     """
     sample_generations: list[ComputedModelOutputThunk] = []
     sample_validations: list[list[tuple[Requirement, ValidationResult]]] = []

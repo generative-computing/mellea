@@ -28,7 +28,7 @@ def _payload() -> SessionPreInitPayload:
 
 
 class TestSessionScopedPlugins:
-    """Plugins registered via ``register(..., session_id=sid)``."""
+    """Plugins registered via `register(..., session_id=sid)`."""
 
     async def test_fires_while_session_active(self) -> None:
         invocations = []

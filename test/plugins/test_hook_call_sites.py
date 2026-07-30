@@ -1539,8 +1539,8 @@ class TestGenerationPostCallObserveOnly:
 class _MockLazyBackend(Backend):
     """Backend that returns a real lazy (uncomputed) ModelOutputThunk.
 
-    The MOT must be materialized via ``avalue()``/``astream()``, exercising
-    the ``_on_computed`` callback path.
+    The MOT must be materialized via `avalue()`/`astream()`, exercising
+    the `_on_computed` callback path.
     """
 
     model_id = "mock-lazy-model"

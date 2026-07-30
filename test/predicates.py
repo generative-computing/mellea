@@ -3,7 +3,7 @@
 
 """Reusable test predicates for resource-gated test skipping.
 
-These return ``pytest.mark.skipif`` decorators that test authors apply directly.
+These return `pytest.mark.skipif` decorators that test authors apply directly.
 Each predicate encapsulates a specific availability check so that:
 
 - Test authors specify *exactly* what their test needs (not a vague tier).
@@ -45,9 +45,9 @@ _IS_APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
 def _apple_silicon_vram_gb() -> float:
     """Conservative usable GPU memory estimate for Apple Silicon.
 
-    Metal's ``recommendedMaxWorkingSetSize`` is a static device property
+    Metal's `recommendedMaxWorkingSetSize` is a static device property
     (~75% of total RAM) that does not account for current system load.
-    We use ``min(total * 0.75, total - 16)`` to leave headroom for the OS
+    We use `min(total * 0.75, total - 16)` to leave headroom for the OS
     and desktop applications, which typically consume 8-16 GB on a loaded
     developer machine.
     """
@@ -76,7 +76,7 @@ def _gpu_vram_gb() -> float:
     """Return usable GPU VRAM in GB, or 0 if unavailable.
 
     On Apple Silicon: uses a conservative heuristic based on total unified
-    memory rather than Metal's static ``recommendedMaxWorkingSetSize``.
+    memory rather than Metal's static `recommendedMaxWorkingSetSize`.
     On CUDA: reports device 0 total memory via torch.
     """
     if _IS_APPLE_SILICON:
@@ -95,7 +95,7 @@ def require_gpu(*, min_vram_gb: int | None = None):
     """Skip unless a GPU is available, optionally with minimum VRAM.
 
     Args:
-        min_vram_gb: Minimum VRAM in GB.  When ``None``, any GPU suffices.
+        min_vram_gb: Minimum VRAM in GB.  When `None`, any GPU suffices.
     """
     if os.environ.get("_MELLEA_SKIP_RESOURCE_CHECKS"):
         return pytest.mark.skipif(False, reason="")
@@ -219,7 +219,7 @@ def require_nltk_data():
 def require_package(package: str):
     """Skip unless *package* is importable.
 
-    For simple cases, ``pytest.importorskip(package)`` at module level is
+    For simple cases, `pytest.importorskip(package)` at module level is
     equivalent and more idiomatic.  This predicate is useful when you want
     a decorator rather than a module-level call::
 

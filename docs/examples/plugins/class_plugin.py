@@ -30,9 +30,9 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     """Redacts PII patterns from both input and output.
 
     .. warning:: Shared mutable state
-        ``redaction_count`` is shared across all hook invocations.  This is
-        safe today because all hooks run on the same ``asyncio`` event loop,
-        but would require a lock or ``contextvars`` if hooks ever execute in
+        `redaction_count` is shared across all hook invocations.  This is
+        safe today because all hooks run on the same `asyncio` event loop,
+        but would require a lock or `contextvars` if hooks ever execute in
         parallel threads.
     """
 
@@ -64,8 +64,8 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     async def scan_output(self, payload, ctx):
         """Scan LLM output for PII and log a warning if detected.
 
-        ``generation_post_call`` is observe-only — plugins cannot modify the
-        ``model_output``.  This hook therefore only inspects the output and
+        `generation_post_call` is observe-only — plugins cannot modify the
+        `model_output`.  This hook therefore only inspects the output and
         records a warning for downstream monitoring/alerting.
         """
         mot_value = getattr(payload.model_output, "value", None)

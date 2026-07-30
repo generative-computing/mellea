@@ -3,12 +3,12 @@
 
 """Unit tests for IOContract validation in rag.py (Epic #929 Phase 1).
 
-Tests the ``parse()`` method of each IOContract subclass directly — no backend,
+Tests the `parse()` method of each IOContract subclass directly — no backend,
 no GPU, no model download required.  Two tests per helper:
 
-- ``test_<helper>_contract_enforced`` — output missing a required field raises
+- `test_<helper>_contract_enforced` — output missing a required field raises
   :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`.
-- ``test_<helper>_forward_compat`` — output containing an extra optional field
+- `test_<helper>_forward_compat` — output containing an extra optional field
   does *not* raise.
 """
 

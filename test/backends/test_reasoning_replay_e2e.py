@@ -4,7 +4,7 @@
 """Live multi-turn reasoning-replay verification against a real thinking model.
 
 This is the "quick verification after the fact" for issue #1201: the mechanical
-strip/round-trip plumbing is unit-tested in ``test_reasoning_replay.py`` without
+strip/round-trip plumbing is unit-tested in `test_reasoning_replay.py` without
 a model; this module confirms the same behaviour holds against a real reasoning
 endpoint, and pins the one empirical unknown — which side of the tool-call
 contract the served model lands on.
@@ -12,11 +12,11 @@ contract the served model lands on.
 Model-agnostic by design. Configure via environment variables (skipped entirely
 when unset, so it never runs in default CI):
 
-- ``MELLEA_REASONING_TEST_BASE_URL`` — OpenAI-compatible endpoint, e.g.
-  ``http://localhost:8000/v1`` (vLLM) or ``http://localhost:11434/v1`` (Ollama).
-- ``MELLEA_REASONING_TEST_MODEL`` — served model id. Defaults to a Granite
+- `MELLEA_REASONING_TEST_BASE_URL` — OpenAI-compatible endpoint, e.g.
+  `http://localhost:8000/v1` (vLLM) or `http://localhost:11434/v1` (Ollama).
+- `MELLEA_REASONING_TEST_MODEL` — served model id. Defaults to a Granite
   reasoning model; point it at Qwen3 / DeepSeek-R1 / etc. to verify those.
-- ``MELLEA_REASONING_TEST_API_KEY`` — optional; defaults to ``"ollama"``.
+- `MELLEA_REASONING_TEST_API_KEY` — optional; defaults to `"ollama"`.
 
 Run directly (bypasses the default marker filter):
 

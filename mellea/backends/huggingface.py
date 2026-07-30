@@ -241,25 +241,25 @@ _HF_INTERNAL_TEMPLATE_VARS: frozenset[str] = frozenset(
 
 
 def _compute_generate_kwargs_allowlist() -> frozenset[str]:
-    """Names that ``transformers``' ``model.generate`` accepts as keyword arguments.
+    """Names that `transformers`' `model.generate` accepts as keyword arguments.
 
     Combines two sources of truth:
 
-    - The explicit named parameters of ``GenerationMixin.generate``
-      (``stopping_criteria``, ``streamer``, ``synced_gpus``, …).
-    - Every public field on ``GenerationConfig``
-      (``temperature``, ``max_new_tokens``, ``return_dict_in_generate``, …).
+    - The explicit named parameters of `GenerationMixin.generate`
+      (`stopping_criteria`, `streamer`, `synced_gpus`, …).
+    - Every public field on `GenerationConfig`
+      (`temperature`, `max_new_tokens`, `return_dict_in_generate`, …).
 
-    Anything outside this set, passed as a free kwarg to ``generate``, is either
-    absorbed by ``**kwargs`` and forwarded to the model forward pass (rare, but
-    valid for forward-only kwargs Mellea sets explicitly — ``attention_mask``,
-    ``past_key_values``, ``cache_position``, ``token_type_ids``, ``inputs_embeds``)
-    or — far more commonly — raises ``TypeError`` because the chat template
-    variable name (``thinking``, ``enable_thinking``, ``custom_tools`` …) is not
+    Anything outside this set, passed as a free kwarg to `generate`, is either
+    absorbed by `**kwargs` and forwarded to the model forward pass (rare, but
+    valid for forward-only kwargs Mellea sets explicitly — `attention_mask`,
+    `past_key_values`, `cache_position`, `token_type_ids`, `inputs_embeds`)
+    or — far more commonly — raises `TypeError` because the chat template
+    variable name (`thinking`, `enable_thinking`, `custom_tools` …) is not
     a generation parameter. This allowlist is the self-maintaining filter that
-    drops those before they reach ``generate``.
+    drops those before they reach `generate`.
 
-    Computed at import time; depends only on the installed ``transformers``
+    Computed at import time; depends only on the installed `transformers`
     version.
     """
     import inspect
@@ -1874,18 +1874,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         `do_sample=True` with `temperature=0` would crash transformers
         ("temperature has to be a strictly positive float").
 
-        When ``for_generate`` is True (the default — and the right choice for any
-        kwargs about to be splatted into ``model.generate``), the result is filtered
-        through the module-level ``_GENERATE_KWARGS_ALLOWLIST`` so chat-template-only
-        variables (``thinking``, ``enable_thinking``, ``custom_tools`` …) cannot leak
-        in and crash ``generate`` with ``TypeError``.  Pass ``for_generate=False`` from
-        ``_filter_for_chat_template`` to skip that filter — that path applies the
+        When `for_generate` is True (the default — and the right choice for any
+        kwargs about to be splatted into `model.generate`), the result is filtered
+        through the module-level `_GENERATE_KWARGS_ALLOWLIST` so chat-template-only
+        variables (`thinking`, `enable_thinking`, `custom_tools` …) cannot leak
+        in and crash `generate` with `TypeError`.  Pass `for_generate=False` from
+        `_filter_for_chat_template` to skip that filter — that path applies the
         chat-template allowlist instead.
 
         Args:
             model_options: the model_options for this call
             for_generate: whether the result will be passed to
-                ``model.generate``; controls whether the generate-kwargs filter
+                `model.generate`; controls whether the generate-kwargs filter
                 runs.
 
         Returns:

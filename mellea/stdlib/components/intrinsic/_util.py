@@ -158,7 +158,7 @@ def call_intrinsic(
     method is called on the raw output string before returning.  The contract validates
     required fields and raises :class:`~mellea.backends.adapters.AdapterSchemaMismatchError`
     on contract-breaking deltas; forward-compatible additions (extra optional fields) do
-    not raise.  When *io_contract* is ``None`` the raw ``json.loads`` result is returned.
+    not raise.  When *io_contract* is `None` the raw `json.loads` result is returned.
 
     Args:
         intrinsic_name (str): Capability name of the adapter function
@@ -168,16 +168,16 @@ def call_intrinsic(
         kwargs (dict | None): Extra keyword arguments forwarded to the
             adapter function's input template.
         model_options (dict | None): Model options that override defaults.
-            Adapter functions default to ``TEMPERATURE: 0.0`` for deterministic
-            output; pass ``TEMPERATURE`` here to override it.
+            Adapter functions default to `TEMPERATURE: 0.0` for deterministic
+            output; pass `TEMPERATURE` here to override it.
         io_contract (IOContract | None): Output contract to validate and parse the
-            raw model output.  When ``None``, ``json.loads`` is used directly.
+            raw model output.  When `None`, `json.loads` is used directly.
 
     Returns:
         dict[str, object]: Parsed (and optionally validated) JSON output from the adapter function.
 
     Raises:
-        ValueError: When the model output is ``None`` or is not valid JSON.
+        ValueError: When the model output is `None` or is not valid JSON.
         AdapterSchemaMismatchError: When *io_contract* is provided and the
             model output is missing a required field.
     """

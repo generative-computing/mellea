@@ -148,7 +148,7 @@ class Compactor(Protocol):
     `compact()` is generic in `T` (a `Context` subtype) so concrete
     compactors can narrow their input/output type — for example a
     chat-only compactor overrides the method as
-    ``def compact(self, ctx: ChatContext, *, backend=None) -> ChatContext``.
+    `def compact(self, ctx: ChatContext, *, backend=None) -> ChatContext`.
 
     The protocol is sync. Compactors that need to perform a backend call
     (e.g. :class:`LLMSummarizeCompactor`) hide the async work behind the sync

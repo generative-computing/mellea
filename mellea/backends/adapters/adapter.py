@@ -8,10 +8,10 @@ register an adapter by capability name) and :meth:`AdapterMixin._find_adapter`
 (look up a registered adapter).  :class:`AdapterMixin` is mixed into backends that
 support runtime adapter loading and unloading.
 
-``LocalHFAdapter``, ``IntrinsicAdapter``, and ``EmbeddedIntrinsicAdapter`` are
+`LocalHFAdapter`, `IntrinsicAdapter`, and `EmbeddedIntrinsicAdapter` are
 **deprecation shims** retained for backwards compatibility.  They satisfy
-``isinstance(x, _core.Adapter)`` but delegate all behaviour to the new dataclass.
-``get_adapter_for_intrinsic`` is similarly deprecated; prefer ``resolve_adapter``.
+`isinstance(x, _core.Adapter)` but delegate all behaviour to the new dataclass.
+`get_adapter_for_intrinsic` is similarly deprecated; prefer `resolve_adapter`.
 """
 
 import abc
@@ -33,18 +33,18 @@ class Adapter(abc.ABC):
     """An adapter that can be added to a single backend.
 
     An adapter can only be registered with one backend at a time. Use
-    ``adapter.qualified_name`` when referencing the adapter after adding it.
+    `adapter.qualified_name` when referencing the adapter after adding it.
 
     Args:
         name (str): Human-readable name of the adapter.
         adapter_type (AdapterType): Enum describing the adapter type (e.g.
-            ``AdapterType.LORA`` or ``AdapterType.ALORA``).
+            `AdapterType.LORA` or `AdapterType.ALORA`).
 
     Attributes:
         qualified_name (str): Unique name used for loading and lookup; formed
-            as ``"<name>_<adapter_type.value>"``.
+            as `"<name>_<adapter_type.value>"`.
         backend (Backend | None): The backend this adapter has been added to,
-            or ``None`` if not yet added.
+            or `None` if not yet added.
         path (str | None): Filesystem path to the adapter weights; set when
             the adapter is added to a backend.
     """
@@ -66,7 +66,7 @@ class Adapter(abc.ABC):
 class LocalHFAdapter(Adapter):
     """Abstract adapter subclass for locally loaded Hugging Face model backends.
 
-    Subclasses must implement ``get_local_hf_path`` to return the filesystem path
+    Subclasses must implement `get_local_hf_path` to return the filesystem path
     from which adapter weights should be loaded given a base model name.
     """
 
@@ -76,7 +76,7 @@ class LocalHFAdapter(Adapter):
 
         Args:
             base_model_name (str): The base model name; typically the last component
-                of the Hugging Face model ID (e.g. ``"granite-4.0-micro"``).
+                of the Hugging Face model ID (e.g. `"granite-4.0-micro"`).
 
         Returns:
             str: Filesystem path to the adapter weights directory.
@@ -127,43 +127,43 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
 
     .. deprecated::
         Use :class:`~mellea.backends.adapters.Adapter` directly.
-        ``IntrinsicAdapter`` will be removed in a future release (Epic #929,
+        `IntrinsicAdapter` will be removed in a future release (Epic #929,
         issue #1144).
 
     Subtype of :class:`Adapter` for models that:
 
     * implement adapter functions
     * are packaged as LoRA or aLoRA adapters on top of a base model
-    * use the shared model loading code in ``mellea.formatters.granite.intrinsics``
+    * use the shared model loading code in `mellea.formatters.granite.intrinsics`
     * use the shared input and output processing code in
-      ``mellea.formatters.granite.intrinsics``
+      `mellea.formatters.granite.intrinsics`
 
     Args:
-        intrinsic_name (str): Name of the adapter function (e.g. ``"answerability"``);
-            the adapter's ``qualified_name`` will be derived from this.
+        intrinsic_name (str): Name of the adapter function (e.g. `"answerability"`);
+            the adapter's `qualified_name` will be derived from this.
         adapter_type (AdapterType): Enum describing the adapter type; defaults to
-            ``AdapterType.ALORA``.
+            `AdapterType.ALORA`.
         config_file (str | pathlib.Path | None): Path to a YAML config file defining
             the adapter function's I/O transformations; mutually exclusive with
-            ``config_dict``.
+            `config_dict`.
         config_dict (dict | None): Dict defining the adapter function's I/O
-            transformations; mutually exclusive with ``config_file``.
+            transformations; mutually exclusive with `config_file`.
         base_model_name (str | None): Base model name used to look up the I/O
-            processing config when neither ``config_file`` nor ``config_dict`` are
+            processing config when neither `config_file` nor `config_dict` are
             provided.
 
     Attributes:
         intrinsic_name (str): Name of the adapter function this adapter implements.
         intrinsic_metadata (IntrinsicsCatalogEntry): Catalog metadata for the adapter function.
         base_model_name (str | None): Base model name provided at construction, if any.
-        adapter_type (AdapterType): The adapter type (``LORA`` or ``ALORA``).
+        adapter_type (AdapterType): The adapter type (`LORA` or `ALORA`).
         config (dict): Parsed I/O transformation configuration for the adapter function.
 
     .. note::
-        ``identity``, ``io_contract``, and ``weights`` are Phase 1 internal scaffolding
-        populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
-        protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
-        ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
+        `identity`, `io_contract`, and `weights` are Phase 1 internal scaffolding
+        populated in `__init__` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
+        protocol.  They are not meaningful consumer-facing attributes; `io_contract` and
+        `weights` raise :exc:`NotImplementedError` and will be replaced in Phase 2
         (issues #1137, #1141).
     """
 
@@ -265,7 +265,7 @@ class IntrinsicAdapter(LocalHFAdapter, _AdapterCore):
 
         Args:
             base_model_name (str): The base model name; typically the last component
-                of the Hugging Face model ID (e.g. ``"granite-3.3-8b-instruct"``).
+                of the Hugging Face model ID (e.g. `"granite-3.3-8b-instruct"`).
 
         Returns:
             str: Filesystem path to the downloaded adapter weights directory.
@@ -306,15 +306,15 @@ def get_adapter_for_intrinsic(
     """Find an adapter from a dict of available adapters based on the adapter function name and its allowed adapter types.
 
     Args:
-        intrinsic_name (str): The name of the adapter function, e.g. ``"answerability"``.
+        intrinsic_name (str): The name of the adapter function, e.g. `"answerability"`.
         intrinsic_adapter_types (list[AdapterType] | tuple[AdapterType, ...]): The
             adapter types allowed for this adapter function, e.g.
-            ``[AdapterType.ALORA, AdapterType.LORA]``.
+            `[AdapterType.ALORA, AdapterType.LORA]`.
         available_adapters (dict[str, T]): The available adapters to choose from;
-            maps ``adapter.qualified_name`` to the adapter object.
+            maps `adapter.qualified_name` to the adapter object.
 
     Returns:
-        T | None: The first matching adapter found, or ``None`` if no match exists.
+        T | None: The first matching adapter found, or `None` if no match exists.
     """
     adapter = None
     for adapter_type in intrinsic_adapter_types:
@@ -340,15 +340,15 @@ class AdapterMixin(Backend, abc.ABC):
     """Mixin class for backends capable of utilizing adapters.
 
     Three verbs are universal across every adapter reality (LocalFile/PEFT,
-    Embedded/Granite Switch, ServerMediated): ``base_model_name``,
-    ``add_adapter``, and ``list_adapters``. The remaining four verbs are
+    Embedded/Granite Switch, ServerMediated): `base_model_name`,
+    `add_adapter`, and `list_adapters`. The remaining four verbs are
     reality-specific — a concrete backend overrides only the verb(s) matching
-    its own reality; the others keep raising ``NotImplementedError``.
+    its own reality; the others keep raising `NotImplementedError`.
 
     Attributes:
         base_model_name (str): The short model name used to identify adapter
-            variants (e.g. ``"granite-3.3-8b-instruct"`` for
-            ``"ibm-granite/granite-3.3-8b-instruct"``).
+            variants (e.g. `"granite-3.3-8b-instruct"` for
+            `"ibm-granite/granite-3.3-8b-instruct"`).
     """
 
     # ---- Universal verbs (every adapter reality) ----
@@ -359,7 +359,7 @@ class AdapterMixin(Backend, abc.ABC):
         """Return the short model name used for adapter variant lookup.
 
         Returns:
-            str: The base model name (e.g. ``"granite-3.3-8b-instruct"``).
+            str: The base model name (e.g. `"granite-3.3-8b-instruct"`).
         """
 
     @abc.abstractmethod
@@ -386,7 +386,7 @@ class AdapterMixin(Backend, abc.ABC):
 
         Returns:
             list[str]: Qualified adapter names for all adapters that have been
-                registered via ``add_adapter``.
+                registered via `add_adapter`.
         """
         ...
 
@@ -396,11 +396,11 @@ class AdapterMixin(Backend, abc.ABC):
         """Load a previously registered PEFT adapter into the underlying model.
 
         LocalFile/PEFT reality only (e.g. a locally hosted Hugging Face
-        model). The adapter must have been registered via ``add_adapter``
+        model). The adapter must have been registered via `add_adapter`
         before calling this method.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to load.
 
         Raises:
@@ -418,7 +418,7 @@ class AdapterMixin(Backend, abc.ABC):
         model).
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to unload.
 
         Raises:
@@ -438,10 +438,10 @@ class AdapterMixin(Backend, abc.ABC):
         requests.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to activate or deactivate.
-            active (bool): ``True`` to render the adapter's control tokens,
-                ``False`` to clear them.
+            active (bool): `True` to render the adapter's control tokens,
+                `False` to clear them.
 
         Raises:
             NotImplementedError: If this backend's adapter reality is not
@@ -460,7 +460,7 @@ class AdapterMixin(Backend, abc.ABC):
         yet.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to select.
 
         Raises:
@@ -476,11 +476,11 @@ class AdapterMixin(Backend, abc.ABC):
         """Find or lazily register an adapter by capability name.
 
         Default implementation preserves Phase 0 behaviour, using the internal
-        ``_added_adapters`` dict that concrete backends maintain.  Override in
+        `_added_adapters` dict that concrete backends maintain.  Override in
         Phase 2 (see epic #929) to implement proper lifecycle management.
 
         Args:
-            name (str): Capability name (e.g. ``"answerability"``).
+            name (str): Capability name (e.g. `"answerability"`).
 
         Returns:
             _AdapterCore: The registered adapter with the given capability.
@@ -544,10 +544,10 @@ class AdapterMixin(Backend, abc.ABC):
         """Context manager wrapping adapter activation and deactivation.
 
         Phase 1 stub — yields immediately (no-op). Phase 2 (see epic #929) wires
-        in ``adapter.weights.activate()`` and ``adapter.weights.deactivate()``.
+        in `adapter.weights.activate()` and `adapter.weights.deactivate()`.
 
         Args:
-            adapter: The adapter to activate, or ``None`` (no-op in Phase 1).
+            adapter: The adapter to activate, or `None` (no-op in Phase 1).
         """
         yield
 
@@ -557,14 +557,14 @@ class AdapterMixin(Backend, abc.ABC):
         """Return the first registered adapter matching capability and (optionally) type.
 
         Args:
-            capability (str): Capability name (e.g. ``"answerability"``).
+            capability (str): Capability name (e.g. `"answerability"`).
             adapter_types (tuple[str, ...] | None): Adapter type strings in
-                preference order (e.g. ``("alora", "lora")``).  When provided,
+                preference order (e.g. `("alora", "lora")`).  When provided,
                 aLoRA is returned before LoRA if both are registered for the same
-                capability.  ``None`` matches any type (insertion order wins).
+                capability.  `None` matches any type (insertion order wins).
 
         Returns:
-            _AdapterCore | None: Matching adapter, or ``None`` if not found.
+            _AdapterCore | None: Matching adapter, or `None` if not found.
         """
         adapters = getattr(self, "_added_adapters", {})
         if adapter_types is None:
@@ -588,33 +588,33 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
     .. deprecated::
         Use :class:`~mellea.backends.adapters.Adapter` directly.
-        ``EmbeddedIntrinsicAdapter`` will be removed in a future release
+        `EmbeddedIntrinsicAdapter` will be removed in a future release
         (Epic #929, issue #1144).
 
     Unlike PEFT-based adapters that are loaded into the model at runtime,
     embedded adapters are already baked into the model weights and activated
     via control tokens injected by the model's chat template.  Only the I/O
-    transformation config (``io.yaml``) is needed; no adapter weights are
+    transformation config (`io.yaml`) is needed; no adapter weights are
     downloaded or loaded.
 
     Args:
-        intrinsic_name (str): Name of the adapter function (e.g. ``"answerability"``).
-        config (dict): Parsed I/O transformation configuration (from ``io.yaml``).
-        technology (str): Adapter technology in the switch model — ``"lora"`` or
-            ``"alora"``.  Determines where the control token is placed in the
+        intrinsic_name (str): Name of the adapter function (e.g. `"answerability"`).
+        config (dict): Parsed I/O transformation configuration (from `io.yaml`).
+        technology (str): Adapter technology in the switch model — `"lora"` or
+            `"alora"`.  Determines where the control token is placed in the
             chat template (beginning of sequence for LoRA, before generation
             prompt for aLoRA).
 
     Attributes:
         intrinsic_name (str): Name of the adapter function this adapter implements.
         config (dict): Parsed I/O transformation configuration.
-        technology (str): ``"lora"`` or ``"alora"``.
+        technology (str): `"lora"` or `"alora"`.
 
     .. note::
-        ``identity``, ``io_contract``, and ``weights`` are Phase 1 internal scaffolding
-        populated in ``__init__`` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
-        protocol.  They are not meaningful consumer-facing attributes; ``io_contract`` and
-        ``weights`` raise :exc:`NotImplementedError` and will be replaced in Phase 2
+        `identity`, `io_contract`, and `weights` are Phase 1 internal scaffolding
+        populated in `__init__` to satisfy the new :class:`~mellea.backends.adapters.Adapter`
+        protocol.  They are not meaningful consumer-facing attributes; `io_contract` and
+        `weights` raise :exc:`NotImplementedError` and will be replaced in Phase 2
         (issues #1137, #1142).
     """
 
@@ -670,21 +670,21 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model directory.
 
-        Reads ``adapter_index.json`` and the corresponding ``io_configs/*/io.yaml``
+        Reads `adapter_index.json` and the corresponding `io_configs/*/io.yaml`
         files from the model directory.
 
         Args:
             model_path (str | pathlib.Path): Path to a Granite Switch model
-                directory that contains ``adapter_index.json`` and ``io_configs/``.
+                directory that contains `adapter_index.json` and `io_configs/`.
             intrinsic_name (str | None): If provided, only load the adapter
-                matching this adapter function name. ``None`` loads all adapters.
+                matching this adapter function name. `None` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
 
         Raises:
-            FileNotFoundError: If ``adapter_index.json`` is missing.
-            ValueError: If an ``io.yaml`` file listed in the index cannot be found
+            FileNotFoundError: If `adapter_index.json` is missing.
+            ValueError: If an `io.yaml` file listed in the index cannot be found
                 or if no adapters are found.
         """
         import json as _json
@@ -751,23 +751,23 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
 
-        Downloads ``adapter_index.json`` and the ``io_configs/`` directory, then
+        Downloads `adapter_index.json` and the `io_configs/` directory, then
         delegates to :meth:`from_model_directory`.
 
         Args:
             repo_id (str): Hugging Face Hub repository ID
-                (e.g. ``"ibm-granite/granite-switch-micro"``).
+                (e.g. `"ibm-granite/granite-switch-micro"`).
             revision (str): Git revision to download from.
-            cache_dir (str | None): Local cache directory; ``None`` for the default.
+            cache_dir (str | None): Local cache directory; `None` for the default.
             intrinsic_name (str | None): If provided, only load the adapter
-                matching this adapter function name. ``None`` loads all adapters.
+                matching this adapter function name. `None` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
 
         Raises:
-            ImportError: If ``huggingface_hub`` is not installed.
-            FileNotFoundError: If ``adapter_index.json`` is missing (delegated
+            ImportError: If `huggingface_hub` is not installed.
+            FileNotFoundError: If `adapter_index.json` is missing (delegated
                 from :meth:`from_model_directory`).
             ValueError: If no adapters are found (delegated from
                 :meth:`from_model_directory`).
@@ -806,16 +806,16 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a local directory or Hugging Face Hub.
 
-        Automatically detects whether ``source`` is a local filesystem path
+        Automatically detects whether `source` is a local filesystem path
         or a Hugging Face Hub repo ID, and delegates accordingly.
 
         Args:
             source (str): Local path to a model directory, or a Hugging Face
-                Hub repo ID (e.g. ``"ibm-granite/granite-switch-micro"``).
+                Hub repo ID (e.g. `"ibm-granite/granite-switch-micro"`).
             revision (str): Git revision (only used for Hub downloads).
             cache_dir (str | None): Cache directory (only used for Hub downloads).
             intrinsic_name (str | None): If provided, only load the adapter
-                matching this adapter function name. ``None`` loads all adapters.
+                matching this adapter function name. `None` loads all adapters.
 
         Returns:
             list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
@@ -837,18 +837,18 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
 
     .. deprecated::
         Use :class:`~mellea.backends.adapters.Adapter` directly.
-        ``CustomIntrinsicAdapter`` will be removed in a future release
+        `CustomIntrinsicAdapter` will be removed in a future release
         (Epic #929, issue #1144).
 
-    This class has the same functionality as ``IntrinsicAdapter``, except that
+    This class has the same functionality as `IntrinsicAdapter`, except that
     its constructor monkey-patches Mellea global variables to enable the backend
     to load the user's adapter.
 
     Args:
         model_id (str): The Hugging Face model ID used for downloading model weights;
-            expected format is ``"<user-id>/<repo-name>"``.
+            expected format is `"<user-id>/<repo-name>"`.
         intrinsic_name (str | None): Catalog name for the adapter function; defaults to the
-            repository name portion of ``model_id`` if not provided.
+            repository name portion of `model_id` if not provided.
         base_model_name (str): The short name of the base model (NOT its repo ID).
     """
 

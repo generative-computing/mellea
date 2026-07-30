@@ -434,7 +434,7 @@ def my_command(
     Extended description with more detail about the command's behaviour.
 
     Prerequisites:
-        Mellea installed (``uv add mellea``). Any other requirements
+        Mellea installed (`uv add mellea`). Any other requirements
         (running services, authentication, etc.).
 
     Output:

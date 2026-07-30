@@ -257,8 +257,8 @@ BACKEND_MARKERS: dict[str, str] = {
 }
 """Single source of truth for backend marker names and descriptions.
 
-Add new backends here — ``pytest_configure`` registers them automatically.
-Keep ``pyproject.toml`` ``[tool.pytest.ini_options].markers`` in sync.
+Add new backends here — `pytest_configure` registers them automatically.
+Keep `pyproject.toml` `[tool.pytest.ini_options].markers` in sync.
 """
 
 
@@ -728,8 +728,8 @@ def aggressive_cleanup():
 async def register_acceptance_sets(request):
     """Register all acceptance plugin sets (logging, sequential, concurrent, fandf).
 
-    Usage: mark your test with ``@pytest.mark.plugins`` and request this fixture,
-    or rely on the autouse ``auto_register_acceptance_sets`` fixture below.
+    Usage: mark your test with `@pytest.mark.plugins` and request this fixture,
+    or rely on the autouse `auto_register_acceptance_sets` fixture below.
     """
     plugins_disabled = request.config.getoption(
         "--disable-default-mellea-plugins", default=False
@@ -756,7 +756,7 @@ async def register_acceptance_sets(request):
 
 @pytest.fixture(autouse=True, scope="session")
 async def auto_register_acceptance_sets(request):
-    """Auto-register acceptance plugin sets for all tests by default; disable when ``--disable-default-mellea-plugins`` is passed on the CLI."""
+    """Auto-register acceptance plugin sets for all tests by default; disable when `--disable-default-mellea-plugins` is passed on the CLI."""
     disable_plugins = request.config.getoption(
         "--disable-default-mellea-plugins", default=False
     )

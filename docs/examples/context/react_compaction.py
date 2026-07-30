@@ -6,13 +6,13 @@ Two integration points are available, and they're complementary:
 1. **Per-add** — the `ChatContext`'s own compactor runs every time the
    ReACT loop appends a Message, ToolMessage, or thunk. This is fine
    for cheap strategies like `WindowCompactor`.
-2. **Per-turn** — pass `compactor=` to ``react(...)`` to invoke a
+2. **Per-turn** — pass `compactor=` to `react(...)` to invoke a
    compactor once per ReACT iteration after the tool observation. Use
    it for heavier strategies that should fire at turn boundaries
    instead of on every component append.
 
-In both cases use ``pin_react_initiator`` (from
-``mellea.stdlib.components.react``) so the goal and tool registration
+In both cases use `pin_react_initiator` (from
+`mellea.stdlib.components.react`) so the goal and tool registration
 survive compaction.
 
 This example exercises the wiring end-to-end against a fake backend so
@@ -118,7 +118,7 @@ def _final(answer: str) -> _ScriptedTurn:
 
 async def per_add_compaction():
     """A `WindowCompactor(pin_react_initiator)` on the ChatContext compacts
-    on every ``add()`` — Messages, ToolMessages, thunks. The ReactInitiator
+    on every `add()` — Messages, ToolMessages, thunks. The ReactInitiator
     stays pinned across the whole loop.
     """
     search = _tool("search")
@@ -149,9 +149,9 @@ async def per_add_compaction():
 
 
 async def per_turn_compaction():
-    """Pass ``compactor=`` to ``react`` for once-per-turn invocation.
+    """Pass `compactor=` to `react` for once-per-turn invocation.
 
-    Use a permissive ``ChatContext`` (large window) so the per-add path is
+    Use a permissive `ChatContext` (large window) so the per-add path is
     effectively disabled — only the per-turn hook drives compaction.
     """
     search = _tool("search")
@@ -180,19 +180,19 @@ async def per_turn_compaction():
 
 
 async def llm_summarize_compaction():
-    """Wire :class:`LLMSummarizeCompactor` into ``react()``.
+    """Wire :class:`LLMSummarizeCompactor` into `react()`.
 
-    ``LLMSummarizeCompactor`` implements the sync :class:`Compactor`
-    protocol — its ``compact`` method internally orchestrates the async
+    `LLMSummarizeCompactor` implements the sync :class:`Compactor`
+    protocol — its `compact` method internally orchestrates the async
     backend call (running it on a worker thread when invoked from inside
-    an event loop). From ``react()``'s perspective it's just another
+    an event loop). From `react()`'s perspective it's just another
     sync compactor.
 
-    To keep the scripted backend simple, this example sets ``keep_n``
+    To keep the scripted backend simple, this example sets `keep_n`
     large enough that summarisation never fires (no LLM call is needed).
-    Real usage would pair it with ``ThresholdCompactor`` so it only
+    Real usage would pair it with `ThresholdCompactor` so it only
     activates once the conversation crosses a token budget. See
-    ``TestLLMSummarizeCompactor`` in ``test/stdlib/test_compactor.py`` for
+    `TestLLMSummarizeCompactor` in `test/stdlib/test_compactor.py` for
     unit tests that exercise the actual summary path.
     """
     from mellea.stdlib.context import LLMSummarizeCompactor

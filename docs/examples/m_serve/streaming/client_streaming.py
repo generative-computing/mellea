@@ -6,9 +6,9 @@ started with:
 
     m serve docs/examples/m_serve/streaming/m_serve_example_streaming.py
 
-Set ``streaming`` below to:
-- ``True`` for incremental SSE chunks
-- ``False`` for a normal non-streaming response
+Set `streaming` below to:
+- `True` for incremental SSE chunks
+- `False` for a normal non-streaming response
 """
 
 import openai

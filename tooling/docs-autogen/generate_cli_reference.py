@@ -4,11 +4,11 @@
 
 """Generate a CLI reference page from Typer command metadata.
 
-Imports the ``cli.m`` Typer application, introspects its Click command tree,
-and emits a single Markdown reference page (``reference/cli.md``) documenting
+Imports the `cli.m` Typer application, introspects its Click command tree,
+and emits a single Markdown reference page (`reference/cli.md`) documenting
 every command, its flags, defaults, and descriptions.
 
-Structured docstring sections (``Prerequisites:``, ``See Also:``) in command
+Structured docstring sections (`Prerequisites:`, `See Also:`) in command
 functions are extracted and rendered as admonitions and cross-links.
 
 Run via::
@@ -43,8 +43,8 @@ _RST_BACKTICK_RE = re.compile(r"``([^`]+)``")
 def _parse_docstring_sections(docstring: str | None) -> dict[str, str]:
     """Parse a Google-style docstring into named sections.
 
-    Returns a dict with keys ``"summary"``, ``"body"``, and any structured
-    section names found (e.g. ``"Prerequisites"``, ``"See Also"``).
+    Returns a dict with keys `"summary"`, `"body"`, and any structured
+    section names found (e.g. `"Prerequisites"`, `"See Also"`).
     """
     if not docstring:
         return {"summary": "", "body": ""}
@@ -80,7 +80,7 @@ def _parse_docstring_sections(docstring: str | None) -> dict[str, str]:
 
 
 def _parse_see_also(see_also_text: str) -> list[tuple[str, str]]:
-    """Parse ``See Also`` entries into ``(kind, path)`` tuples.
+    """Parse `See Also` entries into `(kind, path)` tuples.
 
     Expected format::
 
@@ -138,7 +138,7 @@ def _slug_to_title(slug: str) -> str:
 
 
 def _get_click_app():
-    """Import and return the Click command tree for the ``m`` CLI."""
+    """Import and return the Click command tree for the `m` CLI."""
     try:
         import typer.main
 
@@ -155,13 +155,13 @@ def _get_click_app():
 def _parse_two_column_block(content: str) -> list[tuple[str, str]] | None:
     """Parse a Click-style two-column aligned block into (name, description) pairs.
 
-    Click authors sometimes format ``\\b`` blocks as a fixed-width two-column
+    Click authors sometimes format `\\b` blocks as a fixed-width two-column
     table (name left-aligned, description right-aligned with consistent padding)
-    for legible ``--help`` output.  This function detects that format and returns
-    ``(name, description)`` pairs so the generator can emit a proper markdown
+    for legible `--help` output.  This function detects that format and returns
+    `(name, description)` pairs so the generator can emit a proper markdown
     table instead of a raw code fence.
 
-    Returns ``None`` if the content does not match the two-column pattern.
+    Returns `None` if the content does not match the two-column pattern.
 
     Example input::
 
@@ -203,17 +203,17 @@ def _parse_two_column_block(content: str) -> list[tuple[str, str]] | None:
 
 
 def _extract_verbatim_blocks(help_text: str) -> list[str]:
-    """Extract Click ``\\b`` verbatim blocks from help text.
+    """Extract Click `\\b` verbatim blocks from help text.
 
-    Click uses the backspace character (``\\x08``, written as ``\\b`` in Python
+    Click uses the backspace character (`\\x08`, written as `\\b` in Python
     source string literals) as a marker to prevent paragraph rewrapping in
-    ``--help`` output.  The generator must extract these blocks independently
+    `--help` output.  The generator must extract these blocks independently
     because the section parser buries them inside whatever named section
-    (e.g. ``Raises``) happens to precede them, and that section is never
+    (e.g. `Raises`) happens to precede them, and that section is never
     rendered.
 
     Returns a list of stripped block strings (first line is typically the
-    block title, e.g. ``"Modes:"``, followed by indented content lines).
+    block title, e.g. `"Modes:"`, followed by indented content lines).
     """
     # In memory the docstring contains actual \x08 chars; split on them.
     parts = re.split(r"\x08\s*\n", help_text)
@@ -246,7 +246,7 @@ def _format_type(param: click.Parameter) -> str:
 
 
 def _format_flags(param: click.Parameter) -> str:
-    """Format parameter flags (e.g. ``--backend, -b``)."""
+    """Format parameter flags (e.g. `--backend, -b`)."""
     is_arg = isinstance(param, click.Argument)
     if is_arg:
         name = param.name or ""

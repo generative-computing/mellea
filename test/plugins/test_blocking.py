@@ -4,9 +4,9 @@
 """Tests for blocking behavior and PluginViolationError.
 
 Covers:
-- ``block()`` helper: return shape and field population
-- ``invoke_hook`` raising ``PluginViolationError`` when a plugin blocks (default behavior)
-- Calling the underlying ``PluginManager.invoke_hook`` with ``violations_as_exceptions=False``
+- `block()` helper: return shape and field population
+- `invoke_hook` raising `PluginViolationError` when a plugin blocks (default behavior)
+- Calling the underlying `PluginManager.invoke_hook` with `violations_as_exceptions=False`
   to inspect the raw result without raising
 - Priority ordering: a blocking plugin at priority=1 stops downstream plugins at priority=100
 """
@@ -38,9 +38,9 @@ def _payload(**kwargs) -> SessionPreInitPayload:
 async def _invoke_no_raise(payload: SessionPreInitPayload):
     """Call the underlying ContextForge PluginManager directly with violations_as_exceptions=False.
 
-    Mellea's ``invoke_hook`` wrapper always raises ``PluginViolationError`` on a block.
-    To observe the raw ``PluginResult`` without raising, we bypass the wrapper and call
-    ``PluginManager.invoke_hook`` directly.
+    Mellea's `invoke_hook` wrapper always raises `PluginViolationError` on a block.
+    To observe the raw `PluginResult` without raising, we bypass the wrapper and call
+    `PluginManager.invoke_hook` directly.
     """
     pm = ensure_plugin_manager()
     ctx = build_global_context()
@@ -61,7 +61,7 @@ async def _invoke_no_raise(payload: SessionPreInitPayload):
 
 
 class TestBlockHelper:
-    """Unit tests for the ``block()`` convenience helper."""
+    """Unit tests for the `block()` convenience helper."""
 
     def test_block_basic_returns_non_continue_plugin_result(self) -> None:
         result = block("something went wrong")
@@ -98,7 +98,7 @@ class TestBlockHelper:
 
 
 class TestModifyHelper:
-    """Unit tests for the ``modify()`` convenience helper."""
+    """Unit tests for the `modify()` convenience helper."""
 
     def test_modify_returns_continue_processing_true(self) -> None:
         payload = _payload()

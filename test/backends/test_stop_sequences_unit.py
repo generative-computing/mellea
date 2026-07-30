@@ -27,7 +27,7 @@ def _make_openai_backend() -> OpenAIBackend:
 
 @pytest.mark.parametrize("context", ["chats", "completions"])
 def test_openai_stop_sequences_round_trip(context):
-    """Native ``stop`` -> sentinel -> ``stop`` for both chat and completions."""
+    """Native `stop` -> sentinel -> `stop` for both chat and completions."""
     backend = _make_openai_backend()
     is_chat = context == "chats"
     stops = ["END", "</s>"]
@@ -115,7 +115,7 @@ def _make_watsonx_backend():
     "is_chat,native_key", [(True, "stop"), (False, "stop_sequences")]
 )
 def test_watsonx_stop_sequences_round_trip(is_chat, native_key):
-    """Native -> sentinel -> native for both chat (``stop``) and completions (``stop_sequences``)."""
+    """Native -> sentinel -> native for both chat (`stop`) and completions (`stop_sequences`)."""
     backend = _make_watsonx_backend()
     stops = ["END", "</s>"]
 
@@ -171,8 +171,8 @@ async def test_watsonx_processing_streaming_captures_reasoning_content():
 def _make_hf_backend_stub():
     """Construct a LocalHFBackend without loading a model.
 
-    Bypasses ``__init__`` because the real constructor downloads weights. We only
-    need ``from_mellea_model_opts_map`` for the round-trip mapping check.
+    Bypasses `__init__` because the real constructor downloads weights. We only
+    need `from_mellea_model_opts_map` for the round-trip mapping check.
     """
     pytest.importorskip("transformers")
     from mellea.backends.huggingface import LocalHFBackend

@@ -4,13 +4,13 @@
 """End-to-end tests for discriminated-union tool parameters.
 
 Covers issue #989: a tool parameter typed as a Pydantic discriminated union
-``Annotated[A | B, Field(discriminator="kind")]`` (with or without ``| None``)
-must not collapse to ``{"type": "string"}``. The schema produced by
-``convert_function_to_ollama_tool`` is consumed by every backend
+`Annotated[A | B, Field(discriminator="kind")]` (with or without `| None`)
+must not collapse to `{"type": "string"}`. The schema produced by
+`convert_function_to_ollama_tool` is consumed by every backend
 (Ollama, OpenAI, Watsonx, HuggingFace, LiteLLM), so the union structure must
-be preserved and the OAS-3 ``discriminator`` keyword must be stripped from
+be preserved and the OAS-3 `discriminator` keyword must be stripped from
 the output (the JSON Schema subset accepted by tool-calling APIs does not
-include it; the ``Literal`` tag fields carry the discriminator signal).
+include it; the `Literal` tag fields carry the discriminator signal).
 """
 
 import json
@@ -71,7 +71,7 @@ def act_optional(
 
 
 def _pet_schema(func) -> dict:
-    """Convert ``func`` and return the ``pet`` parameter schema."""
+    """Convert `func` and return the `pet` parameter schema."""
     tool = convert_function_to_ollama_tool(func)
     assert tool.function is not None
     assert tool.function.parameters is not None
@@ -79,10 +79,10 @@ def _pet_schema(func) -> dict:
 
 
 def _has_branch(schema: dict, kind_value: str, *, must_have: set[str]) -> bool:
-    """Check that ``schema`` contains an inlined ``anyOf`` branch for ``kind_value``.
+    """Check that `schema` contains an inlined `anyOf` branch for `kind_value`.
 
-    After the fix lands the output schema must contain ``anyOf`` only, never
-    ``oneOf`` — accepting ``oneOf`` here would silently mask a regression of
+    After the fix lands the output schema must contain `anyOf` only, never
+    `oneOf` — accepting `oneOf` here would silently mask a regression of
     the discriminator-flattening pre-pass.
     """
     branches = schema.get("anyOf", [])
@@ -119,9 +119,9 @@ class TestDiscriminatedUnionSchema:
         )
 
     def test_required_union_strips_discriminator_keyword(self):
-        """OAS-3 ``discriminator`` is rejected by Ollama / OpenAI strict mode.
+        """OAS-3 `discriminator` is rejected by Ollama / OpenAI strict mode.
 
-        The ``Literal`` constraint on ``kind`` already carries the tag signal,
+        The `Literal` constraint on `kind` already carries the tag signal,
         so the OAS keyword adds no semantic value but is actively harmful.
         """
         pet = _pet_schema(act)
@@ -130,7 +130,7 @@ class TestDiscriminatedUnionSchema:
         )
 
     def test_required_union_no_dangling_refs(self):
-        """No ``$ref`` should leak into the output for the issue reproducer."""
+        """No `$ref` should leak into the output for the issue reproducer."""
         rendered = json.dumps(_pet_schema(act))
         assert "$ref" not in rendered, f"unresolved $ref in tool schema: {rendered}"
 
@@ -164,9 +164,9 @@ class TestDiscriminatedUnionSchema:
         )
 
     def test_optional_union_strips_discriminator_keyword(self):
-        """The Optional variant must also drop the OAS-3 ``discriminator``.
+        """The Optional variant must also drop the OAS-3 `discriminator`.
 
-        The required variant strips it via the top-level ``oneOf`` path; the
+        The required variant strips it via the top-level `oneOf` path; the
         optional variant strips it implicitly when the wrapper sub-schema is
         replaced by its expanded branches. Asserted explicitly so a refactor
         that re-introduces the wrapper does not slip past silently.
@@ -201,12 +201,12 @@ class TestDiscriminatedUnionSchema:
         )
 
     def test_non_discriminated_optional_unchanged(self):
-        """Non-discriminated ``Optional[Email]`` must still flow through unchanged.
+        """Non-discriminated `Optional[Email]` must still flow through unchanged.
 
         Regression guard: the new pre-pass must be a no-op for plain
-        ``$ref`` + ``| None`` shapes that the existing inliner already
+        `$ref` + `| None` shapes that the existing inliner already
         handles. Pydantic emits this as
-        ``{"anyOf": [{"$ref": "..."}, {"type": "null"}]}`` — no ``oneOf``
+        `{"anyOf": [{"$ref": "..."}, {"type": "null"}]}` — no `oneOf`
         in any sub-schema, so the pre-pass should not activate.
         """
 
@@ -235,7 +235,7 @@ class TestDiscriminatedUnionSchema:
 
 
 class TestDiscriminatedUnionValidation:
-    """``validate_tool_arguments`` must round-trip a valid discriminated payload."""
+    """`validate_tool_arguments` must round-trip a valid discriminated payload."""
 
     def test_strict_accepts_valid_dog(self):
         """A correctly-shaped dog dict should pass strict validation."""
@@ -258,7 +258,7 @@ class TestDiscriminatedUnionValidation:
             validate_tool_arguments(mt, {"pet": "just a string"}, strict=True)
 
     def test_strict_rejects_missing_discriminator(self):
-        """A dict without the ``kind`` discriminator must be rejected."""
+        """A dict without the `kind` discriminator must be rejected."""
         mt = MelleaTool.from_callable(act)
         with pytest.raises(ValidationError):
             validate_tool_arguments(mt, {"pet": {"name": "Rex"}}, strict=True)

@@ -3,9 +3,9 @@
 
 """Unit tests for audio payload shape on OpenAI-compatible backends (mocked).
 
-Verifies that `AudioBlock` is correctly serialised into the ``input_audio``
+Verifies that `AudioBlock` is correctly serialised into the `input_audio`
 content-part format that OpenAI Chat Completions expects, without requiring a
-live server.  Mirrors the tier-2 structural tests in ``test_vision_ollama.py``.
+live server.  Mirrors the tier-2 structural tests in `test_vision_ollama.py`.
 """
 
 import base64
@@ -100,7 +100,7 @@ def mocked_openai_session():
 def test_audio_block_in_instruct_payload_shape(
     mocked_openai_session: tuple, audio_block: AudioBlock
 ):
-    """AudioBlock is serialised as an ``input_audio`` content part in the outgoing payload."""
+    """AudioBlock is serialised as an `input_audio` content part in the outgoing payload."""
     session, _ = mocked_openai_session
 
     session.instruct("Transcribe this audio.", audio=[audio_block], strategy=None)

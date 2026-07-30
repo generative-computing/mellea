@@ -51,21 +51,21 @@ async def react(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tools: the list of tools to use
         loop_budget: the number of steps allowed; use -1 for unlimited
-        compactor: optional sync ``Compactor`` invoked once per turn after the
+        compactor: optional sync `Compactor` invoked once per turn after the
             tool observation. Use this for strategies that should fire at turn
             boundaries rather than on every component append (per-add
-            compaction is configured on ``context`` itself). Compose with
+            compaction is configured on `context` itself). Compose with
             :func:`mellea.stdlib.components.react.pin_react_initiator` to
             preserve the goal across compactions. Compactors that need to
-            call the backend (e.g. ``LLMSummarizeCompactor``) hide the async
-            work behind their sync ``compact`` method internally.
+            call the backend (e.g. `LLMSummarizeCompactor`) hide the async
+            work behind their sync `compact` method internally.
 
-            The ``Compactor`` protocol is generic in ``T`` bound to
-            ``Context``, so a compactor that returns a non-chat ``Context``
-            (e.g. ``SimpleContext``) type-checks here but breaks the
-            ``ChatContext`` assumptions the next ``aact`` call relies on.
-            Custom compactors used with ``react`` must return a
-            ``ChatContext``.
+            The `Compactor` protocol is generic in `T` bound to
+            `Context`, so a compactor that returns a non-chat `Context`
+            (e.g. `SimpleContext`) type-checks here but breaks the
+            `ChatContext` assumptions the next `aact` call relies on.
+            Custom compactors used with `react` must return a
+            `ChatContext`.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.

@@ -45,7 +45,7 @@ def load_transformers_lora(local_or_remote_path: str) -> tuple:
     pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
     Workaround powers activate!
 
-    Device selection mirrors ``LocalHFBackend``: CUDA → MPS → CPU. The returned model
+    Device selection mirrors `LocalHFBackend`: CUDA → MPS → CPU. The returned model
     is already on that device; callers do not need to move it.
 
     Only works if `transformers` and `peft` are installed.
@@ -117,7 +117,7 @@ class _GuidanceLogitsProcessor:
     def __call__(
         self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
     ) -> torch.Tensor:
-        """Apply the grammar's allowed-token bitmask to ``batch_scores`` in place."""
+        """Apply the grammar's allowed-token bitmask to `batch_scores` in place."""
         # Guaranteed to be imported by class __init__.
         import llguidance
         import llguidance.torch

@@ -49,7 +49,7 @@ def get_context_length(model_id: str | ModelIdentifier) -> int | None:
         The values returned here reflect each model's theoretical maximum context
         window as recorded in the catalog — **not** the context window actually
         used by a running server.  Ollama in particular defaults to
-        ``num_ctx=2048`` regardless of the model's rated maximum; a caller that
+        `num_ctx=2048` regardless of the model's rated maximum; a caller that
         relies on this lookup to size a sliding context window will silently
         overflow Ollama's wire-level limit.
     """

@@ -4,8 +4,8 @@
 """Tests for control-flow tool signalling on tool hook payloads.
 
 Verifies that TOOL_PRE_INVOKE and TOOL_POST_INVOKE hooks always fire for all
-tools (including framework-internal ones like ``final_answer``), and that the
-``is_control_flow`` field is correctly populated so plugins can decide their
+tools (including framework-internal ones like `final_answer`), and that the
+`is_control_flow` field is correctly populated so plugins can decide their
 own policy.
 """
 

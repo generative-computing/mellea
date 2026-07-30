@@ -39,7 +39,7 @@ class MaxSentencesReq(Requirement):
     """Fails if the model generates more than *limit* sentences mid-stream.
 
     Counts sentence terminators in the chunk *text* rather than counting
-    ``stream_validate`` calls.  This makes the requirement **chunker-agnostic**:
+    `stream_validate` calls.  This makes the requirement **chunker-agnostic**:
     the same instance behaves correctly with sentence, word, or paragraph
     chunking, because the semantics depend on content, not on the chunker's
     structural decisions.

@@ -27,7 +27,7 @@ def check_certainty(
         context: Chat context containing user question and assistant answer.
         backend: Backend instance that supports LoRA/aLoRA adapters.
         model_options: Optional model-level overrides forwarded to the backend
-            (e.g. ``{ModelOption.MAX_NEW_TOKENS: 64}``). When ``None``, defaults
+            (e.g. `{ModelOption.MAX_NEW_TOKENS: 64}`). When `None`, defaults
             apply.
 
     Returns:
@@ -57,7 +57,7 @@ def requirement_check(
         backend: Backend instance that supports LoRA/aLoRA adapters.
         requirement: Set of requirements to satisfy.
         model_options: Optional model-level overrides forwarded to the backend
-            (e.g. ``{ModelOption.MAX_NEW_TOKENS: 64}``). When ``None``, defaults
+            (e.g. `{ModelOption.MAX_NEW_TOKENS: 64}`). When `None`, defaults
             apply.
 
     Returns:
@@ -65,7 +65,7 @@ def requirement_check(
 
     Raises:
         AdapterSchemaMismatchError: If the adapter output does not match the
-            expected ``{"requirement_check": {"score": <float>}}`` contract, or
+            expected `{"requirement_check": {"score": <float>}}` contract, or
             if the score is not a finite number in the range 0.0-1.0.
     """
     result_json = call_intrinsic(
@@ -124,7 +124,7 @@ def find_context_attributions(
             a user query.
         backend (AdapterMixin): Backend that supports intrinsic adapters.
         model_options: Optional model-level overrides forwarded to the backend
-            (e.g. ``{ModelOption.MAX_NEW_TOKENS: 64}``). When ``None``, defaults
+            (e.g. `{ModelOption.MAX_NEW_TOKENS: 64}`). When `None`, defaults
             apply.
 
     Returns:

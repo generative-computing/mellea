@@ -2,13 +2,13 @@
 
 """Mellea backend spans carrying OTel GenAI semantic convention attributes.
 
-Each backend generation call emits a ``chat`` span with the following attributes
+Each backend generation call emits a `chat` span with the following attributes
 drawn from the OTel GenAI semconv (https://opentelemetry.io/docs/specs/semconv/gen-ai/):
 
   gen_ai.provider.name   — provider identity (replaces the deprecated gen_ai.system)
   gen_ai.request.model   — model identifier
   gen_ai.usage.*         — token counts (input, output, total, plus cache/reasoning when reported)
-  gen_ai.conversation.id — correlated to the active session via ``with_context``
+  gen_ai.conversation.id — correlated to the active session via `with_context`
   error.type             — set on the error path alongside ERROR span status
 
 Run against otelite for human verification:

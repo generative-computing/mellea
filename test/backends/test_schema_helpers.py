@@ -169,10 +169,10 @@ class TestIsComplexAnyof:
     def test_anyof_with_oneof_branch_is_complex(self):
         """anyOf containing a oneOf branch (Optional discriminated union) is complex.
 
-        Pydantic emits ``Annotated[Cat | Dog, Field(discriminator="kind")] | None``
-        as ``{"anyOf": [{"discriminator": {...}, "oneOf": [$refs]}, {"type": "null"}]}``.
-        Without descending into ``oneOf`` we drop the union structure and ship
-        ``{"type": "string"}`` to the backend (issue #989).
+        Pydantic emits `Annotated[Cat | Dog, Field(discriminator="kind")] | None`
+        as `{"anyOf": [{"discriminator": {...}, "oneOf": [$refs]}, {"type": "null"}]}`.
+        Without descending into `oneOf` we drop the union structure and ship
+        `{"type": "string"}` to the backend (issue #989).
         """
         schema = {
             "anyOf": [

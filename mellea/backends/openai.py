@@ -1111,8 +1111,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             conversation (list[dict]): The chat conversation sent to the model,
                 used for logging.
             thinking: The reasoning value passed to the model: a string level
-                (``"low"``, ``"medium"``, ``"high"``) for explicit effort strings,
-                ``True``/``False`` for the bool toggle, or ``None`` if reasoning
+                (`"low"`, `"medium"`, `"high"`) for explicit effort strings,
+                `True`/`False` for the bool toggle, or `None` if reasoning
                 was not enabled.
             seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.

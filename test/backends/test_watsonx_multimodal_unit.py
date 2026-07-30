@@ -4,8 +4,8 @@
 """Unit tests verifying WatsonxAIBackend rejects image and audio inputs.
 
 Watsonx does not support image or audio inputs.  These tests confirm that
-passing ``ImageBlock``, ``ImageUrlBlock``, ``AudioBlock``, or ``AudioUrlBlock``
-raises ``ValueError`` before any network call is made, rather than silently
+passing `ImageBlock`, `ImageUrlBlock`, `AudioBlock`, or `AudioUrlBlock`
+raises `ValueError` before any network call is made, rather than silently
 dropping the data.
 """
 

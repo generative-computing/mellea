@@ -274,9 +274,9 @@ _GENERATOR_RETURN_PATTERNS = re.compile(
 def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
     """Return quality issues for a single class or function member.
 
-    Each returned dict has keys: ``path``, ``kind``, ``detail``, ``file``, ``line``.
-    ``file`` is the absolute source path; ``line`` is the 1-based line number of the
-    symbol definition (the ``def`` / ``class`` keyword line).
+    Each returned dict has keys: `path`, `kind`, `detail`, `file`, `line`.
+    `file` is the absolute source path; `line` is the 1-based line number of the
+    symbol definition (the `def` / `class` keyword line).
     """
     issues: list[dict] = []
     _raw_file = getattr(member, "filepath", None)
@@ -774,14 +774,14 @@ def _gha_file_annotation(
 ) -> None:
     """Emit a GitHub Actions annotation anchored to a specific file and line.
 
-    When ``file`` and ``line`` are provided the annotation appears inline in the
+    When `file` and `line` are provided the annotation appears inline in the
     PR diff view, making it immediately obvious which symbol needs fixing.
 
     Args:
-        level: Annotation level — ``"error"``, ``"warning"``, or ``"notice"``.
+        level: Annotation level — `"error"`, `"warning"`, or `"notice"`.
         title: Short label shown in bold in the annotation.
         message: Body text for the annotation.
-        file: Repo-relative file path (e.g. ``mellea/core/base.py``).
+        file: Repo-relative file path (e.g. `mellea/core/base.py`).
         line: 1-based line number of the symbol definition.
     """
     for s in (message, title, file):
@@ -801,8 +801,8 @@ _GHA_ANNOTATIONS_PER_KIND = 10
 def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) -> None:
     """Print a grouped quality report to stdout and emit GHA annotations.
 
-    When running in GitHub Actions (``GITHUB_ACTIONS=true``), each issue is
-    also emitted as a file-level annotation (``::error`` or ``::warning``)
+    When running in GitHub Actions (`GITHUB_ACTIONS=true`), each issue is
+    also emitted as a file-level annotation (`::error` or `::warning`)
     anchored to the source line, so they appear inline in the PR diff.
 
     GitHub Actions caps inline diff annotations at roughly 10 per step; issues
@@ -810,15 +810,15 @@ def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) 
     in the full job log and in the JSON artifact).  To ensure every check
     category gets at least one visible annotation, this function emits at most
     :data:`_GHA_ANNOTATIONS_PER_KIND` annotations per kind and prints a
-    ``"... and N more"`` notice for the remainder.  The complete list is always
+    `"... and N more"` notice for the remainder.  The complete list is always
     written to the job log regardless of the GHA cap.
 
     Args:
         issues: List of issue dicts from :func:`audit_docstring_quality`.
-            Each dict must have keys: ``path``, ``kind``, ``detail``,
-            ``file``, ``line``.
-        fail_on_quality: When ``True`` annotations are emitted as ``error``
-            (red); otherwise as ``warning`` (yellow).
+            Each dict must have keys: `path`, `kind`, `detail`,
+            `file`, `line`.
+        fail_on_quality: When `True` annotations are emitted as `error`
+            (red); otherwise as `warning` (yellow).
     """
     by_kind: dict[str, list[dict]] = {}
     for issue in issues:

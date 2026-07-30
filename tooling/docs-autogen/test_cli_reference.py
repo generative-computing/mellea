@@ -17,7 +17,7 @@ import pytest
 
 @pytest.fixture(scope="module")
 def click_app():
-    """Import and return the Click command tree for the ``m`` CLI."""
+    """Import and return the Click command tree for the `m` CLI."""
     import typer.main
 
     from cli.m import cli
@@ -239,10 +239,10 @@ def test_no_mdx_or_framework_specific_syntax(generated_md):
 def test_verbatim_blocks_rendered(generated_md):
     """Click \\b verbatim blocks must appear in the generated docs.
 
-    ``m fix async`` and ``m fix genslots`` contain \\b-delimited sections
+    `m fix async` and `m fix genslots` contain \\b-delimited sections
     (Modes, Best practices, Detection notes, Rewrites) that are visible in
-    ``--help`` output.  These were previously silently dropped because they
-    appear after ``Raises:`` in the docstring, which the generator never
+    `--help` output.  These were previously silently dropped because they
+    appear after `Raises:` in the docstring, which the generator never
     renders.  They should now appear correctly formatted.
     """
     assert "**Modes:**" in generated_md, "fix async Modes block missing"
@@ -256,7 +256,7 @@ def test_verbatim_blocks_rendered(generated_md):
 def test_bullet_blocks_not_in_code_fence(generated_md):
     """Bullet-list \\b blocks must render as markdown lists, not code fences.
 
-    Best practices / Detection notes / Rewrites start with ``- `` items and
+    Best practices / Detection notes / Rewrites start with `- ` items and
     should be plain markdown bullets so they render properly in the browser,
     not as monospace preformatted blocks.
     """

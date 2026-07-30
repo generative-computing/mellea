@@ -9,7 +9,7 @@ capability outside this set is used, so that custom adapters and pre-release
 adapter functions are not blocked.
 
 Deriving from the catalog (rather than hand-copying) keeps the two registries in
-sync automatically — adding a new entry to ``catalog.py`` automatically registers
+sync automatically — adding a new entry to `catalog.py` automatically registers
 its :attr:`~mellea.backends.adapters.catalog.IntrinsicsCatalogEntry.effective_capability`
 as a known capability.
 """

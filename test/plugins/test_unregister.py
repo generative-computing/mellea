@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for the ``unregister()`` public API."""
+"""Tests for the `unregister()` public API."""
 
 from typing import Any
 

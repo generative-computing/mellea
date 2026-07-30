@@ -7,18 +7,18 @@ Execution order: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_
 
 behavior summary
 -----------------
-- ``mode=SEQUENTIAL`` (default): serial, chained. Can block and modify payloads.
+- `mode=SEQUENTIAL` (default): serial, chained. Can block and modify payloads.
 
-- ``mode=TRANSFORM``: serial, chained. Can modify payloads but cannot block — blocking
+- `mode=TRANSFORM`: serial, chained. Can modify payloads but cannot block — blocking
   results are suppressed.
 
-- ``mode=AUDIT``: serial, observe-only. Cannot block or modify — violations are logged
+- `mode=AUDIT`: serial, observe-only. Cannot block or modify — violations are logged
   and payload modifications are discarded.
 
-- ``mode=CONCURRENT``: parallel, fail-fast. Can block but cannot modify — payload
+- `mode=CONCURRENT`: parallel, fail-fast. Can block but cannot modify — payload
   modifications are discarded to avoid non-deterministic races.
 
-- ``mode=FIRE_AND_FORGET``: background ``asyncio.create_task``. Cannot block or modify.
+- `mode=FIRE_AND_FORGET`: background `asyncio.create_task`. Cannot block or modify.
   Receives an isolated snapshot.
 """
 
