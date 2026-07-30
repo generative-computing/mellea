@@ -350,8 +350,8 @@ class AudioUrlBlock(CBlock):
         """Initialize AudioUrlBlock with a URL string and declared format.
 
         Raises:
-            ValueError: If ``value`` does not look like a URL (does not start
-                with ``http://`` or ``https://``), or if ``format`` is empty.
+            ValueError: If `value` does not look like a URL (does not start
+                with `http://` or `https://`), or if `format` is empty.
         """
         if not value.startswith(("http://", "https://")):
             raise ValueError(
@@ -1840,9 +1840,9 @@ def get_audio_from_component(c: Component) -> None | list[AudioBlock | AudioUrlB
         c: The `Component` whose `audio` attribute is inspected.
 
     Returns:
-        A non-empty list of ``AudioBlock`` or ``AudioUrlBlock`` objects if the
-        component has an ``audio`` attribute with at least one element;
-        ``None`` otherwise.
+        A non-empty list of `AudioBlock` or `AudioUrlBlock` objects if the
+        component has an `audio` attribute with at least one element;
+        `None` otherwise.
     """
     if hasattr(c, "audio"):
         audio = c.audio  # type: ignore

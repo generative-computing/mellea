@@ -433,7 +433,7 @@ def check_syntax(code: str, filename: str) -> tuple[str | None, bool]:
     """Try to compile; return (error_message, is_fragment).
 
     is_fragment is True when the error is due to the snippet being an
-    incomplete fragment (e.g. bare ``await`` or leading indentation)
+    incomplete fragment (e.g. bare `await` or leading indentation)
     rather than genuinely broken syntax.
     """
     try:
@@ -466,8 +466,8 @@ def extract_imports(code: str) -> list[tuple[str, int | None]]:
 def _mellea_module_exists(module_name: str) -> bool:
     """Check whether a mellea.* module exists on the filesystem.
 
-    Walks from the repo's ``mellea/`` package directory, checking each
-    dotted component resolves to a directory (package) or ``.py`` file.
+    Walks from the repo's `mellea/` package directory, checking each
+    dotted component resolves to a directory (package) or `.py` file.
     This avoids actually importing anything, so it's safe to call even
     when optional dependencies are missing.
     """
@@ -493,9 +493,9 @@ def module_importable(module_name: str) -> bool:
     """Check if module_name can be resolved without actually importing.
 
     For mellea.* modules, checks the full dotted path on the filesystem
-    so that typos like ``mellea.stdlib.docs`` (should be
-    ``mellea.stdlib.components.docs``) are caught even though the
-    top-level ``mellea`` package exists.
+    so that typos like `mellea.stdlib.docs` (should be
+    `mellea.stdlib.components.docs`) are caught even though the
+    top-level `mellea` package exists.
     """
     if module_name.startswith("mellea"):
         return _mellea_module_exists(module_name)

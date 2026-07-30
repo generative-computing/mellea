@@ -16,7 +16,7 @@ def mock_ollama_backend():
 
     No live Ollama server or pulled model is required. The returned backend has
     real client objects replaced with MagicMocks, so subsequent tests can set
-    attributes such as ``backend._async_client.chat`` to control behaviour.
+    attributes such as `backend._async_client.chat` to control behaviour.
 
     Usage::
 

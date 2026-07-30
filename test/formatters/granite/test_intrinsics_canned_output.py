@@ -5,12 +5,12 @@
 
 These tests exercise the full output-processing pipeline (JSON parsing,
 transformation rules, float-rounding comparison) against pre-recorded model
-outputs stored in ``testdata/``.  They require **no GPU, no network, and no
+outputs stored in `testdata/`.  They require **no GPU, no network, and no
 model downloads** — only a local YAML config file and the three JSON artifacts
 per scenario (canned input, model output, expected result).
 
 Scenarios that need a YAML config from HuggingFace Hub are skipped unless the
-YAML has been previously cached locally or a ``config_dict`` is embedded here.
+YAML has been previously cached locally or a `config_dict` is embedded here.
 """
 
 import copy

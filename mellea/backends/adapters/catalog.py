@@ -15,7 +15,7 @@ import pydantic
 def validate_revision(revision: str) -> str:
     """Validate a Hugging Face revision value.
 
-    Accepts any non-empty string. Hugging Face's ``revision`` parameter takes a
+    Accepts any non-empty string. Hugging Face's `revision` parameter takes a
     branch name, tag, or commit SHA; this validator mirrors that contract.
     Catalogue entries pin to commit SHAs by convention; that is enforced by
     review and (optionally) build-time drift checks rather than by this
@@ -43,8 +43,8 @@ class AdapterType(enum.Enum):
     """Possible types of adapters for a backend.
 
     Attributes:
-        LORA (str): Standard LoRA adapter; value ``"lora"``.
-        ALORA (str): aLoRA adapter (shares model KV cache across adapter functions); value ``"alora"``.
+        LORA (str): Standard LoRA adapter; value `"lora"`.
+        ALORA (str): aLoRA adapter (shares model KV cache across adapter functions); value `"alora"`.
     """
 
     LORA = "lora"
@@ -58,15 +58,15 @@ class IntrinsicsCatalogEntry(pydantic.BaseModel):
 
     Attributes:
         name (str): User-visible name of the adapter function. May contain hyphens when
-            that matches the upstream adapter name; prefer ``effective_capability``
+            that matches the upstream adapter name; prefer `effective_capability`
             to form the stable capability token. Must be non-empty with no leading
             or trailing whitespace.
         capability (str | None): Stable Mellea-level capability token, independent
-            of the upstream adapter name. Uses underscores. When ``None``,
-            :attr:`effective_capability` falls back to ``name``. When set, must be
+            of the upstream adapter name. Uses underscores. When `None`,
+            :attr:`effective_capability` falls back to `name`. When set, must be
             non-empty with no leading or trailing whitespace.
         internal_name (str | None): Internal name used for adapter loading, or
-            ``None`` if the same as ``name``.
+            `None` if the same as `name`.
         repo_id (str): Hugging Face repository where adapters for the adapter function
             are located.
         revision (str): Hugging Face revision — branch name, tag, or commit SHA.
@@ -77,7 +77,7 @@ class IntrinsicsCatalogEntry(pydantic.BaseModel):
             subsequent phase of the adapter-lifecycle epic (#929).
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this adapter function; defaults to
-            ``(AdapterType.LORA, AdapterType.ALORA)``.
+            `(AdapterType.LORA, AdapterType.ALORA)`.
     """
 
     name: str = pydantic.Field(
@@ -87,8 +87,8 @@ class IntrinsicsCatalogEntry(pydantic.BaseModel):
         default=None,
         description=(
             "Stable capability token, independent of the upstream adapter name. "
-            "Uses underscores; no leading/trailing whitespace. When ``None``, "
-            "``effective_capability`` falls back to ``name``."
+            "Uses underscores; no leading/trailing whitespace. When `None`, "
+            "`effective_capability` falls back to `name`."
         ),
     )
     internal_name: str | None = pydantic.Field(
@@ -140,8 +140,8 @@ class IntrinsicsCatalogEntry(pydantic.BaseModel):
     def effective_capability(self) -> str:
         """Return the stable capability token for this adapter function.
 
-        Returns ``capability`` when explicitly set; falls back to ``name``
-        otherwise. Use this property — not ``name`` — whenever building the
+        Returns `capability` when explicitly set; falls back to `name`
+        otherwise. Use this property — not `name` — whenever building the
         capability vocabulary or resolving an
         :class:`~mellea.backends.adapters.Identity` capability.
 
@@ -259,7 +259,7 @@ def fetch_intrinsic_metadata(intrinsic_name: str) -> IntrinsicsCatalogEntry:
             adapter function.
 
     Raises:
-        ValueError: If ``intrinsic_name`` is not a known adapter function name.
+        ValueError: If `intrinsic_name` is not a known adapter function name.
     """
     if intrinsic_name not in _INTRINSICS_CATALOG:
         raise ValueError(

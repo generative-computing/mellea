@@ -9,10 +9,10 @@ through each backend's conversation-construction path:
 
 - reasoning is **stripped** on a plain follow-up turn, and
 - **round-tripped** when the prior assistant turn issued a tool call
-  (detected by that assistant message's own ``tool_calls`` field).
+  (detected by that assistant message's own `tool_calls` field).
 
-The provider ``create``/``acompletion`` call is mocked, so no endpoint is
-required. A separate CI-skipped e2e test (``test_reasoning_replay_e2e.py``)
+The provider `create`/`acompletion` call is mocked, so no endpoint is
+required. A separate CI-skipped e2e test (`test_reasoning_replay_e2e.py`)
 verifies the same behaviour against a real reasoning model.
 """
 

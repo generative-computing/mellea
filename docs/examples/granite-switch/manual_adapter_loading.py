@@ -2,10 +2,10 @@
 
 """Example: manually loading embedded adapters for the OpenAI backend.
 
-Instead of using ``load_embedded_adapters=True`` (which loads all adapters from
+Instead of using `load_embedded_adapters=True` (which loads all adapters from
 the model repo at init), this example shows how to create an OpenAIBackend with
-``load_embedded_adapters=False`` and then manually load individual adapters using
-``EmbeddedIntrinsicAdapter.from_hub()`` or ``from_model_directory()``.
+`load_embedded_adapters=False` and then manually load individual adapters using
+`EmbeddedIntrinsicAdapter.from_hub()` or `from_model_directory()`.
 
 This is useful when:
 - You only need a subset of the model's embedded adapters.

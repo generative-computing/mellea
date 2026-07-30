@@ -36,10 +36,10 @@ def _mellea_finalize_tool(answer: str) -> str:
 
 
 def pin_react_initiator(components: list[Component | CBlock]) -> int:
-    """A ``PinPredicate`` that pins everything up to and including the first ``ReactInitiator``.
+    """A `PinPredicate` that pins everything up to and including the first `ReactInitiator`.
 
     Plug it into any compactor in :mod:`mellea.stdlib.context` that takes a
-    ``pin_predicate`` (e.g. :class:`WindowCompactor`,
+    `pin_predicate` (e.g. :class:`WindowCompactor`,
     :class:`ThresholdCompactor`'s inner compactor) so the react goal and
     tool registration survive compaction:
 
@@ -51,7 +51,7 @@ def pin_react_initiator(components: list[Component | CBlock]) -> int:
         )
         result, _ = await react(goal=..., context=ctx, ...)
 
-    Returns ``0`` when no ``ReactInitiator`` is found, so a context that
+    Returns `0` when no `ReactInitiator` is found, so a context that
     has not yet been seeded with a react goal compacts as if there were
     no prefix.
     """
@@ -66,19 +66,19 @@ def react_summary_prompt(
 ) -> str:
     """Build a research-flavoured summary prompt for :class:`LLMSummarizeCompactor`.
 
-    Returns a template with a ``{conversation}`` placeholder that
+    Returns a template with a `{conversation}` placeholder that
     :class:`LLMSummarizeCompactor` fills in at compaction time. Pass the
-    react goal via ``goal=`` to anchor the summarisation around the
-    objective; with ``goal=None`` the ``GOAL:`` line is omitted.
+    react goal via `goal=` to anchor the summarisation around the
+    objective; with `goal=None` the `GOAL:` line is omitted.
 
-    Pass ``max_tokens_hint=N`` to inject a soft length-cap bullet
+    Pass `max_tokens_hint=N` to inject a soft length-cap bullet
     ("Be at most ~N tokens") into the summarizer's instructions. The hint
     is a plan-time anchor for the model — combine it with a hard
-    ``max_tokens`` API arg on the summarizer's LLM call to enforce.
-    ``max_tokens_hint=None`` (default) or non-positive values omit the
+    `max_tokens` API arg on the summarizer's LLM call to enforce.
+    `max_tokens_hint=None` (default) or non-positive values omit the
     bullet, so the prompt is byte-identical to the un-hinted form.
 
-    Curly braces in ``goal`` are escaped so :meth:`str.format` (used by the
+    Curly braces in `goal` are escaped so :meth:`str.format` (used by the
     compactor) preserves them as literal characters.
 
     Example::

@@ -3,10 +3,10 @@
 
 """Unit tests for the OpenAI backend intrinsic generation path — no server required.
 
-Mocks the OpenAI async client to verify that ``_generate_from_intrinsic`` correctly:
-- injects ``intrinsic_name`` into ``chat_template_kwargs``
-- applies the ``IntrinsicsResultProcessor`` to the raw response
-- forwards ``temperature`` and ``seed`` from model options
+Mocks the OpenAI async client to verify that `_generate_from_intrinsic` correctly:
+- injects `intrinsic_name` into `chat_template_kwargs`
+- applies the `IntrinsicsResultProcessor` to the raw response
+- forwards `temperature` and `seed` from model options
 - user-provided model options override io.yaml parameter defaults
 - all applicable model options (MAX_NEW_TOKENS, SYSTEM_PROMPT, etc.) are forwarded
 - raises when no adapter is registered or streaming is requested

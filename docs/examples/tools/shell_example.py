@@ -13,7 +13,7 @@ Demonstrates multiple ways to use Mellea's bash execution capabilities:
 safety denylist (recommended for typical agentic workflows). The denylist
 enforces: no sudo, no rm -rf, no destructive git operations, no writes to
 /etc, /sys, /proc, etc. Write operations can also be constrained with
-``working_dir`` and explicit ``allowed_paths``.
+`working_dir` and explicit `allowed_paths`.
 
 For higher isolation requirements (untrusted code, security research),
 provide isolation at the application layer (containers, VMs).

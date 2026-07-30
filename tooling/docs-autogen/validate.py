@@ -13,10 +13,13 @@ Performs comprehensive validation checks on generated MDX files:
 """
 
 import argparse
+import ast
+import io
 import json
 import os
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 _IN_GHA = os.environ.get("GITHUB_ACTIONS") == "true"
@@ -131,11 +134,11 @@ def validate_source_links(docs_dir: Path, version: str) -> tuple[int, list[dict]
 
     Args:
         docs_dir: Directory containing MDX files.
-        version: Expected version string in links (e.g., ``"0.5.0"``).
+        version: Expected version string in links (e.g., `"0.5.0"`).
 
     Returns:
         Tuple of (error_count, errors) where each error dict has keys
-        ``file``, ``line``, and ``message``.
+        `file`, `line`, and `message`.
     """
     errors: list[dict] = []
     expected_repo = "ibm-granite/mellea"
@@ -197,7 +200,7 @@ def validate_mdx_syntax(docs_dir: Path) -> tuple[int, list[dict]]:
     """Validate MDX syntax in generated documentation files.
 
     Checks for unclosed code fences, unescaped curly braces inside code
-    blocks, missing frontmatter, and a missing ``title`` field.
+    blocks, missing frontmatter, and a missing `title` field.
 
     Args:
         docs_dir: Directory containing MDX files.
@@ -345,14 +348,166 @@ def validate_anchor_collisions(docs_dir: Path) -> tuple[int, list[dict]]:
     return len(errors), errors
 
 
-def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[dict]]:
-    """Scan Python source files for RST double-backtick notation in docstrings.
+def _documentation_string_nodes(tree: ast.AST) -> list[ast.Constant]:
+    """Return standard and attribute documentation strings from a syntax tree."""
+    results: list[ast.Constant] = []
+    seen: set[tuple[int, int, int | None, int | None]] = set()
 
-    RST-style ``Symbol`` double-backtick markup interacts badly with the
-    add_cross_references step: the regex matches the inner single-backtick
-    boundary and generates a broken link wrapped in an extra code span, e.g.
-    ``Backend`` → `[`Backend`](url)` which Mintlify renders as raw text
-    rather than a clickable link.
+    def add(candidate: ast.AST | None) -> None:
+        if not isinstance(candidate, ast.Constant) or not isinstance(
+            candidate.value, str
+        ):
+            return
+        location = (
+            candidate.lineno,
+            candidate.col_offset,
+            candidate.end_lineno,
+            candidate.end_col_offset,
+        )
+        if location not in seen:
+            seen.add(location)
+            results.append(candidate)
+
+    containers = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+    for container in ast.walk(tree):
+        if not isinstance(container, containers) or not container.body:
+            continue
+
+        first_statement = container.body[0]
+        if isinstance(first_statement, ast.Expr):
+            add(first_statement.value)
+
+        supports_attribute_docstrings = isinstance(
+            container, (ast.Module, ast.ClassDef)
+        ) or (
+            isinstance(container, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and container.name == "__init__"
+        )
+        if not supports_attribute_docstrings:
+            continue
+
+        for assignment, following in zip(container.body, container.body[1:]):
+            if not isinstance(following, ast.Expr):
+                continue
+            target = None
+            if isinstance(assignment, ast.Assign) and len(assignment.targets) == 1:
+                target = assignment.targets[0]
+            elif isinstance(assignment, ast.AnnAssign):
+                target = assignment.target
+            if isinstance(target, (ast.Name, ast.Attribute)):
+                add(following.value)
+
+    for container in ast.walk(tree):
+        if not isinstance(container, (ast.Module, ast.ClassDef)):
+            continue
+        for statement in container.body:
+            if isinstance(statement, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__doc__"
+                for target in statement.targets
+            ):
+                add(statement.value)
+            elif isinstance(statement, ast.AnnAssign) and isinstance(
+                statement.target, ast.Name
+            ):
+                if statement.target.id == "__doc__":
+                    add(statement.value)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Attribute) and target.attr == "__doc__"
+            for target in node.targets
+        ):
+            add(node.value)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Attribute):
+            if node.target.attr == "__doc__":
+                add(node.value)
+        elif isinstance(node, ast.Call):
+            is_field = (
+                isinstance(node.func, ast.Name) and node.func.id == "Field"
+            ) or (isinstance(node.func, ast.Attribute) and node.func.attr == "Field")
+            if is_field:
+                for keyword in node.keywords:
+                    if keyword.arg == "description":
+                        add(keyword.value)
+
+    return sorted(results, key=lambda node: (node.lineno, node.col_offset))
+
+
+def _unfenced_prose_segments(content: str) -> list[tuple[int, str]]:
+    """Return offsets and prose segments outside Markdown code fences."""
+    segments: list[tuple[int, str]] = []
+    fence: tuple[str, int] | None = None
+    offset = 0
+    segment_start = 0
+    for line in content.splitlines(keepends=True):
+        stripped = line.lstrip()
+        marker_match = re.match(r"(?P<marker>`{3,}|~{3,})", stripped)
+        if fence is None and marker_match:
+            if segment_start < offset:
+                segments.append((segment_start, content[segment_start:offset]))
+            marker = marker_match.group("marker")
+            fence = (marker[0], len(marker))
+        elif fence is not None and marker_match:
+            marker = marker_match.group("marker")
+            remainder = stripped[len(marker) :].strip()
+            if marker[0] == fence[0] and len(marker) >= fence[1] and not remainder:
+                fence = None
+                segment_start = offset + len(line)
+        offset += len(line)
+    if fence is None and segment_start < len(content):
+        segments.append((segment_start, content[segment_start:]))
+    return segments
+
+
+def _source_match_lines(
+    content: str,
+    node: ast.Constant,
+    decoded_content: str,
+    decoded_matches: list[re.Match[str]],
+) -> list[int | None]:
+    """Map decoded documentation matches to their original source lines."""
+    source_segment = ast.get_source_segment(content, node)
+    if source_segment is None:
+        return [None] * len(decoded_matches)
+
+    delimiter_pattern = re.compile(r"(?<!`)``(?!`)")
+    decoded_delimiters = list(delimiter_pattern.finditer(decoded_content))
+    delimiter_indexes = {
+        delimiter.start(): index for index, delimiter in enumerate(decoded_delimiters)
+    }
+    source_lines: list[int] = []
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(f"({source_segment})").readline)
+        for token_info in tokens:
+            if token_info.type != tokenize.STRING:
+                continue
+            for delimiter in delimiter_pattern.finditer(token_info.string):
+                line = (
+                    node.lineno
+                    + token_info.start[0]
+                    - 1
+                    + token_info.string[: delimiter.start()].count("\n")
+                )
+                source_lines.append(line)
+    except (IndentationError, tokenize.TokenError):
+        return [None] * len(decoded_matches)
+
+    if len(source_lines) != len(decoded_delimiters):
+        return [None] * len(decoded_matches)
+    return [
+        source_lines[index]
+        if (index := delimiter_indexes.get(match.start())) is not None
+        else None
+        for match in decoded_matches
+    ]
+
+
+def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[dict]]:
+    """Scan Python documentation strings for RST inline-literal markup.
+
+    RST inline literals interact badly with the `add_cross_references` step:
+    the inner single-backtick boundary can produce a link wrapped in an extra
+    code span, which renders as raw text rather than a clickable link.
 
     Args:
         source_dir: Root of the Python source tree to scan (e.g. repo/mellea).
@@ -361,22 +516,42 @@ def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[dict]]:
         Tuple of (error_count, errors).
     """
     errors: list[dict] = []
-    pattern = re.compile(r"``([A-Za-z][^`]*)``")
+    pattern = re.compile(r"(?<!`)``(?!`)(.+?)(?<!`)``(?!`)", re.DOTALL)
 
     for py_file in sorted(source_dir.rglob("*.py")):
         try:
             content = py_file.read_text(encoding="utf-8")
-        except Exception:
+            tree = ast.parse(content, filename=str(py_file))
+        except (OSError, SyntaxError, UnicodeError):
             continue
-        rel = str(py_file.relative_to(source_dir.parent))
-        for line_num, line in enumerate(content.splitlines(), 1):
-            if pattern.search(line):
+
+        rel = py_file.relative_to(source_dir.parent).as_posix()
+        for docstring_node in _documentation_string_nodes(tree):
+            docstring = docstring_node.value
+            if not isinstance(docstring, str):
+                continue
+            decoded_matches = list(pattern.finditer(docstring))
+            source_lines = _source_match_lines(
+                content, docstring_node, docstring, decoded_matches
+            )
+            prose_match_offsets = {
+                segment_offset + match.start()
+                for segment_offset, prose in _unfenced_prose_segments(docstring)
+                for match in pattern.finditer(prose)
+            }
+            for match, source_line in zip(decoded_matches, source_lines):
+                if match.start() not in prose_match_offsets:
+                    continue
+                line_num = source_line or (
+                    docstring_node.lineno + docstring[: match.start()].count("\n")
+                )
+                literal = match.group(0).replace("\n", " ")
                 errors.append(
                     _err(
                         rel,
                         line_num,
-                        f"RST double-backtick notation — use single backticks for "
-                        f"Markdown/MDX compatibility: {line.strip()[:100]}",
+                        "RST double-backtick notation — use single backticks for "
+                        f"Markdown/MDX compatibility: {literal[:100]}",
                     )
                 )
 
@@ -390,7 +565,7 @@ def validate_stale_files(docs_root: Path) -> tuple[int, list[dict]]:
     accumulates during doc rewrites and should not ship in a release.
 
     Args:
-        docs_root: The ``docs/`` directory (parent of ``docs/docs/``).
+        docs_root: The `docs/` directory (parent of `docs/docs/`).
 
     Returns:
         Tuple of (error_count, errors).
@@ -418,12 +593,12 @@ def validate_stale_files(docs_root: Path) -> tuple[int, list[dict]]:
 def validate_examples_catalogue(docs_root: Path) -> tuple[int, list[dict]]:
     """Check that every example directory is listed in the examples index page.
 
-    Scans ``docs/examples/`` for subdirectories that contain at least one
-    ``.py`` file and verifies each directory name appears in the catalogue
-    table in ``docs/docs/examples/index.md``.
+    Scans `docs/examples/` for subdirectories that contain at least one
+    `.py` file and verifies each directory name appears in the catalogue
+    table in `docs/docs/examples/index.md`.
 
     Args:
-        docs_root: The ``docs/`` directory (parent of ``docs/docs/``).
+        docs_root: The `docs/` directory (parent of `docs/docs/`).
 
     Returns:
         Tuple of (error_count, errors).
@@ -467,13 +642,13 @@ def validate_examples_catalogue(docs_root: Path) -> tuple[int, list[dict]]:
 def validate_doc_imports(docs_dir: Path) -> tuple[int, list[dict]]:
     """Verify that mellea imports in documentation code blocks still resolve.
 
-    Parses fenced Python code blocks in static docs for ``from mellea.X import Y``
-    and ``import mellea.X`` statements, then checks whether each module and symbol
-    exists at import time.  Optional-dependency failures (``ImportError`` whose
+    Parses fenced Python code blocks in static docs for `from mellea.X import Y`
+    and `import mellea.X` statements, then checks whether each module and symbol
+    exists at import time.  Optional-dependency failures (`ImportError` whose
     message mentions a third-party package) are silently skipped.
 
     Args:
-        docs_dir: The ``docs/docs/`` directory containing static documentation.
+        docs_dir: The `docs/docs/` directory containing static documentation.
 
     Returns:
         Tuple of (error_count, errors).
@@ -670,8 +845,8 @@ def _print_check_errors(label: str, errors: list[dict], gha_budget: list[int]) -
 
     Args:
         label: Human-readable check name shown in the section header.
-        errors: List of error dicts with keys ``file``, ``line``, ``message``.
-        gha_budget: Single-element list ``[remaining_annotations]``; decremented
+        errors: List of error dicts with keys `file`, `line`, `message`.
+        gha_budget: Single-element list `[remaining_annotations]`; decremented
             in-place as annotations are emitted.
     """
     if not errors:

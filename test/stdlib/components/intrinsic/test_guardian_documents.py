@@ -3,7 +3,7 @@
 
 """Unit tests for guardian adapter functions that require no model.
 
-Covers: ``documents=`` kwarg on factuality_detection/factuality_correction,
+Covers: `documents=` kwarg on factuality_detection/factuality_correction,
 and the policy_guardrails XOR validation logic.
 """
 

@@ -14,8 +14,8 @@ async def _restore_plugins_after_package(request):
 
     Plugin tests freely shut down the manager for isolation.  This package-scoped
     fixture captures whether plugins were active at the start and restores them in
-    teardown so that test modules collected *after* ``test/plugins/`` still see the
-    session-scoped acceptance sets registered by ``auto_register_acceptance_sets``.
+    teardown so that test modules collected *after* `test/plugins/` still see the
+    session-scoped acceptance sets registered by `auto_register_acceptance_sets`.
     """
     plugins_disabled = request.config.getoption(
         "--disable-default-mellea-plugins", default=False

@@ -14,6 +14,7 @@ from validate import (
     validate_examples_catalogue,
     validate_internal_links,
     validate_mdx_syntax,
+    validate_rst_docstrings,
     validate_source_links,
     validate_stale_files,
 )
@@ -131,6 +132,208 @@ def test_validate_internal_links_external_ignored():
         error_count, errors = validate_internal_links(docs_dir)
         assert error_count == 0
         assert len(errors) == 0
+
+
+def test_validate_rst_docstrings_detects_multiline_markup():
+    """Test RST literal detection across docstring lines."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            'def example():\n    """Use ``multi-line\n    value`` in prose."""\n',
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 1
+        assert errors[0]["file"] == "source/example.py"
+        assert errors[0]["line"] == 2
+
+
+def test_validate_rst_docstrings_detects_embedded_backticks():
+    """Test RST literal detection when its content contains backticks."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            'def example():\n    """Avoid ``value with `inner` marker`` in prose."""\n',
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 1
+        assert errors[0]["line"] == 2
+
+
+def test_validate_rst_docstrings_detects_attribute_descriptions():
+    """Test attribute, explicit module, and field documentation strings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            '__doc__ = "Module uses ``literal``."\n'
+            'SETTING = "value"\n'
+            '"""Setting uses ``literal``."""\n'
+            "\n"
+            "class Options:\n"
+            '    field: str = Field(description="Field uses ``literal``.")\n'
+            "\n"
+            "    def __init__(self):\n"
+            '        self.value = "value"\n'
+            '        """Value uses ``literal``."""\n',
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 4
+        assert [error["line"] for error in errors] == [1, 3, 6, 10]
+
+
+def test_validate_rst_docstrings_handles_explicit_doc_scopes():
+    """Test explicit documentation assignments without matching local fixtures."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            "class Documented:\n"
+            "    pass\n"
+            "\n"
+            'Documented.__doc__ = "Class uses ``literal``."\n'
+            "\n"
+            "def fixture():\n"
+            '    __doc__ = "Runtime ``fixture`` input."\n'
+            "    return __doc__\n",
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 1
+        assert errors[0]["line"] == 4
+
+
+def test_validate_rst_docstrings_reports_source_line_for_escaped_newline():
+    """Test line reporting uses source text rather than the decoded string value."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            'def example():\n    """Before \\n``literal`` on one source line."""\n',
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 1
+        assert errors[0]["line"] == 2
+
+
+def test_validate_rst_docstrings_reports_source_line_for_concatenated_literal():
+    """Test line reporting across implicitly concatenated string literals."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            "def example():\n"
+            "    (\n"
+            '        "Before "\n'
+            '        "``literal`` in prose."\n'
+            "    )\n",
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 1
+        assert errors[0]["line"] == 4
+
+
+def test_validate_rst_docstrings_reports_source_line_for_split_literal():
+    """Test line reporting when RST markup spans concatenated string tokens."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            "def example():\n"
+            "    (\n"
+            '        "Before "\n'
+            '        "``literal "\n'
+            '        "continued`` in prose."\n'
+            "    )\n",
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 1
+        assert errors[0]["line"] == 4
+
+
+def test_validate_rst_docstrings_ignores_non_docstrings_and_fences():
+    """Test that only prose outside fenced blocks is validated."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        (source_dir / "example.py").write_text(
+            'TEXT = "Use ``literal`` as fixture input"\n'
+            "\n"
+            "def example():\n"
+            '    """Show a fenced fixture.\n'
+            "\n"
+            "    ```python\n"
+            '    value = "``literal``"\n'
+            "    ```\n"
+            "\n"
+            "    ~~~~text\n"
+            "    ``tilde literal``\n"
+            "    ~~~~\n"
+            "\n"
+            "    ````text\n"
+            "    ```\n"
+            "    ``long fence literal``\n"
+            "    ```\n"
+            "    ````\n"
+            '    """\n'
+            '    return "``literal``"\n'
+            "\n"
+            "def direct_fence():\n"
+            '    """```text\n'
+            "    ``direct fence literal``\n"
+            "    ```\n"
+            '    """\n'
+            "\n"
+            "def escaped_fence():\n"
+            '    """```text\\n``escaped fence literal``\\n```"""\n'
+            "\n"
+            "def concatenated_fixture():\n"
+            "    (\n"
+            '        "Safe "\n'
+            "        # ``comment fixture``\n"
+            '        "documentation."\n'
+            "    )\n",
+            encoding="utf-8",
+        )
+
+        error_count, errors = validate_rst_docstrings(source_dir)
+
+        assert error_count == 0
+        assert errors == []
+
+
+@pytest.mark.parametrize("source_root", ["mellea", "cli", "test", "docs", "tooling"])
+def test_repository_docstrings_use_markdown_backticks(source_root):
+    """Test that repository documentation strings follow Markdown style."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    error_count, errors = validate_rst_docstrings(repo_root / source_root)
+
+    details = "\n".join(
+        f"{error['file']}:{error['line']}: {error['message']}" for error in errors
+    )
+    assert error_count == 0, details
 
 
 def test_validate_stale_files_clean():

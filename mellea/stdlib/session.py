@@ -331,10 +331,10 @@ class MelleaSession:
     def ctx(self, value: Context) -> None:
         """Replace the context and count this as one interaction.
 
-        Every model-interaction code path in this class assigns to ``self.ctx``
+        Every model-interaction code path in this class assigns to `self.ctx`
         with the post-interaction context, so each setter call is exactly one
-        interaction. Lifecycle paths that swap the context wholesale (``reset``,
-        ``_auto_bind_model``) write to ``self._ctx`` directly to bypass this
+        interaction. Lifecycle paths that swap the context wholesale (`reset`,
+        `_auto_bind_model`) write to `self._ctx` directly to bypass this
         counter.
         """
         self._ctx = value

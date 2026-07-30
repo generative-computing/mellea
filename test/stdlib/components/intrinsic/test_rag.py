@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests of the code in ``mellea.stdlib.intrinsics.rag``"""
+"""Tests of the code in `mellea.stdlib.intrinsics.rag`"""
 
 import gc
 import json
@@ -99,8 +99,8 @@ def _read_output_json(file_name: str):
     to Mellea types.
 
     By convention, canned outputs hold the contents of
-    ``<completion>["choices"][0]["message"]["content"]``,
-    where ``<completion>`` is a JSON chat completion after post-processing.
+    `<completion>["choices"][0]["message"]["content"]`,
+    where `<completion>` is a JSON chat completion after post-processing.
     """
     with open(DATA_ROOT / "output_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
@@ -111,10 +111,10 @@ def _dump_output_json(file_name: str, to_write):
     """Shared code for dumping a test's generated JSON data.
 
     Dump the Python data structures that will be compared against canned
-    JSON output files. Outputs go to the local directory ``test_output``.
+    JSON output files. Outputs go to the local directory `test_output`.
 
     If you are sure the current output is correct, you can use this output to update
-    the contents of the ``testdata`` directory.
+    the contents of the `testdata` directory.
     """
     target_path = TEST_OUTPUT_ROOT / "output_json" / file_name
     if not os.path.exists(target_path.parent):

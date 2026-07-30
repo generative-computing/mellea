@@ -3,7 +3,7 @@
 
 """Core adapter scaffolding types (Epic #929 Phase 0).
 
-Introduces the composable ``Adapter`` dataclass and its three parts:
+Introduces the composable `Adapter` dataclass and its three parts:
 
 - :class:`Identity` — name, adapter_type, optional capability
 - :class:`IOContract` — ABC for prompt building and output parsing
@@ -15,10 +15,10 @@ Also provides three stub :class:`WeightsBinding` subclasses
 
 Note:
     The existing :class:`~mellea.backends.adapters.adapter.Adapter` ABC in
-    ``adapter.py`` is not modified here.  This module introduces a new
-    ``Adapter`` *dataclass* that is re-exported from
-    ``mellea.backends.adapters``.  Both coexist until shim removal in 4.1.
-    The old ABC is not part of the public ``__init__.py`` surface, so there is
+    `adapter.py` is not modified here.  This module introduces a new
+    `Adapter` *dataclass* that is re-exported from
+    `mellea.backends.adapters`.  Both coexist until shim removal in 4.1.
+    The old ABC is not part of the public `__init__.py` surface, so there is
     no namespace collision on the public API.
 """
 
@@ -107,8 +107,8 @@ class IOContract(abc.ABC):
         """Build the prompt component for this adapter.
 
         Args:
-            **kwargs: Adapter-specific keyword arguments (e.g. ``documents=...``,
-                ``requirement=...``). Concrete subclasses define the keys they
+            **kwargs: Adapter-specific keyword arguments (e.g. `documents=...`,
+                `requirement=...`). Concrete subclasses define the keys they
                 accept.
 
         Returns:
@@ -185,11 +185,11 @@ class WeightsBinding(abc.ABC):
 
     Lifecycle (informal state machine):
 
-    - ``prepare()`` — stage the weights (e.g. download); idempotent.
-    - ``activate()`` — load into the backend; requires ``prepare()`` first.
-    - ``deactivate()`` — unload from the backend; reversible by ``activate()``.
-    - ``release()`` — terminal; releases all resources. The binding is not
-      reusable after ``release()``.
+    - `prepare()` — stage the weights (e.g. download); idempotent.
+    - `activate()` — load into the backend; requires `prepare()` first.
+    - `deactivate()` — unload from the backend; reversible by `activate()`.
+    - `release()` — terminal; releases all resources. The binding is not
+      reusable after `release()`.
 
     Concrete implementations are expected to document any deviations from this
     contract (e.g. servers that prepare-and-activate atomically).

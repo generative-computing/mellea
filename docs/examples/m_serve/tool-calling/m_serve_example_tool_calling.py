@@ -4,14 +4,14 @@
 
 This file supports two distinct usage patterns:
 
-1. Running it directly with ``uv run python ...`` performs a local smoke test
+1. Running it directly with `uv run python ...` performs a local smoke test
    using native Mellea tool calling.
-2. Serving it with ``m serve`` exposes an OpenAI-compatible endpoint that
+2. Serving it with `m serve` exposes an OpenAI-compatible endpoint that
    accepts OpenAI-style tool definitions in the request.
 
-The direct ``__main__`` smoke test is intentionally separate from the
-OpenAI-compatible server flow because local ``session.instruct(...)`` calls
-should use ``MelleaTool`` objects directly.
+The direct `__main__` smoke test is intentionally separate from the
+OpenAI-compatible server flow because local `session.instruct(...)` calls
+should use `MelleaTool` objects directly.
 """
 
 import os
@@ -167,7 +167,7 @@ def _extract_mellea_tools_from_model_options(
 
     This example supports only two shapes:
     - OpenAI-style JSON tool definitions from the server path
-    - native tool objects from the direct ``__main__`` path
+    - native tool objects from the direct `__main__` path
     """
     if model_options is None or ModelOption.TOOLS not in model_options:
         return {}

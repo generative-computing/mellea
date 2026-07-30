@@ -1,10 +1,10 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for ``cli/decompose/decompose.py`` run flow.
+"""Tests for `cli/decompose/decompose.py` run flow.
 
 This module validates prompt loading, argument forwarding, template selection,
-output writing, multi-job behavior, and cleanup behavior for the ``run`` command.
+output writing, multi-job behavior, and cleanup behavior for the `run` command.
 """
 
 from pathlib import Path
@@ -85,7 +85,7 @@ def write_input_file(tmp_path: Path, content: str, name: str = "input.txt") -> s
 
 @pytest.fixture
 def patch_jinja(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Patch Jinja objects used by ``run``."""
+    """Patch Jinja objects used by `run`."""
     monkeypatch.setattr("cli.decompose.decompose.Environment", DummyEnvironment)
     monkeypatch.setattr(
         "cli.decompose.decompose.FileSystemLoader", lambda *args, **kwargs: None
@@ -146,7 +146,7 @@ class TestRunSuccess:
         patch_validate_filename: None,
         patch_logging: Mock,
     ) -> None:
-        """Input file mode forwards args to ``pipeline.decompose``."""
+        """Input file mode forwards args to `pipeline.decompose`."""
         input_file = write_input_file(tmp_path, "Summarize document.")
         captured: dict[str, Any] = {}
 
@@ -184,7 +184,7 @@ class TestRunSuccess:
         patch_validate_filename: None,
         patch_logging: Mock,
     ) -> None:
-        """Interactive mode reads prompt and sends ``None`` input vars."""
+        """Interactive mode reads prompt and sends `None` input vars."""
         captured: dict[str, Any] = {}
 
         def fake_decompose(**kwargs: Any) -> DecompPipelineResult:
@@ -213,7 +213,7 @@ class TestRunSuccess:
         patch_validate_filename: None,
         patch_logging: Mock,
     ) -> None:
-        """``latest`` resolves to the last declared enum version."""
+        """`latest` resolves to the last declared enum version."""
         input_file = write_input_file(tmp_path, "Test")
         requested_templates: list[str] = []
         environment = Mock()
@@ -366,7 +366,7 @@ class TestRunFailures:
         patch_validate_filename: None,
         patch_logging: Mock,
     ) -> None:
-        """Exceptions from ``pipeline.decompose`` are propagated."""
+        """Exceptions from `pipeline.decompose` are propagated."""
         input_file = write_input_file(tmp_path, "fail")
 
         def raise_inference_error(**kwargs: Any) -> DecompPipelineResult:
@@ -389,7 +389,7 @@ class TestRunFailures:
         patch_validate_filename: None,
         patch_logging: Mock,
     ) -> None:
-        """Invalid ``out_dir`` fails before pipeline call."""
+        """Invalid `out_dir` fails before pipeline call."""
         input_file = write_input_file(tmp_path, "Test prompt")
 
         decompose_mock = Mock(return_value=make_decomp_result())

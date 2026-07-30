@@ -223,7 +223,7 @@ def _vllm_chat_completion(reasoning: str, content: str | None) -> ChatCompletion
 
 
 async def test_processing_captures_vllm_reasoning_field(backend):
-    """Non-streaming: mot.thinking captures the raw ``reasoning`` key from vLLM."""
+    """Non-streaming: mot.thinking captures the raw `reasoning` key from vLLM."""
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     chunk = _vllm_chat_completion(reasoning="2 + 2 equals 4.", content="4")
     # Sanity check: the SDK object does not expose reasoning_content
@@ -236,7 +236,7 @@ async def test_processing_captures_vllm_reasoning_field(backend):
 
 
 async def test_processing_vllm_reasoning_with_null_content(backend):
-    """Non-streaming: reasoning is captured even when ``content`` is null."""
+    """Non-streaming: reasoning is captured even when `content` is null."""
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     chunk = _vllm_chat_completion(reasoning="some thinking", content=None)
 
@@ -247,7 +247,7 @@ async def test_processing_vllm_reasoning_with_null_content(backend):
 
 
 async def test_processing_streaming_captures_vllm_reasoning_field(backend):
-    """Streaming: per-chunk ``reasoning`` deltas accumulate into mot.thinking."""
+    """Streaming: per-chunk `reasoning` deltas accumulate into mot.thinking."""
     mot: ModelOutputThunk = ModelOutputThunk(value=None)
     chunk_a = ChatCompletionChunk.model_validate(
         {
@@ -292,9 +292,9 @@ async def test_processing_streaming_captures_vllm_reasoning_field(backend):
 
 
 async def test_processing_reasoning_content_still_used(backend):
-    """Regression guard: the pre-existing ``reasoning_content`` path is preserved.
+    """Regression guard: the pre-existing `reasoning_content` path is preserved.
 
-    Some providers surface the trace as ``reasoning_content`` on the message
+    Some providers surface the trace as `reasoning_content` on the message
     object itself. The fix must not regress that path in favour of the raw-dict
     fallback.
     """
@@ -322,7 +322,7 @@ async def test_processing_reasoning_content_still_used(backend):
 
 
 async def test_processing_reasoning_content_takes_precedence_over_reasoning(backend):
-    """reasoning_content attribute wins when both it and raw ``reasoning`` are present."""
+    """reasoning_content attribute wins when both it and raw `reasoning` are present."""
     message = ChatCompletionMessage.model_validate(
         {
             "role": "assistant",

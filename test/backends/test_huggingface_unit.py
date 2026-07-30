@@ -891,7 +891,7 @@ async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
 ):
     """_generate_from_intrinsic raises ValueError when ctx contains image/audio blocks.
 
-    The guard on the intrinsic path passes ``action=None`` and scans only the context;
+    The guard on the intrinsic path passes `action=None` and scans only the context;
     this test exercises that branch directly.
     """
     backend = _make_intrinsic_backend_stub(stub_backend)

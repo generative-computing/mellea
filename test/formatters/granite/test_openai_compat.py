@@ -3,9 +3,9 @@
 
 """Unit tests verifying OpenAI SDK compatibility of ChatCompletion objects.
 
-These tests ensure that ``ChatCompletion`` Pydantic models serialise to dicts
+These tests ensure that `ChatCompletion` Pydantic models serialise to dicts
 that pass OpenAI Python SDK request validation.  The SDK client is pointed at a
-bogus URL so that the expected failure is ``APIConnectionError`` (network),
+bogus URL so that the expected failure is `APIConnectionError` (network),
 **not** a Pydantic/type validation error.  No network access is required.
 """
 

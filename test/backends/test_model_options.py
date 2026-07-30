@@ -98,7 +98,7 @@ def test_model_option_replace_with_conflicts():
 
 
 def test_model_option_sentinels_are_unique():
-    """All ``@@@``-prefixed sentinel values on ModelOption must be distinct."""
+    """All `@@@`-prefixed sentinel values on ModelOption must be distinct."""
     sentinel_values = [
         v
         for v in vars(ModelOption).values()

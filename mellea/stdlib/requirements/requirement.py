@@ -32,24 +32,24 @@ class LLMaJRequirement(Requirement):
 
 
 def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
-    """Convert a ``requirement-check`` adapter output string to a boolean result.
+    """Convert a `requirement-check` adapter output string to a boolean result.
 
-    Parses the JSON output produced by the ``requirement-check`` adapter and
-    returns ``True`` when the score exceeds 0.5.
+    Parses the JSON output produced by the `requirement-check` adapter and
+    returns `True` when the score exceeds 0.5.
 
     Args:
         x: Adapter output string or CBlock containing JSON with the contract
-            ``{"requirement_check": {"score": <float>}}``.
+            `{"requirement_check": {"score": <float>}}`.
 
     Returns:
-        ``True`` if the extracted score exceeds 0.5, ``False`` otherwise.
+        `True` if the extracted score exceeds 0.5, `False` otherwise.
 
     Raises:
-        json.JSONDecodeError: If ``x`` is not valid JSON.
+        json.JSONDecodeError: If `x` is not valid JSON.
         AdapterSchemaMismatchError: If the parsed output does not contain the
-            expected ``requirement_check.score`` structure, or if the score is
+            expected `requirement_check.score` structure, or if the score is
             not a finite number in the range 0.0-1.0.  Callers that previously
-            treated ``False`` as "requirement not met" must now catch this error
+            treated `False` as "requirement not met" must now catch this error
             separately.
     """
     output = str(x)
@@ -83,12 +83,12 @@ def requirement_check_to_bool(x: CBlock | ModelOutputThunk | str) -> bool:
 class ALoraRequirement(Requirement, Intrinsic):
     """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on generation error.
 
-    If the adapter is unavailable (e.g. cannot be loaded), ``mellea`` uses
+    If the adapter is unavailable (e.g. cannot be loaded), `mellea` uses
     LLMaJ for that requirement instead.  That is the only case where LLMaJ
     will be used.
 
     If the adapter generates output but the output **fails schema validation**
-    (``requirement_check_to_bool`` raises ``AdapterSchemaMismatchError``), the
+    (`requirement_check_to_bool` raises `AdapterSchemaMismatchError`), the
     exception propagates to the caller — it is not caught and does not trigger
     the LLMaJ fallback.  This is intentional: schema drift should surface
     loudly rather than silently return a wrong result.
@@ -96,10 +96,10 @@ class ALoraRequirement(Requirement, Intrinsic):
     Args:
         description (str): Human-readable requirement description.
         intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
-            Defaults to ``"requirement-check"``.
+            Defaults to `"requirement-check"`.
 
     Attributes:
-        use_aloras (bool): Always ``True``; this class always attempts to use
+        use_aloras (bool): Always `True`; this class always attempts to use
             ALoRA adapters for validation.
     """
 

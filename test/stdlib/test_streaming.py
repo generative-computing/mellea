@@ -100,8 +100,8 @@ async def _feed_tokens(mot: ModelOutputThunk, response: str, token_size: int) ->
 class StreamingMockBackend(Backend):
     """Test double that streams a fixed response one token at a time.
 
-    ``token_size`` controls how many characters constitute one token.
-    Validation calls (via ``stream_validate`` / ``validate``) are delegated
+    `token_size` controls how many characters constitute one token.
+    Validation calls (via `stream_validate` / `validate`) are delegated
     to the requirements themselves — this backend does not perform any real
     inference.
     """
@@ -159,7 +159,7 @@ class AlwaysUnknownReq(Requirement):
 class FailAfterWordsReq(Requirement):
     """Returns 'fail' once the cumulative word count reaches *threshold*.
 
-    Each call to ``stream_validate`` receives a single chunk (delta) from the
+    Each call to `stream_validate` receives a single chunk (delta) from the
     chunking strategy; the running total is maintained on the instance.
     """
 
@@ -769,8 +769,8 @@ async def test_cancel_generation_invoked_on_fail() -> None:
 
 @pytest.mark.asyncio
 async def test_cancelled_flag_reflects_cancellation_state() -> None:
-    """The ``cancelled`` property on ModelOutputThunk distinguishes an early-exit
-    cancellation from a normal completion and propagates through ``as_thunk``."""
+    """The `cancelled` property on ModelOutputThunk distinguishes an early-exit
+    cancellation from a normal completion and propagates through `as_thunk`."""
 
     # Early exit → cancelled is True, is_computed True, propagates through as_thunk.
     fail_response = "word " * 50
@@ -952,10 +952,10 @@ async def test_acomplete_surfaces_exception_without_astream() -> None:
 async def test_external_task_cancellation_releases_consumers() -> None:
     """External cancellation of the orchestration task must still set _done.
 
-    If the finally cleanup itself contains an ``await`` (e.g. awaiting a
+    If the finally cleanup itself contains an `await` (e.g. awaiting a
     terminator put into the chunk queue), CancelledError re-raises at that
-    await and ``_done.set()`` never runs — any consumer blocked on
-    ``acomplete()`` hangs forever. The cleanup must therefore end with
+    await and `_done.set()` never runs — any consumer blocked on
+    `acomplete()` hangs forever. The cleanup must therefore end with
     synchronous operations only.
     """
     response = "word " * 200  # long enough that streaming is still in progress
@@ -994,10 +994,10 @@ async def test_external_task_cancellation_releases_consumers() -> None:
 async def test_external_cancellation_acomplete_raise_once() -> None:
     """Raise-once contract holds for the task-fallback path on external cancel.
 
-    CancelledError bypasses the orchestrator's ``except Exception`` handler,
-    so ``_orchestration_exception`` is never set. ``acomplete()`` surfaces the
-    cancel via ``self._orchestration_task.exception()`` instead — and that
-    branch must also flip ``_exception_surfaced`` so a second ``acomplete()``
+    CancelledError bypasses the orchestrator's `except Exception` handler,
+    so `_orchestration_exception` is never set. `acomplete()` surfaces the
+    cancel via `self._orchestration_task.exception()` instead — and that
+    branch must also flip `_exception_surfaced` so a second `acomplete()`
     call does not raise the same exception twice.
     """
     response = "word " * 200
@@ -1628,10 +1628,10 @@ async def test_cancelled_task_sets_completed_false() -> None:
     never set, guaranteeing the orchestrator is suspended at astream()
     when the task is cancelled.
 
-    Requires ``await asyncio.sleep(0)`` before ``cancel()`` — see inline
+    Requires `await asyncio.sleep(0)` before `cancel()` — see inline
     comment.  Python 3.12's C Task implementation skips the coroutine body
     entirely (including finally blocks) when cancelled before the first
-    ``coro.send(None)``.
+    `coro.send(None)`.
     """
     gate = asyncio.Event()  # never set — feed task blocks indefinitely
     feed_task: asyncio.Task[None] | None = None

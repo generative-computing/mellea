@@ -3,10 +3,10 @@
 """Streaming generation with per-paragraph validation using ParagraphChunker.
 
 Demonstrates:
-- Using the ``"paragraph"`` chunking alias for coarse-grained, structure-aware
+- Using the `"paragraph"` chunking alias for coarse-grained, structure-aware
   validation
 - A paragraph-length gate that cancels generation if any paragraph is too long
-- How ParagraphChunker withholds text until a blank line (``\\n\\n``) is seen,
+- How ParagraphChunker withholds text until a blank line (`\\n\\n`) is seen,
   then emits the entire paragraph as a single chunk
 - The latency trade-off vs. SentenceChunker: fewer, larger chunks mean lower
   validation overhead but later detection
@@ -44,7 +44,7 @@ _MAX_PARAGRAPH_WORDS = 60
 class ParagraphLengthReq(Requirement):
     """Fails the stream if any paragraph exceeds a word-count limit.
 
-    Each ``stream_validate`` call receives one complete paragraph (from
+    Each `stream_validate` call receives one complete paragraph (from
     :class:`~mellea.stdlib.chunking.ParagraphChunker`).  The validator counts
     words and immediately fails the stream if the paragraph is too long.  This
     lets you enforce a maximum paragraph length at generation time rather than

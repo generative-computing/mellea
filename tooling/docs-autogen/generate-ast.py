@@ -404,20 +404,20 @@ def remove_empty_mdx_files() -> None:
 
 
 def _imported_submodules(init_path: Path) -> set[str] | None:
-    """Return submodule names explicitly imported via relative imports in ``__init__.py``.
+    """Return submodule names explicitly imported via relative imports in `__init__.py`.
 
     Uses AST parsing (no import) so it is safe to call during doc generation.
 
-    A ``__init__.py`` that does ``from .ollama import OllamaModelBackend`` imports
-    from the ``ollama`` submodule, making it part of the package's public surface
-    even if the module name does not appear in ``__all__``.
+    A `__init__.py` that does `from .ollama import OllamaModelBackend` imports
+    from the `ollama` submodule, making it part of the package's public surface
+    even if the module name does not appear in `__all__`.
 
     Args:
-        init_path: Path to the ``__init__.py`` file to parse.
+        init_path: Path to the `__init__.py` file to parse.
 
     Returns:
-        Set of submodule names imported via ``from .name import ...``, or ``None``
-        when the file cannot be parsed.  An empty set means the ``__init__.py``
+        Set of submodule names imported via `from .name import ...`, or `None`
+        when the file cannot be parsed.  An empty set means the `__init__.py`
         exists but contains no relative imports — caller should treat the module
         as indeterminate and keep it.
     """
@@ -447,28 +447,28 @@ _CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset()
 def remove_internal_modules(source_root: Path) -> None:
     """Remove MDX files for submodules that are not part of the package's public API.
 
-    ``mdxify --all`` generates documentation for every reachable submodule,
+    `mdxify --all` generates documentation for every reachable submodule,
     regardless of whether the package author intends it to be public.  This step
     enforces the Python convention: a submodule is public when its parent
-    ``__init__.py`` explicitly imports from it (``from .name import ...``).
-    Submodules that are never imported in the parent ``__init__.py`` are internal
+    `__init__.py` explicitly imports from it (`from .name import ...`).
+    Submodules that are never imported in the parent `__init__.py` are internal
     implementation details and are removed from the staging output.
 
     **Conservative rules:**
 
-    * If the parent ``__init__.py`` cannot be parsed → keep (safe default).
-    * If the parent ``__init__.py`` contains *no* relative imports → keep
+    * If the parent `__init__.py` cannot be parsed → keep (safe default).
+    * If the parent `__init__.py` contains *no* relative imports → keep
       (cannot determine intent; typical for packages where submodules are
       accessed via their full dotted path rather than re-exported).
-    * Package index files (``__init__.mdx`` renamed to ``<pkg>.mdx``) are
-      identified by ``stem == parent_dir_name`` and are never filtered.
+    * Package index files (`__init__.mdx` renamed to `<pkg>.mdx`) are
+      identified by `stem == parent_dir_name` and are never filtered.
 
-    A hardcoded ``_CONFIRMED_INTERNAL_MODULES`` set catches known internals in
-    packages where the parent ``__init__.py`` imports nothing (indeterminate
-    case).  These should eventually be renamed with a ``_`` prefix in source.
+    A hardcoded `_CONFIRMED_INTERNAL_MODULES` set catches known internals in
+    packages where the parent `__init__.py` imports nothing (indeterminate
+    case).  These should eventually be renamed with a `_` prefix in source.
 
     Args:
-        source_root: Root of the source repo (contains ``mellea/`` and ``cli/``).
+        source_root: Root of the source repo (contains `mellea/` and `cli/`).
     """
     print("-" * 30, flush=True)
     print(

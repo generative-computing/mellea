@@ -35,7 +35,7 @@ class ModelOption:
         STREAM (str): Sentinel key for enabling streaming responses.
         STREAM_TIMEOUT (str): Sentinel key for the per-chunk streaming timeout in seconds
             (applied to every chunk, including time-to-first-token).
-            ``None`` disables the timeout. Defaults to ``120.0`` when not set.
+            `None` disables the timeout. Defaults to `120.0` when not set.
         STOP_SEQUENCES (str): Sentinel key for a `list[str]` of strings that, when
             encountered in the model output, cause generation to halt.
         LOGITS (str): Sentinel key for requesting per-token processed logit scores (post-LogitsProcessor).
@@ -57,23 +57,23 @@ class ModelOption:
 
     Accepted values:
 
-    * ``True`` — sets ``chat_template_kwargs.enable_thinking=True`` (vLLM,
-      Ollama OpenAI-compat) **and** ``reasoning_effort="medium"`` (OpenAI
+    * `True` — sets `chat_template_kwargs.enable_thinking=True` (vLLM,
+      Ollama OpenAI-compat) **and** `reasoning_effort="medium"` (OpenAI
       o-series, DeepSeek). Use this to engage reasoning on vLLM-served models
-      such as Qwen3, Gemma 4, and GLM-4.5 — ``"medium"`` alone is silently
+      such as Qwen3, Gemma 4, and GLM-4.5 — `"medium"` alone is silently
       ignored by those servers.
-    * ``False`` — sets ``chat_template_kwargs.enable_thinking=False`` to
-      suppress the think block. ``reasoning_effort`` is not sent (passing
-      ``False`` would be an invalid value for OpenAI).
-    * ``"low"`` / ``"medium"`` / ``"high"`` — passed directly as
-      ``reasoning_effort`` (OpenAI/DeepSeek only; no-op on vLLM).
+    * `False` — sets `chat_template_kwargs.enable_thinking=False` to
+      suppress the think block. `reasoning_effort` is not sent (passing
+      `False` would be an invalid value for OpenAI).
+    * `"low"` / `"medium"` / `"high"` — passed directly as
+      `reasoning_effort` (OpenAI/DeepSeek only; no-op on vLLM).
     """
     SEED = "@@@seed@@@"
     STREAM = "@@@stream@@@"
     STREAM_TIMEOUT = "@@@stream_timeout@@@"
     """Per-chunk timeout in seconds (applied to every chunk, including time-to-first-token).
-    If no chunk arrives within this window the stream is aborted with ``TimeoutError``.
-    ``None`` disables the timeout. Defaults to ``120.0`` seconds when not set."""
+    If no chunk arrives within this window the stream is aborted with `TimeoutError`.
+    `None` disables the timeout. Defaults to `120.0` seconds when not set."""
     STOP_SEQUENCES = "@@@stop_sequences@@@"
     """Must be a `list[str]`. Generation halts when the model emits any of these strings.
 
@@ -82,38 +82,38 @@ class ModelOption:
     text-generation endpoint).
     """
     LOGITS = "@@@logits@@@"
-    """When `True`, request per-token processed logit scores (``output_scores``).
+    """When `True`, request per-token processed logit scores (`output_scores`).
 
-    These are logits *after* the ``LogitsProcessor`` chain has run —
+    These are logits *after* the `LogitsProcessor` chain has run —
     temperature scaling, top-k/top-p masking, repetition penalty, etc.
-    Exposed on ``mot.generation.logits`` as a tuple of 1-D tensors of shape
-    ``(vocab_size,)``, one per generated token.
+    Exposed on `mot.generation.logits` as a tuple of 1-D tensors of shape
+    `(vocab_size,)`, one per generated token.
 
     Only supported by the HuggingFace local backend. Backends that cannot
     return logits (OpenAI, Ollama, LiteLLM, WatsonX) log a warning when this
-    option is set and leave ``generation.logits`` as ``None``.
+    option is set and leave `generation.logits` as `None`.
 
-    **Streaming not supported**: when ``ModelOption.STREAM=True``, logit
-    scores are not available and ``mot.generation.logits`` will be ``None``.
+    **Streaming not supported**: when `ModelOption.STREAM=True`, logit
+    scores are not available and `mot.generation.logits` will be `None`.
 
-    See also ``ModelOption.RAW_LOGITS`` for unprocessed LM-head output.
+    See also `ModelOption.RAW_LOGITS` for unprocessed LM-head output.
     """
 
     RAW_LOGITS = "@@@raw_logits@@@"
-    """When `True`, request per-token raw logits (``output_logits``).
+    """When `True`, request per-token raw logits (`output_logits`).
 
     These are the raw, unprocessed logits straight from the LM head —
-    the model's actual output *before* any ``LogitsProcessor`` transforms
+    the model's actual output *before* any `LogitsProcessor` transforms
     (temperature, top-k/top-p, repetition penalty, etc.).
-    Exposed on ``mot.generation.raw_logits`` as a tuple of 1-D tensors of
-    shape ``(vocab_size,)``, one per generated token.
+    Exposed on `mot.generation.raw_logits` as a tuple of 1-D tensors of
+    shape `(vocab_size,)`, one per generated token.
 
     Only supported by the HuggingFace local backend.
 
-    **Streaming not supported**: when ``ModelOption.STREAM=True``, raw
-    logits are not available and ``mot.generation.raw_logits`` will be ``None``.
+    **Streaming not supported**: when `ModelOption.STREAM=True`, raw
+    logits are not available and `mot.generation.raw_logits` will be `None`.
 
-    See also ``ModelOption.LOGITS`` for processor-transformed scores.
+    See also `ModelOption.LOGITS` for processor-transformed scores.
     """
 
     @staticmethod

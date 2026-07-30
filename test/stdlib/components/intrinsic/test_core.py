@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests of the code in ``mellea.stdlib.intrinsics.core``"""
+"""Tests of the code in `mellea.stdlib.intrinsics.core`"""
 
 import gc
 import json
@@ -63,7 +63,7 @@ def _read_input_json(file_name: str):
     """Read test data from JSON and convert to a ChatContext.
 
     Returns the context and the raw JSON data (for accessing extra fields
-    like ``requirement``).
+    like `requirement`).
     """
     with open(DATA_ROOT / "input_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)

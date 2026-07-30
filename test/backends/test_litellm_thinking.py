@@ -3,9 +3,9 @@
 
 """Unit tests for LiteLLMBackend mot.thinking population.
 
-Covers the vLLM case where the wire key is ``"reasoning"`` instead of
-``"reasoning_content"``, and the case where LiteLLM has already normalised
-it to ``"reasoning_content"`` (so both keys are exercised).
+Covers the vLLM case where the wire key is `"reasoning"` instead of
+`"reasoning_content"`, and the case where LiteLLM has already normalised
+it to `"reasoning_content"` (so both keys are exercised).
 """
 
 import pytest
@@ -133,9 +133,9 @@ async def test_processing_non_streaming_empty_reasoning_content_does_not_fall_ba
 ):
     """Empty-string reasoning_content wins — does not fall back to reasoning key.
 
-    Validates that the is-None guard (not ``or``) is used: an empty-string
-    ``reasoning_content`` chunk is preserved as-is, not silently replaced by the
-    fallback ``reasoning`` value.
+    Validates that the is-None guard (not `or`) is used: an empty-string
+    `reasoning_content` chunk is preserved as-is, not silently replaced by the
+    fallback `reasoning` value.
     """
     mot = _fresh_mot()
     msg = Message(content="Paris", role="assistant")
@@ -212,7 +212,7 @@ async def test_processing_streaming_empty_reasoning_content_does_not_fall_back(
 ):
     """Streaming: empty-string reasoning_content wins — does not fall back to reasoning key.
 
-    Validates that the is-None guard (not ``or``) is used in the streaming branch too.
+    Validates that the is-None guard (not `or`) is used in the streaming branch too.
     """
     mot = _fresh_mot()
     delta = Delta(content="")

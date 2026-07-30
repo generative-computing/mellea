@@ -366,7 +366,7 @@ def test_react_summary_prompt_max_tokens_hint_word_estimate_scales():
 
 @pytest.mark.asyncio
 async def test_react_invokes_per_turn_compactor():
-    """The ``compactor=`` hook runs once per turn after the tool observation."""
+    """The `compactor=` hook runs once per turn after the tool observation."""
     search = _make_tool("search", "found it")
     backend = ScriptedBackend(
         [

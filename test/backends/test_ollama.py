@@ -27,12 +27,12 @@ def _ensure_model_warm() -> None:
 
     The conftest warms models when transitioning *into* the ollama test group, but
     that warm-up does not fire when this file is run in isolation (e.g.
-    ``pytest test/backends/test_ollama.py``). Without this fixture the first test
+    `pytest test/backends/test_ollama.py`). Without this fixture the first test
     in such a run fires concurrent requests against a cold model, triggering the
     Ollama load-race that returns empty responses (see #599 and
     https://github.com/ollama/ollama/issues/16326).
 
-    ``keep_alive=-1`` pins the model in memory until the conftest module-boundary
+    `keep_alive=-1` pins the model in memory until the conftest module-boundary
     eviction fires at the end of this test file.
     """
     _model = IBM_GRANITE_4_1_3B.ollama_name

@@ -98,16 +98,16 @@ _ICON_PX_RE = re.compile(
 def normalize_icon_size(content: str) -> str:
     """Replace mdxify's hardcoded pixel icon sizes with em units.
 
-    mdxify emits ``style="width: 14px; height: 14px;"`` on source-link Icon
+    mdxify emits `style="width: 14px; height: 14px;"` on source-link Icon
     components.  Inline styles take priority over the stylesheet, so the icon
-    renders at a fixed 14 px regardless of heading level.  Swapping to ``em``
+    renders at a fixed 14 px regardless of heading level.  Swapping to `em`
     units lets the icon scale with the surrounding heading font-size.
 
     Args:
         content: MDX file content.
 
     Returns:
-        Content with pixel icon dimensions replaced by ``0.85em``.
+        Content with pixel icon dimensions replaced by `0.85em`.
     """
     return _ICON_PX_RE.sub(r"\g<1>width: 0.85em; height: 0.85em;\g<2>", content)
 
@@ -122,7 +122,7 @@ _RST_DOUBLE_BACKTICK_RE = re.compile(r"``([^`]+)``")
 def normalize_rst_backticks(content: str) -> str:
     """Convert RST-style double-backtick literals to single-backtick Markdown.
 
-    Replaces ``Symbol`` with `Symbol` in MDX prose (outside fenced code blocks).
+    Replaces `Symbol` with `Symbol` in MDX prose (outside fenced code blocks).
     This prevents add_cross_references from generating malformed link syntax such
     as `[`Backend`](url)` where the link is wrapped in an extra code span and
     renders as raw text rather than a clickable link.
@@ -131,7 +131,7 @@ def normalize_rst_backticks(content: str) -> str:
         content: MDX file content
 
     Returns:
-        Content with ``x`` replaced by `x` outside code fences
+        Content with `x` replaced by `x` outside code fences
     """
     lines = content.splitlines(keepends=True)
     result = []

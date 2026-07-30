@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for the ``Compactor`` protocol, ``WindowCompactor``, ``ThresholdCompactor``."""
+"""Tests for the `Compactor` protocol, `WindowCompactor`, `ThresholdCompactor`."""
 
 from __future__ import annotations
 
@@ -690,11 +690,11 @@ class TestLLMSummarizeCompactor:
         self, scripted_summary_backend
     ):
         """Component subclasses that aren't Message/ToolMessage/ModelOutputThunk
-        emit a ``<TypeName[: content]>`` marker instead of the default object repr."""
+        emit a `<TypeName[: content]>` marker instead of the default object repr."""
         from mellea.core import Component
 
         class _CustomMarker(Component):
-            """Component without a ``content`` attribute."""
+            """Component without a `content` attribute."""
 
             def parts(self):  # type: ignore[override]
                 return []

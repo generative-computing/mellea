@@ -3,7 +3,7 @@
 
 """Tests that verify each optional dependency group installs and imports correctly in isolation.
 
-Each test uses ``uv run --isolated`` to create a throwaway environment with only the
+Each test uses `uv run --isolated` to create a throwaway environment with only the
 specified extra installed, then runs a generated Python script to verify that:
 1. Expected imports succeed
 2. Optional imports that need other extras fail or degrade gracefully
@@ -122,10 +122,10 @@ TESTED_EXTRAS = {
 
 
 def _parse_optional_dependency_groups() -> set[str]:
-    """Parse ``pyproject.toml`` and return the set of optional-dependency group names.
+    """Parse `pyproject.toml` and return the set of optional-dependency group names.
 
     Returns:
-        set[str]: The group names defined in ``pyproject.toml`` (e.g. ``{"hf", ...}``).
+        set[str]: The group names defined in `pyproject.toml` (e.g. `{"hf", ...}`).
     """
     pyproject = PROJECT_ROOT / "pyproject.toml"
     with open(pyproject, "rb") as f:
@@ -141,11 +141,11 @@ def _normalize_exclude(exclude: set[str] | str = "") -> set[str]:
 
 
 def _backend_fail_imports(exclude: set[str] | str = "") -> list[tuple[str, str]]:
-    """Return ``(import_stmt, extra_name)`` pairs for backends expected to fail.
+    """Return `(import_stmt, extra_name)` pairs for backends expected to fail.
 
-    Collects import statements from all ``BACKEND_EXTRAS`` except those in ``exclude``.
+    Collects import statements from all `BACKEND_EXTRAS` except those in `exclude`.
     Each tuple pairs the import statement with the extra name so the checker
-    script can verify the ``ImportError`` contains a ``mellea[<extra>]`` hint.
+    script can verify the `ImportError` contains a `mellea[<extra>]` hint.
 
     Args:
         exclude (set[str] | str): Backend extras to omit (their imports are
@@ -153,7 +153,7 @@ def _backend_fail_imports(exclude: set[str] | str = "") -> list[tuple[str, str]]
             an empty string to include all backends.
 
     Returns:
-        list[tuple[str, str]]: Pairs of ``(import_statement, extra_name)``.
+        list[tuple[str, str]]: Pairs of `(import_statement, extra_name)`.
     """
     extras = BACKEND_EXTRAS - _normalize_exclude(exclude)
     return [(stmt, name) for name in sorted(extras) for stmt in IMPORTS[name]]
@@ -166,21 +166,21 @@ def _build_check_script(
 ) -> str:
     """Build a self-contained Python script that tests imports and prints failures.
 
-    The generated script attempts each import statement literally (no ``exec``),
-    checks module-level flags via ``importlib``, and raises ``SystemExit`` with
+    The generated script attempts each import statement literally (no `exec`),
+    checks module-level flags via `importlib`, and raises `SystemExit` with
     a newline-delimited failure summary if anything is wrong.
 
     Args:
         should_succeed (list[str]): Import statements that must execute without error.
         should_fail (list[tuple[str, str]]): Tuples of
-            ``(import_statement, extra_name)`` — the import must raise
-            ``ImportError`` and the message must contain ``mellea[<extra_name>]``.
+            `(import_statement, extra_name)` — the import must raise
+            `ImportError` and the message must contain `mellea[<extra_name>]`.
         flag_checks (list[tuple[str, str, bool]]): Tuples of
-            ``(module_path, attribute_name, expected_value)`` for boolean flag
-            assertions (e.g. ``("mellea.telemetry.tracing", "_OTEL_AVAILABLE", True)``).
+            `(module_path, attribute_name, expected_value)` for boolean flag
+            assertions (e.g. `("mellea.telemetry.tracing", "_OTEL_AVAILABLE", True)`).
 
     Returns:
-        str: A complete Python script suitable for ``python -c``.
+        str: A complete Python script suitable for `python -c`.
     """
     lines = ["import importlib", "failures = []", ""]
 
@@ -231,25 +231,25 @@ def _run_check(
 ) -> None:
     """Build and run an import check script in an isolated uv environment.
 
-    Creates a throwaway environment via ``uv run --isolated --no-project``,
+    Creates a throwaway environment via `uv run --isolated --no-project`,
     installs mellea (with the given extra if provided), and executes the
     generated checker script. Fails the current pytest test if any check
     doesn't pass.
 
     Args:
         extra (str | None): The optional-dependency extra to install
-            (e.g. ``"hf"``). Pass ``None`` to install core mellea only.
+            (e.g. `"hf"`). Pass `None` to install core mellea only.
         should_succeed (list[str]): Import statements that must execute without error.
         should_fail (list[tuple[str, str]]): Tuples of
-            ``(import_statement, extra_name)`` — must raise ``ImportError``
-            with ``mellea[<extra_name>]`` in the message.
+            `(import_statement, extra_name)` — must raise `ImportError`
+            with `mellea[<extra_name>]` in the message.
         flag_checks (list[tuple[str, str, bool]]): Tuples of
-            ``(module_path, attribute_name, expected_value)`` for boolean flag
+            `(module_path, attribute_name, expected_value)` for boolean flag
             assertions.
 
     Raises:
-        ValueError: If any import statement appears in both ``should_succeed``
-            and ``should_fail``.
+        ValueError: If any import statement appears in both `should_succeed`
+            and `should_fail`.
     """
     fail_stmts = {stmt for stmt, _ in should_fail}
     overlap = set(should_succeed) & fail_stmts
@@ -294,11 +294,11 @@ def _run_isolated_script(extra: str | None, script: str, error_prefix: str) -> N
 def _inverted_flag_checks(extra: str) -> list[tuple[str, str, bool]]:
     """Return flag checks for the given extra with inverted expected values.
 
-    Used in core-only testing to assert that feature flags are ``False`` when
+    Used in core-only testing to assert that feature flags are `False` when
     the extra is not installed.
 
     Args:
-        extra (str): Key into ``FLAG_CHECKS`` (e.g. ``"telemetry"``). If the
+        extra (str): Key into `FLAG_CHECKS` (e.g. `"telemetry"`). If the
             key is absent, an empty list is returned.
 
     Returns:
@@ -489,16 +489,16 @@ def test_all_extras_have_tests() -> None:
 def _run_script_raw(script: str) -> subprocess.CompletedProcess:
     """Run a checker script with the current Python interpreter and return the result.
 
-    Unlike ``_run_check``, this does **not** use ``uv run --isolated`` — it
-    executes directly with ``sys.executable``, making it suitable for fast
+    Unlike `_run_check`, this does **not** use `uv run --isolated` — it
+    executes directly with `sys.executable`, making it suitable for fast
     self-tests of the checker script logic.
 
     Args:
-        script (str): A complete Python script (as returned by ``_build_check_script``).
+        script (str): A complete Python script (as returned by `_build_check_script`).
 
     Returns:
-        subprocess.CompletedProcess: The completed process with ``stdout``,
-            ``stderr``, and ``returncode``.
+        subprocess.CompletedProcess: The completed process with `stdout`,
+            `stderr`, and `returncode`.
     """
     return subprocess.run(
         [sys.executable, "-c", script], capture_output=True, text=True, timeout=30

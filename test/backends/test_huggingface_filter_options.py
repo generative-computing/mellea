@@ -12,7 +12,7 @@ happen to read self._tokenizer.chat_template.  The fixture sets that attribute t
 known Jinja string, bypassing __init__ (and therefore model loading) entirely.
 
 torch must be importable because importing LocalHFBackend triggers the top-level
-``import torch`` in huggingface.py.  Install mellea[hf] to satisfy this requirement.
+`import torch` in huggingface.py.  Install mellea[hf] to satisfy this requirement.
 """
 
 import logging
@@ -353,9 +353,9 @@ def test_generate_filter_drops_template_only_reasoning_kwargs(
     """Chat-template variables specific to non-Granite models must also be dropped.
 
     These variables are referenced by the chat templates of models shipped in
-    ``mellea/backends/model_ids.py`` (Qwen3, Llama 3.x/4, gpt-oss, etc.) but are
-    NOT accepted by ``transformers``' ``generate``. If forwarded through, they
-    would raise ``TypeError`` at inference time.
+    `mellea/backends/model_ids.py` (Qwen3, Llama 3.x/4, gpt-oss, etc.) but are
+    NOT accepted by `transformers`' `generate`. If forwarded through, they
+    would raise `TypeError` at inference time.
     """
     template_only_kwargs = [
         "enable_thinking",  # Qwen3
@@ -377,9 +377,9 @@ def test_generate_filter_drops_template_only_reasoning_kwargs(
 
 
 def test_for_generate_false_skips_filter(plain_backend: LocalHFBackend) -> None:
-    """``for_generate=False`` skips the generate-kwargs filter.
+    """`for_generate=False` skips the generate-kwargs filter.
 
-    This is the path used by ``_filter_for_chat_template`` — chat-template
+    This is the path used by `_filter_for_chat_template` — chat-template
     variables must survive the rename step so the chat-template allowlist can
     examine them.
     """
@@ -395,7 +395,7 @@ def test_generate_kwargs_allowlist_no_chat_template_only_overlap() -> None:
 
     This is the regression guard for the bug class fixed in this change: if a
     Jinja variable referenced by one of the templates in
-    ``mellea/backends/model_ids.py`` is *also* a real ``generate()`` kwarg name,
+    `mellea/backends/model_ids.py` is *also* a real `generate()` kwarg name,
     the allowlist would let it leak through and we'd need a different mechanism
     (an explicit denylist or a per-call-site decision). Today there is no
     overlap, and this test will fail loudly the day that changes.
@@ -428,11 +428,11 @@ def test_generate_kwargs_allowlist_no_chat_template_only_overlap() -> None:
 
 
 def test_generate_kwargs_allowlist_includes_known_generate_kwargs() -> None:
-    """Common ``generate()`` kwargs Mellea relies on must be in the allowlist.
+    """Common `generate()` kwargs Mellea relies on must be in the allowlist.
 
     A canary against an upstream rename or removal of a kwarg that Mellea
-    forwards from caller-supplied ``model_options``. Mellea-injected kwargs
-    (``stopping_criteria``, ``streamer``, etc.) are passed explicitly at the
+    forwards from caller-supplied `model_options`. Mellea-injected kwargs
+    (`stopping_criteria`, `streamer`, etc.) are passed explicitly at the
     call sites and don't need to be in this set, but generation-tuning kwargs
     that callers customize do.
     """

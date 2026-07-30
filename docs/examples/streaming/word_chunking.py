@@ -3,12 +3,12 @@
 """Streaming generation with per-word validation using WordChunker.
 
 Demonstrates:
-- Using the ``"word"`` chunking alias for the finest-grained validation
+- Using the `"word"` chunking alias for the finest-grained validation
 - Detecting a forbidden word the moment it appears in the stream
 - Early-exit cancelling generation before the consumer sees the bad word
 - How WordChunker compares to SentenceChunker in reaction time
 
-WordChunker splits on whitespace, so each ``stream_validate`` call receives
+WordChunker splits on whitespace, so each `stream_validate` call receives
 exactly one word.  This is the highest-sensitivity strategy: validation fires
 before the model has finished even the current clause, letting you catch
 prohibited content with minimal output produced.
@@ -45,7 +45,7 @@ _FORBIDDEN = {"competitor", "CompetitorX", "legacy", "inferior", "obsolete"}
 class ForbiddenWordReq(Requirement):
     """Fails the stream immediately if a forbidden word appears.
 
-    Each ``stream_validate`` call receives a single word (from
+    Each `stream_validate` call receives a single word (from
     :class:`~mellea.stdlib.chunking.WordChunker`).  The check is O(1)
     per word — set membership test — so it adds negligible latency.
     """

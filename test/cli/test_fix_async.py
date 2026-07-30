@@ -1463,7 +1463,7 @@ class TestUserWrittenPatternDetection:
         assert len(locs) == 0
 
     def test_from_stdlib_import_session_detected(self):
-        """``from mellea.stdlib import session`` should enable session detection."""
+        """`from mellea.stdlib import session` should enable session detection."""
         src = _dedent("""\
             from mellea.stdlib import session
             async def main():
@@ -1476,7 +1476,7 @@ class TestUserWrittenPatternDetection:
         assert locs[0].call_style == "session"
 
     def test_bare_import_mellea_detected(self):
-        """``import mellea`` + session method call should be detected."""
+        """`import mellea` + session method call should be detected."""
         src = _dedent("""\
             import mellea
             m = mellea.start_session()

@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests of the code in ``mellea.stdlib.components.intrinsic.guardian``"""
+"""Tests of the code in `mellea.stdlib.components.intrinsic.guardian`"""
 
 import gc
 import json
@@ -50,9 +50,9 @@ def _backend():
 def _read_guardian_input(file_name: str) -> tuple[ChatContext, list[Document]]:
     """Read test input and return a (ChatContext, documents) pair.
 
-    Builds the context from ``messages`` and extracts any documents stored
-    under ``extra_body.documents`` so callers can pass them via the
-    ``documents=`` keyword argument.
+    Builds the context from `messages` and extracts any documents stored
+    under `extra_body.documents` so callers can pass them via the
+    `documents=` keyword argument.
     """
     with open(DATA_ROOT / "input_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)

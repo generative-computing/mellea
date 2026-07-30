@@ -127,7 +127,7 @@ class OutputSizeLimit(Requirement):
 
     Args:
         limit_chars: Maximum allowed output size in characters. Defaults to 10,000.
-        execution_tier: Execution environment tier. Defaults to ``"static"``
+        execution_tier: Execution environment tier. Defaults to `"static"`
             (no execution; output limit not enforced).
         policy: Optional CapabilityPolicy to override tier defaults.
         allowed_imports: Whitelist of importable top-level modules. None allows all.
@@ -231,15 +231,15 @@ class ImportRestrictions(Requirement):
     provided, all imports are blocked. If None is provided, all imports are accepted.
 
     ⚠️ **Not a Security Boundary**: This is a static AST-based guidance check,
-    not a security control. It only detects static import statements (``import x``
-    and ``from x import y``) and does NOT detect dynamic imports such as:
-    - ``__import__("subprocess")``
-    - ``importlib.import_module("socket")``
-    - ``exec("import urllib")``
-    - ``eval("import os")``
+    not a security control. It only detects static import statements (`import x`
+    and `from x import y`) and does NOT detect dynamic imports such as:
+    - `__import__("subprocess")`
+    - `importlib.import_module("socket")`
+    - `exec("import urllib")`
+    - `eval("import os")`
 
     For real isolation from untrusted code, combine this requirement with
-    ``execution_tier="docker"`` and a restrictive ``CapabilityPolicy``.
+    `execution_tier="docker"` and a restrictive `CapabilityPolicy`.
     The execution environment sandbox provides the actual security boundary,
     not the import allowlist.
 

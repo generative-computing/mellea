@@ -3,18 +3,18 @@
 
 """Bash shell command execution tool and execution environments for agentic workflows.
 
-Provides ``BashEnvironment`` (abstract base for bash execution) and two concrete
-implementations: ``StaticBashEnvironment`` (parse and safety-check only, no execution)
-and ``_LocalBashEnvironment`` (subprocess execution in the current shell). All
+Provides `BashEnvironment` (abstract base for bash execution) and two concrete
+implementations: `StaticBashEnvironment` (parse and safety-check only, no execution)
+and `_LocalBashEnvironment` (subprocess execution in the current shell). All
 environments enforce a conservative safety denylist (sudo, rm -rf, git push --force,
 system paths, interactive shells). Write operations may also be constrained by
-``working_dir`` and ``allowed_paths``.
+`working_dir` and `allowed_paths`.
 
-The top-level ``bash_executor`` (recommended entry point) executes commands locally
+The top-level `bash_executor` (recommended entry point) executes commands locally
 with denylist safety checks. Bash executor runs with access to the host environment;
 isolation must be provided by the application layer (containers, VMs).
 
-The function is ready to be wrapped as a ``MelleaTool`` instance for ReACT or
+The function is ready to be wrapped as a `MelleaTool` instance for ReACT or
 other agentic loops.
 
 Security note: The denylist covers inline code execution (e.g., bash -c, python -e) and
@@ -689,14 +689,14 @@ class BashEnvironment(ABC):
             addition to passing the default dangerous-path checks.
         working_dir (str | None): Optional directory restriction for write
             operations. This is a host path where the command executes. When
-            specified, writes must remain within this directory or ``/tmp``.
+            specified, writes must remain within this directory or `/tmp`.
         timeout (int): Maximum number of seconds to allow command execution.
 
     Note:
-        Subclass ``StaticBashEnvironment`` returns ``success=True, skipped=True``
+        Subclass `StaticBashEnvironment` returns `success=True, skipped=True`
         to indicate that validation passed but the command was intentionally not
-        executed (analysis-only mode). Consumers that branch on ``success`` should
-        check ``skipped`` first to handle this state correctly.
+        executed (analysis-only mode). Consumers that branch on `success` should
+        check `skipped` first to handle this state correctly.
 
     """
 
@@ -715,14 +715,14 @@ class BashEnvironment(ABC):
         """Parse and validate a command before execution.
 
         The shared validation step performs argv parsing, rejects dangerous shell
-        constructs, applies path safety checks, and enforces ``allowed_paths`` and
-        ``working_dir`` restrictions for write operations.
+        constructs, applies path safety checks, and enforces `allowed_paths` and
+        `working_dir` restrictions for write operations.
 
         Args:
             command: The bash command string to validate.
 
         Returns:
-            Either the validated argv list or a skipped ``ExecutionResult``
+            Either the validated argv list or a skipped `ExecutionResult`
             describing why validation failed.
         """
         try:
@@ -840,10 +840,10 @@ class BashEnvironment(ABC):
 class StaticBashEnvironment(BashEnvironment):
     """Safe environment that validates but does not execute bash commands.
 
-    Returns ``success=True, skipped=True`` when validation passes (command is
+    Returns `success=True, skipped=True` when validation passes (command is
     syntactically valid and passes all safety checks), indicating the command
     would be safe to execute but this environment intentionally does not run it.
-    Returns ``success=False, skipped=True`` when validation fails (safety check
+    Returns `success=False, skipped=True` when validation fails (safety check
     rejection or parse error).
     """
 
@@ -854,8 +854,8 @@ class StaticBashEnvironment(BashEnvironment):
             command (str): The bash command to validate.
 
         Returns:
-            ExecutionResult: Result with ``skipped=True`` and parsed argv in
-            ``analysis_result`` on success, or a safety-check failure on rejection.
+            ExecutionResult: Result with `skipped=True` and parsed argv in
+            `analysis_result` on success, or a safety-check failure on rejection.
         """
         validated = self._validate_command(command)
         if isinstance(validated, ExecutionResult):
@@ -988,9 +988,9 @@ def bash_executor(
             to passing the default dangerous-path checks).
 
     Returns:
-        An ``ExecutionResult`` with stdout, stderr, and success flag. If the
-        command was rejected for safety reasons, ``skipped=True`` and
-        ``skip_message`` contains the reason.
+        An `ExecutionResult` with stdout, stderr, and success flag. If the
+        command was rejected for safety reasons, `skipped=True` and
+        `skip_message` contains the reason.
 
     Examples:
         Basic execution:

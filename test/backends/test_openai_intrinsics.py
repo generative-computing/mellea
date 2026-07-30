@@ -4,7 +4,7 @@
 """E2E tests for intrinsics on the OpenAI backend with a Granite Switch model.
 
 Starts a vLLM server hosting a Granite Switch model, creates an OpenAIBackend with
-``embedded_adapters=True``, and runs each intrinsic that has matching test data
+`embedded_adapters=True`, and runs each intrinsic that has matching test data
 through the full generation path.
 """
 
@@ -65,7 +65,7 @@ SWITCH_MODEL_ID = os.environ.get(
 def vllm_switch_process():
     """Module-scoped vLLM process serving a Granite Switch model.
 
-    If ``VLLM_SWITCH_TEST_BASE_URL`` is set the server is assumed to be running
+    If `VLLM_SWITCH_TEST_BASE_URL` is set the server is assumed to be running
     externally and no subprocess is started.
     """
     if os.environ.get("VLLM_SWITCH_TEST_BASE_URL"):
@@ -218,7 +218,7 @@ def _get_matching_combos(backend: OpenAIBackend) -> dict[str, YamlJsonCombo]:
 def _build_chat_context(input_json: dict) -> ChatContext:
     """Build a ChatContext from the raw input JSON used by intrinsics tests.
 
-    Parses messages and attaches any documents from ``extra_body.documents``
+    Parses messages and attaches any documents from `extra_body.documents`
     to the last user message.
     """
     ctx = ChatContext()
