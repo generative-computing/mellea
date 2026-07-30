@@ -88,8 +88,13 @@ def _extract_markers_from_file(file_path):
     return []
 
 
-def _should_skip_collection(markers):
+def _should_skip_collection(markers, config=None):
     """Check if example should be skipped during collection based on markers.
+
+    Args:
+        markers (list[str]): Markers extracted from the example's `# pytest:` line.
+        config (pytest.Config | None): Active config, used to honour capability-check
+            overrides. When omitted, capability gating applies as before.
 
     Returns (should_skip, reason) tuple.
     """
@@ -100,11 +105,30 @@ def _should_skip_collection(markers):
     if "skip_always" in markers:
         return True, "Example marked to always skip (skip_always marker)"
 
-    try:
-        capabilities = get_system_capabilities()
-    except Exception:
-        # If we can't get capabilities, don't skip (fail open)
-        return False, None
+    ignore_all = config is not None and config.getoption(
+        "--ignore-all-checks", default=False
+    )
+    ignore_gpu = ignore_all or (
+        config is not None
+        and (
+            config.getoption("--ignore-gpu-check", default=False)
+            or config.getoption("skip_resource_checks", default=False)
+        )
+    )
+    ignore_ollama = ignore_all or (
+        config is not None and config.getoption("--ignore-ollama-check", default=False)
+    )
+    ignore_api_key = ignore_all or (
+        config is not None and config.getoption("--ignore-api-key-check", default=False)
+    )
+
+    capabilities = None
+    if not ignore_all:
+        try:
+            capabilities = get_system_capabilities()
+        except Exception:
+            # If we can't get capabilities, don't skip (fail open)
+            return False, None
 
     gh_run = int(os.environ.get("CICD", 0))
 
@@ -120,21 +144,28 @@ def _should_skip_collection(markers):
     if "slow" in markers and int(os.environ.get("SKIP_SLOW", 0)) == 1:
         return True, "Skipping slow test (SKIP_SLOW=1)"
 
+    # The runtime gate treats `--ignore-all-checks` as a capability-check bypass,
+    # not as permission to override explicit or environment-driven skip markers.
+    if ignore_all:
+        return False, None
+
+    assert capabilities is not None
+
     # Skip tests requiring GPU if not available
-    if "huggingface" in markers or "vllm" in markers:
+    if ("huggingface" in markers or "vllm" in markers) and not ignore_gpu:
         if not capabilities["has_gpu"]:
             return True, "GPU not available"
 
     # Skip tests requiring Ollama if not available
-    if "ollama" in markers:
+    if "ollama" in markers and not ignore_ollama:
         if not capabilities["has_ollama"]:
             return True, "Ollama not available (port 11434 not listening)"
 
     # Skip tests requiring API keys
-    if "watsonx" in markers:
+    if "watsonx" in markers and not ignore_api_key:
         if not capabilities["has_api_keys"].get("watsonx"):
             return True, "Watsonx API credentials not found"
-    if "openai" in markers:
+    if "openai" in markers and not ignore_api_key:
         if not capabilities["has_api_keys"].get("openai"):
             return True, "OpenAI API key not found"
 
@@ -319,10 +350,7 @@ def pytest_pycollect_makemodule(module_path, parent):
     if file_path.name == "conftest.py":
         return None
 
-    # Initialize capabilities cache if needed
     config = parent.config
-    if not hasattr(config, "_example_capabilities"):
-        config._example_capabilities = get_system_capabilities()
 
     # Check manual skip list
     if str(file_path) in examples_to_skip:
@@ -334,7 +362,7 @@ def pytest_pycollect_makemodule(module_path, parent):
     if not markers:
         return SkippedFile.from_parent(parent, path=file_path)
 
-    should_skip, _reason = _should_skip_collection(markers)
+    should_skip, _reason = _should_skip_collection(markers, config)
 
     if should_skip:
         # Prevent import by returning custom collector
@@ -380,7 +408,7 @@ def pytest_ignore_collect(collection_path, config):
             # No markers → not a runnable example (e.g. __init__.py, helpers)
             if not markers:
                 return True
-            should_skip, reason = _should_skip_collection(markers)
+            should_skip, reason = _should_skip_collection(markers, config)
             if should_skip and reason:
                 # Add to skip list with reason for terminal summary
                 examples_to_skip[str(collection_path)] = reason
@@ -420,7 +448,7 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
         markers = _extract_markers_from_file(file_path)
         if not markers:
             return None
-        should_skip, _reason = _should_skip_collection(markers)
+        should_skip, _reason = _should_skip_collection(markers, parent.config)
         if should_skip:
             return SkippedFile.from_parent(parent, path=file_path)
 
