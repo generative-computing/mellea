@@ -140,13 +140,18 @@ async def log_sampling_loop_end(
     """Log sampling completion with success status and attempt statistics.
 
     Args:
-        payload: SamplingLoopEndPayload with success, iterations_used, all_results, all_validations.
+        payload: SamplingLoopEndPayload with success, iterations_used, all_results,
+            all_validations, and exception (set when the loop raised).
         ctx: Plugin context for hook execution.
     """
     strategy = payload.strategy_name
     iterations = payload.iterations_used
     success = payload.success
     failure_reason = payload.failure_reason
+
+    if payload.exception is not None:
+        logger.info(f"[💥 SAMPLING-END] ERROR using {strategy}: {payload.exception!r}")
+        return
 
     if success:
         logger.info(

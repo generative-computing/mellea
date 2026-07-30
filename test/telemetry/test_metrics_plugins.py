@@ -814,6 +814,21 @@ async def test_sampling_plugin_records_failure_outcome(sampling_plugin):
 
 
 @pytest.mark.asyncio
+async def test_sampling_plugin_skips_outcome_on_exception(sampling_plugin):
+    """A raised loop records no outcome — a crash is not a sampling result."""
+    payload = SamplingLoopEndPayload(
+        strategy_name="RejectionSamplingStrategy",
+        success=False,
+        exception=RuntimeError("boom"),
+    )
+
+    with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
+        await sampling_plugin.record_sampling_outcome(payload, {})
+
+        mock_record.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_sampling_plugin_records_streaming_success_outcome(sampling_plugin):
     """streaming_end with success=True records a `stream_with_chunking` success."""
     payload = StreamingEndPayload(streaming_id="sid", success=True)
@@ -933,6 +948,23 @@ async def test_requirement_plugin_failure_with_no_reason_uses_default(
         await requirement_plugin.record_requirement_metrics(payload, {})
 
         mock_fail.assert_called_once_with("_FakeReq", "LLM judgment")
+
+
+@pytest.mark.asyncio
+async def test_requirement_plugin_skips_on_exception(requirement_plugin):
+    """A raised validation records no checks — there are no results to count."""
+    payload = ValidationPostCheckPayload(
+        requirements=[_FakeReq()], exception=RuntimeError("boom")
+    )
+
+    with (
+        patch("mellea.telemetry.metrics.record_requirement_check") as mock_check,
+        patch("mellea.telemetry.metrics.record_requirement_failure") as mock_fail,
+    ):
+        await requirement_plugin.record_requirement_metrics(payload, {})
+
+        mock_check.assert_not_called()
+        mock_fail.assert_not_called()
 
 
 class _LengthRequirement:

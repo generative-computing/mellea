@@ -73,9 +73,14 @@ async def log_validation_post_check(
     """Log validation results after requirements are checked.
 
     Args:
-        payload: ValidationPostCheckPayload with passed_count, failed_count, results.
+        payload: ValidationPostCheckPayload with passed_count, failed_count,
+            results, and exception (set when validation raised).
         ctx: Plugin context for hook execution.
     """
+    if payload.exception is not None:
+        logger.info(f"[💥 VALIDATION-POST-CHECK] ERROR: {payload.exception!r}")
+        return
+
     passed = payload.passed_count
     failed = payload.failed_count
     total = len(payload.requirements)

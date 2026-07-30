@@ -162,6 +162,36 @@ convention.
 | `mellea.tool.is_control_flow` | Whether the tool is framework control flow (e.g., `final_answer` in ReAct) |
 | `mellea.tool.arguments_hash` | Stable hash of the arguments; recorded independent of content capture, when the call has arguments |
 
+#### `sampling` span
+
+One per sampling loop, when a `m.act()`, `m.instruct()`, or `@generative` call
+runs with a sampling strategy. Wraps each attempt and closes when the loop
+produces a passing sample or exhausts its budget.
+
+| Attribute | Description |
+| --------- | ----------- |
+| `mellea.strategy_type` | Sampling strategy class name (e.g., `RejectionSamplingStrategy`) |
+| `mellea.loop_budget` | Maximum iterations per subsample |
+| `mellea.requirement_count` | Number of requirements validated each iteration |
+| `mellea.sampling_success` | Whether at least one attempt passed all requirements |
+| `mellea.iterations_used` | Total iterations that completed across subsamples |
+| `mellea.failure_reason` | Human-readable reason when `mellea.sampling_success` is `false` |
+
+It also records an `iteration` span event per attempt and a `repair` span event
+per repair.
+
+#### `validation` span
+
+One per requirement-validation batch, wherever requirements are checked.
+
+| Attribute | Description |
+| --------- | ----------- |
+| `mellea.requirement_count` | Number of requirements validated |
+| `mellea.validation_passed` | Whether every requirement passed |
+| `mellea.passed_count` | Number of requirements that passed |
+| `mellea.failed_count` | Number of requirements that failed |
+| `mellea.failure_reasons` | List of failing requirements' reasons; recorded only when `MELLEA_TRACES_CONTENT=true` |
+
 #### `stream_with_chunking` span
 
 One per `stream_with_chunking()` run, wrapping the backend generation and any
@@ -221,19 +251,24 @@ start_session             (mellea.application)
 session                   (mellea.application)
 ├── action                (mellea.application)
 │   │                     [mellea.action_type=Instruction]
-│   ├── chat              (mellea.backend)
-│   │                     [gen_ai.provider.name=ollama]
-│   │                     [gen_ai.request.model=granite4.1:3b]
-│   │                     [gen_ai.usage.input_tokens=150]
-│   │                     [gen_ai.usage.output_tokens=42]
-│   └── requirement_validation  (mellea.application)
+│   └── sampling          (mellea.application)
+│       │                 [mellea.strategy_type=RejectionSamplingStrategy]
+│       ├── chat          (mellea.backend)
+│       │                 [gen_ai.provider.name=ollama]
+│       │                 [gen_ai.request.model=granite4.1:3b]
+│       │                 [gen_ai.usage.input_tokens=150]
+│       │                 [gen_ai.usage.output_tokens=42]
+│       └── validation    (mellea.application)
+│                         [mellea.requirement_count=2]
 ├── execute_tool search   (mellea.application)
 │                         [gen_ai.tool.name=search]
 │                         [mellea.tool.status=success]
-└── action                (mellea.application)
-    └── chat              (mellea.backend)
-                          [gen_ai.provider.name=openai]
-                          [gen_ai.request.model=gpt-4o]
+├── action                (mellea.application)
+│   └── chat              (mellea.backend)
+│                         [gen_ai.provider.name=openai]
+│                         [gen_ai.request.model=gpt-4o]
+└── validation            (mellea.application)   ← final m.validate() check
+                          [mellea.requirement_count=2]
 ```
 
 Tool execution happens after the generating call completes, so `execute_tool`
@@ -269,10 +304,11 @@ When you open a trace in your backend, look for these patterns:
 has accumulated many previous messages. Use
 [prefix caching](../advanced/prefix-caching-and-kv-blocks) to reduce cost.
 
-**Repeated `requirement_validation` spans beneath one `action`.** The value of
-`mellea.num_generate_logs` in the parent span tells you how many retries occurred.
-If the model keeps retrying, read the `mellea.response` attribute on each attempt to
-understand why validation is failing.
+**Repeated `validation` spans beneath one `sampling` span.** The model is
+retrying because requirements keep failing. Each `sampling` span records
+`mellea.iterations_used` (how many attempts ran); open a failing attempt's
+`validation` span and read `mellea.failure_reasons` to see why validation is
+failing (recorded as available when content capture is enabled).
 
 **Long gaps between spans.** A gap between the start of a backend `chat` span
 and the next application span usually indicates time spent waiting for the LLM.

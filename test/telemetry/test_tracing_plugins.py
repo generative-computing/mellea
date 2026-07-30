@@ -46,8 +46,10 @@ from mellea.telemetry.tracing_plugins import (
     _CONTEXT_ATTACH_SUPPORTED,
     BackendTracingPlugin,
     ComponentTracingPlugin,
+    SamplingTracingPlugin,
     StreamingTracingPlugin,
     ToolTracingPlugin,
+    ValidationTracingPlugin,
 )
 from test.telemetry.conftest import reset_tracing_state
 
@@ -70,6 +72,16 @@ def streaming_plugin():
 @pytest.fixture
 def tool_plugin():
     return ToolTracingPlugin()
+
+
+@pytest.fixture
+def sampling_plugin():
+    return SamplingTracingPlugin()
+
+
+@pytest.fixture
+def validation_plugin():
+    return ValidationTracingPlugin()
 
 
 @pytest.fixture
@@ -1277,3 +1289,336 @@ async def test_tool_span_skips_without_id(tool_plugin, enabled_tracing):
             {},
         )
     fake_tracer.start_span.assert_not_called()
+
+
+# SamplingTracingPlugin tests
+
+
+@pytest.mark.asyncio
+async def test_sampling_loop_start_starts_span_and_stashes_by_id(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import SamplingLoopStartPayload
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    payload = SamplingLoopStartPayload(
+        sampling_id="sid-1",
+        strategy_name="RejectionSamplingStrategy",
+        requirements=[object(), object()],
+        loop_budget=3,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(payload, {})
+
+    fake_tracer.start_span.assert_called_once_with("sampling")
+    assert "sid-1" in tracing._in_flight_spans
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.strategy_type"] == "RejectionSamplingStrategy"
+    assert attrs["mellea.loop_budget"] == 3
+    assert attrs["mellea.requirement_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_sampling_loop_start_skips_without_id(sampling_plugin, enabled_tracing):
+    from mellea.plugins.hooks.sampling import SamplingLoopStartPayload
+
+    fake_tracer = MagicMock()
+
+    payload = SamplingLoopStartPayload(sampling_id="")
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(payload, {})
+
+    fake_tracer.start_span.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sampling_iteration_records_span_event(sampling_plugin, enabled_tracing):
+    from mellea.plugins.hooks.sampling import (
+        SamplingIterationPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-2", loop_budget=1)
+    iteration = SamplingIterationPayload(
+        sampling_id="sid-2",
+        iteration=2,
+        all_validations_passed=False,
+        valid_count=1,
+        total_count=2,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_iteration(iteration, {})
+
+    fake_span.add_event.assert_called_once()
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "iteration"
+    assert attrs["iteration"] == 2
+    assert attrs["valid_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sampling_repair_records_span_event(sampling_plugin, enabled_tracing):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopStartPayload,
+        SamplingRepairPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-3", loop_budget=2)
+    repair = SamplingRepairPayload(
+        sampling_id="sid-3",
+        repair_type="rejection",
+        repair_iteration=1,
+        failed_validations=[(object(), object())],
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_repair(repair, {})
+
+    name, attrs = fake_span.add_event.call_args.args
+    assert name == "repair"
+    assert attrs["repair_type"] == "rejection"
+    assert attrs["failed_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sampling_loop_end_finishes_span(sampling_plugin, enabled_tracing):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopEndPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-4", loop_budget=2)
+    end = SamplingLoopEndPayload(
+        sampling_id="sid-4",
+        success=False,
+        iterations_used=2,
+        failure_reason="Budget exhausted after 2 iterations",
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_loop_end(end, {})
+
+    fake_span.end.assert_called_once()
+    assert "sid-4" not in tracing._in_flight_spans
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.sampling_success"] is False
+    assert attrs["mellea.iterations_used"] == 2
+    # A budget-exhausted loop is a routine outcome, not an error.
+    fake_span.set_status.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sampling_loop_end_marks_error_on_exception(
+    sampling_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.sampling import (
+        SamplingLoopEndPayload,
+        SamplingLoopStartPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    start = SamplingLoopStartPayload(sampling_id="sid-5", loop_budget=1)
+    end = SamplingLoopEndPayload(
+        sampling_id="sid-5", success=False, exception=RuntimeError("boom")
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await sampling_plugin.on_loop_start(start, {})
+        await sampling_plugin.on_loop_end(end, {})
+
+    fake_span.end.assert_called_once()
+    fake_span.record_exception.assert_called_once()
+    fake_span.set_status.assert_called_once()
+    assert _attrs(fake_span)["error.type"] == "RuntimeError"
+
+
+# ValidationTracingPlugin tests
+
+
+class _PassResult:
+    reason = None
+
+    def __bool__(self) -> bool:
+        return True
+
+
+class _FailResult:
+    def __init__(self, reason: str = "constraint not met") -> None:
+        self.reason = reason
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_validation_pre_check_starts_span_and_stashes_by_id(
+    validation_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.validation import ValidationPreCheckPayload
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    payload = ValidationPreCheckPayload(
+        validation_id="vid-1", requirements=[object(), object(), object()]
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await validation_plugin.on_pre_check(payload, {})
+
+    fake_tracer.start_span.assert_called_once_with("validation")
+    assert "vid-1" in tracing._in_flight_spans
+    assert _attrs(fake_span)["mellea.requirement_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_validation_pre_check_skips_without_id(
+    validation_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.validation import ValidationPreCheckPayload
+
+    fake_tracer = MagicMock()
+
+    payload = ValidationPreCheckPayload(validation_id="")
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await validation_plugin.on_pre_check(payload, {})
+
+    fake_tracer.start_span.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_validation_post_check_finishes_span_with_counts(
+    validation_plugin, enabled_tracing, monkeypatch
+):
+    monkeypatch.delenv("MELLEA_TRACES_CONTENT", raising=False)
+    monkeypatch.delenv(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False
+    )
+    from mellea.plugins.hooks.validation import (
+        ValidationPostCheckPayload,
+        ValidationPreCheckPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = ValidationPreCheckPayload(validation_id="vid-2", requirements=[object()])
+    post = ValidationPostCheckPayload(
+        validation_id="vid-2",
+        requirements=[object(), object()],
+        results=[_PassResult(), _FailResult("output too short")],
+        all_validations_passed=False,
+        passed_count=1,
+        failed_count=1,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await validation_plugin.on_pre_check(pre, {})
+        await validation_plugin.on_post_check(post, {})
+
+    fake_span.end.assert_called_once()
+    assert "vid-2" not in tracing._in_flight_spans
+    attrs = _attrs(fake_span)
+    assert attrs["mellea.validation_passed"] is False
+    assert attrs["mellea.passed_count"] == 1
+    assert attrs["mellea.failed_count"] == 1
+    # Content capture disabled → failure reasons omitted.
+    assert "mellea.failure_reasons" not in attrs
+
+
+@pytest.mark.asyncio
+async def test_validation_post_check_records_reasons_when_content_enabled(
+    validation_plugin, enabled_tracing, monkeypatch
+):
+    monkeypatch.setenv("MELLEA_TRACES_CONTENT", "true")
+    from mellea.plugins.hooks.validation import (
+        ValidationPostCheckPayload,
+        ValidationPreCheckPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = ValidationPreCheckPayload(validation_id="vid-3", requirements=[object()])
+    post = ValidationPostCheckPayload(
+        validation_id="vid-3",
+        requirements=[object()],
+        results=[_FailResult("output too short")],
+        all_validations_passed=False,
+        passed_count=0,
+        failed_count=1,
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await validation_plugin.on_pre_check(pre, {})
+        await validation_plugin.on_post_check(post, {})
+
+    # Only failing results contribute reasons, recorded as a list.
+    assert _attrs(fake_span)["mellea.failure_reasons"] == ["output too short"]
+
+
+@pytest.mark.asyncio
+async def test_validation_post_check_marks_error_on_exception(
+    validation_plugin, enabled_tracing
+):
+    from mellea.plugins.hooks.validation import (
+        ValidationPostCheckPayload,
+        ValidationPreCheckPayload,
+    )
+
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = ValidationPreCheckPayload(validation_id="vid-4", requirements=[object()])
+    post = ValidationPostCheckPayload(
+        validation_id="vid-4", exception=RuntimeError("boom")
+    )
+    with patch(
+        "mellea.telemetry.tracing.get_application_tracer", return_value=fake_tracer
+    ):
+        await validation_plugin.on_pre_check(pre, {})
+        await validation_plugin.on_post_check(post, {})
+
+    fake_span.end.assert_called_once()
+    fake_span.record_exception.assert_called_once()
+    fake_span.set_status.assert_called_once()
+    assert _attrs(fake_span)["error.type"] == "RuntimeError"

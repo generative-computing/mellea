@@ -134,7 +134,7 @@ register([
 - Loop start: strategy, budget, requirement count
 - Each iteration: pass/fail count, failed requirement names
 - Repair events: when triggered, repair type, failed requirements
-- Loop end: success/failure, iterations used, final statistics
+- Loop end: success/failure/error, iterations used, final statistics
 
 ## Enabling multiple plugins together
 

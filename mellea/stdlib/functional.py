@@ -1047,6 +1047,8 @@ async def avalidate(
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
 
+    validation_id = str(uuid.uuid4())
+
     if output is None:
         validation_target_ctx = context
     else:
@@ -1062,6 +1064,7 @@ async def avalidate(
         from ..plugins.hooks.validation import ValidationPreCheckPayload
 
         pre_payload = ValidationPreCheckPayload(
+            validation_id=validation_id,
             requirements=reqs,
             target=output,
             context=validation_target_ctx,
@@ -1082,40 +1085,47 @@ async def avalidate(
         )
         coroutines.append(val_result_co)
 
-    for val_result in await asyncio.gather(*coroutines):
-        rvs.append(val_result)
+    exception: BaseException | None = None
+    try:
+        for val_result in await asyncio.gather(*coroutines):
+            rvs.append(val_result)
 
-        # If the validator utilized a backend to generate a result, attach the corresponding
-        # info to the generate_logs list.
-        if generate_logs is not None:
-            if val_result.thunk is not None:
-                thunk = val_result.thunk
-                assert (
-                    thunk._generate_log is not None
-                )  # Cannot be None after generation.
-                generate_logs.append(thunk._generate_log)
-            else:
-                # We have to append None here so that the logs line-up.
-                # TODO: A better solution should be found for this edge case.
-                #       This is the only scenario where ValidationResults are supposed to line
-                #       up with GenerateLogs.
-                generate_logs.append(None)  # type: ignore
+            # If the validator utilized a backend to generate a result, attach the corresponding
+            # info to the generate_logs list.
+            if generate_logs is not None:
+                if val_result.thunk is not None:
+                    thunk = val_result.thunk
+                    assert (
+                        thunk._generate_log is not None
+                    )  # Cannot be None after generation.
+                    generate_logs.append(thunk._generate_log)
+                else:
+                    # We have to append None here so that the logs line-up.
+                    # TODO: A better solution should be found for this edge case.
+                    #       This is the only scenario where ValidationResults are supposed to line
+                    #       up with GenerateLogs.
+                    generate_logs.append(None)  # type: ignore
+    except BaseException as exc:
+        exception = exc
+        raise
+    finally:
+        # --- validation_post_check hook ---
+        if has_plugins(HookType.VALIDATION_POST_CHECK):
+            from ..plugins.hooks.validation import ValidationPostCheckPayload
 
-    # --- validation_post_check hook ---
-    if has_plugins(HookType.VALIDATION_POST_CHECK):
-        from ..plugins.hooks.validation import ValidationPostCheckPayload
-
-        post_payload = ValidationPostCheckPayload(
-            requirements=reqs,
-            results=rvs,
-            all_validations_passed=all(bool(r) for r in rvs),
-            passed_count=sum(1 for r in rvs if bool(r)),
-            failed_count=sum(1 for r in rvs if not bool(r)),
-        )
-        _, post_payload = await invoke_hook(
-            HookType.VALIDATION_POST_CHECK, post_payload, backend=backend
-        )
-        rvs = post_payload.results
+            post_payload = ValidationPostCheckPayload(
+                validation_id=validation_id,
+                requirements=reqs,
+                results=rvs,
+                all_validations_passed=exception is None and all(bool(r) for r in rvs),
+                passed_count=sum(1 for r in rvs if bool(r)),
+                failed_count=sum(1 for r in rvs if not bool(r)),
+                exception=exception,
+            )
+            _, post_payload = await invoke_hook(
+                HookType.VALIDATION_POST_CHECK, post_payload, backend=backend
+            )
+            rvs = post_payload.results
 
     return rvs
 

@@ -847,20 +847,17 @@ def start_streaming_span(
     )
 
 
-def add_streaming_event(
-    streaming_id: str, *, event_name: str, attributes: dict[str, Any]
-) -> None:
-    """Add an OTel span event to the in-flight `stream_with_chunking` span.
+def add_span_event(key: str, *, event_name: str, attributes: dict[str, Any]) -> None:
+    """Add an OTel span event to any in-flight application span.
 
-    Leaves the span in `_in_flight_spans` for a later `finish_streaming_span_*`
-    call to close.
+    Leaves the span in `_in_flight_spans` for a later `finish_*` call to close.
 
     Args:
-        streaming_id: Correlation key from the matching open call.
+        key: Correlation key from the matching open call.
         event_name: Span-event name.
         attributes: Span-event attributes; `None` values are skipped.
     """
-    entry = _in_flight_spans.get(streaming_id)
+    entry = _in_flight_spans.get(key)
     if entry is None:
         return
     span = entry[0]
@@ -945,6 +942,139 @@ def finish_streaming_span(
             exception=exception,
             description=failure_reason,
         )
+
+
+def start_sampling_span(
+    sampling_id: str,
+    *,
+    strategy_type: str | None,
+    loop_budget: int | None,
+    requirement_count: int | None,
+    attach_context: bool = True,
+) -> Span | None:
+    """Open the `sampling` span for a single sampling loop.
+
+    Iterations and repairs are recorded as span events on this span (see
+    `add_span_event`) rather than as child spans.
+
+    Args:
+        sampling_id: UUID correlating this loop across the sampling hooks.
+        strategy_type: Sampling strategy class name.
+        loop_budget: Maximum iterations per subsample.
+        requirement_count: Number of requirements validated each iteration.
+        attach_context: Whether to attach the span as the ambient OTel context.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        "sampling",
+        sampling_id,
+        {
+            "mellea.strategy_type": strategy_type,
+            "mellea.loop_budget": loop_budget,
+            "mellea.requirement_count": requirement_count,
+        },
+        attach_context=attach_context,
+    )
+
+
+def finish_sampling_span(
+    sampling_id: str,
+    *,
+    success: bool,
+    iterations_used: int | None = None,
+    failure_reason: str | None = None,
+    exception: BaseException | None = None,
+) -> None:
+    """End the `sampling` span.
+
+    Records the outcome attributes, or ERROR status with the exception when the
+    loop raised.
+
+    Args:
+        sampling_id: Correlation key from the matching open call.
+        success: `True` if at least one attempt passed all requirements.
+        iterations_used: Total iterations that completed across subsamples.
+        failure_reason: Reason recorded as `mellea.failure_reason` when
+            `success` is `False`.
+        exception: The exception that ended the loop, when one was raised.
+    """
+    if exception is None:
+        _finish_application_span_success(
+            sampling_id,
+            extra_attributes={
+                "mellea.sampling_success": success,
+                "mellea.iterations_used": iterations_used,
+                "mellea.failure_reason": failure_reason,
+            },
+        )
+    else:
+        _finish_application_span_error(sampling_id, exception=exception)
+
+
+def start_validation_span(
+    validation_id: str, *, requirement_count: int | None, attach_context: bool = True
+) -> Span | None:
+    """Open the `validation` span for a single requirement-validation batch.
+
+    Args:
+        validation_id: UUID correlating the pre/post validation hooks.
+        requirement_count: Number of requirements being validated.
+        attach_context: Whether to attach the span as the ambient OTel context.
+
+    Returns:
+        The span, or `None` if tracing is disabled.
+    """
+    return _start_application_span(
+        "validation",
+        validation_id,
+        {"mellea.requirement_count": requirement_count},
+        attach_context=attach_context,
+    )
+
+
+def finish_validation_span(
+    validation_id: str,
+    *,
+    all_validations_passed: bool | None = None,
+    passed_count: int | None = None,
+    failed_count: int | None = None,
+    failure_reasons: list[str] | None = None,
+    exception: BaseException | None = None,
+) -> None:
+    """End the `validation` span.
+
+    Records the outcome attributes, or ERROR status with the exception when the
+    check raised. `mellea.failure_reasons` is recorded only when content capture
+    is enabled, since a requirement's reason can echo model output.
+
+    Args:
+        validation_id: Correlation key from the matching open call.
+        all_validations_passed: `mellea.validation_passed`.
+        passed_count: `mellea.passed_count`.
+        failed_count: `mellea.failed_count`.
+        failure_reasons: One reason per failing requirement. Recorded as
+            `mellea.failure_reasons` only when content tracing is enabled.
+        exception: The exception that ended validation, when one was raised.
+    """
+    if exception is None:
+        reasons = (
+            [get_capture_content_value(r) for r in failure_reasons]
+            if failure_reasons and content_capture_enabled()
+            else None
+        )
+        _finish_application_span_success(
+            validation_id,
+            extra_attributes={
+                "mellea.validation_passed": all_validations_passed,
+                "mellea.passed_count": passed_count,
+                "mellea.failed_count": failed_count,
+                "mellea.failure_reasons": reasons,
+            },
+        )
+    else:
+        _finish_application_span_error(validation_id, exception=exception)
 
 
 __all__ = [
