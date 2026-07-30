@@ -8,14 +8,20 @@ Covers image preprocessing plus chat()/instruct() forwarding of multimodal input
 
 import base64
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import AudioBlock, ImageBlock
-from mellea.stdlib.components import Document, Instruction, Message
-from mellea.stdlib.context import SimpleContext
+from mellea.core import AudioBlock, ImageBlock, ModelToolCall
+from mellea.stdlib.components import (
+    Document,
+    Instruction,
+    Message,
+    MObject,
+    ToolMessage,
+)
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.functional import (
     _parse_and_clean_image_args,
     aact,
@@ -404,6 +410,62 @@ async def test_aact_no_raise_without_requirements():
     backend = _mock_backend_returning("ok")
     out, _ = await aact(CBlock("x"), SimpleContext(), backend, await_result=True)
     assert str(out) == "ok"
+
+
+# --- transform()/atransform() must persist the chosen tool message in context ---
+
+
+def _make_tool_message(name: str = "some_tool") -> ToolMessage:
+    """Return a real ToolMessage, as `_call_tools`/`_acall_tools` would produce."""
+    tool_call = ModelToolCall(name=name, func=MagicMock(), args={"arg": 1})
+    return ToolMessage(
+        role="tool",
+        content="tool result",
+        tool_output="tool result",
+        name=name,
+        args={"arg": 1},
+        tool=tool_call,
+    )
+
+
+@patch("mellea.stdlib.functional._call_tools")
+@patch("mellea.stdlib.functional.act")
+def test_transform_persists_chosen_tool_message_in_context(mock_act, mock_call_tools):
+    """The tool message transform() picks must survive in the returned Context.
+
+    `Context.add` is non-mutating (it returns a new context rather than
+    mutating in place), so `new_ctx.add(chosen_tool)` as a bare statement
+    silently drops the tool message.
+    """
+    from mellea.stdlib.functional import transform
+
+    ctx = ChatContext()
+    mock_act.return_value = (MagicMock(), ctx)
+    tool_message = _make_tool_message()
+    mock_call_tools.return_value = [tool_message]
+
+    _, new_ctx = transform(MObject(), "transform it", ctx, MagicMock())
+
+    assert tool_message in new_ctx.as_list()
+
+
+@pytest.mark.asyncio
+@patch("mellea.stdlib.functional._acall_tools", new_callable=AsyncMock)
+@patch("mellea.stdlib.functional.aact", new_callable=AsyncMock)
+async def test_atransform_persists_chosen_tool_message_in_context(
+    mock_aact, mock_acall_tools
+):
+    """Async counterpart of test_transform_persists_chosen_tool_message_in_context."""
+    from mellea.stdlib.functional import atransform
+
+    ctx = ChatContext()
+    mock_aact.return_value = (MagicMock(), ctx)
+    tool_message = _make_tool_message()
+    mock_acall_tools.return_value = [tool_message]
+
+    _, new_ctx = await atransform(MObject(), "transform it", ctx, MagicMock())
+
+    assert tool_message in new_ctx.as_list()
 
 
 if __name__ == "__main__":
