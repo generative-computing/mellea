@@ -699,12 +699,9 @@ async def aact(
             )
 
         if strategy is None:
-            # No strategy means no validate/repair loop, so `requirements` are
-            # not validated. Requirements the action renders into its prompt
-            # (e.g. those attached to an Instruction or generative stub) are
-            # exempt — they still shape generation. Any requirement that is only
-            # passed here, and not rendered by the action, would be silently
-            # dropped, so raise instead of failing quietly.
+            # No strategy means no validate/repair loop. Requirements the action
+            # renders into its prompt still shape generation, but any passed only
+            # here would be silently dropped — so raise instead (see message below).
             if requirements:
                 rendered = _requirements_rendered_by_action(action)
                 unvalidated = [r for r in requirements if id(r) not in rendered]
