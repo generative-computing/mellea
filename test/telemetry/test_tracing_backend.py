@@ -82,6 +82,36 @@ def span_exporter():
     disable_background_collection()
 
 
+@pytest.fixture
+def mocked_tracing_backend():
+    """Create an Ollama backend with a deterministic mocked transport."""
+
+    async def fake_chat(*args, **kwargs):
+        await asyncio.sleep(0.2)
+        return ollama.ChatResponse(
+            model="test-model",
+            created_at=None,
+            message=ollama.Message(role="assistant", content="test"),
+            done=True,
+            eval_count=10,
+            prompt_eval_count=5,
+        )
+
+    mock_async_instance = MagicMock()
+    mock_async_instance.chat.side_effect = fake_chat
+
+    with (
+        patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
+        patch.object(OllamaModelBackend, "_pull_ollama_model", return_value=True),
+        patch("mellea.backends.ollama.ollama.Client"),
+        patch(
+            "mellea.backends.ollama.ollama.AsyncClient",
+            return_value=mock_async_instance,
+        ),
+    ):
+        yield OllamaModelBackend(model_id="test-model")
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_streaming_span_creates_and_closes_span(span_exporter):
@@ -149,6 +179,156 @@ async def test_streaming_span_creates_and_closes_span(span_exporter):
         f"Span closed too early — duration {span_duration_s:.3f}s is shorter than "
         "the streaming delay, suggesting the span did not stay open for the full stream"
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_span_duration_captures_async_operation_mocked(
+    span_exporter, mocked_tracing_backend
+):
+    """Test span duration without requiring a live Ollama server."""
+    ctx = SimpleContext().add(
+        Message(role="user", content="Say 'test' and nothing else")
+    )
+
+    mot, _ = await mocked_tracing_backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+    await drain_background_tasks()
+    trace.get_tracer_provider().force_flush()  # type: ignore
+
+    backend_span = next(
+        (span for span in span_exporter.get_finished_spans() if span.name == "chat"),
+        None,
+    )
+    assert backend_span is not None, "Backend span not found"
+
+    span_duration_s = (backend_span.end_time - backend_span.start_time) / 1e9
+    assert span_duration_s >= 0.1, (
+        f"Span duration too short: {span_duration_s}s (expected >= 0.1s)"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_context_propagation_parent_child_mocked(
+    span_exporter, mocked_tracing_backend
+):
+    """Test parent-child span propagation without a live Ollama server."""
+    ctx = SimpleContext().add(
+        Message(role="user", content="Say 'test' and nothing else")
+    )
+
+    from mellea.telemetry import tracing
+
+    tracer = tracing._tracer_provider.get_tracer(__name__)
+    with tracer.start_as_current_span("parent_operation"):
+        mot, _ = await mocked_tracing_backend.generate_from_context(
+            Message(role="assistant", content=""), ctx
+        )
+        await mot.avalue()
+        await drain_background_tasks()
+
+    spans = span_exporter.get_finished_spans()
+    parent_recorded = next(
+        (span for span in spans if span.name == "parent_operation"), None
+    )
+    child_recorded = next((span for span in spans if span.name == "chat"), None)
+
+    assert parent_recorded is not None, "Parent span not found"
+    assert child_recorded is not None, "Child span not found"
+    assert child_recorded.parent is not None, "Child span has no parent context"
+    assert child_recorded.parent.span_id == parent_recorded.context.span_id, (
+        "Child span parent ID doesn't match parent span ID"
+    )
+    assert child_recorded.context.trace_id == parent_recorded.context.trace_id, (
+        "Child and parent have different trace IDs"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_token_usage_recorded_after_completion_mocked(
+    span_exporter, mocked_tracing_backend
+):
+    """Test deterministic token usage without a live Ollama server."""
+    ctx = SimpleContext().add(
+        Message(role="user", content="Say 'test' and nothing else")
+    )
+
+    mot, _ = await mocked_tracing_backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+    await drain_background_tasks()
+
+    backend_span = next(
+        (span for span in span_exporter.get_finished_spans() if span.name == "chat"),
+        None,
+    )
+    assert backend_span is not None, "Backend span not found"
+
+    attributes = dict(backend_span.attributes)
+    assert attributes.get("gen_ai.provider.name") == "ollama", "Incorrect provider name"
+    assert attributes.get("gen_ai.request.model") == "test-model"
+    assert attributes.get("gen_ai.usage.input_tokens") == 5
+    assert attributes.get("gen_ai.usage.output_tokens") == 10
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_span_not_closed_prematurely_mocked(
+    span_exporter, mocked_tracing_backend
+):
+    """Test that a mocked async operation keeps its span open until completion."""
+    ctx = SimpleContext().add(Message(role="user", content="Count to 5"))
+
+    mot, _ = await mocked_tracing_backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+
+    spans_before = span_exporter.get_finished_spans()
+    backend_spans_before = [span for span in spans_before if span.name == "chat"]
+
+    await mot.avalue()
+    await drain_background_tasks()
+
+    spans_after = span_exporter.get_finished_spans()
+    backend_spans_after = [span for span in spans_after if span.name == "chat"]
+    assert len(backend_spans_after) > len(backend_spans_before), (
+        "Span was closed before async completion"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_multiple_generations_separate_spans_mocked(
+    span_exporter, mocked_tracing_backend
+):
+    """Test separate generation spans without a live Ollama server."""
+    ctx = SimpleContext().add(Message(role="user", content="Say 'test'"))
+
+    mot1, _ = await mocked_tracing_backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot1.avalue()
+
+    mot2, _ = await mocked_tracing_backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot2.avalue()
+    await drain_background_tasks()
+
+    backend_spans = [
+        span for span in span_exporter.get_finished_spans() if span.name == "chat"
+    ]
+    assert len(backend_spans) >= 2, (
+        f"Expected at least 2 spans, got {len(backend_spans)}"
+    )
+
+    span_ids = {span.context.span_id for span in backend_spans}
+    assert len(span_ids) >= 2, "Spans should have unique IDs"
 
 
 @pytest.mark.e2e
