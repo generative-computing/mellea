@@ -11,7 +11,13 @@ import jinja2.sandbox
 import pytest
 
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, ModelIdentifier
-from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from mellea.core import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    NodeData,
+    TemplateRepresentation,
+)
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.components import Instruction, Message, MObject
 
@@ -80,7 +86,7 @@ def test_to_chat_messages_preserves_audio(tf: TemplateFormatter):
     ]
 
     class _AudioComponent(Component[str]):
-        def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+        def parts(self) -> list[NodeData]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:
@@ -191,7 +197,7 @@ def test_no_module(tf: TemplateFormatter):
 
 def test_no_template(tf: TemplateFormatter):
     class _NoTemplate(Component[str]):
-        def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+        def parts(self) -> list[NodeData]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:

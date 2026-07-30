@@ -18,6 +18,7 @@ from mellea.core import (
     ComponentParseError,
     Context,
     ModelOutputThunk,
+    NodeData,
     Requirement,
     SampleActionType,
     ValidationResult,
@@ -32,7 +33,7 @@ class FloatComp(Component[float]):
     def __init__(self, value: str) -> None:
         self.value = value
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         return []
 
     def format_for_llm(self) -> str:
@@ -55,7 +56,7 @@ class IntComp(FloatComp, Component[int]):
 
 
 class ExceptionRaisingComp(Component[int]):
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[NodeData]:
         return []
 
     def format_for_llm(self) -> str:

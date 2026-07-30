@@ -1414,7 +1414,9 @@ class ContextTurn:
             or `None` for an output-only partial turn.
         output (ModelOutputThunk | Component | None): The model's output thunk for this turn,
             or a manually-added response component (e.g., `Message` with role="assistant"),
-            or `None` for an input-only partial turn.
+            or `None` for an input-only partial turn. Deliberately narrower than
+            `model_input`'s `NodeData`: a raw `CBlock` is not a valid model output,
+            so `CBlock` is excluded from this union.
 
     """
 

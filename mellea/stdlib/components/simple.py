@@ -11,6 +11,10 @@ the go-to component type for ad-hoc prompts that do not require a dedicated
 
 from typing import Any
 
+# NodeData is the union type hint for `parts()`. CBlock, Component, and
+# ModelOutputThunk are also imported for the runtime `issubclass` check in
+# `_kwargs_type_check` and the `match` arms in `make_json_string` — they are
+# not a leftover incomplete migration to the NodeData alias.
 from ...core import CBlock, Component, ModelOutputThunk, NodeData
 
 
