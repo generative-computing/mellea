@@ -523,6 +523,8 @@ def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[dict]]:
             content = py_file.read_text(encoding="utf-8")
             tree = ast.parse(content, filename=str(py_file))
         except (OSError, SyntaxError, UnicodeError):
+            # Unparsable/unreadable files are skipped here; syntax errors are
+            # surfaced by ruff/mypy CI jobs, not by this backtick check.
             continue
 
         rel = py_file.relative_to(source_dir.parent).as_posix()
