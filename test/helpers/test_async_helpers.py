@@ -100,6 +100,89 @@ class TestSendToQueue:
         assert "STREAM_TIMEOUT" in str(item)
         assert q.empty()  # no trailing sentinel after a timeout
 
+    async def test_chunk_timeout_calls_timeout_callback(self):
+        """A stream-guard timeout notifies the backend before returning."""
+        timeout_called = False
+
+        def on_timeout() -> None:
+            nonlocal timeout_called
+            timeout_called = True
+
+        async def _stalling_gen():
+            yield "first"
+            await asyncio.sleep(1)
+            yield "never"  # pragma: no cover
+
+        q: asyncio.Queue = asyncio.Queue()
+        await send_to_queue(
+            _stalling_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+        )
+
+        assert await q.get() == "first"
+        assert isinstance(await q.get(), TimeoutError)
+        assert timeout_called is True
+
+    async def test_chunk_timeout_callback_error_does_not_mask_timeout(self):
+        """A backend cleanup failure must not replace the stream timeout."""
+
+        def on_timeout() -> None:
+            raise RuntimeError("cleanup failed")
+
+        async def _stalling_gen():
+            await asyncio.sleep(1)
+            yield "never"  # pragma: no cover
+
+        q: asyncio.Queue = asyncio.Queue()
+        await send_to_queue(
+            _stalling_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+        )
+
+        item = await q.get()
+        assert isinstance(item, TimeoutError)
+        assert "STREAM_TIMEOUT" in str(item)
+
+    async def test_completed_stream_does_not_call_timeout_callback(self):
+        """Normal completion leaves the backend cancellation hook untouched."""
+        timeout_called = False
+
+        def on_timeout() -> None:
+            nonlocal timeout_called
+            timeout_called = True
+
+        async def _completed_gen():
+            yield "done"
+
+        q: asyncio.Queue = asyncio.Queue()
+        await send_to_queue(
+            _completed_gen(), q, chunk_timeout=0.05, on_timeout=on_timeout
+        )
+
+        assert await q.get() == "done"
+        assert await q.get() is None
+        assert timeout_called is False
+
+    async def test_backend_timeout_does_not_call_timeout_callback(self):
+        """A backend-raised TimeoutError is not mistaken for the stream guard."""
+        timeout_called = False
+
+        def on_timeout() -> None:
+            nonlocal timeout_called
+            timeout_called = True
+
+        async def _backend_timeout():
+            raise TimeoutError("backend timeout")
+            yield  # pragma: no cover
+
+        q: asyncio.Queue = asyncio.Queue()
+        await send_to_queue(
+            _backend_timeout(), q, chunk_timeout=1, on_timeout=on_timeout
+        )
+
+        item = await q.get()
+        assert isinstance(item, TimeoutError)
+        assert str(item) == "backend timeout"
+        assert timeout_called is False
+
     async def test_chunk_timeout_none_disables_timeout(self):
         """chunk_timeout=None allows a slow-but-completing iterator to finish normally."""
 
