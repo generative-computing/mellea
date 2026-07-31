@@ -48,7 +48,7 @@ def test_validate_source_links_fail():
         error_count, errors = validate_source_links(docs_dir, "0.5.0")
         assert error_count == 1
         assert len(errors) == 1
-        assert "Invalid source link" in errors[0]
+        assert "Invalid source link" in errors[0]["message"]
 
 
 def test_validate_mdx_syntax_pass():
@@ -74,7 +74,7 @@ def test_validate_mdx_syntax_missing_frontmatter():
 
         error_count, errors = validate_mdx_syntax(docs_dir)
         assert error_count == 1
-        assert "Missing frontmatter" in errors[0]
+        assert "Missing frontmatter" in errors[0]["message"]
 
 
 def test_validate_mdx_syntax_unclosed_code_block():
@@ -86,7 +86,7 @@ def test_validate_mdx_syntax_unclosed_code_block():
 
         error_count, errors = validate_mdx_syntax(docs_dir)
         assert error_count == 1
-        assert "Unclosed code block" in errors[0]
+        assert "Unclosed code block" in errors[0]["message"]
 
 
 def test_validate_internal_links_pass():
@@ -115,7 +115,7 @@ def test_validate_internal_links_broken():
 
         error_count, errors = validate_internal_links(docs_dir)
         assert error_count == 1
-        assert "Broken link" in errors[0]
+        assert "Broken link" in errors[0]["message"]
 
 
 def test_validate_internal_links_external_ignored():
@@ -356,7 +356,7 @@ def test_validate_stale_files_review_artifact():
 
         error_count, errors = validate_stale_files(docs_root)
         assert error_count == 1
-        assert "review artifact" in errors[0].lower()
+        assert "review artifact" in errors[0]["message"]
 
 
 def test_validate_stale_files_superseded_index():
@@ -369,7 +369,7 @@ def test_validate_stale_files_superseded_index():
 
         error_count, errors = validate_stale_files(docs_root)
         assert error_count == 1
-        assert "superseded" in errors[0].lower()
+        assert "superseded" in errors[0]["message"]
 
 
 def test_validate_stale_files_superseded_tutorial():
@@ -382,7 +382,7 @@ def test_validate_stale_files_superseded_tutorial():
 
         error_count, errors = validate_stale_files(docs_root)
         assert error_count == 1
-        assert "superseded" in errors[0].lower()
+        assert "superseded" in errors[0]["message"]
 
 
 def test_validate_doc_imports_pass():
@@ -409,7 +409,7 @@ def test_validate_doc_imports_bad_symbol():
 
         error_count, errors = validate_doc_imports(docs_dir)
         assert error_count == 1
-        assert "symbol not found" in errors[0]
+        assert "symbol not found" in errors[0]["message"]
 
 
 def test_validate_doc_imports_skips_non_python_blocks():
@@ -509,7 +509,7 @@ def test_validate_examples_catalogue_missing():
 
         error_count, errors = validate_examples_catalogue(docs_root)
         assert error_count == 1
-        assert "unlisted_example" in errors[0]
+        assert "unlisted_example" in errors[0]["message"]
 
 
 def test_validate_examples_catalogue_skips_helper():

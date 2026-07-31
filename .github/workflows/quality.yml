@@ -136,7 +136,7 @@ jobs:
         run: >-
           uv run -m pytest -v --junit-xml=/tmp/pytest-results.xml
           test
-          tooling/docs-autogen/test_validate.py::test_repository_docstrings_use_markdown_backticks
+          tooling/docs-autogen/test_validate.py
       - name: Send failure message tests
         if: failure() # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."
