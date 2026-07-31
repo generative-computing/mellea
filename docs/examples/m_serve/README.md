@@ -112,14 +112,13 @@ from mellea import start_session
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.core import Requirement
 
-session = start_session()
-
 def serve(input: list[ChatMessage],
           requirements: list[str] | None = None,
           model_options: dict | None = None):
     """Main serving function - called by m serve."""
     message = input[-1].content
 
+    session = start_session()
     result = session.instruct(
         description=message,
         requirements=requirements or [],
