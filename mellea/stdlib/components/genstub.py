@@ -632,11 +632,18 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 "calling a generative stub with precondition requirements but no args to validate the preconditions against; ignoring precondition validation"
             )
 
+        # The stub renders its own requirements into the prompt regardless of
+        # strategy, so only forward them to act when a strategy will validate
+        # them. Passing them without a strategy would raise (see mfuncs.aact).
+        forwarded_requirements = (
+            stub_copy.requirements if extracted.strategy is not None else None
+        )
+
         response, context = None, None
         if extracted.m is not None:
             response = extracted.m.act(
                 stub_copy,
-                requirements=stub_copy.requirements,
+                requirements=forwarded_requirements,
                 strategy=extracted.strategy,
                 format=self._response_model,
                 model_options=extracted.model_options,
@@ -649,7 +656,7 @@ class SyncGenerativeStub(GenerativeStub, Generic[P, R]):
                 stub_copy,
                 extracted.context,
                 extracted.backend,
-                requirements=stub_copy.requirements,
+                requirements=forwarded_requirements,
                 strategy=extracted.strategy,
                 format=self._response_model,
                 model_options=extracted.model_options,
@@ -771,10 +778,17 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                     "calling a generative stub with precondition requirements but no args to validate the preconditions against; ignoring precondition validation"
                 )
 
+            # The stub renders its own requirements into the prompt regardless of
+            # strategy, so only forward them to aact when a strategy will validate
+            # them. Passing them without a strategy would raise (see mfuncs.aact).
+            forwarded_requirements = (
+                stub_copy.requirements if extracted.strategy is not None else None
+            )
+
             if extracted.m is not None:
                 response = await extracted.m.aact(
                     stub_copy,
-                    requirements=stub_copy.requirements,
+                    requirements=forwarded_requirements,
                     strategy=extracted.strategy,
                     format=self._response_model,
                     model_options=extracted.model_options,
@@ -788,7 +802,7 @@ class AsyncGenerativeStub(GenerativeStub, Generic[P, R]):
                     stub_copy,
                     extracted.context,
                     extracted.backend,
-                    requirements=stub_copy.requirements,
+                    requirements=forwarded_requirements,
                     strategy=extracted.strategy,
                     format=self._response_model,
                     model_options=extracted.model_options,

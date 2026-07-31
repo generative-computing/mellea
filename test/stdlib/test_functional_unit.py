@@ -312,12 +312,12 @@ def test_act_sampling_results_without_strategy_raises():
 
 
 @pytest.mark.asyncio
-async def test_aact_raises_for_strategy_only_requirements():
-    """aact rejects requirements not rendered by the action when strategy is None.
+async def test_aact_raises_for_requirements_without_strategy():
+    """aact rejects any requirements passed without a strategy (issue #1448).
 
-    A raw CBlock has no `parts()`, so a requirement passed via the kwarg can only
-    be validated by a strategy. With `strategy=None` it would go unchecked, so
-    aact must raise ValueError (issue #1448).
+    With `strategy=None` there is no validate/repair loop, so a requirement passed
+    via the kwarg can never be validated — it would be silently dropped. aact
+    raises ValueError instead. This holds regardless of the action type.
     """
     from mellea.core import CBlock
     from mellea.stdlib.requirements import Requirement
@@ -332,8 +332,8 @@ async def test_aact_raises_for_strategy_only_requirements():
         )
 
 
-def test_act_raises_for_strategy_only_requirements():
-    """act surfaces the same ValueError as aact for strategy-only requirements."""
+def test_act_raises_for_requirements_without_strategy():
+    """act surfaces the same ValueError as aact for requirements without a strategy."""
     from mellea.core import CBlock
     from mellea.stdlib.functional import act
     from mellea.stdlib.requirements import Requirement
@@ -349,13 +349,14 @@ def test_act_raises_for_strategy_only_requirements():
 
 
 @pytest.mark.asyncio
-async def test_aact_no_raise_when_requirements_attached_to_component():
-    """aact does not raise when the requirements are rendered by the action.
+async def test_aact_raises_even_when_requirements_attached_to_component():
+    """aact raises for requirements-without-strategy even if attached to the action.
 
-    An Instruction attaches its requirements to the component (they appear in
-    `parts()` and are rendered into the prompt), so passing those same objects as
-    the kwarg with `strategy=None` is legitimate — this is the generative-stubs
-    pattern (issue #1448).
+    aact makes no exception for requirements a component also renders into its own
+    prompt — the check is purely on the `requirements` kwarg. Callers like
+    `instruct`/`ainstruct` avoid the raise by not forwarding their Instruction's
+    requirements when no strategy is set; the Instruction still renders them
+    (issue #1448).
     """
     from mellea.stdlib.requirements import Requirement
 
@@ -363,11 +364,33 @@ async def test_aact_no_raise_when_requirements_attached_to_component():
     req = Requirement("must be short")
     instruction = Instruction(description="say hi", requirements=[req])
 
-    out, _ = await aact(
-        instruction,
+    with pytest.raises(ValueError):
+        await aact(
+            instruction,
+            SimpleContext(),
+            backend,
+            requirements=instruction.requirements,
+            await_result=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_ainstruct_does_not_raise_for_requirements_without_strategy():
+    """ainstruct(strategy=None, requirements=...) does not forward reqs, so no raise.
+
+    The Instruction renders its own requirements into the prompt; ainstruct only
+    forwards them to aact when a strategy is present, so passing requirements with
+    `strategy=None` generates without raising (issue #1448).
+    """
+    from mellea.stdlib.functional import ainstruct
+
+    backend = _mock_backend_returning("ok")
+    out, _ = await ainstruct(
+        "say hi",
         SimpleContext(),
         backend,
-        requirements=instruction.requirements,
+        requirements=["must be short"],
+        strategy=None,
         await_result=True,
     )
     assert str(out) == "ok"
