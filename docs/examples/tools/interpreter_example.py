@@ -41,11 +41,17 @@ def example_3(m: MelleaSession):
     if plot_output.tool_calls is None:
         raise ValueError("Expected tool_calls but got None")
 
-    code = plot_output.tool_calls["python"].args["code"]
+    python_tool = next(
+        (tc for tc in plot_output.tool_calls if tc.name == "python"), None
+    )
+    if python_tool is None:
+        raise ValueError("Expected 'python' tool in tool_calls")
+
+    code = python_tool.args["code"]
     print(f"Going to execute the following code:\n```python\n{code}\n```")
 
     # Call the tool.
-    exec_result = plot_output.tool_calls["python"].call_func()
+    exec_result = python_tool.call_func()
 
     print(exec_result)
 
@@ -76,11 +82,17 @@ def example_4(m: MelleaSession):
     if plot_output.tool_calls is None:
         raise ValueError("Expected tool_calls but got None")
 
-    code = plot_output.tool_calls["python"].args["code"]
+    python_tool = next(
+        (tc for tc in plot_output.tool_calls if tc.name == "python"), None
+    )
+    if python_tool is None:
+        raise ValueError("Expected 'python' tool in tool_calls")
+
+    code = python_tool.args["code"]
     print(f"Going to execute the following code:\n```python\n{code}\n```")
 
     # Call the tool.
-    exec_result = plot_output.tool_calls["python"].call_func()
+    exec_result = python_tool.call_func()
 
     print(exec_result)
 

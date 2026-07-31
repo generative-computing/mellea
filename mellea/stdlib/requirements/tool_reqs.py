@@ -45,7 +45,9 @@ def uses_tool(tool_name: str | Callable, check_only: bool = False) -> Requiremen
         assert output is not None
         if output.tool_calls is None:
             return ValidationResult(result=False, reason="There were no tool calls.")
-        return ValidationResult(result=tool_name in output.tool_calls)
+        return ValidationResult(
+            result=any(tc.name == tool_name for tc in output.tool_calls)
+        )
 
     return Requirement(
         description=f"Use the {tool_name} tool.",
@@ -94,16 +96,19 @@ def tool_arg_validator(
             )
 
         if tool_name is not None:
-            if tool_name not in output.tool_calls:
+            matching_call = next(
+                (tc for tc in output.tool_calls if tc.name == tool_name), None
+            )
+            if matching_call is None:
                 return ValidationResult(
                     result=False, reason=f"Tool {tool_name} was not called."
                 )
-            if arg_name not in output.tool_calls[tool_name].args:
+            if arg_name not in matching_call.args:
                 return ValidationResult(
                     result=False,
                     reason=f"Tool {tool_name} did not call argument {arg_name}",
                 )
-            arg_value = output.tool_calls[tool_name].args[arg_name]
+            arg_value = matching_call.args[arg_name]
             validate_result = validation_fn(arg_value)
             if validate_result:
                 return ValidationResult(result=True)
@@ -113,14 +118,14 @@ def tool_arg_validator(
                     reason=f"Validation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                 )
         else:
-            for tool in output.tool_calls.keys():
-                if arg_name in output.tool_calls[tool].args:
-                    arg_value = output.tool_calls[tool].args[arg_name]
+            for tool_call in output.tool_calls:
+                if arg_name in tool_call.args:
+                    arg_value = tool_call.args[arg_name]
                     validate_result = validation_fn(arg_value)
                     if not validate_result:
                         return ValidationResult(
                             result=False,
-                            reason=f"Validation did not pass for {tool}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
+                            reason=f"Validation did not pass for {tool_call.name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                         )
             return ValidationResult(result=True)
 

@@ -44,8 +44,10 @@ print(result)
 
 # The model chose to call a tool — execute it
 if result.tool_calls:
-    tool_output = result.tool_calls[wiki.name].call_func()
-    print(tool_output)
+    tool_call = next((tc for tc in result.tool_calls if tc.name == wiki.name), None)
+    if tool_call:
+        tool_output = tool_call.call_func()
+        print(tool_output)
 ```
 
 `from_langchain()` reads the tool's name and schema directly from the `BaseTool`

@@ -370,7 +370,9 @@ def add_tools_from_context_actions(
     """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
 
     Args:
-        tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
+        tools_dict: Mutable mapping of tool name to tool instance; modified in-place. Dict keys are unique,
+            so if multiple components define tools with the same name, the last one wins (earlier definitions
+            are silently overwritten).
         ctx_actions: List of `Component`, `CBlock`, or `ModelOutputThunk` objects whose template
             representations may declare tools, or `None` to skip.
     """

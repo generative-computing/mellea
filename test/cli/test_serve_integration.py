@@ -257,13 +257,13 @@ class TestToolCallingIntegration:
         """Test that tool calls are properly formatted in HTTP response."""
         mock_output = ModelOutputThunk("I'll check the weather.")
         mock_tool = MockWeatherTool()
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather",
                 func=mock_tool,
                 args={"location": "Paris", "units": "celsius"},
             )
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         response = client.post(
@@ -301,17 +301,17 @@ class TestToolCallingIntegration:
         """Test multiple tool calls in a single HTTP response."""
         mock_output = ModelOutputThunk("Checking multiple locations.")
         mock_tool = MockWeatherTool()
-        mock_output.tool_calls = {
-            "weather_paris": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             ),
-            "weather_london": ModelToolCall(
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "London"}
             ),
-            "weather_tokyo": ModelToolCall(
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Tokyo"}
             ),
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         response = client.post(
@@ -344,11 +344,11 @@ class TestToolCallingIntegration:
         """Test that usage info is included with tool calls."""
         mock_output = ModelOutputThunk("Calling tool.")
         mock_tool = MockWeatherTool()
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
-        }
+        ]
         mock_output.generation.usage = {
             "prompt_tokens": 50,
             "completion_tokens": 20,
@@ -381,11 +381,11 @@ class TestStreamingWithToolCalls:
         """Test streaming response with tool calls via HTTP."""
         mock_output = ModelOutputThunk("I'll check that for you.")
         mock_tool = MockWeatherTool()
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         response = client.post(
@@ -433,14 +433,14 @@ class TestStreamingWithToolCalls:
         """Test streaming with multiple tool calls via HTTP."""
         mock_output = ModelOutputThunk("Checking multiple locations.")
         mock_tool = MockWeatherTool()
-        mock_output.tool_calls = {
-            "weather_1": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             ),
-            "weather_2": ModelToolCall(
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "London"}
             ),
-        }
+        ]
         mock_module.serve.return_value = mock_output
 
         response = client.post(
@@ -479,11 +479,11 @@ class TestStreamingWithToolCalls:
         """Test streaming tool calls with usage info via HTTP."""
         mock_output = ModelOutputThunk("Calling tool.")
         mock_tool = MockWeatherTool()
-        mock_output.tool_calls = {
-            "get_weather": ModelToolCall(
+        mock_output.tool_calls = [
+            ModelToolCall(
                 name="get_weather", func=mock_tool, args={"location": "Paris"}
             )
-        }
+        ]
         mock_output.generation.usage = {
             "prompt_tokens": 30,
             "completion_tokens": 15,

@@ -72,9 +72,9 @@ class TestExtractModelToolRequests:
         )
         result = extract_model_tool_requests(tools, response)
         assert result is not None
-        assert "get_weather" in result
-        assert result["get_weather"].name == "get_weather"
-        assert result["get_weather"].args["location"] == "Dallas"
+        assert len(result) == 1
+        assert result[0].name == "get_weather"
+        assert result[0].args["location"] == "Dallas"
 
     def test_no_tool_calls_returns_none(self):
         tools = {"get_weather": _make_tool()}
@@ -114,8 +114,8 @@ class TestExtractModelToolRequests:
         result = extract_model_tool_requests(tools, response)
         assert result is not None
         assert len(result) == 2
-        assert "get_weather" in result
-        assert "search" in result
+        assert result[0].name == "get_weather"
+        assert result[1].name == "search"
 
     def test_null_arguments(self):
         """Tool call with None arguments produces empty args dict."""
@@ -128,7 +128,7 @@ class TestExtractModelToolRequests:
         response = _response_with_tool_calls([_tool_call("ping", None)])
         result = extract_model_tool_requests(tools, response)
         assert result is not None
-        assert result["ping"].args == {}
+        assert result[0].args == {}
 
     def test_mixed_known_and_unknown(self):
         """Known tool is extracted; unknown tool is silently skipped."""
@@ -143,7 +143,7 @@ class TestExtractModelToolRequests:
         result = extract_model_tool_requests(tools, response)
         assert result is not None
         assert len(result) == 1
-        assert "get_weather" in result
+        assert result[0].name == "get_weather"
 
     def test_malformed_json_arguments_skipped(self, caplog):
         """Malformed JSON from the model skips that tool call."""
@@ -176,11 +176,48 @@ class TestExtractModelToolRequests:
 
         assert result is not None
         assert len(result) == 1
-        assert result["get_weather"].args["location"] == "LA"
+        assert result[0].args["location"] == "LA"
         assert any(
             "malformed JSON arguments for tool 'get_weather'" in record.message
             for record in caplog.records
         )
+
+    def test_duplicate_same_name_tool_calls(self):
+        """Parallel calls to the same tool with different arguments are preserved."""
+        tool = _make_tool("search")
+        tools = {"search": tool}
+
+        response = _response_with_tool_calls(
+            [
+                {
+                    "id": "call_1",
+                    "function": {
+                        "name": "search",
+                        "arguments": json.dumps({"q": "Python"}),
+                    },
+                },
+                {
+                    "id": "call_2",
+                    "function": {
+                        "name": "search",
+                        "arguments": json.dumps({"q": "JavaScript"}),
+                    },
+                },
+            ]
+        )
+
+        result = extract_model_tool_requests(tools, response)
+
+        assert result is not None
+        assert len(result) == 2
+
+        assert result[0].name == "search"
+        assert result[0].args["q"] == "Python"
+        assert result[0].tool_call_id == "call_1"
+
+        assert result[1].name == "search"
+        assert result[1].args["q"] == "JavaScript"
+        assert result[1].tool_call_id == "call_2"
 
 
 # --- chat_completion_delta_merge ---
@@ -563,7 +600,7 @@ class TestBuildToolCalls:
             func=tool,
             args={"timestamp": datetime(2024, 1, 15), "amount": Decimal("123.45")},
         )
-        output = ModelOutputThunk(value="test", tool_calls={"test_tool": tool_call})
+        output = ModelOutputThunk(value="test", tool_calls=[tool_call])
 
         result = build_tool_calls(output)
 

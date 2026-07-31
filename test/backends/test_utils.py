@@ -83,8 +83,8 @@ def test_to_tool_calls_single_call():
     raw = _tool_call_json("add", {"x": 3, "y": 4})
     result = to_tool_calls(registry, raw)
     assert result is not None
-    assert "add" in result
-    mtc = result["add"]
+    assert len(result) == 1
+    mtc = result[0]
     assert isinstance(mtc, ModelToolCall)
     assert mtc.name == "add"
     assert mtc.args == {"x": 3, "y": 4}
@@ -115,7 +115,7 @@ def test_to_tool_calls_empty_params_cleared():
     raw = _tool_call_json("noop", {"hallucinated": "arg"})
     result = to_tool_calls(registry, raw)
     assert result is not None
-    assert result["noop"].args == {}
+    assert result[0].args == {}
 
 
 def test_to_tool_calls_string_arg_coerced_to_int():
@@ -124,8 +124,8 @@ def test_to_tool_calls_string_arg_coerced_to_int():
     raw = _tool_call_json("add", {"x": "5", "y": "10"})
     result = to_tool_calls(registry, raw)
     assert result is not None
-    assert result["add"].args["x"] == 5
-    assert result["add"].args["y"] == 10
+    assert result[0].args["x"] == 5
+    assert result[0].args["y"] == 10
 
 
 # --- to_chat ---

@@ -49,7 +49,7 @@ class CompletionUsage(BaseModel):
 
 def extract_model_tool_requests(
     tools: dict[str, AbstractMelleaTool], response: dict[str, Any]
-) -> dict[str, ModelToolCall] | None:
+) -> list[ModelToolCall] | None:
     """Extract tool calls from the dict representation of an OpenAI-like chat response object.
 
     Args:
@@ -58,43 +58,55 @@ def extract_model_tool_requests(
             (must contain a `"message"` key).
 
     Returns:
-        Mapping of tool name to `ModelToolCall` for each requested tool call, or
-        `None` if no tool calls were found.
+        List of `ModelToolCall` for each requested tool call (order preserved),
+        or `None` if no tool calls were found.
     """
     from ..backends.tools import validate_tool_arguments
     from ..core import MelleaLogger, ModelToolCall
 
-    model_tool_calls: dict[str, ModelToolCall] = {}
+    model_tool_calls: list[ModelToolCall] = []
     calls = response["message"].get("tool_calls", None)
     if calls:
         for tool_call in calls:
-            tool_name = tool_call["function"]["name"]  # type: ignore
-            tool_args = tool_call["function"]["arguments"]  # type: ignore
+            try:
+                tool_name = tool_call["function"]["name"]  # type: ignore
+                tool_args = tool_call["function"]["arguments"]  # type: ignore
 
-            func = tools.get(tool_name)
-            if func is None:
-                MelleaLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
-                )
-                continue  # skip this function if we can't find it.
-
-            args = {}
-            if tool_args is not None:
-                # Returns the args as a string. Parse it here.
-                try:
-                    args = json.loads(tool_args)
-                except json.JSONDecodeError:
+                func = tools.get(tool_name)
+                if func is None:
                     MelleaLogger.get_logger().warning(
-                        f"model returned malformed JSON arguments for tool {tool_name!r} "
-                        f"(possibly truncated during streaming); skipping this tool call: {tool_args!r}"
+                        f"model attempted to call a non-existing function: {tool_name}"
                     )
-                    continue
+                    continue  # skip this function if we can't find it.
 
-            # Validate and coerce argument types
-            validated_args = validate_tool_arguments(func, args, strict=False)
-            model_tool_calls[tool_name] = ModelToolCall(
-                tool_name, func, validated_args, tool_call_id=tool_call.get("id")
-            )
+                args = {}
+                if tool_args is not None:
+                    # Returns the args as a string. Parse it here.
+                    try:
+                        args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        MelleaLogger.get_logger().warning(
+                            f"model returned malformed JSON arguments for tool {tool_name!r} "
+                            f"(possibly truncated during streaming); skipping this tool call: {tool_args!r}"
+                        )
+                        continue
+
+                # Validate and coerce argument types
+                validated_args = validate_tool_arguments(func, args, strict=False)
+                model_tool_calls.append(
+                    ModelToolCall(
+                        tool_name,
+                        func,
+                        validated_args,
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as e:
+                MelleaLogger.get_logger().warning(
+                    f"Failed to extract tool call from malformed response: {e}; "
+                    f"raw tool_call: {tool_call!r}"
+                )
+                continue
 
     if len(model_tool_calls) > 0:
         return model_tool_calls
@@ -382,7 +394,7 @@ def has_tool_calls(output: ModelOutputThunk) -> bool:
     return (
         hasattr(output, "tool_calls")
         and output.tool_calls is not None
-        and isinstance(output.tool_calls, dict)
+        and isinstance(output.tool_calls, list)
         and bool(output.tool_calls)
     )
 
@@ -402,7 +414,7 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
 
     assert output.tool_calls is not None
     tool_calls: list[ToolCallDict] = []
-    for model_tool_call in output.tool_calls.values():
+    for model_tool_call in output.tool_calls:
         # Generate a unique ID for this tool call
         tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 

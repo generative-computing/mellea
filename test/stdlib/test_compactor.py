@@ -646,7 +646,7 @@ class TestLLMSummarizeCompactor:
             func=None,  # type: ignore[arg-type]
             args={"q": "papers"},
         )
-        thunk = ModelOutputThunk(value=None, tool_calls={"search": tool_call})
+        thunk = ModelOutputThunk(value=None, tool_calls=[tool_call])
 
         comp = LLMSummarizeCompactor(default_backend=scripted_summary_backend, keep_n=1)
         ctx = ChatContext(window_size=10_000)

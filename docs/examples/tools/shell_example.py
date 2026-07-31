@@ -106,14 +106,14 @@ def example_3_llm_with_forced_tool_use(m: MelleaSession) -> None:
     if result.tool_calls is None:
         raise ValueError("Expected tool_calls but got None")
 
-    if "bash_executor" not in result.tool_calls:
-        available_tools = list(result.tool_calls.keys())
+    tool_call = next(
+        (tc for tc in result.tool_calls if tc.name == "bash_executor"), None
+    )
+    if tool_call is None:
+        available_tools = [tc.name for tc in result.tool_calls]
         raise ValueError(
             f"Expected tool 'bash_executor' in tool_calls, but got: {available_tools}"
         )
-
-    # Extract the bash command the LLM generated
-    tool_call = result.tool_calls["bash_executor"]
     if "command" not in tool_call.args:
         raise ValueError(
             f"Expected 'command' argument in tool call args, "

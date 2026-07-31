@@ -78,7 +78,11 @@ def test_tool(session):
 
     assert output.tool_calls is not None
 
-    result = output.tool_calls["get_temperature"].call_func()
+    tool_call = next(
+        (tc for tc in output.tool_calls if tc.name == "get_temperature"), None
+    )
+    assert tool_call is not None
+    result = tool_call.call_func()
     print(result)
 
     assert len(tool_call_history) > 0
