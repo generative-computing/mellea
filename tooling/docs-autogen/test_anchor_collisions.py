@@ -65,7 +65,7 @@ This is a duplicate heading that will cause a collision.
         error_count, errors = validate_anchor_collisions(Path(tmpdir))
 
         assert error_count > 0, "Expected collision errors"
-        assert "class-backend" in errors[0]["message"].lower(), (
+        assert "class-backend" in errors[0]["message"], (
             "Should detect 'class-backend' collision"
         )
         print("✅ Collision detection test passed")

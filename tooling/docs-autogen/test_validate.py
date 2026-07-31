@@ -356,7 +356,7 @@ def test_validate_stale_files_review_artifact():
 
         error_count, errors = validate_stale_files(docs_root)
         assert error_count == 1
-        assert "review artifact" in errors[0]["message"].lower()
+        assert "review artifact" in errors[0]["message"]
 
 
 def test_validate_stale_files_superseded_index():
@@ -369,7 +369,7 @@ def test_validate_stale_files_superseded_index():
 
         error_count, errors = validate_stale_files(docs_root)
         assert error_count == 1
-        assert "superseded" in errors[0]["message"].lower()
+        assert "superseded" in errors[0]["message"]
 
 
 def test_validate_stale_files_superseded_tutorial():
@@ -382,7 +382,7 @@ def test_validate_stale_files_superseded_tutorial():
 
         error_count, errors = validate_stale_files(docs_root)
         assert error_count == 1
-        assert "superseded" in errors[0]["message"].lower()
+        assert "superseded" in errors[0]["message"]
 
 
 def test_validate_doc_imports_pass():
