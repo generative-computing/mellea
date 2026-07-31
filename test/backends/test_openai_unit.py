@@ -7,9 +7,13 @@ Covers filter_openai_client_kwargs, filter_chat_completions_kwargs,
 _simplify_and_merge, and _make_backend_specific_and_remove.
 """
 
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+
 import pytest
+from openai.types import Completion
 from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
+from openai.types.completion_choice import CompletionChoice
 
 from mellea.backends import ModelOption
 from mellea.backends.openai import OpenAIBackend
@@ -343,6 +347,86 @@ async def test_processing_reasoning_content_takes_precedence_over_reasoning(back
 
     assert mot.thinking == "attr-trace"
     assert mot._underlying_value == "answer"
+
+
+# --- _merge_user_extra_body ---
+
+
+def test_merge_user_extra_body_none_returns_base(backend):
+    """A missing user extra_body leaves the base untouched."""
+    base = {"documents": ["d"]}
+    assert backend._merge_user_extra_body(base, None) is base
+
+
+def test_merge_user_extra_body_user_keys_win(backend):
+    """User keys overlay the base, and unrelated base keys survive."""
+    merged = backend._merge_user_extra_body(
+        {"documents": ["d"], "guided_json": {"type": "integer"}},
+        {"guided_json": {"type": "string"}},
+    )
+    assert merged == {"documents": ["d"], "guided_json": {"type": "string"}}
+
+
+def test_merge_user_extra_body_deep_merges_chat_template_kwargs(backend):
+    """chat_template_kwargs merges key-wise rather than being replaced wholesale."""
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "answerability"}},
+        {"chat_template_kwargs": {"caller_key": "caller-value"}},
+    )
+    assert merged["chat_template_kwargs"] == {
+        "adapter_name": "answerability",
+        "caller_key": "caller-value",
+    }
+
+
+def test_merge_user_extra_body_does_not_mutate_inputs(backend):
+    """Neither argument is modified; .pop() operates on a copy."""
+    base = {"chat_template_kwargs": {"adapter_name": "answerability"}}
+    user = {"chat_template_kwargs": {"caller_key": "caller-value"}}
+    backend._merge_user_extra_body(base, user)
+    assert base == {"chat_template_kwargs": {"adapter_name": "answerability"}}
+    assert user == {"chat_template_kwargs": {"caller_key": "caller-value"}}
+
+
+async def test_generate_from_raw_merges_user_extra_body(backend):
+    """The completions path passes one extra_body, not two spreads (#1241)."""
+    import pydantic
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    class Answer(pydantic.BaseModel):
+        value: int
+
+    mock_create = AsyncMock(
+        return_value=Completion(
+            id="raw-test",
+            created=0,
+            model="fake",
+            object="text_completion",
+            choices=[CompletionChoice(index=0, finish_reason="stop", text="ok")],
+        )
+    )
+    mock_client = MagicMock()
+    mock_client.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        await backend._generate_from_raw(
+            [CBlock(value="what is 1+1?")],
+            ChatContext(),
+            format=Answer,
+            model_options={"extra_body": {"caller_key": "caller-value"}},
+        )
+
+    call_kwargs = mock_create.call_args.kwargs
+    extra_body = call_kwargs["extra_body"]
+    assert extra_body["caller_key"] == "caller-value"
+    assert "guided_json" in extra_body or "structured_outputs" in extra_body
 
 
 if __name__ == "__main__":
