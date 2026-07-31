@@ -43,8 +43,20 @@ uv run mypy .                         # Type check
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
 | `docs/examples/` | Example code (run as tests via pytest) |
+| `docs/dev/` | Internal design notes — **not verified documentation** |
 | `.agents/skills/` | Agent skills ([agentskills.io](https://agentskills.io) standard) |
 | `scratchpad/` | Experiments (git-ignored) |
+
+⚠️ **`docs/dev/` is informal design notes, not maintained documentation.** Some
+notes are current, some describe proposals that were never implemented or APIs
+that have since changed, and some are unfinished stubs — nothing in the
+directory is guaranteed accurate. Before relying on a claim from `docs/dev/` in
+code, docs, or a review comment: check the top of the file for a status banner
+(`outdated` / `unfinished stub` / `informal brainstorm`), and independently
+verify the specific claim (class, method, signature, path) against current
+source rather than trusting the note. See
+[#1482](https://github.com/generative-computing/mellea/issues/1482) for the
+ongoing discussion on a long-term currency policy for this directory.
 
 ## 3. Test Markers
 Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The `unit` marker is auto-applied by conftest — never write it explicitly. The `llm` marker is deprecated; use `e2e` instead.
