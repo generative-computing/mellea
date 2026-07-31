@@ -7,7 +7,7 @@ message objects and uses them with a vision model via Ollama's OpenAI-compatible
 
 Prerequisites:
     - Ollama running locally with a vision model pulled
-    - Run: ollama pull granite3.2-vision
+    - Run: ollama pull hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M
 
 Usage:
     m serve docs/examples/m_serve/multimodal-image/m_serve_example_multimodal_image.py
