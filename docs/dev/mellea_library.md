@@ -1,5 +1,9 @@
 # Mellea should be as close to a library as possible
 
+> **Note.** This is a design-philosophy statement (library vs. framework), not
+> an API reference, and it has not been re-verified line-by-line against the
+> current codebase. See #1482 for the `docs/dev/` currency discussion.
+
 We should make it possible to use mellea as a library (as opposed to a framework).
 
 In the context of LLM applications, the library vs framework distinction really boils down to how you treat the backend.

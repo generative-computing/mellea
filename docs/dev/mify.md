@@ -1,5 +1,13 @@
 # mify
 
+> **Status: outdated.** The code below does not run as written — `Circle` has no
+> `__init__`, and `Customer.__init__` is missing its `self` parameter — and the
+> implementation link points to `mellea/stdlib/mify.py`, which has moved to
+> `mellea/stdlib/components/mify.py`. For accurate, working coverage of this
+> topic, see [`docs/docs/concepts/mobjects-and-mify.md`](../docs/concepts/mobjects-and-mify.md)
+> (published) or [`docs/examples/mify/mify.py`](../examples/mify/mify.py). See
+> #1482 for the `docs/dev/` currency discussion.
+
 In classical programming, object-orientation provides a way to couple data and functionality.
 Classes have fields and methods. Fields store data and methods operate over that data.
 

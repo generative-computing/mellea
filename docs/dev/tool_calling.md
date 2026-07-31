@@ -1,5 +1,11 @@
 # Tool Calling
 
+> **Status: outdated.** The `SessionToolCallingProtocol` / `MelleaSessionToolProtocol`
+> mixin proposed below (with `tool_call_result()` and `call_tool()`) was never
+> implemented. The linked example, `docs/examples/agents/react/react_from_scratch/react.py`,
+> uses its own `ReactTool` / `ReactToolbox` classes instead. See #1482 for the
+> `docs/dev/` currency discussion.
+
 ## Problem Statement
 
 Context management and execution of tool calls are inextricably linked, because most

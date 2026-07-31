@@ -1,5 +1,13 @@
 # Design Document for Spans
 
+> **Status: unfinished stub.** This note breaks off mid-decision ("We need to
+> document which approach we choose...") and no decision was ever recorded; no
+> `SpanContext` or `__span_repr__` exists in the codebase. The `/dev/spans` URL
+> on the published docs site now redirects to the unrelated OpenTelemetry
+> tracing page ([`docs/docs/observability/tracing.md`](../docs/observability/tracing.md)),
+> which does not cover this design. See #1482 for the `docs/dev/` currency
+> discussion.
+
 ## Span Contexts
 
 We will introduce a SpanContext which will behave kind of like a heap but with transformer-running-on-GPU memory primitives instead of malloc/realloc/free. The public interface to a SpanContext will roughly correspond to the sort of stuff you can do in Span algebras, if you've seen some of that work.
