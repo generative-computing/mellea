@@ -71,9 +71,6 @@ def pii_remove_validate(
         return "The Validation Failed"
 
 
-session = mellea.start_session(model_id=IBM_GRANITE_4_1_3B)
-
-
 def serve(
     input: list[ChatMessage],
     requirements: list[str] | None = None,
@@ -81,6 +78,7 @@ def serve(
 ) -> ModelOutputThunk | SamplingResult | str:
     """Simple serve example to do PII stuff."""
     message = input[-1].get_text_content()
+    session = mellea.start_session(model_id=IBM_GRANITE_4_1_3B)
     result = pii_remove_validate(
         session, message, requirements=requirements, model_options=model_options
     )

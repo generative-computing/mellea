@@ -10,9 +10,7 @@ Unlike the Ollama version, llama-server with a multimodal Gemma checkpoint
 supports native audio-text-to-text: audio and text are sent together in a
 single request and the model responds in text.
 
-The session uses `ChatContext` so conversation history accumulates across
-turns: follow-up questions work without re-uploading audio.  Caller-supplied
-`requirements` and `model_options` are forwarded to `ainstruct`.
+Caller-supplied `requirements` and `model_options` are forwarded to `ainstruct`.
 
 Prerequisites:
     - llama-server running with an audio-capable Gemma checkpoint, e.g.:
@@ -48,23 +46,11 @@ from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.core import AudioBlock, AudioUrlBlock, ModelOutputThunk, Requirement
 from mellea.serve import ChatMessage
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 _base_url = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8088/v1")
 _api_key = os.environ.get("LLAMA_SERVER_API_KEY", "default")
 _model_id = os.environ.get("LLAMA_SERVER_MODEL", "gemma-4-12b-it-Q8_0.gguf")
-
-# ChatContext accumulates conversation history across turns so follow-up
-# questions work without re-uploading audio.
-session = start_session(
-    "openai",
-    model_id=_model_id,
-    base_url=_base_url,
-    api_key=_api_key,
-    ctx=ChatContext(),
-    model_options={ModelOption.MAX_NEW_TOKENS: 1000, "modalities": ["text"]},
-)
 
 
 async def serve(
@@ -74,9 +60,7 @@ async def serve(
 ) -> ModelOutputThunk:
     """Serve function that supports native audio-text-to-text via llama-server.
 
-    The session retains conversation history across calls (via `ChatContext`),
-    so follow-up questions work without re-uploading audio.  Caller-supplied
-    `requirements` and `model_options` are forwarded to `ainstruct`.
+    Caller-supplied `requirements` and `model_options` are forwarded to `ainstruct`.
     """
     if not input:
         return ModelOutputThunk(value="No input provided")
@@ -92,6 +76,13 @@ async def serve(
             "No audio provided. Please include an audio clip in your message."
         )
 
+    session = start_session(
+        "openai",
+        model_id=_model_id,
+        base_url=_base_url,
+        api_key=_api_key,
+        model_options={ModelOption.MAX_NEW_TOKENS: 1000, "modalities": ["text"]},
+    )
     result = await session.ainstruct(
         description=text,
         audio=audio_blocks,

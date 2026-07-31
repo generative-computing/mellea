@@ -9,8 +9,8 @@ PORT = 8080
 
 client = openai.OpenAI(api_key="na", base_url=f"http://0.0.0.0:{PORT}/v1")
 
-# Create a simple 100x100 red square image (vision models need reasonable-sized images)
-img = Image.new("RGB", (100, 100), color="cyan")
+# Create a simple 100x100 green square image (vision models need reasonable-sized images)
+img = Image.new("RGB", (100, 100), color="green")
 img_io = BytesIO()
 img.save(img_io, "PNG")
 test_image_base64 = base64.b64encode(img_io.getvalue()).decode("utf-8")

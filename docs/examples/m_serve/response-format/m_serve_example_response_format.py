@@ -20,9 +20,6 @@ from typing import Any
 import mellea
 from mellea.core import ModelOutputThunk
 from mellea.serve import ChatMessage
-from mellea.stdlib.context import ChatContext
-
-session = mellea.start_session(ctx=ChatContext())
 
 
 def serve(
@@ -45,7 +42,8 @@ def serve(
     message = input[-1].get_text_content() or "No message provided"
 
     # When format is provided (from json_schema response_format),
-    # pass it to instruct() to get structured output
+    # pass it to instruct() to get structured output.
+    session = mellea.start_session()
     result = session.instruct(
         description=message,
         requirements=requirements,  # type: ignore

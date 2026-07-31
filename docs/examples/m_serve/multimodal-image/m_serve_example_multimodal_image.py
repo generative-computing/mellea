@@ -21,9 +21,9 @@ from typing import Any, cast
 from mellea import start_session
 from mellea.core import ModelOutputThunk
 from mellea.serve import ChatMessage
+from mellea.stdlib.context import ChatContext
 
-MODEL_ID = "granite3.2-vision"
-session = start_session(model_id=MODEL_ID)
+MODEL_ID = "hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M"
 
 # MODEL_ID = "llava"
 #
@@ -54,6 +54,7 @@ async def serve(
     last_message = input[-1]
     text = last_message.get_text_content() or "Describe this image"
     image_blocks = last_message.get_image_blocks()
+    session = start_session(model_id=MODEL_ID, ctx=ChatContext())
     result = session.chat(content=text, images=image_blocks)
 
     print(f"Result content: {result.content[:100] if result.content else 'None'}...")

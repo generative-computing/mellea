@@ -10,8 +10,6 @@ from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
 from mellea.serve import ChatMessage
 from mellea.stdlib.context import SimpleContext
 
-session = mellea.start_session(ctx=SimpleContext())
-
 
 async def serve(
     input: list[ChatMessage],
@@ -27,6 +25,7 @@ async def serve(
     message = input[-1].get_text_content()
     is_streaming = bool((model_options or {}).get(ModelOption.STREAM, False))
 
+    session = mellea.start_session(ctx=SimpleContext())
     if is_streaming:
         return await session.ainstruct(
             description=message,
