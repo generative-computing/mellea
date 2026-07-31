@@ -1,8 +1,10 @@
 # mify
 
 > **Status: outdated.** The code below does not run as written — `Circle` has no
-> `__init__`, and `Customer.__init__` is missing its `self` parameter — and the
-> implementation link points to `mellea/stdlib/mify.py`, which has moved to
+> `__init__`, `Customer.__init__` is missing its `self` parameter, and the
+> second example calls `mify(c)` / `m.query(c, ...)` on an undefined `c` (it
+> meant `customer`) — and the implementation link points to
+> `mellea/stdlib/mify.py`, which has moved to
 > `mellea/stdlib/components/mify.py`. For accurate, working coverage of this
 > topic, see [`docs/docs/concepts/mobjects-and-mify.md`](../docs/concepts/mobjects-and-mify.md)
 > (published) or [`docs/examples/mify/mify.py`](../examples/mify/mify.py). See
@@ -77,5 +79,5 @@ customer.execute("send an email.", email_body, email_subject)
 ```
 
 For more examples and information, see
-- [Mify Examples](../examples/mify.py)
-- [Mify Implementation](../../mellea/stdlib/mify.py)
+- [Mify Examples](../examples/mify/mify.py)
+- [Mify Implementation](../../mellea/stdlib/components/mify.py)

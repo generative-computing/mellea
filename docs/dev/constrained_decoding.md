@@ -1,9 +1,9 @@
 # Constrained Decoding
 
 > **Status: informal brainstorm.** This note records open questions and
-> unattributed suggestions from an early discussion; no decision was ever
-> recorded and nothing below should be treated as settled design. See #1482
-> for the `docs/dev/` currency discussion.
+> informally paraphrased suggestions from an early discussion; no decision was
+> ever recorded and nothing below should be treated as settled design. See
+> #1482 for the `docs/dev/` currency discussion.
 
 ## How do constraints get defined?
 
