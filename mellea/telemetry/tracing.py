@@ -35,6 +35,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from opentelemetry.context import Context, Token
+
+    # NOTE: this is the OpenTelemetry tracing span, distinct from the unrelated
+    # `mellea.core.Span` alias (the Component | CBlock | ModelOutputThunk union).
     from opentelemetry.trace import Span
 
 try:

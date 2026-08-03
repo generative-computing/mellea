@@ -1402,6 +1402,12 @@ carried at each node of the context DAG, returned from `Component.parts()`,
 rendered by formatters, passed to backends for generation, and sampled over by
 sampling strategies. Only `Component` carries `.parse()`/`.format_for_llm()`
 semantics; the other two are carried through as opaque content spans.
+
+Note:
+    This `Span` is unrelated to `opentelemetry.trace.Span`, which is used
+    internally by `mellea.telemetry`. The two never appear in the same module
+    today; if a file needs both, import the tracing one under an alias
+    (e.g. `from opentelemetry.trace import Span as OtelSpan`).
 """
 
 
