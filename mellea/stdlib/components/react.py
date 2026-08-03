@@ -21,7 +21,7 @@ from mellea.core.base import (
     CBlock,
     Component,
     ModelOutputThunk,
-    NodeData,
+    Span,
     TemplateRepresentation,
 )
 from mellea.core.utils import MelleaLogger
@@ -150,11 +150,11 @@ class ReactInitiator(Component[str]):
         self.goal = CBlock(goal)
         self.tools = tools or []
 
-    def parts(self) -> list[NodeData]:
+    def parts(self) -> list[Span]:
         """Return the constituent parts of this component.
 
         Returns:
-            list[NodeData]: A list containing the goal content block.
+            list[Span]: A list containing the goal content block.
         """
         return [self.goal]
 
@@ -196,13 +196,13 @@ class ReactThought(Component[str]):
     def __init__(self):
         """ReactThought signals that a thinking step should be done."""
 
-    def parts(self) -> list[NodeData]:
+    def parts(self) -> list[Span]:
         """Return the constituent parts of this component.
 
         `ReactThought` has no sub-components; it solely triggers a thinking step.
 
         Returns:
-            list[NodeData]: Always an empty list.
+            list[Span]: Always an empty list.
         """
         return []
 

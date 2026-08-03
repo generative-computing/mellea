@@ -16,7 +16,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from ..core import Context, MelleaLogger, ModelToolCall, NodeData
+from ..core import Context, MelleaLogger, ModelToolCall, Span
 from ..core.base import AbstractMelleaTool, ModelOutputThunk
 from ..formatters import ChatFormatter
 from ..stdlib.components import Message
@@ -71,7 +71,7 @@ def populate_response_metadata_openai_shape(
 
 
 def to_chat(
-    action: NodeData, ctx: Context, formatter: ChatFormatter, system_prompt: str | None
+    action: Span, ctx: Context, formatter: ChatFormatter, system_prompt: str | None
 ) -> list[Chat]:
     """Converts a context and an action into a series of dicts to be passed to apply_chat_template.
 

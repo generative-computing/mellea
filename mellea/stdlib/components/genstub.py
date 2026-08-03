@@ -22,9 +22,9 @@ from ...core import (
     Context,
     MelleaLogger,
     ModelOutputThunk,
-    NodeData,
     Requirement,
     SamplingStrategy,
+    Span,
     TemplateRepresentation,
     ValidationResult,
 )
@@ -471,14 +471,14 @@ class GenerativeStub(Component[R], Generic[P, R]):
 
         return extracted
 
-    def parts(self) -> list[NodeData]:
+    def parts(self) -> list[Span]:
         """Return the constituent parts of this generative stub component.
 
         Includes the rendered arguments block (if arguments have been bound)
         and any requirements attached to this stub.
 
         Returns:
-            list[NodeData]: List of argument blocks and requirements.
+            list[Span]: List of argument blocks and requirements.
         """
         cs: list = []
         if self._arguments is not None:

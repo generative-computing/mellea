@@ -27,12 +27,12 @@ from ...core import (
     Context,
     MelleaLogger,
     ModelOutputThunk,
-    NodeData,
     Requirement,
     S,
     SampleActionType,
     SamplingResult,
     SamplingStrategy,
+    Span,
     TemplateRepresentation,
     ValidationResult,
     log_context,
@@ -203,7 +203,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         return best_idx
 
     @staticmethod
-    def _extract_action_prompt(action: NodeData) -> str:
+    def _extract_action_prompt(action: Span) -> str:
         """Extract a human-readable prompt from an action.
 
         Only a `Component` carries `.format_for_llm()`/`.description` semantics.
@@ -428,14 +428,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
     def _prepare_s2_context(
         self,
         s2_mode: str,
-        original_action: NodeData,
+        original_action: Span,
         original_context: Context,
         last_result_ctx: Context,
-        last_action: NodeData,
+        last_action: Span,
         sampled_results: list[ComputedModelOutputThunk],
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]],
         loop_count: int,
-    ) -> tuple[NodeData, Context]:
+    ) -> tuple[Span, Context]:
         """Prepare context and action for S2 Solver based on mode.
 
         Args:
@@ -513,7 +513,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
     async def _generate_and_validate(
         self,
         solver_backend: Backend,
-        action: NodeData,
+        action: Span,
         ctx: Context,
         reqs: list[Requirement],
         session_backend: Backend,

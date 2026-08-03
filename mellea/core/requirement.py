@@ -24,7 +24,7 @@ from .base import (
     Component,
     Context,
     ModelOutputThunk,
-    NodeData,
+    Span,
     TemplateRepresentation,
 )
 
@@ -365,7 +365,7 @@ class Requirement(Component[str]):
         """
         return PartialValidationResult("unknown")
 
-    def parts(self) -> list[NodeData]:
+    def parts(self) -> list[Span]:
         """Returns all of the constituent parts of a Requirement.
 
         Returns:

@@ -12,7 +12,7 @@ retrieval-augmented generation (RAG) workflows.
 import collections.abc
 import warnings
 
-from ....core import Component, ModelOutputThunk, NodeData, TemplateRepresentation
+from ....core import Component, ModelOutputThunk, Span, TemplateRepresentation
 
 
 class Document(Component[str]):
@@ -34,11 +34,11 @@ class Document(Component[str]):
         self.title = title
         self.doc_id = doc_id
 
-    def parts(self) -> list[NodeData]:
+    def parts(self) -> list[Span]:
         """Returns the constituent parts of this document.
 
         Returns:
-            list[NodeData]: An empty list by default since the base
+            list[Span]: An empty list by default since the base
             `Document` class has no constituent parts. Subclasses may override
             this method to return meaningful parts.
         """

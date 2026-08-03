@@ -29,9 +29,9 @@ from ..core import (
     GenerateType,
     MelleaLogger,
     ModelOutputThunk,
-    NodeData,
     RawProviderResponse,
     Requirement,
+    Span,
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
@@ -841,7 +841,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_chat_context_standard(
         self,
-        action: NodeData,
+        action: Span,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]

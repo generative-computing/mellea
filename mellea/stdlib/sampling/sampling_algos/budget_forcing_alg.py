@@ -19,13 +19,13 @@ from ....core import (
     Context,
     GenerateLog,
     ModelOutputThunk,
-    NodeData,
+    Span,
 )
 
 
 async def think_budget_forcing(
     backend: OllamaModelBackend,
-    action: NodeData,
+    action: Span,
     *,
     ctx: Context,
     format: type[BaseModelSubclass] | None = None,

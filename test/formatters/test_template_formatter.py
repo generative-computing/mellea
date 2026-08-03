@@ -15,7 +15,7 @@ from mellea.core import (
     CBlock,
     Component,
     ModelOutputThunk,
-    NodeData,
+    Span,
     TemplateRepresentation,
 )
 from mellea.formatters import TemplateFormatter
@@ -86,7 +86,7 @@ def test_to_chat_messages_preserves_audio(tf: TemplateFormatter):
     ]
 
     class _AudioComponent(Component[str]):
-        def parts(self) -> list[NodeData]:
+        def parts(self) -> list[Span]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:
@@ -197,7 +197,7 @@ def test_no_module(tf: TemplateFormatter):
 
 def test_no_template(tf: TemplateFormatter):
     class _NoTemplate(Component[str]):
-        def parts(self) -> list[NodeData]:
+        def parts(self) -> list[Span]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:

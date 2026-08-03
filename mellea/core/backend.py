@@ -26,7 +26,7 @@ import typing_extensions
 
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
-from .base import C, CBlock, Component, Context, ModelOutputThunk, NodeData
+from .base import C, CBlock, Component, Context, ModelOutputThunk, Span
 from .utils import MelleaLogger
 
 # Necessary to define a type variable that has a default value.
@@ -302,14 +302,14 @@ class Backend(abc.ABC):
                 (OpenAI shape) or `None`.
         """
 
-    async def do_generate_walk(self, action: NodeData) -> None:
+    async def do_generate_walk(self, action: Span) -> None:
         """Awaits all uncomputed `ModelOutputThunk` leaves reachable from `action`.
 
         Traverses the component tree rooted at `action` via `generate_walk`, collects
         any uncomputed `ModelOutputThunk` nodes, and concurrently awaits them all.
 
         Args:
-            action (NodeData): The root node to traverse.
+            action (Span): The root node to traverse.
         """
         _to_compute = list(generate_walk(action))
         coroutines = [x.avalue() for x in _to_compute]
@@ -320,14 +320,14 @@ class Backend(abc.ABC):
             )
         await asyncio.gather(*coroutines)
 
-    async def do_generate_walks(self, actions: list[NodeData]) -> None:
+    async def do_generate_walks(self, actions: list[Span]) -> None:
         """Awaits all uncomputed `ModelOutputThunk` leaves reachable from each action in `actions`.
 
         Traverses the component tree of every action in the list via `generate_walk`, collects
         all uncomputed `ModelOutputThunk` nodes across all actions, and concurrently awaits them.
 
         Args:
-            actions (list[NodeData]): The list of root nodes to traverse.
+            actions (list[Span]): The list of root nodes to traverse.
         """
         _to_compute = []
         for action in actions:
@@ -341,7 +341,7 @@ class Backend(abc.ABC):
         await asyncio.gather(*coroutines)
 
 
-def generate_walk(c: NodeData) -> list[ModelOutputThunk]:
+def generate_walk(c: Span) -> list[ModelOutputThunk]:
     """Return all uncomputed `ModelOutputThunk` leaves reachable from `c`.
 
     Args:

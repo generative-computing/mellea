@@ -11,7 +11,7 @@ attached `IntrinsicAdapter`).
 """
 
 from ....backends.adapters import AdapterType, fetch_intrinsic_metadata
-from ....core import Component, ModelOutputThunk, NodeData, TemplateRepresentation
+from ....core import Component, ModelOutputThunk, Span, TemplateRepresentation
 
 
 class Intrinsic(Component[str]):
@@ -62,14 +62,14 @@ class Intrinsic(Component[str]):
             else self.metadata.adapter_types
         )
 
-    def parts(self) -> list[NodeData]:
+    def parts(self) -> list[Span]:
         """Return the constituent parts of this intrinsic component.
 
         Will need to be implemented by subclasses since not all intrinsics
         produce text or message output.
 
         Returns:
-            list[NodeData]: Always an empty list for the base class.
+            list[Span]: Always an empty list for the base class.
         """
         return []  # TODO revisit this.
 

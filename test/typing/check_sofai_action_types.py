@@ -4,7 +4,7 @@
 """Mypy checks that SOFAI's S2 helpers accept the widened action union.
 
 After #1439, `SOFAISamplingStrategy._extract_action_prompt`,
-`_prepare_s2_context`, and `_generate_and_validate` accept `NodeData`
+`_prepare_s2_context`, and `_generate_and_validate` accept `Span`
 (`Component | CBlock | ModelOutputThunk`) rather than `Component` only. A bare
 `CBlock` or `ModelOutputThunk` action that escalates to the S2 "best_attempt"
 path must type-check without a `# type: ignore[arg-type]` suppression. These
