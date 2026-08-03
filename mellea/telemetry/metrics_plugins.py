@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from mellea.plugins.hooks.validation import ValidationPostCheckPayload
 
 
-class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
+class TokenMetricsPlugin(Plugin, name="token_metrics", priority=1050):
     """Records token usage metrics from generation outputs.
 
     This plugin hooks into the generation_post_call and
@@ -107,7 +107,7 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
         )
 
 
-class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=51):
+class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=1051):
     """Records request duration and TTFB latency metrics from generation outputs.
 
     This plugin hooks into the generation_post_call and
@@ -167,7 +167,7 @@ class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=51):
         )
 
 
-class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
+class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=1052):
     """Records LLM error counts from generation errors.
 
     This plugin hooks into the generation_error and generation_batch_error
@@ -244,7 +244,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=52):
         )
 
 
-class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
+class CostMetricsPlugin(Plugin, name="cost_metrics", priority=1053):
     """Records estimated request cost metrics from generation outputs.
 
     This plugin hooks into the generation_post_call and
@@ -325,7 +325,7 @@ class CostMetricsPlugin(Plugin, name="cost_metrics", priority=53):
             record_cost(cost=cost, model=model, provider=provider)
 
 
-class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
+class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
     """Records sampling loop attempt and outcome metrics.
 
     Hooks into `sampling_iteration` to count attempts per strategy and
@@ -350,14 +350,18 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
     async def record_sampling_outcome(
         self, payload: SamplingLoopEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record success or failure when the sampling loop ends.
+        """Record success or failure when the sampling loop ends, unless it raised.
+
+        A raised loop is not a sampling outcome, so it is skipped.
 
         Args:
-            payload: Contains strategy_name and success flag.
+            payload: Contains strategy_name, success flag, and exception.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import record_sampling_outcome
 
+        if payload.exception is not None:
+            return
         record_sampling_outcome(payload.strategy_name or "unknown", payload.success)
 
     @hook("streaming_end", mode=PluginMode.FIRE_AND_FORGET)
@@ -375,7 +379,7 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=54):
         record_sampling_outcome("stream_with_chunking", payload.success)
 
 
-class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
+class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=1055):
     """Records requirement validation check and failure metrics.
 
     Hooks into `validation_post_check` to count checks and failures per
@@ -386,10 +390,12 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
     async def record_requirement_metrics(
         self, payload: ValidationPostCheckPayload, context: dict[str, Any]
     ) -> None:
-        """Record validation checks and failures for each requirement.
+        """Record validation checks and failures for each requirement, unless it raised.
+
+        A raised validation has no results to count, so it is skipped.
 
         Args:
-            payload: Contains requirements list and corresponding results.
+            payload: Contains requirements list, corresponding results, and exception.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import (
@@ -397,6 +403,8 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
             record_requirement_failure,
         )
 
+        if payload.exception is not None:
+            return
         for req, result in zip(payload.requirements, payload.results):
             req_name = type(req).__name__
             record_requirement_check(req_name)
@@ -435,7 +443,7 @@ class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=55):
                 record_requirement_failure(req_name, pvr.reason or "")
 
 
-class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=56):
+class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=1056):
     """Records tool invocation metrics.
 
     Hooks into `tool_post_invoke` to count tool calls by name and success/failure status.
@@ -463,7 +471,7 @@ class ToolMetricsPlugin(Plugin, name="tool_metrics", priority=56):
 
 
 class AdapterFunctionMetricsPlugin(
-    Plugin, name="adapter_function_metrics", priority=57
+    Plugin, name="adapter_function_metrics", priority=1057
 ):
     """Records adapter function invocation and phase-duration metrics.
 

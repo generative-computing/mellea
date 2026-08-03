@@ -14,6 +14,8 @@ class SamplingLoopStartPayload(MelleaBasePayload):
     """Payload for `sampling_loop_start` — when sampling strategy begins.
 
     Attributes:
+        sampling_id: UUID correlating the start/iteration/repair/end hooks for a
+            single sampling loop.
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         action: The `Component` being sampled.
 
@@ -23,6 +25,7 @@ class SamplingLoopStartPayload(MelleaBasePayload):
         loop_budget: Maximum number of sampling iterations allowed (writable).
     """
 
+    sampling_id: str = ""
     strategy_name: str = ""
     action: Any = None
     context: Any = None
@@ -34,6 +37,7 @@ class SamplingIterationPayload(MelleaBasePayload):
     """Payload for `sampling_iteration` — after each sampling attempt.
 
     Attributes:
+        sampling_id: UUID correlating with the matching `sampling_loop_start`.
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         iteration: 1-based iteration number within the sampling loop. There is no guarantee that
             iteration will be monotonically increasing when concurrency is enabled.
@@ -47,6 +51,7 @@ class SamplingIterationPayload(MelleaBasePayload):
         total_count: Total number of requirements evaluated.
     """
 
+    sampling_id: str = ""
     strategy_name: str = ""
     iteration: int = 0
     action: Any = None
@@ -61,6 +66,7 @@ class SamplingRepairPayload(MelleaBasePayload):
     """Payload for `sampling_repair` — when repair is invoked after validation failure.
 
     Attributes:
+        sampling_id: UUID correlating with the matching `sampling_loop_start`.
         repair_type: Kind of repair (strategy-dependent, e.g. `"rejection"`, `"template"`).
         failed_action: The `Component` that failed validation.
 
@@ -71,6 +77,7 @@ class SamplingRepairPayload(MelleaBasePayload):
         repair_iteration: 1-based iteration at which the repair was triggered.
     """
 
+    sampling_id: str = ""
     repair_type: str = ""
     failed_action: Any = None
     failed_result: Any = None
@@ -83,23 +90,31 @@ class SamplingRepairPayload(MelleaBasePayload):
 class SamplingLoopEndPayload(MelleaBasePayload):
     """Payload for `sampling_loop_end` — when sampling completes.
 
+    Fires on every completing path: success, budget exhaustion, and an
+    unhandled exception. `success` and `exception` together distinguish the
+    outcomes.
+
     Attributes:
+        sampling_id: UUID correlating with the matching `sampling_loop_start`.
         strategy_name: Class name of the sampling strategy (e.g. `"RejectionSamplingStrategy"`).
         success: `True` if at least one attempt passed all requirements.
         iterations_used: Total number of sampling iterations that completed. With concurrency
             enabled, this may be less than `loop_budget * concurrency_budget` if the strategy
-            exits early after a successful result.
+            exits early after a successful result. `0` on the exception path, regardless of
+            how many iterations ran before the loop raised.
         final_result: The selected `ModelOutputThunk` (best success or best failure).
         final_action: The `Component` that produced `final_result`.
 
         final_context: The `Context` associated with `final_result`.
 
         failure_reason: Human-readable reason when `success` is `False`.
+        exception: The exception raised by the loop, or `None` when it completed.
         all_results: List of `ModelOutputThunk` from every iteration.
         all_validations: Nested list — `all_validations[i]` is the list of
             `(Requirement, ValidationResult)` tuples for iteration *i*.
     """
 
+    sampling_id: str = ""
     strategy_name: str = ""
     success: bool = False
     iterations_used: int = 0
@@ -107,5 +122,6 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     final_action: Any = None
     final_context: Any = None
     failure_reason: str | None = None
+    exception: BaseException | None = None
     all_results: list[Any] = []
     all_validations: list[list[tuple[Any, Any]]] = []

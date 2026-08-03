@@ -458,6 +458,27 @@ class TestSamplingLoopEndPlugin:
         assert any("FAILED" in r.message for r in caplog.records)
         assert any("budget exceeded" in r.message for r in caplog.records)
 
+    async def test_sampling_loop_end_logs_error_on_exception(self, caplog) -> None:
+        """Loop end hook logs an ERROR line when the loop raised."""
+        register(log_sampling_loop_end)
+
+        payload = SamplingLoopEndPayload(
+            strategy_name="RejectionSampling",
+            success=False,
+            exception=RuntimeError("backend boom"),
+        )
+
+        with caplog.at_level(
+            logging.DEBUG, logger="mellea.plugins.builtin_debug.sampling"
+        ):
+            await invoke_hook(HookType.SAMPLING_LOOP_END, payload)
+
+        assert any("SAMPLING-END" in r.message for r in caplog.records)
+        assert any("ERROR" in r.message for r in caplog.records)
+        assert any("backend boom" in r.message for r in caplog.records)
+        # The routine-failure line is not emitted on the error path.
+        assert not any("FAILED" in r.message for r in caplog.records)
+
 
 # ---------------------------------------------------------------------------
 # Validation plugin tests
@@ -565,6 +586,24 @@ class TestValidationPostCheckPlugin:
         assert any("VALIDATION-POST-CHECK" in r.message for r in caplog.records)
         assert any("MIXED RESULTS" in r.message for r in caplog.records)
         assert any("1/2 passed" in r.message for r in caplog.records)
+
+    async def test_validation_post_check_logs_error_on_exception(self, caplog) -> None:
+        """Post-check hook logs an ERROR line when validation raised."""
+        register(log_validation_post_check)
+
+        payload = ValidationPostCheckPayload(exception=RuntimeError("validator boom"))
+
+        with caplog.at_level(
+            logging.DEBUG, logger="mellea.plugins.builtin_debug.validation"
+        ):
+            await invoke_hook(HookType.VALIDATION_POST_CHECK, payload)
+
+        assert any("VALIDATION-POST-CHECK" in r.message for r in caplog.records)
+        assert any("ERROR" in r.message for r in caplog.records)
+        assert any("validator boom" in r.message for r in caplog.records)
+        # The routine-outcome lines are not emitted on the error path.
+        assert not any("PASSED" in r.message for r in caplog.records)
+        assert not any("MIXED" in r.message for r in caplog.records)
 
     async def test_validation_post_check_handles_result_mismatch(self, caplog) -> None:
         """Post-check hook detects mismatch between requirements and results."""

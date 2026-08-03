@@ -448,6 +448,7 @@ class TestGenerationPostCallPayload:
 class TestValidationPreCheckPayload:
     def test_defaults(self):
         payload = ValidationPreCheckPayload()
+        assert payload.validation_id == ""
         assert payload.requirements == []
         assert payload.target is None
         assert payload.context is None
@@ -500,11 +501,13 @@ class TestValidationPreCheckPayload:
 class TestValidationPostCheckPayload:
     def test_defaults(self):
         payload = ValidationPostCheckPayload()
+        assert payload.validation_id == ""
         assert payload.requirements == []
         assert payload.results == []
         assert payload.all_validations_passed is False
         assert payload.passed_count == 0
         assert payload.failed_count == 0
+        assert payload.exception is None
 
     def test_construction_with_values(self):
         reqs = [_SENTINEL_REQUIREMENT, _SENTINEL_REQUIREMENT]
@@ -571,6 +574,7 @@ class TestValidationPostCheckPayload:
 class TestSamplingLoopStartPayload:
     def test_defaults(self):
         payload = SamplingLoopStartPayload()
+        assert payload.sampling_id == ""
         assert payload.strategy_name == ""
         assert payload.action is None
         assert payload.context is None
@@ -620,6 +624,7 @@ class TestSamplingLoopStartPayload:
 class TestSamplingIterationPayload:
     def test_defaults(self):
         payload = SamplingIterationPayload()
+        assert payload.sampling_id == ""
         assert payload.iteration == 0
         assert payload.action is None
         assert payload.result is None
@@ -695,6 +700,7 @@ class TestSamplingIterationPayload:
 class TestSamplingRepairPayload:
     def test_defaults(self):
         payload = SamplingRepairPayload()
+        assert payload.sampling_id == ""
         assert payload.repair_type == ""
         assert payload.failed_action is None
         assert payload.failed_result is None
@@ -759,12 +765,14 @@ class TestSamplingRepairPayload:
 class TestSamplingLoopEndPayload:
     def test_defaults(self):
         payload = SamplingLoopEndPayload()
+        assert payload.sampling_id == ""
         assert payload.success is False
         assert payload.iterations_used == 0
         assert payload.final_result is None
         assert payload.final_action is None
         assert payload.final_context is None
         assert payload.failure_reason is None
+        assert payload.exception is None
         assert payload.all_results == []
         assert payload.all_validations == []
 

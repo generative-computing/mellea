@@ -13,6 +13,9 @@ pipelines to automatically emit spans when tracing is enabled:
 - StreamingTracingPlugin: Emits an application-level orchestration span and
   per-chunk span events for `stream_with_chunking` runs.
 - ToolTracingPlugin: Emits an `execute_tool` span for every tool invocation.
+- SamplingTracingPlugin: Emits a `sampling` span per sampling loop, with a span
+  event per iteration and repair.
+- ValidationTracingPlugin: Emits a `validation` span per requirement-check batch.
 """
 
 from __future__ import annotations
@@ -44,6 +47,12 @@ if TYPE_CHECKING:
         GenerationPostCallPayload,
         GenerationPreCallPayload,
     )
+    from mellea.plugins.hooks.sampling import (
+        SamplingIterationPayload,
+        SamplingLoopEndPayload,
+        SamplingLoopStartPayload,
+        SamplingRepairPayload,
+    )
     from mellea.plugins.hooks.streaming import (
         StreamingEndPayload,
         StreamingEventPayload,
@@ -52,9 +61,13 @@ if TYPE_CHECKING:
         StreamingStartPayload,
     )
     from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
+    from mellea.plugins.hooks.validation import (
+        ValidationPostCheckPayload,
+        ValidationPreCheckPayload,
+    )
 
 
-class BackendTracingPlugin(Plugin, name="backend_tracing", priority=40):
+class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
     """Emits Gen-AI semconv backend spans for every LLM generation.
 
     This plugin hooks into the generation pre-call, post-call, and error
@@ -181,7 +194,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=40):
         )
 
 
-class ComponentTracingPlugin(Plugin, name="component_tracing", priority=41):
+class ComponentTracingPlugin(Plugin, name="component_tracing", priority=1041):
     """Emits application-level spans tracking component execution.
 
     This plugin hooks into component pre-execute, post-success, and
@@ -266,7 +279,7 @@ class ComponentTracingPlugin(Plugin, name="component_tracing", priority=41):
         finish_action_span_error(payload.action_id, exception=payload.error)
 
 
-class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
+class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
     """Emits the `stream_with_chunking` application span.
 
     `streaming_start` opens the span; `streaming_event` records a span event for
@@ -334,11 +347,11 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
             QuickCheckEvent,
             StreamingDoneEvent,
         )
-        from mellea.telemetry.tracing import add_streaming_event
+        from mellea.telemetry.tracing import add_span_event
 
         ev = payload.event
         if isinstance(ev, QuickCheckEvent):
-            add_streaming_event(
+            add_span_event(
                 payload.streaming_id,
                 event_name="quick_check",
                 attributes={
@@ -348,25 +361,25 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
                 },
             )
         elif isinstance(ev, ChunkEvent):
-            add_streaming_event(
+            add_span_event(
                 payload.streaming_id,
                 event_name="chunk",
                 attributes={"chunk_index": ev.chunk_index, "text_length": len(ev.text)},
             )
         elif isinstance(ev, StreamingDoneEvent):
-            add_streaming_event(
+            add_span_event(
                 payload.streaming_id,
                 event_name="streaming_done",
                 attributes={"full_text_length": len(ev.full_text)},
             )
         elif isinstance(ev, FullValidationEvent):
-            add_streaming_event(
+            add_span_event(
                 payload.streaming_id,
                 event_name="full_validation",
                 attributes={"passed": ev.passed, "requirement_count": len(ev.results)},
             )
         elif isinstance(ev, ErrorEvent):
-            add_streaming_event(
+            add_span_event(
                 payload.streaming_id,
                 event_name="error",
                 attributes={"exception_type": ev.exception_type, "detail": ev.detail},
@@ -379,9 +392,9 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
         """Record the `completed` span event and close the stream_with_chunking span."""
         if not payload.streaming_id:
             return
-        from mellea.telemetry.tracing import add_streaming_event, finish_streaming_span
+        from mellea.telemetry.tracing import add_span_event, finish_streaming_span
 
-        add_streaming_event(
+        add_span_event(
             payload.streaming_id,
             event_name="completed",
             attributes={
@@ -400,7 +413,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=42):
         )
 
 
-class ToolTracingPlugin(Plugin, name="tool_tracing", priority=43):
+class ToolTracingPlugin(Plugin, name="tool_tracing", priority=1043):
     """Emits an `execute_tool` span per tool invocation (pre/post lifecycle).
 
     `tool_pre_invoke` opens the span; `tool_post_invoke` closes it with success
@@ -452,10 +465,145 @@ class ToolTracingPlugin(Plugin, name="tool_tracing", priority=43):
             )
 
 
+class SamplingTracingPlugin(Plugin, name="sampling_tracing", priority=1044):
+    """Emits a `sampling` span per sampling loop.
+
+    `sampling_loop_start` opens the span; `sampling_iteration` and
+    `sampling_repair` record span events on it; `sampling_loop_end` closes it,
+    correlated across hooks via `sampling_id`.
+
+    Iterations and repairs are recorded as span events, not child spans.
+
+    All hooks run SEQUENTIAL so the OTel context token attached in loop_start
+    can be detached on the same task in loop_end.
+    """
+
+    @hook("sampling_loop_start")
+    async def on_loop_start(
+        self, payload: SamplingLoopStartPayload, context: dict[str, Any]
+    ) -> None:
+        """Open the sampling span for this loop."""
+        if not payload.sampling_id:
+            return
+        from mellea.telemetry.tracing import start_sampling_span
+
+        start_sampling_span(
+            payload.sampling_id,
+            strategy_type=payload.strategy_name or None,
+            loop_budget=payload.loop_budget,
+            requirement_count=len(payload.requirements),
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
+        )
+
+    @hook("sampling_iteration")
+    async def on_iteration(
+        self, payload: SamplingIterationPayload, context: dict[str, Any]
+    ) -> None:
+        """Record a span event for one sampling attempt."""
+        if not payload.sampling_id:
+            return
+        from mellea.telemetry.tracing import add_span_event
+
+        add_span_event(
+            payload.sampling_id,
+            event_name="iteration",
+            attributes={
+                "iteration": payload.iteration,
+                "all_validations_passed": payload.all_validations_passed,
+                "valid_count": payload.valid_count,
+                "total_count": payload.total_count,
+            },
+        )
+
+    @hook("sampling_repair")
+    async def on_repair(
+        self, payload: SamplingRepairPayload, context: dict[str, Any]
+    ) -> None:
+        """Record a span event for one repair."""
+        if not payload.sampling_id:
+            return
+        from mellea.telemetry.tracing import add_span_event
+
+        add_span_event(
+            payload.sampling_id,
+            event_name="repair",
+            attributes={
+                "repair_iteration": payload.repair_iteration,
+                "repair_type": payload.repair_type,
+                "failed_count": len(payload.failed_validations),
+            },
+        )
+
+    @hook("sampling_loop_end")
+    async def on_loop_end(
+        self, payload: SamplingLoopEndPayload, context: dict[str, Any]
+    ) -> None:
+        """Close the sampling span, ERROR only when the loop raised."""
+        if not payload.sampling_id:
+            return
+        from mellea.telemetry.tracing import finish_sampling_span
+
+        finish_sampling_span(
+            payload.sampling_id,
+            success=payload.success,
+            iterations_used=payload.iterations_used,
+            failure_reason=payload.failure_reason,
+            exception=payload.exception,
+        )
+
+
+class ValidationTracingPlugin(Plugin, name="validation_tracing", priority=1045):
+    """Emits a `validation` span per requirement-validation batch.
+
+    `validation_pre_check` opens the span; `validation_post_check` closes it,
+    correlated via `validation_id`.
+
+    All hooks run SEQUENTIAL so the OTel context token attached in pre_check
+    can be detached on the same task in post_check.
+    """
+
+    @hook("validation_pre_check")
+    async def on_pre_check(
+        self, payload: ValidationPreCheckPayload, context: dict[str, Any]
+    ) -> None:
+        """Open the validation span for this check."""
+        if not payload.validation_id:
+            return
+        from mellea.telemetry.tracing import start_validation_span
+
+        start_validation_span(
+            payload.validation_id,
+            requirement_count=len(payload.requirements),
+            attach_context=_CONTEXT_ATTACH_SUPPORTED,
+        )
+
+    @hook("validation_post_check")
+    async def on_post_check(
+        self, payload: ValidationPostCheckPayload, context: dict[str, Any]
+    ) -> None:
+        """Close the validation span, ERROR only when validation raised."""
+        if not payload.validation_id:
+            return
+        from mellea.telemetry.tracing import finish_validation_span
+
+        # One reason per failing requirement (results with no reason are skipped).
+        reasons = [r.reason for r in payload.results if not bool(r) and r.reason]
+        finish_validation_span(
+            payload.validation_id,
+            all_validations_passed=payload.all_validations_passed,
+            passed_count=payload.passed_count,
+            failed_count=payload.failed_count,
+            failure_reasons=reasons,
+            exception=payload.exception,
+        )
+
+
 # All tracing plugins to auto-register when tracing is enabled.
 _TRACING_PLUGIN_CLASSES = (
     BackendTracingPlugin,
     ComponentTracingPlugin,
     StreamingTracingPlugin,
     ToolTracingPlugin,
+    SamplingTracingPlugin,
+    ValidationTracingPlugin,
 )

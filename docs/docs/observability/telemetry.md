@@ -101,7 +101,7 @@ Enable tracing for full observability. Backend spans nest inside application spa
 session                  (mellea.application)
 ├── action               (mellea.application)
 │   ├── chat             (mellea.backend) [gen_ai.provider.name=ollama]
-│   └── requirement_validation  (mellea.application)
+│   └── validation       (mellea.application)
 └── action               (mellea.application)
     └── chat             (mellea.backend) [gen_ai.provider.name=openai]
 ```
