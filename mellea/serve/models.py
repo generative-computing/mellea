@@ -118,7 +118,7 @@ class ChatMessage(BaseModel):
             elif url.startswith("data:"):
                 try:
                     image_blocks.append(ImageBlock(url))
-                except AssertionError as e:
+                except ValueError as e:
                     # Raise ValueError for invalid data so the client gets a clear 400 error
                     # rather than silently processing a request without the expected images
                     raise ValueError(
@@ -151,7 +151,7 @@ class ChatMessage(BaseModel):
                     audio_blocks.append(
                         AudioBlock(item.input_audio.data, item.input_audio.format)
                     )
-                except (AssertionError, ValueError) as e:
+                except ValueError as e:
                     raise ValueError(
                         f"Invalid audio data: {item.input_audio.data[:100]}"
                         f"{'...' if len(item.input_audio.data) > 100 else ''}. "

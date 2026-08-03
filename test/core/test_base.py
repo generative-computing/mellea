@@ -136,7 +136,7 @@ def test_image_block_data_uri_prefix_stripped():
 
 
 def test_image_block_invalid_value_raises():
-    with pytest.raises(AssertionError, match="Invalid base64"):
+    with pytest.raises(ValueError, match="Invalid base64"):
         ImageBlock(value="not-a-png")
 
 
@@ -194,7 +194,7 @@ def test_audio_block_valid_data_uri_prefix():
 
 
 def test_audio_block_invalid_base64_raises():
-    with pytest.raises(AssertionError, match="Invalid base64"):
+    with pytest.raises(ValueError, match="Invalid base64"):
         AudioBlock(value="not-audio", format="wav")
 
 

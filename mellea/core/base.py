@@ -110,11 +110,10 @@ class ImageBlock(CBlock):
         """Initialize ImageBlock with a base64-encoded PNG string, validating the encoding.
 
         Raises:
-            AssertionError: If `value` is not a valid base64-encoded PNG string.
+            ValueError: If `value` is not a valid base64-encoded PNG string.
         """
-        assert self.is_valid_base64_png(value), (
-            "Invalid base64 string representation of image."
-        )
+        if not self.is_valid_base64_png(value):
+            raise ValueError("Invalid base64 string representation of image.")
         super().__init__(value, meta)
 
     @staticmethod
@@ -271,14 +270,13 @@ class AudioBlock(CBlock):
         not provided. When `value` is raw base64, `format` must be supplied explicitly.
 
         Raises:
-            AssertionError: If `value` is not a valid base64-encoded audio string.
+            ValueError: If `value` is not a valid base64-encoded audio string.
             ValueError: If `format` cannot be determined (not provided and not
                 derivable from a data URI prefix), or if an explicit `format` is
                 an empty string.
         """
-        assert self.is_valid_base64_audio(value), (
-            "Invalid base64 string representation of audio."
-        )
+        if not self.is_valid_base64_audio(value):
+            raise ValueError("Invalid base64 string representation of audio.")
         if format is None and "data:" in value and "base64," in value:
             mime = value.split(";")[0].split("data:")[1]  # e.g. "audio/wav"
             subtype = mime.split("/")[-1]  # e.g. "wav"
