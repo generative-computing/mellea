@@ -104,8 +104,8 @@ def act(
         action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
-        requirements: additional requirements checked by the sampling strategy. Providing requirements without a `strategy` logs a warning, since requirements are only validated by a strategy.
-        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — no validate/repair loop runs and any `requirements` go unchecked (a warning is logged). Required when `return_sampling_results=True`.
+        requirements: requirements validated by the sampling strategy. These are only used when a `strategy` is provided; passing them without a `strategy` cannot validate them and raises `ValueError`. (Requirements a component renders into its own prompt — e.g. those attached to an `Instruction` — still shape generation regardless, and are passed via the action, not this parameter.)
+        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — no validate/repair loop runs and `requirements` are not validated (see above). Required when `return_sampling_results=True`.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
         format: Constrains generation to JSON matching this Pydantic
             schema. The result's `.value` is always a JSON string — not a
@@ -115,7 +115,7 @@ def act(
         tool_calls: if true, tool calling is enabled.
 
     Raises:
-        ValueError: if `return_sampling_results=True` without a `strategy`.
+        ValueError: if `return_sampling_results=True` without a `strategy`, or if `requirements` are provided without a `strategy` to validate them.
 
     Returns:
         A (ComputedModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -260,11 +260,14 @@ def instruct(
         audio=audio,
     )
 
+    # The Instruction renders its own requirements into the prompt regardless of
+    # strategy, so only forward them to act when a strategy will validate them.
+    # Passing them without a strategy would raise (see aact).
     return act(
         i,
         context=context,
         backend=backend,
-        requirements=i.requirements,
+        requirements=i.requirements if strategy is not None else None,
         strategy=strategy,
         return_sampling_results=return_sampling_results,
         format=format,
@@ -596,8 +599,8 @@ async def aact(
         action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
-        requirements: additional requirements checked by the sampling strategy. Providing requirements without a `strategy` logs a warning, since requirements are only validated by a strategy.
-        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — in that case no validate/repair loop runs and, unless `await_result=True`, the returned thunk is uncomputed. Required when `return_sampling_results=True`.
+        requirements: requirements validated by the sampling strategy. These are only used when a `strategy` is provided; passing them without a `strategy` cannot validate them and raises `ValueError`. (Requirements a component renders into its own prompt — e.g. those attached to an `Instruction` — still shape generation regardless, and are passed via the action, not this parameter.)
+        strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — in that case no validate/repair loop runs, `requirements` are not validated (see above), and, unless `await_result=True`, the returned thunk is uncomputed. Required when `return_sampling_results=True`.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
         format: Constrains generation to JSON matching this Pydantic
             schema. The result's `.value` is always a JSON string — not a
@@ -609,7 +612,7 @@ async def aact(
         await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
 
     Raises:
-        ValueError: if `return_sampling_results=True` without a `strategy`.
+        ValueError: if `return_sampling_results=True` without a `strategy`, or if `requirements` are provided without a `strategy` to validate them.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -663,16 +666,18 @@ async def aact(
             )
 
         if strategy is None:
-            # No strategy means no validate/repair loop, so any `requirements`
-            # passed here are not checked. Warn rather than raise: some callers
-            # (e.g. generative stubs) attach requirements to the component itself
-            # and render them into the prompt independently of a strategy. A
-            # follow-up issue tracks a proper enforcement design for that case.
-            if requirements is not None and len(requirements) > 0:
-                MelleaLogger.get_logger().warning(
-                    "Requirements were provided without a SamplingStrategy. "
-                    "Requirements are only checked by a strategy; pass a "
-                    "`strategy` (e.g. RejectionSamplingStrategy) to validate them."
+            # No strategy means no validate/repair loop, so requirements passed
+            # here cannot be validated and would be silently dropped. Raise instead.
+            # (Requirements a component renders into its own prompt — e.g. an
+            # `Instruction`'s — shape generation regardless; callers such as
+            # `instruct` simply don't forward those here when no strategy is set.)
+            if requirements:
+                raise ValueError(
+                    "Requirements were provided without a SamplingStrategy, so they "
+                    "cannot be validated: "
+                    f"{[getattr(r, 'description', str(r)) for r in requirements]}. "
+                    "Pass a `strategy` (e.g. RejectionSamplingStrategy) to validate "
+                    "them."
                 )
 
             result, new_ctx = await backend.generate_from_context(
@@ -938,11 +943,14 @@ async def ainstruct(
         audio=audio,
     )
 
+    # The Instruction renders its own requirements into the prompt regardless of
+    # strategy, so only forward them to aact when a strategy will validate them.
+    # Passing them without a strategy would raise (see aact).
     return await aact(
         i,
         context=context,
         backend=backend,
-        requirements=i.requirements,
+        requirements=i.requirements if strategy is not None else None,
         strategy=strategy,
         return_sampling_results=return_sampling_results,
         format=format,

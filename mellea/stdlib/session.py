@@ -519,8 +519,8 @@ class MelleaSession:
 
         Args:
             action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
-            requirements: used as additional requirements when a sampling strategy is provided
-            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used.
+            requirements: requirements validated by the sampling strategy. Requirements the action already renders into its prompt (e.g. those attached to an `Instruction` or generative stub) still shape generation with no strategy. Any other requirement passed here without a `strategy` cannot be validated and raises `ValueError`.
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None, meaning no sampling strategy is used and `requirements` are not validated (see above).
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
             format: Constrains generation to JSON matching this Pydantic
                 schema. The result's `.value` is always a JSON string — not a
@@ -530,7 +530,7 @@ class MelleaSession:
             tool_calls: if true, tool calling is enabled.
 
         Raises:
-            ValueError: if `return_sampling_results=True` without a `strategy`.
+            ValueError: if `return_sampling_results=True` without a `strategy`, or if `requirements` not rendered by the action are provided without a `strategy` to validate them.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -887,8 +887,8 @@ class MelleaSession:
 
         Args:
             action: the `Component`, `CBlock`, or `ModelOutputThunk` from which to generate.
-            requirements: additional requirements checked by the sampling strategy. Providing requirements without a `strategy` logs a warning, since requirements are only validated by a strategy.
-            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — in that case no validate/repair loop runs and, unless `await_result=True`, the returned thunk is uncomputed. Required when `return_sampling_results=True`.
+            requirements: requirements validated by the sampling strategy. Requirements the action already renders into its prompt (e.g. those attached to an `Instruction` or generative stub) still shape generation with no strategy. Any other requirement passed here without a `strategy` cannot be validated and raises `ValueError`.
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. Defaults to None — in that case no validate/repair loop runs, `requirements` are not validated (see above), and, unless `await_result=True`, the returned thunk is uncomputed. Required when `return_sampling_results=True`.
             return_sampling_results: attach the (successful and failed) sampling attempts to the results.
             format: Constrains generation to JSON matching this Pydantic
                 schema. The result's `.value` is always a JSON string — not a
@@ -899,7 +899,7 @@ class MelleaSession:
             await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Raises:
-            ValueError: if `return_sampling_results=True` without a `strategy`.
+            ValueError: if `return_sampling_results=True` without a `strategy`, or if `requirements` not rendered by the action are provided without a `strategy` to validate them.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.

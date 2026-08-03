@@ -308,5 +308,103 @@ def test_act_sampling_results_without_strategy_raises():
         act(CBlock("x"), SimpleContext(), backend, return_sampling_results=True)
 
 
+# --- requirements-without-strategy enforcement (issue #1448) ---
+
+
+@pytest.mark.asyncio
+async def test_aact_raises_for_requirements_without_strategy():
+    """aact rejects any requirements passed without a strategy (issue #1448).
+
+    With `strategy=None` there is no validate/repair loop, so a requirement passed
+    via the kwarg can never be validated — it would be silently dropped. aact
+    raises ValueError instead. This holds regardless of the action type.
+    """
+    from mellea.core import CBlock
+    from mellea.stdlib.requirements import Requirement
+
+    backend = _mock_backend_returning("ignored")
+    with pytest.raises(ValueError):
+        await aact(
+            CBlock("x"),
+            SimpleContext(),
+            backend,
+            requirements=[Requirement("must be short")],
+        )
+
+
+def test_act_raises_for_requirements_without_strategy():
+    """act surfaces the same ValueError as aact for requirements without a strategy."""
+    from mellea.core import CBlock
+    from mellea.stdlib.functional import act
+    from mellea.stdlib.requirements import Requirement
+
+    backend = _mock_backend_returning("ignored")
+    with pytest.raises(ValueError):
+        act(
+            CBlock("x"),
+            SimpleContext(),
+            backend,
+            requirements=[Requirement("must be short")],
+        )
+
+
+@pytest.mark.asyncio
+async def test_aact_raises_even_when_requirements_attached_to_component():
+    """aact raises for requirements-without-strategy even if attached to the action.
+
+    aact makes no exception for requirements a component also renders into its own
+    prompt — the check is purely on the `requirements` kwarg. Callers like
+    `instruct`/`ainstruct` avoid the raise by not forwarding their Instruction's
+    requirements when no strategy is set; the Instruction still renders them
+    (issue #1448).
+    """
+    from mellea.stdlib.requirements import Requirement
+
+    backend = _mock_backend_returning("ok")
+    req = Requirement("must be short")
+    instruction = Instruction(description="say hi", requirements=[req])
+
+    with pytest.raises(ValueError):
+        await aact(
+            instruction,
+            SimpleContext(),
+            backend,
+            requirements=instruction.requirements,
+            await_result=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_ainstruct_does_not_raise_for_requirements_without_strategy():
+    """ainstruct(strategy=None, requirements=...) does not forward reqs, so no raise.
+
+    The Instruction renders its own requirements into the prompt; ainstruct only
+    forwards them to aact when a strategy is present, so passing requirements with
+    `strategy=None` generates without raising (issue #1448).
+    """
+    from mellea.stdlib.functional import ainstruct
+
+    backend = _mock_backend_returning("ok")
+    out, _ = await ainstruct(
+        "say hi",
+        SimpleContext(),
+        backend,
+        requirements=["must be short"],
+        strategy=None,
+        await_result=True,
+    )
+    assert str(out) == "ok"
+
+
+@pytest.mark.asyncio
+async def test_aact_no_raise_without_requirements():
+    """aact with no requirements and no strategy generates without raising."""
+    from mellea.core import CBlock
+
+    backend = _mock_backend_returning("ok")
+    out, _ = await aact(CBlock("x"), SimpleContext(), backend, await_result=True)
+    assert str(out) == "ok"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
