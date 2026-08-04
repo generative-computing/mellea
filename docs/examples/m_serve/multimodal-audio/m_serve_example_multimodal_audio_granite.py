@@ -20,12 +20,10 @@ transcribed to plain text before reaching the chat model, only word-level
 content survives the pipeline — tone of voice, emotion, background sound,
 and speaker identity are not available to the chat model on this path.
 
-The session uses `ChatContext` so conversation history accumulates across
-turns: follow-up questions like "who sang it?" work without re-uploading
-the audio.  The serve function also honours caller-supplied `requirements`
-and `model_options`, and uses `session.ainstruct()` with a built-in
-`Requirement` to keep answers grounded in the transcript (tuned to the
-bundled "roses are red and violets are blue" audio sample).
+The serve function honors caller-supplied `requirements` and `model_options`,
+and uses `session.ainstruct()` with a built-in `Requirement` to keep answers
+grounded in the transcript (tuned to the bundled "roses are red and violets
+are blue" audio sample).
 
 Prerequisites:
     - Ollama running locally with both models pulled:
@@ -57,7 +55,6 @@ import httpx
 from mellea import start_session
 from mellea.core import AudioBlock, ModelOutputThunk, Requirement
 from mellea.serve import ChatMessage
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
@@ -66,10 +63,6 @@ _speech_model = os.environ.get(
     "GRANITE_SPEECH_MODEL", "hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M"
 )
 _chat_model = os.environ.get("GRANITE_CHAT_MODEL", "granite4.1:3b")
-
-# ChatContext accumulates conversation history across turns so follow-up
-# questions work without re-uploading the audio.
-chat_session = start_session(model_id=_chat_model, ctx=ChatContext())
 
 
 def _audio_block_to_bytes(block: AudioBlock) -> tuple[bytes, str]:
@@ -123,9 +116,7 @@ async def serve(
     Step 1: `hf.co/ibm-granite/granite-speech-4.1-2b-GGUF:Q4_K_M` transcribes the audio.
     Step 2: `granite4.1:3b` answers the user's text question, informed by the transcript.
 
-    The session retains conversation history across calls (via `ChatContext`),
-    so follow-up questions work without re-uploading audio.  Caller-supplied
-    `requirements` and `model_options` are forwarded to `ainstruct`.
+    Caller-supplied `requirements` and `model_options` are forwarded to `ainstruct`.
     """
     if not input:
         return ModelOutputThunk(value="No input provided")
@@ -171,6 +162,7 @@ async def serve(
         validation_fn=simple_validate(_has_two_transcript_colors),
     )
 
+    chat_session = start_session(model_id=_chat_model)
     result = await chat_session.ainstruct(
         description=prompt,
         requirements=[

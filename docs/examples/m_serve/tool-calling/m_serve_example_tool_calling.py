@@ -25,7 +25,6 @@ from mellea.core import ModelOutputThunk, Requirement
 from mellea.core.base import AbstractMelleaTool
 from mellea.formatters import TemplateFormatter
 from mellea.serve import ChatMessage
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession
 
 _ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
@@ -38,7 +37,6 @@ backend = OpenAIBackend(
     base_url=f"{_ollama_host}/v1",
     api_key="ollama",
 )
-session = MelleaSession(backend, ctx=ChatContext())
 
 
 class GetWeatherTool(AbstractMelleaTool):
@@ -233,6 +231,7 @@ def serve(
     # at the request level. Enforcing uses_tool(...) inside session.instruct()
     # caused noisy server-side failures when the model ignored the tool request
     # on a particular sample.
+    session = MelleaSession(backend)
     result = session.instruct(
         description=message,  # type: ignore
         requirements=[Requirement(req) for req in requirements],  # type: ignore
@@ -245,6 +244,7 @@ def serve(
 
 
 if __name__ == "__main__":
+    session = MelleaSession(backend)
     response = session.instruct(
         "What's the weather in Boston?",
         model_options={

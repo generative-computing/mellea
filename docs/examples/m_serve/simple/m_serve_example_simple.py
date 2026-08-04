@@ -2,16 +2,11 @@
 
 """Example to run m serve."""
 
-from typing import Any
-
 import mellea
 from mellea.core import ModelOutputThunk, Requirement, SamplingResult
 from mellea.serve import ChatMessage
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-
-session = mellea.start_session(ctx=ChatContext())
 
 
 def validate_hi_bob(email: str) -> bool:
@@ -42,6 +37,7 @@ def serve(
         *requirements,
     ]
 
+    session = mellea.start_session()
     result = session.instruct(
         description=message,  # type: ignore
         requirements=reqs,  # type: ignore
