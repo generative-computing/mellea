@@ -56,6 +56,7 @@ from .adapters.adapter import AdapterInput, AdapterMixin, EmbeddedIntrinsicAdapt
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
+    _recursively_inline_refs,
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
@@ -65,6 +66,48 @@ from .utils import populate_response_metadata_openai_shape
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
+
+def _make_response_schema_openai_strict(schema: dict[str, Any]) -> dict[str, Any]:
+    """Make a JSON schema acceptable to OpenAI's structured outputs.
+
+    OpenAI's strict mode (and OpenAI-compatible proxies that terminate on the
+    OpenAI platform, e.g. OpenRouter routing to an OpenAI model) requires
+    `additionalProperties: false` on every object and rejects `$ref` entries,
+    so schemas must be self-contained. Pydantic emits `$ref`/`$defs` for
+    nested models, so inline them and patch every object before sending.
+    Providers with less strict requirements ignore the extra property.
+
+    Args:
+        schema: Pydantic JSON schema, e.g. from `model_json_schema()`.
+
+    Returns:
+        A new schema with `$ref`s inlined and `additionalProperties: false`
+        set on every object, suitable for OpenAI `response_format`.
+    """
+    defs = schema.get("$defs")
+    if defs is not None:
+        _recursively_inline_refs(schema, defs)
+        schema.pop("$defs", None)
+
+    def _patch_object(obj: dict[str, Any]) -> None:
+        if obj.get("type") == "object":
+            obj["additionalProperties"] = False
+        props = obj.get("properties")
+        if isinstance(props, dict):
+            for prop_schema in props.values():
+                if isinstance(prop_schema, dict):
+                    _patch_object(prop_schema)
+        items = obj.get("items")
+        if isinstance(items, dict):
+            _patch_object(items)
+        for key in ("anyOf", "oneOf", "allOf"):
+            for branch in obj.get(key, []):
+                if isinstance(branch, dict):
+                    _patch_object(branch)
+
+    _patch_object(schema)
+    return schema
 
 
 class OpenAIBackend(FormatterBackend, AdapterMixin):
@@ -912,38 +955,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
-            if self._server_type == _ServerType.OPENAI:
-                # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
-                # However, not all schemas generates by Mellea include additionalProperties.
-                # GenerativeStub, in particular, does not add this property.
-                # The easiest way to address this disparity between OpenAI and other inference providers is to
-                # monkey-patch the response format exactly when we are actually using the OpenAI server.
-                #
-                # This only addresses the additionalProperties=False constraint.
-                # Other constraints we should be checking/patching are described here:
-                # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
-                monkey_patched_response_schema = _format.model_json_schema()  # type: ignore
-                monkey_patched_response_schema["additionalProperties"] = False
-                extra_params["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": _format.__name__,
-                        "schema": monkey_patched_response_schema,
-                        "strict": True,
-                    },
-                }
-            else:
-                MelleaLogger.get_logger().info(
-                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on supporting JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
-                )
-                extra_params["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": _format.__name__,
-                        "schema": _format.model_json_schema(),  # type: ignore
-                        "strict": True,
-                    },
-                }
+            # OpenAI's structured outputs (and OpenAI-compatible proxies that
+            # terminate on the OpenAI platform, e.g. OpenRouter routing to an
+            # OpenAI model) require strict schemas: additionalProperties=False
+            # on every object and no $ref entries. Pydantic emits $ref/$defs
+            # for nested models, so inline them and patch the schema before
+            # sending; providers with less strict requirements ignore the
+            # extra property. See #1491.
+            schema = _make_response_schema_openai_strict(
+                _format.model_json_schema()  # type: ignore
+            )
+            extra_params["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": _format.__name__,
+                    "schema": schema,
+                    "strict": True,
+                },
+            }
 
         # Append tool call information if applicable.
         tools: dict[str, AbstractMelleaTool] = dict()
@@ -1243,10 +1272,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
             # It's dependent on the vllm version though. We check at backend init.
+            # The same strict-schema treatment as response_format applies here: OpenAI-style
+            # structured decoding requires additionalProperties=false and self-contained
+            # schemas. See #1491.
             if self._use_structured_output_for_raw:
-                extra_body["structured_outputs"] = {"json": format.model_json_schema()}  # type: ignore
+                extra_body["structured_outputs"] = {
+                    "json": _make_response_schema_openai_strict(
+                        format.model_json_schema()
+                    )  # type: ignore
+                }
             else:
-                extra_body["guided_json"] = format.model_json_schema()  # type: ignore
+                extra_body["guided_json"] = _make_response_schema_openai_strict(  # type: ignore
+                    format.model_json_schema()  # type: ignore
+                )
         if tool_calls:
             MelleaLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
