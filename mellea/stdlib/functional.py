@@ -500,7 +500,7 @@ def transform(
                 f"the transform of {obj} with transformation description '{transformation}' resulted in a tool call with no generated arguments; consider calling the function `{chosen_tool._tool.name}` directly"
             )
 
-        new_ctx.add(chosen_tool)
+        new_ctx = new_ctx.add(chosen_tool)
         MelleaLogger.get_logger().info(
             "added a tool message from transform to the context"
         )
@@ -1279,7 +1279,7 @@ async def atransform(
                 f"the transform of {obj} with transformation description '{transformation}' resulted in a tool call with no generated arguments; consider calling the function `{chosen_tool._tool.name}` directly"
             )
 
-        new_ctx.add(chosen_tool)
+        new_ctx = new_ctx.add(chosen_tool)
         MelleaLogger.get_logger().info(
             "added a tool message from transform to the context"
         )

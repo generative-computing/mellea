@@ -8,14 +8,20 @@ Covers image preprocessing plus chat()/instruct() forwarding of multimodal input
 
 import base64
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image as PILImage
 
-from mellea.core import AudioBlock, ImageBlock
-from mellea.stdlib.components import Document, Instruction, Message
-from mellea.stdlib.context import SimpleContext
+from mellea.core import AudioBlock, Context, ImageBlock, ModelToolCall
+from mellea.stdlib.components import (
+    Document,
+    Instruction,
+    Message,
+    MObject,
+    ToolMessage,
+)
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.functional import (
     _parse_and_clean_image_args,
     aact,
@@ -404,6 +410,86 @@ async def test_aact_no_raise_without_requirements():
     backend = _mock_backend_returning("ok")
     out, _ = await aact(CBlock("x"), SimpleContext(), backend, await_result=True)
     assert str(out) == "ok"
+
+
+# --- transform()/atransform() must persist the chosen tool message in context ---
+
+
+def _make_tool_message(name: str = "some_tool") -> ToolMessage:
+    """Return a real ToolMessage, as `_call_tools`/`_acall_tools` would produce."""
+    tool_call = ModelToolCall(name=name, func=MagicMock(), args={"arg": 1})
+    return ToolMessage(
+        role="tool",
+        content="tool result",
+        tool_output="tool result",
+        name=name,
+        args={"arg": 1},
+        tool=tool_call,
+    )
+
+
+def _assert_tool_message_persisted_after(
+    prior_ctx: Context,
+    new_ctx: Context,
+    prior_messages: list[Message],
+    tool_message: ToolMessage,
+) -> None:
+    """Assert `new_ctx` is exactly `prior_messages + [tool_message]`, by identity.
+
+    Also asserts `prior_ctx` (the context passed into transform/atransform,
+    which the mocked act/aact returns unchanged) still holds only
+    `prior_messages` — confirming `Context.add` did not mutate it in place.
+    """
+    assert prior_ctx.as_list() == prior_messages
+    result = new_ctx.as_list()
+    assert len(result) == len(prior_messages) + 1
+    for expected, actual in zip(prior_messages, result):
+        assert actual is expected
+    assert result[-1] is tool_message
+
+
+@patch("mellea.stdlib.functional._call_tools")
+@patch("mellea.stdlib.functional.act")
+def test_transform_persists_chosen_tool_message_in_context(mock_act, mock_call_tools):
+    """The tool message transform() picks must survive in the returned Context.
+
+    `Context.add` is non-mutating (it returns a new context rather than
+    mutating in place), so `new_ctx.add(chosen_tool)` as a bare statement
+    silently drops the tool message. Seed the context with a prior message
+    so the assertion can also catch an `add` that clobbers existing history
+    instead of appending to it, and confirm the tool message lands last.
+    """
+    from mellea.stdlib.functional import transform
+
+    prior_message = Message("user", "prior")
+    ctx = ChatContext().add(prior_message)
+    mock_act.return_value = (MagicMock(), ctx)
+    tool_message = _make_tool_message()
+    mock_call_tools.return_value = [tool_message]
+
+    _, new_ctx = transform(MObject(), "transform it", ctx, MagicMock())
+
+    _assert_tool_message_persisted_after(ctx, new_ctx, [prior_message], tool_message)
+
+
+@pytest.mark.asyncio
+@patch("mellea.stdlib.functional._acall_tools", new_callable=AsyncMock)
+@patch("mellea.stdlib.functional.aact", new_callable=AsyncMock)
+async def test_atransform_persists_chosen_tool_message_in_context(
+    mock_aact, mock_acall_tools
+):
+    """Async counterpart of test_transform_persists_chosen_tool_message_in_context."""
+    from mellea.stdlib.functional import atransform
+
+    prior_message = Message("user", "prior")
+    ctx = ChatContext().add(prior_message)
+    mock_aact.return_value = (MagicMock(), ctx)
+    tool_message = _make_tool_message()
+    mock_acall_tools.return_value = [tool_message]
+
+    _, new_ctx = await atransform(MObject(), "transform it", ctx, MagicMock())
+
+    _assert_tool_message_persisted_after(ctx, new_ctx, [prior_message], tool_message)
 
 
 if __name__ == "__main__":
