@@ -25,6 +25,7 @@ from mellea.plugins.hooks.generation import (
     GenerationBatchPostCallPayload,
     GenerationBatchPreCallPayload,
     GenerationErrorPayload,
+    GenerationEventPayload,
     GenerationPostCallPayload,
     GenerationPreCallPayload,
 )
@@ -185,6 +186,56 @@ async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tra
     attrs = _attrs(fake_span)
     assert attrs["error.type"] == "ValueError"
     assert "gid-err" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_event_records_chunk_processed_on_in_flight_span(
+    backend_plugin, enabled_tracing
+):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(action=None, context=None, generation_id="gid-ev")
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    payload = GenerationEventPayload(
+        generation_id="gid-ev",
+        event_name="chunk_processed",
+        data={"chunk_index": 2, "chunk_len": 5},
+    )
+    await backend_plugin.on_generation_event(payload, {})
+
+    events = _events(fake_span)
+    assert len(events) == 1
+    name, attrs = events[0]
+    assert name == "chunk_processed"
+    assert attrs["mellea.chunk_index"] == 2
+    assert attrs["mellea.chunk_text_length"] == 5
+    # The event does not close the span.
+    fake_span.end.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_event_skipped_when_span_not_in_flight(backend_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(action=None, context=None, generation_id="gid-live")
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    # Event for a different, non-in-flight id must not land on the live span.
+    payload = GenerationEventPayload(
+        generation_id="gid-missing",
+        event_name="chunk_processed",
+        data={"chunk_index": 0, "chunk_len": 1},
+    )
+    await backend_plugin.on_generation_event(payload, {})
+
+    fake_span.add_event.assert_not_called()
 
 
 @pytest.mark.asyncio

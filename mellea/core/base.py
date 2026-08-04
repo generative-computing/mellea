@@ -23,6 +23,7 @@ import binascii
 import datetime
 import enum
 import logging
+import os
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Iterable, Mapping
@@ -49,6 +50,15 @@ from PIL import Image as PILImage
 
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
+
+
+def _emit_chunk_events_enabled() -> bool:
+    """Whether `MELLEA_EMIT_CHUNK_EVENTS` opts into per-chunk `generation_event` hooks."""
+    return os.getenv("MELLEA_EMIT_CHUNK_EVENTS", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
 
 
 class CBlock:
@@ -751,6 +761,9 @@ class _GenerationState:
         chunk_size: Minimum number of chunks to stream at a single time.
         first_chunk_received: Whether the first streamed chunk has arrived
             (gates time-to-first-byte recording).
+        processed_chunk_index: Monotonic index of the next streamed chunk to be
+            processed, incremented once per chunk folded into the value across the
+            repeated `astream()` calls of one generation.
         generate: The task driving generation. Linked to `generate_type`.
         generate_type: Determines which functions can resolve the thunk's value.
         generate_extra: Auxiliary generation task; currently only used by hf.
@@ -770,6 +783,7 @@ class _GenerationState:
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
     chunk_size: int = 3
     first_chunk_received: bool = False
+    processed_chunk_index: int = 0
     generate: asyncio.Task[None] | None = None
     generate_type: GenerateType = GenerateType.NONE
     generate_extra: asyncio.Task[Any] | None = None
@@ -852,6 +866,16 @@ class ModelOutputThunk(Generic[S]):
                 datetime.datetime.now() - self._gen.start
             ).total_seconds() * 1000
             self._gen.first_chunk_received = True
+
+    async def _emit_event(self, event_name: str, **data: Any) -> None:
+        """Fire a `generation_event` hook named `event_name` carrying `data`, if any plugin subscribes."""
+        if has_plugins(HookType.GENERATION_EVENT):
+            from ..plugins.hooks.generation import GenerationEventPayload
+
+            event_payload = GenerationEventPayload(
+                generation_id=self._call.generation_id, event_name=event_name, data=data
+            )
+            await invoke_hook(HookType.GENERATION_EVENT, event_payload)
 
     async def cancel_generation(self, error: Exception | None = None) -> None:
         """Cancel an in-progress streaming generation, drain the queue, and fire the `generation_error` hook.
@@ -1153,9 +1177,18 @@ class ModelOutputThunk(Generic[S]):
 
             raise chunks[-1]
 
+        emit_chunk_events = self.generation.streaming and _emit_chunk_events_enabled()
         for chunk in chunks:
             assert self._gen.process is not None
+            prev_len = len(self._underlying_value or "")
             await self._gen.process(self, chunk)
+            if emit_chunk_events:
+                await self._emit_event(
+                    "chunk_processed",
+                    chunk_index=self._gen.processed_chunk_index,
+                    chunk_len=len(self._underlying_value or "") - prev_len,
+                )
+            self._gen.processed_chunk_index += 1
 
         if do_set_computed:
             assert self._underlying_value is not None

@@ -114,13 +114,15 @@ def mocked_tracing_backend():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_streaming_span_creates_and_closes_span(span_exporter):
+async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch):
     """Streaming backend call creates a chat span that closes after the stream completes.
 
     Uses a mocked Ollama client so no server is needed.  Verifies the core
     TracingPlugin invariant: the span must remain open for the full duration of
-    streaming and close only once all chunks are consumed.
+    streaming and close only once all chunks are consumed. With
+    `MELLEA_EMIT_CHUNK_EVENTS` on, the span also carries `chunk_processed` events.
     """
+    monkeypatch.setenv("MELLEA_EMIT_CHUNK_EVENTS", "true")
 
     async def fake_chat_stream(*args, **kwargs):
         for content in ["1", " 2", " 3"]:
@@ -178,6 +180,11 @@ async def test_streaming_span_creates_and_closes_span(span_exporter):
     assert span_duration_s >= 0.1, (
         f"Span closed too early — duration {span_duration_s:.3f}s is shorter than "
         "the streaming delay, suggesting the span did not stay open for the full stream"
+    )
+
+    chunk_events = [e for e in backend_span.events if e.name == "chunk_processed"]
+    assert chunk_events, (
+        "expected chunk_processed events with MELLEA_EMIT_CHUNK_EVENTS on"
     )
 
 

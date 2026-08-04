@@ -55,6 +55,7 @@ class HookType(StrEnum):
     GENERATION_BATCH_PRE_CALL = "generation_batch_pre_call"
     GENERATION_BATCH_POST_CALL = "generation_batch_post_call"
     GENERATION_BATCH_ERROR = "generation_batch_error"
+    GENERATION_EVENT = "generation_event"
 
     # Validation
     VALIDATION_PRE_CHECK = "validation_pre_check"
@@ -106,6 +107,7 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         GenerationBatchPostCallPayload,
         GenerationBatchPreCallPayload,
         GenerationErrorPayload,
+        GenerationEventPayload,
         GenerationPostCallPayload,
         GenerationPreCallPayload,
     )
@@ -166,6 +168,7 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
             GenerationBatchErrorPayload,
             PluginResult,
         ),
+        HookType.GENERATION_EVENT.value: (GenerationEventPayload, PluginResult),
         # Validation
         HookType.VALIDATION_PRE_CHECK.value: (ValidationPreCheckPayload, PluginResult),
         HookType.VALIDATION_POST_CHECK.value: (
