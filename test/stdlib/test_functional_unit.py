@@ -429,9 +429,18 @@ def _make_tool_message(name: str = "some_tool") -> ToolMessage:
 
 
 def _assert_tool_message_persisted_after(
-    new_ctx: Context, prior_messages: list[Message], tool_message: ToolMessage
+    prior_ctx: Context,
+    new_ctx: Context,
+    prior_messages: list[Message],
+    tool_message: ToolMessage,
 ) -> None:
-    """Assert `new_ctx` is exactly `prior_messages + [tool_message]`, by identity."""
+    """Assert `new_ctx` is exactly `prior_messages + [tool_message]`, by identity.
+
+    Also asserts `prior_ctx` (the context passed into transform/atransform,
+    which the mocked act/aact returns unchanged) still holds only
+    `prior_messages` — confirming `Context.add` did not mutate it in place.
+    """
+    assert prior_ctx.as_list() == prior_messages
     result = new_ctx.as_list()
     assert len(result) == len(prior_messages) + 1
     for expected, actual in zip(prior_messages, result):
@@ -454,15 +463,13 @@ def test_transform_persists_chosen_tool_message_in_context(mock_act, mock_call_t
 
     prior_message = Message("user", "prior")
     ctx = ChatContext().add(prior_message)
-    # mock_act returns this same ctx unchanged, so transform() extends it directly;
-    # that's what makes asserting `result[0] is prior_message` meaningful below.
     mock_act.return_value = (MagicMock(), ctx)
     tool_message = _make_tool_message()
     mock_call_tools.return_value = [tool_message]
 
     _, new_ctx = transform(MObject(), "transform it", ctx, MagicMock())
 
-    _assert_tool_message_persisted_after(new_ctx, [prior_message], tool_message)
+    _assert_tool_message_persisted_after(ctx, new_ctx, [prior_message], tool_message)
 
 
 @pytest.mark.asyncio
@@ -476,15 +483,13 @@ async def test_atransform_persists_chosen_tool_message_in_context(
 
     prior_message = Message("user", "prior")
     ctx = ChatContext().add(prior_message)
-    # mock_aact returns this same ctx unchanged, so atransform() extends it directly;
-    # that's what makes asserting `result[0] is prior_message` meaningful below.
     mock_aact.return_value = (MagicMock(), ctx)
     tool_message = _make_tool_message()
     mock_acall_tools.return_value = [tool_message]
 
     _, new_ctx = await atransform(MObject(), "transform it", ctx, MagicMock())
 
-    _assert_tool_message_persisted_after(new_ctx, [prior_message], tool_message)
+    _assert_tool_message_persisted_after(ctx, new_ctx, [prior_message], tool_message)
 
 
 if __name__ == "__main__":
