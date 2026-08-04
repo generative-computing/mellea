@@ -26,6 +26,7 @@ from ...core import (
     ImageUrlBlock,
     ModelOutputThunk,
     Requirement,
+    Span,
     TemplateRepresentation,
     blockify,
 )
@@ -39,7 +40,7 @@ class Instruction(Component[str]):
         description (str | CBlock | None): The task description shown to the model.
         requirements (list[Requirement | str] | None): Constraints the output must satisfy.
         icl_examples (list[str | CBlock] | None): In-context-learning examples.
-        grounding_context (dict[str, str | CBlock | ModelOutputThunk | Component] | None): Named context
+        grounding_context (dict[str, str | Span] | None): Named context
             passages injected into the prompt.
         user_variables (dict[str, str] | None): Jinja2 variable substitutions applied
             to all string parameters.
@@ -59,8 +60,7 @@ class Instruction(Component[str]):
         description: str | CBlock | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | ModelOutputThunk | Component]
-        | None = None,
+        grounding_context: dict[str, str | Span] | None = None,
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
@@ -135,13 +135,13 @@ class Instruction(Component[str]):
 
         self._description = blockify(description) if description is not None else None
         self._requirements: list[Requirement] = [reqify(r) for r in requirements]
-        self._icl_examples: list[CBlock | Component | ModelOutputThunk] = [
+        self._icl_examples: list[Span] = [
             blockify(e)
             for e in icl_examples  # type: ignore[misc]
         ]
 
         # Map all string values to CBlocks in the grounding context.
-        self._grounding_context: dict[str, CBlock | ModelOutputThunk | Component] = {
+        self._grounding_context: dict[str, Span] = {
             k: blockify(v) for k, v in grounding_context.items()
         }
         self._prefix: CBlock | Component | None = (
@@ -154,28 +154,22 @@ class Instruction(Component[str]):
         self._audio = audio
         self._repair_string: str | None = None
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[Span]:
         """Returns all of the constituent parts of an Instruction.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: All non-None constituent blocks and
+            list[Span]: All non-None constituent blocks and
             components making up this instruction, including description,
             prefix, grounding context, requirements, and in-context-learning
             examples.
         """
         # Add all of the optionally defined CBlocks/Components then filter Nones at the end.
-        cs: list[Component | CBlock | ModelOutputThunk | None] = [
-            self._description,
-            self._prefix,
-            self._output_prefix,
-        ]
+        cs: list[Span | None] = [self._description, self._prefix, self._output_prefix]
         cs.extend(self._grounding_context.values())
         cs.extend(self._requirements)
         cs.extend(self._icl_examples)
 
-        filtered: list[Component | CBlock | ModelOutputThunk] = [
-            block for block in cs if block is not None
-        ]
+        filtered: list[Span] = [block for block in cs if block is not None]
         return filtered
 
     def format_for_llm(self) -> TemplateRepresentation:

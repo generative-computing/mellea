@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from mellea.core.utils import MelleaLogger
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
-from ..core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ..core import Component, Span, TemplateRepresentation
 from ..core.base import AbstractMelleaTool, ModelToolCall
 from .model_options import ModelOption
 
@@ -364,8 +364,7 @@ def add_tools_from_model_options(
 
 
 def add_tools_from_context_actions(
-    tools_dict: dict[str, AbstractMelleaTool],
-    ctx_actions: list[Component | CBlock | ModelOutputThunk] | None,
+    tools_dict: dict[str, AbstractMelleaTool], ctx_actions: list[Span] | None
 ):
     """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
 

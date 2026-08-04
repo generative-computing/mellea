@@ -535,11 +535,11 @@ class ComponentParseError(Exception):
 class Component(Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[Span]:
         """Returns the set of all constituent sub-components and content blocks of this `Component`.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: A list of child `Component`, `CBlock`,
+            list[Span]: A list of child `Component`, `CBlock`,
             or `ModelOutputThunk` objects that make up this component. The list may be empty for
             leaf components.
 
@@ -732,8 +732,8 @@ class _CallInfo:
             provider-assigned `GenerationMetadata.response_id`.
     """
 
-    action: Component | CBlock | ModelOutputThunk | None = None
-    context: list[Component | CBlock | ModelOutputThunk] | None = None
+    action: Span | None = None
+    context: list[Span] | None = None
     model_options: dict[str, Any] | None = None
     generation_id: str | None = None
 
@@ -1392,20 +1392,39 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         return True
 
 
+Span = Component | CBlock | ModelOutputThunk
+"""Canonical alias for the three node-shaped types that flow through mellea.
+
+A `Span` is any of `Component`, `CBlock`, or `ModelOutputThunk` — the values
+carried at each node of the context DAG, returned from `Component.parts()`,
+rendered by formatters, passed to backends for generation, and sampled over by
+sampling strategies. Only `Component` carries `.parse()`/`.format_for_llm()`
+semantics; the other two are carried through as opaque content spans.
+
+Note:
+    This `Span` is unrelated to `opentelemetry.trace.Span`, which is used
+    internally by `mellea.telemetry`. The two never appear in the same module
+    today; if a file needs both, import the tracing one under an alias
+    (e.g. `from opentelemetry.trace import Span as OtelSpan`).
+"""
+
+
 @dataclass
 class ContextTurn:
     """A turn of model input and model output.
 
     Args:
-        model_input (CBlock | Component | ModelOutputThunk | None): The input component or content block for this turn,
+        model_input (Span | None): The input component or content block for this turn,
             or `None` for an output-only partial turn.
         output (ModelOutputThunk | Component | None): The model's output thunk for this turn,
             or a manually-added response component (e.g., `Message` with role="assistant"),
-            or `None` for an input-only partial turn.
+            or `None` for an input-only partial turn. Deliberately narrower than
+            `model_input`'s `Span`: a raw `CBlock` is not a valid model output,
+            so `CBlock` is excluded from this union.
 
     """
 
-    model_input: CBlock | Component | ModelOutputThunk | None
+    model_input: Span | None
     output: ModelOutputThunk | Component | None
 
 
@@ -1421,13 +1440,13 @@ class Context(abc.ABC):
         is_root_node (bool): `True` when this context is the root (empty) node of the linked list.
         previous_node (Context | None): The context node from which this one was created,
             or `None` for the root node.
-        node_data (Component | CBlock | ModelOutputThunk | None): The data associated with this context node,
+        node_data (Span | None): The data associated with this context node,
             or `None` for the root node.
         is_chat_context (bool): Whether this context operates in chat (multi-turn) mode.
     """
 
     _previous: Context | None
-    _data: Component | CBlock | ModelOutputThunk | None
+    _data: Span | None
     _is_root: bool
     _is_chat_context: bool = True
 
@@ -1440,16 +1459,12 @@ class Context(abc.ABC):
     # factory functions below this line.
 
     @classmethod
-    def from_previous(
-        cls: type[ContextT],
-        previous: Context,
-        data: Component | CBlock | ModelOutputThunk,
-    ) -> ContextT:
+    def from_previous(cls: type[ContextT], previous: Context, data: Span) -> ContextT:
         """Constructs a new context node linked to an existing context node.
 
         Args:
             previous (Context): The existing context to extend.
-            data (Component | CBlock | ModelOutputThunk): The component, content block, or model output to associate with the new node.
+            data (Span): The component, content block, or model output to associate with the new node.
 
         Returns:
             ContextT: A new context instance whose `previous_node` is `previous`.
@@ -1504,7 +1519,7 @@ class Context(abc.ABC):
         return self._previous
 
     @property
-    def node_data(self) -> Component | CBlock | ModelOutputThunk | None:
+    def node_data(self) -> Span | None:
         """Returns the data associated with this context node.
 
         Internal use: Users should not need to use this property.
@@ -1518,9 +1533,7 @@ class Context(abc.ABC):
 
     # User functions below this line.
 
-    def as_list(
-        self, last_n_components: int | None = None
-    ) -> list[Component | CBlock | ModelOutputThunk]:
+    def as_list(self, last_n_components: int | None = None) -> list[Span]:
         """Returns a list of context components sorted from earliest (first) to most recent (last).
 
         If `last_n_components` is `None`, then all components are returned.
@@ -1530,9 +1543,9 @@ class Context(abc.ABC):
                 Pass `None` to return the full history.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: Components in chronological order (oldest first).
+            list[Span]: Components in chronological order (oldest first).
         """
-        context_list: list[Component | CBlock | ModelOutputThunk] = []
+        context_list: list[Span] = []
         current_context: Context = self
 
         last_n_count = 0
@@ -1555,9 +1568,7 @@ class Context(abc.ABC):
         context_list.reverse()
         return context_list
 
-    def actions_for_available_tools(
-        self,
-    ) -> list[Component | CBlock | ModelOutputThunk] | None:
+    def actions_for_available_tools(self) -> list[Span] | None:
         """Provides a list of actions to extract tools from for use during generation.
 
         Returns `None` if it is not possible to construct such a list. Can be used to make
@@ -1565,7 +1576,7 @@ class Context(abc.ABC):
         overridden by subclasses.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk] | None: The list of actions whose tools should be made
+            list[Span] | None: The list of actions whose tools should be made
             available during generation, or `None` if unavailable.
         """
         return self.view_for_generation()
@@ -1618,11 +1629,11 @@ class Context(abc.ABC):
     # Abstract methods below this line.
 
     @abc.abstractmethod
-    def add(self, c: Component | CBlock | ModelOutputThunk) -> Context:
+    def add(self, c: Span) -> Context:
         """Returns a new context obtained by appending `c` to this context.
 
         Args:
-            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to add to the context.
+            c (Span): The component, content block, or model output to add to the context.
 
         Returns:
             Context: A new context node with `c` as its data and this context as its previous node.
@@ -1631,14 +1642,14 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
+    def view_for_generation(self) -> list[Span] | None:
         """Provides a linear list of context components to use for generation.
 
         Returns `None` if it is not possible to construct such a list (e.g., the context
         is in an inconsistent state). Concrete subclasses define the ordering and filtering logic.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk] | None: An ordered list of components suitable for passing
+            list[Span] | None: An ordered list of components suitable for passing
             to a backend, or `None` if generation is not currently possible.
         """
         ...
@@ -1728,7 +1739,7 @@ class GenerateLog:
         backend (str | None): Identifier of the inference backend used for this generation.
         model_options (dict[str, Any] | None): Model configuration options applied to this call.
         model_output (Any | None): The raw output returned by the backend API.
-        action (Component | CBlock | ModelOutputThunk | None): The component or block that triggered the generation.
+        action (Span | None): The component or block that triggered the generation.
         result (ModelOutputThunk | None): The `ModelOutputThunk` produced by this generation call.
         is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
         extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
@@ -1740,7 +1751,7 @@ class GenerateLog:
     backend: str | None = None
     model_options: dict[str, Any] | None = None
     model_output: Any | None = None
-    action: Component | CBlock | ModelOutputThunk | None = None
+    action: Span | None = None
     result: ModelOutputThunk | None = None
     is_final_result: bool | None = False
     extra: dict[str, Any] | None = None
@@ -1775,9 +1786,7 @@ class ModelToolCall:
         return self.func.run(**self.args)
 
 
-def blockify(
-    s: str | CBlock | Component | ModelOutputThunk,
-) -> CBlock | Component | ModelOutputThunk:
+def blockify(s: str | Span) -> Span:
     """Turn a raw string into a `CBlock`, leaving `CBlock`, `Component`, and `ModelOutputThunk` objects unchanged.
 
     Args:

@@ -19,7 +19,14 @@ from copy import copy
 from typing import Literal
 
 from .backend import Backend, BaseModelSubclass
-from .base import CBlock, Component, Context, ModelOutputThunk, TemplateRepresentation
+from .base import (
+    CBlock,
+    Component,
+    Context,
+    ModelOutputThunk,
+    Span,
+    TemplateRepresentation,
+)
 
 
 class ValidationResult:
@@ -358,7 +365,7 @@ class Requirement(Component[str]):
         """
         return PartialValidationResult("unknown")
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[Span]:
         """Returns all of the constituent parts of a Requirement.
 
         Returns:

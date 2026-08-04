@@ -5,17 +5,17 @@
 
 from __future__ import annotations
 
-from mellea.core import CBlock, Component, Context, ModelOutputThunk
+from mellea.core import Context, Span
 
 
 class SimpleContext(Context):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
-    def add(self, c: Component | CBlock | ModelOutputThunk) -> SimpleContext:
+    def add(self, c: Span) -> SimpleContext:
         """Add a new component or CBlock to the context and return the updated context.
 
         Args:
-            c (Component | CBlock | ModelOutputThunk): The component, content
+            c (Span): The component, content
                 block, or model output to record.
 
         Returns:
@@ -24,13 +24,13 @@ class SimpleContext(Context):
         """
         return SimpleContext.from_previous(self, c)
 
-    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
+    def view_for_generation(self) -> list[Span] | None:
         """Return an empty list, since `SimpleContext` does not pass history to the model.
 
         Each call to the model is treated as a stateless, independent exchange.
         No prior turns are forwarded.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk] | None: Always an empty list.
+            list[Span] | None: Always an empty list.
         """
         return []

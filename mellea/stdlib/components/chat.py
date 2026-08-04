@@ -26,6 +26,7 @@ from ...core import (
     ImageUrlBlock,
     ModelOutputThunk,
     ModelToolCall,
+    Span,
     TemplateRepresentation,
 )
 from .docs.document import Document, _coerce_to_documents
@@ -107,14 +108,14 @@ class Message(Component["Message"]):
         """Returns the OpenAI-compatible tool calls associated with this message."""
         return self._tool_calls
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[Span]:
         """Return the constituent parts of this message, including content, documents, images, and audio.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: A list beginning with the content block,
+            list[Span]: A list beginning with the content block,
             followed by any attached documents, image blocks, and audio blocks.
         """
-        parts: list[Component | CBlock | ModelOutputThunk] = [self._content_cblock]
+        parts: list[Span] = [self._content_cblock]
         if self._docs is not None:
             parts.extend(self._docs)
         if self._images is not None:
@@ -292,7 +293,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
             `Message`.
     """
 
-    def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message | None:
+    def _to_msg(c: Span) -> Message | None:
         match c:
             case Message():
                 return c
@@ -360,7 +361,7 @@ def as_generic_chat_history(
     if formatter is None:
         formatter = _default_formatter
 
-    def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message:
+    def _to_msg(c: Span) -> Message:
         match c:
             case Message():
                 return c

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from mellea.backends.context_lengths import get_context_length
 from mellea.backends.model_ids import ModelIdentifier
-from mellea.core import CBlock, Component, Context, ModelOutputThunk
+from mellea.core import Context, Span
 from mellea.core.utils import MelleaLogger
 
 if TYPE_CHECKING:
@@ -167,11 +167,11 @@ class ChatContext(Context):
         """
         return self._make_root(self._model_id)
 
-    def add(self, c: Component | CBlock | ModelOutputThunk) -> ChatContext:
+    def add(self, c: Span) -> ChatContext:
         """Append `c` and run the compactor; return the resulting context.
 
         Args:
-            c (Component | CBlock | ModelOutputThunk): The component, content
+            c (Span): The component, content
                 block, or model output to append.
 
         Returns:
@@ -184,7 +184,7 @@ class ChatContext(Context):
             new = self._compactor.compact(new)
         return new
 
-    def view_for_generation(self) -> list[Component | CBlock | ModelOutputThunk] | None:
+    def view_for_generation(self) -> list[Span] | None:
         """Return the components to forward to the model.
 
         Compaction is applied at `add` time (Pattern 1), so the stored history
@@ -198,7 +198,7 @@ class ChatContext(Context):
         `None` is returned when the underlying history is non-linear.
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk] | None: Ordered list of
+            list[Span] | None: Ordered list of
             context entries, or `None` if the history is non-linear.
         """
         if self._token_context_length_limit is not None:
@@ -211,9 +211,7 @@ class ChatContext(Context):
 
         return self.as_list()
 
-    def _as_list_token_budget(
-        self, token_budget: int
-    ) -> list[Component | CBlock | ModelOutputThunk]:
+    def _as_list_token_budget(self, token_budget: int) -> list[Span]:
         """Return history items that fit within *token_budget*, dropping oldest first.
 
         Walks the linked list from newest to oldest, accumulating items until
@@ -234,7 +232,7 @@ class ChatContext(Context):
             TemplateFormatter(self._model_id) if self._model_id is not None else None
         )
         effective_budget = int(token_budget * 0.75)
-        collected: list[Component | CBlock | ModelOutputThunk] = []
+        collected: list[Span] = []
         spent = 0
         chain_length = 0
         node: Context = self
@@ -275,7 +273,7 @@ class ChatContext(Context):
 
 
 def _rebuild_chat_context(
-    components: list[Component | CBlock | ModelOutputThunk],
+    components: list[Span],
     *,
     compactor: InlineCompactor | None = None,
     token_context_length_limit: int | None = None,

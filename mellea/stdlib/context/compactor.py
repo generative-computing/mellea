@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
 
-from mellea.core import CBlock, Component, Context, ModelOutputThunk
+from mellea.core import CBlock, Context, ModelOutputThunk, Span
 from mellea.core.backend import Backend
 from mellea.core.utils import MelleaLogger
 from mellea.stdlib.components.chat import Message, ToolMessage
@@ -40,7 +40,7 @@ T = TypeVar("T", bound=Context)
 # Pin predicates                                                              #
 # --------------------------------------------------------------------------- #
 
-PinPredicate: TypeAlias = Callable[[list[Component | CBlock | ModelOutputThunk]], int]
+PinPredicate: TypeAlias = Callable[[list[Span]], int]
 """A function that returns the index after the pinned prefix.
 
 Given the full ordered list of context components, a `PinPredicate`
@@ -53,7 +53,7 @@ The shape subsumes both "contiguous role-based prefix" (e.g.
 """
 
 
-def pin_nothing(components: list[Component | CBlock | ModelOutputThunk]) -> int:
+def pin_nothing(components: list[Span]) -> int:
     """A :class:`PinPredicate` that pins nothing — pure body, no protected prefix.
 
     Args:
@@ -66,7 +66,7 @@ def pin_nothing(components: list[Component | CBlock | ModelOutputThunk]) -> int:
     return 0
 
 
-def pin_system(components: list[Component | CBlock | ModelOutputThunk]) -> int:
+def pin_system(components: list[Span]) -> int:
     """Pin contiguous leading `Message(role="system")` components.
 
     Stops at the first non-system component. A system message that appears
@@ -86,9 +86,7 @@ def pin_system(components: list[Component | CBlock | ModelOutputThunk]) -> int:
     return len(components)
 
 
-def pin_system_and_initial_user(
-    components: list[Component | CBlock | ModelOutputThunk],
-) -> int:
+def pin_system_and_initial_user(components: list[Span]) -> int:
     """Pin leading system messages PLUS the first user message that follows.
 
     Useful when the initial user prompt encodes the goal of the conversation
@@ -533,11 +531,7 @@ class LLMSummarizeCompactor:
             return ctx
 
     async def _async_compact(
-        self,
-        ctx: ChatContext,
-        backend: Backend,
-        full: list[Component | CBlock | ModelOutputThunk],
-        pin_end: int,
+        self, ctx: ChatContext, backend: Backend, full: list[Span], pin_end: int
     ) -> ChatContext:
         """Async core — renders the body, calls the backend, rebuilds the context.
 

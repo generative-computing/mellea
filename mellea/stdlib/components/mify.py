@@ -18,13 +18,7 @@ from collections.abc import Callable
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
 from ...backends.tools import MelleaTool
-from ...core import (
-    CBlock,
-    Component,
-    ComponentParseError,
-    ModelOutputThunk,
-    TemplateRepresentation,
-)
+from ...core import ComponentParseError, ModelOutputThunk, Span, TemplateRepresentation
 from .mobject import MObjectProtocol, Query, Transform
 
 
@@ -46,7 +40,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
     _parsing_func: Callable[[str], object] | None = None
     _stringify_func: Callable[[object], str] | None = None
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[Span]:
         """Return the constituent sub-components of this mified object.
 
         TODO: we need to rewrite this component to use format_for_llm and initializer correctly.
@@ -56,7 +50,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         [no-index]
 
         Returns:
-            list[Component | CBlock | ModelOutputThunk]: Always an empty list for mified objects.
+            list[Span]: Always an empty list for mified objects.
         """
         return []
 

@@ -29,6 +29,7 @@ from ..core import (
     Component,
     MelleaLogger,
     ModelOutputThunk,
+    Span,
     TemplateRepresentation,
 )
 from .chat_formatter import ChatFormatter
@@ -167,11 +168,11 @@ class TemplateFormatter(ChatFormatter):
 
         return template.render(stringified_template_args)
 
-    def print(self, c: Component | CBlock | ModelOutputThunk) -> str:
+    def print(self, c: Span) -> str:
         """Render a component, content block, or model output to a string using a Jinja2 template.
 
         Args:
-            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output to render.
+            c (Span): The component, content block, or model output to render.
 
         Returns:
             str: The rendered string representation of the component.

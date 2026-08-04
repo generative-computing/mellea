@@ -55,6 +55,7 @@ from ..core import (
     MelleaLogger,
     ModelOutputThunk,
     Requirement,
+    Span,
     get_audio_from_component,
     get_images_from_component,
 )
@@ -277,9 +278,7 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
 
 
-def _check_no_multimodal_blocks(
-    action: Component | CBlock | ModelOutputThunk | None, ctx: Context | None
-) -> None:
+def _check_no_multimodal_blocks(action: Span | None, ctx: Context | None) -> None:
     """Raise ValueError if any component in ctx or action carries image/audio blocks.
 
     Args:
@@ -870,7 +869,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     # TODO make this async.
     def _make_merged_kv_cache(
         self,
-        linearized_ctx: list[Component | CBlock | ModelOutputThunk],
+        linearized_ctx: list[Span],
         ctx_as_conversation: Any,
         model_options: Any,
         tools: Any,
@@ -1182,7 +1181,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context_standard(
         self,
-        action: Component | CBlock | ModelOutputThunk,
+        action: Span,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,

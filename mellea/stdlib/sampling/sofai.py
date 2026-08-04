@@ -32,6 +32,7 @@ from ...core import (
     SampleActionType,
     SamplingResult,
     SamplingStrategy,
+    Span,
     TemplateRepresentation,
     ValidationResult,
     log_context,
@@ -202,10 +203,21 @@ class SOFAISamplingStrategy(SamplingStrategy):
         return best_idx
 
     @staticmethod
-    def _extract_action_prompt(action: Component) -> str:
-        """Extract a human-readable prompt from a Component."""
+    def _extract_action_prompt(action: Span) -> str:
+        """Extract a human-readable prompt from an action.
+
+        Only a `Component` carries `.format_for_llm()`/`.description` semantics.
+        A bare `CBlock` or `ModelOutputThunk` is an opaque span, so its content
+        (`str(action)`, which yields the block's value) is used directly rather
+        than attempting a Component-only extraction path.
+        """
         if isinstance(action, Message):
             return action.content
+
+        # Non-Component actions (CBlock / ModelOutputThunk) have no description
+        # or format_for_llm; their value *is* the prompt content. See #1439.
+        if not isinstance(action, Component):
+            return str(action)
 
         for attr in ("description", "_description"):
             if hasattr(action, attr):
@@ -416,14 +428,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
     def _prepare_s2_context(
         self,
         s2_mode: str,
-        original_action: Component,
+        original_action: Span,
         original_context: Context,
         last_result_ctx: Context,
-        last_action: Component,
+        last_action: Span,
         sampled_results: list[ComputedModelOutputThunk],
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]],
         loop_count: int,
-    ) -> tuple[Component, Context]:
+    ) -> tuple[Span, Context]:
         """Prepare context and action for S2 Solver based on mode.
 
         Args:
@@ -501,7 +513,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
     async def _generate_and_validate(
         self,
         solver_backend: Backend,
-        action: Component,
+        action: Span,
         ctx: Context,
         reqs: list[Requirement],
         session_backend: Backend,
@@ -662,9 +674,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
                     constraint_scores,
                 ) = await self._generate_and_validate(
                     solver_backend=self.s1_solver_backend,
-                    # A CBlock/MOT action is carried through as an opaque
-                    # Component-shaped span (SOFAI has no repair semantics for it).
-                    action=next_action,  # type: ignore[arg-type]
+                    # A CBlock/MOT action is carried through as an opaque span
+                    # (SOFAI has no repair semantics for it).
+                    action=next_action,
                     ctx=next_context,
                     reqs=reqs,
                     session_backend=backend,
@@ -676,7 +688,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 # Store attempt
                 sampled_results.append(result)
                 sampled_scores.append(constraint_scores)
-                sampled_actions.append(next_action)  # type: ignore[arg-type]
+                sampled_actions.append(next_action)
                 sample_contexts.append(result_ctx)
 
                 # Check for success
@@ -740,10 +752,10 @@ class SOFAISamplingStrategy(SamplingStrategy):
             s2_action, s2_context = self._prepare_s2_context(
                 s2_mode=self.s2_solver_mode,
                 # See note above: non-Component actions are opaque spans here.
-                original_action=action,  # type: ignore[arg-type]
+                original_action=action,
                 original_context=context,
                 last_result_ctx=result_ctx,
-                last_action=next_action,  # type: ignore[arg-type]
+                last_action=next_action,
                 sampled_results=sampled_results,
                 sampled_scores=sampled_scores,
                 loop_count=loop_count,

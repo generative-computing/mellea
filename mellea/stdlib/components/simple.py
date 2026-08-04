@@ -11,7 +11,11 @@ the go-to component type for ad-hoc prompts that do not require a dedicated
 
 from typing import Any
 
-from ...core import CBlock, Component, ModelOutputThunk
+# Span is the union type hint for `parts()`. CBlock, Component, and
+# ModelOutputThunk are also imported for the runtime `issubclass` check in
+# `_kwargs_type_check` and the `match` arms in `make_json_string` — they are
+# not a leftover incomplete migration to the Span alias.
+from ...core import CBlock, Component, ModelOutputThunk, Span
 
 
 class SimpleComponent(Component[str]):
@@ -25,7 +29,7 @@ class SimpleComponent(Component[str]):
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
 
-    def parts(self) -> list[Component | CBlock | ModelOutputThunk]:
+    def parts(self) -> list[Span]:
         """Returns the values of the kwargs.
 
         Returns:

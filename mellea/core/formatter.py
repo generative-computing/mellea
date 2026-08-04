@@ -12,18 +12,18 @@ respectively.
 
 import abc
 
-from .base import CBlock, Component, ModelOutputThunk
+from .base import Span
 
 
 class Formatter(abc.ABC):
     """A Formatter converts `Component`s into strings and parses `ModelOutputThunk`s into `Component`s (or `CBlock`s)."""
 
     @abc.abstractmethod
-    def print(self, c: Component | CBlock | ModelOutputThunk) -> str:
+    def print(self, c: Span) -> str:
         """Renders a `Component`, `CBlock`, or `ModelOutputThunk` into a string suitable for use as model input.
 
         Args:
-            c (Component | CBlock | ModelOutputThunk): The component, content block, or model output thunk to render.
+            c (Span): The component, content block, or model output thunk to render.
 
         Returns:
             str: The rendered string representation of `c`.

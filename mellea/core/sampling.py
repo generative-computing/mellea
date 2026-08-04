@@ -23,14 +23,17 @@ from .base import (
     Context,
     ModelOutputThunk,
     S,
+    Span,
 )
 from .requirement import Requirement, ValidationResult
 
 # The kinds of action a sampling strategy may operate on. Originally `Component`
 # only; widened to include `CBlock` and `ModelOutputThunk` so that `act`/`aact`
 # can sample over non-Component actions (see #356). Only `Component` carries
-# `.parse()` semantics; the others are carried through as opaque spans.
-SampleActionType = Component | CBlock | ModelOutputThunk
+# `.parse()` semantics; the others are carried through as opaque spans. Now a
+# re-export of the canonical `Span` alias (see #1439); kept as its own name
+# so the historical `mellea.core.SampleActionType` import path keeps working.
+SampleActionType = Span
 
 
 class SamplingResult(CBlock, Generic[S]):
