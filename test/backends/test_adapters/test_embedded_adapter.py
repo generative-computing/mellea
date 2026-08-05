@@ -334,6 +334,51 @@ class TestFromHub:
             with pytest.raises(ImportError, match="huggingface_hub is required"):
                 EmbeddedIntrinsicAdapter.from_hub("some/repo")
 
+    @pytest.mark.parametrize(
+        "error_name", ["GatedRepoError", "RepositoryNotFoundError"]
+    )
+    def test_auth_error_raises_permission_error(self, error_name):
+        """Auth failures from snapshot_download become an actionable PermissionError."""
+        from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+
+        class _FakeResponse:
+            headers: dict = {}
+            status_code = 403
+            url = "https://huggingface.co"
+            request = None
+
+        error_cls = {
+            "GatedRepoError": GatedRepoError,
+            "RepositoryNotFoundError": RepositoryNotFoundError,
+        }[error_name]
+        hf_error = error_cls("denied", response=_FakeResponse())
+
+        with patch("huggingface_hub.snapshot_download", side_effect=hf_error):
+            with pytest.raises(PermissionError, match="huggingface-cli login") as exc:
+                EmbeddedIntrinsicAdapter.from_hub("ibm-granite/private-switch")
+
+        # Original HF error is chained for debugging.
+        assert exc.value.__cause__ is hf_error
+
+    def test_missing_index_after_download_raises_clear_file_not_found(self, tmp_path):
+        """A snapshot without adapter_index.json raises a repo-scoped FileNotFoundError.
+
+        snapshot_download can return a path that lacks the index (wrong
+        repo/revision, not a Switch model, or a stale cache). The message names
+        the repo and lists auth as one possible cause, rather than leaking the
+        cryptic snapshot-cache path from from_model_directory.
+        """
+        with patch("huggingface_hub.snapshot_download", return_value=str(tmp_path)):
+            with pytest.raises(
+                FileNotFoundError, match=r"ibm-granite/some-switch"
+            ) as exc:
+                EmbeddedIntrinsicAdapter.from_hub("ibm-granite/some-switch")
+
+        # Not the raw cache-path error, and auth is offered as a possibility.
+        assert "huggingface-cli login" in str(exc.value)
+        # The original cryptic error is chained for debugging.
+        assert isinstance(exc.value.__cause__, FileNotFoundError)
+
 
 # ---- EmbeddedIntrinsicAdapter.from_source ----
 

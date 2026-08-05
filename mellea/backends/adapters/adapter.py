@@ -23,7 +23,7 @@ from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
-from ...core import Backend
+from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
 from ._core import Adapter as _AdapterCore, Identity, IOContract, WeightsBinding
 from .catalog import AdapterType, fetch_intrinsic_metadata
@@ -767,8 +767,11 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
 
         Raises:
             ImportError: If `huggingface_hub` is not installed.
-            FileNotFoundError: If `adapter_index.json` is missing (delegated
-                from :meth:`from_model_directory`).
+            PermissionError: If the repository is private or gated and the
+                current Hugging Face credentials do not grant access.
+            FileNotFoundError: If the downloaded snapshot has no
+                `adapter_index.json` (wrong repo/revision, not a Granite Switch
+                model, or a stale cache).
             ValueError: If no adapters are found (delegated from
                 :meth:`from_model_directory`).
         """
@@ -780,16 +783,42 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 'Hugging Face Hub. Please install it with: pip install "mellea[switch]"'
             ) from e
 
-        local_root = huggingface_hub.snapshot_download(
-            repo_id=repo_id,
-            allow_patterns=["adapter_index.json", "io_configs/**"],
-            cache_dir=cache_dir,
-            revision=revision,
-        )
+        from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+
+        try:
+            local_root = huggingface_hub.snapshot_download(
+                repo_id=repo_id,
+                allow_patterns=["adapter_index.json", "io_configs/**"],
+                cache_dir=cache_dir,
+                revision=revision,
+            )
+        except (GatedRepoError, RepositoryNotFoundError) as e:
+            auth_hint = (
+                f"Could not access '{repo_id}' on Hugging Face Hub. If this is a "
+                "private or gated repository, authenticate first (run "
+                "`huggingface-cli login` or set the HF_TOKEN environment variable) "
+                "and confirm your account has been granted access to the repository."
+            )
+            MelleaLogger.get_logger().error(auth_hint)
+            raise PermissionError(auth_hint) from e
+
         try:
             return EmbeddedIntrinsicAdapter.from_model_directory(
                 local_root, intrinsic_name=intrinsic_name
             )
+        except FileNotFoundError as e:
+            # snapshot_download succeeded but the index is absent: wrong
+            # repo/revision, a repo that isn't a Granite Switch model, or a
+            # stale cache. Replace the cryptic snapshot-cache path with a
+            # repo-scoped message that names authentication as one possible
+            # cause without asserting it.
+            raise FileNotFoundError(
+                f"adapter_index.json was not found in the downloaded snapshot of "
+                f"'{repo_id}'. Verify it is a Granite Switch model and that the "
+                f"revision '{revision}' is correct; if the repository is private "
+                "or gated, confirm you are authenticated (run "
+                "`huggingface-cli login` or set the HF_TOKEN environment variable)."
+            ) from e
         except ValueError as e:
             if intrinsic_name is not None:
                 raise ValueError(
