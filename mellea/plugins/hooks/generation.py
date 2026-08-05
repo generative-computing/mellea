@@ -89,6 +89,11 @@ class GenerationEventPayload(MelleaBasePayload):
     A generic carrier for events emitted mid-generation. Subscribers branch on
     `event_name` and read the keys `data` carries for that event.
 
+    Known events:
+        `chunk_processed`: emitted once per streamed chunk during `astream()`
+            (opt-in via `MELLEA_EMIT_CHUNK_EVENTS`). `data` keys:
+            `chunk_index` (int), `chunk_text_length` (int).
+
     Attributes:
         generation_id: Mellea-side hook correlation ID matching the corresponding
             pre_call payload, distinct from the provider-assigned
@@ -96,7 +101,7 @@ class GenerationEventPayload(MelleaBasePayload):
             generate one.
         event_name: Identifies the event. Subscribers dispatch on this.
         data: Values for this event, keyed by name. The keys present depend on
-            `event_name`.
+            `event_name` (see Known events above).
     """
 
     generation_id: str | None = None

@@ -203,7 +203,7 @@ async def test_event_records_chunk_processed_on_in_flight_span(
     payload = GenerationEventPayload(
         generation_id="gid-ev",
         event_name="chunk_processed",
-        data={"chunk_index": 2, "chunk_len": 5},
+        data={"chunk_index": 2, "chunk_text_length": 5},
     )
     await backend_plugin.on_generation_event(payload, {})
 
@@ -231,7 +231,7 @@ async def test_event_skipped_when_span_not_in_flight(backend_plugin, enabled_tra
     payload = GenerationEventPayload(
         generation_id="gid-missing",
         event_name="chunk_processed",
-        data={"chunk_index": 0, "chunk_len": 1},
+        data={"chunk_index": 0, "chunk_text_length": 1},
     )
     await backend_plugin.on_generation_event(payload, {})
 

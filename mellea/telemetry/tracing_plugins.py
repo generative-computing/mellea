@@ -158,7 +158,7 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
                 attributes={
                     "mellea.generation.chunk_index": payload.data.get("chunk_index"),
                     "mellea.generation.chunk_text_length": payload.data.get(
-                        "chunk_len"
+                        "chunk_text_length"
                     ),
                 },
             )

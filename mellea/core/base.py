@@ -50,15 +50,7 @@ from PIL import Image as PILImage
 
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
-
-
-def _emit_chunk_events_enabled() -> bool:
-    """Whether `MELLEA_EMIT_CHUNK_EVENTS` opts into per-chunk `generation_event` hooks."""
-    return os.getenv("MELLEA_EMIT_CHUNK_EVENTS", "false").lower() in (
-        "true",
-        "1",
-        "yes",
-    )
+from .utils import _parse_bool_env
 
 
 class CBlock:
@@ -1177,16 +1169,18 @@ class ModelOutputThunk(Generic[S]):
 
             raise chunks[-1]
 
-        emit_chunk_events = self.generation.streaming and _emit_chunk_events_enabled()
+        emit_chunk_events = self.generation.streaming and _parse_bool_env(
+            os.getenv("MELLEA_EMIT_CHUNK_EVENTS", ""), default=False
+        )
         for chunk in chunks:
             assert self._gen.process is not None
-            prev_len = len(self._underlying_value or "")
+            prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
             if emit_chunk_events:
                 await self._emit_event(
                     "chunk_processed",
                     chunk_index=self._gen.processed_chunk_index,
-                    chunk_len=len(self._underlying_value or "") - prev_len,
+                    chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
                 )
             self._gen.processed_chunk_index += 1
 
