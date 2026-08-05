@@ -18,6 +18,7 @@ import abc
 import contextlib
 import pathlib
 import re
+import tempfile
 import warnings
 from typing import Literal, TypeAlias, TypeVar, cast
 
@@ -751,8 +752,18 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
     ) -> list["EmbeddedIntrinsicAdapter"]:
         """Load embedded adapters from a Granite Switch model on Hugging Face Hub.
 
-        Downloads `adapter_index.json` and the `io_configs/` directory, then
-        delegates to :meth:`from_model_directory`.
+        Downloads `adapter_index.json` and the `io_configs/` directory into a
+        self-contained local directory, then delegates to
+        :meth:`from_model_directory`.
+
+        `huggingface_hub.snapshot_download`'s default cache-backed snapshot
+        directory populates `io_configs/` with symlinks that resolve into a
+        sibling `blobs/` directory *outside* the snapshot root. That breaks the
+        contract `from_model_directory` expects (a self-contained model
+        directory) and trips its path-escape check. To satisfy that contract,
+        the files are downloaded directly into a temporary directory (via
+        `local_dir`) instead, so `io_configs/` contains real files rather than
+        symlinks escaping the directory.
 
         Args:
             repo_id (str): Hugging Face Hub repository ID
@@ -780,22 +791,24 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 'Hugging Face Hub. Please install it with: pip install "mellea[switch]"'
             ) from e
 
-        local_root = huggingface_hub.snapshot_download(
-            repo_id=repo_id,
-            allow_patterns=["adapter_index.json", "io_configs/**"],
-            cache_dir=cache_dir,
-            revision=revision,
-        )
-        try:
-            return EmbeddedIntrinsicAdapter.from_model_directory(
-                local_root, intrinsic_name=intrinsic_name
+        with tempfile.TemporaryDirectory() as local_dir:
+            downloaded_dir = huggingface_hub.snapshot_download(
+                repo_id=repo_id,
+                allow_patterns=["adapter_index.json", "io_configs/**"],
+                cache_dir=cache_dir,
+                local_dir=local_dir,
+                revision=revision,
             )
-        except ValueError as e:
-            if intrinsic_name is not None:
-                raise ValueError(
-                    f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
-                ) from e
-            raise ValueError(f"No adapters found in {repo_id}") from e
+            try:
+                return EmbeddedIntrinsicAdapter.from_model_directory(
+                    downloaded_dir, intrinsic_name=intrinsic_name
+                )
+            except ValueError as e:
+                if intrinsic_name is not None:
+                    raise ValueError(
+                        f"No adapter found for adapter function '{intrinsic_name}' in {repo_id}"
+                    ) from e
+                raise ValueError(f"No adapters found in {repo_id}") from e
 
     @staticmethod
     def from_source(
