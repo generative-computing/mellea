@@ -51,7 +51,7 @@ hf = [
 
 
 litellm = [
-    "litellm>=1.83.10",  # CVE-2026-42203/42208/42271/40217 (pulls fixed anthropic>=0.87.0, python-multipart>=0.0.27)
+    "litellm>=1.95.0",  # CVE-2026-42203/42208/42271/40217 (pulls fixed anthropic>=0.87.0, python-multipart>=0.0.27); floor also converges the resolver's 3.12-3.14 litellm fork (was 1.83.14 vs 1.93.0), see 1456
     "boto3", # for Bedrock support.
 ]
 
