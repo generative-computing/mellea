@@ -215,7 +215,7 @@ def describe_function(func: Callable) -> FunctionDict:
     """
     return {
         "name": func.__name__,
-        "signature": str(inspect.signature(func)),
+        "signature": str(inspect.signature(func, eval_str=True)),
         "docstring": inspect.getdoc(func),
     }
 
@@ -233,7 +233,7 @@ def get_argument(func: Callable, key: str, val: Any) -> Argument:
     Returns:
         Argument: an argument object representing the given parameter.
     """
-    sig = inspect.signature(func)
+    sig = inspect.signature(func, eval_str=True)
     param = sig.parameters.get(key)
     if param and param.annotation is not inspect.Parameter.empty:
         param_type = param.annotation
