@@ -239,7 +239,7 @@ Mellea also adds context-specific attributes to backend spans:
 | `mellea.tool_calls_enabled` | Whether tool calling is enabled |
 | `mellea.num_actions` | Number of actions in batch (for `generate_from_raw`) |
 
-When `MELLEA_EMIT_CHUNK_EVENTS=true`, backend spans also record a `chunk_processed`
+When `MELLEA_GENERATION_CHUNK_EVENTS=true`, backend spans also record a `chunk_processed`
 span event per streamed chunk, carrying its index and added text length. This is
 opt-in and off by default, since a long response produces one event per chunk.
 

@@ -1170,7 +1170,7 @@ class ModelOutputThunk(Generic[S]):
             raise chunks[-1]
 
         emit_chunk_events = self.generation.streaming and _parse_bool_env(
-            os.getenv("MELLEA_EMIT_CHUNK_EVENTS", ""), default=False
+            os.getenv("MELLEA_GENERATION_CHUNK_EVENTS", ""), default=False
         )
         for chunk in chunks:
             assert self._gen.process is not None

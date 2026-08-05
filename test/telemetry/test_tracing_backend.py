@@ -121,13 +121,13 @@ async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch
     Uses a mocked Ollama client so no server is needed.  Verifies the core
     TracingPlugin invariant: the span must remain open for the full duration of
     streaming and close only once all chunks are consumed. `chunk_processed`
-    events are emitted only when `MELLEA_EMIT_CHUNK_EVENTS` is on; with the env
+    events are emitted only when `MELLEA_GENERATION_CHUNK_EVENTS` is on; with the env
     unset (the default) the span carries no such events.
     """
     if emit:
-        monkeypatch.setenv("MELLEA_EMIT_CHUNK_EVENTS", "true")
+        monkeypatch.setenv("MELLEA_GENERATION_CHUNK_EVENTS", "true")
     else:
-        monkeypatch.delenv("MELLEA_EMIT_CHUNK_EVENTS", raising=False)
+        monkeypatch.delenv("MELLEA_GENERATION_CHUNK_EVENTS", raising=False)
 
     async def fake_chat_stream(*args, **kwargs):
         for content in ["1", " 2", " 3"]:
@@ -190,11 +190,11 @@ async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch
     chunk_events = [e for e in backend_span.events if e.name == "chunk_processed"]
     if emit:
         assert chunk_events, (
-            "expected chunk_processed events with MELLEA_EMIT_CHUNK_EVENTS on"
+            "expected chunk_processed events with MELLEA_GENERATION_CHUNK_EVENTS on"
         )
     else:
         assert not chunk_events, (
-            "expected no chunk_processed events when MELLEA_EMIT_CHUNK_EVENTS is unset"
+            "expected no chunk_processed events when MELLEA_GENERATION_CHUNK_EVENTS is unset"
         )
 
 

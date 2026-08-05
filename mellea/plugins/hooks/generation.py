@@ -91,7 +91,7 @@ class GenerationEventPayload(MelleaBasePayload):
 
     Known events:
         `chunk_processed`: emitted once per streamed chunk during `astream()`
-            (opt-in via `MELLEA_EMIT_CHUNK_EVENTS`). `data` keys:
+            (opt-in via `MELLEA_GENERATION_CHUNK_EVENTS`). `data` keys:
             `chunk_index` (int), `chunk_text_length` (int).
 
     Attributes:
