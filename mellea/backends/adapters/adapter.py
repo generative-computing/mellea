@@ -23,7 +23,7 @@ from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
-from ...core import Backend, MelleaLogger
+from ...core import Backend
 from ...formatters.granite import intrinsics as intrinsics
 from ._core import Adapter as _AdapterCore, Identity, IOContract, WeightsBinding
 from .catalog import AdapterType, fetch_intrinsic_metadata
@@ -777,13 +777,12 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
         """
         try:
             import huggingface_hub
+            from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
         except ImportError as e:
             raise ImportError(
                 "huggingface_hub is required to download embedded adapter configs from "
                 'Hugging Face Hub. Please install it with: pip install "mellea[switch]"'
             ) from e
-
-        from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
 
         try:
             local_root = huggingface_hub.snapshot_download(
@@ -797,9 +796,9 @@ class EmbeddedIntrinsicAdapter(_AdapterCore):
                 f"Could not access '{repo_id}' on Hugging Face Hub. If this is a "
                 "private or gated repository, authenticate first (run "
                 "`huggingface-cli login` or set the HF_TOKEN environment variable) "
-                "and confirm your account has been granted access to the repository."
+                "and confirm your account has been granted access to the repository. "
+                "Otherwise, the repository ID may be misspelled."
             )
-            MelleaLogger.get_logger().error(auth_hint)
             raise PermissionError(auth_hint) from e
 
         try:
