@@ -26,6 +26,7 @@ from mellea.stdlib.components.genstub import (
     get_argument,
 )
 from mellea.stdlib.requirements.requirement import reqify
+from test.stdlib.components._pep563_fixtures import extract_requirements, greet
 
 # --- describe_function ---
 
@@ -64,6 +65,26 @@ def test_describe_function_no_docstring():
     assert result["docstring"] is None
 
 
+def test_describe_function_resolves_postponed_annotations():
+    # Regression test: `from __future__ import annotations` made
+    # `describe_function` render literal annotation strings (e.g.
+    # "(product_description: 'str') -> 'list[Requirement]'") instead of the
+    # resolved types, corrupting the prompt sent to the model.
+    # Guard the precondition: if the fixture module ever drops its
+    # `from __future__ import annotations`, this test would otherwise keep
+    # passing without exercising postponed annotations at all.
+    assert extract_requirements.__annotations__["return"] == "list[Requirement]"
+
+    result = describe_function(extract_requirements)
+    assert "'str'" not in result["signature"]
+    assert "'list[Requirement]'" not in result["signature"]
+    assert "product_description: str" in result["signature"]
+    assert (
+        "list[test.stdlib.components._pep563_fixtures.Requirement]"
+        in result["signature"]
+    )
+
+
 # --- get_argument ---
 
 
@@ -83,6 +104,18 @@ def test_get_argument_int_value_not_quoted():
     arg = get_argument(fn, "count", 42)
     assert arg._argument_dict["value"] == 42
     assert "int" in str(arg._argument_dict["annotation"])
+
+
+def test_get_argument_string_value_quoted_under_postponed_annotations():
+    # Regression test: under `from __future__ import annotations`,
+    # `param.annotation` was the literal string "str" rather than the `str`
+    # type, so the `is str` check failed and string arguments were rendered
+    # unquoted in the prompt.
+    # Guard the precondition: same reasoning as above.
+    assert greet.__annotations__["name"] == "str"
+
+    arg = get_argument(greet, "name", "Alice")
+    assert arg._argument_dict["value"] == '"Alice"'
 
 
 def test_get_argument_no_annotation_falls_back_to_runtime_type():
