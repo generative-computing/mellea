@@ -187,14 +187,21 @@ async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch
         "the streaming delay, suggesting the span did not stay open for the full stream"
     )
 
-    chunk_events = [e for e in backend_span.events if e.name == "chunk_processed"]
+    chunk_events = [
+        (
+            e.attributes.get("mellea.generation.chunk_index"),
+            e.attributes.get("mellea.generation.chunk_text_length"),
+        )
+        for e in backend_span.events
+        if e.name == "chunk_processed"
+    ]
     if emit:
-        assert chunk_events, (
-            "expected chunk_processed events with MELLEA_GENERATION_CHUNK_EVENTS on"
+        assert chunk_events == [(0, 1), (1, 2), (2, 2), (3, 0)], (
+            "Chunk events should report (index, added_text_length) per chunk"
         )
     else:
         assert not chunk_events, (
-            "expected no chunk_processed events when MELLEA_GENERATION_CHUNK_EVENTS is unset"
+            "Chunk events should be absent when MELLEA_GENERATION_CHUNK_EVENTS is unset"
         )
 
 
