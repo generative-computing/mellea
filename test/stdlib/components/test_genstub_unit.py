@@ -26,6 +26,7 @@ from mellea.stdlib.components.genstub import (
     get_argument,
 )
 from mellea.stdlib.requirements.requirement import reqify
+from test.stdlib.components._pep563_fixtures import extract_requirements, greet
 
 # --- describe_function ---
 
@@ -69,8 +70,6 @@ def test_describe_function_resolves_postponed_annotations():
     # `describe_function` render literal annotation strings (e.g.
     # "(product_description: 'str') -> 'list[Requirement]'") instead of the
     # resolved types, corrupting the prompt sent to the model.
-    from test.stdlib.components._pep563_fixtures import extract_requirements
-
     # Guard the precondition: if the fixture module ever drops its
     # `from __future__ import annotations`, this test would otherwise keep
     # passing without exercising postponed annotations at all.
@@ -112,8 +111,6 @@ def test_get_argument_string_value_quoted_under_postponed_annotations():
     # `param.annotation` was the literal string "str" rather than the `str`
     # type, so the `is str` check failed and string arguments were rendered
     # unquoted in the prompt.
-    from test.stdlib.components._pep563_fixtures import greet
-
     # Guard the precondition: same reasoning as above.
     assert greet.__annotations__["name"] == "str"
 
