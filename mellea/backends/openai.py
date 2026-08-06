@@ -91,8 +91,14 @@ def _make_response_schema_openai_strict(schema: dict[str, Any]) -> dict[str, Any
         schema.pop("$defs", None)
 
     def _patch_object(obj: dict[str, Any]) -> None:
-        if obj.get("type") == "object":
+        add_props = obj.get("additionalProperties")
+        if obj.get("type") == "object" and not isinstance(add_props, dict):
+            # Only assert a closed object when the value schema isn't itself a
+            # constraint (e.g. dict[str, Model] emits additionalProperties as a
+            # schema — overwriting it with False would drop the value type).
             obj["additionalProperties"] = False
+        elif isinstance(add_props, dict):
+            _patch_object(add_props)
         props = obj.get("properties")
         if isinstance(props, dict):
             for prop_schema in props.values():

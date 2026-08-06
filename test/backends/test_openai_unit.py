@@ -472,6 +472,16 @@ class _ExtractUserListResponse(BaseModel):
     users: list[_NestedProfile]
 
 
+class _ExtractUserMapResponse(BaseModel):
+    """Wrapper with a dict-of-model field.
+
+    Pydantic emits the value type as `additionalProperties: {schema}` (not
+    `false`) on the map object, which is the case that must not be clobbered.
+    """
+
+    users: dict[str, _NestedProfile]
+
+
 def test_make_response_schema_openai_strict_patches_list_items():
     """Objects inside array items are patched too."""
     schema = _make_response_schema_openai_strict(
@@ -507,6 +517,49 @@ def test_make_response_schema_openai_strict_patches_anyof_branches():
     # The null branch is not an object, so it stays untouched.
     null_branch = next(b for b in result["anyOf"] if b.get("type") == "null")
     assert "additionalProperties" not in null_branch
+
+
+def test_make_response_schema_openai_strict_patches_freeform_dict_scalar_values():
+    """A `dict[str, scalar]` value-type schema (e.g. int) is preserved too."""
+
+    class _Counts(BaseModel):
+        counts: dict[str, int]
+
+    schema = _make_response_schema_openai_strict(_Counts.model_json_schema())
+
+    counts = schema["properties"]["counts"]
+    assert counts["type"] == "object"
+    # Scalar value type stays intact instead of being turned into False.
+    assert counts["additionalProperties"] == {"type": "integer"}
+
+
+def test_make_response_schema_openai_strict_preserves_dict_value_schema():
+    """A `dict[str, Model]` value-type schema is preserved, not overwritten.
+
+    Regression guard for the `additionalProperties`-as-schema case: pydantic
+    emits `additionalProperties: {<value schema>}` for `dict[str, Model]`
+    fields. Overwriting that with `False` would silently drop the value type
+    (turning "string keys -> Model" into "no extra properties allowed"), so
+    the patcher must recurse into the value schema instead of clobbering it.
+    """
+    schema = _make_response_schema_openai_strict(
+        _ExtractUserMapResponse.model_json_schema()
+    )
+
+    users = schema["properties"]["users"]
+    assert users["type"] == "object"
+
+    # The value-type schema must survive as a dict, NOT be replaced by False.
+    value_schema = users["additionalProperties"]
+    assert isinstance(value_schema, dict), (
+        "dict[str, Model] value type was clobbered by additionalProperties=False"
+    )
+
+    # The nested model reachable through the map is inlined and closed.
+    assert "$ref" not in value_schema
+    assert value_schema["type"] == "object"
+    assert value_schema["additionalProperties"] is False
+    assert set(value_schema["properties"]) == {"name", "age"}
 
 
 # --- Payload tests: what actually reaches the provider (#1491) ---
