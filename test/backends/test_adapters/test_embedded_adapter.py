@@ -6,7 +6,7 @@
 import json
 import os
 import pathlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 import yaml
@@ -308,6 +308,7 @@ class TestFromHub:
             repo_id="ibm-granite/granite-switch-micro",
             allow_patterns=["adapter_index.json", "io_configs/**"],
             cache_dir="/tmp/test-cache",
+            local_dir=ANY,
             revision="test-rev",
         )
         assert len(adapters) == 2
@@ -324,10 +325,20 @@ class TestFromHub:
             repo_id="ibm-granite/granite-switch-micro",
             allow_patterns=["adapter_index.json", "io_configs/**"],
             cache_dir=None,
+            local_dir=ANY,
             revision="main",
         )
         assert len(adapters) == 1
         assert adapters[0].intrinsic_name == "citations"
+
+    def test_from_hub_requests_local_dir(self, model_dir):
+        """from_hub requests local_dir to avoid symlinks escaping model directory."""
+        with patch(
+            "huggingface_hub.snapshot_download", return_value=str(model_dir)
+        ) as mock_dl:
+            EmbeddedIntrinsicAdapter.from_hub("ibm-granite/granite-switch-micro")
+        _, kwargs = mock_dl.call_args
+        assert "local_dir" in kwargs and kwargs["local_dir"] is not None
 
     def test_missing_huggingface_hub_raises(self):
         with patch.dict("sys.modules", {"huggingface_hub": None}):
@@ -377,6 +388,7 @@ class TestFromSource:
             repo_id="ibm-granite/granite-switch-micro",
             allow_patterns=["adapter_index.json", "io_configs/**"],
             cache_dir="/tmp/cache",
+            local_dir=ANY,
             revision="v2",
         )
 
