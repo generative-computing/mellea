@@ -65,11 +65,16 @@ def test_describe_function_no_docstring():
 
 
 def test_describe_function_resolves_postponed_annotations():
-    # Regression test for issue #1476: `from __future__ import annotations`
-    # made `describe_function` render literal annotation strings (e.g.
+    # Regression test: `from __future__ import annotations` made
+    # `describe_function` render literal annotation strings (e.g.
     # "(product_description: 'str') -> 'list[Requirement]'") instead of the
     # resolved types, corrupting the prompt sent to the model.
     from test.stdlib.components._pep563_fixtures import extract_requirements
+
+    # Guard the precondition: if the fixture module ever drops its
+    # `from __future__ import annotations`, this test would otherwise keep
+    # passing without exercising postponed annotations at all.
+    assert extract_requirements.__annotations__["return"] == "list[Requirement]"
 
     result = describe_function(extract_requirements)
     assert "'str'" not in result["signature"]
@@ -103,11 +108,14 @@ def test_get_argument_int_value_not_quoted():
 
 
 def test_get_argument_string_value_quoted_under_postponed_annotations():
-    # Regression test for issue #1476: under `from __future__ import
-    # annotations`, `param.annotation` was the literal string "str" rather
-    # than the `str` type, so the `is str` check failed and string arguments
-    # were rendered unquoted in the prompt.
+    # Regression test: under `from __future__ import annotations`,
+    # `param.annotation` was the literal string "str" rather than the `str`
+    # type, so the `is str` check failed and string arguments were rendered
+    # unquoted in the prompt.
     from test.stdlib.components._pep563_fixtures import greet
+
+    # Guard the precondition: same reasoning as above.
+    assert greet.__annotations__["name"] == "str"
 
     arg = get_argument(greet, "name", "Alice")
     assert arg._argument_dict["value"] == '"Alice"'
