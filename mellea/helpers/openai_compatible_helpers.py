@@ -264,7 +264,11 @@ def message_to_openai_message(
         images or audio, `"content"` is a list of content-part dicts; otherwise
         is a plain string. For tool-only assistant turns, `"content"` is `None`
         and `"tool_calls"` carries the structured call list. When content is
-        present alongside tool calls, both keys are included. When
+        present alongside tool calls, both keys are included. For a `ToolMessage`
+        (a tool-result turn) whose originating `ModelToolCall` carries a
+        provider-supplied id, the dict also carries `"tool_call_id"` (matching the
+        assistant tool call) and the tool `"name"`, as spec-strict
+        OpenAI-compatible providers require on `role: "tool"` messages. When
         `replay_reasoning` is `True` and reasoning is present, the dict also
         carries a `"reasoning_content"` field.
 
@@ -324,6 +328,20 @@ def message_to_openai_message(
         result["tool_calls"] = tool_calls
         if msg.images is None and not content:
             result["content"] = None
+
+    # Tool-result turns: spec-strict OpenAI-compatible providers require a
+    # `role: "tool"` message to reference the assistant's originating tool call
+    # via `tool_call_id` (issue #1389). Emit it — plus the optional `name` — when
+    # the ToolMessage carries a provider-supplied id. Duck-type on `_tool` to
+    # avoid importing ToolMessage (circular import) and to leave plain
+    # `role="tool"` Messages, and ids-less parses (e.g. Hugging Face raw-string
+    # tool calls), untouched.
+    tool_call = getattr(msg, "_tool", None)
+    if tool_call is not None and getattr(tool_call, "tool_call_id", None) is not None:
+        result["tool_call_id"] = tool_call.tool_call_id
+        name = getattr(msg, "name", None)
+        if name is not None:
+            result["name"] = name
 
     if replay_reasoning and msg.thinking:
         result["reasoning_content"] = msg.thinking

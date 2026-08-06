@@ -26,7 +26,7 @@ from mellea.helpers.openai_compatible_helpers import (
     message_to_openai_message,
     messages_to_docs,
 )
-from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components import Document, Message, ToolMessage
 
 # Minimal valid 1x1 white PNG
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -611,6 +611,62 @@ class TestBuildToolCalls:
         assert isinstance(args["timestamp"], str)
         assert "2024-01-15" in args["timestamp"]
         assert args["amount"] == "123.45"
+
+
+def _make_tool_message(
+    content: str = "sunny in Dallas",
+    *,
+    tool_call_id: str | None = "call_abc123",
+    name: str = "get_weather",
+) -> ToolMessage:
+    """Build a ToolMessage whose underlying ModelToolCall carries a tool_call_id."""
+    tool = _make_tool(name)
+    model_tool_call = ModelToolCall(
+        name=name, func=tool, args={"location": "Dallas"}, tool_call_id=tool_call_id
+    )
+    return ToolMessage(
+        role="tool",
+        content=content,
+        tool_output=content,
+        name=name,
+        args={"location": "Dallas"},
+        tool=model_tool_call,
+    )
+
+
+class TestToolMessageSerialization:
+    """Tool results must round-trip as role='tool' with a matching tool_call_id (issue #1389)."""
+
+    def test_tool_message_serializes_tool_call_id(self):
+        """A ToolMessage with a provider id emits role='tool', tool_call_id, and name."""
+        msg = _make_tool_message()
+        result = message_to_openai_message(msg)
+        assert result["role"] == "tool"
+        assert result["content"] == "sunny in Dallas"
+        assert result["tool_call_id"] == "call_abc123"
+        assert result["name"] == "get_weather"
+
+    def test_tool_message_without_id_omits_tool_call_id(self):
+        """A ToolMessage lacking a provider id (e.g. HF raw parsing) omits the key."""
+        msg = _make_tool_message(tool_call_id=None)
+        result = message_to_openai_message(msg)
+        assert result["role"] == "tool"
+        assert result["content"] == "sunny in Dallas"
+        assert "tool_call_id" not in result
+
+    def test_plain_message_role_tool_has_no_tool_call_id(self):
+        """A plain Message (not a ToolMessage) with role='tool' is unaffected."""
+        msg = Message(role="tool", content="raw tool text")
+        result = message_to_openai_message(msg)
+        assert result == {"role": "tool", "content": "raw tool text"}
+
+    def test_regular_message_unaffected(self):
+        """Ordinary user messages carry no tool_call_id or name keys."""
+        msg = Message(role="user", content="hello")
+        result = message_to_openai_message(msg)
+        assert result == {"role": "user", "content": "hello"}
+        assert "tool_call_id" not in result
+        assert "name" not in result
 
 
 if __name__ == "__main__":
