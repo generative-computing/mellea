@@ -1344,15 +1344,20 @@ def convert_function_to_ollama_tool(
     """
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
+    # eval_str=True resolves PEP 563 postponed (string) annotations back to
+    # real type objects; without it, `from __future__ import annotations` in
+    # the tool's module leaves Pydantic unable to build the schema for
+    # non-builtin parameter types.
+    sig = inspect.signature(func, eval_str=True)
     schema = type(
         func.__name__,
         (BaseModel,),
         {
             "__annotations__": {
                 k: v.annotation if v.annotation != inspect._empty else str
-                for k, v in inspect.signature(func).parameters.items()
+                for k, v in sig.parameters.items()
             },
-            "__signature__": inspect.signature(func),
+            "__signature__": sig,
             "__doc__": parsed_docstring[doc_string_hash],
         },
     ).model_json_schema()  # type: ignore
