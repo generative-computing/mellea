@@ -27,6 +27,9 @@ from mellea.backends.adapters import AdapterMixin, IntrinsicAdapter
 from mellea.backends.adapters._core import Identity
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import ModelOutputThunk
+from mellea.formatters.granite.base.util import (
+    chat_completion_request_to_transformers_inputs,
+)
 from mellea.stdlib.components import (
     AudioBlock,
     AudioUrlBlock,
@@ -1146,5 +1149,39 @@ async def test_whitespace_flexible_true_in_generate_from_context_with_kv_cache()
             Instruction(description="test"), ctx, model_options={}, _format=_FakeSchema
         )
     await output._gen.generate
+
+    _assert_whitespace_flexible_true(captured)
+
+
+def test_whitespace_flexible_true_in_chat_completion_request_to_transformers_inputs():
+    """Regression (#1510): chat_completion_request_to_transformers_inputs (the
+    OpenAI-compatible /chat/completions path used by `m serve`) must call
+    grammar_from_json_schema with whitespace_flexible=True.
+    """
+    tokenizer = MagicMock()
+    tokenizer.apply_chat_template.return_value = torch.zeros(1, 4, dtype=torch.long)
+    tokenizer.pad_token_id = 0
+    tokenizer.eos_token_id = 1
+
+    model = MagicMock()
+    model.device = "cpu"
+
+    request = {
+        "messages": [{"role": "user", "content": "list facts"}],
+        "extra_body": {"structured_outputs": {"json": _FakeSchema.model_json_schema()}},
+    }
+
+    captured: list[dict] = []
+
+    def _capture_grammar(schema, defaults=None):
+        captured.append(defaults or {})
+        return "stub-grammar"
+
+    with patch(
+        "llguidance.LLMatcher.grammar_from_json_schema", side_effect=_capture_grammar
+    ):
+        chat_completion_request_to_transformers_inputs(
+            request, tokenizer, model, ll_tokenizer=MagicMock()
+        )
 
     _assert_whitespace_flexible_true(captured)

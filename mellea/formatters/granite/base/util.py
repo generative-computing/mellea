@@ -20,6 +20,7 @@ from ....core.utils import MelleaLogger
 if TYPE_CHECKING:
     import llguidance
     import torch
+    from llguidance._lib import JsonCompileOptions
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
@@ -27,6 +28,14 @@ from .optional import import_optional
 from .types import ChatCompletionResponse, ChatCompletionResponseChoice
 
 __all__ = ["import_optional"]
+
+# whitespace_flexible=True (natural, spaced JSON) is required. False (compact
+# JSON), and omitting the option entirely, put the model into a state where the
+# highest-probability grammar-compatible token closes an array immediately,
+# silently collapsing {"result": [...]} to {"result": []}. No exception is
+# raised — the caller cannot distinguish a correct empty list from a collapse.
+# See issue #1510 for full characterisation.
+_LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {"whitespace_flexible": True}
 
 
 def random_uuid() -> str:
@@ -296,7 +305,8 @@ def chat_completion_request_to_transformers_inputs(
             ll_tokenizer = llguidance.hf.from_tokenizer(tokenizer, n_vocab=n_vocab)  # type: ignore[arg-type]
 
         grammar = llguidance.LLMatcher.grammar_from_json_schema(
-            request["extra_body"]["structured_outputs"]["json"]
+            request["extra_body"]["structured_outputs"]["json"],
+            defaults=_LLGUIDANCE_GRAMMAR_DEFAULTS,
         )
         logits_processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
 
