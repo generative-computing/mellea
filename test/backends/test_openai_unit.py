@@ -7,6 +7,7 @@ Covers filter_openai_client_kwargs, filter_chat_completions_kwargs,
 _simplify_and_merge, and _make_backend_specific_and_remove.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -14,9 +15,10 @@ from openai.types import Completion
 from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_choice import CompletionChoice
+from pydantic import BaseModel
 
 from mellea.backends import ModelOption
-from mellea.backends.openai import OpenAIBackend
+from mellea.backends.openai import OpenAIBackend, _make_response_schema_openai_strict
 from mellea.core.base import ModelOutputThunk
 
 
@@ -427,6 +429,267 @@ async def test_generate_from_raw_merges_user_extra_body(backend):
     extra_body = call_kwargs["extra_body"]
     assert extra_body["caller_key"] == "caller-value"
     assert "guided_json" in extra_body or "structured_outputs" in extra_body
+
+
+# --- _make_response_schema_openai_strict ---
+
+
+class _NestedProfile(BaseModel):
+    """A nested Pydantic model used in response-schema tests."""
+
+    name: str
+    age: int
+
+
+class _ExtractUserResponse(BaseModel):
+    """Wrapper that forces Pydantic to emit a $ref for the nested model."""
+
+    result: _NestedProfile
+
+
+def test_make_response_schema_openai_strict_inlines_refs_and_patches_all_objects():
+    """$refs are inlined and every object gets additionalProperties: false."""
+    schema = _make_response_schema_openai_strict(
+        _ExtractUserResponse.model_json_schema()
+    )
+
+    # No $ref / $defs may remain: OpenAI strict mode rejects both.
+    assert "$defs" not in schema
+    result = schema["properties"]["result"]
+    assert "$ref" not in result
+
+    assert schema["additionalProperties"] is False
+    assert result["type"] == "object"
+    assert result["additionalProperties"] is False
+    for prop in result["properties"].values():
+        # Leaf scalar properties are not objects, so they stay untouched.
+        assert "additionalProperties" not in prop
+
+
+class _ExtractUserListResponse(BaseModel):
+    """Wrapper with a list-of-model field to exercise items recursion."""
+
+    users: list[_NestedProfile]
+
+
+class _ExtractUserMapResponse(BaseModel):
+    """Wrapper with a dict-of-model field.
+
+    Pydantic emits the value type as `additionalProperties: {schema}` (not
+    `false`) on the map object, which is the case that must not be clobbered.
+    """
+
+    users: dict[str, _NestedProfile]
+
+
+def test_make_response_schema_openai_strict_patches_list_items():
+    """Objects inside array items are patched too."""
+    schema = _make_response_schema_openai_strict(
+        _ExtractUserListResponse.model_json_schema()
+    )
+
+    item_schema = schema["properties"]["users"]["items"]
+    assert item_schema["type"] == "object"
+    assert item_schema["additionalProperties"] is False
+
+
+def test_make_response_schema_openai_strict_patches_anyof_branches():
+    """$refs inside anyOf branches are inlined and object branches patched."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "result": {"anyOf": [{"$ref": "#/$defs/UserProfile"}, {"type": "null"}]}
+        },
+        "$defs": {
+            "UserProfile": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            }
+        },
+    }
+
+    out = _make_response_schema_openai_strict(schema)
+    result = out["properties"]["result"]
+    assert "$ref" not in result
+    obj_branch = next(b for b in result["anyOf"] if b.get("type") == "object")
+    assert obj_branch["additionalProperties"] is False
+    # The null branch is not an object, so it stays untouched.
+    null_branch = next(b for b in result["anyOf"] if b.get("type") == "null")
+    assert "additionalProperties" not in null_branch
+
+
+def test_make_response_schema_openai_strict_patches_freeform_dict_scalar_values():
+    """A `dict[str, scalar]` value-type schema (e.g. int) is preserved too."""
+
+    class _Counts(BaseModel):
+        counts: dict[str, int]
+
+    schema = _make_response_schema_openai_strict(_Counts.model_json_schema())
+
+    counts = schema["properties"]["counts"]
+    assert counts["type"] == "object"
+    # Scalar value type stays intact instead of being turned into False.
+    assert counts["additionalProperties"] == {"type": "integer"}
+
+
+def test_make_response_schema_openai_strict_preserves_dict_value_schema():
+    """A `dict[str, Model]` value-type schema is preserved, not overwritten.
+
+    Regression guard for the `additionalProperties`-as-schema case: pydantic
+    emits `additionalProperties: {<value schema>}` for `dict[str, Model]`
+    fields. Overwriting that with `False` would silently drop the value type
+    (turning "string keys -> Model" into "no extra properties allowed"), so
+    the patcher must recurse into the value schema instead of clobbering it.
+    """
+    schema = _make_response_schema_openai_strict(
+        _ExtractUserMapResponse.model_json_schema()
+    )
+
+    users = schema["properties"]["users"]
+    assert users["type"] == "object"
+
+    # The value-type schema must survive as a dict, NOT be replaced by False.
+    value_schema = users["additionalProperties"]
+    assert isinstance(value_schema, dict), (
+        "dict[str, Model] value type was clobbered by additionalProperties=False"
+    )
+
+    # The nested model reachable through the map is inlined and closed.
+    assert "$ref" not in value_schema
+    assert value_schema["type"] == "object"
+    assert value_schema["additionalProperties"] is False
+    assert set(value_schema["properties"]) == {"name", "age"}
+
+
+# --- Payload tests: what actually reaches the provider (#1491) ---
+
+
+def _schema_from_chat_payload(payload: dict) -> dict:
+    """Pull the response_format schema out of the chat completions call kwargs."""
+    return payload["response_format"]["json_schema"]["schema"]
+
+
+async def test_generate_from_chat_sends_inlined_strict_response_format(backend):
+    """The chat path sends an inlined schema with additionalProperties everywhere.
+
+    Regression test for #1491: the payload handed to an OpenAI-compatible
+    provider must have no $ref / $defs and set additionalProperties: false on
+    every object, regardless of server type.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    mock_create = AsyncMock()
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = mock_create
+
+    with (
+        patch.object(
+            OpenAIBackend,
+            "_async_client",
+            new_callable=PropertyMock,
+            return_value=mock_client,
+        ),
+        patch("mellea.backends.openai.send_to_queue", new=AsyncMock()),
+    ):
+        await backend._generate_from_chat_context_standard(
+            CBlock(value="User log 42: Alice is 31 years old."),
+            ChatContext(),
+            _format=_ExtractUserResponse,
+        )
+
+    schema = _schema_from_chat_payload(mock_create.call_args.kwargs)
+    assert "$defs" not in schema
+    assert "$ref" not in schema["properties"]["result"]
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["result"]["additionalProperties"] is False
+
+    # Let the background send_to_queue task settle so nothing is left pending.
+    await asyncio.sleep(0)
+
+
+async def test_generate_from_raw_sends_strict_guided_schema(backend):
+    """The raw completions path patches guided_json/structured_outputs too.
+
+    vLLM-style structured decoding on the completions endpoint gets the same
+    strict-schema treatment as the chat response_format (see #1491).
+    """
+    from openai.types import Completion
+    from openai.types.completion_choice import CompletionChoice
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    mock_create = AsyncMock(
+        return_value=Completion(
+            id="raw-test",
+            created=0,
+            model="fake",
+            object="text_completion",
+            choices=[CompletionChoice(index=0, finish_reason="stop", text="ok")],
+        )
+    )
+    mock_client = MagicMock()
+    mock_client.completions.create = mock_create
+
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        await backend._generate_from_raw(
+            [CBlock(value="what is 1+1?")], ChatContext(), format=_ExtractUserResponse
+        )
+
+    extra_body = mock_create.call_args.kwargs["extra_body"]
+    if "structured_outputs" in extra_body:
+        schema = extra_body["structured_outputs"]["json"]
+    else:
+        schema = extra_body["guided_json"]
+    assert "$defs" not in schema
+    assert "$ref" not in schema["properties"]["result"]
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["result"]["additionalProperties"] is False
+
+
+async def test_generate_from_raw_sends_strict_structured_outputs(backend):
+    """vLLM-style structured_outputs on the raw path get the strict schema too."""
+    from openai.types import Completion
+    from openai.types.completion_choice import CompletionChoice
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    mock_create = AsyncMock(
+        return_value=Completion(
+            id="raw-test",
+            created=0,
+            model="fake",
+            object="text_completion",
+            choices=[CompletionChoice(index=0, finish_reason="stop", text="ok")],
+        )
+    )
+    mock_client = MagicMock()
+    mock_client.completions.create = mock_create
+
+    backend._use_structured_output_for_raw = True  # vLLM-style server probe result
+    with patch.object(
+        OpenAIBackend,
+        "_async_client",
+        new_callable=PropertyMock,
+        return_value=mock_client,
+    ):
+        await backend._generate_from_raw(
+            [CBlock(value="what is 1+1?")], ChatContext(), format=_ExtractUserResponse
+        )
+
+    schema = mock_create.call_args.kwargs["extra_body"]["structured_outputs"]["json"]
+    assert "$defs" not in schema
+    assert "$ref" not in schema["properties"]["result"]
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["result"]["additionalProperties"] is False
 
 
 if __name__ == "__main__":
