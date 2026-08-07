@@ -429,5 +429,50 @@ async def test_generate_from_raw_merges_user_extra_body(backend):
     assert "guided_json" in extra_body or "structured_outputs" in extra_body
 
 
+# --- #1502: non-OpenAI format= warning only at init ---
+
+_FORMAT_ASSUMPTION = "NOT using the OpenAI platform"
+
+
+def _info_msgs(mock_logger) -> list[str]:
+    return [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+
+
+def test_non_openai_format_assumption_logged_once_at_init():
+    mock_logger = MagicMock()
+    with patch(
+        "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+    ):
+        OpenAIBackend(
+            model_id="gpt-4o",
+            api_key="fake-key",
+            base_url="http://localhost:9999/v1",
+        )
+        OpenAIBackend(
+            model_id="gpt-4o",
+            api_key="fake-key",
+            base_url="http://localhost:9999/v1",
+        )
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert len(matches) == 2  # once per backend instance
+
+
+def test_openai_platform_skips_format_assumption_log():
+    mock_logger = MagicMock()
+    with patch(
+        "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+    ):
+        OpenAIBackend(
+            model_id="gpt-4o",
+            api_key="fake-key",
+            base_url="https://api.openai.com/v1",
+        )
+        OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert matches == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
