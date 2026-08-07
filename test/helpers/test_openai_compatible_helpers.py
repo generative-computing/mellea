@@ -689,6 +689,13 @@ class TestToolMessageSerialization:
         assert result["content"] == "sunny in Dallas"
         assert "tool_call_id" not in result
 
+    def test_tool_message_with_empty_id_omits_tool_call_id(self):
+        """An empty-string provider id is treated as absent (truthiness gate)."""
+        msg = _make_tool_message(tool_call_id="")
+        result = message_to_openai_message(msg)
+        assert result["role"] == "tool"
+        assert "tool_call_id" not in result
+
     def test_plain_message_role_tool_has_no_tool_call_id(self):
         """A plain Message (not a ToolMessage) with role='tool' is unaffected."""
         msg = Message(role="tool", content="raw tool text")

@@ -331,15 +331,18 @@ def message_to_openai_message(
     # Tool-result turns: spec-strict OpenAI-compatible providers require a
     # `role: "tool"` message to reference the assistant's originating tool call
     # via `tool_call_id` (issue #1389). Emit it when the ToolMessage carries a
-    # provider-supplied id. Duck-type on `_tool` to avoid importing ToolMessage
-    # (circular import) and to leave plain `role="tool"` Messages, and ids-less
-    # parses (e.g. Hugging Face raw-string tool calls), untouched. The optional
-    # `name` field is deliberately omitted: it is a legacy carryover from
-    # `role: "function"`, not part of the OpenAI tool-message schema, and is not
-    # required to satisfy the result-turn contract.
-    tool_call = getattr(msg, "_tool", None)
-    if tool_call is not None and getattr(tool_call, "tool_call_id", None) is not None:
-        result["tool_call_id"] = tool_call.tool_call_id
+    # provider-supplied id. The import is deferred (like `extract_model_tool_requests`
+    # above) purely to keep it out of module load; narrowing on `ToolMessage`
+    # leaves plain `role="tool"` Messages, and id-less parses (e.g. Hugging Face
+    # raw-string tool calls), untouched. The optional `name` field is deliberately
+    # omitted: it is a legacy carryover from `role: "function"`, not part of the
+    # OpenAI tool-message schema, and is not required to satisfy the result-turn
+    # contract. Gate on truthiness (matching `build_tool_calls` below) so an empty
+    # id is treated as absent.
+    from ..stdlib.components import ToolMessage
+
+    if isinstance(msg, ToolMessage) and msg._tool.tool_call_id:
+        result["tool_call_id"] = msg._tool.tool_call_id
 
     if replay_reasoning and msg.thinking:
         result["reasoning_content"] = msg.thinking
@@ -431,11 +434,14 @@ def build_tool_calls(output: ModelOutputThunk) -> list[ToolCallDict] | None:
     assert output.tool_calls is not None
     tool_calls: list[ToolCallDict] = []
     for model_tool_call in output.tool_calls:
-        # Reuse the provider-supplied call id so the replayed assistant turn and
-        # its tool-result turn (which reads the same id via `_tool.tool_call_id`)
+        # Reuse the provider-supplied call id when one exists so a downstream
+        # tool-result turn (which reads the same id via `_tool.tool_call_id`) can
         # reference the same call — spec-strict providers reject a mismatch
-        # (issue #1389). Fall back to a fabricated id only when the backend
-        # exposed none (e.g. raw-string tool parsing).
+        # (issue #1389). The live case is `cli/serve` forwarding an upstream id
+        # back downstream; on the openai/litellm paths the assistant turn's tool
+        # calls come straight from the provider payload rather than through here.
+        # Fall back to a fabricated id only when no id was supplied (e.g.
+        # raw-string tool parsing).
         tool_call_id = model_tool_call.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 
         # Serialize arguments to JSON with str fallback for non-serializable types
