@@ -162,11 +162,23 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
     return ModelOption.replace_keys(filtered_options, openai_to_model_option)
 
 
+def _build_client_options(request: ChatCompletionRequest) -> dict:
+    """Return the full raw client request as a plain dict.
+
+    Passed to serve() as client_options when the function declares that
+    parameter, giving it access to every field the client sent (including
+    model, user, n, and anything else) without those values leaking into
+    the backend generation parameters in model_options.
+    """
+    return request.model_dump(exclude_none=True)
+
+
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
     # Inspect serve function once at endpoint creation time
     serve_sig = inspect.signature(module.serve)
     accepts_format = "format" in serve_sig.parameters
+    accepts_client_options = "client_options" in serve_sig.parameters
     is_async = inspect.iscoroutinefunction(module.serve)
 
     async def endpoint(request: ChatCompletionRequest):
@@ -221,6 +233,8 @@ def make_chat_endpoint(module):
             }
             if accepts_format:
                 serve_kwargs["format"] = format_model
+            if accepts_client_options:
+                serve_kwargs["client_options"] = _build_client_options(request)
 
             # Detect if serve is async or sync and handle accordingly
             if is_async:
