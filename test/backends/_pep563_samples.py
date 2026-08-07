@@ -10,6 +10,10 @@ module-level directive — it cannot be scoped to a single test function.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from decimal import Decimal
 
 
 @dataclass
@@ -19,6 +23,13 @@ class Address:
     city: str
 
 
+@dataclass
+class Period:
+    """A custom parameter type for testing."""
+
+    name: str
+
+
 def send_letter(to: Address) -> str:
     """Send a letter to the given address.
 
@@ -26,3 +37,30 @@ def send_letter(to: Address) -> str:
         to: the destination address
     """
     return "sent"
+
+
+def tc_only_return_builtin_param(query: str) -> Decimal:
+    """TYPE_CHECKING-only return with builtin params.
+
+    Args:
+        query: query string
+    """
+    return Decimal("0")
+
+
+def tc_return_custom_param(period: Period) -> Decimal:
+    """TYPE_CHECKING-only return with custom param.
+
+    Args:
+        period: the period
+    """
+    return Decimal("0")
+
+
+def unresolvable_param(query: NonExistentType) -> str:  # type: ignore[name-defined]  # noqa: F821
+    """Unresolvable parameter annotation.
+
+    Args:
+        query: query string
+    """
+    return "ok"

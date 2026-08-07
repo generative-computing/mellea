@@ -1344,11 +1344,32 @@ def convert_function_to_ollama_tool(
     """
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
-    # eval_str=True resolves PEP 563 postponed (string) annotations back to
-    # real type objects; without it, `from __future__ import annotations` in
-    # the tool's module leaves Pydantic unable to build the schema for
-    # non-builtin parameter types.
-    sig = inspect.signature(func, eval_str=True)
+    # Resolve postponed (string) parameter annotations back to real type
+    # objects so Pydantic can build schemas for non-builtin parameter types
+    # under `from __future__ import annotations` (PEP 563). Evaluate
+    # parameter annotations individually rather than using
+    # `eval_str=True` because the return annotation is never consumed by
+    # this schema — resolving it would fail for TYPE_CHECKING-only or
+    # forward-referenced return types where the pre-existing path
+    # succeeded. `func.__globals__` already carries `__builtins__`, so no
+    # defensive copy is needed.
+    try:
+        sig = inspect.signature(func, eval_str=True)
+    except Exception:
+        sig = inspect.signature(func)
+        g = getattr(func, "__globals__", {})
+        params = []
+        for p in sig.parameters.values():
+            if isinstance(p.annotation, str):
+                try:
+                    # ast.literal_eval cannot evaluate type expressions
+                    # (e.g. `Decimal`, `Foo | None`); this mirrors what
+                    # `inspect.signature(..., eval_str=True)` does internally.
+                    p = p.replace(annotation=eval(p.annotation, g))  # noqa: S307
+                except Exception:
+                    pass  # leave as string; Pydantic will report it
+            params.append(p)
+        sig = sig.replace(parameters=params)
     schema = type(
         func.__name__,
         (BaseModel,),
