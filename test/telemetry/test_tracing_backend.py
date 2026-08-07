@@ -114,13 +114,20 @@ def mocked_tracing_backend():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_streaming_span_creates_and_closes_span(span_exporter):
+@pytest.mark.parametrize("emit", [True, False], ids=["emit_on", "emit_off_default"])
+async def test_streaming_span_creates_and_closes_span(span_exporter, monkeypatch, emit):
     """Streaming backend call creates a chat span that closes after the stream completes.
 
     Uses a mocked Ollama client so no server is needed.  Verifies the core
     TracingPlugin invariant: the span must remain open for the full duration of
-    streaming and close only once all chunks are consumed.
+    streaming and close only once all chunks are consumed. `chunk_processed`
+    events are emitted only when `MELLEA_GENERATION_CHUNK_EVENTS` is on; with the env
+    unset (the default) the span carries no such events.
     """
+    if emit:
+        monkeypatch.setenv("MELLEA_GENERATION_CHUNK_EVENTS", "true")
+    else:
+        monkeypatch.delenv("MELLEA_GENERATION_CHUNK_EVENTS", raising=False)
 
     async def fake_chat_stream(*args, **kwargs):
         for content in ["1", " 2", " 3"]:
@@ -179,6 +186,23 @@ async def test_streaming_span_creates_and_closes_span(span_exporter):
         f"Span closed too early — duration {span_duration_s:.3f}s is shorter than "
         "the streaming delay, suggesting the span did not stay open for the full stream"
     )
+
+    chunk_events = [
+        (
+            e.attributes.get("mellea.generation.chunk_index"),
+            e.attributes.get("mellea.generation.chunk_text_length"),
+        )
+        for e in backend_span.events
+        if e.name == "chunk_processed"
+    ]
+    if emit:
+        assert chunk_events == [(0, 1), (1, 2), (2, 2), (3, 0)], (
+            "Chunk events should report (index, added_text_length) per chunk"
+        )
+    else:
+        assert not chunk_events, (
+            "Chunk events should be absent when MELLEA_GENERATION_CHUNK_EVENTS is unset"
+        )
 
 
 @pytest.mark.integration

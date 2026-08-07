@@ -34,6 +34,7 @@ All telemetry is configured via environment variables:
 | `MELLEA_TRACES_OTLP` | Enable OTLP span exporter | `false` |
 | `MELLEA_TRACES_CONSOLE` | Print traces to console (debugging) | `false` |
 | `MELLEA_TRACES_CONTENT` | Capture prompt/response content on spans (may include PII) | `false` |
+| `MELLEA_GENERATION_CHUNK_EVENTS` | Emit a `chunk_processed` span event per streamed chunk on backend spans | `false` |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Trace-specific OTLP endpoint (overrides general) | none |
 
 ### Metrics variables

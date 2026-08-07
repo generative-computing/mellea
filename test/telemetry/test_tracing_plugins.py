@@ -25,6 +25,7 @@ from mellea.plugins.hooks.generation import (
     GenerationBatchPostCallPayload,
     GenerationBatchPreCallPayload,
     GenerationErrorPayload,
+    GenerationEventPayload,
     GenerationPostCallPayload,
     GenerationPreCallPayload,
 )
@@ -185,6 +186,56 @@ async def test_error_finishes_span_with_error_status(backend_plugin, enabled_tra
     attrs = _attrs(fake_span)
     assert attrs["error.type"] == "ValueError"
     assert "gid-err" not in tracing._in_flight_spans
+
+
+@pytest.mark.asyncio
+async def test_event_records_chunk_processed_on_in_flight_span(
+    backend_plugin, enabled_tracing
+):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(action=None, context=None, generation_id="gid-ev")
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    payload = GenerationEventPayload(
+        generation_id="gid-ev",
+        event_name="chunk_processed",
+        data={"chunk_index": 2, "chunk_text_length": 5},
+    )
+    await backend_plugin.on_generation_event(payload, {})
+
+    events = _events(fake_span)
+    assert len(events) == 1
+    name, attrs = events[0]
+    assert name == "chunk_processed"
+    assert attrs["mellea.generation.chunk_index"] == 2
+    assert attrs["mellea.generation.chunk_text_length"] == 5
+    # The event does not close the span.
+    fake_span.end.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_event_skipped_when_span_not_in_flight(backend_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    pre = GenerationPreCallPayload(action=None, context=None, generation_id="gid-live")
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(pre, {})
+
+    # Event for a different, non-in-flight id must not land on the live span.
+    payload = GenerationEventPayload(
+        generation_id="gid-missing",
+        event_name="chunk_processed",
+        data={"chunk_index": 0, "chunk_text_length": 1},
+    )
+    await backend_plugin.on_generation_event(payload, {})
+
+    fake_span.add_event.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -896,8 +947,8 @@ async def test_streaming_end_records_completed_event_then_closes_span(
     events = _events(fake_span)
     assert any(name == "completed" for name, _ in events)
     completed_attrs = next(attrs for name, attrs in events if name == "completed")
-    assert completed_attrs["success"] is True
-    assert completed_attrs["full_text_length"] == 11
+    assert completed_attrs["mellea.streaming.success"] is True
+    assert completed_attrs["mellea.streaming.full_text_length"] == 11
 
     attrs = _attrs(fake_span)
     assert attrs["mellea.full_text_length"] == 11
@@ -977,11 +1028,11 @@ async def test_streaming_event_records_mid_stream_events(
     names = [name for name, _ in events]
     assert names == ["quick_check", "chunk", "streaming_done", "full_validation"]
     qc_attrs = events[0][1]
-    assert qc_attrs["chunk_index"] == 0
-    assert qc_attrs["passed"] is True
-    assert qc_attrs["requirement_count"] == 1
+    assert qc_attrs["mellea.streaming.chunk_index"] == 0
+    assert qc_attrs["mellea.validation.passed"] is True
+    assert qc_attrs["mellea.validation.requirement_count"] == 1
     chunk_attrs = events[1][1]
-    assert chunk_attrs["text_length"] == 5
+    assert chunk_attrs["mellea.streaming.chunk_text_length"] == 5
 
     # streaming_event never closes the span.
     fake_span.end.assert_not_called()
@@ -1003,8 +1054,8 @@ async def test_streaming_event_records_error_event(streaming_plugin, enabled_tra
     events = _events(fake_span)
     assert any(name == "error" for name, _ in events)
     error_attrs = next(attrs for name, attrs in events if name == "error")
-    assert error_attrs["exception_type"] == "ValueError"
-    assert error_attrs["detail"] == "boom"
+    assert error_attrs["mellea.error.type"] == "ValueError"
+    assert error_attrs["mellea.error.detail"] == "boom"
     fake_span.end.assert_not_called()
 
 
@@ -1366,8 +1417,8 @@ async def test_sampling_iteration_records_span_event(sampling_plugin, enabled_tr
     fake_span.add_event.assert_called_once()
     name, attrs = fake_span.add_event.call_args.args
     assert name == "iteration"
-    assert attrs["iteration"] == 2
-    assert attrs["valid_count"] == 1
+    assert attrs["mellea.sampling.iteration"] == 2
+    assert attrs["mellea.validation.valid_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -1396,8 +1447,8 @@ async def test_sampling_repair_records_span_event(sampling_plugin, enabled_traci
 
     name, attrs = fake_span.add_event.call_args.args
     assert name == "repair"
-    assert attrs["repair_type"] == "rejection"
-    assert attrs["failed_count"] == 1
+    assert attrs["mellea.sampling.repair_type"] == "rejection"
+    assert attrs["mellea.validation.failed_count"] == 1
 
 
 @pytest.mark.asyncio

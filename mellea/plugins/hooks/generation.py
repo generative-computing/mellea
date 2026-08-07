@@ -83,6 +83,32 @@ class GenerationErrorPayload(MelleaBasePayload):
     generation_id: str | None = None
 
 
+class GenerationEventPayload(MelleaBasePayload):
+    """Payload for `generation_event` — a milestone event during a single generation.
+
+    A generic carrier for events emitted mid-generation. Subscribers branch on
+    `event_name` and read the keys `data` carries for that event.
+
+    Known events:
+        `chunk_processed`: emitted once per streamed chunk during `astream()`
+            (opt-in via `MELLEA_GENERATION_CHUNK_EVENTS`). `data` keys:
+            `chunk_index` (int), `chunk_text_length` (int).
+
+    Attributes:
+        generation_id: Mellea-side hook correlation ID matching the corresponding
+            pre_call payload, distinct from the provider-assigned
+            `GenerationMetadata.response_id`. `None` when the firing site did not
+            generate one.
+        event_name: Identifies the event. Subscribers dispatch on this.
+        data: Values for this event, keyed by name. The keys present depend on
+            `event_name` (see Known events above).
+    """
+
+    generation_id: str | None = None
+    event_name: str = ""
+    data: dict[str, Any] = {}
+
+
 class GenerationBatchPreCallPayload(MelleaBasePayload):
     """Payload for `generation_batch_pre_call` — fires once before a batch generation request.
 
