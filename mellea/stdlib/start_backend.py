@@ -14,6 +14,7 @@ from ..core import Backend, Context
 from .context import ChatContext, SimpleContext
 
 if TYPE_CHECKING:
+    from ..backends.atlascloud import AtlasCloudBackend
     from ..backends.huggingface import LocalHFBackend
     from ..backends.litellm import LiteLLMBackend
     from ..backends.ollama import OllamaModelBackend
@@ -56,6 +57,10 @@ def backend_name_to_class(name: str) -> Any:
         from ..backends.openai import OpenAIBackend
 
         return OpenAIBackend
+    elif name == "atlascloud" or name == "atlas-cloud" or name == "atlas":
+        from ..backends.atlascloud import AtlasCloudBackend
+
+        return AtlasCloudBackend
     elif name == "watsonx":
         try:
             from ..backends.watsonx import WatsonxAIBackend
@@ -101,12 +106,21 @@ def _resolve_context(
 
 def _resolve_model_id_str(model_id: str | ModelIdentifier, backend_name: str) -> str:
     """Resolve a model identifier to its string representation for a given backend."""
+    if backend_name in {"atlascloud", "atlas-cloud", "atlas"}:
+        from ..backends.atlascloud import ATLASCLOUD_DEFAULT_MODEL
+
+        if model_id == IBM_GRANITE_4_MICRO_3B:
+            return ATLASCLOUD_DEFAULT_MODEL
+
     if isinstance(model_id, ModelIdentifier):
         backend_to_attr = {
             "ollama": "ollama_name",
             "hf": "hf_model_name",
             "huggingface": "hf_model_name",
             "openai": "openai_name",
+            "atlascloud": "openai_name",
+            "atlas-cloud": "openai_name",
+            "atlas": "openai_name",
             "watsonx": "watsonx_name",
             "litellm": "hf_model_name",
         }
@@ -233,6 +247,45 @@ def start_backend(
 
 
 # ---------------------------------------------------------------------------
+# Overloads: atlascloud
+# ---------------------------------------------------------------------------
+@overload
+def start_backend(
+    backend_name: Literal["atlascloud", "atlas-cloud", "atlas"],
+    model_id: str | ModelIdentifier = ...,
+    ctx: CtxT = ...,
+    *,
+    context_type: Literal["chat"],
+    model_options: dict | None = ...,
+    **backend_kwargs: Any,
+) -> tuple[ChatContext, AtlasCloudBackend]: ...
+
+
+@overload
+def start_backend(
+    backend_name: Literal["atlascloud", "atlas-cloud", "atlas"],
+    model_id: str | ModelIdentifier = ...,
+    ctx: CtxT = ...,
+    *,
+    context_type: Literal["simple"],
+    model_options: dict | None = ...,
+    **backend_kwargs: Any,
+) -> tuple[SimpleContext, AtlasCloudBackend]: ...
+
+
+@overload
+def start_backend(
+    backend_name: Literal["atlascloud", "atlas-cloud", "atlas"],
+    model_id: str | ModelIdentifier = ...,
+    ctx: CtxT = ...,
+    *,
+    context_type: None = ...,
+    model_options: dict | None = ...,
+    **backend_kwargs: Any,
+) -> tuple[CtxT, AtlasCloudBackend]: ...
+
+
+# ---------------------------------------------------------------------------
 # Overloads: watsonx
 # ---------------------------------------------------------------------------
 @overload
@@ -314,7 +367,16 @@ def start_backend(
 # Implementation
 # ---------------------------------------------------------------------------
 def start_backend(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
+    backend_name: Literal[
+        "ollama",
+        "hf",
+        "openai",
+        "atlascloud",
+        "atlas-cloud",
+        "atlas",
+        "watsonx",
+        "litellm",
+    ] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
     ctx: Context | None = None,
     *,
@@ -330,7 +392,7 @@ def start_backend(
 
     Args:
         backend_name: The backend to use (`"ollama"`, `"hf"`, `"openai"`,
-            `"watsonx"`, or `"litellm"`).
+            `"atlascloud"`, `"watsonx"`, or `"litellm"`).
         model_id: Model identifier or name.
         ctx: An explicit `Context` instance. Mutually exclusive with
             `context_type`.
@@ -351,11 +413,12 @@ def start_backend(
         Exception: If `backend_name` is not recognised.
     """
     resolved_ctx = _resolve_context(ctx, context_type)
+    model_id_str = _resolve_model_id_str(model_id, backend_name)
     backend_class = backend_name_to_class(backend_name)
     if backend_class is None:
         raise Exception(
             f"Backend name {backend_name} unknown. Valid options are: "
-            "`ollama`, `hf`, `openai`, `watsonx`, `litellm`."
+            "`ollama`, `hf`, `openai`, `atlascloud`, `watsonx`, `litellm`."
         )
-    backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+    backend = backend_class(model_id_str, model_options=model_options, **backend_kwargs)
     return resolved_ctx, backend
