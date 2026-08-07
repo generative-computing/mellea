@@ -207,6 +207,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if self._base_url is not None
             else _ServerType.OPENAI
         )  # type: ignore
+        if self._server_type != _ServerType.OPENAI:
+            MelleaLogger.get_logger().info(
+                "Mellea assumes you are NOT using the OpenAI platform, and that "
+                "other model providers have less strict requirements on supporting "
+                "JSON schemas passed into `format=`. If you encounter a server-side "
+                "error when using format=, then you found an exception to this "
+                "assumption. Please open an issue at "
+                "github.com/generative_computing/mellea with the stack trace and "
+                "your inference engine / model provider."
+            )
 
         self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
@@ -934,9 +944,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     },
                 }
             else:
-                MelleaLogger.get_logger().info(
-                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on supporting JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
-                )
                 extra_params["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
