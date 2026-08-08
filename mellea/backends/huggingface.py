@@ -1031,8 +1031,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             format_kwargs = {}
             if _format:
                 schema: dict[str, Any] = _format.model_json_schema()
+                # whitespace_flexible=True (natural, spaced JSON) is required.
+                # False (compact JSON) can put the model into a state where the
+                # highest-probability grammar-compatible token closes an array
+                # immediately, silently collapsing {"result": [...]} to {"result": []}.
+                # No exception is raised — the caller cannot distinguish a correct
+                # empty list from a collapse. See issue #1510 for full characterisation.
                 grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults={"whitespace_flexible": False}
+                    schema, defaults={"whitespace_flexible": True}
                 )
                 logits_processor = _GuidanceLogitsProcessor(
                     grammar, self._llguidance_tokenizer
@@ -1236,8 +1242,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             format_kwargs = {}
             if _format:
                 schema: dict[str, Any] = _format.model_json_schema()
+                # whitespace_flexible=True (natural, spaced JSON) is required.
+                # False (compact JSON) can put the model into a state where the
+                # highest-probability grammar-compatible token closes an array
+                # immediately, silently collapsing {"result": [...]} to {"result": []}.
+                # No exception is raised — the caller cannot distinguish a correct
+                # empty list from a collapse. See issue #1510 for full characterisation.
                 grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults={"whitespace_flexible": False}
+                    schema, defaults={"whitespace_flexible": True}
                 )
                 logits_processor = _GuidanceLogitsProcessor(
                     grammar, self._llguidance_tokenizer
@@ -1701,8 +1713,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         format_kwargs = {}
         if format:
             schema: dict[str, Any] = format.model_json_schema()
+            # whitespace_flexible=True (natural, spaced JSON) is required.
+            # False (compact JSON) can put the model into a state where the
+            # highest-probability grammar-compatible token closes an array
+            # immediately, silently collapsing {"result": [...]} to {"result": []}.
+            # No exception is raised — the caller cannot distinguish a correct
+            # empty list from a collapse. See issue #1510 for full characterisation.
             grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                schema, defaults={"whitespace_flexible": False}
+                schema, defaults={"whitespace_flexible": True}
             )
             logits_processor = _GuidanceLogitsProcessor(
                 grammar, self._llguidance_tokenizer

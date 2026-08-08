@@ -977,3 +977,167 @@ async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
         await LocalHFBackend._generate_from_intrinsic(
             backend, Intrinsic("answerability"), ctx, model_options={}
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for issue #1510: whitespace_flexible must be True
+# ---------------------------------------------------------------------------
+# llguidance's whitespace_flexible=False (compact JSON) forces greedy decoding
+# into states where the highest-probability grammar-compatible token closes an
+# array immediately, silently collapsing {"result": [...]} to {"result": []}.
+# All three grammar_from_json_schema call sites in LocalHFBackend must pass
+# whitespace_flexible=True. These tests assert that invariant via mock without
+# loading any real model.
+
+
+class _FakeSchema:
+    """Minimal Pydantic-compatible schema stub."""
+
+    @staticmethod
+    def model_json_schema() -> dict:
+        return {"type": "object", "properties": {"result": {"type": "array"}}}
+
+
+def _mock_chat_template_output() -> MagicMock:
+    """Return a mock that looks like a tokenizer output dict with a .to() method.
+
+    apply_chat_template returns a BatchEncoding (dict-like) which gets a .to(device)
+    call immediately after. Plain dicts don't have .to(), so the mock must.
+    """
+    ids = torch.zeros(1, 4, dtype=torch.long)
+    attn = torch.ones(1, 4, dtype=torch.long)
+    obj = MagicMock()
+    obj.__getitem__ = lambda s, k: ids if k == "input_ids" else attn
+    obj.to = lambda device: obj
+    obj["input_ids"] = ids
+    obj["attention_mask"] = attn
+    return obj
+
+
+@pytest.mark.asyncio
+async def test_whitespace_flexible_true_in_generate_from_context_standard():
+    """Regression (#1510): _generate_from_context_standard must call
+    grammar_from_json_schema with whitespace_flexible=True.
+
+    Without the fix, the call passes whitespace_flexible=False, which can cause
+    silent array collapse to [] under greedy decoding.
+    """
+    # _make_backend() patches llguidance during construction; re-patch just for
+    # the method call to intercept the grammar_from_json_schema invocation.
+    backend = _make_backend()
+    backend._tokenizer = MagicMock()
+    backend._tokenizer.apply_chat_template.return_value = _mock_chat_template_output()
+    backend._model = MagicMock()
+    backend._model.generate.return_value = torch.zeros(1, 5, dtype=torch.long)
+    ctx = ChatContext().add(Message("user", "list facts"))
+
+    captured: list[dict] = []
+
+    def _capture_grammar(schema, defaults=None):
+        captured.append(defaults or {})
+        return "stub-grammar"
+
+    with patch("mellea.backends.huggingface.llguidance") as mock_llg:
+        mock_llg.LLMatcher.grammar_from_json_schema.side_effect = _capture_grammar
+        mock_llg.LLMatcher.return_value = MagicMock()
+        mock_llg.torch.allocate_token_bitmask.return_value = MagicMock()
+        try:
+            await backend._generate_from_context_standard(
+                Instruction(description="test"),
+                ctx,
+                model_options={},
+                _format=_FakeSchema,
+            )
+        except Exception:
+            pass  # We only care that the grammar call was made correctly.
+
+    assert captured, "grammar_from_json_schema was never called"
+    for call_defaults in captured:
+        assert call_defaults.get("whitespace_flexible") is True, (
+            f"Expected whitespace_flexible=True, got {call_defaults!r} — "
+            "see issue #1510: False causes silent empty-array collapse"
+        )
+
+
+@pytest.mark.asyncio
+async def test_whitespace_flexible_true_in_generate_from_raw():
+    """Regression (#1510): _generate_from_raw must call grammar_from_json_schema
+    with whitespace_flexible=True.
+    """
+    backend = _make_backend()
+    # _generate_from_raw calls self._tokenizer(prompts, ...).to(device), so the
+    # mock tokenizer must be callable and return a .to()-able object.
+    tok_output = MagicMock()
+    tok_output.to = lambda device: tok_output
+    tok_output.__getitem__ = lambda s, k: torch.zeros(1, 4, dtype=torch.long)
+    backend._tokenizer = MagicMock(return_value=tok_output)
+    backend._model = MagicMock()
+    backend._model.generate.return_value = torch.zeros(1, 5, dtype=torch.long)
+    ctx = ChatContext().add(Message("user", "list facts"))
+
+    captured: list[dict] = []
+
+    def _capture_grammar(schema, defaults=None):
+        captured.append(defaults or {})
+        return "stub-grammar"
+
+    with patch("mellea.backends.huggingface.llguidance") as mock_llg:
+        mock_llg.LLMatcher.grammar_from_json_schema.side_effect = _capture_grammar
+        mock_llg.LLMatcher.return_value = MagicMock()
+        mock_llg.torch.allocate_token_bitmask.return_value = MagicMock()
+        try:
+            await backend._generate_from_raw(
+                [Instruction(description="test")],
+                ctx,
+                format=_FakeSchema,
+                model_options={},
+            )
+        except Exception:
+            pass
+
+    assert captured, "grammar_from_json_schema was never called"
+    for call_defaults in captured:
+        assert call_defaults.get("whitespace_flexible") is True, (
+            f"Expected whitespace_flexible=True, got {call_defaults!r} — "
+            "see issue #1510: False causes silent empty-array collapse"
+        )
+
+
+@pytest.mark.asyncio
+async def test_whitespace_flexible_true_in_generate_from_context_with_kv_cache():
+    """Regression (#1510): _generate_from_context_with_kv_cache must call
+    grammar_from_json_schema with whitespace_flexible=True.
+    """
+    backend = _make_backend()
+    backend._tokenizer = MagicMock()
+    backend._tokenizer.apply_chat_template.return_value = _mock_chat_template_output()
+    backend._model = MagicMock()
+    backend._model.generate.return_value = torch.zeros(1, 5, dtype=torch.long)
+    ctx = ChatContext().add(Message("user", "list facts"))
+
+    captured: list[dict] = []
+
+    def _capture_grammar(schema, defaults=None):
+        captured.append(defaults or {})
+        return "stub-grammar"
+
+    with patch("mellea.backends.huggingface.llguidance") as mock_llg:
+        mock_llg.LLMatcher.grammar_from_json_schema.side_effect = _capture_grammar
+        mock_llg.LLMatcher.return_value = MagicMock()
+        mock_llg.torch.allocate_token_bitmask.return_value = MagicMock()
+        try:
+            await backend._generate_from_context_with_kv_cache(
+                Instruction(description="test"),
+                ctx,
+                model_options={},
+                _format=_FakeSchema,
+            )
+        except Exception:
+            pass
+
+    assert captured, "grammar_from_json_schema was never called"
+    for call_defaults in captured:
+        assert call_defaults.get("whitespace_flexible") is True, (
+            f"Expected whitespace_flexible=True, got {call_defaults!r} — "
+            "see issue #1510: False causes silent empty-array collapse"
+        )
