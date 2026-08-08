@@ -7,6 +7,7 @@ Covers filter_openai_client_kwargs, filter_chat_completions_kwargs,
 _simplify_and_merge, and _make_backend_specific_and_remove.
 """
 
+import os
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -444,14 +445,10 @@ def test_non_openai_format_assumption_logged_once_at_init():
         "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
     ):
         OpenAIBackend(
-            model_id="gpt-4o",
-            api_key="fake-key",
-            base_url="http://localhost:9999/v1",
+            model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
         )
         OpenAIBackend(
-            model_id="gpt-4o",
-            api_key="fake-key",
-            base_url="http://localhost:9999/v1",
+            model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
         )
 
     matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
@@ -464,14 +461,31 @@ def test_openai_platform_skips_format_assumption_log():
         "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
     ):
         OpenAIBackend(
-            model_id="gpt-4o",
-            api_key="fake-key",
-            base_url="https://api.openai.com/v1",
+            model_id="gpt-4o", api_key="fake-key", base_url="https://api.openai.com/v1"
         )
         OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
 
     matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
     assert matches == []
+
+
+def test_format_assumption_log_honors_openai_base_url_env():
+    """Env-only non-OpenAI base_url must still classify as non-OpenAI at init."""
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch.dict(
+            os.environ,
+            {"OPENAI_BASE_URL": "http://localhost:9999/v1"},
+            clear=False,
+        ),
+    ):
+        OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert len(matches) == 1
 
 
 if __name__ == "__main__":
