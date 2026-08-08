@@ -1,4 +1,11 @@
 # Intrinsics and Adapters
+
+> **Status: outdated.** "Mellea currently only supports IntrinsicAdapters and
+> Intrinsics" predates Epic #929's capability-based `Identity` / `_find_adapter`
+> adapter model (see [`requirement_aLoRA_rerouting.md`](requirement_aLoRA_rerouting.md)
+> for the current lookup mechanism). A rewrite of this note is tracked in
+> #1144. See #1482 for the broader `docs/dev/` currency discussion.
+
 Note: Mellea currently only supports IntrinsicAdapters and Intrinsics.
 
 ## Basics

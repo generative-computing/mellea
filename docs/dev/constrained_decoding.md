@@ -1,5 +1,10 @@
 # Constrained Decoding
 
+> **Status: informal brainstorm.** This note records open questions and
+> informally paraphrased suggestions from an early discussion; no decision was
+> ever recorded and nothing below should be treated as settled design. See
+> #1482 for the `docs/dev/` currency discussion.
+
 ## How do constraints get defined?
 
 Should we be thinking bigger than pydantic? Should it be possible to pass arbitrary grammars? If so, what's the abstract interface for those? Should this be factored out into llm-io?
