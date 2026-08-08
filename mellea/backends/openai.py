@@ -186,7 +186,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Use provided parameters or fall back to environment variables
         self._api_key = api_key
-        self._base_url = base_url
+        # Resolve env here (not only in the SDK) so _server_type / init logging
+        # see the same host the client will actually call.
+        self._base_url = base_url or os.getenv("OPENAI_BASE_URL")
 
         # Validate that we have the required configuration
         if self._api_key is None and os.getenv("OPENAI_API_KEY") is None:
@@ -196,7 +198,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "  2. Pass it as a parameter: OpenAIBackend(api_key='your-key-here')"
             )
 
-        if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
+        if self._base_url is None:
             MelleaLogger.get_logger().warning(
                 "OPENAI_BASE_URL or base_url is not set.\n"
                 "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
@@ -214,7 +216,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 "JSON schemas passed into `format=`. If you encounter a server-side "
                 "error when using format=, then you found an exception to this "
                 "assumption. Please open an issue at "
-                "github.com/generative_computing/mellea with the stack trace and "
+                "github.com/generative-computing/mellea with the stack trace and "
                 "your inference engine / model provider."
             )
 
