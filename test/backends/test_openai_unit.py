@@ -457,9 +457,15 @@ def test_non_openai_format_assumption_logged_once_at_init():
 
 def test_openai_platform_skips_format_assumption_log():
     mock_logger = MagicMock()
-    with patch(
-        "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+    # Unset OPENAI_BASE_URL for this test: after resolving env into _base_url,
+    # a leftover non-OpenAI env would make the no-base_url construction log.
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch.dict(os.environ),
     ):
+        os.environ.pop("OPENAI_BASE_URL", None)
         OpenAIBackend(
             model_id="gpt-4o", api_key="fake-key", base_url="https://api.openai.com/v1"
         )
