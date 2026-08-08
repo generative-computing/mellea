@@ -1344,15 +1344,41 @@ def convert_function_to_ollama_tool(
     """
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
+    # Resolve postponed (string) parameter annotations back to real type
+    # objects so Pydantic can build schemas for non-builtin parameter types
+    # under `from __future__ import annotations` (PEP 563). Evaluate
+    # parameter annotations individually rather than using
+    # `eval_str=True` because the return annotation is never consumed by
+    # this schema — resolving it would fail for TYPE_CHECKING-only or
+    # forward-referenced return types where the pre-existing path
+    # succeeded. `func.__globals__` already carries `__builtins__`, so no
+    # defensive copy is needed.
+    try:
+        sig = inspect.signature(func, eval_str=True)
+    except Exception:
+        sig = inspect.signature(func)
+        g = getattr(func, "__globals__", {})
+        params = []
+        for p in sig.parameters.values():
+            if isinstance(p.annotation, str):
+                try:
+                    # ast.literal_eval cannot evaluate type expressions
+                    # (e.g. `Decimal`, `Foo | None`); this mirrors what
+                    # `inspect.signature(..., eval_str=True)` does internally.
+                    p = p.replace(annotation=eval(p.annotation, g))  # noqa: S307
+                except Exception:
+                    pass  # leave as string; Pydantic will report it
+            params.append(p)
+        sig = sig.replace(parameters=params)
     schema = type(
         func.__name__,
         (BaseModel,),
         {
             "__annotations__": {
                 k: v.annotation if v.annotation != inspect._empty else str
-                for k, v in inspect.signature(func).parameters.items()
+                for k, v in sig.parameters.items()
             },
-            "__signature__": inspect.signature(func),
+            "__signature__": sig,
             "__doc__": parsed_docstring[doc_string_hash],
         },
     ).model_json_schema()  # type: ignore
