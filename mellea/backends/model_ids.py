@@ -7,7 +7,8 @@
 variants for a model (Hugging Face, Ollama, WatsonX, MLX, OpenAI, Bedrock) so that
 a single constant can be passed to any backend without manual string translation.
 The module also ships a curated catalog of ready-to-use constants for popular
-open-weight models including IBM Granite 4, Meta Llama 4, Mistral, and Qwen families.
+open-weight models including IBM Granite 4, Meta Llama 4, Mistral, Qwen, and
+NVIDIA Nemotron families.
 """
 
 import dataclasses
@@ -276,6 +277,84 @@ QWEN3_14B = ModelIdentifier(
     hf_model_name="Qwen/Qwen3-14B",  # Qwen 14B
     ollama_name="qwen3:14b",  # Ollama
     context_length=40960,
+)
+
+#######################
+#### NVIDIA models ####
+#######################
+
+#### Nemotron 3 models (hybrid Mamba-Transformer, current generation) ####
+# HF publishes one repo per precision; the BF16 repos are the reference weights.
+NVIDIA_NEMOTRON_3_NANO_4B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+    ollama_name="nemotron-3-nano:4b",
+    mlx_name="mlx-community/NVIDIA-Nemotron-3-Nano-4B-4bit",
+    context_length=262144,
+)
+
+NVIDIA_NEMOTRON_3_NANO_30B_A3B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+    ollama_name="nemotron-3-nano:30b",
+    mlx_name="mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-4bit",
+    context_length=262144,
+)
+
+NVIDIA_NEMOTRON_3_SUPER_120B_A12B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+    ollama_name="nemotron-3-super:120b",
+    mlx_name="mlx-community/NVIDIA-Nemotron-3-Super-120B-A12B-4bit",
+    context_length=262144,
+)
+
+NVIDIA_NEMOTRON_3_ULTRA_550B_A55B = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
+    ollama_name="nemotron-3-ultra:cloud",  # Ollama ships this size cloud-only; no local weights.
+    context_length=262144,
+)
+
+# Nemotron 3 Nano Omni: video, audio, image, and text understanding.
+NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B = ModelIdentifier(
+    hf_model_name="nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
+    ollama_name="nemotron3:33b",
+    context_length=131072,  # Multimodal max_sequence_length; the text tower alone allows 262144.
+)
+
+#### Nemotron Nano v2 models ####
+NVIDIA_NEMOTRON_NANO_9B_V2 = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+    mlx_name="mlx-community/NVIDIA-Nemotron-Nano-9B-v2-4bits",
+    context_length=131072,
+)
+
+NVIDIA_NEMOTRON_NANO_12B_V2 = ModelIdentifier(
+    hf_model_name="nvidia/NVIDIA-Nemotron-Nano-12B-v2", context_length=131072
+)
+
+#### Llama-Nemotron models ####
+NVIDIA_LLAMA_3_1_NEMOTRON_NANO_8B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3.1-Nemotron-Nano-8B-v1", context_length=131072
+)
+
+NVIDIA_LLAMA_3_3_NEMOTRON_SUPER_49B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3_3-Nemotron-Super-49B-v1_5", context_length=131072
+)
+
+NVIDIA_LLAMA_3_1_NEMOTRON_ULTRA_253B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3_1-Nemotron-Ultra-253B-v1", context_length=131072
+)
+
+NVIDIA_LLAMA_3_1_NEMOTRON_70B = ModelIdentifier(
+    hf_model_name="nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
+    ollama_name="nemotron:70b",
+    mlx_name="mlx-community/Llama-3.1-Nemotron-70B-Instruct-HF-4bit",
+    context_length=131072,
+)
+
+#### Nemotron Mini ####
+NVIDIA_NEMOTRON_MINI_4B = ModelIdentifier(
+    hf_model_name="nvidia/Nemotron-Mini-4B-Instruct",
+    ollama_name="nemotron-mini:4b",
+    context_length=4096,
 )
 
 ###########################

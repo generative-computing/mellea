@@ -91,6 +91,7 @@ ollama pull mistral:7b
 | `META_LLAMA_3_2_3B` | `llama3.2:3b` | Compact Llama model. |
 | `MISTRALAI_MISTRAL_0_3_7B` | `mistral:7b` | Mistral 7B. |
 | `QWEN3_8B` | `qwen3:8b` | Qwen3 8B. |
+| `NVIDIA_NEMOTRON_3_NANO_4B` | `nemotron-3-nano:4b` | Compact NVIDIA Nemotron 3 model. |
 | `DEEPSEEK_R1_8B` | `deepseek-r1:8b` | Reasoning-capable model. |
 
 Run `ollama list` to see which models are already downloaded locally.
