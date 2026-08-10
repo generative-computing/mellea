@@ -167,8 +167,10 @@ def _build_client_options(request: ChatCompletionRequest) -> dict:
 
     Passed to serve() as client_options when the function declares that
     parameter, giving it access to every field the client sent (including
-    model, user, n, and anything else) without those values leaking into
-    the backend generation parameters in model_options.
+    routing and metadata fields like model, user, and n) while ensuring those
+    specific named routing fields are excluded from model_options. Note that
+    arbitrary extra fields are forwarded to model_options as potential
+    backend-specific generation parameters.
     """
     return request.model_dump(exclude_none=True)
 
