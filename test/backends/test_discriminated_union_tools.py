@@ -747,6 +747,11 @@ class TestPostponedAnnotations:
 
     def test_type_checking_only_return_with_builtin_params(self):
         """TYPE_CHECKING-only return + builtin params must produce schema."""
+        # Guard the precondition: without this, a resolved `Decimal` return
+        # annotation would make the test pass trivially, without exercising
+        # the unresolvable-return fallback at all.
+        assert tc_only_return_builtin_param.__annotations__["return"] == "Decimal"
+
         tool = convert_function_to_ollama_tool(tc_only_return_builtin_param)
         assert tool.function is not None
         assert tool.function.parameters is not None
@@ -761,6 +766,11 @@ class TestPostponedAnnotations:
         failure) from per-parameter resolution: the return annotation is
         unresolvable, but the custom parameter type still must resolve.
         """
+        # Guard the precondition: both must still be postponed strings, or
+        # this test stops exercising the per-parameter resolution path.
+        assert tc_return_custom_param.__annotations__["return"] == "Decimal"
+        assert tc_return_custom_param.__annotations__["period"] == "Period"
+
         tool = convert_function_to_ollama_tool(tc_return_custom_param)
         assert tool.function is not None
         assert tool.function.parameters is not None
@@ -774,6 +784,10 @@ class TestPostponedAnnotations:
         Confirms the documented degradation: unresolvable param annotations
         surface as `PydanticUserError`, not `NameError`.
         """
+        # Guard the precondition: if this were ever resolved, the test would
+        # pass without exercising the unresolvable-parameter fallback.
+        assert unresolvable_param.__annotations__["query"] == "NonExistentType"
+
         with pytest.raises(PydanticUserError):
             convert_function_to_ollama_tool(unresolvable_param)
 
