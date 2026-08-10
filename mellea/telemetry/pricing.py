@@ -35,6 +35,7 @@ Environment variables:
   - MELLEA_PRICING_FILE: Path to a JSON file with custom model pricing.
 """
 
+import importlib.util
 import json
 import logging
 import os
@@ -43,13 +44,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-try:
-    import litellm  # type: ignore[import-not-found]
-
-    _LITELLM_AVAILABLE = True
-except ImportError:
-    litellm = None  # type: ignore
-    _LITELLM_AVAILABLE = False
+# Availability is probed without importing: `import litellm` costs ~1s and
+# transitively pulls in openai and pandas, which every `import mellea` would pay
+# even when pricing is disabled. The functions below import litellm at the point
+# of use, so the cost lands on the first priced request instead.
+_LITELLM_AVAILABLE = importlib.util.find_spec("litellm") is not None
 
 
 def _resolve_pricing_enabled() -> bool:
@@ -89,6 +88,8 @@ def _register_custom_pricing(path: str | Path) -> None:
             "Custom pricing file %r must be a JSON object — skipping.", str(path)
         )
         return
+    import litellm  # type: ignore[import-not-found]
+
     try:
         litellm.register_model(data)
     except Exception as exc:
@@ -140,6 +141,9 @@ def compute_cost(
     """
     if not _PRICING_ENABLED:
         return None
+
+    import litellm  # type: ignore[import-not-found]
+
     try:
         prompt_cost, completion_cost = litellm.cost_per_token(
             model=model,

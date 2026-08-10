@@ -3,12 +3,13 @@
 
 """Sampling Strategies for Minimum Bayes Risk Decoding (MBRD)."""
 
+from __future__ import annotations
+
 import abc
 import asyncio
+from typing import TYPE_CHECKING
 
 import numpy as np
-from math_verify import ExprExtractionConfig, LatexExtractionConfig, parse, verify
-from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
 
 from ...core import (
     Backend,
@@ -22,6 +23,13 @@ from ...core import (
     SamplingResult,
 )
 from .base import RejectionSamplingStrategy
+
+if TYPE_CHECKING:
+    # `math_verify` and `rouge_score` are imported lazily at first use rather than at
+    # module scope. Both are required dependencies, but `rouge_score` pulls in nltk
+    # (and transitively scipy/scikit-learn/pandas), which dominated `import mellea`
+    # even for programs that never perform majority voting.
+    from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
 
 
 class BaseMBRDSampling(RejectionSamplingStrategy):
@@ -271,6 +279,13 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
             float: `1.0` if the expressions are considered equivalent,
             `0.0` otherwise.
         """
+        from math_verify import (
+            ExprExtractionConfig,
+            LatexExtractionConfig,
+            parse,
+            verify,
+        )
+
         # Convert string match_types to ExtractionTarget objects
         extraction_targets = []
         for match_type in self.match_types:
@@ -335,6 +350,8 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
             loop_budget=loop_budget,
             requirements=requirements,
         )
+        from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
+
         self.match_types = ["rougeL"]
         self.symmetric = True
         self.scorer = RougeScorer(self.match_types, use_stemmer=True)

@@ -4,6 +4,7 @@
 """Unit tests for the litellm-backed pricing module."""
 
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,7 +29,7 @@ def mock_litellm_pricing():
     mock.cost_per_token.return_value = (0.001, 0.002)
     with (
         patch("mellea.telemetry.pricing._PRICING_ENABLED", True),
-        patch("mellea.telemetry.pricing.litellm", mock),
+        patch.dict(sys.modules, {"litellm": mock}),
         patch("mellea.telemetry.pricing._warned_models", set()),
     ):
         yield mock
@@ -97,7 +98,7 @@ def test_register_custom_pricing_calls_register_model(tmp_path):
     pricing_file.write_text(json.dumps(data))
 
     mock_litellm = MagicMock()
-    with patch("mellea.telemetry.pricing.litellm", mock_litellm):
+    with patch.dict(sys.modules, {"litellm": mock_litellm}):
         pricing._register_custom_pricing(str(pricing_file))
 
     mock_litellm.register_model.assert_called_once_with(data)
@@ -192,7 +193,7 @@ def test_compute_cost_disabled_returns_none():
     mock_litellm = MagicMock()
     with (
         patch("mellea.telemetry.pricing._PRICING_ENABLED", False),
-        patch("mellea.telemetry.pricing.litellm", mock_litellm),
+        patch.dict(sys.modules, {"litellm": mock_litellm}),
     ):
         cost = pricing.compute_cost("gpt-5.4", None, 100, 50)
 
