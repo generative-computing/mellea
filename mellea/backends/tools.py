@@ -1344,20 +1344,27 @@ def convert_function_to_ollama_tool(
     """
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
-    # Resolve postponed (string) parameter annotations back to real type
-    # objects so Pydantic can build schemas for non-builtin parameter types
-    # under `from __future__ import annotations` (PEP 563). Evaluate
-    # parameter annotations individually rather than using
-    # `eval_str=True` because the return annotation is never consumed by
-    # this schema — resolving it would fail for TYPE_CHECKING-only or
-    # forward-referenced return types where the pre-existing path
-    # succeeded. `func.__globals__` already carries `__builtins__`, so no
-    # defensive copy is needed.
+    # Under `from __future__ import annotations` (PEP 563) every annotation is
+    # a string, which Pydantic cannot resolve for non-builtin parameter types.
+    # Prefer `eval_str=True`, which resolves the whole signature in the
+    # function's own module namespace. It also resolves the return annotation,
+    # which this schema never consumes, so it fails for TYPE_CHECKING-only or
+    # forward-referenced return types where the pre-existing path succeeded;
+    # resolve parameter annotations individually in that case.
     try:
         sig = inspect.signature(func, eval_str=True)
     except Exception:
         sig = inspect.signature(func)
-        g = getattr(func, "__globals__", {})
+        # `inspect.signature` follows `__wrapped__`, so the annotations above
+        # may come from a function in a different module than `func` itself.
+        # Take the namespace from that same object, otherwise a
+        # `functools.wraps` decorator's module supplies the wrong globals and a
+        # colliding type name resolves to the wrong type. The `stop` predicate
+        # matches the one `inspect.signature` uses to stop unwrapping.
+        target = inspect.unwrap(func, stop=lambda f: hasattr(f, "__signature__"))
+        # A module's globals already carry `__builtins__`, so no defensive copy
+        # is needed.
+        g = getattr(target, "__globals__", {})
         params = []
         for p in sig.parameters.values():
             if isinstance(p.annotation, str):
@@ -1365,9 +1372,20 @@ def convert_function_to_ollama_tool(
                     # ast.literal_eval cannot evaluate type expressions
                     # (e.g. `Decimal`, `Foo | None`); this mirrors what
                     # `inspect.signature(..., eval_str=True)` does internally.
+                    # The input is an annotation from a callable the caller
+                    # registered as a tool, so it is no more attacker-controlled
+                    # than the callable itself, and the attempt above already
+                    # evaluated a superset of these strings.
                     p = p.replace(annotation=eval(p.annotation, g))  # noqa: S307
-                except Exception:
-                    pass  # leave as string; Pydantic will report it
+                except Exception as e:
+                    # Leave as a string; Pydantic reports the unresolved name.
+                    MelleaLogger.get_logger().debug(
+                        "Could not resolve annotation %r for parameter '%s' of tool '%s': %s",
+                        p.annotation,
+                        p.name,
+                        getattr(func, "__name__", func),
+                        e,
+                    )
             params.append(p)
         sig = sig.replace(parameters=params)
     schema = type(

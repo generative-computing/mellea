@@ -20,6 +20,8 @@ building, while a return annotation that is unresolvable at call time (e.g.
 produced schema never consumes it.
 """
 
+import functools
+import inspect
 import json
 from typing import Annotated, Literal
 
@@ -37,6 +39,7 @@ from test.backends._postponed_annotation_samples import (
     send_letter,
     tc_only_return_builtin_param,
     tc_return_custom_param,
+    tc_return_region,
     unresolvable_param,
 )
 
@@ -751,6 +754,12 @@ class TestPostponedAnnotations:
         # annotation would make the test pass trivially, without exercising
         # the unresolvable-return fallback at all.
         assert tc_only_return_builtin_param.__annotations__["return"] == "Decimal"
+        # A postponed string is necessary but not sufficient: if `Decimal` ever
+        # moves out of the sample module's `if TYPE_CHECKING:` block, the string
+        # would still be postponed but `eval_str=True` would resolve it and the
+        # fallback would never be taken.
+        with pytest.raises(NameError):
+            inspect.signature(tc_only_return_builtin_param, eval_str=True)
 
         tool = convert_function_to_ollama_tool(tc_only_return_builtin_param)
         assert tool.function is not None
@@ -770,6 +779,10 @@ class TestPostponedAnnotations:
         # this test stops exercising the per-parameter resolution path.
         assert tc_return_custom_param.__annotations__["return"] == "Decimal"
         assert tc_return_custom_param.__annotations__["period"] == "Period"
+        # And, as above, the fallback must be the path under test rather than
+        # `eval_str=True` succeeding outright.
+        with pytest.raises(NameError):
+            inspect.signature(tc_return_custom_param, eval_str=True)
 
         tool = convert_function_to_ollama_tool(tc_return_custom_param)
         assert tool.function is not None
@@ -788,8 +801,39 @@ class TestPostponedAnnotations:
         # pass without exercising the unresolvable-parameter fallback.
         assert unresolvable_param.__annotations__["query"] == "NonExistentType"
 
-        with pytest.raises(PydanticUserError):
+        with pytest.raises(PydanticUserError, match="NonExistentType"):
             convert_function_to_ollama_tool(unresolvable_param)
+
+    def test_decorated_tool_resolves_in_wrapped_functions_module(self):
+        """A `functools.wraps` wrapper must not shift the resolution namespace.
+
+        `inspect.signature` follows `__wrapped__`, so the annotations being
+        resolved belong to the wrapped function's module. Resolving them
+        against the decorator's module instead finds the wrong type, or none
+        at all - and the failure is silent, producing a wrong tool schema
+        rather than an error.
+        """
+
+        # The wrapper must be defined here, not in the sample module: its
+        # `__globals__` is the namespace the buggy code would have used, and it
+        # has to be one that lacks `Region`. Moving it beside `tc_return_region`
+        # would make the test pass either way.
+        @functools.wraps(tc_return_region)
+        def wrapper(*args, **kwargs):
+            return tc_return_region(*args, **kwargs)
+
+        # This module deliberately does not import `Region`, so resolving
+        # against this module's namespace cannot find it. That is what makes
+        # the assertion below meaningful.
+        assert "Region" not in globals()
+
+        tool = convert_function_to_ollama_tool(wrapper)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["region"]["type"] == "object"
+        assert props["region"]["title"] == "Region"
+        assert props["region"]["properties"]["code"]["type"] == "string"
 
 
 if __name__ == "__main__":

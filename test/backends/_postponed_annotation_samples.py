@@ -30,6 +30,17 @@ class Period:
     name: str
 
 
+@dataclass
+class Region:
+    """A custom parameter type deliberately not imported by the test module.
+
+    Used to prove annotations resolve in this module's namespace rather than
+    the namespace of a decorator applied elsewhere.
+    """
+
+    code: str
+
+
 def send_letter(to: Address) -> str:
     """Send a letter to the given address.
 
@@ -53,6 +64,15 @@ def tc_return_custom_param(period: Period) -> Decimal:
 
     Args:
         period: the period
+    """
+    return Decimal("0")
+
+
+def tc_return_region(region: Region) -> Decimal:
+    """TYPE_CHECKING-only return with a param type local to this module.
+
+    Args:
+        region: the region
     """
     return Decimal("0")
 
