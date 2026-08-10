@@ -24,17 +24,12 @@ Test with the client:
     python docs/examples/m_serve/model-routing/client_model_routing.py
 """
 
-import os
 from typing import Any
 
 import mellea
 from mellea.backends.model_ids import IBM_GRANITE_4_1_3B, IBM_GRANITE_4_1_8B
 from mellea.core import ModelOutputThunk
 from mellea.serve import ChatMessage
-
-_ollama_host = os.environ.get("OLLAMA_HOST", "localhost:11434")
-if not _ollama_host.startswith(("http://", "https://")):
-    _ollama_host = f"http://{_ollama_host}"
 
 _DEFAULT_MODEL = IBM_GRANITE_4_1_3B
 
