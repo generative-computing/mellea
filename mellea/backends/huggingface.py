@@ -1763,6 +1763,37 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result.generation.provider = self._provider
             result.raw.provider = self._provider
 
+            # Construct a per-MOT GenerateDecoderOnlyOutput slice using tensor views
+            # past_key_values, attentions, and hidden_states are omitted
+            mot_sequences = cast(
+                "torch.LongTensor",
+                outputs.sequences[i : i + 1, :]
+                if isinstance(outputs.sequences, torch.Tensor)
+                else None,
+            )
+            mot_scores: tuple | None = None
+            if outputs.scores is not None:
+                mot_scores = tuple(s[i : i + 1, :] for s in outputs.scores)
+            mot_logits_raw: tuple | None = None
+            if outputs.logits is not None:
+                mot_logits_raw = tuple(s[i : i + 1, :] for s in outputs.logits)
+
+            if "raw_batch_response_fields_omitted" not in self._warned_about:
+                self._warned_about.add("raw_batch_response_fields_omitted")
+                MelleaLogger.get_logger().debug(
+                    "mot.raw.response.past_key_values, .attentions, and .hidden_states "
+                    "are not available on the raw batch path and will always be None."
+                )
+
+            result.raw.response = GenerateDecoderOnlyOutput(
+                sequences=mot_sequences,
+                scores=mot_scores,
+                logits=mot_logits_raw,
+                attentions=None,
+                hidden_states=None,
+                past_key_values=None,
+            )
+
             if want_logits and outputs.scores is not None:
                 # Clone each slice so this MOT does not hold a view into the shared batch allocation.
                 result.generation.logits = tuple(
@@ -1790,6 +1821,35 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             result._generate_log = generate_log
             results.append(result)
+
+        # Drop the shared batch output — per-MOT views in raw.response keep the
+        # underlying tensor storage alive
+        import gc
+
+        if torch.cuda.is_available():
+            MelleaLogger.get_logger().debug(
+                "GPU memory before raw batch cleanup: %d bytes allocated",
+                torch.cuda.memory_allocated(),
+            )
+        if hasattr(outputs, "sequences") and outputs.sequences is not None:
+            del outputs.sequences
+        if hasattr(outputs, "scores") and outputs.scores is not None:
+            del outputs.scores
+        if hasattr(outputs, "logits") and outputs.logits is not None:
+            del outputs.logits
+        if hasattr(outputs, "attentions") and outputs.attentions is not None:
+            del outputs.attentions
+        if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
+            del outputs.hidden_states
+        if hasattr(outputs, "past_key_values") and outputs.past_key_values is not None:
+            del outputs.past_key_values
+        gc.collect()
+        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            MelleaLogger.get_logger().debug(
+                "GPU memory after raw batch cleanup: %d bytes allocated",
+                torch.cuda.memory_allocated(),
+            )
 
         usage: dict[str, Any] | None = (
             {
