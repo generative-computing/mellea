@@ -167,3 +167,21 @@ class TestBuildClientOptions:
         client_opts = _build_client_options(request)
         assert "model" not in model_opts
         assert client_opts["model"] == "granite4.1:8b"
+
+    def test_extra_fields_allowed_and_passed_through(self):
+        """Extra fields not defined on the schema are allowed and passed through."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="hi")],
+            custom_backend_param="some-value",
+        )
+        # Extra fields are allowed in ChatCompletionRequest
+        assert getattr(request, "custom_backend_param", None) == "some-value"
+
+        # Extra fields are included in client_options
+        client_opts = _build_client_options(request)
+        assert client_opts.get("custom_backend_param") == "some-value"
+
+        # Extra fields are also forwarded as potential model_options
+        model_opts = _build_model_options(request)
+        assert model_opts.get("custom_backend_param") == "some-value"

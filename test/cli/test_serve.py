@@ -371,6 +371,29 @@ class TestChatEndpoint:
         assert "model" in received
 
     @pytest.mark.asyncio
+    async def test_client_options_passed_when_declared_async(
+        self, mock_module, sample_request
+    ):
+        """serve() is async and declares client_options; receives full raw request dict."""
+        mock_output = ModelOutputThunk("Test response")
+        received: dict = {}
+
+        async def serve_with_client_options_async(
+            input, requirements=None, model_options=None, client_options=None
+        ):
+            if client_options is not None:
+                received.update(client_options)
+            return mock_output
+
+        mock_module.serve = serve_with_client_options_async
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(sample_request)
+
+        assert isinstance(response, ChatCompletion)
+        assert "model" in received
+
+    @pytest.mark.asyncio
     async def test_client_options_contains_model(self, mock_module):
         """client_options includes the model field that is absent from model_options."""
         captured_client_options: dict = {}
