@@ -1349,28 +1349,119 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
     the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
 
+    The *computed invariant* is enforced on every assignment: the thunk can never be
+    mutated into an inconsistent state. Setting `_computed` to anything other than
+    `True` (it can never become uncomputed) or setting `_underlying_value`/`value` to
+    `None` or a non-`str` (the `.value -> str` contract must hold) raises `AttributeError`.
+    Invariant-*preserving* writes are allowed — a caller may replace the value with a
+    different computed string (see `mellea/stdlib/frameworks/react.py`, which swaps in a
+    tool's final answer) and a sampling strategy may finalize `parsed_repr`. This
+    guarantees `is_computed()` stays `True` and `.value` stays a non-`None` `str` for
+    the lifetime of the object.
+
+    Constructing without a `thunk` raises `TypeError` — the argument is mandatory.
+
     Args:
         thunk: A fully-computed `ModelOutputThunk` whose class will be reassigned.
     """
 
-    def __new__(cls, thunk: ModelOutputThunk[S]) -> ComputedModelOutputThunk[S]:
-        """Convert the ModelOutputThunk into a ComputedModelOutputThunk."""
+    # Fields guarded by the computed invariant. Each maps to a predicate a *new* value
+    # must satisfy; a rejected write raises AttributeError. The rule is "never made
+    # uncomputed or given an invalid value" — not "read-only": replacing the value with
+    # another valid computed string is allowed (react.py does this). `parsed_repr` is
+    # unguarded (a derived field finalized post-wrap). The guard is purely value-based,
+    # so it needs no "is-sealed" flag: at wrap time the base thunk is already computed
+    # with a str value, and the wrap itself writes no guarded field.
+    _INVARIANT_GUARDS: dict[str, Callable[[Any], bool]] = {
+        "_computed": lambda v: v is True,
+        "_underlying_value": lambda v: isinstance(v, str),
+    }
+
+    def __new__(
+        cls, thunk: ModelOutputThunk[S] | None = None
+    ) -> ComputedModelOutputThunk[S]:
+        """Convert a `ModelOutputThunk` into a `ComputedModelOutputThunk` via zero-copy reassignment.
+
+        `thunk is None` allocates a bare instance; this is the path taken by pickle's
+        default reconstruction (`cls.__new__(cls)`), which then restores `__dict__`
+        directly. A genuine no-arg call is caught in `__init__` (which pickle skips).
+
+        Raises:
+            TypeError: If `thunk` is neither `None` nor a `ModelOutputThunk`.
+        """
+        if thunk is None:
+            return object.__new__(cls)  # type: ignore[return-value]
+        if not isinstance(thunk, ModelOutputThunk):
+            raise TypeError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; "
+                f"got {type(thunk).__name__}."
+            )
         thunk.__class__ = cls
         return thunk  # type: ignore[return-value]
 
-    def __init__(self, thunk: ModelOutputThunk[S]) -> None:
+    def __init__(self, thunk: ModelOutputThunk[S] | None = None) -> None:
         """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
 
         Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
         the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+
+        Raises:
+            TypeError: If constructed with no `thunk` (the argument is mandatory).
+            ValueError: If `thunk` is not computed or has a `None` value.
         """
-        # Call the underlying value. It's already been cast as a ComputedModelOutputThunk, so it's .is_computed() value is always True.
+        # Pickle restores state via __dict__ and never calls __init__, so reaching here
+        # with thunk=None means a genuine no-arg constructor call, which is invalid.
+        if thunk is None:
+            raise TypeError(
+                "ComputedModelOutputThunk() requires a computed ModelOutputThunk; "
+                "construct one as ComputedModelOutputThunk(thunk)."
+            )
+
+        # `self` is `thunk` (zero-copy), already cast to ComputedModelOutputThunk.
         if not self._computed:
             raise ValueError(
                 "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
             )
         if self.value is None:
             raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Enforce the computed invariant on every assignment.
+
+        A guarded field (see `_INVARIANT_GUARDS`) may be reassigned only to a value that
+        keeps the thunk computed and its `.value` a valid `str`; unguarded fields
+        (`parsed_repr`, `_cancelled`, ...) are unrestricted. The `value` property setter
+        also routes here.
+
+        Raises:
+            AttributeError: If the assignment would violate the computed invariant
+                (uncompute the thunk, or set the value to `None`/non-`str`).
+        """
+        guard = self._INVARIANT_GUARDS.get(name)
+        if guard is not None and not guard(value):
+            raise AttributeError(
+                "cannot assign to this ComputedModelOutputThunk: the assignment "
+                "would violate the computed invariant (it must stay computed with a "
+                f"non-None str value; got {value!r})."
+            )
+        super().__setattr__(name, value)
+
+    def __copy__(self) -> ComputedModelOutputThunk[S]:
+        """Shallow-copy, preserving the concrete computed subclass.
+
+        Delegates field copying to `ModelOutputThunk.__copy__`, then re-casts the
+        base-class result back to `ComputedModelOutputThunk` so the copy keeps its type
+        and invariant instead of silently demoting to the base class.
+        """
+        copied = super().__copy__()
+        copied.__class__ = ComputedModelOutputThunk
+        return copied  # type: ignore[return-value]
+
+    def __deepcopy__(self, memo: dict) -> ComputedModelOutputThunk[S]:
+        """Deep-copy, preserving the concrete computed subclass (see `__copy__`)."""
+        deepcopied = super().__deepcopy__(memo)
+        deepcopied.__class__ = ComputedModelOutputThunk
+        return deepcopied  # type: ignore[return-value]
 
     async def avalue(self) -> str:
         """Return the value of the thunk. Use .value instead.
@@ -1407,7 +1498,11 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @value.setter
     def value(self, v: str):
-        """Sets the value of the block."""
+        """Set the underlying value, enforcing the computed invariant.
+
+        Raises:
+            AttributeError: If `v` is not a `str`.
+        """
         self._underlying_value = v
 
     def is_computed(self) -> Literal[True]:

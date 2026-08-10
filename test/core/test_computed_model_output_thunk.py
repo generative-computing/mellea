@@ -3,6 +3,9 @@
 
 """Tests for ComputedModelOutputThunk."""
 
+import copy
+import pickle
+
 import pytest
 
 from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
@@ -135,3 +138,110 @@ def test_computed_thunk_zero_copy_identity():
     base_thunk = ModelOutputThunk(value="test output")
     computed_thunk = ComputedModelOutputThunk(base_thunk)
     assert computed_thunk is base_thunk
+
+
+def test_computed_thunk_no_arg_construction_rejected():
+    """Constructing without a thunk must raise; the argument is mandatory."""
+    with pytest.raises(TypeError):
+        ComputedModelOutputThunk()  # type: ignore[call-arg]
+
+
+def test_computed_thunk_non_thunk_arg_rejected():
+    """Passing a non-ModelOutputThunk must raise TypeError, not silently proceed."""
+    with pytest.raises(TypeError, match="requires a computed ModelOutputThunk"):
+        ComputedModelOutputThunk("not a thunk")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "field, bad_value",
+    [
+        ("_computed", False),
+        ("_computed", None),
+        ("_underlying_value", None),
+        ("_underlying_value", 123),
+        ("value", None),
+        ("value", 123),
+    ],
+)
+def test_computed_thunk_invariant_violating_writes_rejected(field, bad_value):
+    """Assignments that would uncompute the thunk or invalidate its value are rejected."""
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="original"))
+    with pytest.raises(AttributeError, match="computed invariant"):
+        setattr(computed, field, bad_value)
+    # The invariant still holds after the rejected write.
+    assert computed.value == "original"
+    assert computed.is_computed()
+
+
+def test_computed_thunk_value_may_be_replaced_with_valid_string():
+    """The value may be swapped for another valid computed string (react.py relies on this)."""
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="original"))
+    computed.value = "replaced"
+    assert computed.value == "replaced"
+    assert computed.is_computed()
+    # The private field route is equally allowed for a valid string.
+    computed._underlying_value = "again"
+    assert computed.value == "again"
+
+
+def test_computed_thunk_derived_and_status_fields_writable():
+    """Fields outside the invariant guard remain freely mutable after wrapping.
+
+    `parsed_repr` is finalized by sampling strategies (mellea/stdlib/sampling/base.py),
+    `_cancelled` is a status flag, and `thinking` is derived output — none are guarded.
+    """
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="ok"))
+    computed.thinking = "some reasoning"
+    computed.parsed_repr = "finalized"
+    computed._cancelled = True
+    assert computed.thinking == "some reasoning"
+    assert computed.parsed_repr == "finalized"
+    assert computed._cancelled is True
+
+
+def test_pre_wrap_value_edit_still_allowed():
+    """The guard must not engage on the still-plain ModelOutputThunk before wrapping.
+
+    Setting `.value` on the base thunk prior to wrapping must succeed (the existing
+    `test_computed_thunk_requires_value` flow relies on this).
+    """
+    base = ModelOutputThunk(value="original")
+    base.value = "edited"  # allowed: base thunk is not sealed
+    computed = ComputedModelOutputThunk(base)
+    assert computed.value == "edited"
+
+
+def test_deepcopy_preserves_computed_subclass():
+    """deepcopy of a computed thunk stays a sealed, computed ComputedModelOutputThunk."""
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="hello"))
+    dc = copy.deepcopy(computed)
+
+    assert isinstance(dc, ComputedModelOutputThunk)
+    assert dc.is_computed()
+    assert dc.value == "hello"
+    with pytest.raises(AttributeError, match="computed invariant"):
+        dc.value = None  # type: ignore[assignment]
+
+
+def test_copy_preserves_computed_subclass():
+    """copy.copy of a computed thunk stays a sealed, computed ComputedModelOutputThunk."""
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="hello"))
+    cc = copy.copy(computed)
+
+    assert isinstance(cc, ComputedModelOutputThunk)
+    assert cc.is_computed()
+    assert cc.value == "hello"
+    with pytest.raises(AttributeError, match="computed invariant"):
+        cc._computed = False
+
+
+def test_pickle_roundtrip_preserves_computed_subclass():
+    """A pickled/unpickled computed thunk stays a sealed, computed ComputedModelOutputThunk."""
+    computed = ComputedModelOutputThunk(ModelOutputThunk(value="hello"))
+    restored = pickle.loads(pickle.dumps(computed))
+
+    assert isinstance(restored, ComputedModelOutputThunk)
+    assert restored.is_computed()
+    assert restored.value == "hello"
+    with pytest.raises(AttributeError, match="computed invariant"):
+        restored.value = None  # type: ignore[assignment]
