@@ -30,11 +30,13 @@ from .types import ChatCompletionResponse, ChatCompletionResponseChoice
 __all__ = ["import_optional"]
 
 # whitespace_flexible=True (natural, spaced JSON) is required. False (compact
-# JSON), and omitting the option entirely, put the model into a state where the
-# highest-probability grammar-compatible token closes an array immediately,
-# silently collapsing {"result": [...]} to {"result": []}. No exception is
-# raised — the caller cannot distinguish a correct empty list from a collapse.
-# See issue #1510 for full characterisation.
+# JSON) puts the model into a state where the highest-probability
+# grammar-compatible token closes an array immediately, silently collapsing
+# {"result": [...]} to {"result": []}. No exception is raised — the caller
+# cannot distinguish a correct empty list from a collapse.
+# llguidance's own default when `defaults` is omitted is already True; we pass
+# it explicitly so the requirement is legible here and pinned against a future
+# upstream default change. See issue #1510 for full characterisation.
 _LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {"whitespace_flexible": True}
 
 
@@ -306,7 +308,10 @@ def chat_completion_request_to_transformers_inputs(
 
         grammar = llguidance.LLMatcher.grammar_from_json_schema(
             request["extra_body"]["structured_outputs"]["json"],
-            defaults=_LLGUIDANCE_GRAMMAR_DEFAULTS,
+            # This schema comes directly off the wire, so a caller could embed
+            # their own `x-guidance.whitespace_flexible: false` and defeat a
+            # `defaults=` pass. `overrides=` cannot be defeated this way.
+            overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS,
         )
         logits_processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
 

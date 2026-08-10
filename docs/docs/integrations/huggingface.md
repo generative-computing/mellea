@@ -97,8 +97,9 @@ hardware. See the aLoRA guide for training and usage.
 via [llguidance](https://github.com/guidance-ai/llguidance). The grammar is built with
 `whitespace_flexible=True`, which *permits* natural, spaced JSON rather than forcing
 compact output. In testing, spaced JSON used roughly 1.5x more tokens than compact
-JSON for the same content — size `MAX_NEW_TOKENS` accordingly if you set it
-explicitly. Generation that runs to EOS is unaffected.
+JSON for the same content — size `ModelOption.MAX_NEW_TOKENS` accordingly if you set
+it explicitly. Generation that runs to EOS still completes, but consumes proportionally
+more tokens getting there.
 
 ## Vision support
 

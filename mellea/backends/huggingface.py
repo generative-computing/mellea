@@ -15,7 +15,7 @@ import functools
 import json
 import threading
 from collections.abc import Callable, Coroutine, Sequence
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import jinja2
 import jinja2.meta
@@ -43,10 +43,6 @@ except ImportError as e:
         'Please install them with: pip install "mellea[hf]"'
     ) from e
 
-if TYPE_CHECKING:
-    # llguidance doesn't re-export this TypedDict from its public namespace.
-    from llguidance._lib import JsonCompileOptions
-
 from ..backends import kv_block_helpers
 from ..core import (
     BaseModelSubclass,
@@ -65,7 +61,10 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
-from ..formatters.granite.base.util import _GuidanceLogitsProcessor
+from ..formatters.granite.base.util import (
+    _LLGUIDANCE_GRAMMAR_DEFAULTS,
+    _GuidanceLogitsProcessor,
+)
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     message_to_openai_message,
@@ -280,15 +279,6 @@ def _compute_generate_kwargs_allowlist() -> frozenset[str]:
 
 
 _GENERATE_KWARGS_ALLOWLIST: frozenset[str] = _compute_generate_kwargs_allowlist()
-
-
-# whitespace_flexible=True (natural, spaced JSON) is required.
-# False (compact JSON) can put the model into a state where the
-# highest-probability grammar-compatible token closes an array
-# immediately, silently collapsing {"result": [...]} to {"result": []}.
-# No exception is raised — the caller cannot distinguish a correct
-# empty list from a collapse. See issue #1510 for full characterisation.
-_LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {"whitespace_flexible": True}
 
 
 def _check_no_multimodal_blocks(action: Span | None, ctx: Context | None) -> None:

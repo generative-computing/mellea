@@ -989,9 +989,10 @@ async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
 # the backend's default greedy decoding, putting it into states where the
 # highest-probability grammar-compatible token closes an array immediately,
 # silently collapsing {"result": [...]} to {"result": []}.
-# All three grammar_from_json_schema call sites in LocalHFBackend must pass
-# whitespace_flexible=True. These tests assert that invariant via mock without
-# loading any real model.
+# All four grammar_from_json_schema call sites — three in LocalHFBackend plus
+# chat_completion_request_to_transformers_inputs (the `m serve` path) — must
+# pass whitespace_flexible=True. These tests assert that invariant via mock
+# without loading any real model.
 
 
 class _FakeSchema:
@@ -1173,8 +1174,8 @@ def test_whitespace_flexible_true_in_chat_completion_request_to_transformers_inp
 
     captured: list[dict] = []
 
-    def _capture_grammar(schema, defaults=None):
-        captured.append(defaults or {})
+    def _capture_grammar(schema, overrides=None):
+        captured.append(overrides or {})
         return "stub-grammar"
 
     with patch(
