@@ -97,6 +97,35 @@ from mellea.telemetry import is_tracing_enabled
 print(f"Tracing enabled: {is_tracing_enabled()}")
 ```
 
+## How spans are produced
+
+Library code never opens a span itself. `mellea/backends/*` and
+`mellea/stdlib/*` call `invoke_hook(HookType.X, payload)` and move on; a
+plugin in `mellea/telemetry/tracing_plugins.py` subscribes to that hook and
+opens or closes the span. Nothing under `mellea/backends/` or
+`mellea/stdlib/` imports `mellea.telemetry.tracing` — that module's
+span-opening functions are called from the tracing plugins alone.
+
+This indirection is what makes tracing genuinely optional and removable: with
+no plugins registered, firing a hook is a no-op, so nothing changes for
+someone using Mellea without the `[telemetry]` extra. It is also what lets a
+single plugin assemble one span tree from work spread across several
+objects, threads, or call stacks — the `chat` span nested under `sampling` in
+the hierarchy below, for instance, is opened by the tracing plugin that
+subscribes to the `generation_pre_call`/`generation_post_call` hook pair
+fired from `Backend.generate_from_context`, not by the backend itself.
+
+`mellea/stdlib/session.py` is the one sanctioned exception: it imports
+`mellea.telemetry.tracing` directly for the `session`/`start_session` span
+pair, because OTel `Token` attach/detach is task-affine and each hook fires
+in a separate task, so it can't be delegated to a plugin. That exception is
+documented at its import site — treat it as the exception, not a template
+for a new span.
+
+> **Note:** `test/telemetry/test_tracing_import_boundary.py` enforces this in
+> CI — it fails if anything under `mellea/backends/` imports
+> `mellea.telemetry.tracing` directly.
+
 ## What spans Mellea emits
 
 Mellea has two trace scopes.
