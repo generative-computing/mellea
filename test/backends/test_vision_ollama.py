@@ -9,10 +9,9 @@ Three tiers:
 2. **Structural payload** (unit, mocked) — verify mellea correctly embeds images
    into the Ollama conversation payload. The Ollama transport is mocked so no
    server or vision model is needed. Runs in CI unconditionally.
-3. **Dormant live e2e** (e2e, qualitative) — full round-trip against a real
-   vision-capable Ollama model. Skipped today because granite-vision-4.1 is not
-   yet in the Ollama library. Reactivates automatically once the model is pulled.
-   See #1187 for the activation checklist.
+3. **Live e2e** (e2e, qualitative) — full round-trip against a real
+   vision-capable Ollama model. Requires `granite-vision-4.1` to be pulled
+   locally; skipped with a pull command if it is not.
 """
 
 import base64
@@ -27,6 +26,7 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_VISION_4_1_4B
 from mellea.core import (
     AudioBlock,
     AudioUrlBlock,
@@ -36,13 +36,18 @@ from mellea.core import (
 )
 from mellea.stdlib.components import Instruction, Message
 
-# Ollama name for the target vision model; bump to the model_ids constant once
-# IBM_GRANITE_VISION_4_1_4B is added to mellea/backends/model_ids.py.
-_VISION_MODEL = "granite-vision-4.1"
+# granite-vision-4.1 is not in the Ollama library, so the model is pulled from
+# IBM's official GGUF repo on Hugging Face. Match on the full tag rather than a
+# bare name so the check cannot be satisfied by an unrelated local alias.
+_VISION_MODEL = IBM_GRANITE_VISION_4_1_4B
+_VISION_MODEL_TAG = str(IBM_GRANITE_VISION_4_1_4B.ollama_name)
 _SKIP_REASON = (
-    f"Vision model {_VISION_MODEL!r} not available in Ollama — "
-    "see https://github.com/generative-computing/mellea/issues/1187"
+    f"Vision model not pulled locally — run `ollama pull {_VISION_MODEL_TAG}`"
 )
+
+# The model's full 131072-token context window loads ~9 GB for a job that needs a
+# few thousand tokens; capping it keeps the live tests near 2.5 GB.
+_VISION_CONTEXT_WINDOW = 4096
 
 
 # ── Shared image fixture ──────────────────────────────────────────────────────
@@ -294,18 +299,15 @@ def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Ima
     assert image_list[0] == str(image_block)
 
 
-# ── Tier 3: Dormant live e2e ──────────────────────────────────────────────────
+# ── Tier 3: Live e2e ──────────────────────────────────────────────────────────
 #
-# Full round-trip against a real vision-capable Ollama model.  Currently skipped
-# because granite-vision-4.1 is not yet in the Ollama library.
-#
-# To activate: ensure `ollama pull granite-vision-4.1` succeeds, then remove the
-# pytest.skip() call from vision_session below and add the model to the CI pull
-# step in .github/workflows/quality.yml.  See #1187 for the full checklist.
+# Full round-trip against a real vision-capable Ollama model.  CI pulls the model
+# in the "Pull models" step of .github/workflows/quality.yml; locally these skip
+# unless you have pulled it yourself (the skip message gives the command).
 
 
 def _ollama_vision_model_available() -> bool:
-    """Return True if _VISION_MODEL is present in the local Ollama model list."""
+    """Return True if the vision model tag is present in the local Ollama model list."""
     import requests
 
     host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
@@ -318,7 +320,7 @@ def _ollama_vision_model_available() -> bool:
         resp = requests.get(f"{base_url}/api/tags", timeout=5)
         resp.raise_for_status()
         pulled = {m.get("name", "") for m in resp.json().get("models", [])}
-        return any(_VISION_MODEL in name for name in pulled)
+        return any(name.startswith(_VISION_MODEL_TAG) for name in pulled)
     except Exception:
         return False
 
@@ -331,7 +333,12 @@ def vision_session():
     from mellea import start_session
 
     m = start_session(
-        "ollama", model_id=_VISION_MODEL, model_options={ModelOption.MAX_NEW_TOKENS: 5}
+        "ollama",
+        model_id=_VISION_MODEL,
+        model_options={
+            ModelOption.MAX_NEW_TOKENS: 5,
+            ModelOption.CONTEXT_WINDOW: _VISION_CONTEXT_WINDOW,
+        },
     )
     yield m
     del m
@@ -343,7 +350,7 @@ def vision_session():
 def test_vision_instruct_live_e2e(
     vision_session: MelleaSession, pil_image: Image.Image
 ):
-    """Live vision instruct round-trip; skips until granite-vision-4.1 lands on Ollama."""
+    """Live vision instruct round-trip against granite-vision-4.1."""
     image_block: ImageBlock | ImageUrlBlock = ImageBlock.from_pil_image(pil_image)
     instr = vision_session.instruct(
         "Is this image mainly blue? Answer yes or no.",
@@ -359,7 +366,7 @@ def test_vision_instruct_live_e2e(
 @pytest.mark.ollama
 @pytest.mark.qualitative
 def test_vision_chat_live_e2e(vision_session: MelleaSession, pil_image: Image.Image):
-    """Live vision chat round-trip; skips until granite-vision-4.1 lands on Ollama."""
+    """Live vision chat round-trip against granite-vision-4.1."""
     ct = vision_session.chat(
         "Is this image mainly blue? Answer yes or no.", images=[pil_image]
     )

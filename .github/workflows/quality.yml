@@ -122,11 +122,17 @@ jobs:
       - name: Start serving ollama
         run: nohup ollama serve &
       - name: Pull models
+        # granite-vision-4.1 is not in the Ollama library, so it is pulled from
+        # IBM's official GGUF repo on Hugging Face (that build ships the mmproj
+        # projector Ollama needs for image input). Drop the hf.co prefix if the
+        # model is ever published to the Ollama library directly.
         run: |
-          for i in 1 2 3 4 5; do
-            ollama pull granite4.1:3b && break
-            echo "Attempt $i failed, retrying in 20s..."
-            sleep 20
+          for model in granite4.1:3b hf.co/ibm-granite/granite-vision-4.1-4b-GGUF:Q4_K_M; do
+            for i in 1 2 3 4 5; do
+              ollama pull "$model" && break
+              echo "Attempt $i to pull $model failed, retrying in 20s..."
+              sleep 20
+            done
           done
       - name: Run Tests
         id: tests
