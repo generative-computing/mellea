@@ -69,9 +69,6 @@ try:
 except ImportError:
     _OTEL_AVAILABLE = False
 
-from ..telemetry import get_otlp_log_handler
-from ..telemetry.context import _CONTEXT_VARS as _telemetry_vars, MelleaContextFilter
-
 # ---------------------------------------------------------------------------
 # Per-task/coroutine context fields (safe for asyncio — each Task gets its own copy)
 # ---------------------------------------------------------------------------
@@ -426,6 +423,8 @@ class JsonFormatter(logging.Formatter):
         # MelleaContextFilter stamps these onto the record before formatters run; read
         # them back off the record here so they appear in JSON output.  Fall back to the
         # ContextVar directly so the formatter still works without the filter attached.
+        from ..telemetry.context import _CONTEXT_VARS as _telemetry_vars
+
         for key, var in _telemetry_vars.items():
             value = getattr(record, key, var.get())
             if value is not None:
@@ -577,6 +576,8 @@ def configure_logging(logger: logging.Logger) -> None:
     Args:
         logger: The `logging.Logger` to configure.
     """
+    from ..telemetry import get_otlp_log_handler
+
     enabled_raw = os.environ.get("MELLEA_LOGS_ENABLED")
     if not _parse_bool_env(enabled_raw or "", default=True):
         return
@@ -701,6 +702,8 @@ class MelleaLogger:
         Returns:
             Configured logger instance.
         """
+        from ..telemetry.context import MelleaContextFilter
+
         if MelleaLogger.logger is None:
             with _logger_lock:
                 # Second check inside the lock: another thread may have finished
