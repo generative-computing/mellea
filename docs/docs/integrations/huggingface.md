@@ -95,11 +95,9 @@ hardware. See the aLoRA guide for training and usage.
 
 `LocalHFBackend` enforces `format=` schemas (see [Enforce Structured Output](../how-to/enforce-structured-output.md))
 via [llguidance](https://github.com/guidance-ai/llguidance). The grammar is built with
-`whitespace_flexible=True`, which *permits* natural, spaced JSON rather than forcing
-compact output. In testing, spaced JSON used roughly 1.5x more tokens than compact
-JSON for the same content — size `ModelOption.MAX_NEW_TOKENS` accordingly if you set
-it explicitly. Generation that runs to EOS still completes, but consumes proportionally
-more tokens getting there.
+a bounded `whitespace_pattern` (`r"[\x20\x0A\x0D\x09]{0,20}"`), which permits natural, spaced, and pretty-printed JSON (up to 4 levels of standard 4-space indentation) while setting a hard upper limit of 20 consecutive whitespace characters to prevent runaway token generation or infinite loops.
+
+In testing, spaced JSON used roughly 1.5x more tokens than compact JSON for the same content — size `ModelOption.MAX_NEW_TOKENS` accordingly if you set it explicitly. Generation that runs to EOS still completes, but consumes proportionally more tokens getting there.
 
 ## Vision support
 
