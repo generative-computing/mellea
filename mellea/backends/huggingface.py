@@ -1035,7 +1035,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 schema: dict[str, Any] = _format.model_json_schema()
                 grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults=_LLGUIDANCE_GRAMMAR_DEFAULTS
+                    schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
                 )
                 logits_processor = _GuidanceLogitsProcessor(
                     grammar, self._llguidance_tokenizer
@@ -1240,7 +1240,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 schema: dict[str, Any] = _format.model_json_schema()
                 grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults=_LLGUIDANCE_GRAMMAR_DEFAULTS
+                    schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
                 )
                 logits_processor = _GuidanceLogitsProcessor(
                     grammar, self._llguidance_tokenizer
@@ -1705,7 +1705,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if format:
             schema: dict[str, Any] = format.model_json_schema()
             grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                schema, defaults=_LLGUIDANCE_GRAMMAR_DEFAULTS
+                schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
             )
             logits_processor = _GuidanceLogitsProcessor(
                 grammar, self._llguidance_tokenizer

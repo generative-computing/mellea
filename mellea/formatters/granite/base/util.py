@@ -29,15 +29,15 @@ from .types import ChatCompletionResponse, ChatCompletionResponseChoice
 
 __all__ = ["import_optional"]
 
-# whitespace_flexible=True (natural, spaced JSON) is required. False (compact
-# JSON) puts the model into a state where the highest-probability
-# grammar-compatible token closes an array immediately, silently collapsing
-# {"result": [...]} to {"result": []}. No exception is raised — the caller
-# cannot distinguish a correct empty list from a collapse.
-# llguidance's own default when `defaults` is omitted is already True; we pass
-# it explicitly so the requirement is legible here and pinned against a future
-# upstream default change. See issue #1510 for full characterisation.
-_LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {"whitespace_flexible": True}
+# A bounded whitespace_pattern (allowing 0 to 20 consecutive whitespace characters)
+# is used as an intermediate fix (addressing PR #1513 feedback from Jake LoRocco).
+# This allows natural, spaced JSON (preventing the silent array collapse bug characterized
+# in issue #1510) while comfortably accommodating 4-space indentation up to 4 levels of
+# nesting (which requires 17 contiguous characters: \n + 16 spaces), while still setting
+# an absolute hard ceiling to completely prevent unlimited/runaway whitespace loops.
+_LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {
+    "whitespace_pattern": r"[\x20\x0A\x0D\x09]{0,20}"
+}
 
 
 def random_uuid() -> str:

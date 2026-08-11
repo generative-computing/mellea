@@ -983,16 +983,16 @@ async def test_multimodal_blocks_in_intrinsic_ctx_raise_error(
 
 
 # ---------------------------------------------------------------------------
-# Regression tests for issue #1510: whitespace_flexible must be True
+# Regression tests for issue #1510: bounded whitespace_pattern required
 # ---------------------------------------------------------------------------
 # llguidance's whitespace_flexible=False (compact JSON) interacts badly with
 # the backend's default greedy decoding, putting it into states where the
 # highest-probability grammar-compatible token closes an array immediately,
 # silently collapsing {"result": [...]} to {"result": []}.
-# All four grammar_from_json_schema call sites — three in LocalHFBackend plus
-# chat_completion_request_to_transformers_inputs (the `m serve` path) — must
-# pass whitespace_flexible=True. These tests assert that invariant via mock
-# without loading any real model.
+# To prevent this, all four grammar_from_json_schema call sites must enforce a
+# bounded whitespace_pattern (which allows space and prevents unlimited run-away
+# whitespace generation, resolving PR #1513 feedback).
+# These tests assert that invariant via mock without loading any real model.
 
 
 class _FakeSchema:
@@ -1017,19 +1017,19 @@ def _mock_chat_template_output() -> MagicMock:
     return obj
 
 
-def _assert_whitespace_flexible_true(captured: list[dict]) -> None:
+def _assert_whitespace_pattern_set(captured: list[dict]) -> None:
     assert captured, "grammar_from_json_schema was never called"
     for call_defaults in captured:
-        assert call_defaults.get("whitespace_flexible") is True, (
-            f"Expected whitespace_flexible=True, got {call_defaults!r} — "
-            "see issue #1510: False causes silent empty-array collapse"
+        assert call_defaults.get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,20}", (
+            f"Expected bounded whitespace_pattern, got {call_defaults!r} — "
+            "see issue #1510 and PR #1513 review"
         )
 
 
 @pytest.mark.asyncio
-async def test_whitespace_flexible_true_in_generate_from_context_standard():
+async def test_whitespace_pattern_set_in_generate_from_context_standard():
     """Regression (#1510): _generate_from_context_standard must call
-    grammar_from_json_schema with whitespace_flexible=True.
+    grammar_from_json_schema with bounded whitespace_pattern.
 
     Without the fix, the call passes whitespace_flexible=False, which can cause
     silent array collapse to [] under greedy decoding.
@@ -1044,8 +1044,8 @@ async def test_whitespace_flexible_true_in_generate_from_context_standard():
 
     captured: list[dict] = []
 
-    def _capture_grammar(schema, defaults=None):
-        captured.append(defaults or {})
+    def _capture_grammar(schema, overrides=None):
+        captured.append(overrides or {})
         return "stub-grammar"
 
     # The real generate() call runs in a background task (output._gen.generate)
@@ -1063,13 +1063,13 @@ async def test_whitespace_flexible_true_in_generate_from_context_standard():
         )
     await output._gen.generate
 
-    _assert_whitespace_flexible_true(captured)
+    _assert_whitespace_pattern_set(captured)
 
 
 @pytest.mark.asyncio
-async def test_whitespace_flexible_true_in_generate_from_raw():
+async def test_whitespace_pattern_set_in_generate_from_raw():
     """Regression (#1510): _generate_from_raw must call grammar_from_json_schema
-    with whitespace_flexible=True.
+    with bounded whitespace_pattern.
     """
     backend = _make_backend()
     # _generate_from_raw calls self._tokenizer(prompts, ...).to(device), so the
@@ -1095,8 +1095,8 @@ async def test_whitespace_flexible_true_in_generate_from_raw():
 
     captured: list[dict] = []
 
-    def _capture_grammar(schema, defaults=None):
-        captured.append(defaults or {})
+    def _capture_grammar(schema, overrides=None):
+        captured.append(overrides or {})
         return "stub-grammar"
 
     with (
@@ -1110,13 +1110,13 @@ async def test_whitespace_flexible_true_in_generate_from_raw():
             [Instruction(description="test")], ctx, format=_FakeSchema, model_options={}
         )
 
-    _assert_whitespace_flexible_true(captured)
+    _assert_whitespace_pattern_set(captured)
 
 
 @pytest.mark.asyncio
-async def test_whitespace_flexible_true_in_generate_from_context_with_kv_cache():
+async def test_whitespace_pattern_set_in_generate_from_context_with_kv_cache():
     """Regression (#1510): _generate_from_context_with_kv_cache must call
-    grammar_from_json_schema with whitespace_flexible=True.
+    grammar_from_json_schema with bounded whitespace_pattern.
     """
     backend = _make_backend()
     backend._model = MagicMock()
@@ -1127,8 +1127,8 @@ async def test_whitespace_flexible_true_in_generate_from_context_with_kv_cache()
 
     captured: list[dict] = []
 
-    def _capture_grammar(schema, defaults=None):
-        captured.append(defaults or {})
+    def _capture_grammar(schema, overrides=None):
+        captured.append(overrides or {})
         return "stub-grammar"
 
     # The real generate() call runs in a background task (output._gen.generate)
@@ -1151,13 +1151,13 @@ async def test_whitespace_flexible_true_in_generate_from_context_with_kv_cache()
         )
     await output._gen.generate
 
-    _assert_whitespace_flexible_true(captured)
+    _assert_whitespace_pattern_set(captured)
 
 
-def test_whitespace_flexible_true_in_chat_completion_request_to_transformers_inputs():
+def test_whitespace_pattern_set_in_chat_completion_request_to_transformers_inputs():
     """Regression (#1510): chat_completion_request_to_transformers_inputs (the
     OpenAI-compatible /chat/completions path used by `m serve`) must call
-    grammar_from_json_schema with whitespace_flexible=True.
+    grammar_from_json_schema with bounded whitespace_pattern.
     """
     tokenizer = MagicMock()
     tokenizer.apply_chat_template.return_value = torch.zeros(1, 4, dtype=torch.long)
@@ -1185,4 +1185,127 @@ def test_whitespace_flexible_true_in_chat_completion_request_to_transformers_inp
             request, tokenizer, model, ll_tokenizer=MagicMock()
         )
 
-    _assert_whitespace_flexible_true(captured)
+    _assert_whitespace_pattern_set(captured)
+
+
+@pytest.mark.asyncio
+async def test_whitespace_pattern_cannot_be_defeated_by_schema():
+    """Regression (#1510): Custom schemas attempting to force compact JSON
+    (whitespace_flexible=False) must be overridden to our bounded whitespace_pattern across all entry points.
+    """
+
+    class _FakeCompactSchema:
+        @staticmethod
+        def model_json_schema() -> dict:
+            return {
+                "type": "object",
+                "properties": {"result": {"type": "array"}},
+                "x-guidance": {"whitespace_flexible": False},
+            }
+
+    backend = _make_backend()
+    backend._tokenizer = MagicMock()
+    backend._tokenizer.apply_chat_template.return_value = _mock_chat_template_output()
+    tok_output = MagicMock()
+    tok_output.to = lambda device: tok_output
+    tok_output.__getitem__ = lambda s, k: torch.zeros(1, 4, dtype=torch.long)
+    backend._tokenizer.return_value = tok_output
+    backend._tokenizer.batch_decode = MagicMock(return_value=["stub-completion"])
+    backend._model = MagicMock()
+    backend._model.device = torch.device("cpu")
+    ctx = ChatContext().add(Message("user", "list facts"))
+
+    input_ids = torch.tensor([[1]])
+    attention_mask = torch.tensor([[1]])
+
+    # We want to trace each of the 4 paths
+    for path_name in ("context_standard", "raw", "context_kv_cache", "chat_completion"):
+        captured: list[dict] = []
+
+        def _capture_grammar(schema, overrides=None):
+            captured.append(overrides or {})
+            return "stub-grammar"
+
+        if path_name in ("context_standard", "context_kv_cache"):
+            backend._tokenizer.apply_chat_template.return_value = (
+                _mock_chat_template_output()
+            )
+        elif path_name == "chat_completion":
+            backend._tokenizer.apply_chat_template.return_value = torch.zeros(
+                1, 4, dtype=torch.long
+            )
+            backend._tokenizer.pad_token_id = 0
+            backend._tokenizer.eos_token_id = 1
+
+        with (
+            patch("mellea.backends.huggingface.llguidance") as mock_llg,
+            patch(
+                "mellea.backends.huggingface.asyncio.to_thread",
+                return_value=GenerateDecoderOnlyOutput(
+                    sequences=torch.zeros(1, 7, dtype=torch.long),
+                    scores=None,
+                    logits=None,
+                    attentions=None,
+                    hidden_states=None,
+                    past_key_values=None,
+                )
+                if path_name == "raw"
+                else MagicMock(),
+            ),
+        ):
+            mock_llg.LLMatcher.grammar_from_json_schema.side_effect = _capture_grammar
+
+            if path_name == "context_standard":
+                output = await backend._generate_from_context_standard(
+                    Instruction(description="test"),
+                    ctx,
+                    model_options={},
+                    _format=_FakeCompactSchema,
+                )
+                await output._gen.generate
+            elif path_name == "raw":
+                await backend._generate_from_raw(
+                    [Instruction(description="test")],
+                    ctx,
+                    format=_FakeCompactSchema,
+                    model_options={},
+                )
+            elif path_name == "context_kv_cache":
+                with patch.object(
+                    backend,
+                    "_make_merged_kv_cache",
+                    return_value=("", input_ids, MagicMock(), attention_mask),
+                ):
+                    output = await backend._generate_from_context_with_kv_cache(
+                        Instruction(description="test"),
+                        ctx,
+                        model_options={},
+                        _format=_FakeCompactSchema,
+                    )
+                    await output._gen.generate
+            elif path_name == "chat_completion":
+                request = {
+                    "messages": [{"role": "user", "content": "list facts"}],
+                    "extra_body": {
+                        "structured_outputs": {
+                            "json": _FakeCompactSchema.model_json_schema()
+                        }
+                    },
+                }
+                with patch(
+                    "llguidance.LLMatcher.grammar_from_json_schema",
+                    side_effect=_capture_grammar,
+                ):
+                    chat_completion_request_to_transformers_inputs(
+                        request,
+                        backend._tokenizer,
+                        backend._model,
+                        ll_tokenizer=MagicMock(),
+                    )
+
+        assert len(captured) == 1, (
+            f"grammar_from_json_schema was not called for {path_name}"
+        )
+        assert captured[0].get("whitespace_pattern") == r"[\x20\x0A\x0D\x09]{0,20}", (
+            f"Expected bounded whitespace_pattern to override False in {path_name}"
+        )
