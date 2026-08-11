@@ -49,17 +49,22 @@ class _Contract(IOContract):
 
 @contextlib.contextmanager
 def capture_adapter_hooks():
-    """Record the hook payloads `adapter_scope` fires, without a plugin manager.
+    """Record the hook payloads `adapter_scope` fires, so they can be asserted on.
 
     Asserts on hooks rather than spans: `adapter_scope` fires hooks and never
     opens a span (#1464 documents the rule, #1466 adds the spans from a plugin).
 
-    Patches `_run_async_in_thread` as well as `invoke_hook`, matching the idiom in
-    `test_local_file_binding.py`. `invoke_hook` is replaced by a plain `MagicMock`
-    so no coroutine is ever created — returning a real coroutine here and letting
-    the live `_run_async_in_thread` see it produces "coroutine was never awaited"
-    warnings, since `has_plugins()` is `False` in tests and the dispatch path is
-    not actually live.
+    Follows `test_local_file_binding.py`'s idiom, patching all three of
+    `has_plugins`, `invoke_hook` and `_run_async_in_thread`:
+
+    - `has_plugins` is pinned `True`. It is already `True` in the test session —
+      plugins are registered session-scoped — but pinning it keeps these tests
+      independent of the ambient registration.
+    - `invoke_hook` becomes a plain `MagicMock`, so the payloads are readable from
+      `call_args_list` and no coroutine is created.
+    - `_run_async_in_thread` is patched out; nothing here needs a real dispatch.
+      Leaving it live while `invoke_hook` returns a real coroutine produced
+      "coroutine was never awaited" warnings.
     """
     with (
         patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),

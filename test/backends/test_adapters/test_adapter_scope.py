@@ -94,12 +94,18 @@ def test_adapter_scope_propagates_deactivate_error_over_body_success():
 
 @contextlib.contextmanager
 def _capture_hooks():
-    """Capture fired hook payloads without a live plugin manager.
+    """Capture the hook payloads fired inside the block.
 
-    Follows the idiom in `test_local_file_binding.py`: patch `has_plugins` on and
-    `_run_async_in_thread` off, with `invoke_hook` a plain `MagicMock` so no
-    coroutine is created (a real one would trigger "never awaited" warnings, since
-    the dispatch path is not live in tests).
+    Follows `test_local_file_binding.py`'s idiom: pin `has_plugins` `True` (it
+    already is in the test session, but pinning removes the dependency on ambient
+    plugin registration), make `invoke_hook` a plain `MagicMock` so payloads are
+    readable and no coroutine is created, and patch `_run_async_in_thread` out
+    since no real dispatch is needed here. Leaving the latter live while
+    `invoke_hook` returns a real coroutine produced "coroutine was never awaited"
+    warnings.
+
+    Note that the tests which do *not* use this helper exercise the real dispatch
+    path, since plugins are genuinely registered under pytest.
     """
     with (
         patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),
