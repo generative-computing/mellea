@@ -339,6 +339,20 @@ def _vision_model_pulled(pulled: set[str]) -> bool:
     return any(name.casefold().startswith(tag) for name in pulled)
 
 
+def test_vision_model_tag_match_ignores_case():
+    """Ollama has varied the case of `hf.co/...` tags, so matching must not depend on it."""
+    assert _vision_model_pulled({_VISION_MODEL_TAG})
+    assert _vision_model_pulled({_VISION_MODEL_TAG.lower()})
+    assert _vision_model_pulled({_VISION_MODEL_TAG.upper()})
+
+
+def test_vision_model_tag_match_rejects_other_models():
+    """Only the pinned tag counts; a bare alias could point at any model."""
+    assert not _vision_model_pulled(set())
+    assert not _vision_model_pulled({"granite4.1:3b", "granite3.2-vision:latest"})
+    assert not _vision_model_pulled({"granite-vision-4.1:latest"})
+
+
 @pytest.fixture
 def vision_session(gh_run: int):
     pulled = _pulled_ollama_models()
