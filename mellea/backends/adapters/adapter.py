@@ -32,6 +32,7 @@ from ...plugins.manager import has_plugins, invoke_hook
 from ...plugins.types import HookType
 from ._core import (
     Adapter as _AdapterCore,
+    AdapterSchemaMismatchError,
     Identity,
     IOContract,
     LocalFileBinding,
@@ -700,7 +701,7 @@ class AdapterMixin(Backend, abc.ABC):
         binding_type = adapter.weights.binding_type
         adapter_type = adapter.identity.adapter_type
 
-        outcome: Literal["success", "error"] = "success"
+        outcome: Literal["success", "schema_error", "error"] = "success"
         exception: BaseException | None = None
         try:
             _run_adapter_phase(name, "activate", adapter.weights.activate)
@@ -708,6 +709,16 @@ class AdapterMixin(Backend, abc.ABC):
                 yield
             finally:
                 _run_adapter_phase(name, "deactivate", adapter.weights.deactivate)
+        except AdapterSchemaMismatchError as exc:
+            # Distinct from a generic error: this is the schema-drift signal the
+            # `parse_failures` counter exists to detect, so collapsing it into
+            # "error" would leave that counter permanently at zero. Reachable
+            # today — `adapter_scope` is public, so a caller can parse inside the
+            # scope — and it becomes the common case once #1465 moves generation
+            # and parsing in here.
+            outcome = "schema_error"
+            exception = exc
+            raise
         except BaseException as exc:
             outcome = "error"
             exception = exc

@@ -52,25 +52,26 @@ def capture_adapter_hooks():
     """Record the hook payloads `adapter_scope` fires, without a plugin manager.
 
     Asserts on hooks rather than spans: `adapter_scope` fires hooks and never
-    opens a span (see #1464 for the rule, #1466 for the spans themselves).
+    opens a span (#1464 documents the rule, #1466 adds the spans from a plugin).
+
+    Patches `_run_async_in_thread` as well as `invoke_hook`, matching the idiom in
+    `test_local_file_binding.py`. `invoke_hook` is replaced by a plain `MagicMock`
+    so no coroutine is ever created — returning a real coroutine here and letting
+    the live `_run_async_in_thread` see it produces "coroutine was never awaited"
+    warnings, since `has_plugins()` is `False` in tests and the dispatch path is
+    not actually live.
     """
-    recorded: list[tuple[object, object]] = []
-
-    async def _noop() -> None:
-        return None
-
-    def _fake_invoke_hook(hook_type: object, payload: object):
-        recorded.append((hook_type, payload))
-        return _noop()
-
     with (
         patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),
-        patch(
-            "mellea.backends.adapters.adapter.invoke_hook",
-            side_effect=_fake_invoke_hook,
-        ),
+        patch("mellea.backends.adapters.adapter.invoke_hook") as mock_invoke,
+        patch("mellea.backends.adapters.adapter._run_async_in_thread"),
     ):
-        yield recorded
+        yield mock_invoke
+
+
+def _payloads(mock_invoke):
+    """The payload argument of every recorded `invoke_hook` call, in order."""
+    return [call.args[1] for call in mock_invoke.call_args_list]
 
 
 def _make_backend() -> LocalHFBackend:
@@ -129,7 +130,7 @@ def test_prepare_activate_deactivate_release_full_lifecycle():
         mock_obtain_lora.assert_called_once()
         assert mock_obtain_lora.call_args.kwargs["revision"] == binding.revision
 
-        with capture_adapter_hooks() as recorded:
+        with capture_adapter_hooks() as mock_invoke:
             with backend.adapter_scope(adapter):
                 backend._model.set_adapter.assert_called_with(binding.qualified_name)  # type: ignore[union-attr]
 
@@ -140,10 +141,11 @@ def test_prepare_activate_deactivate_release_full_lifecycle():
     backend._model.delete_adapter.assert_called_once_with(binding.qualified_name)  # type: ignore[union-attr]
     assert binding.backend is None
 
-    phases = [p.phase for _, p in recorded if hasattr(p, "phase")]
+    recorded = _payloads(mock_invoke)
+    phases = [p.phase for p in recorded if hasattr(p, "phase")]
     assert phases == ["activate", "deactivate"]
 
-    invocations = [p for _, p in recorded if hasattr(p, "outcome")]
+    invocations = [p for p in recorded if hasattr(p, "outcome")]
     assert len(invocations) == 1
     assert invocations[0].outcome == "success"
     assert invocations[0].name == "answerability"
@@ -163,7 +165,7 @@ def test_deactivate_runs_even_when_generation_body_raises():
         binding.bind_backend(backend)
         binding.prepare()
 
-        with capture_adapter_hooks() as recorded:
+        with capture_adapter_hooks() as mock_invoke:
             with pytest.raises(RuntimeError, match="generation failed"):
                 with backend.adapter_scope(adapter):
                     raise RuntimeError("generation failed")
@@ -173,10 +175,11 @@ def test_deactivate_runs_even_when_generation_body_raises():
 
     # deactivate still ran, and the invocation is reported as an error carrying
     # the original exception — the behaviour the span status used to assert.
-    phases = [p.phase for _, p in recorded if hasattr(p, "phase")]
+    recorded = _payloads(mock_invoke)
+    phases = [p.phase for p in recorded if hasattr(p, "phase")]
     assert "deactivate" in phases
 
-    invocations = [p for _, p in recorded if hasattr(p, "outcome")]
+    invocations = [p for p in recorded if hasattr(p, "outcome")]
     assert len(invocations) == 1
     assert invocations[0].outcome == "error"
     assert isinstance(invocations[0].error, RuntimeError)

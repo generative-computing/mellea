@@ -13,7 +13,7 @@ adapter set. `generate_from_context()` on a plain `CBlock` is only a
 smoke-test that generation still succeeds afterwards — it does not run
 through the activated adapter, since the standard generation path always
 deactivates adapters first (`_generate_with_adapter_lock("", ...)`); wiring
-that path onto `adapter_scope` is deferred to a follow-up issue.
+that path onto `adapter_scope` is deferred to #1465.
 
 Assertions are structural/functional only (adapter registered, real model
 reports it active, generation succeeds, adapter cleanly released), per
