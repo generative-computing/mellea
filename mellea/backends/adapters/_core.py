@@ -368,6 +368,13 @@ class LocalFileBinding(WeightsBinding):
 
         Idempotent: a no-op once already prepared.
 
+        The `prepare` phase duration reported to
+        `ADAPTER_FUNCTION_PHASE_COMPLETE` spans the whole operation, **including
+        the Hugging Face download** — `add_adapter` calls `get_local_hf_path`,
+        which can take seconds on a cache miss. That is deliberate (it is the
+        wall-clock cost of preparing), but worth stating, since a phase added
+        later may not want the same boundary.
+
         Raises:
             RuntimeError: `bind_backend()` was not called first, `name` is empty,
                 or the backend refused the registration.
@@ -397,8 +404,10 @@ class LocalFileBinding(WeightsBinding):
         if self.backend is None:
             raise RuntimeError(
                 f"Backend refused to register adapter {self.qualified_name!r}; see the "
-                "backend's warning log. A different adapter is most likely already "
-                "registered under this qualified name."
+                "backend's warning log. Either another adapter is already registered "
+                "under this qualified name, or this binding was previously released — "
+                "`release()` is terminal and does not free the name for re-use "
+                "(see #1528)."
             )
         self._staged_backend.load_peft_adapter(self.qualified_name)
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
@@ -430,9 +439,19 @@ class LocalFileBinding(WeightsBinding):
             self.backend.deactivate_peft_adapter(self.qualified_name)
 
     def release(self) -> None:
-        """Unloads the adapter from the backend and releases all resources.
+        """Unloads the adapter's weights from the backend and clears local state.
 
-        Idempotent: a no-op if never prepared, or already released.
+        Idempotent: a no-op if never prepared, or already released. Terminal, per
+        the :class:`WeightsBinding` contract — the binding is not reusable
+        afterwards, and `bind_backend()` + `prepare()` will not revive it.
+
+        Does **not** fully deregister. `unload_peft_adapter` removes the adapter
+        from the backend's *loaded* set, but the backend's *registered* set
+        (`_added_adapters` on `LocalHFBackend`) keeps its entry, because
+        `add_adapter` has no inverse verb. So the `qualified_name` stays claimed
+        for the backend's lifetime and no later binding can register under it.
+        Tracked in #1528, which also asks whether re-registration should be
+        supported at all given the terminal contract.
         """
         if self.backend is None:
             return

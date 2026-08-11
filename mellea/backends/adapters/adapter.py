@@ -342,6 +342,12 @@ def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> N
     Fires the hook only; it does not open a span. Span production belongs to a
     plugin (#1464, #1466), not to code under `mellea/backends/`.
 
+    The hook fires **only when the phase succeeds**, matching the name of
+    `ADAPTER_FUNCTION_PHASE_COMPLETE`: a phase that raised did not complete. If
+    `phase_fn` raises, the exception propagates and no phase event is emitted, so
+    a consumer reconciling phase counts against invocation counts will see the
+    failure only at invocation level, where `outcome` and `error` carry it.
+
     Args:
         name: Adapter function name, used as the metric's `name` field.
         phase: Lifecycle phase name; must be a valid

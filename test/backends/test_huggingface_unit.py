@@ -239,7 +239,12 @@ def test_generate_with_adapter_lock_calls_load_peft_adapter():
         backend._generate_with_adapter_lock("my_adapter", lambda: "output")
 
     mock_load.assert_called_once_with("my_adapter")
-    backend._model.set_adapter.assert_called_once_with("my_adapter")  # type: ignore[union-attr]
+    # Deliberately no `_model.set_adapter` assertion. Since #1141 that call is
+    # reached via `activate_peft_adapter` rather than inlined here, so asserting
+    # it would make this test an unannounced guard for the delegation chain --
+    # failing on a change to `activate_peft_adapter` without naming it. The chain
+    # is covered by `test_generate_with_adapter_lock_uses_activate_deactivate_verbs`
+    # and the verb itself by `test_activate_peft_adapter_calls_set_adapter`.
 
 
 def test_generate_with_adapter_lock_uses_activate_deactivate_verbs():

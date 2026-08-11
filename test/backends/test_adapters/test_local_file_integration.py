@@ -13,7 +13,6 @@ fires hooks and deliberately opens no spans (#1464 documents the rule, #1466 add
 the spans from a plugin).
 """
 
-import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,6 +34,10 @@ from mellea.backends.adapters._core import (
 from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import Component
+from test.backends.test_adapters._hook_capture import (
+    capture_adapter_hooks,
+    hook_payloads,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -45,38 +48,6 @@ class _Contract(IOContract):
 
     def parse(self, raw: str) -> dict[str, object]:
         return {}
-
-
-@contextlib.contextmanager
-def capture_adapter_hooks():
-    """Record the hook payloads `adapter_scope` fires, so they can be asserted on.
-
-    Asserts on hooks rather than spans: `adapter_scope` fires hooks and never
-    opens a span (#1464 documents the rule, #1466 adds the spans from a plugin).
-
-    Follows `test_local_file_binding.py`'s idiom, patching all three of
-    `has_plugins`, `invoke_hook` and `_run_async_in_thread`:
-
-    - `has_plugins` is pinned `True`. It is already `True` in the test session —
-      plugins are registered session-scoped — but pinning it keeps these tests
-      independent of the ambient registration.
-    - `invoke_hook` becomes a plain `MagicMock`, so the payloads are readable from
-      `call_args_list` and no coroutine is created.
-    - `_run_async_in_thread` is patched out; nothing here needs a real dispatch.
-      Leaving it live while `invoke_hook` returns a real coroutine produced
-      "coroutine was never awaited" warnings.
-    """
-    with (
-        patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),
-        patch("mellea.backends.adapters.adapter.invoke_hook") as mock_invoke,
-        patch("mellea.backends.adapters.adapter._run_async_in_thread"),
-    ):
-        yield mock_invoke
-
-
-def _payloads(mock_invoke):
-    """The payload argument of every recorded `invoke_hook` call, in order."""
-    return [call.args[1] for call in mock_invoke.call_args_list]
 
 
 def _make_backend() -> LocalHFBackend:
@@ -146,7 +117,7 @@ def test_prepare_activate_deactivate_release_full_lifecycle():
     backend._model.delete_adapter.assert_called_once_with(binding.qualified_name)  # type: ignore[union-attr]
     assert binding.backend is None
 
-    recorded = _payloads(mock_invoke)
+    recorded = hook_payloads(mock_invoke)
     phases = [p.phase for p in recorded if hasattr(p, "phase")]
     assert phases == ["activate", "deactivate"]
 
@@ -180,7 +151,7 @@ def test_deactivate_runs_even_when_generation_body_raises():
 
     # deactivate still ran, and the invocation is reported as an error carrying
     # the original exception — the behaviour the span status used to assert.
-    recorded = _payloads(mock_invoke)
+    recorded = hook_payloads(mock_invoke)
     phases = [p.phase for p in recorded if hasattr(p, "phase")]
     assert "deactivate" in phases
 

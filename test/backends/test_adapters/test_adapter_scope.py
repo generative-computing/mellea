@@ -9,8 +9,7 @@ metric hooks only and opens no spans, so no exporter is involved; the hook
 dispatch safely no-ops when no plugins are registered.
 """
 
-import contextlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -23,6 +22,10 @@ from mellea.backends.adapters._core import (
 )
 from mellea.backends.adapters.adapter import AdapterMixin
 from mellea.core import Component
+from test.backends.test_adapters._hook_capture import (
+    capture_adapter_hooks,
+    invocation_payloads,
+)
 
 
 class _Contract(IOContract):
@@ -84,40 +87,19 @@ def test_adapter_scope_propagates_deactivate_error_over_body_success():
     adapter, weights = _make_adapter()
     weights.deactivate.side_effect = RuntimeError("deactivation failed")
 
-    with pytest.raises(RuntimeError, match="deactivation failed"):
-        with AdapterMixin.adapter_scope(mock_backend, adapter):
-            pass
+    with capture_adapter_hooks() as mock_invoke:
+        with pytest.raises(RuntimeError, match="deactivation failed"):
+            with AdapterMixin.adapter_scope(mock_backend, adapter):
+                pass
 
     weights.activate.assert_called_once()
     weights.deactivate.assert_called_once()
 
-
-@contextlib.contextmanager
-def _capture_hooks():
-    """Capture the hook payloads fired inside the block.
-
-    Follows `test_local_file_binding.py`'s idiom: pin `has_plugins` `True` (it
-    already is in the test session, but pinning removes the dependency on ambient
-    plugin registration), make `invoke_hook` a plain `MagicMock` so payloads are
-    readable and no coroutine is created, and patch `_run_async_in_thread` out
-    since no real dispatch is needed here. Leaving the latter live while
-    `invoke_hook` returns a real coroutine produced "coroutine was never awaited"
-    warnings.
-
-    Note that the tests which do *not* use this helper exercise the real dispatch
-    path, since plugins are genuinely registered under pytest.
-    """
-    with (
-        patch("mellea.backends.adapters.adapter.has_plugins", return_value=True),
-        patch("mellea.backends.adapters.adapter.invoke_hook") as mock_invoke,
-        patch("mellea.backends.adapters.adapter._run_async_in_thread"),
-    ):
-        yield mock_invoke
-
-
-def _outcomes(mock_invoke):
-    payloads = [c.args[1] for c in mock_invoke.call_args_list]
-    return [p for p in payloads if hasattr(p, "outcome")]
+    # A body that succeeded does not make the invocation a success: the failure
+    # came from deactivate, and the invocation must still report it.
+    invocations = invocation_payloads(mock_invoke)
+    assert [p.outcome for p in invocations] == ["error"]
+    assert isinstance(invocations[0].error, RuntimeError)
 
 
 def test_adapter_scope_reports_schema_mismatch_as_schema_error():
@@ -129,7 +111,7 @@ def test_adapter_scope_reports_schema_mismatch_as_schema_error():
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, _ = _make_adapter()
 
-    with _capture_hooks() as mock_invoke:
+    with capture_adapter_hooks() as mock_invoke:
         with pytest.raises(AdapterSchemaMismatchError):
             with AdapterMixin.adapter_scope(mock_backend, adapter):
                 raise AdapterSchemaMismatchError(
@@ -138,7 +120,7 @@ def test_adapter_scope_reports_schema_mismatch_as_schema_error():
                     frozenset({"answerability"}),
                 )
 
-    invocations = _outcomes(mock_invoke)
+    invocations = invocation_payloads(mock_invoke)
     assert [p.outcome for p in invocations] == ["schema_error"]
     assert isinstance(invocations[0].error, AdapterSchemaMismatchError)
 
@@ -148,12 +130,36 @@ def test_adapter_scope_reports_other_exceptions_as_error():
     mock_backend = MagicMock(spec=AdapterMixin)
     adapter, _ = _make_adapter()
 
-    with _capture_hooks() as mock_invoke:
+    with capture_adapter_hooks() as mock_invoke:
         with pytest.raises(RuntimeError, match="boom"):
             with AdapterMixin.adapter_scope(mock_backend, adapter):
                 raise RuntimeError("boom")
 
-    assert [p.outcome for p in _outcomes(mock_invoke)] == ["error"]
+    assert [p.outcome for p in invocation_payloads(mock_invoke)] == ["error"]
+
+
+def test_phase_hook_not_fired_when_the_phase_itself_fails():
+    """A phase that raised did not complete, so no phase event is emitted.
+
+    `ADAPTER_FUNCTION_PHASE_COMPLETE` means the phase finished. The failure is
+    reported once, at invocation level, where `outcome`/`error` carry it — so a
+    consumer reconciling phase counts against invocation counts sees one
+    invocation error and no phase event, not both.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter, weights = _make_adapter()
+    weights.activate.side_effect = RuntimeError("activation failed")
+
+    with capture_adapter_hooks() as mock_invoke:
+        with pytest.raises(RuntimeError, match="activation failed"):
+            with AdapterMixin.adapter_scope(mock_backend, adapter):
+                pytest.fail("body must not run when activate() raises")
+
+    payloads = [c.args[1] for c in mock_invoke.call_args_list]
+    assert [p for p in payloads if hasattr(p, "phase")] == []
+
+    invocations = invocation_payloads(mock_invoke)
+    assert [p.outcome for p in invocations] == ["error"]
 
 
 def test_adapter_scope_noop_when_adapter_is_none():
