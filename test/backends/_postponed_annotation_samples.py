@@ -41,6 +41,18 @@ class Region:
     code: str
 
 
+@dataclass
+class Zone:
+    """A custom parameter type whose name is reused by the test module.
+
+    The test module binds a different class to the name `Zone`, so resolving
+    this function's annotation in the wrong namespace yields a schema for the
+    wrong type instead of an error.
+    """
+
+    identifier: str
+
+
 def send_letter(to: Address) -> str:
     """Send a letter to the given address.
 
@@ -73,6 +85,15 @@ def tc_return_region(region: Region) -> Decimal:
 
     Args:
         region: the region
+    """
+    return Decimal("0")
+
+
+def tc_return_zone(zone: Zone) -> Decimal:
+    """TYPE_CHECKING-only return with a param type whose name the test reuses.
+
+    Args:
+        zone: the zone
     """
     return Decimal("0")
 

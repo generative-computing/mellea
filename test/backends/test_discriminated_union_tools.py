@@ -23,6 +23,7 @@ produced schema never consumes it.
 import functools
 import inspect
 import json
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 import pytest
@@ -36,12 +37,28 @@ from mellea.backends.tools import (
 from test.backends._postponed_annotation_samples import (
     Address,
     Period,
+    Zone as samples_zone,
     send_letter,
     tc_only_return_builtin_param,
     tc_return_custom_param,
     tc_return_region,
+    tc_return_zone,
     unresolvable_param,
 )
+
+
+@dataclass
+class Zone:
+    """Deliberately shadows `Zone` in `_postponed_annotation_samples`.
+
+    Binding this name in the test module's globals is what makes
+    `test_decorated_tool_resolves_colliding_type_name` meaningful: a wrapper
+    defined here resolves against these globals under the buggy behaviour, so
+    the wrong `Zone` is found and no error is raised. The field name differs
+    from the real one so the resulting schema is distinguishable.
+    """
+
+    wrong_field: int
 
 
 class Cat(BaseModel):
@@ -834,6 +851,40 @@ class TestPostponedAnnotations:
         assert props["region"]["type"] == "object"
         assert props["region"]["title"] == "Region"
         assert props["region"]["properties"]["code"]["type"] == "string"
+
+    def test_decorated_tool_resolves_colliding_type_name(self):
+        """A colliding type name must resolve to the wrapped function's type.
+
+        The sibling test above covers a name *absent* from the decorator's
+        module, which degrades loudly to `PydanticUserError`. This covers the
+        worse case: the name exists in the decorator's module but refers to a
+        different type, so resolving in the wrong namespace succeeds and emits
+        a plausible-looking schema for entirely the wrong type.
+        """
+
+        # Defined here, so this module's globals - which bind `Zone` to the
+        # shadowing class above - are what the buggy path would resolve against.
+        @functools.wraps(tc_return_zone)
+        def wrapper(*args, **kwargs):
+            return tc_return_zone(*args, **kwargs)
+
+        # Guard the preconditions: the annotation must still be postponed, the
+        # fallback must be the path under test, and the two `Zone` classes must
+        # genuinely differ - otherwise the assertions below prove nothing.
+        assert tc_return_zone.__annotations__["zone"] == "Zone"
+        with pytest.raises(NameError):
+            inspect.signature(wrapper, eval_str=True)
+        assert globals()["Zone"] is not samples_zone
+        assert "wrong_field" in globals()["Zone"].__dataclass_fields__
+
+        tool = convert_function_to_ollama_tool(wrapper)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["zone"]["properties"] == {
+            "identifier": {"title": "Identifier", "type": "string"}
+        }
+        assert "wrong_field" not in props["zone"]["properties"]
 
 
 if __name__ == "__main__":
