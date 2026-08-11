@@ -1,0 +1,100 @@
+# zizmor configuration — ignore rules for pre-existing findings
+#
+# Each entry here suppresses a known, pre-existing finding that predates the
+# introduction of zizmor CI enforcement. New occurrences of the same rule in
+# different files or on different lines are NOT suppressed and will fail CI.
+#
+# Each group of ignores has a corresponding open issue that tracks the
+# underlying fix. When a fix lands, remove the relevant ignore entries here.
+#
+# Rule reference: https://docs.zizmor.sh/audits/
+
+rules:
+
+  # --- ref-version-mismatch ---------------------------------------------------
+  # Version comments on SHA-pinned actions are stale (e.g. "# v6" should be
+  # "# v6.0.2"). SHAs are correct and immutable; comments are cosmetic only.
+  # Fix tracked in: <issue to be filed>
+  ref-version-mismatch:
+    ignore:
+      - cut-release-branch.yml:40
+      - docs-publish.yml:69
+      - docs-publish.yml:266
+      - pr-update.yml:29
+      - publish-dev-from-main.yml:49
+      - publish-release.yml:73
+      - publish-release.yml:116
+      - publish-release.yml:168
+      - pypi.yml:30
+      - pypi.yml:65
+      - quality.yml:24
+      - quality.yml:35
+      - quality.yml:54
+      - quality.yml:66
+
+  # --- unpinned-uses ----------------------------------------------------------
+  # actions/create-github-app-token is referenced by tag (@v1) rather than a
+  # commit SHA across all release workflows. These workflows are
+  # workflow_dispatch-only and require maintainer write access to trigger, so
+  # the external attacker surface is low, but SHA-pinning is the right fix.
+  # Fix tracked in: <issue to be filed>
+  unpinned-uses:
+    ignore:
+      - cut-release-branch.yml:35
+      - dispatch-to-contribs.yml:44
+      - publish-dev-from-main.yml:44
+      - publish-release.yml:111
+      - publish-release.yml:163
+
+  # --- github-app -------------------------------------------------------------
+  # GitHub App tokens are created without explicit permission scoping in the
+  # release workflows. The tokens are used for legitimate release automation
+  # (push commits/tags, open PRs, dispatch workflows), but the permission set
+  # should be narrowed to the minimum required.
+  # Fix tracked in: <issue to be filed>
+  github-app:
+    ignore:
+      - cut-release-branch.yml:35
+      - dispatch-to-contribs.yml:44
+      - publish-dev-from-main.yml:44
+      - publish-release.yml:111
+      - publish-release.yml:163
+
+  # --- template-injection -----------------------------------------------------
+  # workflow_dispatch inputs used directly in run: blocks in
+  # dispatch-to-contribs.yml. The workflow is dispatch-only (requires
+  # maintainer write access); no external attacker trigger path exists.
+  # The fix is to route inputs through env vars per AGENTS.md convention.
+  # Fix tracked in: <issue to be filed>
+  template-injection:
+    ignore:
+      - dispatch-to-contribs.yml:33
+      - dispatch-to-contribs.yml:34
+      - dispatch-to-contribs.yml:59
+
+  # --- cache-poisoning --------------------------------------------------------
+  # astral-sh/setup-uv and actions/setup-node use caching in the
+  # docs-publish build-and-validate job, which is triggered on push to main.
+  # The cache-poisoning risk requires write access to main (branch-protected),
+  # so no external attacker trigger path exists.
+  # Fix tracked in: <issue to be filed>
+  cache-poisoning:
+    ignore:
+      - docs-publish.yml:75
+      - docs-publish.yml:81
+
+  # --- excessive-permissions --------------------------------------------------
+  # dispatch-to-contribs.yml has no permissions: block, so it inherits the
+  # repo default. The workflow is release-triggered and dispatch-only.
+  # Fix tracked in: <issue to be filed>
+  excessive-permissions:
+    ignore:
+      - dispatch-to-contribs.yml:20
+
+  # --- artipacked -------------------------------------------------------------
+  # publish-release.yml snapshot-docs job uses persist-credentials implicitly
+  # (no persist-credentials: false) because it pushes commits to main.
+  # Fix tracked in: <issue to be filed>
+  artipacked:
+    ignore:
+      - publish-release.yml:168
