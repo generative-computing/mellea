@@ -483,15 +483,51 @@ def test_format_assumption_log_honors_openai_base_url_env():
             "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
         ),
         patch.dict(
-            os.environ,
-            {"OPENAI_BASE_URL": "http://localhost:9999/v1"},
-            clear=False,
+            os.environ, {"OPENAI_BASE_URL": "http://localhost:9999/v1"}, clear=False
         ),
     ):
         OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
 
     matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
     assert len(matches) == 1
+
+
+async def test_format_assumption_not_relogged_per_generation():
+    """#1502: the notice must not repeat on every format= generation."""
+    import pydantic
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    class Answer(pydantic.BaseModel):
+        value: int
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+    )
+    ctx = ChatContext().add(CBlock(value="q"))
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message.content = "{}"
+    resp.choices[0].message.role = "assistant"
+
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch.object(
+            backend._async_client.chat.completions, "create", new_callable=AsyncMock
+        ) as create,
+    ):
+        create.return_value = resp
+        for _ in range(3):
+            await backend.generate_from_chat_context(
+                CBlock(value="q"), ctx, _format=Answer, model_options={}
+            )
+
+    msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+    assert [m for m in msgs if _FORMAT_ASSUMPTION in m] == []
 
 
 if __name__ == "__main__":
