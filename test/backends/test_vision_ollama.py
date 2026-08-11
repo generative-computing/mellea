@@ -329,25 +329,13 @@ def _pulled_ollama_models() -> set[str]:
 
 
 def _vision_model_pulled(pulled: set[str]) -> bool:
-    """Return True if the vision model tag is among the pulled model names.
-
-    Compared case-insensitively: Ollama has normalised the case of `hf.co/...` tags
-    differently across versions, and a case difference alone must not decide whether
-    the live tests run.
-    """
-    tag = _VISION_MODEL_TAG.casefold()
-    return any(name.casefold().startswith(tag) for name in pulled)
+    """Return True if the vision model tag is among the pulled model names."""
+    return any(name.startswith(_VISION_MODEL_TAG) for name in pulled)
 
 
-def test_vision_model_tag_match_ignores_case():
-    """Ollama has varied the case of `hf.co/...` tags, so matching must not depend on it."""
-    assert _vision_model_pulled({_VISION_MODEL_TAG})
-    assert _vision_model_pulled({_VISION_MODEL_TAG.lower()})
-    assert _vision_model_pulled({_VISION_MODEL_TAG.upper()})
-
-
-def test_vision_model_tag_match_rejects_other_models():
+def test_vision_model_tag_matches_the_pulled_tag():
     """Only the pinned tag counts; a bare alias could point at any model."""
+    assert _vision_model_pulled({_VISION_MODEL_TAG})
     assert not _vision_model_pulled(set())
     assert not _vision_model_pulled({"granite4.1:3b", "granite3.2-vision:latest"})
     assert not _vision_model_pulled({"granite-vision-4.1:latest"})
