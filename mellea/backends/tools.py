@@ -1353,7 +1353,14 @@ def convert_function_to_ollama_tool(
     # resolve parameter annotations individually in that case.
     try:
         sig = inspect.signature(func, eval_str=True)
-    except Exception:
+    except Exception as e:
+        MelleaLogger.get_logger().debug(
+            "Could not resolve the full signature of tool '%s' (%s); "
+            "falling back to per-parameter annotation resolution: %s",
+            getattr(func, "__name__", func),
+            type(e).__name__,
+            e,
+        )
         sig = inspect.signature(func)
         # `inspect.signature` follows `__wrapped__`, so the annotations above
         # may come from a function in a different module than `func` itself.
