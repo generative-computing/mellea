@@ -15,6 +15,7 @@ Each subdirectory contains a server implementation and its matching client(s):
 | `multimodal-image/` | Vision model serving with image inputs |
 | `multimodal-audio/` | Audio-text-to-text serving (llama-server and Ollama/Granite variants) |
 | `pii/` | PII detection service |
+| `model-routing/` | Using or ignoring the client-supplied model ID |
 
 ## Files
 
@@ -74,6 +75,20 @@ OpenAI-compatible `input_audio` content part request.
 ### pii/pii_serve.py
 Example of serving a PII (Personally Identifiable Information) detection service.
 
+### model-routing/m_serve_example_model_routing.py
+Example showing how to use `client_options` to route on the client-supplied `model` field.
+
+**Key Concepts:**
+- The `model` field in an OpenAI-compatible request is routing/metadata: `m serve` echoes
+  it back in the response but does **not** include it in `model_options`.
+- Declare `client_options` in `serve()` and `m serve` passes the full raw client request
+  as a dict, giving access to `model` and every other field without them leaking into
+  `model_options` to be used by the backend.
+- To ignore the client model ID entirely, omit `client_options` (see the `simple/` examples).
+
+### model-routing/client_model_routing.py
+Client code demonstrating routing via the standard `model` field and fallback to the default backend.
+
 ### simple/client.py
 Client code for testing the served API endpoints with non-streaming requests.
 
@@ -104,6 +119,7 @@ Client code demonstrating streaming responses combined with tool calling.
 - **Structured Output**: Using `response_format` for JSON schema validation
 - **Multimodal Inputs**: Sending text plus image content to vision-capable models
 - **Audio-Text-to-Text**: Sending base64-encoded audio alongside text in a chat request; the model responds in text (not transcription)
+- **Model Routing**: Reading the client `model` field via `client_options` to route to an allowlisted backend
 
 ## Basic Pattern
 
@@ -213,6 +229,16 @@ uv run python docs/examples/m_serve/tool-calling/client_tool_calling.py
 
 # Or test with streaming tool calling
 uv run python docs/examples/m_serve/tool-calling/client_streaming_tool_calling.py
+```
+
+### Model Routing
+
+```bash
+# Start the model-routing example server
+uv run m serve docs/examples/m_serve/model-routing/m_serve_example_model_routing.py
+
+# In another terminal, run the client
+uv run python docs/examples/m_serve/model-routing/client_model_routing.py
 ```
 
 ## Response Format Support

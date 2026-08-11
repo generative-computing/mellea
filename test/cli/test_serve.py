@@ -333,6 +333,126 @@ class TestChatEndpoint:
         assert errors[0]["loc"] == ("n",)
         assert errors[0]["type"] == "greater_than_equal"
 
+    @pytest.mark.asyncio
+    async def test_client_options_not_passed_when_not_declared(
+        self, mock_module, sample_request
+    ):
+        """serve() without client_options param is not called with it."""
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        await endpoint(sample_request)
+
+        call_kwargs = mock_module.serve.call_args.kwargs
+        assert "client_options" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_client_options_passed_when_declared(
+        self, mock_module, sample_request
+    ):
+        """serve() declaring client_options receives the full raw request dict."""
+        mock_output = ModelOutputThunk("Test response")
+        received: dict = {}
+
+        def serve_with_client_options(
+            input, requirements=None, model_options=None, client_options=None
+        ):
+            if client_options is not None:
+                received.update(client_options)
+            return mock_output
+
+        mock_module.serve = serve_with_client_options
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(sample_request)
+
+        assert isinstance(response, ChatCompletion)
+        assert "model" in received
+
+    @pytest.mark.asyncio
+    async def test_client_options_passed_when_declared_async(
+        self, mock_module, sample_request
+    ):
+        """serve() is async and declares client_options; receives full raw request dict."""
+        mock_output = ModelOutputThunk("Test response")
+        received: dict = {}
+
+        async def serve_with_client_options_async(
+            input, requirements=None, model_options=None, client_options=None
+        ):
+            if client_options is not None:
+                received.update(client_options)
+            return mock_output
+
+        mock_module.serve = serve_with_client_options_async
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(sample_request)
+
+        assert isinstance(response, ChatCompletion)
+        assert "model" in received
+
+    @pytest.mark.asyncio
+    async def test_client_options_contains_model(self, mock_module):
+        """client_options includes the model field that is absent from model_options."""
+        captured_client_options: dict = {}
+
+        mock_output = ModelOutputThunk("Test response")
+
+        def serve_capturing(
+            input, requirements=None, model_options=None, client_options=None
+        ):
+            if client_options is not None:
+                captured_client_options.update(client_options)
+            return mock_output
+
+        mock_module.serve = serve_capturing
+
+        request = ChatCompletionRequest(
+            model="granite4.1:8b",
+            messages=[ChatMessage(role="user", content="Hello")],
+            temperature=0.5,
+            user="alice",
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        await endpoint(request)
+
+        assert captured_client_options["model"] == "granite4.1:8b"
+        assert captured_client_options["user"] == "alice"
+        assert captured_client_options["temperature"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_client_options_does_not_affect_model_options(self, mock_module):
+        """model_options stays clean — model/user are absent even when client_options is used."""
+        captured_model_options: dict = {}
+
+        mock_output = ModelOutputThunk("Test response")
+
+        def serve_capturing(
+            input, requirements=None, model_options=None, client_options=None
+        ):
+            if model_options is not None:
+                captured_model_options.update(model_options)
+            return mock_output
+
+        mock_module.serve = serve_capturing
+
+        request = ChatCompletionRequest(
+            model="granite4.1:8b",
+            messages=[ChatMessage(role="user", content="Hello")],
+            temperature=0.5,
+            user="alice",
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        await endpoint(request)
+
+        assert "model" not in captured_model_options
+        assert "user" not in captured_model_options
+        assert ModelOption.TEMPERATURE in captured_model_options
+
 
 class TestHTTPValidation:
     """Tests for HTTP-level validation via FastAPI TestClient."""
