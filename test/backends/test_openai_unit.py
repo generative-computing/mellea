@@ -487,6 +487,30 @@ def test_default_extra_body_does_not_mutate_constructor_arg():
     assert defaults == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
+def test_default_extra_body_chat_template_kwargs_three_way_merge():
+    """default_extra_body, base, and per-call user all contribute simultaneously.
+
+    Each layer sets a distinct chat_template_kwargs key (mirroring a real call:
+    a construction-time thinking default, Mellea's own adapter-activation write,
+    and a per-call override for something else) — all three must survive.
+    """
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "answerability"}},
+        {"chat_template_kwargs": {"thinking_budget": 5000}},
+    )
+    assert merged["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "adapter_name": "answerability",
+        "thinking_budget": 5000,
+    }
+
+
 async def test_standard_chat_path_applies_default_extra_body_without_per_call_override():
     """Regression test for #1453: the standard chat path must not silently
     drop `default_extra_body` when the caller passes no per-call `extra_body`.
