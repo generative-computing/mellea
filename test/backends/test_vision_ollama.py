@@ -9,9 +9,13 @@ Three tiers:
 2. **Structural payload** (unit, mocked) — verify mellea correctly embeds images
    into the Ollama conversation payload. The Ollama transport is mocked so no
    server or vision model is needed. Runs in CI unconditionally.
-3. **Live e2e** (e2e, qualitative) — full round-trip against a real
-   vision-capable Ollama model. Requires `granite-vision-4.1` to be pulled
-   locally; skipped with a pull command if it is not.
+3. **Live e2e** (e2e) — full round-trip against a real vision-capable Ollama
+   model. The assertions are structural (a thunk/message with non-empty content),
+   so these are `e2e` and not `qualitative`: no assertion here can be broken by
+   swapping the model version, and marking them `qualitative` would exclude them
+   from CI, where `CICD=1` skips that tier. Requires `granite-vision-4.1` to be
+   pulled; skipped locally with a pull command if it is not, and failed in CI,
+   where the workflow is responsible for pulling it.
 """
 
 import base64
@@ -306,8 +310,8 @@ def test_image_block_in_chat(mocked_session: MelleaSession, pil_image: Image.Ima
 # unless you have pulled it yourself (the skip message gives the command).
 
 
-def _ollama_vision_model_available() -> bool:
-    """Return True if the vision model tag is present in the local Ollama model list."""
+def _pulled_ollama_models() -> set[str]:
+    """Return the model names Ollama reports locally; empty if it is unreachable."""
     import requests
 
     host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
@@ -319,15 +323,35 @@ def _ollama_vision_model_available() -> bool:
     try:
         resp = requests.get(f"{base_url}/api/tags", timeout=5)
         resp.raise_for_status()
-        pulled = {m.get("name", "") for m in resp.json().get("models", [])}
-        return any(name.startswith(_VISION_MODEL_TAG) for name in pulled)
+        return {m.get("name", "") for m in resp.json().get("models", [])}
     except Exception:
-        return False
+        return set()
+
+
+def _vision_model_pulled(pulled: set[str]) -> bool:
+    """Return True if the vision model tag is among the pulled model names.
+
+    Compared case-insensitively: Ollama has normalised the case of `hf.co/...` tags
+    differently across versions, and a case difference alone must not decide whether
+    the live tests run.
+    """
+    tag = _VISION_MODEL_TAG.casefold()
+    return any(name.casefold().startswith(tag) for name in pulled)
 
 
 @pytest.fixture
-def vision_session():
-    if not _ollama_vision_model_available():
+def vision_session(gh_run: int):
+    pulled = _pulled_ollama_models()
+    if not _vision_model_pulled(pulled):
+        if gh_run:
+            # CI pulls this model in the "Pull models" step, so a miss here is a real
+            # failure -- either the pull did not happen or Ollama reports the model
+            # under a name this check does not recognise. Skipping would hide both
+            # behind a green tick.
+            pytest.fail(
+                f"{_SKIP_REASON}\nOllama reported: "
+                f"{sorted(pulled) if pulled else '<no models / server unreachable>'}"
+            )
         pytest.skip(_SKIP_REASON)
 
     from mellea import start_session
@@ -346,7 +370,6 @@ def vision_session():
 
 @pytest.mark.e2e
 @pytest.mark.ollama
-@pytest.mark.qualitative
 def test_vision_instruct_live_e2e(
     vision_session: MelleaSession, pil_image: Image.Image
 ):
@@ -364,7 +387,6 @@ def test_vision_instruct_live_e2e(
 
 @pytest.mark.e2e
 @pytest.mark.ollama
-@pytest.mark.qualitative
 def test_vision_chat_live_e2e(vision_session: MelleaSession, pil_image: Image.Image):
     """Live vision chat round-trip against granite-vision-4.1."""
     ct = vision_session.chat(

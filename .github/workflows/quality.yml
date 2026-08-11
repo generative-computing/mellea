@@ -134,6 +134,9 @@ jobs:
               sleep 20
             done
           done
+          # The names below are what the tests match against; print them so a
+          # tag-name mismatch is diagnosable from the log alone.
+          ollama list
       - name: Run Tests
         id: tests
         env:
