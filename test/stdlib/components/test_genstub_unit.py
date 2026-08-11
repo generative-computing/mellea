@@ -8,7 +8,7 @@ create_response_format, GenerativeStub.format_for_llm, and @generative routing.
 """
 
 import inspect
-from typing import Literal
+from typing import Any, Literal, get_type_hints
 
 import pytest
 
@@ -229,6 +229,37 @@ def test_create_response_format_literal_type():
     model = create_response_format(classify)
     instance = model(result="pos")
     assert instance.result == "pos"
+
+
+def test_create_response_format_type_checking_only_return_falls_back_to_any():
+    # Regression test: `get_type_hints` resolves every annotation, so a return
+    # type imported only under `if TYPE_CHECKING:` raised NameError here. This
+    # runs from `GenerativeStub.__init__`, i.e. at decoration time, so the
+    # failure made the whole module unimportable rather than degrading anything.
+    # Guard the precondition: resolution must still fail, or this tests nothing.
+    with pytest.raises(NameError):
+        get_type_hints(price_item)
+
+    model = create_response_format(price_item)
+
+    # Degrades to `Any` — the same fallback an unannotated function already
+    # gets — rather than failing the decoration.
+    assert model.model_fields["result"].annotation is Any
+    instance = model(result="anything")
+    assert instance.result == "anything"
+
+
+def test_generative_decoration_survives_type_checking_only_return():
+    # The user-facing path: `@generative` calls `create_response_format` and
+    # `describe_function` during construction, so both must tolerate a return
+    # annotation that cannot be resolved.
+    stub = generative(price_item)
+
+    assert stub._response_model.model_fields["result"].annotation is Any
+    # Parameters still resolve for the prompt; only the return stays postponed.
+    signature = stub._function._function_dict["signature"]
+    assert "quantity: int" in signature
+    assert signature.endswith("-> 'Decimal'")
 
 
 # --- GenerativeStub.format_for_llm ---

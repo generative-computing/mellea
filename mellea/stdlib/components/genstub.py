@@ -55,8 +55,23 @@ def create_response_format(func: Callable[..., R]) -> type[FunctionResponse[R]]:
     Returns:
         A Pydantic model class that inherits from FunctionResponse[T]
     """
-    type_hints = get_type_hints(func)
-    return_type = type_hints.get("return", Any)
+    # `get_type_hints` resolves every annotation, including ones this function
+    # never reads, so a parameter or return type that only exists under
+    # `if TYPE_CHECKING:` raises `NameError` here — at decoration time, so the
+    # module cannot even be imported. Only the return type is read below, and an
+    # unannotated function already falls back to `Any`; degrade an unresolvable
+    # one to the same `Any` rather than failing the decoration outright.
+    try:
+        return_type = get_type_hints(func).get("return", Any)
+    except Exception as e:
+        MelleaLogger.get_logger().debug(
+            "Could not resolve type hints for '%s' (%s); "
+            "falling back to `Any` for the response model: %s",
+            getattr(func, "__name__", func),
+            type(e).__name__,
+            e,
+        )
+        return_type = Any
 
     class_name = f"{func.__name__.replace('_', ' ').title().replace(' ', '')}Response"
 
