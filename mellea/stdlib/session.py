@@ -54,6 +54,12 @@ from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
 from ..telemetry.context import with_context
+
+# session.py is the one sanctioned exception to "library code fires hooks;
+# plugins open spans" (see tracing_plugins.py): OTel Token attach/detach is
+# task-affine, and each hook fires in a separate _run_async_in_thread Task,
+# so this span pair can't be delegated to a plugin. Do not copy this import
+# elsewhere under mellea/stdlib/ or mellea/backends/ — use a hook instead.
 from ..telemetry.tracing import (
     finish_session_span,
     finish_session_startup_span,
