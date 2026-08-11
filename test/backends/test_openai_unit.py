@@ -353,9 +353,13 @@ async def test_processing_reasoning_content_takes_precedence_over_reasoning(back
 
 
 def test_merge_user_extra_body_none_returns_base(backend):
-    """A missing user extra_body leaves the base untouched."""
+    """A missing user extra_body returns a dict equal to base (a copy, not same object)."""
     base = {"documents": ["d"]}
-    assert backend._merge_user_extra_body(base, None) is base
+    result = backend._merge_user_extra_body(base, None)
+    assert result == {"documents": ["d"]}
+    assert (
+        result is not base
+    )  # always returns a new dict so default_extra_body can be layered
 
 
 def test_merge_user_extra_body_user_keys_win(backend):
@@ -427,6 +431,60 @@ async def test_generate_from_raw_merges_user_extra_body(backend):
     extra_body = call_kwargs["extra_body"]
     assert extra_body["caller_key"] == "caller-value"
     assert "guided_json" in extra_body or "structured_outputs" in extra_body
+
+
+def test_default_extra_body_applied_when_no_per_call_override():
+    """Construction-time default_extra_body is present in every merged result."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"enable_thinking": False},
+    )
+    merged = backend._merge_user_extra_body({}, None)
+    assert merged["enable_thinking"] is False
+
+
+def test_default_extra_body_overridden_by_per_call():
+    """Per-call model_options take priority over construction-time defaults."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"enable_thinking": False},
+    )
+    merged = backend._merge_user_extra_body({}, {"enable_thinking": True})
+    assert merged["enable_thinking"] is True
+
+
+def test_default_extra_body_chat_template_kwargs_deep_merged():
+    """chat_template_kwargs from default and per-call are merged key-by-key."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "foo"}}, None
+    )
+    assert merged["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "adapter_name": "foo",
+    }
+
+
+def test_default_extra_body_does_not_mutate_constructor_arg():
+    """The dict passed as default_extra_body is not mutated by merge operations."""
+    defaults = {"chat_template_kwargs": {"enable_thinking": True}}
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body=defaults,
+    )
+    backend._merge_user_extra_body({"other_key": "val"}, {"another": "val2"})
+    assert defaults == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
 if __name__ == "__main__":
