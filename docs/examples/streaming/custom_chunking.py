@@ -3,24 +3,22 @@
 """Streaming generation with a custom ChunkingStrategy subclass.
 
 Demonstrates:
-- Subclassing :class:`~mellea.stdlib.chunking.ChunkingStrategy` to define a
-  new splitting boundary
+- Subclassing `ChunkingStrategy` to define a new splitting boundary
 - Implementing `split()` (stateless, idempotent) and `flush()` (end-of-stream
   release of any withheld trailing fragment)
-- Using the custom chunker with `stream_with_chunking()` in place of a string alias
+- Using the custom chunker with `stream()` in place of a string alias
 - Validating line-by-line output from a numbered-list prompt
 
-`LineChunker` splits on single newlines (`\\n`), emitting one line per
-`stream_validate` call.  It sits between :class:`~mellea.stdlib.chunking.WordChunker`
-(one word) and :class:`~mellea.stdlib.chunking.SentenceChunker` (one sentence) in
-granularity, and is a natural fit for list-formatted model output.
+`LineChunking` splits on single newlines (`\\n`), emitting one line per
+`stream_validate` call.  It sits between `WordChunking` (one word) and
+`SentenceChunking` (one sentence) in granularity, and is a natural fit for
+list-formatted model output.
 
 Extension pattern:
   1. Subclass `ChunkingStrategy`.
-  2. Implement `split(accumulated_text)` — return all complete chunks found in
-     the accumulated text so far; withhold any trailing fragment.  The method is
-     called on every new token delta, so it must be stateless and idempotent.
-  3. Override `flush(accumulated_text)` to release the withheld trailing fragment
+  2. Implement `split(text)` — return all complete chunks in `text`;
+     withhold any trailing fragment.  It must be stateless and idempotent.
+  3. Override `flush(text)` to release the withheld trailing fragment
      when the stream ends naturally.  The default base implementation returns `[]`
      (fragment discarded); override it when the trailing fragment is semantically
      significant.
@@ -28,6 +26,7 @@ Extension pattern:
 
 import asyncio
 import re
+from typing import Any
 
 from mellea.core.backend import Backend
 from mellea.core.base import Context
@@ -36,6 +35,7 @@ from mellea.core.requirement import (
     Requirement,
     ValidationResult,
 )
+from mellea.plugins import hook, register
 from mellea.stdlib.chunking import ChunkingStrategy
 from mellea.stdlib.components import Instruction
 from mellea.stdlib.streaming import (
@@ -44,7 +44,7 @@ from mellea.stdlib.streaming import (
     FullValidationEvent,
     QuickCheckEvent,
     StreamingDoneEvent,
-    stream_with_chunking,
+    stream,
 )
 
 # Matches a leading list marker: "1.", "1)", "1 .", or a bare number followed
@@ -52,11 +52,11 @@ from mellea.stdlib.streaming import (
 _NUMBERED_LINE = re.compile(r"^\s*\d+[\.\)]\s")
 
 
-class LineChunker(ChunkingStrategy):
-    """Splits accumulated text on single newlines, emitting one line per chunk.
+class LineChunking(ChunkingStrategy):
+    """Splits text on single newlines, emitting one line per chunk.
 
     The line after the last `\\n` is withheld as a trailing fragment until
-    the stream ends and :meth:`flush` is called.  Blank lines are skipped —
+    the stream ends and `flush()` is called.  Blank lines are skipped —
     they carry no content for a line-level validator.
 
     This chunker is a good fit for numbered-list output, code listings, and
@@ -64,38 +64,36 @@ class LineChunker(ChunkingStrategy):
     rather than sentence-ending punctuation or double newlines.
     """
 
-    def split(self, accumulated_text: str) -> list[str]:
+    def split(self, text: str) -> list[str]:
         """Return all complete lines (up to the last newline).
 
         Args:
-            accumulated_text: The full text accumulated so far.
+            text: The text to split.
 
         Returns:
             Non-empty lines found before the last newline character.
             The text after the last newline is withheld as a trailing fragment.
         """
-        if "\n" not in accumulated_text:
+        if "\n" not in text:
             return []
-        last_nl = accumulated_text.rfind("\n")
-        complete_section = accumulated_text[:last_nl]
+        last_nl = text.rfind("\n")
+        complete_section = text[:last_nl]
         return [line for line in complete_section.split("\n") if line.strip()]
 
-    def flush(self, accumulated_text: str) -> list[str]:
+    def flush(self, text: str) -> list[str]:
         """Release the trailing line fragment at end of stream.
 
         Args:
-            accumulated_text: The full accumulated text at stream end.
+            text: The text whose trailing fragment to release.
 
         Returns:
             The text after the last newline as a single-element list (stripped),
             or an empty list if the text ends with a newline or is empty.
         """
-        if not accumulated_text:
+        if not text:
             return []
-        last_nl = accumulated_text.rfind("\n")
-        trailing = (
-            accumulated_text if last_nl == -1 else accumulated_text[last_nl + 1 :]
-        ).strip()
+        last_nl = text.rfind("\n")
+        trailing = (text if last_nl == -1 else text[last_nl + 1 :]).strip()
         return [trailing] if trailing else []
 
 
@@ -103,7 +101,7 @@ class NumberedLineReq(Requirement):
     """Fails the stream if any line does not start with a list number.
 
     Each `stream_validate` call receives one complete line (from
-    :class:`LineChunker`).  This requirement enforces that every line follows
+    `LineChunking`).  This requirement enforces that every line follows
     the `N. item` format, catching unstructured paragraphs or stray headers
     that sneak into what should be a clean numbered list.
     """
@@ -142,15 +140,12 @@ async def main() -> None:
         "List five world capitals, one per line, numbered 1 through 5. "
         "Use the format: '1. City'. Output only the numbered list, nothing else."
     )
-    chunker = LineChunker()
+    chunker = LineChunking()
     req = NumberedLineReq()
 
-    result = await stream_with_chunking(
-        action, backend, ctx, requirements=[req], chunking=chunker
-    )
-
-    print("Streaming events as they arrive (one ChunkEvent per line):")
-    async for event in result.events():
+    @hook("streaming_event")
+    async def print_events(payload: Any, ctx: Any) -> None:
+        event = payload.event
         match event:
             case ChunkEvent():
                 print(f"  LINE[{event.chunk_index}]: {event.text!r}")
@@ -170,14 +165,22 @@ async def main() -> None:
             case _:
                 pass
 
-    await result.acomplete()
+    register(print_events)
 
-    print(f"\nCompleted normally: {result.completed}")
-    if result.streaming_failures:
-        for _req, pvr in result.streaming_failures:
+    print("Stream events as they arrive (one per line):")
+    async with await stream(
+        action, backend, ctx, requirements=[req], chunking=chunker
+    ) as streamer:
+        # Draining the stream fires the events; the hook does the printing.
+        async for _line in streamer:
+            pass
+
+    print(f"\nCompleted normally: {not streamer.failed_early}")
+    if streamer.streaming_failures:
+        for _req, pvr in streamer.streaming_failures:
             print(f"Streaming failure: {pvr.reason}")
     else:
-        print(f"Full text:\n{result.full_text}")
+        print(f"Full text:\n{streamer.full_text}")
 
 
 asyncio.run(main())

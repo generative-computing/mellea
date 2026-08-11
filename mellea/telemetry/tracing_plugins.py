@@ -11,8 +11,8 @@ pipelines to automatically emit spans when tracing is enabled:
   events from the generation_event hook.
 - ComponentTracingPlugin: Emits application-level spans tracking component
   execution.
-- StreamingTracingPlugin: Emits an application-level orchestration span and
-  per-chunk span events for `stream_with_chunking` runs.
+- StreamingTracingPlugin: Emits an application-level span and per-chunk span
+  events for `stream` runs.
 - ToolTracingPlugin: Emits an `execute_tool` span for every tool invocation.
 - SamplingTracingPlugin: Emits a `sampling` span per sampling loop, with a span
   event per iteration and repair.
@@ -58,8 +58,6 @@ if TYPE_CHECKING:
     from mellea.plugins.hooks.streaming import (
         StreamingEndPayload,
         StreamingEventPayload,
-        StreamingOrchestrationEndPayload,
-        StreamingOrchestrationStartPayload,
         StreamingStartPayload,
     )
     from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
@@ -306,25 +304,20 @@ class ComponentTracingPlugin(Plugin, name="component_tracing", priority=1041):
 
 
 class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
-    """Emits the `stream_with_chunking` application span.
+    """Emits the `stream` application span.
 
     `streaming_start` opens the span; `streaming_event` records a span event for
-    each mid-stream `StreamEvent`; `streaming_end` records the `completed` span
-    event and closes the span. `streaming_orchestration_start` /
-    `streaming_orchestration_end` re-attach the span on the orchestration task
-    so mid-stream spans parent under it (see `reattach_span`).
+    each `StreamEvent`; `streaming_end` closes the span.
 
-    All hooks run SEQUENTIAL: the OTel context Token attached in start is
-    detached on the originating task in end, and `streaming_orchestration_end`
-    releases the reattached span before `streaming_end` closes it
-    (FIRE_AND_FORGET would reorder these and break span nesting).
+    All hooks run SEQUENTIAL so the OTel context Token attached in start is
+    detached on the same task in end.
     """
 
     @hook("streaming_start")
     async def on_streaming_start(
         self, payload: StreamingStartPayload, context: dict[str, Any]
     ) -> None:
-        """Open the stream_with_chunking span for this orchestrator invocation."""
+        """Open the stream span for this streaming run."""
         if not payload.streaming_id:
             return
         from mellea.telemetry.tracing import start_streaming_span
@@ -337,28 +330,6 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             attach_context=_CONTEXT_ATTACH_SUPPORTED,
         )
 
-    @hook("streaming_orchestration_start")
-    async def on_streaming_orchestration_start(
-        self, payload: StreamingOrchestrationStartPayload, context: dict[str, Any]
-    ) -> None:
-        """Re-attach the streaming span as the orchestration task's ambient context."""
-        if not payload.streaming_id or not _CONTEXT_ATTACH_SUPPORTED:
-            return
-        from mellea.telemetry.tracing import reattach_span
-
-        reattach_span(payload.streaming_id)
-
-    @hook("streaming_orchestration_end")
-    async def on_streaming_orchestration_end(
-        self, payload: StreamingOrchestrationEndPayload, context: dict[str, Any]
-    ) -> None:
-        """Detach the streaming span re-attached on the orchestration task."""
-        if not payload.streaming_id:
-            return
-        from mellea.telemetry.tracing import release_reattached_span
-
-        release_reattached_span(payload.streaming_id)
-
     @hook("streaming_event")
     async def on_streaming_event(
         self, payload: StreamingEventPayload, context: dict[str, Any]
@@ -368,6 +339,7 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             return
         from mellea.stdlib.streaming import (
             ChunkEvent,
+            CompletedEvent,
             ErrorEvent,
             FullValidationEvent,
             QuickCheckEvent,
@@ -420,24 +392,25 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
                     "mellea.error.detail": ev.detail,
                 },
             )
+        elif isinstance(ev, CompletedEvent):
+            add_span_event(
+                payload.streaming_id,
+                event_name="completed",
+                attributes={
+                    "mellea.streaming.success": ev.success,
+                    "mellea.streaming.full_text_length": len(ev.full_text),
+                },
+            )
 
     @hook("streaming_end")
     async def on_streaming_end(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record the `completed` span event and close the stream_with_chunking span."""
+        """Close the stream span."""
         if not payload.streaming_id:
             return
-        from mellea.telemetry.tracing import add_span_event, finish_streaming_span
+        from mellea.telemetry.tracing import finish_streaming_span
 
-        add_span_event(
-            payload.streaming_id,
-            event_name="completed",
-            attributes={
-                "mellea.streaming.success": payload.success,
-                "mellea.streaming.full_text_length": payload.full_text_length,
-            },
-        )
         finish_streaming_span(
             payload.streaming_id,
             success=payload.success,

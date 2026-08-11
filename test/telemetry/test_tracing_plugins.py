@@ -37,6 +37,7 @@ from mellea.plugins.hooks.streaming import (
 from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
 from mellea.stdlib.streaming import (
     ChunkEvent,
+    CompletedEvent,
     ErrorEvent,
     FullValidationEvent,
     QuickCheckEvent,
@@ -906,7 +907,7 @@ async def test_streaming_start_starts_span_and_stashes_by_streaming_id(
         streaming_id="sid-1",
         has_requirements=True,
         requirement_count=2,
-        chunking_strategy="SentenceChunker",
+        chunking_strategy="SentenceChunking",
     )
 
     with patch(
@@ -914,21 +915,19 @@ async def test_streaming_start_starts_span_and_stashes_by_streaming_id(
     ):
         await streaming_plugin.on_streaming_start(payload, {})
 
-    fake_tracer.start_span.assert_called_once_with("stream_with_chunking")
+    fake_tracer.start_span.assert_called_once_with("stream")
     assert "sid-1" in tracing._in_flight_spans
     fake_span.end.assert_not_called()
     attrs = _attrs(fake_span)
     assert attrs["mellea.has_requirements"] is True
     assert attrs["mellea.requirement_count"] == 2
-    assert attrs["mellea.chunking_strategy"] == "SentenceChunker"
+    assert attrs["mellea.chunking_strategy"] == "SentenceChunking"
     # The correlation id is the in-flight key, not a span attribute.
     assert "mellea.streaming_id" not in attrs
 
 
 @pytest.mark.asyncio
-async def test_streaming_end_records_completed_event_then_closes_span(
-    streaming_plugin, enabled_tracing
-):
+async def test_streaming_end_success_closes_span(streaming_plugin, enabled_tracing):
     fake_span = MagicMock()
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
@@ -944,11 +943,6 @@ async def test_streaming_end_records_completed_event_then_closes_span(
     await streaming_plugin.on_streaming_end(end, {})
 
     fake_span.end.assert_called_once()
-    events = _events(fake_span)
-    assert any(name == "completed" for name, _ in events)
-    completed_attrs = next(attrs for name, attrs in events if name == "completed")
-    assert completed_attrs["mellea.streaming.success"] is True
-    assert completed_attrs["mellea.streaming.full_text_length"] == 11
 
     attrs = _attrs(fake_span)
     assert attrs["mellea.full_text_length"] == 11
@@ -1018,21 +1012,31 @@ async def test_streaming_event_records_mid_stream_events(
     full_val = FullValidationEvent(
         attempt=1, passed=True, results=[ValidationResult(result=True)]
     )
+    completed = CompletedEvent(success=True, full_text="hello world", attempts_used=1)
 
-    for ev in (qc, chunk, done, full_val):
+    for ev in (qc, chunk, done, full_val, completed):
         await streaming_plugin.on_streaming_event(
             StreamingEventPayload(streaming_id="sid-ev", event=ev), {}
         )
 
     events = _events(fake_span)
     names = [name for name, _ in events]
-    assert names == ["quick_check", "chunk", "streaming_done", "full_validation"]
+    assert names == [
+        "quick_check",
+        "chunk",
+        "streaming_done",
+        "full_validation",
+        "completed",
+    ]
     qc_attrs = events[0][1]
     assert qc_attrs["mellea.streaming.chunk_index"] == 0
     assert qc_attrs["mellea.validation.passed"] is True
     assert qc_attrs["mellea.validation.requirement_count"] == 1
     chunk_attrs = events[1][1]
     assert chunk_attrs["mellea.streaming.chunk_text_length"] == 5
+    completed_attrs = events[4][1]
+    assert completed_attrs["mellea.streaming.success"] is True
+    assert completed_attrs["mellea.streaming.full_text_length"] == 11
 
     # streaming_event never closes the span.
     fake_span.end.assert_not_called()

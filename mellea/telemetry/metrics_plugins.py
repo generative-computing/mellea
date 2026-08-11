@@ -225,7 +225,7 @@ class ErrorMetricsPlugin(Plugin, name="error_metrics", priority=1052):
     async def record_streaming_error_metrics(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record error metrics when `stream_with_chunking` ends with an exception.
+        """Record error metrics when `stream` ends with an exception.
 
         Args:
             payload: Contains the exception plus the model and provider from
@@ -368,15 +368,15 @@ class SamplingMetricsPlugin(Plugin, name="sampling_metrics", priority=1054):
     async def record_streaming_outcome(
         self, payload: StreamingEndPayload, context: dict[str, Any]
     ) -> None:
-        """Record the `stream_with_chunking` outcome when the orchestrator finishes.
+        """Record the `stream` outcome when the stream finishes.
 
         Args:
-            payload: Contains the orchestrator's success flag.
+            payload: Contains the stream's success flag.
             context: Plugin context (unused).
         """
         from mellea.telemetry.metrics import record_sampling_outcome
 
-        record_sampling_outcome("stream_with_chunking", payload.success)
+        record_sampling_outcome("stream", payload.success)
 
 
 class RequirementMetricsPlugin(Plugin, name="requirement_metrics", priority=1055):

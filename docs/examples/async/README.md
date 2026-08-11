@@ -35,6 +35,16 @@ Demonstrates:
 - Creating ModelOutputThunk objects
 - Deferred computation patterns
 
+### Streaming with the Async Iterator
+
+```bash
+uv run async-iterator.py
+```
+
+Demonstrates:
+- Consuming a streamed response with `async for delta in response`
+- Using `async with` so an early exit cancels the in-flight generation
+
 ## Key Concepts
 
 **Async Backend Operations**: Mellea backends support async methods (`ainstruct`, `aact`, `achat`) that allow concurrent execution without blocking.

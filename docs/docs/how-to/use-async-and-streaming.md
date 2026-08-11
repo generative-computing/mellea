@@ -142,6 +142,40 @@ How `astream()` behaves:
 > **Warning:** Do not call `astream()` from multiple coroutines simultaneously on
 > the same thunk. Each thunk should have a single reader.
 
+### Iterating a thunk with `async for`
+
+`astream()` is the low-level primitive. To consume a thunk as an async iterator,
+use `async for` — ideally inside `async with`, which cancels the generation if
+you leave the loop early (an exception or `break`) so an abandoned stream does
+not keep running:
+
+```python
+# Requires: mellea
+# Returns: None
+import asyncio
+import mellea
+from mellea.backends import ModelOption
+
+async def main():
+    m = mellea.start_session()
+    mot = await m.ainstruct(
+        "Write a short story about a robot learning to cook.",
+        model_options={ModelOption.STREAM: True},
+    )
+
+    async with mot:
+        async for delta in mot:
+            print(delta, end="", flush=True)
+    print()  # newline after streaming completes
+
+asyncio.run(main())
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+Each iteration yields the same delta `astream()` would return; iteration ends
+when the thunk is computed. Like `astream()`, a thunk has a single reader — a
+second `async for` over the same thunk raises rather than splitting the stream.
+
 ### Streaming timeout
 
 Mellea waits up to 120 seconds for each chunk by default, including the first
@@ -207,14 +241,15 @@ For parallel generation, use `SimpleContext`.
 
 ## Streaming with per-chunk validation
 
-`stream_with_chunking()` adds per-chunk validation to a streaming generation.
-It splits the accumulated text into semantic units (sentences, words, or
-paragraphs), calls `stream_validate()` on each chunk in parallel, and can
-exit early if any requirement returns `"fail"` — preventing the consumer from
-seeing invalid content mid-stream.
+`stream()` adds per-chunk validation to a streaming generation. It splits the
+accumulated text into semantic units (sentences, words, or paragraphs), calls
+`stream_validate()` on each chunk in parallel, and can exit early if any
+requirement returns `"fail"` — preventing the consumer from seeing invalid
+content mid-stream.
 
-The primary way to observe a `stream_with_chunking()` run is via typed
-`StreamEvent` objects from `result.events()`:
+`stream()` returns a `Streamer` you consume with `async for`, ideally inside
+`async with` so the generation is released on every exit path (including an
+early `break` or exception):
 
 ```python
 # Requires: mellea
@@ -225,14 +260,7 @@ from mellea.core.backend import Backend
 from mellea.core.base import Context
 from mellea.core.requirement import PartialValidationResult, Requirement, ValidationResult
 from mellea.stdlib.components import Instruction
-from mellea.stdlib.streaming import (
-    ChunkEvent,
-    CompletedEvent,
-    FullValidationEvent,
-    QuickCheckEvent,
-    StreamingDoneEvent,
-    stream_with_chunking,
-)
+from mellea.stdlib.streaming import stream
 
 
 class MaxSentencesReq(Requirement):
@@ -267,48 +295,24 @@ async def main() -> None:
     action = Instruction("Write a two-sentence summary of the water cycle.")
     req = MaxSentencesReq(limit=3)
 
-    result = await stream_with_chunking(
+    async with await stream(
         action, m.backend, m.ctx, requirements=[req], chunking="sentence"
-    )
+    ) as streamer:
+        async for chunk in streamer:
+            print(chunk)
 
-    async for event in result.events():
-        match event:
-            case ChunkEvent():
-                print(f"  chunk[{event.chunk_index}]: {event.text!r}")
-            case QuickCheckEvent(passed=False):
-                print(f"  FAIL at chunk {event.chunk_index}: {event.results}")
-            case StreamingDoneEvent():
-                print(f"  stream done — {len(event.full_text)} chars")
-            case FullValidationEvent():
-                print(f"  final: {'pass' if event.passed else 'fail'}")
-            case CompletedEvent():
-                print(f"  completed — success={event.success}")
-            case _:
-                pass  # ErrorEvent and other future types
-
-    await result.acomplete()
-    print(f"completed={result.completed}, failures={len(result.streaming_failures)}")
+    # Terminal state on the Streamer, after the loop.
+    print(f"Completed normally: {not streamer.failed_early}")
+    for _req, result in streamer.streaming_failures:
+        print(f"Streaming failure: {result.reason}")
 
 
 asyncio.run(main())
 ```
 
-If you only need the raw validated text without event metadata, use
-`result.astream()` instead:
-
-```python
-result = await stream_with_chunking(
-    action, m.backend, m.ctx, requirements=[req], chunking="sentence"
-)
-async for chunk in result.astream():
-    print(chunk)
-await result.acomplete()
-```
-
-Both `astream()` (raw chunks) and `events()` are available on the same result
-object. They use independent queues, so you can run them concurrently with
-`asyncio.gather`. Both are **single-consumer** — a second iteration on either
-will block indefinitely.
+To observe the run through typed `StreamEvent` objects instead, register a
+plugin on the `streaming_event` hook — see the
+[streaming validation tutorial](../tutorials/06-streaming-validation.md).
 
 ### The `stream_validate` tri-state
 

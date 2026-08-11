@@ -830,24 +830,24 @@ async def test_sampling_plugin_skips_outcome_on_exception(sampling_plugin):
 
 @pytest.mark.asyncio
 async def test_sampling_plugin_records_streaming_success_outcome(sampling_plugin):
-    """streaming_end with success=True records a `stream_with_chunking` success."""
+    """streaming_end with success=True records a `stream` success."""
     payload = StreamingEndPayload(streaming_id="sid", success=True)
 
     with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
         await sampling_plugin.record_streaming_outcome(payload, {})
 
-        mock_record.assert_called_once_with("stream_with_chunking", True)
+        mock_record.assert_called_once_with("stream", True)
 
 
 @pytest.mark.asyncio
 async def test_sampling_plugin_records_streaming_failure_outcome(sampling_plugin):
-    """streaming_end with success=False records a `stream_with_chunking` failure."""
+    """streaming_end with success=False records a `stream` failure."""
     payload = StreamingEndPayload(streaming_id="sid", success=False)
 
     with patch("mellea.telemetry.metrics.record_sampling_outcome") as mock_record:
         await sampling_plugin.record_streaming_outcome(payload, {})
 
-        mock_record.assert_called_once_with("stream_with_chunking", False)
+        mock_record.assert_called_once_with("stream", False)
 
 
 # RequirementMetricsPlugin tests
