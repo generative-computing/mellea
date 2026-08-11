@@ -49,7 +49,8 @@ async def think_budget_forcing(
     Args:
         backend: OllamaModelBackend instance to use for generation.
         action: The last item of the context, passed as an `action` instead of as part
-            of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
+            of the `ctx`. See `Backend.generate_from_context` for the rationale
+            behind the action/context split.
         ctx: The current conversation context.
         format: Optional Pydantic model for constrained decoding of the response.
         tool_calls: If `True`, tool calling is enabled.

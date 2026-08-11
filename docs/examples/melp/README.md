@@ -55,4 +55,3 @@ actual_result = force(composed)
 ## Related Documentation
 
 - See `mellea/stdlib/functional.py` for functional programming primitives
-- See `docs/dev/mellea_library.md` for design philosophy

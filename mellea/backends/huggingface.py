@@ -499,7 +499,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             # Requirements can be automatically rerouted to a requirement adapter.
             if isinstance(action, Requirement):
-                # See docs/dev/requirement_aLoRA_rerouting.md
+                # See "How automatic routing works" in
+                # docs/docs/advanced/lora-and-alora-adapters.md for the three
+                # exceptions to this rule.
                 reroute_to_alora = self.default_to_constraint_checking_alora
                 adapter_name = "requirement-check"
 

@@ -80,7 +80,11 @@ class Backend(abc.ABC):
                 calls — no deep copy is needed when multiple requests (e.g. rejection
                 sampling iterations, parallel requirement checks) run over the same
                 context. This also lets the backend see the exact generation target
-                without having to extract it from the context tail.
+                without having to extract it from the context tail. This head/tail split
+                is specific to the current linear-context stdlib patterns; it does not
+                generalize to a poset of possible generation points, which span-based
+                backends will need to express, so the signature may need to change again
+                once that work lands.
             ctx: The rest of the context, excluding `action`.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.
