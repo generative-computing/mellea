@@ -28,6 +28,7 @@ from ...core import (
     TemplateRepresentation,
     ValidationResult,
 )
+from ...helpers.annotation_helpers import resolve_signature_annotations
 from ..requirements.requirement import reqify
 from ..session import MelleaSession
 
@@ -214,9 +215,15 @@ def describe_function(func: Callable) -> FunctionDict:
     Returns:
         FunctionDict: Function dict of the passed function.
     """
+    # This signature is rendered directly into the prompt by
+    # `GenerativeStub.jinja2`, so unlike the other call sites the return
+    # annotation *is* consumed by the model. An unresolvable one (a
+    # `TYPE_CHECKING`-only import, or a forward reference) is therefore left as
+    # its postponed string and renders quoted — `-> 'Decimal'` — which still
+    # conveys the type name, rather than being dropped from the prompt entirely.
     return {
         "name": func.__name__,
-        "signature": str(inspect.signature(func, eval_str=True)),
+        "signature": str(resolve_signature_annotations(func)),
         "docstring": inspect.getdoc(func),
     }
 
@@ -234,7 +241,10 @@ def get_argument(func: Callable, key: str, val: Any) -> Argument:
     Returns:
         Argument: an argument object representing the given parameter.
     """
-    sig = inspect.signature(func, eval_str=True)
+    # Resolve postponed annotations (PEP 563). Only the named parameter's
+    # annotation is read below, so an unresolvable return type must not fail the
+    # call — see `resolve_signature_annotations`.
+    sig = resolve_signature_annotations(func)
     param = sig.parameters.get(key)
     if param and param.annotation is not inspect.Parameter.empty:
         param_type = param.annotation
