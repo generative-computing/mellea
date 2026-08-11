@@ -98,6 +98,19 @@ def tc_return_zone(zone: Zone) -> Decimal:
     return Decimal("0")
 
 
+def tc_return_unannotated_param(flag, period: Period) -> Decimal:  # type: ignore[no-untyped-def]
+    """TYPE_CHECKING-only return with one annotated and one bare parameter.
+
+    `flag` has no annotation at all, so it arrives as `inspect._empty` rather
+    than a string and must be passed through the per-parameter loop untouched.
+
+    Args:
+        flag: an unannotated parameter
+        period: the period
+    """
+    return Decimal("0")
+
+
 def unresolvable_param(query: NonExistentType) -> str:  # type: ignore[name-defined]  # noqa: F821
     """Unresolvable parameter annotation.
 

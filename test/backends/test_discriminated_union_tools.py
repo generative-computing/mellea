@@ -42,6 +42,7 @@ from test.backends._postponed_annotation_samples import (
     tc_only_return_builtin_param,
     tc_return_custom_param,
     tc_return_region,
+    tc_return_unannotated_param,
     tc_return_zone,
     unresolvable_param,
 )
@@ -805,6 +806,25 @@ class TestPostponedAnnotations:
         assert tool.function is not None
         assert tool.function.parameters is not None
         props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["period"]["type"] == "object"
+        assert props["period"]["title"] == Period.__name__
+
+    def test_unannotated_parameter_passes_through_fallback(self):
+        """A bare parameter must survive the per-parameter loop untouched.
+
+        In the fallback path an unannotated parameter is `inspect._empty`, not a
+        string, so it takes the branch that skips resolution. It should still
+        reach the schema, defaulting to `str` as it does on the normal path.
+        """
+        # Guard the precondition: the fallback must be the path under test.
+        with pytest.raises(NameError):
+            inspect.signature(tc_return_unannotated_param, eval_str=True)
+
+        tool = convert_function_to_ollama_tool(tc_return_unannotated_param)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["flag"]["type"] == "string"
         assert props["period"]["type"] == "object"
         assert props["period"]["title"] == Period.__name__
 
