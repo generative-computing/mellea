@@ -75,8 +75,13 @@ class Backend(abc.ABC):
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
-            action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
-            ctx: The rest of the context.
+            action: The component to generate from. Passed separately from `ctx` rather
+                than appended to it so that shared context is referentially equal across
+                calls — no deep copy is needed when multiple requests (e.g. rejection
+                sampling iterations, parallel requirement checks) run over the same
+                context. This also lets the backend see the exact generation target
+                without having to extract it from the context tail.
+            ctx: The rest of the context, excluding `action`.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.
             tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
@@ -143,8 +148,9 @@ class Backend(abc.ABC):
         """Backend implementers should override this method to generate the actual response.
 
         Args:
-            action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
-            ctx: The rest of the context.
+            action: The component to generate from. See `generate_from_context` for the
+                rationale behind the action/context split.
+            ctx: The rest of the context, excluding `action`.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.
             tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation

@@ -149,6 +149,25 @@ When `backend.add_adapter()` is called, Mellea automatically routes requirement
 validation through the adapter for any `req()` calls on that session. The adapter
 runs at the `check_requirement` prompt position — fast, with minimal context overhead.
 
+## How automatic routing works
+
+When an adapter is loaded via `backend.add_adapter()`, Mellea automatically routes
+`req()` validation calls through it rather than falling back to LLM-as-a-judge. The
+rule is: use the most specific available method. In practice this means the aLoRA
+adapter is preferred whenever one is loaded, with three exceptions:
+
+1. `backend.default_to_constraint_checking_alora` is set to `False` — the adapter
+   is loaded but routing is suppressed for the entire backend instance.
+2. The requirement uses the `LLMaJRequirement` subtype explicitly — the caller is
+   asking for LLM-as-a-judge regardless of what adapters are loaded.
+3. The adapter throws an exception — Mellea falls back to LLM-as-a-judge
+   automatically.
+
+If you want to force the adapter path even when using `generate_from_context`
+directly (bypassing the normal `validate()` call), use `ALoraRequirement` from
+`mellea.stdlib.requirements` — routing through the adapter is then guaranteed
+regardless of `default_to_constraint_checking_alora`.
+
 ## Disable adapter validation
 
 To run without adapter validation (for benchmarking or debugging):
