@@ -1382,12 +1382,20 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     ) -> ComputedModelOutputThunk[S]:
         """Convert a `ModelOutputThunk` into a `ComputedModelOutputThunk` via zero-copy reassignment.
 
-        `thunk is None` allocates a bare instance; this is the path taken by pickle's
-        default reconstruction (`cls.__new__(cls)`), which then restores `__dict__`
-        directly. A genuine no-arg call is caught in `__init__` (which pickle skips).
+        The whole computed invariant is validated here, *before* the class reassignment,
+        so a rejected `thunk` is left untouched as the plain `ModelOutputThunk` the caller
+        passed in.
+
+        `thunk is None` allocates a bare instance. Pickling a `ModelOutputThunk` or a
+        `ComputedModelOutputThunk` is not supported today — a generated thunk's `_gen`
+        holds asyncio tasks and backend-bound callbacks that cannot be pickled — but
+        pickle reconstructs via `cls.__new__(cls)`, so keeping this branch means adding
+        pickle support to the base class later needs no change here. A genuine no-arg call
+        is caught in `__init__` (which pickle skips).
 
         Raises:
             TypeError: If `thunk` is neither `None` nor a `ModelOutputThunk`.
+            ValueError: If `thunk` is not computed or has a `None` value.
         """
         if thunk is None:
             return object.__new__(cls)  # type: ignore[return-value]
@@ -1396,34 +1404,39 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
                 "ComputedModelOutputThunk requires a computed ModelOutputThunk; "
                 f"got {type(thunk).__name__}."
             )
+
+        # Validate before reassigning __class__ below. Reassigning first would leave a
+        # rejected thunk mutated into a ComputedModelOutputThunk whose is_computed()
+        # returns True while .value is None, and __setattr__ then blocks resetting
+        # _computed to repair it.
+        if not thunk._computed:
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+            )
+        if thunk.value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
         thunk.__class__ = cls
         return thunk  # type: ignore[return-value]
 
-    def __init__(self, thunk: ModelOutputThunk[S] | None = None) -> None:
+    def __init__(self, thunk: ModelOutputThunk[S]) -> None:
         """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
 
         Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
         the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+        The computed invariant is validated in `__new__`, which runs first.
 
         Raises:
             TypeError: If constructed with no `thunk` (the argument is mandatory).
-            ValueError: If `thunk` is not computed or has a `None` value.
         """
-        # Pickle restores state via __dict__ and never calls __init__, so reaching here
-        # with thunk=None means a genuine no-arg constructor call, which is invalid.
+        # `thunk` is mandatory, so a no-arg call raises TypeError before reaching here.
+        # An explicit `None` still arrives, having taken the bare-allocation branch in
+        # __new__ that exists for pickle's reconstruction path; reject it.
         if thunk is None:
             raise TypeError(
                 "ComputedModelOutputThunk() requires a computed ModelOutputThunk; "
                 "construct one as ComputedModelOutputThunk(thunk)."
             )
-
-        # `self` is `thunk` (zero-copy), already cast to ComputedModelOutputThunk.
-        if not self._computed:
-            raise ValueError(
-                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
-            )
-        if self.value is None:
-            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Enforce the computed invariant on every assignment.
@@ -1450,17 +1463,19 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         """Shallow-copy, preserving the concrete computed subclass.
 
         Delegates field copying to `ModelOutputThunk.__copy__`, then re-casts the
-        base-class result back to `ComputedModelOutputThunk` so the copy keeps its type
-        and invariant instead of silently demoting to the base class.
+        base-class result back to `type(self)` so the copy keeps its type and invariant
+        instead of silently demoting to the base class. Only the class is preserved: the
+        delegate builds a plain `ModelOutputThunk`, so a subclass that adds fields of its
+        own still needs to override this.
         """
         copied = super().__copy__()
-        copied.__class__ = ComputedModelOutputThunk
+        copied.__class__ = type(self)
         return copied  # type: ignore[return-value]
 
     def __deepcopy__(self, memo: dict) -> ComputedModelOutputThunk[S]:
         """Deep-copy, preserving the concrete computed subclass (see `__copy__`)."""
         deepcopied = super().__deepcopy__(memo)
-        deepcopied.__class__ = ComputedModelOutputThunk
+        deepcopied.__class__ = type(self)
         return deepcopied  # type: ignore[return-value]
 
     async def avalue(self) -> str:

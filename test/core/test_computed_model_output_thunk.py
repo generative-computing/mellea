@@ -4,7 +4,6 @@
 """Tests for ComputedModelOutputThunk."""
 
 import copy
-import pickle
 
 import pytest
 
@@ -37,14 +36,44 @@ def test_computed_thunk_requires_computed_thunk():
         ComputedModelOutputThunk(uncomputed_thunk)
 
 
-def test_computed_thunk_requires_value():
-    """Test that ComputedModelOutputThunk requires a non-None value."""
-    # Create a thunk that's computed but has None value (edge case)
+def _computed_thunk_with_none_value() -> ModelOutputThunk:
+    """A thunk that claims to be computed but holds a None value (edge case)."""
     base_thunk = ModelOutputThunk(value="test")
     base_thunk.value = None  # type: ignore
+    return base_thunk
 
+
+def test_computed_thunk_requires_value():
+    """Test that ComputedModelOutputThunk requires a non-None value."""
     with pytest.raises(ValueError, match="requires a non-None value"):
+        ComputedModelOutputThunk(_computed_thunk_with_none_value())
+
+
+@pytest.mark.parametrize(
+    "make_base_thunk",
+    [
+        pytest.param(lambda: ModelOutputThunk(value=None), id="uncomputed"),
+        pytest.param(_computed_thunk_with_none_value, id="none-value"),
+    ],
+)
+def test_rejected_wrap_leaves_input_thunk_unmutated(make_base_thunk):
+    """A rejected wrap must leave the caller's thunk as a plain ModelOutputThunk.
+
+    `__new__` reassigns `__class__` in place, so validating after that reassignment would
+    leave the input claiming `is_computed() is True` while `.value` is None — and the
+    guarded `__setattr__` would then block repairing it.
+    """
+    base_thunk = make_base_thunk()
+
+    with pytest.raises(ValueError):
         ComputedModelOutputThunk(base_thunk)
+
+    assert type(base_thunk) is ModelOutputThunk
+
+    # Still a plain thunk, so it remains repairable and wrappable.
+    base_thunk._computed = True
+    base_thunk.value = "repaired"
+    assert ComputedModelOutputThunk(base_thunk).value == "repaired"
 
 
 async def test_computed_thunk_avalue():
@@ -235,13 +264,13 @@ def test_copy_preserves_computed_subclass():
         cc._computed = False
 
 
-def test_pickle_roundtrip_preserves_computed_subclass():
-    """A pickled/unpickled computed thunk stays a sealed, computed ComputedModelOutputThunk."""
-    computed = ComputedModelOutputThunk(ModelOutputThunk(value="hello"))
-    restored = pickle.loads(pickle.dumps(computed))
+def test_copies_preserve_concrete_subclass():
+    """copy/deepcopy of a subclass return that subclass, not the base computed class."""
 
-    assert isinstance(restored, ComputedModelOutputThunk)
-    assert restored.is_computed()
-    assert restored.value == "hello"
-    with pytest.raises(AttributeError, match="computed invariant"):
-        restored.value = None  # type: ignore[assignment]
+    class _SubComputedThunk(ComputedModelOutputThunk):
+        pass
+
+    sub = _SubComputedThunk(ModelOutputThunk(value="hello"))
+
+    assert type(copy.copy(sub)) is _SubComputedThunk
+    assert type(copy.deepcopy(sub)) is _SubComputedThunk
