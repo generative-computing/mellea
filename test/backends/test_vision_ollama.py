@@ -44,7 +44,10 @@ from mellea.stdlib.components import Instruction, Message
 # IBM's official GGUF repo on Hugging Face. Match on the full tag rather than a
 # bare name so the check cannot be satisfied by an unrelated local alias.
 _VISION_MODEL = IBM_GRANITE_VISION_4_1_4B
-_VISION_MODEL_TAG = str(IBM_GRANITE_VISION_4_1_4B.ollama_name)
+# Asserted rather than coerced with str(): ollama_name is `str | None`, and
+# str(None) would silently make the tag the literal "None".
+assert IBM_GRANITE_VISION_4_1_4B.ollama_name is not None
+_VISION_MODEL_TAG = IBM_GRANITE_VISION_4_1_4B.ollama_name
 _SKIP_REASON = (
     f"Vision model not pulled locally — run `ollama pull {_VISION_MODEL_TAG}`"
 )
@@ -329,16 +332,19 @@ def _pulled_ollama_models() -> set[str]:
 
 
 def _vision_model_pulled(pulled: set[str]) -> bool:
-    """Return True if the vision model tag is among the pulled model names."""
-    return any(name.startswith(_VISION_MODEL_TAG) for name in pulled)
+    """Return True if the exact vision model tag is among the pulled model names."""
+    return _VISION_MODEL_TAG in pulled
 
 
 def test_vision_model_tag_matches_the_pulled_tag():
-    """Only the pinned tag counts; a bare alias could point at any model."""
+    """Only the exact pinned tag counts; anything else may be a different model."""
     assert _vision_model_pulled({_VISION_MODEL_TAG})
     assert not _vision_model_pulled(set())
     assert not _vision_model_pulled({"granite4.1:3b", "granite3.2-vision:latest"})
+    # A bare alias of that name could point anywhere, and a longer tag sharing
+    # the prefix is a different model -- neither counts.
     assert not _vision_model_pulled({"granite-vision-4.1:latest"})
+    assert not _vision_model_pulled({f"{_VISION_MODEL_TAG}-extra"})
 
 
 @pytest.fixture

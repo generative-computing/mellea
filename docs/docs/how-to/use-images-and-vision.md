@@ -11,8 +11,9 @@ Mellea supports multimodal input: pass images alongside your text prompt to any
 running.
 
 > **Backend note:** The default Ollama model (`granite4.1:3b`) does not support image
-> input. You must switch to a vision-capable model such as `granite-vision-4.1` or
-> `granite3.2-vision`. Not all backends support vision — see backend notes below.
+> input. You must switch to a vision-capable model such as `granite3.2-vision`, or
+> `granite-vision-4.1` via the Hugging Face tag shown below. Not all backends support
+> vision — see backend notes below.
 
 ---
 
