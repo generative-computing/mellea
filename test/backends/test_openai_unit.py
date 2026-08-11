@@ -487,5 +487,52 @@ def test_default_extra_body_does_not_mutate_constructor_arg():
     assert defaults == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
+async def test_standard_chat_path_applies_default_extra_body_without_per_call_override():
+    """Regression test for #1453: the standard chat path must not silently
+    drop `default_extra_body` when the caller passes no per-call `extra_body`.
+
+    `_generate_from_chat_context_standard` used to call `_merge_user_extra_body`
+    only when `model_options` carried a per-call `extra_body` override, so a
+    construction-time `default_extra_body` never reached the wire on an
+    ordinary call — defeating the "set once at construction" point of the
+    feature.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="gpt-4o",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.STREAM: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

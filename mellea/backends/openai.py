@@ -1030,10 +1030,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_opts, is_chat_context=ctx.is_chat_context
         )
         user_extra_body = backend_specific.pop("extra_body", None)
-        if user_extra_body is not None:
-            extra_params["extra_body"] = self._merge_user_extra_body(
-                extra_params.get("extra_body") or {}, user_extra_body
-            )
+        extra_params["extra_body"] = self._merge_user_extra_body(
+            extra_params.get("extra_body") or {}, user_extra_body
+        )
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
