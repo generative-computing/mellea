@@ -21,6 +21,7 @@ from typing import Annotated, Any, Literal, ParamSpec, TypeVar, overload
 from pydantic import BaseModel, ConfigDict, Field
 
 from mellea.core.utils import MelleaLogger
+from mellea.helpers.annotation_helpers import resolve_signature_annotations
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 
 from ..core import Component, Span, TemplateRepresentation
@@ -1346,55 +1347,9 @@ def convert_function_to_ollama_tool(
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
     # Under `from __future__ import annotations` (PEP 563) every annotation is
     # a string, which Pydantic cannot resolve for non-builtin parameter types.
-    # Prefer `eval_str=True`, which resolves the whole signature in the
-    # function's own module namespace. It also resolves the return annotation,
-    # which this schema never consumes, so it fails for TYPE_CHECKING-only or
-    # forward-referenced return types where the pre-existing path succeeded;
-    # resolve parameter annotations individually in that case.
-    try:
-        sig = inspect.signature(func, eval_str=True)
-    except Exception as e:
-        MelleaLogger.get_logger().debug(
-            "Could not resolve the full signature of tool '%s' (%s); "
-            "falling back to per-parameter annotation resolution: %s",
-            getattr(func, "__name__", func),
-            type(e).__name__,
-            e,
-        )
-        sig = inspect.signature(func)
-        # `inspect.signature` follows `__wrapped__`, so the annotations above
-        # may come from a function in a different module than `func` itself.
-        # Take the namespace from that same object, otherwise a
-        # `functools.wraps` decorator's module supplies the wrong globals and a
-        # colliding type name resolves to the wrong type. The `stop` predicate
-        # matches the one `inspect.signature` uses to stop unwrapping.
-        target = inspect.unwrap(func, stop=lambda f: hasattr(f, "__signature__"))
-        # A module's globals already carry `__builtins__`, so no defensive copy
-        # is needed.
-        g = getattr(target, "__globals__", {})
-        params = []
-        for p in sig.parameters.values():
-            if isinstance(p.annotation, str):
-                try:
-                    # ast.literal_eval cannot evaluate type expressions
-                    # (e.g. `Decimal`, `Foo | None`); this mirrors what
-                    # `inspect.signature(..., eval_str=True)` does internally.
-                    # The input is an annotation from a callable the caller
-                    # registered as a tool, so it is no more attacker-controlled
-                    # than the callable itself, and the attempt above already
-                    # evaluated a superset of these strings.
-                    p = p.replace(annotation=eval(p.annotation, g))  # noqa: S307
-                except Exception as e:
-                    # Leave as a string; Pydantic reports the unresolved name.
-                    MelleaLogger.get_logger().debug(
-                        "Could not resolve annotation %r for parameter '%s' of tool '%s': %s",
-                        p.annotation,
-                        p.name,
-                        getattr(func, "__name__", func),
-                        e,
-                    )
-            params.append(p)
-        sig = sig.replace(parameters=params)
+    # This schema never consumes the return annotation, so an unresolvable one
+    # is left as a string rather than being allowed to fail the conversion.
+    sig = resolve_signature_annotations(func)
     schema = type(
         func.__name__,
         (BaseModel,),
