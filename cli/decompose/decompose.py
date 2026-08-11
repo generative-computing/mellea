@@ -11,6 +11,8 @@ the subtasks before writing a JSON result file and a rendered Python script to t
 specified output directory.
 """
 
+from __future__ import annotations
+
 import json
 import keyword
 import re
@@ -18,15 +20,17 @@ import shutil
 from enum import StrEnum
 from graphlib import TopologicalSorter
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from jinja2 import Environment, FileSystemLoader
 
-from . import pipeline
+from ._types import DecompBackend
 from .logging import LogMode, configure_logging, get_logger, log_section
-from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 from .utils import validate_filename
+
+if TYPE_CHECKING:
+    from .pipeline import DecompPipelineResult, DecompSubtasksResult
 
 
 class DecompVersion(StrEnum):
@@ -299,6 +303,11 @@ def run(
             failures. Any output directories created earlier in the run are
             removed before the exception is re-raised.
     """
+    # Imported here rather than at module scope: `pipeline` pulls in `mellea`
+    # and its backend dependencies, which would otherwise be loaded on every
+    # `m` invocation just to build the CLI's help text.
+    from . import pipeline
+
     created_dirs: list[Path] = []
 
     try:
