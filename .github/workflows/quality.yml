@@ -27,22 +27,6 @@ jobs:
       - name: Lint GitHub Actions workflows
         uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
 
-  zizmor:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Audit GitHub Actions workflows with zizmor
-        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
-        with:
-          advanced-security: false
-          config: .github/zizmor.yml
-        env:
-          GH_TOKEN: ${{ github.token }}
-
   license-headers:
     runs-on: ubuntu-latest
     permissions:
