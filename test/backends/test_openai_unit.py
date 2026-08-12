@@ -459,9 +459,16 @@ def test_openai_platform_skips_format_assumption_log():
     mock_logger = MagicMock()
     # Unset OPENAI_BASE_URL for this test: after resolving env into _base_url,
     # a leftover non-OpenAI env would make the no-base_url construction log.
+    # These backends point at api.openai.com, so mock the vLLM version probe:
+    # __init__ calls is_vllm_server_with_structured_output unconditionally,
+    # which would otherwise make a real GET to api.openai.com/version.
     with (
         patch(
             "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
         ),
         patch.dict(os.environ),
     ):
