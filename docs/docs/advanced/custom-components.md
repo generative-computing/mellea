@@ -146,6 +146,8 @@ For components that need model-specific prompt formatting, return a
 | `template` | `str \| None` | Inline Jinja2 template string |
 | `template_order` | `list[str] \| None` | Template file names to look up; `"*"` means the class name |
 | `images` | `list \| None` | Image blocks to include |
+| `audio` | `list \| None` | Audio blocks to include |
+| `role` | `str \| None` | Chat role to serialize as; `None` uses the default (`user`, or `assistant` for model-generated components) |
 
 The formatter resolves template files from a `templates/prompts/` directory,
 traversing subdirectories that match the model ID before falling back to

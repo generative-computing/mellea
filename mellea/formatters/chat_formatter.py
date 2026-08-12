@@ -11,6 +11,8 @@ outputs. Concrete backends call this formatter when preparing input for a chat
 completion endpoint.
 """
 
+from typing import cast
+
 from ..core import Component, Formatter, ModelOutputThunk, Span, TemplateRepresentation
 from ..stdlib.components.chat import Message
 
@@ -24,8 +26,10 @@ class ChatFormatter(Formatter):
         Iterates over each element in the context history and converts it to a
         `Message` with an appropriate role. `ModelOutputThunk` instances are
         treated as assistant responses, while all other `Component` and
-        `CBlock` objects default to the `user` role. Image attachments and
-        parsed structured outputs are handled transparently.
+        `CBlock` objects default to the `user` role. A `Component` may override
+        this positional guess by setting `role` on the `TemplateRepresentation`
+        returned from its `format_for_llm`. Image attachments and parsed
+        structured outputs are handled transparently.
 
         Args:
             cs (list[Span]): The linearized sequence of context
@@ -69,6 +73,11 @@ class ChatFormatter(Formatter):
                     if isinstance(tr, TemplateRepresentation):
                         images = tr.images
                         audio = tr.audio
+                        # A component may declare its own role; honor it over the
+                        # positional guess. `Message` validates the role value and
+                        # raises ValueError for anything outside `Message.Role`.
+                        if tr.role is not None:
+                            role = cast(Message.Role, tr.role)
 
                     return Message(
                         role=role, content=self.print(c), images=images, audio=audio

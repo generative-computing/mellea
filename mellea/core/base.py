@@ -1735,6 +1735,10 @@ class TemplateRepresentation:
         images (list[ImageBlock | ImageUrlBlock] | None): Optional list of image blocks associated with this representation.
         audio (list[AudioBlock | AudioUrlBlock] | None): Optional list of audio blocks associated
             with this representation.
+        role (str | None): Optional chat role (`"system"`, `"user"`, `"assistant"`,
+            or `"tool"`) the component should be serialized as. When `None` (the
+            default), the formatter falls back to its positional guess: `"assistant"`
+            for model-generated components, `"user"` otherwise.
 
     """
 
@@ -1751,6 +1755,7 @@ class TemplateRepresentation:
     template_order: list[str] | None = None
     images: list[ImageBlock | ImageUrlBlock] | None = None
     audio: list[AudioBlock | AudioUrlBlock] | None = None
+    role: str | None = None
 
 
 @dataclass

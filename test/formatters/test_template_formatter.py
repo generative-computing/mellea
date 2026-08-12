@@ -103,6 +103,63 @@ def test_to_chat_messages_preserves_audio(tf: TemplateFormatter):
     assert msgs[0].audio == audio
 
 
+class _RoleComponent(Component[str]):
+    """Component whose serialized role is configurable via `format_for_llm`."""
+
+    def __init__(self, role: str | None = None):
+        self._role = role
+
+    def parts(self) -> list[Span]:
+        return []
+
+    def format_for_llm(self) -> TemplateRepresentation:
+        return TemplateRepresentation(
+            obj=self, args={}, template="role component", role=self._role
+        )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        return ""
+
+
+def test_template_representation_role_defaults_to_none():
+    """`TemplateRepresentation.role` defaults to `None` so behavior is opt-in."""
+    repr = TemplateRepresentation(obj=object(), args={})
+    assert repr.role is None
+
+
+def test_to_chat_messages_honors_component_role(tf: TemplateFormatter):
+    """A component declaring `role` in its representation controls its message role."""
+    msgs = tf.to_chat_messages([_RoleComponent(role="system")])
+
+    assert len(msgs) == 1
+    assert msgs[0].role == "system"
+
+
+def test_to_chat_messages_defaults_role_when_unset(tf: TemplateFormatter):
+    """A component that declares no role still defaults to `user`."""
+    msgs = tf.to_chat_messages([_RoleComponent()])
+
+    assert len(msgs) == 1
+    assert msgs[0].role == "user"
+
+
+def test_to_chat_messages_role_on_modeloutputthunk_parsed_repr(tf: TemplateFormatter):
+    """A role declared by a MOT's component `parsed_repr` overrides the assistant default."""
+    action = ModelOutputThunk(value="ignored")
+    action.parsed_repr = _RoleComponent(role="system")
+
+    msgs = tf.to_chat_messages([action])
+
+    assert len(msgs) == 1
+    assert msgs[0].role == "system"
+
+
+def test_to_chat_messages_invalid_role_raises(tf: TemplateFormatter):
+    """An unrecognized declared role is rejected with a ValueError."""
+    with pytest.raises(ValueError):
+        tf.to_chat_messages([_RoleComponent(role="banana")])
+
+
 def test_custom_template_string(tf: TemplateFormatter):
     class _TemplInstruction(Instruction):
         def format_for_llm(self) -> TemplateRepresentation:
