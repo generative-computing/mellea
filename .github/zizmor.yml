@@ -14,7 +14,7 @@ rules:
   # --- ref-version-mismatch ---------------------------------------------------
   # Version comments on SHA-pinned actions are stale (e.g. "# v6" should be
   # "# v6.0.2"). SHAs are correct and immutable; comments are cosmetic only.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1533
   ref-version-mismatch:
     ignore:
       - cut-release-branch.yml:40
@@ -37,7 +37,7 @@ rules:
   # commit SHA across all release workflows. These workflows are
   # workflow_dispatch-only and require maintainer write access to trigger, so
   # the external attacker surface is low, but SHA-pinning is the right fix.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1531
   unpinned-uses:
     ignore:
       - cut-release-branch.yml:35
@@ -51,7 +51,7 @@ rules:
   # release workflows. The tokens are used for legitimate release automation
   # (push commits/tags, open PRs, dispatch workflows), but the permission set
   # should be narrowed to the minimum required.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1531
   github-app:
     ignore:
       - cut-release-branch.yml:35
@@ -65,7 +65,7 @@ rules:
   # dispatch-to-contribs.yml. The workflow is dispatch-only (requires
   # maintainer write access); no external attacker trigger path exists.
   # The fix is to route inputs through env vars per AGENTS.md convention.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1532
   template-injection:
     ignore:
       - dispatch-to-contribs.yml:33
@@ -77,7 +77,7 @@ rules:
   # docs-publish build-and-validate job, which is triggered on push to main.
   # The cache-poisoning risk requires write access to main (branch-protected),
   # so no external attacker trigger path exists.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
   cache-poisoning:
     ignore:
       - docs-publish.yml:75
@@ -86,7 +86,7 @@ rules:
   # --- excessive-permissions --------------------------------------------------
   # dispatch-to-contribs.yml has no permissions: block, so it inherits the
   # repo default. The workflow is release-triggered and dispatch-only.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
   excessive-permissions:
     ignore:
       - dispatch-to-contribs.yml:20
@@ -94,7 +94,7 @@ rules:
   # --- artipacked -------------------------------------------------------------
   # publish-release.yml snapshot-docs job uses persist-credentials implicitly
   # (no persist-credentials: false) because it pushes commits to main.
-  # Fix tracked in: <issue to be filed>
+  # Fix tracked in: https://github.com/generative-computing/mellea/issues/1534
   artipacked:
     ignore:
       - publish-release.yml:168
