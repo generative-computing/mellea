@@ -12,6 +12,10 @@ output meets a criterion expressed in natural language. In Mellea this is the
 default validation strategy for [`req()`](../reference/glossary#requirement) — you describe what good output looks
 like, and Mellea asks the model whether the output satisfies that description.
 
+> **Reliability note:** LLM as a judge quality is highly model-dependent. Larger models tend to be stronger
+> judges. For deterministic constraints, prefer a Python validator; for subjective
+> constraints, use the aLoRA `requirement-check` adapter (on Granite models) or run use LLM as a Judge. See [Choosing a validation approach](../concepts/requirements-system#choosing-a-validation-approach).
+
 ## How it works
 
 When a [`Requirement`](../reference/glossary#requirement) has no `validation_fn`, Mellea runs a separate LLM call
