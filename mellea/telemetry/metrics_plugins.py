@@ -476,16 +476,8 @@ class AdapterFunctionMetricsPlugin(
     """Records adapter function invocation and phase-duration metrics.
 
     Hooks into `adapter_function_invocation_complete` and
-    `adapter_function_phase_complete`.
-
-    Three of the five phases have real firing sites: `LocalFileBinding.prepare()`
-    fires `prepare`, and `AdapterMixin.adapter_scope()` fires `activate` and
-    `deactivate` plus the invocation-complete event (Epic #929, issue #1141).
-    `generate` and `parse` do not fire yet — they need the intrinsic generation
-    path to run inside `adapter_scope`, which is #1465. Note that no *internal*
-    Mellea code path reaches these sites either; they are on the public
-    `Adapter`/`LocalFileBinding` surface, so today they fire only for a caller
-    driving that surface directly.
+    `adapter_function_phase_complete`. `phase` is one of the values in
+    `AdapterFunctionPhaseCompletePayload`'s `phase` field.
     """
 
     @hook("adapter_function_invocation_complete", mode=PluginMode.FIRE_AND_FORGET)

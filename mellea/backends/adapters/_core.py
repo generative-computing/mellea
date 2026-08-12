@@ -234,13 +234,12 @@ class LocalFileBinding(WeightsBinding):
     """Weights binding for the LocalFile/PEFT reality (Epic #929 Phase 2).
 
     Downloads LoRA/aLoRA adapter weights from a Hugging Face Hub repository and
-    loads them into a PEFT-capable backend (e.g.
-    :class:`~mellea.backends.huggingface.LocalHFBackend`) via the
-    :class:`~mellea.backends.adapters.adapter.AdapterMixin` verb contract.
+    loads them into a PEFT-capable backend (e.g. `LocalHFBackend`) via the
+    `AdapterMixin` verb contract.
 
     `prepare()` is session-scoped: call `bind_backend()` once, then `prepare()`.
     `activate()`/`deactivate()` are call-scoped, typically driven by
-    :meth:`~mellea.backends.adapters.adapter.AdapterMixin.adapter_scope`.
+    `AdapterMixin.adapter_scope`.
     `release()` is terminal.
 
     Attributes:
@@ -442,7 +441,7 @@ class LocalFileBinding(WeightsBinding):
         """Unloads the adapter's weights from the backend and clears local state.
 
         Idempotent: a no-op if never prepared, or already released. Terminal, per
-        the :class:`WeightsBinding` contract — the binding is not reusable
+        the `WeightsBinding` contract — the binding is not reusable
         afterwards, and `bind_backend()` + `prepare()` will not revive it.
 
         Does **not** fully deregister. `unload_peft_adapter` removes the adapter
