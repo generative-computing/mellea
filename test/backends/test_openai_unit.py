@@ -7,6 +7,7 @@ Covers filter_openai_client_kwargs, filter_chat_completions_kwargs,
 _simplify_and_merge, and _make_backend_specific_and_remove.
 """
 
+import os
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -431,6 +432,123 @@ async def test_generate_from_raw_merges_user_extra_body(backend):
     extra_body = call_kwargs["extra_body"]
     assert extra_body["caller_key"] == "caller-value"
     assert "guided_json" in extra_body or "structured_outputs" in extra_body
+
+
+# --- #1502: non-OpenAI format= warning only at init ---
+
+_FORMAT_ASSUMPTION = "NOT using the OpenAI platform"
+
+
+def _info_msgs(mock_logger) -> list[str]:
+    return [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+
+
+def test_non_openai_format_assumption_logged_once_at_init():
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
+    ):
+        OpenAIBackend(
+            model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+        )
+        OpenAIBackend(
+            model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+        )
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert len(matches) == 2  # once per backend instance
+
+
+def test_openai_platform_skips_format_assumption_log():
+    mock_logger = MagicMock()
+    # Unset OPENAI_BASE_URL for this test: after resolving env into _base_url,
+    # a leftover non-OpenAI env would make the no-base_url construction log.
+    # These backends point at api.openai.com, so mock the vLLM version probe:
+    # __init__ calls is_vllm_server_with_structured_output unconditionally,
+    # which would otherwise make a real GET to api.openai.com/version.
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
+        patch.dict(os.environ),
+    ):
+        os.environ.pop("OPENAI_BASE_URL", None)
+        OpenAIBackend(
+            model_id="gpt-4o", api_key="fake-key", base_url="https://api.openai.com/v1"
+        )
+        OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert matches == []
+
+
+def test_format_assumption_log_honors_openai_base_url_env():
+    """Env-only non-OpenAI base_url must still classify as non-OpenAI at init."""
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
+        patch.dict(
+            os.environ, {"OPENAI_BASE_URL": "http://localhost:9999/v1"}, clear=False
+        ),
+    ):
+        OpenAIBackend(model_id="gpt-4o", api_key="fake-key")
+
+    matches = [m for m in _info_msgs(mock_logger) if _FORMAT_ASSUMPTION in m]
+    assert len(matches) == 1
+
+
+async def test_format_assumption_not_relogged_per_generation():
+    """#1502: the notice must not repeat on every format= generation."""
+    import pydantic
+
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    class Answer(pydantic.BaseModel):
+        value: int
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
+    )
+    ctx = ChatContext().add(CBlock(value="q"))
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message.content = "{}"
+    resp.choices[0].message.role = "assistant"
+
+    mock_logger = MagicMock()
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch.object(
+            backend._async_client.chat.completions, "create", new_callable=AsyncMock
+        ) as create,
+    ):
+        create.return_value = resp
+        for _ in range(3):
+            await backend.generate_from_chat_context(
+                CBlock(value="q"), ctx, _format=Answer, model_options={}
+            )
+
+    msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+    assert [m for m in msgs if _FORMAT_ASSUMPTION in m] == []
 
 
 def test_default_extra_body_applied_when_no_per_call_override():
