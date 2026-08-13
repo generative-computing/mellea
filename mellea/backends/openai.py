@@ -90,6 +90,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
         api_key (str | None): API key; falls back to `OPENAI_API_KEY` env var.
+        default_extra_body (dict | None): Construction-time `extra_body` fields
+            that are merged into every request this backend makes. Per-call
+            `extra_body` values (from `model_options`) take precedence.
+            `chat_template_kwargs` is deep-merged across all layers so that,
+            for example, a construction-time `enable_thinking` flag is not
+            silently dropped when the request also carries an `adapter_name`.
+            Defaults to `{}` (no extra fields).
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
     Attributes:
@@ -114,6 +121,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         load_embedded_adapters: bool = False,
         adapter_source: str | None = None,
         api_key: str | None = None,
+        default_extra_body: dict | None = None,
         **kwargs,
     ):
         """Initialize an OpenAI-compatible backend with the given model ID and API credentials."""
@@ -170,6 +178,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
+        self._default_extra_body: dict = default_extra_body or {}
 
         match model_id:
             case str():
@@ -458,31 +467,56 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return model_opts
 
-    @staticmethod
     def _merge_user_extra_body(
-        base: dict[str, Any], user: dict[str, Any] | None
+        self, base: dict[str, Any], user: dict[str, Any] | None
     ) -> dict[str, Any]:
-        """Merges a user-supplied `extra_body` into the one Mellea built.
+        """Merges default_extra_body, Mellea-assembled extra_body, and caller-supplied extra_body.
 
-        Both must end up in a single `extra_body` value; passing two spreads that
-        each contain one raises `TypeError` at call time.
+        Merge order (lowest → highest priority):
+          1. `self._default_extra_body` — set at construction time
+          2. `base` — assembled by Mellea for this request (documents, structured_outputs, …)
+          3. `user` — from the caller's per-call `model_options`
+
+        Both must end up in a single `extra_body` value; passing two spreads
+        that each contain one raises `TypeError` at call time.
+
+        `chat_template_kwargs` is the only nested dict Mellea writes into
+        `extra_body` and is deep-merged across all three layers so that, for
+        example, a construction-time `{"enable_thinking": True}` is not silently
+        dropped when a per-call `{"adapter_name": "foo"}` is also present.
 
         Args:
-            base: the `extra_body` Mellea assembled for this request
-            user: `extra_body` taken from the caller's model_options, or None
+            base: the `extra_body` Mellea assembled for this request.
+            user: `extra_body` taken from the caller's model_options, or None.
 
         Returns:
-            a new dict; `base` and `user` are left unmodified
+            a new dict; `base`, `user`, and `self._default_extra_body` are
+            left unmodified.
         """
-        if user is None:
-            return base
+        # Start from construction-time defaults, then overlay Mellea-built values.
+        # Work on copies throughout so no caller dict is mutated.
+        merged = dict(self._default_extra_body)
+        default_ctk = merged.pop("chat_template_kwargs", None)
 
-        # shallow copy so .pop() below doesn't mutate the caller's dict
+        base = dict(base) if base else {}
+        base_ctk = base.pop("chat_template_kwargs", None)
+        merged.update(base)
+
+        # Merge chat_template_kwargs from default and base layers.
+        merged_ctk: dict = {}
+        if default_ctk is not None:
+            merged_ctk.update(default_ctk)
+        if base_ctk is not None:
+            merged_ctk.update(base_ctk)
+        if merged_ctk:
+            merged["chat_template_kwargs"] = merged_ctk
+
+        if user is None:
+            return merged
+
+        # Overlay caller-supplied values last (highest priority).
         user = dict(user)
-        merged = dict(base)
         user_ctk = user.pop("chat_template_kwargs", None)
-        # shallow merge is safe: chat_template_kwargs is the only nested dict key
-        # Mellea writes into extra_body; it is deep-merged separately below
         merged.update(user)
         if user_ctk is not None:
             merged["chat_template_kwargs"] = {
@@ -996,10 +1030,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model_opts, is_chat_context=ctx.is_chat_context
         )
         user_extra_body = backend_specific.pop("extra_body", None)
-        if user_extra_body is not None:
-            extra_params["extra_body"] = self._merge_user_extra_body(
-                extra_params.get("extra_body") or {}, user_extra_body
-            )
+        extra_params["extra_body"] = self._merge_user_extra_body(
+            extra_params.get("extra_body") or {}, user_extra_body
+        )
 
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
