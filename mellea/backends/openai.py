@@ -90,13 +90,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             falls back to *model_id*. Use this when the vLLM served model name
             differs from the adapter config location.
         api_key (str | None): API key; falls back to `OPENAI_API_KEY` env var.
-        default_extra_body (dict | None): Construction-time ``extra_body`` fields
+        default_extra_body (dict | None): Construction-time `extra_body` fields
             that are merged into every request this backend makes. Per-call
-            ``extra_body`` values (from ``model_options``) take precedence.
-            ``chat_template_kwargs`` is deep-merged across all layers so that,
-            for example, a construction-time ``enable_thinking`` flag is not
-            silently dropped when the request also carries an ``adapter_name``.
-            Defaults to ``{}`` (no extra fields).
+            `extra_body` values (from `model_options`) take precedence.
+            `chat_template_kwargs` is deep-merged across all layers so that,
+            for example, a construction-time `enable_thinking` flag is not
+            silently dropped when the request also carries an `adapter_name`.
+            Defaults to `{}` (no extra fields).
         kwargs: Additional keyword arguments forwarded to the OpenAI client.
 
     Attributes:
@@ -473,24 +473,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Merges default_extra_body, Mellea-assembled extra_body, and caller-supplied extra_body.
 
         Merge order (lowest → highest priority):
-          1. ``self._default_extra_body`` — set at construction time
-          2. ``base`` — assembled by Mellea for this request (documents, structured_outputs, …)
-          3. ``user`` — from the caller's per-call ``model_options``
+          1. `self._default_extra_body` — set at construction time
+          2. `base` — assembled by Mellea for this request (documents, structured_outputs, …)
+          3. `user` — from the caller's per-call `model_options`
 
-        Both must end up in a single ``extra_body`` value; passing two spreads
-        that each contain one raises ``TypeError`` at call time.
+        Both must end up in a single `extra_body` value; passing two spreads
+        that each contain one raises `TypeError` at call time.
 
-        ``chat_template_kwargs`` is the only nested dict Mellea writes into
-        ``extra_body`` and is deep-merged across all three layers so that, for
-        example, a construction-time ``{"enable_thinking": True}`` is not silently
-        dropped when a per-call ``{"adapter_name": "foo"}`` is also present.
+        `chat_template_kwargs` is the only nested dict Mellea writes into
+        `extra_body` and is deep-merged across all three layers so that, for
+        example, a construction-time `{"enable_thinking": True}` is not silently
+        dropped when a per-call `{"adapter_name": "foo"}` is also present.
 
         Args:
-            base: the ``extra_body`` Mellea assembled for this request.
-            user: ``extra_body`` taken from the caller's model_options, or None.
+            base: the `extra_body` Mellea assembled for this request.
+            user: `extra_body` taken from the caller's model_options, or None.
 
         Returns:
-            a new dict; ``base``, ``user``, and ``self._default_extra_body`` are
+            a new dict; `base`, `user`, and `self._default_extra_body` are
             left unmodified.
         """
         # Start from construction-time defaults, then overlay Mellea-built values.
