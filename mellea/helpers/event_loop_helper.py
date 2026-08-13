@@ -82,12 +82,22 @@ class _EventLoopHandler:
         `_reinit_if_forked`/`get_current_event_loop` run before the coroutine
         is scheduled, so an exception there (or a failure to schedule) would
         otherwise leave `co` unawaited and emit a "coroutine was never
-        awaited" warning on top of whatever raised. `co.close()` on any
-        exception path here is always safe: if scheduling never succeeded,
-        `co` hasn't started and closing it is a clean no-op; if `.result()`
-        raised instead, the future is only marked done after the scheduled
-        task has fully finished running `co`, so closing an already-completed
-        coroutine is also a no-op.
+        awaited" warning on top of whatever raised. `co.close()` covers that:
+        if scheduling never succeeded, `co` hasn't started and closing it is
+        a clean no-op; if `.result()` raised the task's own exception instead,
+        the future is only marked done after the scheduled task has fully
+        finished running `co`, so closing an already-completed coroutine is
+        also a no-op.
+
+        Deliberately `except Exception`, not `BaseException`: a `Future.result()`
+        with no timeout blocks on a `threading.Condition`, and a `KeyboardInterrupt`
+        delivered to this (calling) thread can unblock that wait before the task
+        on the event-loop thread has actually finished — `co` may still be running
+        there. Closing it from here at that point would run `co`'s `GeneratorExit`
+        handling in this thread while the event loop thread is concurrently
+        stepping the same frame, which is not safe. Excluding
+        `KeyboardInterrupt`/`SystemExit` means that rare case leaks the
+        unawaited-coroutine warning instead of risking that race.
         """
         try:
             self._reinit_if_forked()
@@ -105,7 +115,7 @@ class _EventLoopHandler:
             return asyncio.run_coroutine_threadsafe(
                 _wrapped(), self._event_loop
             ).result()
-        except BaseException:
+        except Exception:
             co.close()
             raise
 
