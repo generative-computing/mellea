@@ -153,20 +153,11 @@ def graph_coloring_requirement():
 
 
 def create_mock_mot(value: str) -> ModelOutputThunk:
-    """Create a mock ModelOutputThunk with given value."""
-    mot = MagicMock(spec=ModelOutputThunk)
-    mot.value = value
+    """Create a real, computed ModelOutputThunk with the given value."""
+    mot = ModelOutputThunk(value=value)
     mot.parsed_repr = value
-    mot._generate_log = MagicMock(spec=GenerateLog)
+    mot._generate_log = GenerateLog()
     mot._generate_log.is_final_result = False
-    # Required for Message._parse() to work correctly
-    mot.tool_calls = None
-    mot._meta = {}
-
-    async def mock_avalue():
-        return value
-
-    mot.avalue = mock_avalue
     return mot
 
 

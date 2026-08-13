@@ -31,8 +31,6 @@ from mellea.core.base import (
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
-    _CallInfo,
-    _GenerationState,
 )
 from mellea.core.requirement import Requirement, ValidationResult
 from mellea.plugins import HookType, PluginResult, hook, register
@@ -68,20 +66,11 @@ class _MockBackend(Backend):
         self._provider: str = "mock-provider"
 
     async def _generate_from_context(self, action, ctx, **kwargs):
-        mot = MagicMock(spec=ModelOutputThunk)
-        mot._gen = _GenerationState()
-        mot._call = _CallInfo()
+        mot = ModelOutputThunk(value="mocked output string")
         glog = GenerateLog()
         glog.prompt = "mocked formatted prompt"
         mot._generate_log = glog
-        mot.parsed_repr = None
         mot._gen.start = datetime.datetime.now()
-
-        async def _avalue():
-            return "mocked output"
-
-        mot.avalue = _avalue
-        mot.value = "mocked output string"  # SamplingResult requires a str .value
         # Return a new SimpleContext to mimic real context evolution
         new_ctx = SimpleContext()
         return mot, new_ctx
