@@ -470,7 +470,7 @@ def transform(
         tool_calls=True,
     )
 
-    tools = _call_tools(transformed, backend)
+    tools = call_tools(transformed, backend)
 
     # Transform only supports calling one tool call since it cannot currently synthesize multiple outputs.
     # Attempt to choose the best one to call.
@@ -1249,7 +1249,7 @@ async def atransform(
         await_result=True,  # Must be computed for tool calls.
     )
 
-    tools = await _acall_tools(transformed, backend)
+    tools = await acall_tools(transformed, backend)
 
     # Transform only supports calling one tool call since it cannot currently synthesize multiple outputs.
     # Attempt to choose the best one to call.
@@ -1313,22 +1313,62 @@ def _parse_and_clean_image_args(
     return images
 
 
-def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
+def call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
     """Call all the tools requested in a result's tool calls object.
 
+    This is a low-level primitive for executing tool calls from model output. It fires
+    tool_pre_invoke and tool_post_invoke hooks, allowing plugins to observe and modify
+    tool execution. Higher-level APIs like `act()` or `instruct()` generate tool calls
+    but do not execute them—use this function to execute the generated tools. Use this
+    primitive when implementing a custom session or agentic loop where you handle both
+    tool execution and context management explicitly.
+
+    Args:
+        result: A ModelOutputThunk containing tool calls to execute.
+        backend: The backend used to format tool outputs.
+
     Returns:
-        list[ToolMessage]: A list of tool messages that can be empty.
+        list[ToolMessage]: A list of ToolMessage objects, one per tool call. May be empty
+            if no tool calls were present. Each ToolMessage contains the tool name,
+            arguments, raw output, and formatted content.
+
+    Example:
+        ```python
+        from mellea.stdlib import call_tools
+        from mellea.stdlib.context import SimpleContext
+
+        result, ctx = instruct("...", context, backend, tool_calls=True)
+        tool_messages = call_tools(result, backend)
+        ctx = ctx.add(tool_messages)
+        ```
+
+    See Also:
+        - `acall_tools`: Async version of this function.
+        - Hook Types: `TOOL_PRE_INVOKE`, `TOOL_POST_INVOKE` in `mellea.plugins.types`.
     """
-    return _run_async_in_thread(_acall_tools(result, backend))
+    return _run_async_in_thread(acall_tools(result, backend))
 
 
-async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
-    """Call all the tools requested in a result's tool calls object.
+async def acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
+    """Async version of call_tools; executes all tool calls with hook support.
 
-    Call tools with tool_pre_invoke / tool_post_invoke hook support.
+    Fires tool_pre_invoke and tool_post_invoke hooks before and after tool execution,
+    allowing plugins to observe and modify the execution flow. Higher-level APIs like
+    `aact()` or `ainstruct()` generate tool calls but do not execute them—use this
+    function to execute the generated tools. Tool calls execute sequentially; use this
+    primitive when implementing custom agentic loops with explicit context management.
+
+    Args:
+        result: A ModelOutputThunk containing tool calls to execute.
+        backend: The backend used to format tool outputs.
 
     Returns:
-        list[ToolMessage]: A list of tool messages that can be empty.
+        list[ToolMessage]: A list of ToolMessage objects, one per tool call. May be empty
+            if no tool calls were present.
+
+    See Also:
+        - `call_tools`: Synchronous version of this function.
+        - Hook Types: `TOOL_PRE_INVOKE`, `TOOL_POST_INVOKE` in `mellea.plugins.types`.
     """
     outputs: list[ToolMessage] = []
     tool_calls = result.tool_calls
@@ -1417,3 +1457,17 @@ async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolM
         outputs.append(tool_msg)
 
     return outputs
+
+
+# --- Backward compatibility: deprecated underscore-prefixed versions ---
+
+# These are aliases for the public API. Use call_tools() and acall_tools() directly.
+# The underscore versions are deprecated and will be removed in a future major release.
+# See: https://github.com/generative-computing/mellea/discussions/1460
+#
+# Migration: Replace _call_tools with call_tools, _acall_tools with acall_tools
+# Example:
+#   from mellea.stdlib.functional import _call_tools  # ❌ old
+#   from mellea.stdlib.functional import call_tools   # ✓ new
+_call_tools = call_tools
+_acall_tools = acall_tools

@@ -18,6 +18,12 @@ orchestration primitive :func:`~mellea.stdlib.streaming.stream_with_chunking` an
 its result type :class:`~mellea.stdlib.streaming.StreamChunkingResult` are also
 re-exported here, alongside the full :class:`~mellea.stdlib.streaming.StreamEvent`
 vocabulary for typed event observation.
+
+Low-level primitives for tool execution are available in `mellea.stdlib.functional`:
+`call_tools` and `acall_tools` for executing model-requested tool calls with full
+hook and telemetry support. Higher-level APIs like `act()`, `instruct()`, or
+`chat()` generate tool calls but do not execute them—use `call_tools()` to run
+the generated tools. These primitives are rarely needed outside custom agentic loops.
 """
 
 from .chunking import ChunkingStrategy, ParagraphChunker, SentenceChunker, WordChunker

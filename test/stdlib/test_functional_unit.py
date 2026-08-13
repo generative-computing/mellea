@@ -416,7 +416,7 @@ async def test_aact_no_raise_without_requirements():
 
 
 def _make_tool_message(name: str = "some_tool") -> ToolMessage:
-    """Return a real ToolMessage, as `_call_tools`/`_acall_tools` would produce."""
+    """Return a real ToolMessage, as `call_tools`/`acall_tools` would produce."""
     tool_call = ModelToolCall(name=name, func=MagicMock(), args={"arg": 1})
     return ToolMessage(
         role="tool",
@@ -448,7 +448,7 @@ def _assert_tool_message_persisted_after(
     assert result[-1] is tool_message
 
 
-@patch("mellea.stdlib.functional._call_tools")
+@patch("mellea.stdlib.functional.call_tools")
 @patch("mellea.stdlib.functional.act")
 def test_transform_persists_chosen_tool_message_in_context(mock_act, mock_call_tools):
     """The tool message transform() picks must survive in the returned Context.
@@ -473,10 +473,10 @@ def test_transform_persists_chosen_tool_message_in_context(mock_act, mock_call_t
 
 
 @pytest.mark.asyncio
-@patch("mellea.stdlib.functional._acall_tools", new_callable=AsyncMock)
+@patch("mellea.stdlib.functional.acall_tools", new_callable=AsyncMock)
 @patch("mellea.stdlib.functional.aact", new_callable=AsyncMock)
 async def test_atransform_persists_chosen_tool_message_in_context(
-    mock_aact, mock_acall_tools
+    mock_aact, mockacall_tools
 ):
     """Async counterpart of test_transform_persists_chosen_tool_message_in_context."""
     from mellea.stdlib.functional import atransform
@@ -485,7 +485,7 @@ async def test_atransform_persists_chosen_tool_message_in_context(
     ctx = ChatContext().add(prior_message)
     mock_aact.return_value = (MagicMock(), ctx)
     tool_message = _make_tool_message()
-    mock_acall_tools.return_value = [tool_message]
+    mockacall_tools.return_value = [tool_message]
 
     _, new_ctx = await atransform(MObject(), "transform it", ctx, MagicMock())
 
