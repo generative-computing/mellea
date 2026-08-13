@@ -441,8 +441,14 @@ def _info_msgs(mock_logger) -> list[str]:
 
 def test_non_openai_format_assumption_logged_once_at_init():
     mock_logger = MagicMock()
-    with patch(
-        "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+    with (
+        patch(
+            "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
+        ),
     ):
         OpenAIBackend(
             model_id="gpt-4o", api_key="fake-key", base_url="http://localhost:9999/v1"
@@ -488,6 +494,10 @@ def test_format_assumption_log_honors_openai_base_url_env():
     with (
         patch(
             "mellea.backends.openai.MelleaLogger.get_logger", return_value=mock_logger
+        ),
+        patch(
+            "mellea.backends.openai.is_vllm_server_with_structured_output",
+            return_value=False,
         ),
         patch.dict(
             os.environ, {"OPENAI_BASE_URL": "http://localhost:9999/v1"}, clear=False
