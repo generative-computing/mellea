@@ -15,7 +15,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletio
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_choice import CompletionChoice
 
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.openai import OpenAIBackend
 from mellea.core.base import ModelOutputThunk
 
@@ -61,6 +61,47 @@ def test_str_masks_api_key():
     backend = _make_backend()
     assert "fake-key" not in str(backend)
     assert "***" in str(backend)
+
+
+# --- model_id resolution ---
+
+
+def test_model_identifier_resolves_to_openai_name():
+    backend = OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_SUPER_120B_A12B,
+        api_key="fake-key",
+        base_url="http://localhost:9999/v1",
+    )
+    assert backend._model_id == model_ids.NVIDIA_NEMOTRON_3_SUPER_120B_A12B.openai_name
+
+
+def test_model_identifier_without_openai_name_raises():
+    # Local-inference-only constants have no name for a hosted endpoint.
+    assert model_ids.NVIDIA_NEMOTRON_NANO_12B_V2.openai_name is None
+    with pytest.raises(ValueError, match="openai_name"):
+        OpenAIBackend(
+            model_id=model_ids.NVIDIA_NEMOTRON_NANO_12B_V2,
+            api_key="fake-key",
+            base_url="http://localhost:9999/v1",
+        )
+
+
+def test_model_id_none_raises_type_error():
+    # Forwarding an unset ModelIdentifier field (e.g. `.hf_model_name`) yields None;
+    # it must fail here rather than as a missing _model_id at generation time.
+    with pytest.raises(TypeError, match="must be a str or ModelIdentifier"):
+        OpenAIBackend(
+            model_id=None,  # type: ignore[arg-type]
+            api_key="fake-key",
+            base_url="http://localhost:9999/v1",
+        )
+
+
+def test_model_id_empty_string_raises_value_error():
+    with pytest.raises(ValueError, match="empty string"):
+        OpenAIBackend(
+            model_id="  ", api_key="fake-key", base_url="http://localhost:9999/v1"
+        )
 
 
 # --- filter_openai_client_kwargs ---

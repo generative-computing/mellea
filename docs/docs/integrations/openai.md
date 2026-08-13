@@ -248,7 +248,7 @@ from mellea.backends.openai import OpenAIBackend
 
 m = MelleaSession(
     OpenAIBackend(
-        model_id=model_ids.NVIDIA_NEMOTRON_3_SUPER_120B_A12B,
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_4B,
         api_key="your-nvidia-api-key",
         base_url="https://integrate.api.nvidia.com/v1",
     )
