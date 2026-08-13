@@ -61,7 +61,10 @@ from ..core import (
 )
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
-from ..formatters.granite.base.util import _GuidanceLogitsProcessor
+from ..formatters.granite.base.util import (
+    _LLGUIDANCE_GRAMMAR_DEFAULTS,
+    _GuidanceLogitsProcessor,
+)
 from ..helpers import (
     DEFAULT_CHUNK_TIMEOUT,
     message_to_openai_message,
@@ -1032,7 +1035,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 schema: dict[str, Any] = _format.model_json_schema()
                 grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults={"whitespace_flexible": False}
+                    schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
                 )
                 logits_processor = _GuidanceLogitsProcessor(
                     grammar, self._llguidance_tokenizer
@@ -1237,7 +1240,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 schema: dict[str, Any] = _format.model_json_schema()
                 grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                    schema, defaults={"whitespace_flexible": False}
+                    schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
                 )
                 logits_processor = _GuidanceLogitsProcessor(
                     grammar, self._llguidance_tokenizer
@@ -1702,7 +1705,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if format:
             schema: dict[str, Any] = format.model_json_schema()
             grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
-                schema, defaults={"whitespace_flexible": False}
+                schema, overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS
             )
             logits_processor = _GuidanceLogitsProcessor(
                 grammar, self._llguidance_tokenizer
