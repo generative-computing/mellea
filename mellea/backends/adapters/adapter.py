@@ -366,11 +366,7 @@ def _run_adapter_phase(name: str, phase: str, phase_fn: Callable[[], None]) -> N
         name=name, phase=phase, duration_ms=(time.monotonic() - started_at) * 1000.0
     )
     hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
-    try:
-        _run_async_in_thread(hook_coro)
-    except BaseException:
-        hook_coro.close()
-        raise
+    _run_async_in_thread(hook_coro)
 
 
 def _fire_invocation_complete(
@@ -407,11 +403,7 @@ def _fire_invocation_complete(
         error=error,
     )
     hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_INVOCATION_COMPLETE, payload)
-    try:
-        _run_async_in_thread(hook_coro)
-    except BaseException:
-        hook_coro.close()
-        raise
+    _run_async_in_thread(hook_coro)
 
 
 # The full adapter-input surface `add_adapter` advertises. The legacy abc

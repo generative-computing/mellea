@@ -3,6 +3,7 @@
 
 import contextvars
 import multiprocessing
+from unittest import mock
 
 import pytest
 
@@ -80,6 +81,39 @@ def test_event_loop_handler_init_and_del():
 
     # Make sure this didn't delete the actual singleton.
     assert elh.__event_loop_handler is not None
+
+
+def test_run_async_in_thread_closes_coroutine_on_scheduling_failure():
+    """A failure before the coroutine is scheduled must close it, not leak it."""
+    closed = False
+
+    async def never_scheduled() -> None:
+        nonlocal closed
+        closed = True
+
+    co = never_scheduled()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with mock.patch.object(
+            elh, "get_current_event_loop", side_effect=RuntimeError("boom")
+        ):
+            elh._run_async_in_thread(co)
+
+    # A closed-but-never-started coroutine raises StopIteration internally,
+    # which close() swallows; the body (setting `closed`) never runs.
+    assert closed is False
+    with pytest.raises(RuntimeError):
+        co.send(None)
+
+
+def test_run_async_in_thread_reraises_coroutine_exception():
+    """Exceptions raised by the coroutine itself still propagate normally."""
+
+    async def boom() -> None:
+        raise ValueError("from inside the coroutine")
+
+    with pytest.raises(ValueError, match="from inside the coroutine"):
+        elh._run_async_in_thread(boom())
 
 
 def test_event_loop_handler_with_forking():

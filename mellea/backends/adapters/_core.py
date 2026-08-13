@@ -485,11 +485,7 @@ class LocalFileBinding(WeightsBinding):
             name=self.name, phase=phase, duration_ms=duration_s * 1000.0
         )
         hook_coro = invoke_hook(HookType.ADAPTER_FUNCTION_PHASE_COMPLETE, payload)
-        try:
-            _run_async_in_thread(hook_coro)
-        except BaseException:
-            hook_coro.close()
-            raise
+        _run_async_in_thread(hook_coro)
 
 
 class EmbeddedBinding(WeightsBinding):

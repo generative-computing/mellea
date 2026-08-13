@@ -78,20 +78,36 @@ class _EventLoopHandler:
         The caller's `contextvars` snapshot is applied inside the new Task so
         contextvar-backed state is visible to the coroutine. One-way:
         mutations inside the Task don't leak back.
+
+        `_reinit_if_forked`/`get_current_event_loop` run before the coroutine
+        is scheduled, so an exception there (or a failure to schedule) would
+        otherwise leave `co` unawaited and emit a "coroutine was never
+        awaited" warning on top of whatever raised. `co.close()` on any
+        exception path here is always safe: if scheduling never succeeded,
+        `co` hasn't started and closing it is a clean no-op; if `.result()`
+        raised instead, the future is only marked done after the scheduled
+        task has fully finished running `co`, so closing an already-completed
+        coroutine is also a no-op.
         """
-        self._reinit_if_forked()
-        if self._event_loop == get_current_event_loop():
-            # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
-            return _EventLoopHandler()(co)
+        try:
+            self._reinit_if_forked()
+            if self._event_loop == get_current_event_loop():
+                # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
+                return _EventLoopHandler()(co)
 
-        parent_ctx = contextvars.copy_context()
+            parent_ctx = contextvars.copy_context()
 
-        async def _wrapped() -> R:
-            for var, value in parent_ctx.items():
-                var.set(value)
-            return await co
+            async def _wrapped() -> R:
+                for var, value in parent_ctx.items():
+                    var.set(value)
+                return await co
 
-        return asyncio.run_coroutine_threadsafe(_wrapped(), self._event_loop).result()
+            return asyncio.run_coroutine_threadsafe(
+                _wrapped(), self._event_loop
+            ).result()
+        except BaseException:
+            co.close()
+            raise
 
 
 # Instantiate this class once. It will not be re-instantiated.
