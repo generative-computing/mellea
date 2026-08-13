@@ -56,7 +56,7 @@ EXPECTED_SUBCOMMANDS = {
     "alora": {"train", "upload", "add-readme"},
     "decompose": {"run"},
     "eval": {"run"},
-    "fix": {"async", "genslots"},
+    "fix": {"genslots"},
 }
 
 
@@ -142,7 +142,6 @@ def test_subcommands_in_output(generated_md):
     assert "### `m alora upload`" in generated_md
     assert "### `m decompose run`" in generated_md
     assert "### `m eval run`" in generated_md
-    assert "### `m fix async`" in generated_md
     assert "### `m fix genslots`" in generated_md
 
 
@@ -239,16 +238,13 @@ def test_no_mdx_or_framework_specific_syntax(generated_md):
 def test_verbatim_blocks_rendered(generated_md):
     """Click \\b verbatim blocks must appear in the generated docs.
 
-    `m fix async` and `m fix genslots` contain \\b-delimited sections
-    (Modes, Best practices, Detection notes, Rewrites) that are visible in
-    `--help` output.  These were previously silently dropped because they
-    appear after `Raises:` in the docstring, which the generator never
-    renders.  They should now appear correctly formatted.
+    `m fix genslots` contains \\b-delimited sections (Rewrites, Best
+    practices) that are visible in `--help` output.  These were previously
+    silently dropped because they appear after `Raises:` in the docstring,
+    which the generator never renders.  They should now appear correctly
+    formatted.
     """
-    assert "**Modes:**" in generated_md, "fix async Modes block missing"
-    assert "add-await-result" in generated_md, "fix async mode value missing"
     assert "**Best practices:**" in generated_md, "Best practices block missing"
-    assert "**Detection notes:**" in generated_md, "Detection notes block missing"
     assert "**Rewrites:**" in generated_md, "fix genslots Rewrites block missing"
     assert "GenerativeStub" in generated_md, "fix genslots rewrite target missing"
 
@@ -256,9 +252,9 @@ def test_verbatim_blocks_rendered(generated_md):
 def test_bullet_blocks_not_in_code_fence(generated_md):
     """Bullet-list \\b blocks must render as markdown lists, not code fences.
 
-    Best practices / Detection notes / Rewrites start with `- ` items and
-    should be plain markdown bullets so they render properly in the browser,
-    not as monospace preformatted blocks.
+    Rewrites / Best practices start with `- ` items and should be plain
+    markdown bullets so they render properly in the browser, not as
+    monospace preformatted blocks.
     """
     # Find the Best practices section and verify the bullet follows as plain text
     idx = generated_md.index("**Best practices:**")

@@ -23,6 +23,12 @@ Configuration via environment variables:
 - `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: Trace-specific OTLP endpoint (optional).
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: General OTLP endpoint (fallback).
 - `OTEL_SERVICE_NAME`: Service name for traces (default: `mellea`).
+
+Consumption boundary:
+    This is a public API for external consumers. Code outside
+    `mellea/telemetry/` opens spans via hook plugins (`tracing_plugins.py`), not
+    by calling these functions. Exceptions are limited to spans opened from sync
+    code, and are documented at their call site.
 """
 
 from __future__ import annotations

@@ -23,6 +23,7 @@ import binascii
 import datetime
 import enum
 import logging
+import os
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Iterable, Mapping
@@ -49,6 +50,7 @@ from PIL import Image as PILImage
 
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
+from .utils import _parse_bool_env
 
 
 class CBlock:
@@ -751,6 +753,9 @@ class _GenerationState:
         chunk_size: Minimum number of chunks to stream at a single time.
         first_chunk_received: Whether the first streamed chunk has arrived
             (gates time-to-first-byte recording).
+        processed_chunk_index: Monotonic index of the next streamed chunk to be
+            processed, incremented once per chunk folded into the value across the
+            repeated `astream()` calls of one generation.
         generate: The task driving generation. Linked to `generate_type`.
         generate_type: Determines which functions can resolve the thunk's value.
         generate_extra: Auxiliary generation task; currently only used by hf.
@@ -770,6 +775,7 @@ class _GenerationState:
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=20))
     chunk_size: int = 3
     first_chunk_received: bool = False
+    processed_chunk_index: int = 0
     generate: asyncio.Task[None] | None = None
     generate_type: GenerateType = GenerateType.NONE
     generate_extra: asyncio.Task[Any] | None = None
@@ -852,6 +858,16 @@ class ModelOutputThunk(Generic[S]):
                 datetime.datetime.now() - self._gen.start
             ).total_seconds() * 1000
             self._gen.first_chunk_received = True
+
+    async def _emit_event(self, event_name: str, **data: Any) -> None:
+        """Fire a `generation_event` hook named `event_name` carrying `data`, if any plugin subscribes."""
+        if has_plugins(HookType.GENERATION_EVENT):
+            from ..plugins.hooks.generation import GenerationEventPayload
+
+            event_payload = GenerationEventPayload(
+                generation_id=self._call.generation_id, event_name=event_name, data=data
+            )
+            await invoke_hook(HookType.GENERATION_EVENT, event_payload)
 
     async def cancel_generation(self, error: Exception | None = None) -> None:
         """Cancel an in-progress streaming generation, drain the queue, and fire the `generation_error` hook.
@@ -1153,9 +1169,20 @@ class ModelOutputThunk(Generic[S]):
 
             raise chunks[-1]
 
+        emit_chunk_events = self.generation.streaming and _parse_bool_env(
+            os.getenv("MELLEA_GENERATION_CHUNK_EVENTS", ""), default=False
+        )
         for chunk in chunks:
             assert self._gen.process is not None
+            prev_len = len(str(self._underlying_value or ""))
             await self._gen.process(self, chunk)
+            if emit_chunk_events:
+                await self._emit_event(
+                    "chunk_processed",
+                    chunk_index=self._gen.processed_chunk_index,
+                    chunk_text_length=len(str(self._underlying_value or "")) - prev_len,
+                )
+            self._gen.processed_chunk_index += 1
 
         if do_set_computed:
             assert self._underlying_value is not None
@@ -1322,12 +1349,73 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
     the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
 
+    The *computed invariant* is enforced on every assignment: the thunk can never be
+    mutated into an inconsistent state. Setting `_computed` to anything other than
+    `True` (it can never become uncomputed) or setting `_underlying_value`/`value` to
+    `None` or a non-`str` (the `.value -> str` contract must hold) raises `AttributeError`.
+    Invariant-*preserving* writes are allowed — a caller may replace the value with a
+    different computed string (see `mellea/stdlib/frameworks/react.py`, which swaps in a
+    tool's final answer) and a sampling strategy may finalize `parsed_repr`. This
+    guarantees `is_computed()` stays `True` and `.value` stays a non-`None` `str` for
+    the lifetime of the object.
+
+    Constructing without a `thunk` raises `TypeError` — the argument is mandatory.
+
     Args:
         thunk: A fully-computed `ModelOutputThunk` whose class will be reassigned.
     """
 
-    def __new__(cls, thunk: ModelOutputThunk[S]) -> ComputedModelOutputThunk[S]:
-        """Convert the ModelOutputThunk into a ComputedModelOutputThunk."""
+    # Fields guarded by the computed invariant. Each maps to a predicate a *new* value
+    # must satisfy; a rejected write raises AttributeError. The rule is "never made
+    # uncomputed or given an invalid value" — not "read-only": replacing the value with
+    # another valid computed string is allowed (react.py does this). `parsed_repr` is
+    # unguarded (a derived field finalized post-wrap). The guard is purely value-based,
+    # so it needs no "is-sealed" flag: at wrap time the base thunk is already computed
+    # with a str value, and the wrap itself writes no guarded field.
+    _INVARIANT_GUARDS: dict[str, Callable[[Any], bool]] = {
+        "_computed": lambda v: v is True,
+        "_underlying_value": lambda v: isinstance(v, str),
+    }
+
+    def __new__(
+        cls, thunk: ModelOutputThunk[S] | None = None
+    ) -> ComputedModelOutputThunk[S]:
+        """Convert a `ModelOutputThunk` into a `ComputedModelOutputThunk` via zero-copy reassignment.
+
+        The whole computed invariant is validated here, *before* the class reassignment,
+        so a rejected `thunk` is left untouched as the plain `ModelOutputThunk` the caller
+        passed in.
+
+        `thunk is None` allocates a bare instance. Pickling a `ModelOutputThunk` or a
+        `ComputedModelOutputThunk` is not supported today — a generated thunk's `_gen`
+        holds asyncio tasks and backend-bound callbacks that cannot be pickled — but
+        pickle reconstructs via `cls.__new__(cls)`, so keeping this branch means adding
+        pickle support to the base class later needs no change here. A genuine no-arg call
+        is caught in `__init__` (which pickle skips).
+
+        Raises:
+            TypeError: If `thunk` is neither `None` nor a `ModelOutputThunk`.
+            ValueError: If `thunk` is not computed or has a `None` value.
+        """
+        if thunk is None:
+            return object.__new__(cls)  # type: ignore[return-value]
+        if not isinstance(thunk, ModelOutputThunk):
+            raise TypeError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; "
+                f"got {type(thunk).__name__}."
+            )
+
+        # Validate before reassigning __class__ below. Reassigning first would leave a
+        # rejected thunk mutated into a ComputedModelOutputThunk whose is_computed()
+        # returns True while .value is None, and __setattr__ then blocks resetting
+        # _computed to repair it.
+        if not thunk._computed:
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+            )
+        if thunk.value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
         thunk.__class__ = cls
         return thunk  # type: ignore[return-value]
 
@@ -1336,14 +1424,59 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
         Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
         the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+        The computed invariant is validated in `__new__`, which runs first.
+
+        Raises:
+            TypeError: If constructed with no `thunk` (the argument is mandatory).
         """
-        # Call the underlying value. It's already been cast as a ComputedModelOutputThunk, so it's .is_computed() value is always True.
-        if not self._computed:
-            raise ValueError(
-                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+        # `thunk` is mandatory, so a no-arg call raises TypeError before reaching here.
+        # An explicit `None` still arrives, having taken the bare-allocation branch in
+        # __new__ that exists for pickle's reconstruction path; reject it.
+        if thunk is None:
+            raise TypeError(
+                "ComputedModelOutputThunk() requires a computed ModelOutputThunk; "
+                "construct one as ComputedModelOutputThunk(thunk)."
             )
-        if self.value is None:
-            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Enforce the computed invariant on every assignment.
+
+        A guarded field (see `_INVARIANT_GUARDS`) may be reassigned only to a value that
+        keeps the thunk computed and its `.value` a valid `str`; unguarded fields
+        (`parsed_repr`, `_cancelled`, ...) are unrestricted. The `value` property setter
+        also routes here.
+
+        Raises:
+            AttributeError: If the assignment would violate the computed invariant
+                (uncompute the thunk, or set the value to `None`/non-`str`).
+        """
+        guard = self._INVARIANT_GUARDS.get(name)
+        if guard is not None and not guard(value):
+            raise AttributeError(
+                "cannot assign to this ComputedModelOutputThunk: the assignment "
+                "would violate the computed invariant (it must stay computed with a "
+                f"non-None str value; got {value!r})."
+            )
+        super().__setattr__(name, value)
+
+    def __copy__(self) -> ComputedModelOutputThunk[S]:
+        """Shallow-copy, preserving the concrete computed subclass.
+
+        Delegates field copying to `ModelOutputThunk.__copy__`, then re-casts the
+        base-class result back to `type(self)` so the copy keeps its type and invariant
+        instead of silently demoting to the base class. Only the class is preserved: the
+        delegate builds a plain `ModelOutputThunk`, so a subclass that adds fields of its
+        own still needs to override this.
+        """
+        copied = super().__copy__()
+        copied.__class__ = type(self)
+        return copied  # type: ignore[return-value]
+
+    def __deepcopy__(self, memo: dict) -> ComputedModelOutputThunk[S]:
+        """Deep-copy, preserving the concrete computed subclass (see `__copy__`)."""
+        deepcopied = super().__deepcopy__(memo)
+        deepcopied.__class__ = type(self)
+        return deepcopied  # type: ignore[return-value]
 
     async def avalue(self) -> str:
         """Return the value of the thunk. Use .value instead.
@@ -1380,7 +1513,11 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
 
     @value.setter
     def value(self, v: str):
-        """Sets the value of the block."""
+        """Set the underlying value, enforcing the computed invariant.
+
+        Raises:
+            AttributeError: If `v` is not a `str`.
+        """
         self._underlying_value = v
 
     def is_computed(self) -> Literal[True]:

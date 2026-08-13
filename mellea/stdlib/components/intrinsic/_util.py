@@ -140,6 +140,35 @@ def _resolve_response(
     return _extract_last_response(context)
 
 
+def _assert_context_forwards_history(intrinsic_name: str, context: ChatContext) -> None:
+    """Guard against contexts that forward no history to the model.
+
+    Adapter functions evaluate over a conversation, so the context must
+    linearize to at least one message. A `SimpleContext` (the `start_session`
+    default) always drops history — its `view_for_generation()` returns `[]`
+    even after messages are added — which downstream causes an opaque
+    `IndexError` inside `apply_chat_template` (issue #937). Fail early here
+    with an actionable message instead.
+
+    Args:
+        intrinsic_name: Capability name, included in the error message.
+        context: The context that will be forwarded to the backend.
+
+    Raises:
+        ValueError: When `context.view_for_generation()` is empty or `None`.
+    """
+    if not context.view_for_generation():
+        raise ValueError(
+            f"Intrinsic '{intrinsic_name}' received a context that forwards no "
+            "history to the model. Adapter functions evaluate over a "
+            "conversation, so the context must contain at least one message. "
+            "This usually means a SimpleContext was passed (the default for "
+            "`start_session`), which does not retain history. Use a ChatContext "
+            'instead, e.g. `start_session(..., context_type="chat")` or '
+            '`start_backend(..., context_type="chat")`.'
+        )
+
+
 def call_intrinsic(
     intrinsic_name: str,
     context: ChatContext,
@@ -177,10 +206,14 @@ def call_intrinsic(
         dict[str, object]: Parsed (and optionally validated) JSON output from the adapter function.
 
     Raises:
-        ValueError: When the model output is `None` or is not valid JSON.
+        ValueError: When *context* forwards no history to the model (e.g. a
+            `SimpleContext` was passed), or when the model output is `None` or
+            is not valid JSON.
         AdapterSchemaMismatchError: When *io_contract* is provided and the
             model output is missing a required field.
     """
+    _assert_context_forwards_history(intrinsic_name, context)
+
     # Ensure the adapter is registered; resolve_adapter creates it if absent.
     backend.resolve_adapter(intrinsic_name)
 

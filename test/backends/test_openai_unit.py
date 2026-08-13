@@ -354,9 +354,13 @@ async def test_processing_reasoning_content_takes_precedence_over_reasoning(back
 
 
 def test_merge_user_extra_body_none_returns_base(backend):
-    """A missing user extra_body leaves the base untouched."""
+    """A missing user extra_body returns a dict equal to base (a copy, not same object)."""
     base = {"documents": ["d"]}
-    assert backend._merge_user_extra_body(base, None) is base
+    result = backend._merge_user_extra_body(base, None)
+    assert result == {"documents": ["d"]}
+    assert (
+        result is not base
+    )  # always returns a new dict so default_extra_body can be layered
 
 
 def test_merge_user_extra_body_user_keys_win(backend):
@@ -545,6 +549,131 @@ async def test_format_assumption_not_relogged_per_generation():
 
     msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
     assert [m for m in msgs if _FORMAT_ASSUMPTION in m] == []
+
+
+def test_default_extra_body_applied_when_no_per_call_override():
+    """Construction-time default_extra_body is present in every merged result."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"enable_thinking": False},
+    )
+    merged = backend._merge_user_extra_body({}, None)
+    assert merged["enable_thinking"] is False
+
+
+def test_default_extra_body_overridden_by_per_call():
+    """Per-call model_options take priority over construction-time defaults."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"enable_thinking": False},
+    )
+    merged = backend._merge_user_extra_body({}, {"enable_thinking": True})
+    assert merged["enable_thinking"] is True
+
+
+def test_default_extra_body_chat_template_kwargs_deep_merged():
+    """chat_template_kwargs from default and per-call are merged key-by-key."""
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "foo"}}, None
+    )
+    assert merged["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "adapter_name": "foo",
+    }
+
+
+def test_default_extra_body_does_not_mutate_constructor_arg():
+    """The dict passed as default_extra_body is not mutated by merge operations."""
+    defaults = {"chat_template_kwargs": {"enable_thinking": True}}
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body=defaults,
+    )
+    backend._merge_user_extra_body({"other_key": "val"}, {"another": "val2"})
+    assert defaults == {"chat_template_kwargs": {"enable_thinking": True}}
+
+
+def test_default_extra_body_chat_template_kwargs_three_way_merge():
+    """default_extra_body, base, and per-call user all contribute simultaneously.
+
+    Each layer sets a distinct chat_template_kwargs key (mirroring a real call:
+    a construction-time thinking default, Mellea's own adapter-activation write,
+    and a per-call override for something else) — all three must survive.
+    """
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    merged = backend._merge_user_extra_body(
+        {"chat_template_kwargs": {"adapter_name": "answerability"}},
+        {"chat_template_kwargs": {"thinking_budget": 5000}},
+    )
+    assert merged["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "adapter_name": "answerability",
+        "thinking_budget": 5000,
+    }
+
+
+async def test_standard_chat_path_applies_default_extra_body_without_per_call_override():
+    """Regression test for #1453: the standard chat path must not silently
+    drop `default_extra_body` when the caller passes no per-call `extra_body`.
+
+    `_generate_from_chat_context_standard` used to call `_merge_user_extra_body`
+    only when `model_options` carried a per-call `extra_body` override, so a
+    construction-time `default_extra_body` never reached the wire on an
+    ordinary call — defeating the "set once at construction" point of the
+    feature.
+    """
+    from mellea.core.base import CBlock
+    from mellea.stdlib.context import ChatContext
+
+    backend = OpenAIBackend(
+        model_id="gpt-4o",
+        base_url="http://localhost:9999/v1",
+        api_key="test-key",
+        default_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = ChatCompletion(
+            id="test",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="gpt-4o",
+            object="chat.completion",
+        )
+        mot, _ = await backend.generate_from_chat_context(
+            CBlock(value="hello"),
+            ChatContext(),
+            model_options={ModelOption.STREAM: False},
+        )
+        await mot.avalue()
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
 
 
 if __name__ == "__main__":

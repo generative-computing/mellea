@@ -1,9 +1,9 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for _build_model_options function."""
+"""Unit tests for _build_model_options and _build_client_options functions."""
 
-from cli.serve.app import _build_model_options
+from cli.serve.app import _build_client_options, _build_model_options
 from cli.serve.models import ChatCompletionRequest, ChatMessage
 from mellea.backends.model_options import ModelOption
 
@@ -109,3 +109,79 @@ class TestBuildModelOptions:
         options = _build_model_options(request)
         assert "requirements" not in options
         assert ModelOption.TEMPERATURE in options
+
+
+class TestBuildClientOptions:
+    """Unit tests for _build_client_options."""
+
+    def test_includes_model_field(self):
+        """model is present in client_options (it is excluded from model_options)."""
+        request = ChatCompletionRequest(
+            model="granite4.1:8b", messages=[ChatMessage(role="user", content="hi")]
+        )
+        options = _build_client_options(request)
+        assert options["model"] == "granite4.1:8b"
+
+    def test_includes_user_field(self):
+        """user tracking field is present in client_options."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="hi")],
+            user="user-123",
+        )
+        options = _build_client_options(request)
+        assert options["user"] == "user-123"
+
+    def test_includes_generation_params(self):
+        """Generation params (temperature, max_tokens) are also present."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="hi")],
+            temperature=0.5,
+            max_tokens=200,
+        )
+        options = _build_client_options(request)
+        assert options["temperature"] == 0.5
+        assert options["max_tokens"] == 200
+
+    def test_excludes_none_values(self):
+        """None fields are excluded (exclude_none=True)."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="hi")],
+            max_tokens=None,
+            user=None,
+        )
+        options = _build_client_options(request)
+        assert "max_tokens" not in options
+        assert "user" not in options
+
+    def test_model_absent_from_model_options_but_present_in_client_options(self):
+        """model is stripped from model_options but preserved in client_options."""
+        request = ChatCompletionRequest(
+            model="granite4.1:8b",
+            messages=[ChatMessage(role="user", content="hi")],
+            temperature=0.7,
+        )
+        model_opts = _build_model_options(request)
+        client_opts = _build_client_options(request)
+        assert "model" not in model_opts
+        assert client_opts["model"] == "granite4.1:8b"
+
+    def test_extra_fields_allowed_and_passed_through(self):
+        """Extra fields not defined on the schema are allowed and passed through."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="hi")],
+            custom_backend_param="some-value",
+        )
+        # Extra fields are allowed in ChatCompletionRequest
+        assert getattr(request, "custom_backend_param", None) == "some-value"
+
+        # Extra fields are included in client_options
+        client_opts = _build_client_options(request)
+        assert client_opts.get("custom_backend_param") == "some-value"
+
+        # Extra fields are also forwarded as potential model_options
+        model_opts = _build_model_options(request)
+        assert model_opts.get("custom_backend_param") == "some-value"

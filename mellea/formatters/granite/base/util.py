@@ -20,6 +20,7 @@ from ....core.utils import MelleaLogger
 if TYPE_CHECKING:
     import llguidance
     import torch
+    from llguidance._lib import JsonCompileOptions
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
@@ -27,6 +28,16 @@ from .optional import import_optional
 from .types import ChatCompletionResponse, ChatCompletionResponseChoice
 
 __all__ = ["import_optional"]
+
+# A bounded whitespace_pattern (allowing 0 to 20 consecutive whitespace characters)
+# is used as an intermediate fix (addressing PR #1513 feedback from Jake LoRocco).
+# This allows natural, spaced JSON (preventing the silent array collapse bug characterized
+# in issue #1510) while comfortably accommodating 4-space indentation up to 4 levels of
+# nesting (which requires 17 contiguous characters: \n + 16 spaces), while still setting
+# an absolute hard ceiling to completely prevent unlimited/runaway whitespace loops.
+_LLGUIDANCE_GRAMMAR_DEFAULTS: JsonCompileOptions = {
+    "whitespace_pattern": r"[\x20\x0A\x0D\x09]{0,20}"
+}
 
 
 def random_uuid() -> str:
@@ -296,7 +307,11 @@ def chat_completion_request_to_transformers_inputs(
             ll_tokenizer = llguidance.hf.from_tokenizer(tokenizer, n_vocab=n_vocab)  # type: ignore[arg-type]
 
         grammar = llguidance.LLMatcher.grammar_from_json_schema(
-            request["extra_body"]["structured_outputs"]["json"]
+            request["extra_body"]["structured_outputs"]["json"],
+            # This schema comes directly off the wire, so a caller could embed
+            # their own `x-guidance.whitespace_flexible: false` and defeat a
+            # `defaults=` pass. `overrides=` cannot be defeated this way.
+            overrides=_LLGUIDANCE_GRAMMAR_DEFAULTS,
         )
         logits_processor = _GuidanceLogitsProcessor(grammar, ll_tokenizer)
 

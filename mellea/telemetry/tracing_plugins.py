@@ -7,7 +7,8 @@ This module contains plugins that hook into the generation and component
 pipelines to automatically emit spans when tracing is enabled:
 
 - BackendTracingPlugin: Emits Gen-AI semconv backend spans for every LLM
-  generation, on both chat and raw (batch) paths.
+  generation, on both chat and raw (batch) paths, plus mid-generation span
+  events from the generation_event hook.
 - ComponentTracingPlugin: Emits application-level spans tracking component
   execution.
 - StreamingTracingPlugin: Emits an application-level orchestration span and
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
         GenerationBatchPostCallPayload,
         GenerationBatchPreCallPayload,
         GenerationErrorPayload,
+        GenerationEventPayload,
         GenerationPostCallPayload,
         GenerationPreCallPayload,
     )
@@ -73,10 +75,13 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
     This plugin hooks into the generation pre-call, post-call, and error
     events on both the chat and raw (batch) paths to automatically emit one
     span per LLM call. Spans are started on pre-call and ended on post-call
-    or error, correlated across hooks via generation_id.
+    or error, correlated across hooks via generation_id. It also records
+    mid-generation span events from the `generation_event` hook onto the
+    in-flight span.
 
     All hooks run SEQUENTIAL so the OTel context token attached in pre-call
-    can be detached on the same task in post-call / error.
+    can be detached on the same task in post-call / error, and so
+    `generation_event` appends to the span before post-call ends it.
     """
 
     # --- Chat hooks ---
@@ -136,6 +141,27 @@ class BackendTracingPlugin(Plugin, name="backend_tracing", priority=1040):
             exception=payload.exception,
             gen=gen,
         )
+
+    @hook("generation_event")
+    async def on_generation_event(
+        self, payload: GenerationEventPayload, context: dict[str, Any]
+    ) -> None:
+        """Record a span event on the in-flight backend span for one `generation_event`."""
+        if not payload.generation_id:
+            return
+        from mellea.telemetry.tracing import add_span_event
+
+        if payload.event_name == "chunk_processed":
+            add_span_event(
+                payload.generation_id,
+                event_name="chunk_processed",
+                attributes={
+                    "mellea.generation.chunk_index": payload.data.get("chunk_index"),
+                    "mellea.generation.chunk_text_length": payload.data.get(
+                        "chunk_text_length"
+                    ),
+                },
+            )
 
     # --- Batch hooks ---
 
@@ -355,34 +381,44 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
                 payload.streaming_id,
                 event_name="quick_check",
                 attributes={
-                    "chunk_index": ev.chunk_index,
-                    "passed": ev.passed,
-                    "requirement_count": len(ev.results),
+                    "mellea.streaming.chunk_index": ev.chunk_index,
+                    "mellea.validation.passed": ev.passed,
+                    "mellea.validation.requirement_count": len(ev.results),
                 },
             )
         elif isinstance(ev, ChunkEvent):
             add_span_event(
                 payload.streaming_id,
                 event_name="chunk",
-                attributes={"chunk_index": ev.chunk_index, "text_length": len(ev.text)},
+                attributes={
+                    "mellea.streaming.chunk_index": ev.chunk_index,
+                    "mellea.streaming.chunk_text_length": len(ev.text),
+                },
             )
         elif isinstance(ev, StreamingDoneEvent):
             add_span_event(
                 payload.streaming_id,
                 event_name="streaming_done",
-                attributes={"full_text_length": len(ev.full_text)},
+                attributes={"mellea.streaming.full_text_length": len(ev.full_text)},
             )
         elif isinstance(ev, FullValidationEvent):
             add_span_event(
                 payload.streaming_id,
                 event_name="full_validation",
-                attributes={"passed": ev.passed, "requirement_count": len(ev.results)},
+                attributes={
+                    "mellea.validation.passed": ev.passed,
+                    "mellea.validation.requirement_count": len(ev.results),
+                },
             )
         elif isinstance(ev, ErrorEvent):
+            # Not OTel's reserved `exception.*`: `detail` isn't always the plain message.
             add_span_event(
                 payload.streaming_id,
                 event_name="error",
-                attributes={"exception_type": ev.exception_type, "detail": ev.detail},
+                attributes={
+                    "mellea.error.type": ev.exception_type,
+                    "mellea.error.detail": ev.detail,
+                },
             )
 
     @hook("streaming_end")
@@ -398,8 +434,8 @@ class StreamingTracingPlugin(Plugin, name="streaming_tracing", priority=1042):
             payload.streaming_id,
             event_name="completed",
             attributes={
-                "success": payload.success,
-                "full_text_length": payload.full_text_length,
+                "mellea.streaming.success": payload.success,
+                "mellea.streaming.full_text_length": payload.full_text_length,
             },
         )
         finish_streaming_span(
@@ -508,10 +544,10 @@ class SamplingTracingPlugin(Plugin, name="sampling_tracing", priority=1044):
             payload.sampling_id,
             event_name="iteration",
             attributes={
-                "iteration": payload.iteration,
-                "all_validations_passed": payload.all_validations_passed,
-                "valid_count": payload.valid_count,
-                "total_count": payload.total_count,
+                "mellea.sampling.iteration": payload.iteration,
+                "mellea.sampling.all_validations_passed": payload.all_validations_passed,
+                "mellea.validation.valid_count": payload.valid_count,
+                "mellea.validation.requirement_count": payload.total_count,
             },
         )
 
@@ -528,9 +564,9 @@ class SamplingTracingPlugin(Plugin, name="sampling_tracing", priority=1044):
             payload.sampling_id,
             event_name="repair",
             attributes={
-                "repair_iteration": payload.repair_iteration,
-                "repair_type": payload.repair_type,
-                "failed_count": len(payload.failed_validations),
+                "mellea.sampling.repair_iteration": payload.repair_iteration,
+                "mellea.sampling.repair_type": payload.repair_type,
+                "mellea.validation.failed_count": len(payload.failed_validations),
             },
         )
 

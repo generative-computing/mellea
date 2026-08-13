@@ -91,6 +91,14 @@ hardware. See the aLoRA guide for training and usage.
 > serve pre-embedded adapters via vLLM and the OpenAI backend. See
 > [Adapter functions](../advanced/intrinsics.md) for details.
 
+## Constrained decoding
+
+`LocalHFBackend` enforces `format=` schemas (see [Enforce Structured Output](../how-to/enforce-structured-output.md))
+via [llguidance](https://github.com/guidance-ai/llguidance). The grammar is built with
+a bounded `whitespace_pattern` (`r"[\x20\x0A\x0D\x09]{0,20}"`), which permits natural, spaced, and pretty-printed JSON (up to 4 levels of standard 4-space indentation) while setting a hard upper limit of 20 consecutive whitespace characters to prevent runaway token generation or infinite loops.
+
+In testing, spaced JSON used roughly 1.5x more tokens than compact JSON for the same content — size `ModelOption.MAX_NEW_TOKENS` accordingly if you set it explicitly. Generation that runs to EOS still completes, but consumes proportionally more tokens getting there.
+
 ## Vision support
 
 Vision support for `LocalHFBackend` is model-dependent and experimental. Pass a PIL

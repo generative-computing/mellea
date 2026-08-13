@@ -11,19 +11,55 @@ must not collapse to `{"type": "string"}`. The schema produced by
 be preserved and the OAS-3 `discriminator` keyword must be stripped from
 the output (the JSON Schema subset accepted by tool-calling APIs does not
 include it; the `Literal` tag fields carry the discriminator signal).
+
+Also covers `convert_function_to_ollama_tool`'s handling of postponed
+annotations (`from __future__ import annotations`, PEP 563): non-builtin
+parameter types must resolve to real type objects for Pydantic schema
+building, while a return annotation that is unresolvable at call time (e.g.
+`TYPE_CHECKING`-only imports) must not break the conversion, since the
+produced schema never consumes it.
 """
 
+import functools
+import inspect
 import json
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, PydanticUserError, ValidationError
 
 from mellea.backends.tools import (
     MelleaTool,
     convert_function_to_ollama_tool,
     validate_tool_arguments,
 )
+from test.backends._postponed_annotation_samples import (
+    Address,
+    Period,
+    Zone as samples_zone,
+    send_letter,
+    tc_only_return_builtin_param,
+    tc_return_custom_param,
+    tc_return_region,
+    tc_return_unannotated_param,
+    tc_return_zone,
+    unresolvable_param,
+)
+
+
+@dataclass
+class Zone:
+    """Deliberately shadows `Zone` in `_postponed_annotation_samples`.
+
+    Binding this name in the test module's globals is what makes
+    `test_decorated_tool_resolves_colliding_type_name` meaningful: a wrapper
+    defined here resolves against these globals under the buggy behaviour, so
+    the wrong `Zone` is found and no error is raised. The field name differs
+    from the real one so the resulting schema is distinguishable.
+    """
+
+    wrong_field: int
 
 
 class Cat(BaseModel):
@@ -704,6 +740,171 @@ class TestNestedDiscriminatedUnions:
         validate_tool_arguments(
             mt, {"param": {"l1_type": "b", "name": "direct"}}, strict=True
         )
+
+
+class TestPostponedAnnotations:
+    """Postponed annotation (PEP 563) resolution in generated tool schemas."""
+
+    def test_resolves_postponed_parameter_annotation(self):
+        # Regression test: under `from __future__ import annotations`, a
+        # non-builtin parameter type's annotation is a string rather than the
+        # real type object, which Pydantic cannot resolve when building the
+        # dynamic schema model - raising PydanticUserError instead of producing
+        # a tool schema.
+
+        # Guard the precondition: if the sample module ever drops its
+        # `from __future__ import annotations`, this test would otherwise keep
+        # passing without exercising postponed annotations at all.
+        assert send_letter.__annotations__["to"] == "Address"
+
+        tool = convert_function_to_ollama_tool(send_letter)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["to"]["type"] == "object"
+        assert props["to"]["title"] == Address.__name__
+        assert props["to"]["properties"]["city"]["type"] == "string"
+
+    def test_type_checking_only_return_with_builtin_params(self):
+        """TYPE_CHECKING-only return + builtin params must produce schema."""
+        # Guard the precondition: without this, a resolved `Decimal` return
+        # annotation would make the test pass trivially, without exercising
+        # the unresolvable-return fallback at all.
+        assert tc_only_return_builtin_param.__annotations__["return"] == "Decimal"
+        # A postponed string is necessary but not sufficient: if `Decimal` ever
+        # moves out of the sample module's `if TYPE_CHECKING:` block, the string
+        # would still be postponed but `eval_str=True` would resolve it and the
+        # fallback would never be taken.
+        with pytest.raises(NameError):
+            inspect.signature(tc_only_return_builtin_param, eval_str=True)
+
+        tool = convert_function_to_ollama_tool(tc_only_return_builtin_param)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert "query" in props
+
+    def test_type_checking_only_return_with_custom_param(self):
+        """TYPE_CHECKING return + custom param must resolve param.
+
+        This is the case that separates the try/except-around-`eval_str=True`
+        fallback (which discards parameter resolution entirely on any
+        failure) from per-parameter resolution: the return annotation is
+        unresolvable, but the custom parameter type still must resolve.
+        """
+        # Guard the precondition: both must still be postponed strings, or
+        # this test stops exercising the per-parameter resolution path.
+        assert tc_return_custom_param.__annotations__["return"] == "Decimal"
+        assert tc_return_custom_param.__annotations__["period"] == "Period"
+        # And, as above, the fallback must be the path under test rather than
+        # `eval_str=True` succeeding outright.
+        with pytest.raises(NameError):
+            inspect.signature(tc_return_custom_param, eval_str=True)
+
+        tool = convert_function_to_ollama_tool(tc_return_custom_param)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["period"]["type"] == "object"
+        assert props["period"]["title"] == Period.__name__
+
+    def test_unannotated_parameter_passes_through_fallback(self):
+        """A bare parameter must survive the per-parameter loop untouched.
+
+        In the fallback path an unannotated parameter is `inspect._empty`, not a
+        string, so it takes the branch that skips resolution. It should still
+        reach the schema, defaulting to `str` as it does on the normal path.
+        """
+        # Guard the precondition: the fallback must be the path under test.
+        with pytest.raises(NameError):
+            inspect.signature(tc_return_unannotated_param, eval_str=True)
+
+        tool = convert_function_to_ollama_tool(tc_return_unannotated_param)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["flag"]["type"] == "string"
+        assert props["period"]["type"] == "object"
+        assert props["period"]["title"] == Period.__name__
+
+    def test_unresolvable_parameter_annotation_raises(self):
+        """Genuinely unresolvable parameter must still raise PydanticUserError.
+
+        Confirms the documented degradation: unresolvable param annotations
+        surface as `PydanticUserError`, not `NameError`.
+        """
+        # Guard the precondition: if this were ever resolved, the test would
+        # pass without exercising the unresolvable-parameter fallback.
+        assert unresolvable_param.__annotations__["query"] == "NonExistentType"
+
+        with pytest.raises(PydanticUserError, match="NonExistentType"):
+            convert_function_to_ollama_tool(unresolvable_param)
+
+    def test_decorated_tool_resolves_in_wrapped_functions_module(self):
+        """A `functools.wraps` wrapper must not shift the resolution namespace.
+
+        `inspect.signature` follows `__wrapped__`, so the annotations being
+        resolved belong to the wrapped function's module. Resolving them
+        against the decorator's module instead finds the wrong type, or none
+        at all - and the failure is silent, producing a wrong tool schema
+        rather than an error.
+        """
+
+        # The wrapper must be defined here, not in the sample module: its
+        # `__globals__` is the namespace the buggy code would have used, and it
+        # has to be one that lacks `Region`. Moving it beside `tc_return_region`
+        # would make the test pass either way.
+        @functools.wraps(tc_return_region)
+        def wrapper(*args, **kwargs):
+            return tc_return_region(*args, **kwargs)
+
+        # This module deliberately does not import `Region`, so resolving
+        # against this module's namespace cannot find it. That is what makes
+        # the assertion below meaningful.
+        assert "Region" not in globals()
+
+        tool = convert_function_to_ollama_tool(wrapper)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["region"]["type"] == "object"
+        assert props["region"]["title"] == "Region"
+        assert props["region"]["properties"]["code"]["type"] == "string"
+
+    def test_decorated_tool_resolves_colliding_type_name(self):
+        """A colliding type name must resolve to the wrapped function's type.
+
+        The sibling test above covers a name *absent* from the decorator's
+        module, which degrades loudly to `PydanticUserError`. This covers the
+        worse case: the name exists in the decorator's module but refers to a
+        different type, so resolving in the wrong namespace succeeds and emits
+        a plausible-looking schema for entirely the wrong type.
+        """
+
+        # Defined here, so this module's globals - which bind `Zone` to the
+        # shadowing class above - are what the buggy path would resolve against.
+        @functools.wraps(tc_return_zone)
+        def wrapper(*args, **kwargs):
+            return tc_return_zone(*args, **kwargs)
+
+        # Guard the preconditions: the annotation must still be postponed, the
+        # fallback must be the path under test, and the two `Zone` classes must
+        # genuinely differ - otherwise the assertions below prove nothing.
+        assert tc_return_zone.__annotations__["zone"] == "Zone"
+        with pytest.raises(NameError):
+            inspect.signature(wrapper, eval_str=True)
+        assert globals()["Zone"] is not samples_zone
+        assert "wrong_field" in globals()["Zone"].__dataclass_fields__
+
+        tool = convert_function_to_ollama_tool(wrapper)
+        assert tool.function is not None
+        assert tool.function.parameters is not None
+        props = tool.function.parameters.model_dump(exclude_none=True)["properties"]
+        assert props["zone"]["properties"] == {
+            "identifier": {"title": "Identifier", "type": "string"}
+        }
+        assert "wrong_field" not in props["zone"]["properties"]
 
 
 if __name__ == "__main__":

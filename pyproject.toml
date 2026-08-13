@@ -26,7 +26,7 @@ dependencies = [
     "mistletoe>=1.4.0",
     "pillow>=12.0.0", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
-    "nltk>=3.9", # Needed for sentence tokenization in granite citation parsing.
+    "nltk>=3.9,!=3.10.1", # Needed for sentence tokenization in granite citation parsing.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "PyYAML", # Needed for backends/adapters and granite formatters.
     "packaging", # Needed for server type helpers.

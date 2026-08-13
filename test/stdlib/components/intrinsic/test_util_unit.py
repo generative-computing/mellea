@@ -11,9 +11,13 @@ discarded behind a hardcoded default) resurfacing.
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
 from mellea.backends.model_options import ModelOption
+from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import _util
 from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context.simple import SimpleContext
 
 
 def _fake_act_capturing(calls):
@@ -33,7 +37,7 @@ def test_call_intrinsic_caller_model_options_survive(monkeypatch):
     monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
 
     backend = MagicMock()
-    context = ChatContext()
+    context = ChatContext().add(Message("user", "hi"))
 
     _util.call_intrinsic(
         "answerability", context, backend, model_options={ModelOption.TEMPERATURE: 0.7}
@@ -51,7 +55,7 @@ def test_call_intrinsic_default_temperature_used_when_not_overridden(monkeypatch
     monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
 
     backend = MagicMock()
-    context = ChatContext()
+    context = ChatContext().add(Message("user", "hi"))
 
     _util.call_intrinsic("answerability", context, backend)
 
@@ -67,8 +71,39 @@ def test_call_intrinsic_resolves_adapter_before_acting(monkeypatch):
     monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
 
     backend = MagicMock()
-    context = ChatContext()
+    context = ChatContext().add(Message("user", "hi"))
 
     _util.call_intrinsic("answerability", context, backend)
 
     backend.resolve_adapter.assert_called_once_with("answerability")
+
+
+def test_call_intrinsic_rejects_context_with_no_history(monkeypatch):
+    """A SimpleContext forwards no history, so call_intrinsic must fail early (issue #937)."""
+    calls: list[dict | None] = []
+    monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
+
+    backend = MagicMock()
+    # SimpleContext.view_for_generation() is always [] even after add().
+    context = SimpleContext().add(Message("user", "hi"))
+
+    with pytest.raises(ValueError, match="forwards no history"):
+        _util.call_intrinsic("answerability", context, backend)
+
+    # The guard must fire before the backend is touched.
+    backend.resolve_adapter.assert_not_called()
+    assert calls == []
+
+
+def test_call_intrinsic_rejects_empty_chat_context(monkeypatch):
+    """An empty ChatContext also forwards nothing and must be rejected."""
+    calls: list[dict | None] = []
+    monkeypatch.setattr(_util.mfuncs, "act", _fake_act_capturing(calls))
+
+    backend = MagicMock()
+
+    with pytest.raises(ValueError, match="forwards no history"):
+        _util.call_intrinsic("answerability", ChatContext(), backend)
+
+    backend.resolve_adapter.assert_not_called()
+    assert calls == []

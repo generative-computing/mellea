@@ -13,7 +13,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from cli.decompose.decompose import DecompVersion, reorder_subtasks, run
+from cli.decompose.decompose import DecompVersion, run
 from cli.decompose.logging import LogMode
 from cli.decompose.pipeline import ConstraintResult, DecompBackend, DecompPipelineResult
 
@@ -129,9 +129,7 @@ class TestRunSuccess:
             captured.update(kwargs)
             return make_decomp_result()
 
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", fake_decompose
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
 
         run(out_dir=tmp_path, out_name="default_case", input_file=input_file)
 
@@ -154,9 +152,7 @@ class TestRunSuccess:
             captured.update(kwargs)
             return make_decomp_result()
 
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", fake_decompose
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
 
         run(
             out_dir=tmp_path,
@@ -191,9 +187,7 @@ class TestRunSuccess:
             captured.update(kwargs)
             return make_decomp_result()
 
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", fake_decompose
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
         monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "A\\nB")
 
         run(
@@ -231,8 +225,7 @@ class TestRunSuccess:
             "cli.decompose.decompose.FileSystemLoader", lambda *args, **kwargs: None
         )
         monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose",
-            lambda **kwargs: make_decomp_result(),
+            "cli.decompose.pipeline.decompose", lambda **kwargs: make_decomp_result()
         )
 
         run(
@@ -256,8 +249,7 @@ class TestRunSuccess:
         input_file = write_input_file(tmp_path, "Generate subtasks.")
 
         monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose",
-            lambda **kwargs: make_decomp_result(),
+            "cli.decompose.pipeline.decompose", lambda **kwargs: make_decomp_result()
         )
 
         run(out_dir=tmp_path, out_name="ok_case", input_file=input_file)
@@ -281,7 +273,7 @@ class TestRunSuccess:
         input_file = write_input_file(tmp_path, "Generate JSON.")
 
         monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose",
+            "cli.decompose.pipeline.decompose",
             lambda **kwargs: make_decomp_result(with_code_validation=True),
         )
 
@@ -314,9 +306,7 @@ class TestRunSuccess:
             calls.append(kwargs["task_prompt"])
             return make_decomp_result()
 
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", fake_decompose
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
 
         run(out_dir=tmp_path, out_name="batch", input_file=input_file)
 
@@ -340,8 +330,7 @@ class TestRunFailures:
         input_file = write_input_file(tmp_path, "fail")
 
         monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose",
-            lambda **kwargs: make_decomp_result(),
+            "cli.decompose.pipeline.decompose", lambda **kwargs: make_decomp_result()
         )
 
         original_mkdir = Path.mkdir
@@ -372,9 +361,7 @@ class TestRunFailures:
         def raise_inference_error(**kwargs: Any) -> DecompPipelineResult:
             raise RuntimeError("inference error")
 
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", raise_inference_error
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", raise_inference_error)
 
         with pytest.raises(RuntimeError, match="inference error"):
             run(out_dir=tmp_path, out_name="err_case", input_file=input_file)
@@ -393,9 +380,7 @@ class TestRunFailures:
         input_file = write_input_file(tmp_path, "Test prompt")
 
         decompose_mock = Mock(return_value=make_decomp_result())
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", decompose_mock
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", decompose_mock)
 
         missing_dir = tmp_path / "does_not_exist"
 
@@ -418,9 +403,7 @@ class TestRunFailures:
         input_file = write_input_file(tmp_path, "\n \n\t\n")
 
         decompose_mock = Mock(return_value=make_decomp_result())
-        monkeypatch.setattr(
-            "cli.decompose.decompose.pipeline.decompose", decompose_mock
-        )
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", decompose_mock)
 
         with pytest.raises(
             ValueError, match="Input file contains no non-empty task lines"
