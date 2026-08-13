@@ -1055,11 +1055,11 @@ async def test_generate_from_raw_raw_response_set_per_mot():
         assert result.raw.response.sequences.shape == (1, full_seq_len), (
             f"item {item_idx}: sequences shape must be (1, {full_seq_len})"
         )
-        # View — must share the same underlying storage as the original batch tensor.
+        # Clone - must NOT share storage with the original batch tensor.
         assert (
             result.raw.response.sequences.untyped_storage().data_ptr()
-            == sequences.untyped_storage().data_ptr()
-        ), f"item {item_idx}: sequences must be a view, not a clone"
+            != sequences.untyped_storage().data_ptr()
+        ), f"item {item_idx}: sequences must be a clone, not a view"
         assert result.raw.response.past_key_values is None, (
             f"item {item_idx}: past_key_values must be None"
         )
@@ -1123,11 +1123,11 @@ async def test_generate_from_raw_raw_response_scores_are_views_when_logits_reque
             assert t.shape == (1, vocab_size), (
                 f"item {item_idx} token {tok_idx}: shape must be (1, vocab_size)"
             )
-            # View — must share storage with the original batch step tensor.
+            # Clone - must NOT share storage with the original batch step tensor.
             assert (
                 t.untyped_storage().data_ptr()
-                == fake_scores[tok_idx].untyped_storage().data_ptr()
-            ), f"item {item_idx} token {tok_idx}: raw.response.scores must be a view"
+                != fake_scores[tok_idx].untyped_storage().data_ptr()
+            ), f"item {item_idx} token {tok_idx}: raw.response.scores must be a clone"
 
 
 @pytest.mark.asyncio

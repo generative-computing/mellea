@@ -1763,36 +1763,41 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result.generation.provider = self._provider
             result.raw.provider = self._provider
 
-            # Construct a per-MOT GenerateDecoderOnlyOutput slice using tensor views
-            # past_key_values, attentions, and hidden_states are omitted
-            mot_sequences = cast(
-                "torch.LongTensor",
-                outputs.sequences[i : i + 1, :]
-                if isinstance(outputs.sequences, torch.Tensor)
-                else None,
-            )
-            mot_scores: tuple | None = None
-            if outputs.scores is not None:
-                mot_scores = tuple(s[i : i + 1, :] for s in outputs.scores)
-            mot_logits_raw: tuple | None = None
-            if outputs.logits is not None:
-                mot_logits_raw = tuple(s[i : i + 1, :] for s in outputs.logits)
+            # Construct a per-MOT GenerateDecoderOnlyOutput slice holding clones of row i.
+            # past_key_values, attentions, and hidden_states are shared across the batch
+            # and cannot be sliced per MOT, so they are omitted.
+            if isinstance(outputs.sequences, torch.Tensor):
+                mot_scores: tuple[torch.Tensor, ...] | None = None
+                if outputs.scores is not None:
+                    mot_scores = tuple(
+                        s[i : i + 1, :].detach().clone() for s in outputs.scores
+                    )
+                mot_logits_raw: tuple[torch.Tensor, ...] | None = None
+                if outputs.logits is not None:
+                    mot_logits_raw = tuple(
+                        step_logits[i : i + 1, :].detach().clone()
+                        for step_logits in outputs.logits
+                    )
 
-            if "raw_batch_response_fields_omitted" not in self._warned_about:
-                self._warned_about.add("raw_batch_response_fields_omitted")
-                MelleaLogger.get_logger().debug(
-                    "mot.raw.response.past_key_values, .attentions, and .hidden_states "
-                    "are not available on the raw batch path and will always be None."
+                if "raw_batch_response_fields_omitted" not in self._warned_about:
+                    self._warned_about.add("raw_batch_response_fields_omitted")
+                    MelleaLogger.get_logger().debug(
+                        "mot.raw.response.past_key_values, .attentions, and "
+                        ".hidden_states are not available on the raw batch path "
+                        "and will always be None."
+                    )
+
+                result.raw.response = GenerateDecoderOnlyOutput(
+                    sequences=cast(
+                        "torch.LongTensor",
+                        outputs.sequences[i : i + 1, :].detach().clone(),
+                    ),
+                    scores=mot_scores,
+                    logits=mot_logits_raw,
+                    attentions=None,
+                    hidden_states=None,
+                    past_key_values=None,
                 )
-
-            result.raw.response = GenerateDecoderOnlyOutput(
-                sequences=mot_sequences,
-                scores=mot_scores,
-                logits=mot_logits_raw,
-                attentions=None,
-                hidden_states=None,
-                past_key_values=None,
-            )
 
             if want_logits and outputs.scores is not None:
                 # Clone each slice so this MOT does not hold a view into the shared batch allocation.
