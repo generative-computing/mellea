@@ -510,13 +510,6 @@ async def log_latency(payload, ctx):
 - Error logging and alerting
 - Failure analysis
 
-:::note
-**Creation hooks** (`component_pre_create` / `component_post_create`) are not
-implemented. `Component` is a `Protocol`, not an abstract base class, so there is no
-single interception point that covers all component implementations. Use
-`component_pre_execute` for pre-execution policy enforcement instead.
-:::
-
 ---
 
 ### Generation pipeline

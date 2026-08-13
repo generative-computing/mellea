@@ -44,6 +44,9 @@ class HookType(StrEnum):
     SESSION_CLEANUP = "session_cleanup"
 
     # Component Lifecycle
+    # No component_pre_create/component_post_create: Component is a Protocol,
+    # not an abstract base class, so there is no single interception point
+    # that covers all implementations. Use COMPONENT_PRE_EXECUTE instead.
     COMPONENT_PRE_EXECUTE = "component_pre_execute"
     COMPONENT_POST_SUCCESS = "component_post_success"
     COMPONENT_POST_ERROR = "component_post_error"

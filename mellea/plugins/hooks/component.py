@@ -42,10 +42,9 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
     Split from `component_post_error` rather than one `component_post` hook
     with a success/failure union: the two carry disjoint fields (`result` and
     `sampling_results` here vs. `error` and `stack_trace` on the error
-    payload), and plugins commonly care about only one outcome (a metrics
-    collector doesn't subscribe to errors; an audit logger may only want
-    them). A single hook would force nullable fields on both sides for no
-    registration benefit.
+    payload), and a plugin that only cares about successful executions
+    needn't handle the error fields. A single hook would force nullable
+    fields on both sides for no registration benefit.
 
     Attributes:
         action_id: UUID correlating pre/post hooks for a single component execution.
