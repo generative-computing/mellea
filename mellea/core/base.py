@@ -1845,6 +1845,17 @@ class TemplateRepresentation:
         images (list[ImageBlock | ImageUrlBlock] | None): Optional list of image blocks associated with this representation.
         audio (list[AudioBlock | AudioUrlBlock] | None): Optional list of audio blocks associated
             with this representation.
+        role (str | None): Optional chat role (`"system"`, `"user"`, `"assistant"`,
+            or `"tool"`) the component should be serialized as. When `None` (the
+            default), the formatter falls back to its positional guess: `"assistant"`
+            for model-generated components, `"user"` otherwise.
+        thinking (str | None): Optional reasoning trace to carry onto the serialized
+            message, so a component's captured reasoning round-trips through the
+            formatter. Defaults to `None`.
+        tool_calls (list[dict[str, Any]] | None): Optional OpenAI-compatible assistant
+            tool calls to carry onto the serialized message. Defaults to `None`.
+        tool_call_id (str | None): For a `role="tool"` component, the provider-supplied
+            tool-call id, when available. Defaults to `None`.
 
     """
 
@@ -1861,6 +1872,10 @@ class TemplateRepresentation:
     template_order: list[str] | None = None
     images: list[ImageBlock | ImageUrlBlock] | None = None
     audio: list[AudioBlock | AudioUrlBlock] | None = None
+    role: str | None = None
+    thinking: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
 
 
 @dataclass
