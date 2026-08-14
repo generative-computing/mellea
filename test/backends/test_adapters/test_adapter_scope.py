@@ -40,6 +40,11 @@ def _make_adapter():
     weights = MagicMock(spec=LocalFileBinding)
     weights.binding_type = "local_file"
     weights.revision = "abc123"
+    # `MagicMock(spec=LocalFileBinding)` passes `isinstance(weights,
+    # LocalFileBinding)`, so `adapter_scope` calls `resolved_revision()` on it
+    # (real `LocalFileBinding`s resolve lazily); stub it to match `.revision`
+    # since these tests aren't exercising lazy resolution itself.
+    weights.resolved_revision.return_value = "abc123"
     identity = Identity(name="answerability", adapter_type="lora")
     adapter = Adapter(identity=identity, io_contract=_Contract(), weights=weights)
     return adapter, weights
@@ -193,6 +198,75 @@ def test_phase_hook_not_fired_when_the_phase_itself_fails():
 
     invocations = invocation_payloads(mock_invoke)
     assert [p.outcome for p in invocations] == ["error"]
+
+
+def test_adapter_scope_reports_resolved_revision_not_raw_none():
+    """A lazily-resolved binding (revision=None) must report its resolved pin, not None.
+
+    Regression guard: `adapter_scope` used to read the raw `.revision`
+    attribute, which is `None` for a `LocalFileBinding(name=..., revision=None)`
+    even though the binding downloads and runs against a concrete catalogue
+    pin. Reporting `None` mislabels an effectively-pinned invocation as
+    unpinned in telemetry.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    binding = LocalFileBinding(name="answerability")  # revision=None, lazily resolved
+    identity = Identity(name="answerability", adapter_type="lora")
+    adapter = Adapter(identity=identity, io_contract=_Contract(), weights=binding)
+    binding.activate = MagicMock()
+    binding.deactivate = MagicMock()
+    assert binding.revision is None
+
+    with capture_adapter_hooks() as mock_invoke:
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            pass
+
+    invocations = invocation_payloads(mock_invoke)
+    assert len(invocations) == 1
+    assert invocations[0].revision == binding.resolved_revision()
+    assert invocations[0].revision != "main"
+
+
+def test_adapter_scope_swallows_invocation_hook_failure_on_clean_run():
+    """A failing invocation-complete hook must not turn a clean run into an error.
+
+    Regression guard: `_fire_invocation_complete` used to be called unguarded
+    in the outer `finally`. If its hook dispatch raised, that exception
+    replaced the (successful, no-exception) outcome of an otherwise-clean
+    `with` block — telemetry turning success into failure.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter, weights = _make_adapter()
+
+    with patch(
+        "mellea.backends.adapters.adapter._fire_invocation_complete",
+        side_effect=RuntimeError("invocation hook dispatch blew up"),
+    ):
+        with AdapterMixin.adapter_scope(mock_backend, adapter):
+            pass  # must not raise despite the hook failing on exit
+
+    weights.activate.assert_called_once()
+    weights.deactivate.assert_called_once()
+
+
+def test_adapter_scope_invocation_hook_failure_does_not_mask_body_exception():
+    """A failing invocation-complete hook must not replace the body's real exception.
+
+    Regression guard: when both the body and the invocation hook raise, the
+    caller must still see the body's exception, not the hook's.
+    """
+    mock_backend = MagicMock(spec=AdapterMixin)
+    adapter, weights = _make_adapter()
+
+    with patch(
+        "mellea.backends.adapters.adapter._fire_invocation_complete",
+        side_effect=RuntimeError("invocation hook dispatch blew up"),
+    ):
+        with pytest.raises(ValueError, match="the real failure"):
+            with AdapterMixin.adapter_scope(mock_backend, adapter):
+                raise ValueError("the real failure")
+
+    weights.deactivate.assert_called_once()
 
 
 def test_adapter_scope_noop_when_adapter_is_none():

@@ -25,7 +25,7 @@ from typing import Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
-from ...core import Backend
+from ...core import Backend, MelleaLogger
 from ...formatters.granite import intrinsics as intrinsics
 from ...helpers.event_loop_helper import _run_async_in_thread
 from ...plugins.manager import has_plugins, invoke_hook
@@ -743,7 +743,20 @@ class AdapterMixin(Backend, abc.ABC):
             return
 
         name = adapter.identity.name
-        revision = getattr(adapter.weights, "revision", None)
+        # Prefer `resolved_revision()` over the raw `.revision` attribute: a
+        # lazily-resolved binding (`revision=None`) still downloads and runs
+        # against the catalogue's pinned SHA, so reporting the unresolved
+        # `None` would mislabel an effectively-pinned invocation as unpinned.
+        # `resolved_revision()` only exists on `LocalFileBinding`, not the
+        # `WeightsBinding` base, so both the lookup and the call are guarded.
+        revision: str | None
+        if isinstance(adapter.weights, LocalFileBinding):
+            try:
+                revision = adapter.weights.resolved_revision()
+            except Exception:
+                revision = adapter.weights.revision
+        else:
+            revision = cast(str | None, getattr(adapter.weights, "revision", None))
         binding_type = adapter.weights.binding_type
         adapter_type = adapter.identity.adapter_type
 
@@ -777,14 +790,26 @@ class AdapterMixin(Backend, abc.ABC):
             exception = exc
             raise
         finally:
-            _fire_invocation_complete(
-                name=name,
-                revision=revision,
-                binding_type=binding_type,
-                adapter_type=adapter_type,
-                outcome=outcome,
-                error=exception,
-            )
+            # A hook-dispatch failure here must not replace or mask the real
+            # outcome computed above — that would turn a clean `with` block
+            # into a thrown error, or swap a genuine body exception for a
+            # telemetry-plumbing one. Log and swallow instead.
+            try:
+                _fire_invocation_complete(
+                    name=name,
+                    revision=revision,
+                    binding_type=binding_type,
+                    adapter_type=adapter_type,
+                    outcome=outcome,
+                    error=exception,
+                )
+            except Exception:
+                MelleaLogger.get_logger().warning(
+                    f"adapter_function_invocation_complete hook dispatch failed for "
+                    f"{name!r}; ignoring so it doesn't mask the real outcome "
+                    f"({outcome!r}).",
+                    exc_info=True,
+                )
 
     def _find_adapter(
         self, capability: str, adapter_types: tuple[str, ...] | None = None

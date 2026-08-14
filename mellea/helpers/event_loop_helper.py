@@ -98,7 +98,14 @@ class _EventLoopHandler:
         stepping the same frame, which is not safe. Excluding
         `KeyboardInterrupt`/`SystemExit` means that rare case leaks the
         unawaited-coroutine warning instead of risking that race.
+
+        `_wrapped()`'s own coroutine object needs the same treatment as `co`:
+        if scheduling fails before `run_coroutine_threadsafe` hands it to the
+        loop, `_wrapped()` never starts and never gets to `await co` — leaking
+        both `_wrapped()`'s and (via the outer `except`) `co`'s "coroutine was
+        never awaited" warnings otherwise.
         """
+        wrapped_co: Coroutine[Any, Any, R] | None = None
         try:
             self._reinit_if_forked()
             if self._event_loop == get_current_event_loop():
@@ -112,11 +119,14 @@ class _EventLoopHandler:
                     var.set(value)
                 return await co
 
+            wrapped_co = _wrapped()
             return asyncio.run_coroutine_threadsafe(
-                _wrapped(), self._event_loop
+                wrapped_co, self._event_loop
             ).result()
         except Exception:
             co.close()
+            if wrapped_co is not None:
+                wrapped_co.close()
             raise
 
 
