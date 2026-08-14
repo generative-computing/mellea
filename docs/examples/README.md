@@ -261,7 +261,6 @@ Utility functions used across examples.
 
 - **Main README**: [../../README.md](../../README.md)
 - **Agent Guidelines**: [../../AGENTS.md](../../AGENTS.md)
-- **Dev Docs**: [../dev/](../dev/)
 
 ## 🏃 Running Examples
 

@@ -62,16 +62,6 @@ class Backend(abc.ABC):
     _provider: str
     """Provider name (e.g. 'openai', 'ollama'). Must be set by every backend implementation."""
 
-    # `action` is passed separately from `ctx` rather than appended to it so
-    # shared context stays referentially equal across calls — no deep copy
-    # needed when multiple requests (rejection sampling iterations, parallel
-    # requirement checks) run over the same context. This head/tail split is
-    # specific to the current linear-context stdlib patterns and doesn't
-    # generalize to a poset of possible generation points, which span-based
-    # backends will need to express; the signature may need to change again
-    # once that lands. Contexts are not actually immutable, so callers must
-    # take care about when a context gets modified — this may eventually
-    # need synchronization once concurrent mutation becomes possible.
     @final
     async def generate_from_context(
         self,
@@ -153,8 +143,7 @@ class Backend(abc.ABC):
         """Backend implementers should override this method to generate the actual response.
 
         Args:
-            action: The component to generate from. See `generate_from_context` for the
-                rationale behind the action/context split.
+            action: The component to generate from, passed separately from `ctx`.
             ctx: The rest of the context, excluding `action`.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.

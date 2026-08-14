@@ -11,7 +11,7 @@ schemes not well-represented in general training data. Mellea lets you train a
 [aLoRA](https://github.com/IBM/activated-lora) adapter on your own labeled dataset
 and use it as a requirement validator in any Mellea program.
 
-**Prerequisites:** `pip install "mellea[cli]"`. Training requires a GPU or
+**Prerequisites:** `pip install "mellea[cli,hf]"`. Training requires a GPU or
 Apple Silicon Mac with sufficient VRAM for the chosen base model. Uploading requires a
 Hugging Face account.
 
@@ -128,24 +128,23 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.stdlib.context import ChatContext
 from mellea import MelleaSession
-from mellea.stdlib.requirements import req
+from mellea.stdlib.requirements import ALoraRequirement
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.2-8b-instruct")
 
 adapter = CustomIntrinsicAdapter(
-    model_id="your-org/my-adapter",       # HF repo ID or local checkpoint path
+    model_id="your-org/my-adapter",  # HF repo ID or local checkpoint path
     base_model_name="granite-3.2-8b-instruct",
-    intrinsic_name="requirement-check",   # must match this for plain req() to find it
+    intrinsic_name="custom-failure-check",
 )
 backend.add_adapter(adapter)
 
 m = MelleaSession(backend, ctx=ChatContext())
 
-# A UserWarning about "requirement-check" not being a known capability is
-# expected and benign here — it's advisory, checked against catalog entries
-# for built-in adapter functions, and doesn't apply to custom ones like this.
-
-failure_check = req("The failure mode must not be 'no_failure'.")
+failure_check = ALoraRequirement(
+    "The failure mode must not be 'no_failure'.",
+    intrinsic_name="custom-failure-check",
+)
 result = m.instruct(
     "Write a triage summary based on this technician note: {{note}}",
     user_variables={"note": "High vibration at 3100 RPM, connecting rod suspected."},
@@ -155,9 +154,17 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-When `backend.add_adapter()` is called, Mellea automatically routes requirement
-validation through the adapter for any `req()` calls on that session. The adapter
-runs at the `check_requirement` prompt position — fast, with minimal context overhead.
+> **Note:** `CustomIntrinsicAdapter` emits an advisory `UserWarning` because
+> custom capability names are not part of Mellea's built-in capability registry.
+> The adapter is still registered for routing.
+
+`ALoraRequirement` routes validation through the adapter with the matching
+`intrinsic_name`. Create `CustomIntrinsicAdapter` before the requirement: its
+compatibility shim registers the custom name, which lets `ALoraRequirement`
+resolve it. The adapter runs at the `check_requirement` prompt position. Its
+`io.yaml` must transform the output into the
+`{"requirement_check": {"score": <float>}}` response schema; label-only
+adapter output is not compatible with `ALoraRequirement`.
 
 ## How automatic routing works
 
