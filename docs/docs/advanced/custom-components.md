@@ -148,6 +148,9 @@ For components that need model-specific prompt formatting, return a
 | `images` | `list \| None` | Image blocks to include |
 | `audio` | `list \| None` | Audio blocks to include |
 | `role` | `str \| None` | Chat role to serialize as; `None` uses the default (`user`, or `assistant` for model-generated components) |
+| `thinking` | `str \| None` | Reasoning trace to carry onto the serialized message |
+| `tool_calls` | `list \| None` | OpenAI-compatible assistant tool calls to carry onto the message |
+| `tool_call_id` | `str \| None` | For a `role="tool"` component, the provider-supplied tool-call id |
 
 The formatter resolves template files from a `templates/prompts/` directory,
 traversing subdirectories that match the model ID before falling back to

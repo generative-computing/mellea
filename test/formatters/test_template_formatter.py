@@ -104,17 +104,30 @@ def test_to_chat_messages_preserves_audio(tf: TemplateFormatter):
 
 
 class _RoleComponent(Component[str]):
-    """Component whose serialized role is configurable via `format_for_llm`."""
+    """Component whose serialized role and tool metadata are configurable via `format_for_llm`."""
 
-    def __init__(self, role: str | None = None):
+    def __init__(
+        self,
+        role: str | None = None,
+        *,
+        tool_calls: list[dict] | None = None,
+        tool_call_id: str | None = None,
+    ):
         self._role = role
+        self._tool_calls = tool_calls
+        self._tool_call_id = tool_call_id
 
     def parts(self) -> list[Span]:
         return []
 
     def format_for_llm(self) -> TemplateRepresentation:
         return TemplateRepresentation(
-            obj=self, args={}, template="role component", role=self._role
+            obj=self,
+            args={},
+            template="role component",
+            role=self._role,
+            tool_calls=self._tool_calls,
+            tool_call_id=self._tool_call_id,
         )
 
     def _parse(self, computed: ModelOutputThunk) -> str:
@@ -158,6 +171,27 @@ def test_to_chat_messages_invalid_role_raises(tf: TemplateFormatter):
     """An unrecognized declared role is rejected with a ValueError."""
     with pytest.raises(ValueError):
         tf.to_chat_messages([_RoleComponent(role="banana")])
+
+
+def test_to_chat_messages_carries_tool_calls(tf: TemplateFormatter):
+    """A component may declare `tool_calls`, which flow onto the resulting message."""
+    tool_calls = [{"id": "call_1", "function": {"name": "f", "arguments": "{}"}}]
+    msgs = tf.to_chat_messages(
+        [_RoleComponent(role="assistant", tool_calls=tool_calls)]
+    )
+
+    assert len(msgs) == 1
+    assert msgs[0].role == "assistant"
+    assert msgs[0].tool_calls == tool_calls
+
+
+def test_to_chat_messages_tool_role_carries_tool_call_id(tf: TemplateFormatter):
+    """A `role="tool"` component may declare a `tool_call_id`, which round-trips onto the message."""
+    msgs = tf.to_chat_messages([_RoleComponent(role="tool", tool_call_id="call_42")])
+
+    assert len(msgs) == 1
+    assert msgs[0].role == "tool"
+    assert msgs[0].tool_call_id == "call_42"
 
 
 def test_custom_template_string(tf: TemplateFormatter):

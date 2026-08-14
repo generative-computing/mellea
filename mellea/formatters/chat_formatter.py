@@ -11,10 +11,8 @@ outputs. Concrete backends call this formatter when preparing input for a chat
 completion endpoint.
 """
 
-from typing import cast
-
 from ..core import Component, Formatter, ModelOutputThunk, Span, TemplateRepresentation
-from ..stdlib.components.chat import Message
+from ..stdlib.components.chat import Message, message_from_template_representation
 
 
 class ChatFormatter(Formatter):
@@ -28,8 +26,10 @@ class ChatFormatter(Formatter):
         treated as assistant responses, while all other `Component` and
         `CBlock` objects default to the `user` role. A `Component` may override
         this positional guess by setting `role` on the `TemplateRepresentation`
-        returned from its `format_for_llm`. Image attachments and parsed
-        structured outputs are handled transparently.
+        returned from its `format_for_llm`, and a component with `role="tool"`
+        may additionally declare `tool_name`/`tool_args`/`tool_call_id` to be
+        rendered as a `ToolMessage`. Image attachments and parsed structured
+        outputs are handled transparently.
 
         Args:
             cs (list[Span]): The linearized sequence of context
@@ -65,23 +65,21 @@ class ChatFormatter(Formatter):
 
             match c:
                 case Message():
+                    # A Message (or ToolMessage) is already a fully-formed chat
+                    # message; return it verbatim so subtype-specific state such as
+                    # `ToolMessage._tool.tool_call_id` survives to the backend payload.
                     return c
                 case Component():
-                    images = None
-                    audio = None
                     tr = c.format_for_llm()
                     if isinstance(tr, TemplateRepresentation):
-                        images = tr.images
-                        audio = tr.audio
-                        # A component may declare its own role; honor it over the
-                        # positional guess. `Message` validates the role value and
-                        # raises ValueError for anything outside `Message.Role`.
-                        if tr.role is not None:
-                            role = cast(Message.Role, tr.role)
-
-                    return Message(
-                        role=role, content=self.print(c), images=images, audio=audio
-                    )
+                        # A component may declare its own role and tool metadata via
+                        # its template representation; honor them over the positional
+                        # guess. Role validation is deferred to `Message`/`ToolMessage`,
+                        # which raise ValueError for anything outside `Message.Role`.
+                        return message_from_template_representation(
+                            tr, default_role=role, content=self.print(c)
+                        )
+                    return Message(role=role, content=self.print(c))
                 case _:
                     return Message(role=role, content=self.print(c))
 
