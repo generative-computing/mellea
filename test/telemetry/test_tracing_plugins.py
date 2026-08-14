@@ -919,9 +919,9 @@ async def test_streaming_start_starts_span_and_stashes_by_streaming_id(
     assert "sid-1" in tracing._in_flight_spans
     fake_span.end.assert_not_called()
     attrs = _attrs(fake_span)
-    assert attrs["mellea.has_requirements"] is True
-    assert attrs["mellea.requirement_count"] == 2
-    assert attrs["mellea.chunking_strategy"] == "SentenceChunking"
+    assert attrs["mellea.streaming.has_requirements"] is True
+    assert attrs["mellea.streaming.requirement_count"] == 2
+    assert attrs["mellea.streaming.chunking_strategy"] == "SentenceChunking"
     # The correlation id is the in-flight key, not a span attribute.
     assert "mellea.streaming_id" not in attrs
 
@@ -945,7 +945,7 @@ async def test_streaming_end_success_closes_span(streaming_plugin, enabled_traci
     fake_span.end.assert_called_once()
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.full_text_length"] == 11
+    assert attrs["mellea.streaming.full_text_length"] == 11
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert attrs["gen_ai.provider.name"] == "openai"
     assert "sid-2" not in tracing._in_flight_spans

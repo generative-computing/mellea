@@ -127,7 +127,7 @@ async def main() -> None:
         async for _chunk in streamer:
             pass
 
-    print(f"\nCompleted normally: {not streamer.failed_early}")
+    print(f"\nCompleted normally: {streamer.completed_normally}")
     print(f"Full text: {streamer.full_text!r}")
 
     if streamer.streaming_failures:

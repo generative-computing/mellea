@@ -31,6 +31,7 @@ from mellea.plugins.manager import (
     drain_background_tasks,
     enable_background_collection,
 )
+from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.streaming import (
     ChunkEvent,
@@ -44,6 +45,14 @@ from mellea.stdlib.streaming import (
     StreamingDoneEvent,
     stream,
 )
+
+# Tests that observe the stream via the STREAMING_EVENT / STREAMING_END hooks need
+# the optional `hooks` extra (cpex); the core streaming tests below do not. Skip
+# the hook-observing tests when it is not installed rather than fail on register().
+_cpex_skip = pytest.mark.skipif(
+    not _HAS_PLUGIN_FRAMEWORK, reason="cpex not installed — install mellea[hooks]"
+)
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -303,6 +312,7 @@ async def test_normal_completion_calls_validate_at_stream_end() -> None:
     assert streamer.final_validations[0].as_bool() is True
     assert streamer.streaming_failures == []
     assert streamer.mot is not None
+    assert streamer.completed_normally is True
 
 
 @pytest.mark.asyncio
@@ -594,6 +604,7 @@ async def test_cancel_generation_invoked_on_fail() -> None:
     # On early exit the driving MOT was cancelled; `mot` (natural-completion only)
     # stays None.
     assert streamer.mot is None
+    assert streamer.completed_normally is False
     # The underlying generation was actually cancelled, not merely abandoned.
     assert streamer._mot._cancelled is True
     assert streamer._mot.is_computed() is True
@@ -723,6 +734,7 @@ async def test_full_text_through_last_emitted_chunk_on_break() -> None:
 # ---------------------------------------------------------------------------
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_break_cancels_generation_and_fires_end() -> None:
     """`async with` + early break cancels generation and fires STREAMING_END once."""
@@ -749,8 +761,10 @@ async def test_break_cancels_generation_and_fires_end() -> None:
     # Generation was cancelled: it did not reach natural completion, so `mot`
     # stays None but the underlying stream is computed/cancelled.
     assert s.mot is None
+    assert s.completed_normally is False
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_acquired_never_iterated_aclose_cancels_and_ends() -> None:
     """A Streamer acquired but never iterated still cancels + fires END on aclose().
@@ -790,6 +804,7 @@ async def test_acquired_never_iterated_aclose_cancels_and_ends() -> None:
     assert len(gen_errors) >= 1
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_aclose_after_natural_completion_is_noop() -> None:
     """aclose() after full drain does not re-fire STREAMING_END."""
@@ -816,6 +831,7 @@ async def test_aclose_after_natural_completion_is_noop() -> None:
     assert ends[0].success is True
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_double_aclose_fires_end_once() -> None:
     """Calling aclose() twice fires STREAMING_END exactly once."""
@@ -884,6 +900,7 @@ class SlowStreamingMockBackend(StreamingMockBackend):
         return mot, new_ctx
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_external_cancellation_mid_stream_still_finalizes() -> None:
     """An external timeout mid-stream still fires terminal events and computes the MOT.
@@ -1261,6 +1278,7 @@ def test_stream_event_types_have_auto_timestamp() -> None:
         )
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_event_emission_order_happy_path() -> None:
     """Natural completion emits QuickCheck/Chunk pairs, then Done, FullValidation, Completed."""
@@ -1303,6 +1321,7 @@ async def test_event_emission_order_happy_path() -> None:
         assert events.index(qc_events[ci]) < events.index(chunk_events[ci])
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_streaming_done_event_carries_full_text() -> None:
     """StreamingDoneEvent.full_text matches the streamer's full_text."""
@@ -1321,6 +1340,7 @@ async def test_streaming_done_event_carries_full_text() -> None:
     assert done[0].full_text == streamer.full_text
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_event_emission_on_early_exit() -> None:
     """Early exit emits a failing QuickCheck then Completed; no Done/FullValidation."""
@@ -1345,6 +1365,7 @@ async def test_event_emission_on_early_exit() -> None:
     assert quick[-1].passed is False
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_no_requirements_omits_full_validation_event() -> None:
     """With no requirements, no QuickCheck or FullValidation events fire."""
@@ -1367,6 +1388,7 @@ async def test_no_requirements_omits_full_validation_event() -> None:
     assert events[-1].success is True
 
 
+@_cpex_skip
 @pytest.mark.asyncio
 async def test_error_event_on_stream_validate_exception() -> None:
     """An exception in stream_validate emits ErrorEvent then Completed(success=False)."""

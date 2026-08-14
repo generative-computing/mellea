@@ -21,7 +21,9 @@ background orchestrator and no `acomplete()`. Typed events now come from the
 | `async for chunk in result.astream()` | `async for chunk in streamer` | Iterate the `Streamer` directly |
 | `async for event in result.events()` | `@hook("streaming_event")` plugin | Events move to the hook (see below) |
 | `await result.acomplete()` | *(removed)* | Consuming the stream drives it to completion |
+| `STREAMING_ORCHESTRATION_START`/`_END` hooks | *(removed)* | No replacement — the whole run is on one task now, so there is nothing to reattach a span across |
 | `result.completed` | `not streamer.failed_early` | |
+| *(new)* | `streamer.completed_normally` | `True` only on natural completion; unlike `not failed_early`, it is `False` after an early `break` |
 | `result.full_text` | `streamer.full_text` | Same |
 | `result.streaming_failures` | `streamer.streaming_failures` | Same |
 | `result.final_validations` | `streamer.final_validations` | Same |
@@ -128,7 +130,7 @@ async with await stream(
     async for _chunk in streamer:
         pass
 
-print(f"\nCompleted normally: {not streamer.failed_early}")
+print(f"\nCompleted normally: {streamer.completed_normally}")
 print(f"Full text: {streamer.full_text!r}")
 ```
 
@@ -141,8 +143,9 @@ The three transformations to make:
    The event vocabulary and payloads are unchanged; register the plugin (with
    `register()` or a `plugin_scope`) before consuming. Draining the stream is
    what fires the events.
-3. **`result.<attr>` → `streamer.<attr>`**, with `result.completed` becoming
-   `not streamer.failed_early`.
+3. **`result.<attr>` → `streamer.<attr>`**. `result.completed` maps directly to
+   `not streamer.failed_early`; prefer the new `streamer.completed_normally` if
+   you need a signal that also excludes an early `break` (used above).
 
 ## Before and after: consuming raw chunks
 

@@ -502,3 +502,16 @@ def test_chunker_holds_only_pending_fragment() -> None:
     assert "delta" in chunker._pending
     assert "alpha" not in chunker._pending
     assert len(chunker._pending) < len("alpha beta gamma delta")
+
+
+def test_chunker_rejects_mutating_strategy() -> None:
+    """feed() raises if split() returns a chunk that is not a verbatim substring."""
+
+    class MutatingChunking(ChunkingStrategy):
+        def split(self, text: str) -> list[str]:
+            # Normalizes whitespace inside the chunk, so the returned text is no
+            # longer a substring of the input.
+            return [" ".join(text.split())] if text.strip() else []
+
+    with pytest.raises(ValueError, match="verbatim substring"):
+        Chunker(MutatingChunking()).feed("one   two")

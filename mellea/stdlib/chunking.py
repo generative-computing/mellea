@@ -44,6 +44,10 @@ class ChunkingStrategy(ABC):
     def split(self, text: str) -> list[str]:
         """Return complete chunks from text, excluding any trailing fragment.
 
+        Each returned chunk must be a verbatim substring of `text`; the `Chunker`
+        driver rejects a strategy that mutates chunk text (e.g. normalizes
+        whitespace inside a chunk). Dropping text between chunks is fine.
+
         Args:
             text: The text to split.
 
@@ -359,6 +363,10 @@ class Chunker:
             The chunks completed by this delta, in order. Empty when the delta
             did not complete a boundary. The trailing fragment is withheld until
             a later `feed()` completes it or `flush()` releases it.
+
+        Raises:
+            ValueError: If the strategy's `split()` returns a chunk that is not a
+                verbatim substring of the buffered text (i.e. it mutated the text).
         """
         self._pending += delta
         chunks = self._strategy.split(self._pending)
@@ -371,8 +379,13 @@ class Chunker:
         cursor = 0
         for c in chunks:
             pos = self._pending.find(c, cursor)
-            if pos >= 0:
-                cursor = pos + len(c)
+            if pos < 0:
+                raise ValueError(
+                    f"{type(self._strategy).__name__}.split() returned a chunk that "
+                    "is not a verbatim substring of the buffered text; split() must "
+                    "not mutate chunk text (see ChunkingStrategy.split)."
+                )
+            cursor = pos + len(c)
         self._pending = self._pending[cursor:]
         return chunks
 

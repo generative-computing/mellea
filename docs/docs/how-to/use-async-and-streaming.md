@@ -302,7 +302,7 @@ async def main() -> None:
             print(chunk)
 
     # Terminal state on the Streamer, after the loop.
-    print(f"Completed normally: {not streamer.failed_early}")
+    print(f"Completed normally: {streamer.completed_normally}")
     for _req, result in streamer.streaming_failures:
         print(f"Streaming failure: {result.reason}")
 

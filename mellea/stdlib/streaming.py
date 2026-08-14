@@ -192,8 +192,10 @@ class Streamer:
 
     Iterate the returned `Streamer` object with `async for` to receive the output
     as validated chunks, ideally inside `async with` so the stream is released on
-    every exit. The attributes below track progress and outcome. Instances are
-    created by `stream`; do not instantiate directly.
+    every exit. Each chunk is a `str` segment of the model output text, sized by the
+    `chunking` strategy (or a raw model delta when `chunking` is `None`). The
+    attributes below track progress and outcome. Instances are created by `stream`;
+    do not instantiate directly.
 
     Args:
         mot: The in-flight streaming thunk from the backend generation call.
@@ -205,6 +207,9 @@ class Streamer:
     Attributes:
         failed_early: `True` if a requirement returned `"fail"` during streaming
             and the stream stopped before natural completion.
+        completed_normally: `True` only if the stream reached its natural end.
+            `False` on requirement failure, an early `break`, or an exception —
+            unlike `not failed_early`, which stays `True` after an early `break`.
         failure_reason: Human-readable reason when `failed_early` is `True`.
         streaming_failures: `(Requirement, PartialValidationResult)` pairs for
             every requirement that failed the offending chunk.
@@ -228,6 +233,7 @@ class Streamer:
     ) -> None:
         """Wrap an in-flight generation; iterating the `Streamer` drives it."""
         self.failed_early: bool = False
+        self.completed_normally: bool = False
         self.failure_reason: str | None = None
         self.streaming_failures: list[tuple[Requirement, PartialValidationResult]] = []
         self.full_text: str = ""
@@ -271,27 +277,29 @@ class Streamer:
             # aclose() is a no-op once the stream is fully drained; cancels otherwise.
             await self._mot.aclose()
         finally:
-            await _emit_event(
-                self.streaming_id,
-                CompletedEvent(
-                    success=success, full_text=self.full_text, attempts_used=1
-                ),
-            )
-            if has_plugins(HookType.STREAMING_END):
-                from ..plugins.hooks.streaming import StreamingEndPayload
-
-                await invoke_hook(
-                    HookType.STREAMING_END,
-                    StreamingEndPayload(
-                        streaming_id=self.streaming_id,
-                        success=success,
-                        failure_reason=self.failure_reason,
-                        exception=error,
-                        model=self._mot.generation.model,
-                        provider=self._mot.generation.provider,
-                        full_text_length=full_text_length,
+            try:
+                await _emit_event(
+                    self.streaming_id,
+                    CompletedEvent(
+                        success=success, full_text=self.full_text, attempts_used=1
                     ),
                 )
+            finally:
+                if has_plugins(HookType.STREAMING_END):
+                    from ..plugins.hooks.streaming import StreamingEndPayload
+
+                    await invoke_hook(
+                        HookType.STREAMING_END,
+                        StreamingEndPayload(
+                            streaming_id=self.streaming_id,
+                            success=success,
+                            failure_reason=self.failure_reason,
+                            exception=error,
+                            model=self._mot.generation.model,
+                            provider=self._mot.generation.provider,
+                            full_text_length=full_text_length,
+                        ),
+                    )
 
     async def aclose(self) -> None:
         """Release the stream, cancelling generation if it is still in flight.
@@ -501,6 +509,7 @@ async def _drive(
 
         streamer.full_text = accumulated
         streamer.mot = mot
+        streamer.completed_normally = True
         await _emit_event(
             streamer.streaming_id, StreamingDoneEvent(attempt=1, full_text=accumulated)
         )
@@ -534,7 +543,7 @@ async def _drive(
     finally:
         # Driver-side teardown on every exit path
         await streamer._finalize(
-            success=success, error=error, full_text_length=len(accumulated)
+            success=success, error=error, full_text_length=len(streamer.full_text)
         )
 
 

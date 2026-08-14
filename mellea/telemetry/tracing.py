@@ -33,7 +33,6 @@ Consumption boundary:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import warnings
 from importlib.metadata import version
@@ -785,9 +784,9 @@ def start_streaming_span(
         "stream",
         streaming_id,
         {
-            "mellea.has_requirements": has_requirements,
-            "mellea.requirement_count": requirement_count,
-            "mellea.chunking_strategy": chunking_strategy,
+            "mellea.streaming.has_requirements": has_requirements,
+            "mellea.streaming.requirement_count": requirement_count,
+            "mellea.streaming.chunking_strategy": chunking_strategy,
         },
         attach_context=attach_context,
     )
@@ -835,10 +834,10 @@ def finish_streaming_span(
         exception: The exception raised by the orchestrator, when one was.
         model: Model identifier, when known.
         provider: Provider name, when known.
-        full_text_length: Accumulated text length at orchestrator exit.
+        full_text_length: Length of the validated-and-emitted text at stream exit.
     """
     extra_attributes = {
-        "mellea.full_text_length": full_text_length,
+        "mellea.streaming.full_text_length": full_text_length,
         "gen_ai.request.model": model,
         "gen_ai.provider.name": provider,
     }

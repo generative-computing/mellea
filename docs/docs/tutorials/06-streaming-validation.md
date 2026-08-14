@@ -92,7 +92,7 @@ async def main() -> None:
         async for chunk in streamer:
             print(f"  chunk: {chunk!r}")
 
-    print(f"\nCompleted normally: {not streamer.failed_early}")
+    print(f"\nCompleted normally: {streamer.completed_normally}")
     print(f"Full text: {streamer.full_text!r}")
 
 

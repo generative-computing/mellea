@@ -175,7 +175,7 @@ async def main() -> None:
         async for _line in streamer:
             pass
 
-    print(f"\nCompleted normally: {not streamer.failed_early}")
+    print(f"\nCompleted normally: {streamer.completed_normally}")
     if streamer.streaming_failures:
         for _req, pvr in streamer.streaming_failures:
             print(f"Streaming failure: {pvr.reason}")
