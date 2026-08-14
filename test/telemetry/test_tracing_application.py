@@ -477,10 +477,10 @@ def test_session_action_chat_span_nesting_through_real_hooks(span_exporter):
     by_name = _spans_by_name(span_exporter)
     assert "session" in by_name, "session span not emitted"
     assert "action" in by_name, "action span not emitted"
-    assert "chat" in by_name, "chat span not emitted"
+    assert "chat test-model" in by_name, "chat span not emitted"
     session_span = by_name["session"]
     action_span = by_name["action"]
-    chat_span = by_name["chat"]
+    chat_span = by_name["chat test-model"]
 
     # Action nests under session on all versions: the session span is attached
     # directly (not via a hook), so it survives as ambient context on 3.11 too.

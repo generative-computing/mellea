@@ -34,8 +34,7 @@ No code changes are required.
 
 | Metric Name | Type | Unit | Description |
 | ----------- | ---- | ---- | ----------- |
-| `mellea.llm.tokens.input` | Counter | `tokens` | Total input/prompt tokens processed |
-| `mellea.llm.tokens.output` | Counter | `tokens` | Total output/completion tokens generated |
+| `gen_ai.client.token.usage` | Histogram | `{token}` | Input and output token counts per request, split by `gen_ai.token.type` |
 
 ### Token attributes
 
@@ -43,8 +42,10 @@ All token metrics include these attributes following Gen-AI semantic conventions
 
 | Attribute | Description | Example Values |
 | --------- | ----------- | -------------- |
-| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `ibm.watsonx.ai`, `litellm`, `huggingface` |
 | `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
+| `gen_ai.token.type` | Which token count this observation is | `input`, `output` |
 
 ### Backend support
 
@@ -86,29 +87,31 @@ after each LLM call. No code changes are required.
 
 | Metric Name | Type | Unit | Description |
 | ----------- | ---- | ---- | ----------- |
-| `mellea.llm.request.duration` | Histogram | `s` | Total request duration, from call to full response |
-| `mellea.llm.ttfb` | Histogram | `s` | Time to first token (streaming requests only) |
+| `gen_ai.client.operation.duration` | Histogram | `s` | Total request duration, from call to full response |
+| `gen_ai.client.operation.time_to_first_chunk` | Histogram | `s` | Time to first chunk (streaming requests only) |
 
 ### Latency attributes
 
 | Attribute | Description | Example Values |
 | --------- | ----------- | -------------- |
-| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `ibm.watsonx.ai`, `litellm`, `huggingface` |
 | `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
-| `streaming` | Whether streaming mode was used (duration only) | `True`, `False` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
+| `gen_ai.request.stream` | Whether streaming mode was used (duration only) | `True`, `False` |
+| `error.type` | Exception class name, on failed operations only (duration only) | `TimeoutError`, `RateLimitError` |
 
 ### Histogram buckets
 
-Custom bucket boundaries are configured for LLM-sized latencies:
+Bucket boundaries follow the Gen-AI semantic conventions:
 
-- **`mellea.llm.request.duration`**: `0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120` seconds
-- **`mellea.llm.ttfb`**: `0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10` seconds
+- **`gen_ai.client.operation.duration`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
+- **`gen_ai.client.operation.time_to_first_chunk`**: `0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92` seconds
 
 ### Latency recording timing
 
-- **`mellea.llm.request.duration`**: Recorded for every `generate_from_context` call,
+- **`gen_ai.client.operation.duration`**: Recorded for every `generate_from_context` call,
   both streaming and non-streaming.
-- **`mellea.llm.ttfb`**: Recorded only for streaming requests, measuring elapsed time
+- **`gen_ai.client.operation.time_to_first_chunk`**: Recorded only for streaming requests, measuring elapsed time
   from the `generate_from_context` call until the first chunk arrives.
 
 Access latency data directly from a `ModelOutputThunk`:
@@ -144,14 +147,15 @@ All error metrics include these attributes:
 
 | Attribute | Description | Example Values |
 | --------- | ----------- | -------------- |
-| `error_type` | Semantic error category (mellea-specific) | `rate_limit`, `timeout`, `auth`, `content_policy`, `invalid_request`, `transport_error`, `server_error`, `unknown` |
+| `mellea.error.category` | Semantic error category (mellea-specific) | `rate_limit`, `timeout`, `auth`, `content_policy`, `invalid_request`, `transport_error`, `server_error`, `unknown` |
 | `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
 | `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
 | `error.type` | Python exception class name (standard OTel) | `RateLimitError`, `TimeoutError`, `AuthenticationError` |
 
 ### Error type categories
 
-The `error_type` attribute maps exceptions to human-friendly semantic labels:
+The `mellea.error.category` attribute maps exceptions to human-friendly semantic labels:
 
 | Category | Description | Matched exceptions |
 | -------- | ----------- | ------------------ |
@@ -187,6 +191,7 @@ is available. No code changes are required.
 | --------- | ----------- | -------------- |
 | `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
 | `gen_ai.request.model` | Model identifier | `gpt-5.4`, `claude-sonnet-4-6` |
+| `gen_ai.operation.name` | GenAI operation | `chat`, `text_completion` |
 
 ### Pricing data
 
@@ -429,7 +434,7 @@ docker run -p 9090:9090 \
 ```
 
 Access Prometheus UI at `http://localhost:9090` and query metrics like
-`mellea_llm_tokens_input`.
+`gen_ai_client_token_usage`.
 
 ### Multiple exporters simultaneously
 

@@ -22,6 +22,14 @@ def _env_true(name: str) -> bool:
     return os.getenv(name, "false").lower() in ("true", "1", "yes")
 
 
+_PROVIDER_SEMCONV = {"watsonx": "ibm.watsonx.ai"}
+
+
+def normalize_provider_name(provider: str | None) -> str | None:
+    """Map a Mellea provider id to its `gen_ai.provider.name` semconv value, else unchanged."""
+    return _PROVIDER_SEMCONV.get(provider, provider) if provider else provider
+
+
 def content_capture_enabled() -> bool:
     """Check if content capture is opted into via environment variable.
 
@@ -79,7 +87,9 @@ def set_attribute_safe(span: Any, key: str, value: Any) -> None:
 def set_request_attrs(span: Any, gen: GenerationMetadata, operation: str) -> None:
     """Emit request-side `gen_ai.*` attributes."""
     if gen.provider:
-        span.set_attribute("gen_ai.provider.name", gen.provider)
+        span.set_attribute(
+            "gen_ai.provider.name", normalize_provider_name(gen.provider)
+        )
     if gen.model:
         span.set_attribute("gen_ai.request.model", gen.model)
     span.set_attribute("gen_ai.operation.name", operation)
@@ -104,7 +114,7 @@ def set_usage_attrs(span: Any, usage: dict[str, Any] | None) -> None:
 
     total_tokens = usage.get("total_tokens")
     if total_tokens is not None:
-        span.set_attribute("gen_ai.usage.total_tokens", total_tokens)
+        span.set_attribute("mellea.usage.total_tokens", total_tokens)
 
     # Cache-read tokens: prefer top-level, fall back to prompt_tokens_details.cached_tokens
     cache_read = usage.get("cache_read_input_tokens")
@@ -137,9 +147,11 @@ def set_response_attrs(span: Any, gen: GenerationMetadata) -> None:
         span.set_attribute("gen_ai.response.id", gen.response_id)
     if gen.finish_reasons:
         span.set_attribute("gen_ai.response.finish_reasons", list(gen.finish_reasons))
+    if gen.ttfb_ms is not None:
+        span.set_attribute("gen_ai.response.time_to_first_chunk", gen.ttfb_ms / 1000.0)
 
 
-def set_mellea_attrs(span: Any, mot: Any, gen: GenerationMetadata) -> None:
+def set_mellea_attrs(span: Any, mot: Any) -> None:
     """Emit `mellea.*` attributes derivable from the `ModelOutputThunk`."""
     call = getattr(mot, "_call", None)
     action = getattr(call, "action", None)
@@ -148,9 +160,6 @@ def set_mellea_attrs(span: Any, mot: Any, gen: GenerationMetadata) -> None:
 
     ctx = getattr(call, "context", None)
     span.set_attribute("mellea.context_size", len(ctx) if ctx else 0)
-
-    if gen.streaming:
-        span.set_attribute("mellea.streaming", True)
 
 
 def set_conversation_id(span: Any) -> None:

@@ -69,19 +69,24 @@ def test_record_request_duration_non_streaming(clean_metrics_env):
     from mellea.telemetry.metrics import record_request_duration
 
     record_request_duration(
-        duration_s=1.5, model="llama2:7b", provider="ollama", streaming=False
+        duration_s=1.5,
+        model="llama2:7b",
+        provider="ollama",
+        operation="chat",
+        streaming=False,
     )
 
     provider.force_flush()
     data_points = _find_histogram(
-        reader.get_metrics_data(), "mellea.llm.request.duration"
+        reader.get_metrics_data(), "gen_ai.client.operation.duration"
     )
 
     assert len(data_points) == 1
     attrs = dict(data_points[0].attributes)
     assert attrs["gen_ai.request.model"] == "llama2:7b"
     assert attrs["gen_ai.provider.name"] == "ollama"
-    assert attrs["streaming"] is False
+    assert attrs["gen_ai.operation.name"] == "chat"
+    assert attrs["gen_ai.request.stream"] is False
     assert data_points[0].count == 1
 
 
@@ -94,20 +99,74 @@ def test_record_request_duration_streaming(clean_metrics_env):
     from mellea.telemetry.metrics import record_request_duration
 
     record_request_duration(
-        duration_s=2.0, model="gpt-4", provider="openai", streaming=True
+        duration_s=2.0,
+        model="gpt-4",
+        provider="openai",
+        operation="chat",
+        streaming=True,
     )
     record_request_duration(
-        duration_s=1.0, model="gpt-4", provider="openai", streaming=False
+        duration_s=1.0,
+        model="gpt-4",
+        provider="openai",
+        operation="chat",
+        streaming=False,
     )
 
     provider.force_flush()
     data_points = _find_histogram(
-        reader.get_metrics_data(), "mellea.llm.request.duration"
+        reader.get_metrics_data(), "gen_ai.client.operation.duration"
     )
 
     assert len(data_points) == 2
-    streaming_flags = {dict(dp.attributes)["streaming"] for dp in data_points}
+    streaming_flags = {
+        dict(dp.attributes)["gen_ai.request.stream"] for dp in data_points
+    }
     assert streaming_flags == {True, False}
+
+
+def test_record_request_duration_with_error(clean_metrics_env):
+    """A failed operation records duration tagged with error.type."""
+    from mellea.telemetry import metrics as metrics_module
+
+    reader, provider = _setup_in_memory_provider(metrics_module)
+
+    from mellea.telemetry.metrics import record_request_duration
+
+    record_request_duration(
+        duration_s=0.8,
+        model="gpt-4",
+        provider="openai",
+        operation="chat",
+        exception_class="TimeoutError",
+    )
+
+    provider.force_flush()
+    data_points = _find_histogram(
+        reader.get_metrics_data(), "gen_ai.client.operation.duration"
+    )
+
+    assert len(data_points) == 1
+    assert dict(data_points[0].attributes)["error.type"] == "TimeoutError"
+
+
+def test_record_request_duration_negative_skipped(clean_metrics_env):
+    """A negative duration (start time never recorded) is not recorded."""
+    from mellea.telemetry import metrics as metrics_module
+
+    reader, provider = _setup_in_memory_provider(metrics_module)
+
+    from mellea.telemetry.metrics import record_request_duration
+
+    record_request_duration(
+        duration_s=-0.001, model="gpt-4", provider="openai", operation="chat"
+    )
+
+    provider.force_flush()
+    data_points = _find_histogram(
+        reader.get_metrics_data(), "gen_ai.client.operation.duration"
+    )
+    assert data_points == []
 
 
 def test_record_ttfb(clean_metrics_env):
@@ -118,10 +177,12 @@ def test_record_ttfb(clean_metrics_env):
 
     from mellea.telemetry.metrics import record_ttfb
 
-    record_ttfb(ttfb_s=0.18, model="llama2:7b", provider="ollama")
+    record_ttfb(ttfb_s=0.18, model="llama2:7b", provider="ollama", operation="chat")
 
     provider.force_flush()
-    data_points = _find_histogram(reader.get_metrics_data(), "mellea.llm.ttfb")
+    data_points = _find_histogram(
+        reader.get_metrics_data(), "gen_ai.client.operation.time_to_first_chunk"
+    )
 
     assert len(data_points) == 1
     attrs = dict(data_points[0].attributes)

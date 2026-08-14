@@ -115,10 +115,10 @@ exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.
 Mellea automatically records the following metrics across all backends using
 OpenTelemetry. No code changes are required:
 
-- **Token counters** — `mellea.llm.tokens.input` and `mellea.llm.tokens.output`
-  after each LLM call.
-- **Latency histograms** — `mellea.llm.request.duration` (every request) and
-  `mellea.llm.ttfb` (streaming requests only).
+- **Token usage histogram** — `gen_ai.client.token.usage` after each LLM call,
+  with input and output split by the `gen_ai.token.type` attribute.
+- **Latency histograms** — `gen_ai.client.operation.duration` (every request) and
+  `gen_ai.client.operation.time_to_first_chunk` (streaming requests only).
 - **Error counter** — `mellea.llm.errors` on each failed backend call,
   classified by semantic error type.
 - **Cost counter** — `mellea.llm.cost.usd` estimated request cost in USD,

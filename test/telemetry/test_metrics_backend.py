@@ -89,8 +89,7 @@ def _setup_metrics_provider(metrics_module, metric_reader):
     provider = MeterProvider(metric_readers=[metric_reader])
     metrics_module._meter_provider = provider
     metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    metrics_module._token_usage_histogram = None
     metrics_module._duration_histogram = None
     metrics_module._ttfb_histogram = None
     metrics_module._error_counter = None
@@ -119,6 +118,16 @@ def _find_histogram_data_point(metrics_data, metric_name, attributes=None):
                         if all(point_attrs.get(k) == v for k, v in attributes.items()):
                             return dp
     return None
+
+
+def _token_sum(metrics_data, provider, token_type):
+    """Return the recorded token count for a provider/token type from the usage histogram."""
+    dp = _find_histogram_data_point(
+        metrics_data,
+        "gen_ai.client.token.usage",
+        {"gen_ai.provider.name": provider, "gen_ai.token.type": token_type},
+    )
+    return dp.sum if dp is not None else None
 
 
 def get_metric_value(metrics_data, metric_name, attributes=None):
@@ -180,14 +189,10 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     metrics_data = metric_reader.get_metrics_data()
 
     # Verify input token counter
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "ollama"}
-    )
+    input_tokens = _token_sum(metrics_data, "ollama", "input")
 
-    # Verify output token counter
-    output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "ollama"}
-    )
+    # Verify output tokens
+    output_tokens = _token_sum(metrics_data, "ollama", "output")
 
     # Ollama should always return token counts
     assert input_tokens is not None, "Input tokens should not be None"
@@ -198,13 +203,17 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data, "mellea.llm.request.duration", {"streaming": stream}
+        metrics_data,
+        "gen_ai.client.operation.duration",
+        {"gen_ai.request.stream": stream},
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
 
     if stream:
-        ttfb_dp = _find_histogram_data_point(metrics_data, "mellea.llm.ttfb")
+        ttfb_dp = _find_histogram_data_point(
+            metrics_data, "gen_ai.client.operation.time_to_first_chunk"
+        )
         assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
         assert ttfb_dp.sum > 0, "TTFB should be > 0"
 
@@ -245,13 +254,9 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
     metrics_data = metric_reader.get_metrics_data()
 
     # OpenAI always provides token counts
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "openai"}
-    )
+    input_tokens = _token_sum(metrics_data, "openai", "input")
 
-    output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "openai"}
-    )
+    output_tokens = _token_sum(metrics_data, "openai", "output")
 
     assert input_tokens is not None, "Input tokens should be recorded"
     assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
@@ -261,13 +266,17 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data, "mellea.llm.request.duration", {"streaming": stream}
+        metrics_data,
+        "gen_ai.client.operation.duration",
+        {"gen_ai.request.stream": stream},
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
 
     if stream:
-        ttfb_dp = _find_histogram_data_point(metrics_data, "mellea.llm.ttfb")
+        ttfb_dp = _find_histogram_data_point(
+            metrics_data, "gen_ai.client.operation.time_to_first_chunk"
+        )
         assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
         assert ttfb_dp.sum > 0, "TTFB should be > 0"
 
@@ -298,13 +307,9 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "watsonx"}
-    )
+    input_tokens = _token_sum(metrics_data, "ibm.watsonx.ai", "input")
 
-    output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "watsonx"}
-    )
+    output_tokens = _token_sum(metrics_data, "ibm.watsonx.ai", "output")
 
     assert input_tokens is not None, "Input tokens should be recorded"
     assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
@@ -314,14 +319,16 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
     # Verify cost metric — litellm has pricing for ibm/granite-4-h-small on watsonx
     cost = get_metric_value(
-        metrics_data, "mellea.llm.cost.usd", {"gen_ai.provider.name": "watsonx"}
+        metrics_data, "mellea.llm.cost.usd", {"gen_ai.provider.name": "ibm.watsonx.ai"}
     )
     assert cost is not None, "Cost should be recorded for a known watsonx model"
     assert cost > 0, f"Cost should be > 0, got {cost}"
 
     # Verify latency metrics (watsonx is non-streaming only)
     duration_dp = _find_histogram_data_point(
-        metrics_data, "mellea.llm.request.duration", {"streaming": False}
+        metrics_data,
+        "gen_ai.client.operation.duration",
+        {"gen_ai.request.stream": False},
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
@@ -366,13 +373,9 @@ async def test_litellm_token_metrics_integration(
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "litellm"}
-    )
+    input_tokens = _token_sum(metrics_data, "litellm", "input")
 
-    output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "litellm"}
-    )
+    output_tokens = _token_sum(metrics_data, "litellm", "output")
 
     # LiteLLM with Ollama backend should always provide token counts
     assert input_tokens is not None, "Input tokens should be recorded"
@@ -383,13 +386,17 @@ async def test_litellm_token_metrics_integration(
 
     # Verify latency metrics
     duration_dp = _find_histogram_data_point(
-        metrics_data, "mellea.llm.request.duration", {"streaming": stream}
+        metrics_data,
+        "gen_ai.client.operation.duration",
+        {"gen_ai.request.stream": stream},
     )
     assert duration_dp is not None, "Request duration should be recorded"
     assert duration_dp.sum > 0, "Request duration should be > 0"
 
     if stream:
-        ttfb_dp = _find_histogram_data_point(metrics_data, "mellea.llm.ttfb")
+        ttfb_dp = _find_histogram_data_point(
+            metrics_data, "gen_ai.client.operation.time_to_first_chunk"
+        )
         assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
         assert ttfb_dp.sum > 0, "TTFB should be > 0"
 
@@ -425,15 +432,9 @@ async def test_huggingface_token_metrics_integration(
     metrics_data = metric_reader.get_metrics_data()
 
     # HuggingFace computes token counts locally
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "huggingface"}
-    )
+    input_tokens = _token_sum(metrics_data, "huggingface", "input")
 
-    output_tokens = get_metric_value(
-        metrics_data,
-        "mellea.llm.tokens.output",
-        {"gen_ai.provider.name": "huggingface"},
-    )
+    output_tokens = _token_sum(metrics_data, "huggingface", "output")
 
     assert input_tokens is not None, "Input tokens should be recorded"
     assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
@@ -559,19 +560,15 @@ async def test_ollama_generate_from_raw_metrics_integration(
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "ollama"}
-    )
-    output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "ollama"}
-    )
+    input_tokens = _token_sum(metrics_data, "ollama", "input")
+    output_tokens = _token_sum(metrics_data, "ollama", "output")
     assert input_tokens is not None and input_tokens > 0
     assert output_tokens is not None and output_tokens > 0
 
     duration_dp = _find_histogram_data_point(
         metrics_data,
-        "mellea.llm.request.duration",
-        {"gen_ai.provider.name": "ollama", "streaming": False},
+        "gen_ai.client.operation.duration",
+        {"gen_ai.provider.name": "ollama", "gen_ai.request.stream": False},
     )
     assert duration_dp is not None, "Request duration should be recorded for batch"
     assert duration_dp.sum > 0

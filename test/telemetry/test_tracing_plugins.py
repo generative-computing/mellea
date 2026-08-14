@@ -13,6 +13,9 @@ pytest.importorskip(
 )
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
+from opentelemetry.trace import SpanKind
+
+from mellea.backends.model_options import ModelOption
 from mellea.core.base import GenerationMetadata, ModelOutputThunk
 from mellea.core.requirement import PartialValidationResult, ValidationResult
 from mellea.plugins.hooks.component import (
@@ -122,11 +125,39 @@ async def test_pre_call_starts_span_and_stashes_by_generation_id(
     with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
         await backend_plugin.on_pre_call(payload, {})
 
-    fake_tracer.start_span.assert_called_once_with("chat")
+    fake_tracer.start_span.assert_called_once_with("chat", kind=SpanKind.INTERNAL)
     assert "gid-1" in tracing._in_flight_spans
     fake_span.end.assert_not_called()
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.operation.name"] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_pre_call_sets_request_attrs_on_span(backend_plugin, enabled_tracing):
+    fake_span = MagicMock()
+    fake_tracer = MagicMock()
+    fake_tracer.start_span.return_value = fake_span
+
+    payload = GenerationPreCallPayload(
+        action=None,
+        context=None,
+        generation_id="gid-1",
+        model="ibm-granite/granite-4.1-3b",
+        provider="huggingface",
+        model_options={ModelOption.STREAM: True},
+    )
+
+    with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
+        await backend_plugin.on_pre_call(payload, {})
+
+    fake_tracer.start_span.assert_called_once_with(
+        "chat ibm-granite/granite-4.1-3b", kind=SpanKind.INTERNAL
+    )
+    attrs = _attrs(fake_span)
+    assert attrs["gen_ai.operation.name"] == "chat"
+    assert attrs["gen_ai.request.model"] == "ibm-granite/granite-4.1-3b"
+    assert attrs["gen_ai.provider.name"] == "huggingface"
+    assert attrs["gen_ai.request.stream"] is True
 
 
 @pytest.mark.asyncio
@@ -156,7 +187,7 @@ async def test_post_call_finishes_span_with_usage_attrs(
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.usage.input_tokens"] == 10
     assert attrs["gen_ai.usage.output_tokens"] == 5
-    assert attrs["gen_ai.usage.total_tokens"] == 15
+    assert attrs["mellea.usage.total_tokens"] == 15
     assert attrs["gen_ai.provider.name"] == "openai"
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert "gid-2" not in tracing._in_flight_spans
@@ -361,7 +392,7 @@ class _DummyFormat:
 async def test_pre_call_emits_request_side_mellea_attrs(
     backend_plugin, enabled_tracing
 ):
-    """`mellea.has_format`, `mellea.format_type`, and `mellea.tool_calls_enabled` come through the pre_call payload."""
+    """`gen_ai.output.type`, `mellea.format_type`, and `mellea.tool_calls_enabled` come through the pre_call payload."""
     fake_span = MagicMock()
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
@@ -378,18 +409,17 @@ async def test_pre_call_emits_request_side_mellea_attrs(
 
     attrs = _attrs(fake_span)
     assert "mellea.backend" not in attrs
-    assert attrs["mellea.has_format"] is True
     assert attrs["mellea.format_type"] == "_DummyFormat"
     assert attrs["mellea.tool_calls_enabled"] is True
     # OTel GenAI semconv attribute for structured output
-    assert attrs["gen_ai.output.type"] == "json_schema"
+    assert attrs["gen_ai.output.type"] == "json"
 
 
 @pytest.mark.asyncio
 async def test_pre_call_omits_format_type_when_no_format(
     backend_plugin, enabled_tracing
 ):
-    """`mellea.format_type` is not emitted when no format is supplied; `mellea.has_format` is still emitted as False."""
+    """Neither `gen_ai.output.type` nor `mellea.format_type` is emitted when no format is supplied."""
     fake_span = MagicMock()
     fake_tracer = MagicMock()
     fake_tracer.start_span.return_value = fake_span
@@ -405,7 +435,6 @@ async def test_pre_call_omits_format_type_when_no_format(
         await backend_plugin.on_pre_call(pre, {})
 
     attrs = _attrs(fake_span)
-    assert attrs["mellea.has_format"] is False
     assert "mellea.format_type" not in attrs
     assert attrs["mellea.tool_calls_enabled"] is False
     assert "gen_ai.output.type" not in attrs
@@ -489,7 +518,9 @@ async def test_batch_pre_call_starts_text_completion_span(
     with patch("mellea.telemetry.tracing.get_backend_tracer", return_value=fake_tracer):
         await backend_plugin.on_batch_pre_call(payload, {})
 
-    fake_tracer.start_span.assert_called_once_with("text_completion")
+    fake_tracer.start_span.assert_called_once_with(
+        "text_completion m-x", kind=SpanKind.CLIENT
+    )
     assert "batch-1" in tracing._in_flight_spans
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.operation.name"] == "text_completion"
@@ -497,7 +528,7 @@ async def test_batch_pre_call_starts_text_completion_span(
     assert attrs["gen_ai.provider.name"] == "openai"
     assert attrs["gen_ai.request.model"] == "m-x"
     assert "mellea.backend" not in attrs
-    assert attrs["mellea.has_format"] is True
+    assert attrs["gen_ai.output.type"] == "json"
     assert attrs["mellea.format_type"] == "_DummyFormat"
     assert attrs["mellea.tool_calls_enabled"] is False
 
@@ -534,7 +565,8 @@ async def test_batch_post_call_finishes_with_aggregate_usage(
     attrs = _attrs(fake_span)
     assert attrs["gen_ai.usage.input_tokens"] == 30
     assert attrs["gen_ai.usage.output_tokens"] == 15
-    assert attrs["gen_ai.usage.total_tokens"] == 45
+    assert attrs["mellea.usage.total_tokens"] == 45
+    assert attrs["gen_ai.provider.name"] == "ibm.watsonx.ai"
     assert "batch-2" not in tracing._in_flight_spans
 
 

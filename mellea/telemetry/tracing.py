@@ -64,6 +64,7 @@ from mellea.telemetry._tracing_helpers import (
     content_capture_enabled,
     get_capture_content_value,
     get_tool_call_attrs,
+    normalize_provider_name,
     set_attribute_safe,
     set_conversation_id,
     set_mellea_attrs,
@@ -77,6 +78,8 @@ _application_tracer: Any = None
 _backend_tracer: Any = None
 _tracing_enabled: bool = False
 _plugins_registered: bool = False  # Plugin registry is process-global; register once.
+
+_REMOTE_PROVIDERS = frozenset({"openai", "ollama", "watsonx", "litellm"})
 
 
 def _setup_tracer_provider() -> Any:
@@ -347,6 +350,7 @@ def start_backend_span(
     has_format: bool | None = None,
     format_type: str | None = None,
     tool_calls_enabled: bool | None = None,
+    streaming: bool | None = None,
     attach_context: bool = True,
 ) -> Span | None:
     """Open a backend span, activate it as the current OTel context, and stash both under `generation_id`.
@@ -364,11 +368,13 @@ def start_backend_span(
         provider: Provider name, or `None` if not yet known.
         action_class_name: Optional `mellea.action_type` attribute (chat).
         num_actions: Optional `mellea.num_actions` attribute (batch).
-        has_format: Optional `mellea.has_format` attribute (whether structured
-            output was requested).
+        has_format: Whether structured output was requested; emits
+            `gen_ai.output.type="json"` when True.
         format_type: Optional `mellea.format_type` attribute (the structured
             output class name, when `has_format` is True).
         tool_calls_enabled: Optional `mellea.tool_calls_enabled` attribute.
+        streaming: Whether streaming was requested; emits `gen_ai.request.stream`
+            when True (unset/False is left off, which semconv reads as non-streaming).
         attach_context: Whether to attach the span as the ambient OTel context.
 
     Returns:
@@ -380,7 +386,14 @@ def start_backend_span(
     if tracer is None:
         return None
 
-    span = tracer.start_span(operation)
+    # Span name is "{operation} {model}" per Gen-AI semconv; operation alone when model unknown.
+    span_name = f"{operation} {model}" if model else operation
+    kind = (
+        trace.SpanKind.CLIENT
+        if provider in _REMOTE_PROVIDERS
+        else trace.SpanKind.INTERNAL
+    )
+    span = tracer.start_span(span_name, kind=kind)
 
     gen = GenerationMetadata(model=model, provider=provider)
     set_request_attrs(span, gen, operation)
@@ -388,12 +401,12 @@ def start_backend_span(
         span.set_attribute("mellea.action_type", action_class_name)
     if num_actions is not None:
         span.set_attribute("mellea.num_actions", num_actions)
-    if has_format is not None:
-        span.set_attribute("mellea.has_format", has_format)
-        if has_format:
-            span.set_attribute("gen_ai.output.type", "json_schema")
+    if has_format:
+        span.set_attribute("gen_ai.output.type", "json")
     if format_type is not None:
         span.set_attribute("mellea.format_type", format_type)
+    if streaming:
+        span.set_attribute("gen_ai.request.stream", True)
     if tool_calls_enabled is not None:
         span.set_attribute("mellea.tool_calls_enabled", tool_calls_enabled)
     set_conversation_id(span)
@@ -433,8 +446,8 @@ def finish_backend_span_success(
             set_request_attrs(span, gen, operation)
             set_response_attrs(span, gen)
         set_usage_attrs(span, usage)
-        if mot is not None and gen is not None:
-            set_mellea_attrs(span, mot, gen)
+        if mot is not None:
+            set_mellea_attrs(span, mot)
     finally:
         _safe_detach(token, attach_task)
         span.end()
@@ -937,7 +950,7 @@ def finish_streaming_span(
     extra_attributes = {
         "mellea.full_text_length": full_text_length,
         "gen_ai.request.model": model,
-        "gen_ai.provider.name": provider,
+        "gen_ai.provider.name": normalize_provider_name(provider),
     }
 
     if success:

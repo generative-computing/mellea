@@ -847,6 +847,12 @@ class ModelOutputThunk(Generic[S]):
         # MOT instead of raising. Sibling to `_cancelled`.
         self._error: Exception | None = None
 
+    def _elapsed_ms(self) -> float:
+        """Milliseconds since generation start, or -1 if start was never set."""
+        if self._gen.start is None:
+            return -1
+        return (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
+
     def _record_ttfb(self) -> None:
         """Record time-to-first-byte if streaming and not yet recorded."""
         if (
@@ -854,9 +860,7 @@ class ModelOutputThunk(Generic[S]):
             and not self._gen.first_chunk_received
             and self._gen.start is not None
         ):
-            self.generation.ttfb_ms = (
-                datetime.datetime.now() - self._gen.start
-            ).total_seconds() * 1000
+            self.generation.ttfb_ms = self._elapsed_ms()
             self._gen.first_chunk_received = True
 
     async def _emit_event(self, event_name: str, **data: Any) -> None:
@@ -964,6 +968,7 @@ class ModelOutputThunk(Generic[S]):
                     exception=recorded,
                     model_output=self,
                     generation_id=self._call.generation_id,
+                    latency_ms=self._elapsed_ms(),
                 ),
             )
 
@@ -1164,6 +1169,7 @@ class ModelOutputThunk(Generic[S]):
                     exception=chunks[-1],
                     model_output=self,
                     generation_id=self._call.generation_id,
+                    latency_ms=self._elapsed_ms(),
                 )
                 await invoke_hook(HookType.GENERATION_ERROR, err_payload)
 
@@ -1218,15 +1224,10 @@ class ModelOutputThunk(Generic[S]):
 
                 glog = self._generate_log
                 prompt = glog.prompt if glog and glog.prompt else ""
-                latency_ms = (
-                    (datetime.datetime.now() - self._gen.start).total_seconds() * 1000
-                    if self._gen.start
-                    else -1
-                )
                 post_payload = GenerationPostCallPayload(
                     prompt=prompt,
                     model_output=self,
-                    latency_ms=latency_ms,
+                    latency_ms=self._elapsed_ms(),
                     generation_id=self._call.generation_id,
                 )
                 await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)

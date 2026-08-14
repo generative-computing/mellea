@@ -221,12 +221,14 @@ Backend spans cover individual LLM API calls. They follow the
 | `gen_ai.provider.name` | Backend system name mapped from class (e.g., `ollama`, `openai`) |
 | `gen_ai.request.model` | Model ID requested |
 | `gen_ai.operation.name` | `"chat"` for `generate_from_context`; `"text_completion"` for `generate_from_raw` |
+| `gen_ai.request.stream` | `True` when streaming was requested; omitted otherwise |
+| `gen_ai.output.type` | `"json"` when structured output was requested; omitted otherwise |
 | `gen_ai.usage.input_tokens` | Input tokens consumed |
 | `gen_ai.usage.output_tokens` | Output tokens generated |
-| `gen_ai.usage.total_tokens` | Total tokens (input + output) |
 | `gen_ai.response.model` | Actual model used in the response (may differ from request) |
 | `gen_ai.response.finish_reasons` | List of finish reasons (e.g., `["stop"]`) |
 | `gen_ai.response.id` | Response identifier from the backend |
+| `gen_ai.response.time_to_first_chunk` | Time to first chunk in seconds; streaming requests only |
 
 Mellea also adds context-specific attributes to backend spans:
 
@@ -234,10 +236,10 @@ Mellea also adds context-specific attributes to backend spans:
 | --------- | ----------- |
 | `mellea.action_type` | Component type being executed |
 | `mellea.context_size` | Number of items in context |
-| `mellea.has_format` | Whether structured output format is specified |
 | `mellea.format_type` | Response format class name |
 | `mellea.tool_calls_enabled` | Whether tool calling is enabled |
 | `mellea.num_actions` | Number of actions in batch (for `generate_from_raw`) |
+| `mellea.usage.total_tokens` | Total tokens reported by the backend; a Mellea extension, since semconv defines only input/output |
 
 When `MELLEA_GENERATION_CHUNK_EVENTS=true`, backend spans also record a `chunk_processed`
 span event per streamed chunk, carrying its index and added text length. This is
