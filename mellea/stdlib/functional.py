@@ -1334,12 +1334,12 @@ def call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
 
     Example:
         ```python
-        from mellea.stdlib import call_tools
-        from mellea.stdlib.context import SimpleContext
+        from mellea.stdlib.functional import call_tools
 
         result, ctx = instruct("...", context, backend, tool_calls=True)
         tool_messages = call_tools(result, backend)
-        ctx = ctx.add(tool_messages)
+        for tool_msg in tool_messages:
+            ctx = ctx.add(tool_msg)
         ```
 
     See Also:

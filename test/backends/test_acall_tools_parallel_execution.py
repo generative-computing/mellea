@@ -36,7 +36,7 @@ def backend():
 
 
 @pytest.mark.asyncio
-async def testacall_tools_executes_all_parallel_same_name_calls(backend):
+async def test_acall_tools_executes_all_parallel_same_name_calls(backend):
     """Verify acall_tools() executes all parallel same-name tool calls.
 
     This is the execution-level regression test for PR #1431.
@@ -98,7 +98,7 @@ async def testacall_tools_executes_all_parallel_same_name_calls(backend):
 
 
 @pytest.mark.asyncio
-async def testacall_tools_preserves_order_in_execution(backend):
+async def test_acall_tools_preserves_order_in_execution(backend):
     """Verify acall_tools() executes tool calls in order.
 
     Order preservation is critical for reproducibility and correctness,
@@ -155,7 +155,7 @@ async def testacall_tools_preserves_order_in_execution(backend):
 
 
 @pytest.mark.asyncio
-async def testacall_tools_with_mixed_tools(backend):
+async def test_acall_tools_with_mixed_tools(backend):
     """Verify acall_tools() handles multiple different tools alongside duplicates.
 
     Realistic scenario: user calls search twice, calculate once, search again.
@@ -208,7 +208,7 @@ async def testacall_tools_with_mixed_tools(backend):
 
 
 @pytest.mark.asyncio
-async def testacall_tools_cardinality_regression(backend):
+async def test_acall_tools_cardinality_regression(backend):
     """Regression test: verify tool_calls cardinality == ToolMessages cardinality.
 
     With dict-based tool_calls:

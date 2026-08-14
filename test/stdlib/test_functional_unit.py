@@ -476,7 +476,7 @@ def test_transform_persists_chosen_tool_message_in_context(mock_act, mock_call_t
 @patch("mellea.stdlib.functional.acall_tools", new_callable=AsyncMock)
 @patch("mellea.stdlib.functional.aact", new_callable=AsyncMock)
 async def test_atransform_persists_chosen_tool_message_in_context(
-    mock_aact, mockacall_tools
+    mock_aact, mock_acall_tools
 ):
     """Async counterpart of test_transform_persists_chosen_tool_message_in_context."""
     from mellea.stdlib.functional import atransform
@@ -485,7 +485,7 @@ async def test_atransform_persists_chosen_tool_message_in_context(
     ctx = ChatContext().add(prior_message)
     mock_aact.return_value = (MagicMock(), ctx)
     tool_message = _make_tool_message()
-    mockacall_tools.return_value = [tool_message]
+    mock_acall_tools.return_value = [tool_message]
 
     _, new_ctx = await atransform(MObject(), "transform it", ctx, MagicMock())
 
