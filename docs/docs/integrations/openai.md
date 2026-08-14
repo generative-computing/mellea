@@ -232,6 +232,51 @@ m = MelleaSession(
 Options set at construction time apply to all calls. Options passed to `instruct()`
 or `chat()` apply to that call only and take precedence.
 
+## NVIDIA NIM via OpenAI-compatible endpoint
+
+NVIDIA hosts the Nemotron models at `https://integrate.api.nvidia.com/v1`, which is
+OpenAI-compatible. The `NVIDIA_*` constants in `model_ids` carry their NVIDIA-hosted
+names in `openai_name`, so you can pass the `ModelIdentifier` directly — but you must
+also set `base_url`, since these models are not served by OpenAI:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import model_ids
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_4B,
+        api_key="your-nvidia-api-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+    )
+)
+```
+
+Not every constant has a hosted endpoint: `NVIDIA_NEMOTRON_3_NANO_4B` and
+`NVIDIA_NEMOTRON_NANO_12B_V2` ship for local inference only, so their `openai_name` is
+`None` and passing them to `OpenAIBackend` raises an `AssertionError`. To self-host any
+of these with vLLM instead, pass `hf_model_name` as a string — vLLM serves a model under
+the name it was launched with, not under the NVIDIA-hosted name:
+
+```python
+# Requires: mellea
+# Returns: MelleaSession
+from mellea import MelleaSession
+from mellea.backends import model_ids
+from mellea.backends.openai import OpenAIBackend
+
+m = MelleaSession(
+    OpenAIBackend(
+        model_id=model_ids.NVIDIA_NEMOTRON_3_NANO_30B_A3B.hf_model_name,
+        api_key="EMPTY",
+        base_url="http://localhost:8000/v1",
+    )
+)
+```
+
 ## Anthropic via OpenAI-compatible endpoint
 
 Anthropic's API is not OpenAI-compatible natively, but if you access it through a

@@ -108,6 +108,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             option names to Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel keys
             to completions-endpoint option names.
+
+    Raises:
+        TypeError: If `model_id` is neither a `str` nor a `ModelIdentifier` — most often
+            `None`, from forwarding a `ModelIdentifier` field that this model does not set.
+        ValueError: If `model_id` is an empty string, if neither `api_key` nor
+            `OPENAI_API_KEY` is set, or if `model_id` is a `ModelIdentifier` with no `openai_name` set.
     """
 
     def __init__(
@@ -125,6 +131,38 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         **kwargs,
     ):
         """Initialize an OpenAI-compatible backend with the given model ID and API credentials."""
+        # Resolve the served model name first: an unusable model_id must fail here rather
+        # than as a missing `self._model_id` at generation time. `None` reaches this branch
+        # whenever a caller forwards a ModelIdentifier field that is unset for this model,
+        # e.g. `SOME_MODEL.hf_model_name`.
+        match model_id:
+            case str():
+                if not model_id.strip():
+                    raise ValueError(
+                        "model_id is an empty string. Pass the model name your endpoint "
+                        "serves it under, or a ModelIdentifier from "
+                        "`mellea.backends.model_ids`."
+                    )
+                self._model_id = model_id
+            case ModelIdentifier():
+                if model_id.openai_name is None:
+                    raise ValueError(
+                        "The ModelIdentifier passed as model_id has no `openai_name` set "
+                        f"(hf_model_name={model_id.hf_model_name!r}), so there is no model name "
+                        "to send to an OpenAI-compatible endpoint. Either use a ModelIdentifier "
+                        "whose provider hosts the model, or pass the name your server serves the "
+                        "model under as a string -- for self-hosted vLLM/SGLang that is usually "
+                        "`hf_model_name` -- along with a matching `base_url`."
+                    )
+                self._model_id = model_id.openai_name
+            case _:
+                raise TypeError(
+                    "model_id must be a str or ModelIdentifier, got "
+                    f"{type(model_id).__name__}. ModelIdentifier fields such as "
+                    "`hf_model_name` are `None` when the model has no name for that "
+                    "provider; check the constant in `mellea.backends.model_ids`."
+                )
+
         super().__init__(
             model_id=model_id,
             formatter=(
@@ -179,15 +217,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
         self._default_extra_body: dict = default_extra_body or {}
-
-        match model_id:
-            case str():
-                self._model_id = model_id
-            case ModelIdentifier():
-                assert model_id.openai_name is not None, (
-                    "model_id is None. This can also happen if the ModelIdentifier has no `openai_name` name set."
-                )
-                self._model_id = model_id.openai_name
 
         self._provider: str = "openai"
 
