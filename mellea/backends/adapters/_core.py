@@ -282,6 +282,8 @@ class LocalFileBinding(WeightsBinding):
         self.backend: AdapterMixin | None = None
         self.path: str | None = None
         self._staged_backend: AdapterMixin | None = None
+        self._loaded = False
+        self._released = False
 
     @property
     def qualified_name(self) -> str:
@@ -359,13 +361,27 @@ class LocalFileBinding(WeightsBinding):
 
         Args:
             backend: The backend to register with on the next `prepare()` call.
+
+        Raises:
+            RuntimeError: This binding has already been `release()`d.
         """
+        if self._released:
+            raise RuntimeError(
+                "LocalFileBinding.bind_backend() called after release(): "
+                "release() is terminal per the WeightsBinding contract and does "
+                "not revive the binding. Construct a new LocalFileBinding instead."
+            )
         self._staged_backend = backend
 
     def prepare(self) -> None:
         """Downloads the adapter weights and loads them into the staged backend.
 
-        Idempotent: a no-op once already prepared.
+        Idempotent: a no-op once already prepared. Retryable: if a previous
+        call registered with the backend but failed during the weights load
+        (e.g. a transient download/load failure), the next call retries only
+        the load rather than re-registering — registration already succeeded
+        and re-attempting it would hit the backend's own duplicate-registration
+        guard.
 
         The `prepare` phase duration reported to
         `ADAPTER_FUNCTION_PHASE_COMPLETE` spans the whole operation, **including
@@ -376,48 +392,61 @@ class LocalFileBinding(WeightsBinding):
 
         Raises:
             RuntimeError: `bind_backend()` was not called first, `name` is empty,
-                or the backend refused the registration.
+                the binding was already `release()`d, or the backend refused
+                the registration.
         """
-        if self.backend is not None:
+        if self.backend is not None and self._loaded:
             return
-        if self._staged_backend is None:
+        if self._released:
             raise RuntimeError(
-                "LocalFileBinding.prepare() requires bind_backend() to be called first."
-            )
-        if not self.name:
-            raise RuntimeError(
-                "LocalFileBinding.prepare() requires a non-empty name. A default-"
-                "constructed LocalFileBinding() is an unconfigured placeholder — "
-                "build one with LocalFileBinding.from_catalog(name) instead."
+                "LocalFileBinding.prepare() called after release(): release() is "
+                "terminal per the WeightsBinding contract and does not revive the "
+                "binding. Construct a new LocalFileBinding instead."
             )
 
         started_at = time.monotonic()
-        self._staged_backend.add_adapter(self)
-        # `add_adapter` signals success by setting `.backend`; it has early-return
-        # paths (notably: a different object already registered under this
-        # `qualified_name`) that log a warning and leave it unset. Without this
-        # check `prepare()` would go on to load the *other* adapter's weights and
-        # leave `.backend` None, so a later `activate()` would raise "requires
-        # prepare() to be called first" despite `prepare()` having run. Fail here
-        # instead, where the cause is still visible.
         if self.backend is None:
-            raise RuntimeError(
-                f"Backend refused to register adapter {self.qualified_name!r}; see the "
-                "backend's warning log. Either another adapter is already registered "
-                "under this qualified name, or this binding was previously released — "
-                "`release()` is terminal and does not free the name for re-use "
-                "(see #1528)."
-            )
-        self._staged_backend.load_peft_adapter(self.qualified_name)
+            if self._staged_backend is None:
+                raise RuntimeError(
+                    "LocalFileBinding.prepare() requires bind_backend() to be called first."
+                )
+            if not self.name:
+                raise RuntimeError(
+                    "LocalFileBinding.prepare() requires a non-empty name. A "
+                    "default-constructed LocalFileBinding() is an unconfigured "
+                    "placeholder — build one with LocalFileBinding.from_catalog(name) "
+                    "instead."
+                )
+
+            self._staged_backend.add_adapter(self)
+            # `add_adapter` signals success by setting `.backend`; it has early-return
+            # paths (notably: a different object already registered under this
+            # `qualified_name`) that log a warning and leave it unset. Without this
+            # check `prepare()` would go on to load the *other* adapter's weights and
+            # leave `.backend` None, so a later `activate()` would raise "requires
+            # prepare() to be called first" despite `prepare()` having run. Fail here
+            # instead, where the cause is still visible.
+            if self.backend is None:
+                raise RuntimeError(
+                    f"Backend refused to register adapter {self.qualified_name!r}; see the "
+                    "backend's warning log. Either another adapter is already registered "
+                    "under this qualified name, or this binding was previously released — "
+                    "`release()` is terminal and does not free the name for re-use "
+                    "(see #1528)."
+                )
+        self.backend.load_peft_adapter(self.qualified_name)
+        self._loaded = True
         self._fire_phase_complete("prepare", time.monotonic() - started_at)
 
     def activate(self) -> None:
         """Loads the adapter weights into the backend for generation.
 
         Raises:
-            RuntimeError: `prepare()` was not called first.
+            RuntimeError: `prepare()` was not called first, or called but did
+                not complete (registered with the backend but the weights
+                load itself failed or hasn't been retried yet).
         """
-        if self.backend is None:
+        if self.backend is None or not self._loaded:
             raise RuntimeError(
                 "LocalFileBinding.activate() requires prepare() to be called first."
             )
@@ -428,9 +457,11 @@ class LocalFileBinding(WeightsBinding):
         """Unloads the adapter weights from the backend.
 
         Raises:
-            RuntimeError: `prepare()` was not called first.
+            RuntimeError: `prepare()` was not called first, or called but did
+                not complete (registered with the backend but the weights
+                load itself failed or hasn't been retried yet).
         """
-        if self.backend is None:
+        if self.backend is None or not self._loaded:
             raise RuntimeError(
                 "LocalFileBinding.deactivate() requires prepare() to be called first."
             )
@@ -441,8 +472,9 @@ class LocalFileBinding(WeightsBinding):
         """Unloads the adapter's weights from the backend and clears local state.
 
         Idempotent: a no-op if never prepared, or already released. Terminal, per
-        the `WeightsBinding` contract — the binding is not reusable
-        afterwards, and `bind_backend()` + `prepare()` will not revive it.
+        the `WeightsBinding` contract — enforced: `bind_backend()` and
+        `prepare()` both raise `RuntimeError` if called after `release()`,
+        rather than silently reviving the binding on a new backend.
 
         Does **not** fully deregister. `unload_peft_adapter` removes the adapter
         from the backend's *loaded* set, but the backend's *registered* set
@@ -452,6 +484,7 @@ class LocalFileBinding(WeightsBinding):
         Tracked in #1528, which also asks whether re-registration should be
         supported at all given the terminal contract.
         """
+        self._released = True
         if self.backend is None:
             return
 
@@ -460,6 +493,7 @@ class LocalFileBinding(WeightsBinding):
         self.backend = None
         self.path = None
         self._staged_backend = None
+        self._loaded = False
 
     def _fire_phase_complete(self, phase: str, duration_s: float) -> None:
         """Fires `adapter_function_phase_complete` for a phase this binding owns.

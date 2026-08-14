@@ -117,6 +117,68 @@ def test_prepare_is_idempotent():
     backend.load_peft_adapter.assert_called_once()
 
 
+def test_prepare_retries_only_the_load_after_a_load_failure():
+    """A failed load must be retryable without re-registering.
+
+    Regression guard: `add_adapter` sets `.backend` (registration) before
+    `prepare()` calls `load_peft_adapter` (the load). If the load raised,
+    `.backend` was already non-None, so the old idempotency guard
+    (`if self.backend is not None: return`) made every retry a silent no-op —
+    the caller got no error and no adapter, forever. The fix tracks the load
+    separately from registration so a retry redoes only the failed step.
+    """
+    backend = _fake_backend()
+    backend.load_peft_adapter.side_effect = [
+        RuntimeError("transient load failure"),
+        None,
+    ]
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+
+    with pytest.raises(RuntimeError, match="transient load failure"):
+        binding.prepare()
+
+    # Registration succeeded (that's why .backend is set); the load did not.
+    # A binding in this state must not look "already prepared".
+    assert binding.backend is backend
+    with pytest.raises(RuntimeError, match="prepare"):
+        binding.activate()
+
+    binding.prepare()  # retry: must not re-register, must retry the load
+
+    backend.add_adapter.assert_called_once()
+    assert backend.load_peft_adapter.call_count == 2
+    binding.activate()
+    backend.activate_peft_adapter.assert_called_once_with(binding.qualified_name)
+
+
+def test_bind_backend_after_release_raises():
+    """release() is terminal: bind_backend() must not silently revive the binding."""
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    binding.release()
+
+    other_backend = _fake_backend()
+    with pytest.raises(RuntimeError, match="release"):
+        binding.bind_backend(other_backend)
+
+
+def test_prepare_after_release_raises():
+    """release() is terminal: prepare() must not silently revive the binding."""
+    backend = _fake_backend()
+    binding = LocalFileBinding(name="answerability")
+    binding.bind_backend(backend)
+    binding.prepare()
+    binding.release()
+
+    # Bypass bind_backend()'s own guard to confirm prepare() enforces this too.
+    binding._staged_backend = _fake_backend()
+    with pytest.raises(RuntimeError, match="release"):
+        binding.prepare()
+
+
 def test_activate_without_prepare_raises():
     binding = LocalFileBinding(name="answerability")
     with pytest.raises(RuntimeError, match="prepare"):
