@@ -1,13 +1,13 @@
 ---
 title: "LiteLLM"
-description: "Reach 100+ LLM providers through Mellea's LiteLLMBackend — direct calls, a self-hosted proxy, and the recommended migration path off the deprecated WatsonX backend."
+description: "Reach 100+ LLM providers through Mellea's LiteLLMBackend: direct calls, a self-hosted proxy, and the recommended migration path off the deprecated WatsonX backend."
 sidebar_label: "LiteLLM"
 # diataxis: how-to
 ---
 
 The [`LiteLLMBackend`](../reference/glossary#litellm--litellmbackend) gives Mellea a
-single code path to 100+ model providers — Anthropic, AWS Bedrock, Azure OpenAI, IBM
-WatsonX, Google Vertex AI, and more — by delegating provider auth and request
+single code path to 100+ model providers (Anthropic, AWS Bedrock, Azure OpenAI, IBM
+WatsonX, Google Vertex AI, and more) by delegating provider auth and request
 translation to [LiteLLM](https://docs.litellm.ai/). You switch providers by changing
 the `model_id` prefix; your Mellea code stays the same.
 
@@ -105,8 +105,8 @@ m = MelleaSession(
 
 ### Azure OpenAI
 
-The `model_id` is `azure/<your-deployment-name>` — your Azure deployment name, not a
-base model name:
+The `model_id` is `azure/<your-deployment-name>`, your Azure deployment name rather
+than a base model name:
 
 ```bash
 export AZURE_API_KEY=your-api-key-here
@@ -128,7 +128,7 @@ m = MelleaSession(
 ### IBM WatsonX
 
 LiteLLM reaches WatsonX with the `watsonx/` prefix. Note the API-key variable is
-`WATSONX_APIKEY` (no underscore before `KEY`) — different from the native backend's
+`WATSONX_APIKEY` (no underscore before `KEY`), which differs from the native backend's
 `WATSONX_API_KEY`:
 
 ```bash
@@ -153,8 +153,8 @@ m = MelleaSession(
 Both use `LiteLLMBackend` and have dedicated pages with credential setup and model-string
 tables:
 
-- **Bedrock** — `bedrock/converse/<model-id>`. See [AWS Bedrock](./bedrock.md).
-- **Vertex AI** — `vertex_ai/<model>`. See [Vertex AI](./vertex-ai.md).
+- **Bedrock**: `bedrock/converse/<model-id>`. See [AWS Bedrock](./bedrock.md).
+- **Vertex AI**: `vertex_ai/<model>`. See [Vertex AI](./vertex-ai.md).
 
 ## Self-hosted LiteLLM Proxy
 
@@ -199,7 +199,7 @@ m = MelleaSession(
 )
 ```
 
-`my-model` is the `model_name` you defined in the proxy's `config.yaml` — the app never
+`my-model` is the `model_name` you defined in the proxy's `config.yaml`; the app never
 sees which provider or model backs it. To pass the proxy key explicitly instead of using
 the environment variable, add it to `model_options`:
 
@@ -306,7 +306,7 @@ pip install 'mellea[litellm]'
 **"litellm allows for unknown / non-openai input params" or "litellm may drop the
 following openai keys" warnings:** LiteLLM supports different parameters per provider.
 Mellea logs which model options are unrecognized or may be dropped for the current
-model, and passes the request through anyway. These warnings are informational — the
+model, and passes the request through anyway. These warnings are informational: the
 unsupported OpenAI parameters are dropped automatically (`drop_params=True`), and there
 are occasional false positives. Remove the flagged options if a call misbehaves.
 
