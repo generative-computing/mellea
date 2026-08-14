@@ -180,7 +180,7 @@ fails, Mellea retries with the failure reason embedded in the repair request.
 
 > **Reliability note:** The word-count check is deterministic and trustworthy on
 > any model. The "answer both questions" check falls back to LLM-as-a-judge, whose
-> verdict is depending on model — prefer
+> verdict depends on the model — prefer
 > a Python validator for anything you can code, and reserve the judge (or, on Granite
 > models, the aLoRA `requirement-check` adapter) for genuinely subjective constraints. See
 > [Choosing a validation approach](../concepts/requirements-system#choosing-a-validation-approach).

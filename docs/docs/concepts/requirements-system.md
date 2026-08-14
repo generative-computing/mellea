@@ -263,7 +263,7 @@ gives you the same for the final selected output only.
 
 Mellea offers three ways to validate a requirement: a Python validator, an LLM-as-a-judge
 call, or the aLoRA `requirement-check` adapter. They differ not just in latency and coding
-effort, but — critically — in **how much you can trust the verdict**.
+effort, but also in **how much you can trust the verdict**.
 
 The single most important factor is often overlooked: **LLM-as-a-judge reliability is
 highly model-dependent.** In testing across judge sizes, larger models were stronger judges
@@ -273,8 +273,7 @@ the easiest path is less exact. Treat a small-model judge verdict as a signal, n
 
 Recommendation:
 
-- **Python validators (`simple_validate` or a full `validation_fn`)**
-  use for any deterministic constraint (length, regex, JSON/schema, an external lookup). They are exact, fast, and free of model dependence.
+- **Python validators (`simple_validate` or a full `validation_fn`)** — use for any deterministic constraint (length, regex, JSON/schema, an external lookup). They are exact, fast, and free of model dependence.
 
 - **aLoRA `requirement-check` (Granite), or LLM-as-a-judge on a capable model** — use for
   genuinely subjective constraints that resist coding ("be polite", "stay on topic"). The
