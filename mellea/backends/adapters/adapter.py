@@ -686,6 +686,31 @@ class AdapterMixin(Backend, abc.ABC):
         if found is not None:
             return found
 
+        # `_find_adapter` only matches `_AdapterCore` entries. If registration
+        # above silently failed because a `LocalFileBinding` already claims a
+        # colliding qualified name (they share `f"{name}_{type}"` with
+        # `IntrinsicAdapter`), say so — the alternative is an opaque KeyError
+        # that gives no hint the two registration paths collided.
+        added = getattr(self, "_added_adapters", {})
+        blocking = next(
+            (
+                v
+                for k, v in added.items()
+                if k.startswith(f"{name}_") and not isinstance(v, _AdapterCore)
+            ),
+            None,
+        )
+        if blocking is not None:
+            blocking_name = getattr(blocking, "qualified_name", None)
+            raise KeyError(
+                f"Adapter {name!r} not found after registration: a "
+                f"{type(blocking).__name__} is already registered under "
+                f"{blocking_name!r}, which collides with {name!r}'s auto-registration "
+                "path. LocalFileBinding and resolve_adapter()/intrinsic-helper "
+                "registrations share the same qualified-name key space on this "
+                "backend and cannot both claim it."
+            )
+
         raise KeyError(f"Adapter {name!r} not found after registration")
 
     @contextlib.contextmanager

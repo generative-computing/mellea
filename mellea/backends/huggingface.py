@@ -2020,9 +2020,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
                 )
 
-        if self._added_adapters.get(adapter.qualified_name) is not None:
+        existing = self._added_adapters.get(adapter.qualified_name)
+        if existing is not None:
             MelleaLogger.get_logger().warning(
-                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but {adapter.name} was already added to {self.__class__}. The backend is refusing to do this, because adapter loading is not idempotent."
+                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} "
+                f"but {adapter.qualified_name!r} is already registered as a "
+                f"{type(existing).__name__} on {self.__class__.__name__}. The backend is "
+                "refusing to do this, because adapter loading is not idempotent. "
+                "LocalFileBinding and IntrinsicAdapter/resolve_adapter() registrations "
+                "share this qualified-name key space and cannot both claim the same name."
             )
             return None
 

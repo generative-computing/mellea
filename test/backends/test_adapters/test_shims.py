@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 
 from mellea.backends.adapters import Adapter, EmbeddedIntrinsicAdapter, IntrinsicAdapter
-from mellea.backends.adapters._core import Identity
+from mellea.backends.adapters._core import Identity, LocalFileBinding
 from mellea.backends.adapters.adapter import AdapterMixin
 from mellea.backends.adapters.catalog import AdapterType, IntrinsicsCatalogEntry
 
@@ -261,6 +261,34 @@ def test_find_adapter_honours_type_preference_order():
         mock_backend, "answerability", ("alora", "lora")
     )
     assert result is alora, "alora must win over lora regardless of insertion order"
+
+
+def test_resolve_adapter_names_the_conflict_when_a_binding_blocks_registration():
+    """resolve_adapter's KeyError should name the collision, not just say "not found".
+
+    Regression guard: a `LocalFileBinding` registered under the same
+    qualified-name key space `resolve_adapter` auto-registers into silently
+    blocks the new `IntrinsicAdapter` (the backend's duplicate-key guard
+    refuses it). `_find_adapter` can't see the `LocalFileBinding` either (not
+    an `_AdapterCore`), so without this check the failure surfaced as a bare
+    "Adapter 'answerability' not found after registration" with no hint of
+    what actually occupied the name.
+    """
+    binding = LocalFileBinding(name="answerability", adapter_type=AdapterType.LORA)
+    mock_backend = MagicMock(spec=AdapterMixin)
+    mock_backend.base_model_name = "ibm-granite/granite-4.1-3b"
+    mock_backend._uses_embedded_adapters = False
+    mock_backend._added_adapters = {binding.qualified_name: binding}
+    mock_backend._find_adapter.side_effect = lambda cap, types=None: (
+        AdapterMixin._find_adapter(mock_backend, cap, types)
+    )
+    # Simulates the backend's real duplicate-key guard refusing the new
+    # IntrinsicAdapter: registration is attempted but nothing new lands in
+    # `_added_adapters`.
+    mock_backend.add_adapter.side_effect = lambda a: None
+
+    with pytest.raises(KeyError, match=r"LocalFileBinding.*answerability_lora"):
+        AdapterMixin.resolve_adapter(mock_backend, "answerability")
 
 
 def test_resolve_adapter_raises_without_base_model():
