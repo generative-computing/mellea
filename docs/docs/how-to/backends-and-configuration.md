@@ -32,7 +32,7 @@ The following table shows all available backends, their class names, import path
 | ------- | ----- | ------ | --------------- | ----------------- |
 | [Ollama](../integrations/ollama) | `OllamaModelBackend` | `mellea.backends.ollama` | base | `backend_name="ollama"` |
 | [OpenAI](../integrations/openai) | `OpenAIBackend` | `mellea.backends.openai` | base | `backend_name="openai"` |
-| [LiteLLM](../integrations/bedrock) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
+| [LiteLLM](../integrations/litellm) | `LiteLLMBackend` | `mellea.backends.litellm` | `mellea[litellm]` | `backend_name="litellm"` |
 | [Hugging Face](../integrations/huggingface) | `LocalHFBackend` | `mellea.backends.huggingface` | `mellea[hf]` | `backend_name="hf"` |
 | [WatsonX](../integrations/watsonx) | `WatsonxAIBackend` | `mellea.backends.watsonx` | `mellea[watsonx]` | `backend_name="watsonx"` (deprecated) |
 
@@ -112,7 +112,8 @@ m = MelleaSession(
 > See the [LiteLLM docs](https://docs.litellm.ai/) for your provider's setup.
 
 LiteLLM provides unified access to 100+ providers — Anthropic, AWS Bedrock, Azure,
-and more:
+IBM WatsonX, and more. Set the provider's credentials in the environment and pass a
+`<provider>/<model>` model string:
 
 ```python
 # Requires: mellea[litellm]
@@ -127,6 +128,10 @@ result = m.chat("Give me three facts about the Amazon rainforest.")
 print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
+
+See the [LiteLLM integration](../integrations/litellm) for direct-mode vs proxy usage,
+self-hosted proxy setup, per-provider configuration examples, an environment variable
+reference, and the WatsonX migration path.
 
 ## Hugging Face backend
 
