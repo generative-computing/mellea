@@ -111,9 +111,9 @@ its import site: OTel `Token` attach/detach is task-affine, so the
 `session`/`start_session` span pair can't be delegated to a plugin. Treat
 it as the exception, not a template for a new span.
 
-> **Note:** `test/telemetry/test_tracing_import_boundary.py` enforces this in
-> CI — it fails if anything under `mellea/backends/` imports
-> `mellea.telemetry.tracing` directly.
+> **Note:** `test/package/test_telemetry_import_boundary.py` enforces this in
+> CI — it fails if anything under `mellea/backends/` or `mellea/stdlib/`
+> imports `mellea.telemetry.tracing` directly, other than `session.py`.
 
 ## What spans Mellea emits
 

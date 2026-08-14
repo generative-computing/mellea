@@ -34,17 +34,40 @@ def _resolve_relative_import(package: str, level: int, module: str | None) -> st
     return f"{base}.{module}" if module else base
 
 
+def _dotted_name(node: ast.expr) -> str | None:
+    """Return the dotted name an attribute-chain expression spells out, if any."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted_name(node.value)
+        return f"{base}.{node.attr}" if base else None
+    return None
+
+
 def _imported_telemetry_submodules(path: Path) -> set[str]:
-    """Return the `mellea.telemetry.*` submodules `path` imports directly."""
+    """Return the `mellea.telemetry.*` submodules `path` imports or accesses directly.
+
+    Catches both import forms (`import mellea.telemetry.tracing`,
+    `from mellea.telemetry import tracing`, absolute or relative) and the
+    package-alias-plus-attribute-access form (`import mellea.telemetry as
+    telemetry; telemetry.tracing.foo()`), where nothing in the import
+    statement itself names the submodule.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     package = _package_for(path)
     found: set[str] = set()
+    # Local names bound to the `mellea.telemetry` package itself (not one of
+    # its submodules) — `import mellea.telemetry [as x]` or
+    # `from mellea import telemetry [as x]`, absolute or relative.
+    package_aliases = {"mellea.telemetry"}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 for submodule in TELEMETRY_SUBMODULES:
                     if alias.name == f"mellea.telemetry.{submodule}":
                         found.add(submodule)
+                if alias.name == "mellea.telemetry" and alias.asname:
+                    package_aliases.add(alias.asname)
         elif isinstance(node, ast.ImportFrom):
             resolved = (
                 node.module or ""
@@ -60,6 +83,18 @@ def _imported_telemetry_submodules(path: Path) -> set[str]:
                     alias.name == submodule for alias in node.names
                 ):
                     found.add(submodule)
+            if resolved == "mellea":
+                for alias in node.names:
+                    if alias.name == "telemetry":
+                        package_aliases.add(alias.asname or alias.name)
+    # Second pass: attribute access on a name bound to the package, e.g.
+    # `telemetry.tracing.start_action_span(...)` after `import mellea.telemetry
+    # as telemetry` — no import statement names `tracing`, so this can only
+    # be caught by looking at how the bound name is used.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in TELEMETRY_SUBMODULES:
+            if _dotted_name(node.value) in package_aliases:
+                found.add(node.attr)
     return found
 
 
